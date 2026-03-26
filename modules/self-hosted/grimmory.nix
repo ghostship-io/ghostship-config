@@ -6,7 +6,6 @@ in
 {
   virtualisation.oci-containers.containers."grimmory" = {
     image = "grimmory/grimmory:latest";
-    user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=wget -q --spider http://127.0.0.1:6060 || exit 1"

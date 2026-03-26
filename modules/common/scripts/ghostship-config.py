@@ -139,12 +139,56 @@ class YAMLDriver:
 
         return value
 
+    def _split_path(self, path):
+        parts = []
+        curr = []
+        bracket_depth = 0
+
+        for ch in path:
+            if ch == "." and bracket_depth == 0:
+                parts.append("".join(curr))
+                curr = []
+                continue
+
+            if ch == "[":
+                bracket_depth += 1
+            elif ch == "]":
+                bracket_depth = max(0, bracket_depth - 1)
+
+            curr.append(ch)
+
+        parts.append("".join(curr))
+        return parts
+
+    def _select_from_list(self, items, selector):
+        if selector.isdigit():
+            index = int(selector)
+            if 0 <= index < len(items):
+                return items[index]
+            return None
+
+        if "=" in selector:
+            attr_key, attr_val = selector.split("=", 1)
+            for item in items:
+                if (
+                    isinstance(item, dict)
+                    and str(item.get(attr_key)) == attr_val
+                ):
+                    return item
+            return None
+
+        for item in items:
+            if isinstance(item, dict) and selector in item:
+                return item[selector]
+
+        return None
+
     def _get_target(self, path):
-        parts = path.split(".")
+        parts = self._split_path(path)
         curr = self.data
         for part in parts[:-1]:
             # Attribute selector: [key=val] or [key]
-            match = re.match(r"(.*)\[(.+)\]", part)
+            match = re.fullmatch(r"(.*)\[(.+)\]", part)
             if match:
                 list_name, selector = match.groups()
                 if list_name:
@@ -158,26 +202,8 @@ class YAMLDriver:
                     )
                     return None, None
 
-                found = False
-                if "=" in selector:
-                    attr_key, attr_val = selector.split("=", 1)
-                    for item in items:
-                        if (
-                            isinstance(item, dict)
-                            and str(item.get(attr_key)) == attr_val
-                        ):
-                            curr = item
-                            found = True
-                            break
-                else:
-                    # Key existence selector (for Homepage-style lists)
-                    for item in items:
-                        if isinstance(item, dict) and selector in item:
-                            curr = item[selector]
-                            found = True
-                            break
-
-                if not found:
+                curr = self._select_from_list(items, selector)
+                if curr is None:
                     return None, None
             elif part.isdigit() and isinstance(curr, list):
                 curr = curr[int(part)]
@@ -191,6 +217,35 @@ class YAMLDriver:
         target, key = self._get_target(path)
         if target is None:
             logging.warning(f"Path not found: {path}")
+            return
+
+        key_match = re.fullmatch(r"(.*)\[(.+)\]", key)
+        if key_match:
+            list_name, selector = key_match.groups()
+            if list_name:
+                items = target.get(list_name, [])
+            else:
+                items = target
+
+            if not isinstance(items, list):
+                logging.warning(f"Expected list for key: {path}")
+                return
+
+            if not selector.isdigit():
+                logging.warning(f"Unsupported list selector for key: {path}")
+                return
+
+            index = int(selector)
+            if not (0 <= index < len(items)):
+                logging.warning(f"Index out of range for key: {path}")
+                return
+
+            current = items[index]
+            typed_value = self._coerce_value(current, value)
+
+            if current != typed_value:
+                items[index] = typed_value
+                self.dirty = True
             return
 
         current = target.get(key)
@@ -404,6 +459,73 @@ server:
         finally:
             os.unlink(path)
 
+    def test_yaml_complex_paths():
+        homepage_content = """
+- Infrastructure:
+  - Llama.cpp:
+      icon: sh-old
+      description: old
+"""
+        recyclarr_content = """
+recyclarr:
+  custom_formats:
+  - trash_ids:
+    - old-id
+    assign_scores_to:
+    - name: Optimal
+      score: 100
+"""
+        with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False) as f1:
+            with tempfile.NamedTemporaryFile(
+                suffix=".yaml", delete=False
+            ) as f2:
+                f1.write(homepage_content.encode())
+                f2.write(recyclarr_content.encode())
+                homepage_path = f1.name
+                recyclarr_path = f2.name
+        try:
+            resolver = ValueResolver()
+            homepage = ConfigManager(homepage_path)
+            homepage.load()
+            homepage.driver.set(
+                "[Infrastructure].[Llama.cpp].icon", "sh-ollama"
+            )
+            homepage.save()
+
+            recyclarr = ConfigManager(recyclarr_path)
+            recyclarr.load()
+            recyclarr.driver.set(
+                "recyclarr.custom_formats[0].trash_ids[0]",
+                "new-id",
+            )
+            recyclarr.driver.set(
+                "recyclarr.custom_formats[0].assign_scores_to[name=Optimal].score",
+                resolver.resolve("yaml:900"),
+            )
+            recyclarr.save()
+
+            yaml = YAML(typ="safe")
+            with open(homepage_path, "r") as f:
+                homepage_data = yaml.load(f)
+                assert (
+                    homepage_data[0]["Infrastructure"][0]["Llama.cpp"]["icon"]
+                    == "sh-ollama"
+                )
+            with open(recyclarr_path, "r") as f:
+                recyclarr_data = yaml.load(f)
+                assert (
+                    recyclarr_data["recyclarr"]["custom_formats"][0]["trash_ids"][0]
+                    == "new-id"
+                )
+                assert (
+                    recyclarr_data["recyclarr"]["custom_formats"][0]["assign_scores_to"][0]["score"]
+                    == 900
+                )
+            logging.info("YAML complex path tests passed")
+        finally:
+            os.unlink(homepage_path)
+            os.unlink(recyclarr_path)
+
     def test_ini():
         content = "<?php die(); ?>\n[General]\nkey = old\n[WebUI]\nPort = 8080"
         with tempfile.NamedTemporaryFile(suffix=".ini.php", delete=False) as f:
@@ -484,6 +606,7 @@ server:
     test_xml()
     test_yaml()
     test_yaml_poisoned_scalar_repair()
+    test_yaml_complex_paths()
     test_ini()
     test_kv()
     test_resolver()

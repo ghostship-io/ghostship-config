@@ -9,9 +9,9 @@ in
     user = "3000:3000";
     extraOptions = [
       "--network=container:gluetun"
-      "--health-cmd=wget -q --spider http://127.0.0.1:5002 && wget -q --spider https://google.com || exit 1"
+      "--health-cmd=/bin/sh -c 'for _ in $(seq 1 30); do wget -q --spider http://127.0.0.1:5002 && wget -q --spider https://google.com && exit 0; sleep 2; done; exit 1'"
       "--health-interval=1m"
-      "--health-timeout=10s"
+      "--health-timeout=75s"
       "--health-retries=3"
       "--health-start-period=30s"
     ];
