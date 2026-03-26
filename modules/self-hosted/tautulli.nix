@@ -30,8 +30,6 @@ in
     "d /srv/apps/tautulli 0755 apps apps -"
   ];
 
-  systemd.services.podman-tautulli.after = [ "sops-nix.service" ];
-  systemd.services.podman-tautulli.requires = [ "sops-nix.service" ];
   systemd.services.podman-tautulli.preStart = ''
     CONFIG_FILE="/srv/apps/tautulli/config.ini"
 

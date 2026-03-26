@@ -34,9 +34,8 @@ in
   };
 
   systemd.services.podman-romm = {
-    after = [ "mnt-share.mount" "sops-nix.service" ];
+    after = [ "mnt-share.mount" ];
     wants = [ "mnt-share.mount" ];
-    requires = [ "sops-nix.service" ];
   };
 
   systemd.tmpfiles.rules = [

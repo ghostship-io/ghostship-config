@@ -49,7 +49,7 @@ in
   # Systemd service to run the mount on boot/activation
   systemd.services.mount-z = {
     description = "Mount Windows Z: drive in WSL";
-    after = [ "network.target" "sops-nix.service" ];
+    after = [ "network.target" ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";

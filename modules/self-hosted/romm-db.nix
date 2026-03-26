@@ -35,8 +35,6 @@ in
     "d /srv/apps/romm-db 0755 apps apps -"
   ];
 
-  systemd.services.podman-romm-db.after = [ "sops-nix.service" ];
-  systemd.services.podman-romm-db.requires = [ "sops-nix.service" ];
   systemd.services.podman-romm-db.preStart = ''
     ENV_FILE="/srv/apps/romm-db/romm-db.env"
 

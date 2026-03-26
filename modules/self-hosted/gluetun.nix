@@ -37,8 +37,6 @@ in
     ];
   };
 
-  systemd.services.podman-gluetun.after = [ "sops-nix.service" ];
-  systemd.services.podman-gluetun.requires = [ "sops-nix.service" ];
   systemd.services.podman-gluetun.serviceConfig.Restart = lib.mkForce "always";
 
   systemd.services.podman-gluetun.preStart = ''
@@ -72,8 +70,7 @@ EOF
 
   systemd.services.gluetun-network-monitor = {
     description = "Monitor Gluetun IP and restart dependents on change";
-    after = [ "sops-nix.service" "podman-gluetun.service" ];
-    requires = [ "sops-nix.service" ];
+    after = [ "podman-gluetun.service" ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "simple";
