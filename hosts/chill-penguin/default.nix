@@ -1,5 +1,9 @@
 { config, pkgs, lib, inputs, ... }:
 
+let
+  asahiFirmwareDirectory = /boot/asahi;
+  hasAsahiFirmwareDirectory = builtins.pathExists asahiFirmwareDirectory;
+in
 {
   imports = [
     ../../modules/common
@@ -11,8 +15,9 @@
   hardware.asahi = {
     enable = true;
     setupAsahiSound = false;
-    extractPeripheralFirmware = true;
-    peripheralFirmwareDirectory = /boot/asahi;
+    extractPeripheralFirmware = hasAsahiFirmwareDirectory;
+  } // lib.optionalAttrs hasAsahiFirmwareDirectory {
+    peripheralFirmwareDirectory = asahiFirmwareDirectory;
   };
 
   # Network
