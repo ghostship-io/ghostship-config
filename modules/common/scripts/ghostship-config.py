@@ -183,6 +183,12 @@ class YAMLDriver:
 
         return None
 
+    def _select_from_mapping(self, mapping, selector):
+        if selector in mapping:
+            return mapping[selector]
+
+        return None
+
     def _get_target(self, path):
         parts = self._split_path(path)
         curr = self.data
@@ -196,13 +202,16 @@ class YAMLDriver:
                 else:
                     items = curr
 
-                if not isinstance(items, list):
+                if isinstance(items, list):
+                    curr = self._select_from_list(items, selector)
+                elif isinstance(items, dict):
+                    curr = self._select_from_mapping(items, selector)
+                else:
                     logging.warning(
-                        f"Expected list for selector, got {type(items)}"
+                        f"Expected list or mapping for selector, got {type(items)}"
                     )
                     return None, None
 
-                curr = self._select_from_list(items, selector)
                 if curr is None:
                     return None, None
             elif part.isdigit() and isinstance(curr, list):
@@ -227,24 +236,35 @@ class YAMLDriver:
             else:
                 items = target
 
-            if not isinstance(items, list):
-                logging.warning(f"Expected list for key: {path}")
+            if isinstance(items, list):
+                if not selector.isdigit():
+                    logging.warning(
+                        f"Unsupported list selector for key: {path}"
+                    )
+                    return
+
+                index = int(selector)
+                if not (0 <= index < len(items)):
+                    logging.warning(f"Index out of range for key: {path}")
+                    return
+
+                current = items[index]
+                typed_value = self._coerce_value(current, value)
+
+                if current != typed_value:
+                    items[index] = typed_value
+                    self.dirty = True
                 return
 
-            if not selector.isdigit():
-                logging.warning(f"Unsupported list selector for key: {path}")
+            if not isinstance(items, dict):
+                logging.warning(f"Expected list or mapping for key: {path}")
                 return
 
-            index = int(selector)
-            if not (0 <= index < len(items)):
-                logging.warning(f"Index out of range for key: {path}")
-                return
-
-            current = items[index]
+            current = items.get(selector)
             typed_value = self._coerce_value(current, value)
 
             if current != typed_value:
-                items[index] = typed_value
+                items[selector] = typed_value
                 self.dirty = True
             return
 
@@ -475,14 +495,24 @@ recyclarr:
     - name: Optimal
       score: 100
 """
+        searxng_content = """
+plugins:
+  searx.plugins.calculator.SXNGPlugin:
+    active: false
+"""
         with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False) as f1:
             with tempfile.NamedTemporaryFile(
                 suffix=".yaml", delete=False
             ) as f2:
-                f1.write(homepage_content.encode())
-                f2.write(recyclarr_content.encode())
-                homepage_path = f1.name
-                recyclarr_path = f2.name
+                with tempfile.NamedTemporaryFile(
+                    suffix=".yaml", delete=False
+                ) as f3:
+                    f1.write(homepage_content.encode())
+                    f2.write(recyclarr_content.encode())
+                    f3.write(searxng_content.encode())
+                    homepage_path = f1.name
+                    recyclarr_path = f2.name
+                    searxng_path = f3.name
         try:
             resolver = ValueResolver()
             homepage = ConfigManager(homepage_path)
@@ -507,6 +537,17 @@ recyclarr:
             )
             recyclarr.save()
 
+            searxng = ConfigManager(searxng_path)
+            searxng.load()
+            searxng.driver.set(
+                (
+                    "plugins[searx.plugins.calculator.SXNGPlugin]."
+                    "active"
+                ),
+                resolver.resolve("yaml:true"),
+            )
+            searxng.save()
+
             yaml = YAML(typ="safe")
             with open(homepage_path, "r") as f:
                 homepage_data = yaml.load(f)
@@ -528,10 +569,19 @@ recyclarr:
                     ][0]["score"]
                     == 900
                 )
+            with open(searxng_path, "r") as f:
+                searxng_data = yaml.load(f)
+                assert (
+                    searxng_data["plugins"][
+                        "searx.plugins.calculator.SXNGPlugin"
+                    ]["active"]
+                    is True
+                )
             logging.info("YAML complex path tests passed")
         finally:
             os.unlink(homepage_path)
             os.unlink(recyclarr_path)
+            os.unlink(searxng_path)
 
     def test_ini():
         content = "<?php die(); ?>\n[General]\nkey = old\n[WebUI]\nPort = 8080"

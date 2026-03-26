@@ -45,6 +45,26 @@ in
         . "$SECRETS_FILE"
         set +a
 
+        ${pkgs.python3.withPackages (ps: [ ps.ruamel-yaml ])}/bin/python <<'PY'
+from pathlib import Path
+from ruamel.yaml import YAML
+
+path = Path("/srv/apps/searxng/settings.yml")
+yaml = YAML(typ="rt")
+yaml.preserve_quotes = True
+data = yaml.load(path.read_text())
+
+bad_keys = [
+    key for key in data
+    if isinstance(key, str) and key.startswith("plugins[")
+]
+if bad_keys:
+    for key in bad_keys:
+        del data[key]
+    with path.open("w") as handle:
+        yaml.dump(data, handle)
+PY
+
         if [ -z "''${SEARXNG_SECRET_KEY:-}" ]; then
           SEARXNG_SECRET_KEY=$(${pkgs.openssl}/bin/openssl rand -hex 32)
         fi
