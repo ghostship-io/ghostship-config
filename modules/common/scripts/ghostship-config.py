@@ -348,6 +348,7 @@ services:
 server:
   image_proxy: true
   port: 8080
+  bind_address: "127.0.0.1"
 """
         with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False) as f:
             f.write(content.encode())
@@ -358,13 +359,48 @@ server:
             m.driver.set("services[name=Sonarr].key", "new")
             m.driver.set("server.image_proxy", "false")
             m.driver.set("server.port", "5002")
+            m.driver.set("server.bind_address", "0.0.0.0")
             m.save()
             with open(path, "r") as f:
                 res = f.read()
                 assert "key: new" in res
                 assert "image_proxy: false" in res
                 assert "port: 5002" in res
+                assert 'bind_address: "0.0.0.0"' in res
+
+            yaml = YAML(typ="safe")
+            with open(path, "r") as f:
+                data = yaml.load(f)
+                assert data["server"]["image_proxy"] is False
+                assert data["server"]["port"] == 5002
+                assert data["server"]["bind_address"] == "0.0.0.0"
             logging.info("YAML comprehensive tests passed")
+        finally:
+            os.unlink(path)
+
+    def test_yaml_poisoned_scalar_repair():
+        content = """
+server:
+  image_proxy: 'true'
+  port: '8080'
+"""
+        with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False) as f:
+            f.write(content.encode())
+            path = f.name
+        try:
+            resolver = ValueResolver()
+            m = ConfigManager(path)
+            m.load()
+            m.driver.set("server.image_proxy", resolver.resolve("yaml:false"))
+            m.driver.set("server.port", resolver.resolve("yaml:5002"))
+            m.save()
+
+            yaml = YAML(typ="safe")
+            with open(path, "r") as f:
+                data = yaml.load(f)
+                assert data["server"]["image_proxy"] is False
+                assert data["server"]["port"] == 5002
+            logging.info("YAML poisoned scalar repair tests passed")
         finally:
             os.unlink(path)
 
@@ -442,10 +478,12 @@ server:
         assert r.resolve("yaml:true") is True
         assert r.resolve("yaml:false") is False
         assert r.resolve("yaml:5002") == 5002
+        assert r.resolve('yaml:"0.0.0.0"') == "0.0.0.0"
         logging.info("YAML resolver tests passed")
 
     test_xml()
     test_yaml()
+    test_yaml_poisoned_scalar_repair()
     test_ini()
     test_kv()
     test_resolver()
