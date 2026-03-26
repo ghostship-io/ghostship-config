@@ -1,0 +1,8 @@
+{
+  "track_id": "nix_optimization_20260226",
+  "type": "chore",
+  "status": "new",
+  "created_at": "2026-02-26T14:00:00Z",
+  "updated_at": "2026-02-26T14:00:00Z",
+  "description": "Automate Nix garbage collection and generation cleanup"
+}

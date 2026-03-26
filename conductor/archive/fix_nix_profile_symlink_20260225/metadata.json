@@ -1,0 +1,8 @@
+{
+  "track_id": "fix_nix_profile_symlink_20260225",
+  "type": "fix",
+  "status": "new",
+  "created_at": "2026-02-25T16:50:00Z",
+  "updated_at": "2026-02-25T16:50:00Z",
+  "description": "Fix .nix-profile symlink to point to Home Manager profile"
+}

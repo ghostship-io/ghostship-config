@@ -1,0 +1,8 @@
+{
+  "track_id": "multihost_launch_octopus_20260225",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-02-25T14:00:00Z",
+  "updated_at": "2026-02-25T14:00:00Z",
+  "description": "Implement Multi-Host Support and Configure 'launch-octopus' Host"
+}

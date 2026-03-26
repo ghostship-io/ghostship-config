@@ -1,0 +1,8 @@
+{
+  "track_id": "remove_devenv_nix_direnv_20260227",
+  "type": "chore",
+  "status": "new",
+  "created_at": "2026-02-27T12:45:00Z",
+  "updated_at": "2026-02-27T12:45:00Z",
+  "description": "Remove devenv and cachix, replace standard direnv with nix-direnv."
+}

@@ -1,0 +1,8 @@
+{
+  "track_id": "wsl_username_discovery_fix_20260225",
+  "type": "fix",
+  "status": "new",
+  "created_at": "2026-02-25T14:45:00Z",
+  "updated_at": "2026-02-25T14:45:00Z",
+  "description": "Update the username discovery to use this: /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command '$env:UserName' | tr -d ''"
+}

@@ -1,0 +1,8 @@
+{
+  "track_id": "upgrade_nh_20260226",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-02-26T14:30:00Z",
+  "updated_at": "2026-02-26T14:30:00Z",
+  "description": "Upgrade nh helper to latest version from GitHub"
+}

@@ -1,0 +1,7 @@
+creation_rules:
+  - path_regex: secrets\.yaml$
+    key_groups:
+      - age:
+          - age1xuwcyzcm8l2hy8950zr4swjj4d92dut4p3dfq6vn0xgtjl9ceynqrcqtxl # armored-armadillo
+          - age1whdrlhw24r0ucgttfcvvrkmpchswfya5dmu79zvmfzyhdwdqks3sjj2uhy # chill-penguin
+          - age1kfz4asnfhjpr97xd5dg6zkus3hgfxth5pesq8zlvcs59qguhpp0s398w8l # launch-octopus

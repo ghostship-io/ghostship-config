@@ -1,0 +1,8 @@
+{
+  "track_id": "refactor_wsl_home_20260227",
+  "type": "refactor",
+  "status": "new",
+  "created_at": "2026-02-27T12:00:00Z",
+  "updated_at": "2026-02-27T12:00:00Z",
+  "description": "I want to put all the wsl2 features in their own file. Right now there are home specific wsl2 configs that are only for wsl2 environments like running the ssh agent with systemd."
+}

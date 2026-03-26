@@ -1,0 +1,8 @@
+{
+  "track_id": "remove_win_notifications_20260227",
+  "type": "chore",
+  "status": "new",
+  "created_at": "2026-02-27T14:30:00Z",
+  "updated_at": "2026-02-27T14:30:00Z",
+  "description": "Remove all the code related to the win_notifications track we're going to change the way that is done."
+}

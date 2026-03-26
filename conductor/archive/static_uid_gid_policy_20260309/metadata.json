@@ -1,0 +1,8 @@
+{
+  "track_id": "static_uid_gid_policy_20260309",
+  "type": "chore",
+  "status": "new",
+  "created_at": "2026-03-09T15:20:00Z",
+  "updated_at": "2026-03-09T15:20:00Z",
+  "description": "Enforce static UID/GID assignment policy and prevent overlaps across the fleet."
+}

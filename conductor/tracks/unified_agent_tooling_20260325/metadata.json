@@ -1,0 +1,8 @@
+{
+  "track_id": "unified_agent_tooling_20260325",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-03-25T21:22:03Z",
+  "updated_at": "2026-03-25T21:22:03Z",
+  "description": "Overhaul Gemini, Conductor, OpenCode, and Codex so they share skills, global instructions, extensions, update checks, and MCP servers."
+}

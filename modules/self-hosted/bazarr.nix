@@ -1,0 +1,77 @@
+{ config, lib, pkgs, ... }:
+
+let
+  bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
+  plex-secrets = config.sops.secrets."plex-secrets".path;
+  sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
+  radarr-secrets = config.sops.secrets."radarr-secrets".path;
+in
+{
+  virtualisation.oci-containers.containers."bazarr" = {
+    image = "lscr.io/linuxserver/bazarr:latest";
+    user = "3000:3000";
+    extraOptions = [
+      "--network=ghostship_net"
+      "--health-cmd=wget -q --spider http://127.0.0.1:6767/ || exit 1"
+      "--health-interval=1m"
+      "--health-timeout=10s"
+      "--health-retries=3"
+      "--health-start-period=30s"
+    ];
+    environment = {
+      TZ = "UTC";
+      PUID = "3000";
+      PGID = "3000";
+    };
+    volumes = [
+      "/srv/apps/bazarr:/config"
+      "/mnt/share/Library/Movies:/movies:ro"
+      "/mnt/share/Library/TV:/tv:ro"
+    ];
+  };
+
+  systemd.services.podman-bazarr = {
+    after = [ "mnt-share.mount" ];
+    wants = [ "mnt-share.mount" ];
+  };
+
+  systemd.tmpfiles.rules = [
+    "d /srv/apps/bazarr 0755 apps apps -"
+  ];
+
+  system.activationScripts.bazarr-config = {
+    text = ''
+      CONFIG_FILE="/srv/apps/bazarr/config.yaml"
+
+      if [ -f "$CONFIG_FILE" ] && [ -f "${bazarr-secrets}" ] && [ -f "${plex-secrets}" ] && [ -f "${sonarr-secrets}" ] && [ -f "${radarr-secrets}" ]; then
+        echo "Surgically updating Bazarr config..."
+        set -a
+        . "${bazarr-secrets}"
+        . "${plex-secrets}"
+        . "${sonarr-secrets}"
+        . "${radarr-secrets}"
+        set +a
+
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" \
+          --secrets-file "${bazarr-secrets}" \
+          --secrets-file "${plex-secrets}" \
+          --secrets-file "${sonarr-secrets}" \
+          --secrets-file "${radarr-secrets}" \
+          auth.apikey=env:BAZARR_API_KEY \
+          general.flask_secret_key=env:BAZARR_FLASK_SECRET_KEY \
+          opensubtitlescom.password=env:BAZARR_OPENSUBTITLES_PASSWORD \
+          plex.apikey=env:PLEX_API_KEY \
+          plex.encryption_key=env:BAZARR_PLEX_ENCRYPTION_KEY \
+          plex.token=env:BAZARR_PLEX_TOKEN \
+          radarr.apikey=env:RADARR_API_KEY \
+          sonarr.apikey=env:SONARR_API_KEY \
+          subdl.api_key=env:BAZARR_SUBDL_API_KEY \
+          general.instance_name=literal:"Ghostship Bazarr" \
+          analytics.enabled=literal:false
+        
+        chown 3000:3000 "$CONFIG_FILE"
+        chmod 644 "$CONFIG_FILE"
+      fi
+    '';
+  };
+}

@@ -1,0 +1,27 @@
+# Nix
+result
+result-*
+.direnv/
+.worktrees/
+*.drv
+*.log
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+
+# Reference data
+old/
+.sops-age-key.txt
+secrets.dec.yaml
+
+# Build artifacts
+*.attempt*
+*.bak
+:Zone.Identifier
+secrets.dec.yaml
