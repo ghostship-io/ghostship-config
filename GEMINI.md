@@ -12,6 +12,7 @@
 - **Firmware Source Path**: The correct source for Apple firmware on NixOS is `/boot/asahi/`, containing `all_firmware.tar.gz` and `kernelcache*`.
 - **Impure Rebuilds**: When `extractPeripheralFirmware` is enabled and pointing to `/boot/asahi`, `nixos-rebuild` REQUIRES the `--impure` flag to access files outside the flake.
 - **Asahi Firmware Scope**: `/boot/asahi` is only relevant on `chill-penguin`; do not treat it as a repo-wide requirement. The peripheral-firmware module defaults `extractPeripheralFirmware = true`, so hosts without firmware must explicitly set it to `false` when `builtins.pathExists /boot/asahi` is false.
+- **Gluetun Secret Ordering**: Gluetun must declare `after` and `requires` on `sops-nix.service`; activation-time polling of `/run/secrets/gluetun-secrets` is not reliable enough on `nh os switch`.
 - **Mutable Users Safety**: In early-stage hardware setups where WiFi might be unstable, set `users.mutableUsers = true;`. This prevents lockouts if `sops-nix` fails to decrypt the user password on boot.
 - **Btrfs Layout**: A modern subvolume layout (`@`, `@home`, `@nix`, `@log`) with `compress=zstd` and `noatime` is preferred for large NVMe storage on Apple Silicon.
 - **`nh os build` Flag Quirk**: `nh os build` passes extra arguments through to `nix build`; the `--no-build-output` flag is not accepted in this environment. Use the built-in `-q/--quiet` option or omit the flag entirely.

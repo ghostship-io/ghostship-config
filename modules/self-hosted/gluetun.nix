@@ -29,8 +29,7 @@ in
       TZ = "UTC";
     };
     environmentFiles = [
-      # Path to be defined once sops-nix is ready for this service
-      "/run/secrets/gluetun-secrets"
+      gluetun-secrets
       gluetun-runtime-env
     ];
     volumes = [
@@ -38,32 +37,43 @@ in
     ];
   };
 
+  systemd.services.podman-gluetun.after = [ "sops-nix.service" ];
+  systemd.services.podman-gluetun.requires = [ "sops-nix.service" ];
   systemd.services.podman-gluetun.serviceConfig.Restart = lib.mkForce "always";
 
-  system.activationScripts.gluetun-runtime-env = {
-    text = ''
-      if [ ! -f "${gluetun-secrets}" ]; then
-        echo "Missing Gluetun secrets file at ${gluetun-secrets}" >&2
-        exit 1
-      fi
+  systemd.services.podman-gluetun.preStart = ''
+    if [ ! -f "${gluetun-secrets}" ]; then
+      echo "Waiting for Gluetun secrets at ${gluetun-secrets}..."
+      for _ in $(seq 1 30); do
+        if [ -f "${gluetun-secrets}" ]; then
+          break
+        fi
+        sleep 1
+      done
+    fi
 
-      set -a
-      . "${gluetun-secrets}"
-      set +a
+    if [ ! -f "${gluetun-secrets}" ]; then
+      echo "Missing Gluetun secrets file at ${gluetun-secrets}" >&2
+      exit 1
+    fi
 
-      API_KEY="$HTTP_CONTROL_SERVER_API_KEY"
-      mkdir -p /run/secrets
-      cat > ${gluetun-runtime-env} <<EOF
+    set -a
+    . "${gluetun-secrets}"
+    set +a
+
+    API_KEY="$HTTP_CONTROL_SERVER_API_KEY"
+    mkdir -p /run/secrets
+    cat > ${gluetun-runtime-env} <<EOF
 GLUETUN_API_KEY=$API_KEY
 HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE={"auth":"apikey","apikey":"$API_KEY","routes":["GET /v1/publicip/ip","GET /v1/openvpn/portforwarded"]}
 EOF
-      chmod 600 ${gluetun-runtime-env}
-    '';
-  };
+    chmod 600 ${gluetun-runtime-env}
+  '';
 
   systemd.services.gluetun-network-monitor = {
     description = "Monitor Gluetun IP and restart dependents on change";
-    after = [ "podman-gluetun.service" ];
+    after = [ "sops-nix.service" "podman-gluetun.service" ];
+    requires = [ "sops-nix.service" ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "simple";
@@ -71,6 +81,21 @@ EOF
         set -eu
 
         LAST_IP=""
+        if [ ! -f "${gluetun-secrets}" ]; then
+          echo "Waiting for Gluetun secrets at ${gluetun-secrets}..."
+          for _ in $(seq 1 30); do
+            if [ -f "${gluetun-secrets}" ]; then
+              break
+            fi
+            sleep 1
+          done
+        fi
+
+        if [ ! -f "${gluetun-secrets}" ]; then
+          echo "Missing Gluetun secrets file at ${gluetun-secrets}" >&2
+          exit 1
+        fi
+
         set -a
         . "${gluetun-secrets}"
         set +a
