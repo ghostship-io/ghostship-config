@@ -349,6 +349,9 @@ class ConfigManager:
         self.content = ""
 
     def _detect_format(self):
+        if os.path.basename(self.file_path) == "qBittorrent.conf":
+            return "ini"
+
         ext = os.path.splitext(self.file_path)[1].lower()
         if ext == ".xml":
             return "xml"
@@ -604,6 +607,36 @@ plugins:
         finally:
             os.unlink(path)
 
+    def test_qbittorrent_conf_detection():
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, "qBittorrent.conf")
+            content = """
+[Preferences]
+WebUI\\Address=*
+WebUI\\Port=5000
+"""
+            with open(path, "w") as f:
+                f.write(content)
+
+            m = ConfigManager(path)
+            assert m.format == "ini"
+            m.load()
+            m.driver.set(
+                "Preferences.WebUI\\ReverseProxySupportEnabled",
+                "true",
+            )
+            m.driver.set(
+                "Preferences.WebUI\\AlternativeUIEnabled",
+                "true",
+            )
+            m.save()
+
+            with open(path, "r") as f:
+                res = f.read()
+                assert "WebUI\\ReverseProxySupportEnabled = true" in res
+                assert "WebUI\\AlternativeUIEnabled = true" in res
+            logging.info("qBittorrent INI detection tests passed")
+
     def test_kv():
         content = "Server1.Host = old\nServer1.Port=443"
         with tempfile.NamedTemporaryFile(suffix=".conf", delete=False) as f:
@@ -666,6 +699,7 @@ plugins:
     test_yaml_poisoned_scalar_repair()
     test_yaml_complex_paths()
     test_ini()
+    test_qbittorrent_conf_detection()
     test_kv()
     test_resolver()
     test_resolver_multiple_files()

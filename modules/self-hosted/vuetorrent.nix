@@ -39,16 +39,23 @@ let
     # 3. Update config if it exists
     if [ -f "$CONFIG_FILE" ]; then
       echo "Surgically updating VueTorrent config..."
+
+      # Remove legacy KV-style lines from the old broken writer.
+      ${pkgs.gnused}/bin/sed -i '/^WebUI\./d' "$CONFIG_FILE"
+
       ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" \
-        WebUI.Port=literal:5000 \
-        WebUI.AuthSubnetWhitelist=literal:0.0.0.0/0 \
-        WebUI.AuthSubnetWhitelistEnabled=literal:true \
-        WebUI.CSRFProtection=literal:false \
-        WebUI.ClickjackingProtection=literal:false \
-        WebUI.HostHeaderValidation=literal:false \
-        WebUI.AlternativeUIEnabled=literal:true \
-        WebUI.RootFolder=literal:/vuetorrent-ui \
-        WebUI.Username=literal:admin
+        Preferences.WebUI\\Address=literal:* \
+        Preferences.WebUI\\Port=literal:5000 \
+        Preferences.WebUI\\ServerDomains=literal:* \
+        Preferences.WebUI\\AuthSubnetWhitelist=literal:0.0.0.0/0 \
+        Preferences.WebUI\\AuthSubnetWhitelistEnabled=literal:true \
+        Preferences.WebUI\\CSRFProtection=literal:false \
+        Preferences.WebUI\\ClickjackingProtection=literal:false \
+        Preferences.WebUI\\HostHeaderValidation=literal:false \
+        Preferences.WebUI\\ReverseProxySupportEnabled=literal:true \
+        Preferences.WebUI\\AlternativeUIEnabled=literal:true \
+        Preferences.WebUI\\RootFolder=literal:/vuetorrent-ui \
+        Preferences.WebUI\\Username=literal:admin
       
       echo "VueTorrent config updated"
     fi
