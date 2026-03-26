@@ -34,8 +34,9 @@ in
   };
 
   systemd.services.podman-romm = {
-    after = [ "mnt-share.mount" ];
+    after = [ "mnt-share.mount" "sops-nix.service" ];
     wants = [ "mnt-share.mount" ];
+    requires = [ "sops-nix.service" ];
   };
 
   systemd.tmpfiles.rules = [
@@ -45,44 +46,37 @@ in
     "d /srv/apps/romm/config 0755 apps apps -"
   ];
 
-  system.activationScripts.romm-config = {
-    text = ''
-      CONFIG_DIR="/srv/apps/romm"
-      CONFIG_FILE="$CONFIG_DIR/config/config.yml"
-      ENV_FILE="$CONFIG_DIR/romm.env"
-      SECRETS_FILE="${romm-secrets}"
+  systemd.services.podman-romm.preStart = ''
+    CONFIG_DIR="/srv/apps/romm"
+    CONFIG_FILE="$CONFIG_DIR/config/config.yml"
+    ENV_FILE="$CONFIG_DIR/romm.env"
 
-      if [ -f "$CONFIG_FILE" ]; then
-        echo "Surgically updating RomM config.yml..."
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" \
-          library_path=literal:/romm/library \
-          assets_path=literal:/romm/assets \
-          resources_path=literal:/romm/resources
-        chown 3000:3000 "$CONFIG_FILE"
-      fi
-      if [ -f "$ENV_FILE" ] || [ -f "$SECRETS_FILE" ]; then
-        echo "Surgically updating RomM env file..."
-        set -a
-        . "$SECRETS_FILE"
-        set +a
+    if [ -f "$CONFIG_FILE" ]; then
+      echo "Surgically updating RomM config.yml..."
+      ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" \
+        library_path=literal:/romm/library \
+        assets_path=literal:/romm/assets \
+        resources_path=literal:/romm/resources
+      chown 3000:3000 "$CONFIG_FILE"
+    fi
 
-        mkdir -p "$(dirname "$ENV_FILE")"
-        touch "$ENV_FILE"
+    echo "Surgically updating RomM env file..."
+    mkdir -p "$(dirname "$ENV_FILE")"
+    touch "$ENV_FILE"
 
-      ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" \
-          DB_USER=env:ROMM_DB_USER \
-          DB_PASSWD=env:ROMM_DB_PASSWORD \
-          ROMM_AUTH_SECRET_KEY=env:ROMM_AUTH_SECRET \
-          IGDB_CLIENT_ID=env:ROMM_IGDB_CLIENT_ID \
-          IGDB_CLIENT_SECRET=env:ROMM_IGDB_CLIENT_SECRET \
-          RETROACHIEVEMENTS_API_KEY=env:ROMM_RETROACHIEVEMENTS_API_KEY \
-          STEAMGRIDDB_API_KEY=env:ROMM_STEAMGRIDDB_API_KEY \
-          SCREENSCRAPER_USER=env:ROMM_SCREENSCRAPER_USER \
-          SCREENSCRAPER_PASSWORD=env:ROMM_SCREENSCRAPER_PASS
-        
-        chown 3000:3000 "$ENV_FILE"
-        chmod 600 "$ENV_FILE"
-      fi
-    '';
-  };
+    ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" \
+      --secrets-file "${romm-secrets}" \
+      DB_USER=env:ROMM_DB_USER \
+      DB_PASSWD=env:ROMM_DB_PASSWORD \
+      ROMM_AUTH_SECRET_KEY=env:ROMM_AUTH_SECRET \
+      IGDB_CLIENT_ID=env:ROMM_IGDB_CLIENT_ID \
+      IGDB_CLIENT_SECRET=env:ROMM_IGDB_CLIENT_SECRET \
+      RETROACHIEVEMENTS_API_KEY=env:ROMM_RETROACHIEVEMENTS_API_KEY \
+      STEAMGRIDDB_API_KEY=env:ROMM_STEAMGRIDDB_API_KEY \
+      SCREENSCRAPER_USER=env:ROMM_SCREENSCRAPER_USER \
+      SCREENSCRAPER_PASSWORD=env:ROMM_SCREENSCRAPER_PASS
+
+    chown 3000:3000 "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
+  '';
 }
