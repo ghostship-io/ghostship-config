@@ -110,6 +110,32 @@ class YAMLDriver:
         self.data = self.yaml.load(content)
         self.dirty = False
 
+    def _coerce_value(self, current, value):
+        if not isinstance(value, str):
+            return value
+
+        lowered = value.lower()
+
+        if isinstance(current, bool):
+            if lowered == "true":
+                return True
+            if lowered == "false":
+                return False
+
+        if isinstance(current, int) and not isinstance(current, bool):
+            try:
+                return int(value)
+            except ValueError:
+                return value
+
+        if isinstance(current, float):
+            try:
+                return float(value)
+            except ValueError:
+                return value
+
+        return value
+
     def _get_target(self, path):
         parts = path.split(".")
         curr = self.data
@@ -164,8 +190,11 @@ class YAMLDriver:
             logging.warning(f"Path not found: {path}")
             return
 
-        if str(target.get(key)) != str(value):
-            target[key] = value
+        current = target.get(key)
+        typed_value = self._coerce_value(current, value)
+
+        if current != typed_value:
+            target[key] = typed_value
             self.dirty = True
 
     def serialize(self):
@@ -313,6 +342,9 @@ def run_self_tests():
 services:
   - name: Sonarr
     key: old
+server:
+  image_proxy: true
+  port: 8080
 """
         with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False) as f:
             f.write(content.encode())
@@ -321,10 +353,14 @@ services:
             m = ConfigManager(path)
             m.load()
             m.driver.set("services[name=Sonarr].key", "new")
+            m.driver.set("server.image_proxy", "false")
+            m.driver.set("server.port", "5002")
             m.save()
             with open(path, "r") as f:
                 res = f.read()
                 assert "key: new" in res
+                assert "image_proxy: false" in res
+                assert "port: 5002" in res
             logging.info("YAML comprehensive tests passed")
         finally:
             os.unlink(path)
