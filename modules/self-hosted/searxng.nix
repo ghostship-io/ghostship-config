@@ -54,22 +54,22 @@ in
           --secrets-file "$SECRETS_FILE" \
           server.secret_key=env:SEARXNG_SECRET_KEY \
           general.instance_name=literal:"Ghostship Search" \
-          server.port=literal:5002 \
+          server.port=yaml:5002 \
           server.bind_address=literal:"0.0.0.0" \
-          server.image_proxy=literal:true \
-          search.safe_search=literal:0 \
+          server.image_proxy=yaml:true \
+          search.safe_search=yaml:0 \
           search.autocomplete=literal:duckduckgo \
           "valkey.url=literal:valkey://searxng-valkey:6379/0" \
-          "plugins[searx.plugins.calculator.SXNGPlugin].active=literal:true" \
-          "plugins[searx.plugins.hash_plugin.SXNGPlugin].active=literal:true" \
-          "plugins[searx.plugins.self_info.SXNGPlugin].active=literal:true" \
-          "engines[name=google].disabled=literal:false" \
-          "engines[name=duckduckgo].disabled=literal:false" \
-          "engines[name=brave].disabled=literal:false" \
-          "engines[name=mojeek].disabled=literal:false" \
-          "engines[name=yep].disabled=literal:false" \
-          "engines[name=wikipedia].disabled=literal:false" \
-          "engines[name=annas archive].disabled=literal:false"
+          "plugins[searx.plugins.calculator.SXNGPlugin].active=yaml:true" \
+          "plugins[searx.plugins.hash_plugin.SXNGPlugin].active=yaml:true" \
+          "plugins[searx.plugins.self_info.SXNGPlugin].active=yaml:true" \
+          "engines[name=google].disabled=yaml:false" \
+          "engines[name=duckduckgo].disabled=yaml:false" \
+          "engines[name=brave].disabled=yaml:false" \
+          "engines[name=mojeek].disabled=yaml:false" \
+          "engines[name=yep].disabled=yaml:false" \
+          "engines[name=wikipedia].disabled=yaml:false" \
+          "engines[name=annas archive].disabled=yaml:false"
         
         chown 3000:3000 "$SETTINGS_FILE"
       fi

@@ -61,6 +61,9 @@ class ValueResolver:
                 return ""
         if value.startswith("literal:"):
             return value[8:]
+        if value.startswith("yaml:"):
+            yaml = YAML(typ="safe")
+            return yaml.load(value[5:])
         return value
 
 
@@ -434,12 +437,20 @@ server:
             os.unlink(path1)
             os.unlink(path2)
 
+    def test_resolver_yaml():
+        r = ValueResolver()
+        assert r.resolve("yaml:true") is True
+        assert r.resolve("yaml:false") is False
+        assert r.resolve("yaml:5002") == 5002
+        logging.info("YAML resolver tests passed")
+
     test_xml()
     test_yaml()
     test_ini()
     test_kv()
     test_resolver()
     test_resolver_multiple_files()
+    test_resolver_yaml()
     logging.info("All comprehensive self-tests passed!")
 
 
@@ -482,7 +493,7 @@ def main():
 
     if manager.driver:
         for patch in args.patches:
-            match = re.match(r"(.+)=(env|file|literal):(.*)", patch)
+            match = re.match(r"(.+)=(env|file|literal|yaml):(.*)", patch)
             if match:
                 key, prefix, val_ref = match.groups()
                 val = resolver.resolve(f"{prefix}:{val_ref}")
