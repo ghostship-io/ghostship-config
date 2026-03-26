@@ -25,7 +25,8 @@ in
   };
 
   systemd.services.podman-searxng = {
-    wantedBy = [ "podman-gluetun.service" ];
+    after = [ "podman-gluetun.service" ];
+    bindsTo = [ "podman-gluetun.service" ];
   };
 
   systemd.tmpfiles.rules = [
