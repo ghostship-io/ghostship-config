@@ -382,11 +382,12 @@ services:
             os.unlink(path)
 
     def test_resolver_multiple_files():
-        with tempfile.NamedTemporaryFile(delete=False) as f1, tempfile.NamedTemporaryFile(delete=False) as f2:
-            f1.write(b"KEY1=VAL1\nSHARED=ONE")
-            f2.write(b"KEY2=VAL2\nSHARED=TWO")
-            path1 = f1.name
-            path2 = f2.name
+        with tempfile.NamedTemporaryFile(delete=False) as f1:
+            with tempfile.NamedTemporaryFile(delete=False) as f2:
+                f1.write(b"KEY1=VAL1\nSHARED=ONE")
+                f2.write(b"KEY2=VAL2\nSHARED=TWO")
+                path1 = f1.name
+                path2 = f2.name
         try:
             r = ValueResolver(secrets_files=[path1, path2])
             assert r.resolve("env:KEY1") == "VAL1"
