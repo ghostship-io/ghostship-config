@@ -499,7 +499,10 @@ recyclarr:
                 "new-id",
             )
             recyclarr.driver.set(
-                "recyclarr.custom_formats[0].assign_scores_to[name=Optimal].score",
+                (
+                    "recyclarr.custom_formats[0]."
+                    "assign_scores_to[name=Optimal].score"
+                ),
                 resolver.resolve("yaml:900"),
             )
             recyclarr.save()
@@ -514,11 +517,15 @@ recyclarr:
             with open(recyclarr_path, "r") as f:
                 recyclarr_data = yaml.load(f)
                 assert (
-                    recyclarr_data["recyclarr"]["custom_formats"][0]["trash_ids"][0]
+                    recyclarr_data["recyclarr"]["custom_formats"][0][
+                        "trash_ids"
+                    ][0]
                     == "new-id"
                 )
                 assert (
-                    recyclarr_data["recyclarr"]["custom_formats"][0]["assign_scores_to"][0]["score"]
+                    recyclarr_data["recyclarr"]["custom_formats"][0][
+                        "assign_scores_to"
+                    ][0]["score"]
                     == 900
                 )
             logging.info("YAML complex path tests passed")
