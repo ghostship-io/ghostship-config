@@ -208,7 +208,8 @@ class YAMLDriver:
                     curr = self._select_from_mapping(items, selector)
                 else:
                     logging.warning(
-                        f"Expected list or mapping for selector, got {type(items)}"
+                        "Expected list or mapping for selector, got %s",
+                        type(items),
                     )
                     return None, None
 
