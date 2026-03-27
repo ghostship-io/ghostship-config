@@ -78,7 +78,7 @@ in
         resources_path=literal:/romm/resources
       )
 
-      ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${romm_cfg_args[@]}"
+      ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${romm_cfg_args[@]}"
       chown 3000:3000 "$CONFIG_FILE"
     fi
 
