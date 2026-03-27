@@ -12,8 +12,8 @@ let
 
   mcpServers = {
     ssh = {
-      command = "npx";
-      args = [ "-y" "@aiondadotcom/mcp-ssh" ];
+      command = "uvx";
+      args = [ "mcp-ssh-session" ];
     };
     "agent-browser" = {
       command = "npx";

@@ -77,8 +77,8 @@ This file serves as the primary memory and persistent fact store for AI agents w
 - **Skill Refactor**: The `nixos` skill has been renamed to `system` and set as a default skill in `modules/common/gemini.nix`.
 - **Automated Maintenance**: Automated daily garbage collection and generation cleanup (keeping 7 days) is configured in `modules/common/default.nix`. Use `nh clean all --keep X` for manual pruning.
 - **Plan Mode Enabled**: Experimental plan mode has been enabled in `modules/develop/gemini.nix` while maintaining `default` as the default approval mode.
-- **SSH MCP & Agent**: `mcp-ssh-manager` is configured to use the SSH agent at `/run/user/1000/ssh-agent`. Users must ensure their keys (especially password-protected ones) are loaded into the agent before using remote tasks.
-- **MCP Runners**: `uv` and `nodejs` (for `npx`) are required for the current MCP server configurations (`agent-browser` and `mcp-ssh-manager`).
+- **SSH MCP & Agent**: `mcp-ssh-session` (via `uvx`) enables persistent shell sessions, allowing `cd` and environment variables to persist across commands. It integrates with `~/.ssh/config` and uses the SSH agent at `/run/user/1000/ssh-agent`. Use `execute_command`, `read_file`, and `write_file` as primary tools.
+- **MCP Runners**: `uvx` is preferred for Python-based MCP servers like `mcp-ssh-session`, while `npx` remains for Node-based servers like `agent-browser`.
 - **Python Skill Added**: A new `python` skill for modern development using `uv`, Nix flakes, and comprehensive testing/linting has been added to `~/.agents/skills/python/`.
 - **System Packages**: `zip` has been added to the common system packages in `modules/common/default.nix`.
 - **Build123d Skill Added**: A new `build123d` skill for Python-based CAD modeling with an emphasis on multi-perspective screenshot validation has been added.
