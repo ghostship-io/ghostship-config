@@ -11,10 +11,6 @@ let
   ];
 
   mcpServers = {
-    ssh = {
-      command = "uvx";
-      args = [ "mcp-ssh-session" ];
-    };
     "agent-browser" = {
       command = "npx";
       args = [ "-y" "agent-browser-mcp" ];

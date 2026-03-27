@@ -56,11 +56,6 @@ let
         --set NODE_NO_WARNINGS 1
       mv $out/bin/gemini-base $out/bin/gemini
 
-      # Provide mcp-ssh as a wrapper around npx
-      echo "#!${pkgs.bash}/bin/bash" > $out/bin/mcp-ssh
-      echo "exec npx -y @aiondadotcom/mcp-ssh \"\$@\"" >> $out/bin/mcp-ssh
-      chmod +x $out/bin/mcp-ssh
-
       wrapProgram $out/bin/skills-base \
         --set NODE_NO_WARNINGS 1
       mv $out/bin/skills-base $out/bin/skills

@@ -76,6 +76,13 @@ map \$http_x_forwarded_proto \$forwardscheme {
     https https;
 }
 
+# Disable manifest fetches only when RomM is rendered inside an iframe.
+# This tests whether the PWA manifest path is the embed-specific trigger.
+map \$http_sec_fetch_dest \$romm_csp {
+    default        "frame-ancestors https://*.ghostship.io https://ghostship.io https://apps.ghostship.io;";
+    iframe         "frame-ancestors https://*.ghostship.io https://ghostship.io https://apps.ghostship.io; manifest-src 'none';";
+}
+
 # COEP and COOP headers for cross-origin isolation, which are set only for the
 # EmulatorJS player path, to enable SharedArrayBuffer support, which is needed
 # for multi-threaded cores.
@@ -100,7 +107,7 @@ server {
     proxy_set_header X-Forwarded-Proto \$forwardscheme;
 
     location / {
-        add_header Content-Security-Policy "frame-ancestors https://*.ghostship.io https://ghostship.io https://apps.ghostship.io;" always;
+        add_header Content-Security-Policy \$romm_csp always;
         try_files \$uri \$uri/ /index.html;
         proxy_redirect off;
         add_header Access-Control-Allow-Origin *;
