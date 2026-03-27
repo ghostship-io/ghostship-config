@@ -87,7 +87,7 @@ let
         Preferences.WebUI\\RootFolder=literal:/vuetorrent-ui/public
       )
 
-      ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${vt_args[@]}"
+      ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_args[@]}"
       
       echo "VueTorrent config updated"
     fi

@@ -42,7 +42,7 @@ in
           plexautolanguages.plex.token=env:PLEX_API_KEY
         )
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${pal_args[@]}"
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${pal_args[@]}"
         chown 3000:3000 "$CONFIG_FILE"
       fi
     '';

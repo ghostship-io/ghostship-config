@@ -48,7 +48,7 @@ in
       MYSQL_PASSWORD=env:ROMM_DB_PASS
     )
 
-    ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" "${romm_db_args[@]}"
+    ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" "''${romm_db_args[@]}"
 
     chown 3000:3000 "$ENV_FILE"
     chmod 600 "$ENV_FILE"

@@ -92,7 +92,7 @@ PY
           "engines[name=annas archive].disabled=yaml:false"
         )
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$SETTINGS_FILE" "${searx_args[@]}"
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$SETTINGS_FILE" "''${searx_args[@]}"
         
         chown 3000:3000 "$SETTINGS_FILE"
       fi

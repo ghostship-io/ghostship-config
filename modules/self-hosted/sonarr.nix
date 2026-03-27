@@ -53,7 +53,7 @@ in
           Config.UpdateMechanism=literal:Docker
         )
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${sonarr_args[@]}"
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${sonarr_args[@]}"
         chown 3000:3000 "$CONFIG_FILE"
       fi
     '';

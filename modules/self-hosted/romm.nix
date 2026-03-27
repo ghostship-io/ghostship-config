@@ -99,7 +99,7 @@ in
       SCREENSCRAPER_PASSWORD=env:ROMM_SCREENSCRAPER_PASS
     )
 
-    ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" "${romm_env_args[@]}"
+    ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" "''${romm_env_args[@]}"
 
     chown 3000:3000 "$ENV_FILE"
     chmod 600 "$ENV_FILE"

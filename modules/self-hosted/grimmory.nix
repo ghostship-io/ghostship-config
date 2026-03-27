@@ -58,7 +58,7 @@ in
           DATABASE_PASSWORD=env:GRIMMORY_DB_PASS
         )
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" "${grimmory_args[@]}"
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" "''${grimmory_args[@]}"
         chown 3000:3000 "$ENV_FILE"
         chmod 600 "$ENV_FILE"
       fi

@@ -31,7 +31,7 @@ let
         Preferences.@AcceptedEULA=literal:1
       )
 
-      ${pkgs.ghostship-config}/bin/ghostship-config set "$PREFS_FILE" "${plex_args[@]}"
+      ${pkgs.ghostship-config}/bin/ghostship-config set "$PREFS_FILE" "''${plex_args[@]}"
 
       # Ensure permissions are correct after yq edit
       chown 3000:3000 "$PREFS_FILE"

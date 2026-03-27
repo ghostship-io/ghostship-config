@@ -60,7 +60,7 @@ in
           "radarr.radarr.custom_formats[1].assign_scores_to[name=Optimal].score=literal:800"
         )
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${recyclarr_args[@]}"
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${recyclarr_args[@]}"
         chown 3000:3000 "$CONFIG_FILE"
       fi
     '';

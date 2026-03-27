@@ -78,7 +78,7 @@ in
           analytics.enabled=literal:false
         )
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${bazarr_args[@]}"
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${bazarr_args[@]}"
 
         chown 3000:3000 "$CONFIG_FILE"
         chmod 644 "$CONFIG_FILE"

@@ -57,7 +57,7 @@ in
             title=literal:"Ghostship Dashboard"
             quicklaunch.hideInternetSearch=literal:true
           )
-          ${pkgs.ghostship-config}/bin/ghostship-config set "$SETTINGS_FILE" "${settings_args[@]}"
+          ${pkgs.ghostship-config}/bin/ghostship-config set "$SETTINGS_FILE" "''${settings_args[@]}"
           fi
         # Update services.yaml if it exists
         if [ -f "$SERVICES_FILE" ]; then
@@ -267,7 +267,7 @@ in
             "2.openmeteo.timezone=literal:Pacific/Honolulu"
             "2.openmeteo.units=literal:imperial"
           )
-          ${pkgs.ghostship-config}/bin/ghostship-config set "$WIDGETS_FILE" "${widget_args[@]}"
+          ${pkgs.ghostship-config}/bin/ghostship-config set "$WIDGETS_FILE" "''${widget_args[@]}"
         fi
 
         # Update docker.yaml if it exists
@@ -276,7 +276,7 @@ in
           docker_args=(
             chill-penguin.socket=literal:/var/run/podman.sock
           )
-          ${pkgs.ghostship-config}/bin/ghostship-config set "$DOCKER_FILE" "${docker_args[@]}"
+          ${pkgs.ghostship-config}/bin/ghostship-config set "$DOCKER_FILE" "''${docker_args[@]}"
         fi
 
         chown -R apps:apps /srv/apps/homepage

@@ -154,7 +154,7 @@
           SSH.dd=literal:"true"
         )
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${mux_args[@]}"
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${mux_args[@]}"
         
         chown apps:apps "$CONFIG_FILE"
       fi

@@ -78,7 +78,7 @@
           "InterDir=literal:''${DestDir}/.incomplete"
         )
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${nzb_args[@]}"
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${nzb_args[@]}"
         
         chown 3000:3000 "$CONFIG_FILE"
         chmod 644 "$CONFIG_FILE"

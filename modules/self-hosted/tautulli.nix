@@ -58,7 +58,7 @@ in
           General.api_key=env:TAUTULLI_API_KEY
         )
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${tautulli_args[@]}"
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${tautulli_args[@]}"
         echo "Tautulli config updated"
       else
         echo "Tautulli config.ini not found, skipping start hook"
