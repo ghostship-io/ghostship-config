@@ -120,7 +120,7 @@
           OmniTools.name=literal:"OmniTools"
           OmniTools.url=literal:"https://omnitools.ghostship.io"
           OmniTools.scale=literal:1
-          OmniTools.icon=literal:"fa-toolbox"
+          OmniTools.icon=literal:"fa-wrench"
           OmniTools.color=literal:"#ff9800"
           OmniTools.enabled=literal:"true"
           OmniTools.dd=literal:"true"
