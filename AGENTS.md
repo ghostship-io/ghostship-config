@@ -21,6 +21,38 @@ This file serves as the primary memory and persistent fact store for AI agents w
     - For large YAML configs, use `pkgs.writeText` to embed the YAML as a file, then `cp` to target
     - Use yq for partial updates (e.g., `.title = "value"`)
 
+- **ISO Partitioning**: A custom ISO manually created from `iso-extract/` lacked a partition table (GPT/MBR), causing U-Boot's EFI boot manager to fail with `Cannot load any image`. The working ISO was built using the official `nixos-apple-silicon` repository with: `nix build .#installer-bootstrap -o installer -j4 -L`.
+- **M1 Ultra Multi-Die Addressing**: M1 Ultra (t6002) peripherals on Die 1 have an 80GB offset (`0x2000000000`). The Asahi kernel (6.19.9) handles this correctly.
+- **WiFi Firmware Compression**: The Asahi kernel (6.19.x) fails to load `brcmfmac` drivers if they are ZSTD compressed. Set `hardware.firmwareCompression = "none";` in the configuration.
+- **Firmware Source Path**: The correct source for Apple firmware on NixOS is `/boot/asahi/`, containing `all_firmware.tar.gz` and `kernelcache*`.
+- **Impure Rebuilds**: When `extractPeripheralFirmware` is enabled and pointing to `/boot/asahi`, `nixos-rebuild` REQUIRES the `--impure` flag to access files outside the flake.
+- **Asahi Firmware Scope**: `/boot/asahi` is only relevant on `chill-penguin`; do not treat it as a repo-wide requirement. The peripheral-firmware module defaults `extractPeripheralFirmware = true`, so hosts without firmware must explicitly set it to `false` when `builtins.pathExists /boot/asahi` is false.
+- **Gluetun Secret Ordering**: In this repo, `sops` installs secrets via activation scripts, not `sops-nix.service`. Do not add dependencies on `sops-nix.service`. Keep Gluetun's secret checks in `preStart` and wait for the actual files.
+- **Podman Container Networking Dependencies**: Any container that uses `--network=container:gluetun` must explicitly declare `after = [ "podman-gluetun.service" ]` and `bindsTo = [ "podman-gluetun.service" ]`. Without that, the dependent container can survive a Gluetun replacement and block Podman from recreating the `gluetun` container.
+- **Service Config Generation**: If a service config generator depends on `sops`-managed secret files, move it to `systemd.services.<unit>.preStart` instead of `system.activationScripts`. In this repo that is sufficient because `/run/secrets` is populated during activation before units are started.
+- **Mutable Users Safety**: In early-stage hardware setups where WiFi might be unstable, set `users.mutableUsers = true;`. This prevents lockouts if `sops-nix` fails to decrypt the user password on boot.
+- **Btrfs Layout**: A modern subvolume layout (`@`, `@home`, `@nix`, `@log`) with `compress=zstd` and `noatime` is preferred for large NVMe storage on Apple Silicon. When creating Btrfs filesystems on Apple Silicon, use 4K sectors (default) even if the CPU page size is 16K, as it is supported by kernels 6.x+ and ensures compatibility.
+- **nh os build Flag Quirk**: `nh os build` passes extra arguments through to `nix build`; the `--no-build-output` flag is not accepted in this environment. Use the built-in `-q/--quiet` option or omit the flag entirely.
+- **Ghostship Secret Resolution**: `modules/common/scripts/ghostship-config.py` must accept multiple `--secrets-file` inputs because activation scripts often combine several service-local secret files. Merge them in order so later files can override earlier values.
+- **Ghostship YAML Scalars**: Use `yaml:` patches in `ghostship-config.py` when YAML fields must be written with native scalar types (for example booleans and integers in `searxng` settings). `literal:` always starts as a string and is only safe when the file already has the correct target type.
+- **Ghostship YAML Paths**: `ghostship-config.py` YAML paths must handle dots inside bracket selectors (for example `[Infrastructure].[Llama.cpp]`), bracketed numeric list indices (for example `custom_formats[0].trash_ids[0]`), and bracket selectors against YAML mappings with dotted keys (for example `plugins[searx.plugins.calculator.SXNGPlugin].active`). Homepage, Recyclarr, and SearXNG all depend on those exact path forms.
+- **qBittorrent Config Format**: `qBittorrent.conf` is an INI file despite the `.conf` extension. `ghostship-config.py` must special-case that basename as INI, and qBittorrent WebUI settings belong under `[Preferences]` as `WebUI\\...` keys, not legacy `WebUI.*` KV lines.
+- **VueTorrent Alternate UI Layout**: qBittorrent's alternate WebUI expects `RootFolder` to be the parent directory that contains a `public/` subtree. VueTorrent must be unpacked so `public/index.html` exists, and auth bypass for the widget should rely on `WebUI\\AuthSubnetWhitelist` instead of a saved username/password when the UI is meant to be anonymous on trusted subnets.
+- **VueTorrent Refresh Marker**: VueTorrent should only re-download its archive when the upstream redirected release URL changes. Keep a small marker file outside the UI tree and compare it against the current `curl -fsSLI -L` effective URL so activation does not unpack on every switch.
+- **Cloudflared Secret Names**: Keep Cloudflared's credentials split by purpose in `cloudflared-secrets`: `CLOUDFLARED_TUNNEL_TOKEN` is for the `cloudflared` container itself, while Homepage's Cloudflared widget needs `CLOUDFLARED_ACCOUNT_ID`, `CLOUDFLARED_TUNNEL_ID`, and `CLOUDFLARED_API_TOKEN`. Reusing the tunnel token for the widget returns Cloudflare `400` auth failures and leaves `connections` null.
+- **Cloudflared Secret Mirror**: When editing `secrets.dec.yaml`, preserve the existing service blocks and append Cloudflare's `CLOUDFLARED_*` values into the `cloudflared-secrets` block. Do not replace the whole file with only the new block.
+- **Cloudflared Tunnel Startup**: The `cloudflared` container must pass `--token "$CLOUDFLARED_TUNNEL_TOKEN"` on the command line; setting `TUNNEL_TOKEN` in the environment alone still exits with "You did not specify any valid additional argument".
+- **Gluetun Secret Source**: Gluetun should use the single `gluetun-secrets` bundle for both container env and the runtime auth shim. Do not keep a separate `gluetun-api-key` secret.
+- **Bazarr Config Path**: Bazarr's authoritative config lives under `/srv/apps/bazarr/config/config.yaml` because the container mounts `/srv/apps/bazarr` at `/config`. If a legacy root `/srv/apps/bazarr/config.yaml` appears, seed the nested file from it once, update the nested file, and remove the legacy root copy to avoid Homepage/API key drift.
+- **Plaintext Secret Mirror**: `secrets.dec.yaml` is the ignored plaintext mirror generated from `secrets.yaml`; when auditing secrets, use it to inspect actual secret values, then re-encrypt with the normal `sops` workflow.
+- **YAML Secret Style**: Keep every secret bundle in `secrets.dec.yaml` formatted with `|-` block scalars, even when a bundle contains only a single `KEY=value` line.
+- **Service-Local Secrets**: Service-local secret bundles should use `*-secrets` names (`gluetun-secrets`, `plex-secrets`, `tautulli-secrets`, `sonarr-secrets`, `radarr-secrets`, `prowlarr-secrets`, `bazarr-secrets`, `romm-secrets`, `grimmory-secrets`, `searxng-secrets`, `smb-secrets`, `cloudflared-secrets`, `homeassistant-secrets`) with service-local env names instead of `HOMEPAGE_*`. Homepage should source those service-local secrets directly instead of keeping a shared homepage bundle.
+- **Bootstrap Script**: The installer-time bootstrap flow uses `bootstrap.sh` at repo root. It sets the hostname, creates `/etc/nix/secrets/age.key` if missing, preserves an existing key, and emits JSON for host registration. Use `nix-shell -p age jq nixos-install-tools` to provision installer-time dependencies.
+- **Conductor Tree**: The repository's `conductor/` tree is a full task-management layer, not just `plan.md`; it also includes `tracks/`, `archive/`, `metadata.json`, `spec.md`, `index.md`, and `workflow.md`.
+- **Comma Tool**: Use the `comma` tool to run utilities not in the current environment (e.g., `comma parted`).
+- **U-Boot EFI Variables**: "Failed to load EFI variables" is usually non-fatal on Apple Silicon but can precede a boot failure if the boot target is missing.
+- **Declarative Passwords Removed**: Declarative password management (`hashedPasswordFile`) was removed in favor of manual `passwd` to increase boot reliability on remote hosts.
+
 ## Agent Added Memories
 
 - **GRUB Configuration Policy (CRITICAL)**: On `chill-penguin`, the ONLY functional GRUB config is **`/boot/grub/grub.cfg`** on partition **`p5`** (UUID: `2cd4968a-3953-4afe-9818-d9c10317e4a5`). NEVER rebuild or reformat this file.
@@ -49,7 +81,8 @@ This file serves as the primary memory and persistent fact store for AI agents w
 - **Python Skill Added**: A new `python` skill for modern development using `uv`, Nix flakes, and comprehensive testing/linting has been added to `~/.agents/skills/python/`.
 - **System Packages**: `zip` has been added to the common system packages in `modules/common/default.nix`.
 - **Build123d Skill Added**: A new `build123d` skill for Python-based CAD modeling with an emphasis on multi-perspective screenshot validation has been added.
-- **Bootstrap Flake**: Replaced the legacy `bootstrap.sh` script with a minimal bootstrap flake located at `bootstrap/`. Use `nix run .#bootstrap <hostname>` to generate host registration data. This flake provides exactly the same functionality as the original script: generates hardware configuration, creates SOPS age keys, and outputs machine-readable JSON for host registration.
+- **Memory File Migration**: Treat `AGENTS.md` as the active project memory file for this workspace; ignore `GEMINI.md` for future memory updates.
+
 - **SSH Skill Added**: A new `ssh` skill for expert remote server management via `mcp-ssh-manager` has been added to `~/.agents/skills/ssh/`.
 - **Dynamic Skill Building**: The Nix configuration now dynamically zips skills from `home/config/skills/` during the build process, removing the need for manual `.skill` file check-ins.
 - **Skills Location Migrated**: Skills have been migrated to the universal `~/.agents/skills/` directory. Global agent directives are in `~/.agents/AGENTS.md`.
@@ -60,12 +93,4 @@ This file serves as the primary memory and persistent fact store for AI agents w
 - **MCP Refresh on Switch**: A system `activationScripts` hook is a reasonable place to warm `npx`-managed MCP packages during `nh os switch`, so CLI-side MCP deps stay current without extra user steps.
 - **Plugin Version Checks**: For GitHub-backed Gemini extensions and OpenCode plugins, compare the installed local `HEAD` to `git ls-remote` before updating. If the commit hash is unchanged, skip the update; if it changed, refresh or delete the local checkout so the launcher reinstalls it.
 - **Encrypted Secrets Workflow**: If a task requires changing encrypted secret material (for example `secrets.yaml` or a `sops.secrets` payload), ask the user to decrypt and re-encrypt the secret rather than trying to edit ciphertext directly.
-- **Chill Penguin Migration (In-Progress)**:
-    - **Status**: Phase 6 (Rust Support & GPU Acceleration - Attempt 46).
-    - **Host**: Mac Studio M1 Ultra (`mac13j`).
-    - **Strategy**: Side-by-side subvolume install on `/dev/nvme0n1p7`. Using Fedora's GRUB to chainload.
-    - **Current Action**: Attempt 46 built with Rust + Fedora-like config. Still uses kernel 6.18.10 which doesn't boot.
-    - **Working Kernel**: Attempt 29 (6.14.2-asahi + GZIP + no Rust).
-    - **m1n1**: v1.5.2 installed (confirmed from Asahi installer v0.8.0).
-    - **Issue**: nixpkgs provides linux-asahi 6.18.10. Need 6.14.2 (Fedora's working kernel) but can't change without source override.
-    - **Next Step**: Override kernel source to use asahi-6.14.2-1 tag with correct hash.
+- **Chill Penguin Status**: Running NixOS on Apple Silicon (Mac Studio M1 Ultra) with kernel 6.19.9-asahi. Uses Fedora's GRUB to chainload. m1n1 bootloader v1.5.2 installed (from Asahi installer v0.8.0).
