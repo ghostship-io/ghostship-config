@@ -88,7 +88,7 @@
           Grimmory.icon=literal:"muximux-book2"
           Grimmory.color=literal:"#49da7e"
           Grimmory.enabled=literal:"true"
-          Grimmory.dd=literal:"true"
+          Grimmory.dd=literal:"false"
           MeTube.name=literal:"MeTube"
           MeTube.url=literal:"https://metube.ghostship.io"
           MeTube.scale=literal:1
