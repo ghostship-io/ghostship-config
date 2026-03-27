@@ -16,14 +16,7 @@ in
       "--health-start-period=1m"
     ];
     environment = {
-      DB_HOST = "romm-db";
-      DB_NAME = "romm";
-      HASHEOUS_API_ENABLED = "true";
-      HLTB_API_ENABLED = "true";
-      ALLOWED_HOSTS = "romm.ghostship.io,apps.ghostship.io,*";
-      TRUSTED_PROXIES = "*";
-      ENABLE_CSP = "false";
-      ROMM_HTTP_PROXY = "true";
+      # Most environment is now managed via env file in preStart to ensure consistency with secrets
     };
     environmentFiles = [
       "/srv/apps/romm/romm.env"
@@ -97,8 +90,8 @@ map \$request_uri \$coop_header {
 
 server {
     root /var/www/html;
-    listen \''${ROMM_PORT};
-    \''${IPV6_LISTEN}
+    listen ''${ROMM_PORT};
+    ''${IPV6_LISTEN}
     server_name localhost;
 
     proxy_set_header Host \$http_host;
@@ -144,7 +137,7 @@ server {
     # Internally redirect download requests
     location /library/ {
         internal;
-        alias "\''${ROMM_BASE_PATH}/library/";
+        alias "''${ROMM_BASE_PATH}/library/";
     }
 
     # Internal decoding endpoint, used to decode base64 encoded data
@@ -162,6 +155,8 @@ EOF
 
     romm_env_args=(
       --secrets-file "${romm-secrets}"
+      DB_HOST=literal:romm-db
+      DB_NAME=literal:romm
       DB_USER=env:ROMM_DB_USER
       DB_PASSWD=env:ROMM_DB_PASS
       ROMM_AUTH_SECRET_KEY=env:ROMM_AUTH_SECRET
@@ -171,6 +166,12 @@ EOF
       STEAMGRIDDB_API_KEY=env:ROMM_STEAMGRIDDB_API_KEY
       SCREENSCRAPER_USER=env:ROMM_SCREENSCRAPER_USER
       SCREENSCRAPER_PASSWORD=env:ROMM_SCREENSCRAPER_PASS
+      HASHEOUS_API_ENABLED=literal:true
+      HLTB_API_ENABLED=literal:true
+      ALLOWED_HOSTS=literal:romm.ghostship.io,apps.ghostship.io,*
+      TRUSTED_PROXIES=literal:*
+      ENABLE_CSP=literal:false
+      ROMM_HTTP_PROXY=literal:true
     )
 
     ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" "''${romm_env_args[@]}"
