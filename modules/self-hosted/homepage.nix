@@ -75,12 +75,10 @@ in
           --secrets-file "${bazarr-secrets}" \
           --secrets-file "${cloudflared-secrets}" \
           --secrets-file "${grimmory-secrets}" \
-          # Calendar group
           "[Calendar].[Calendar].icon=literal:mdi-calendar" \
           "[Calendar].[Calendar].widget.type=literal:calendar" \
           "[Calendar].[Calendar].widget.view=literal:agenda" \
           "[Calendar].[Calendar].widget.timezone=literal:Pacific/Honolulu" \
-          # Media group
           "[Media].[Plex].icon=literal:plex.png" \
           "[Media].[Plex].description=literal:Media Server" \
           "[Media].[Plex].server=literal:chill-penguin" \
@@ -109,7 +107,6 @@ in
           "[Media].[Grimmory].widget.url=literal:http://grimmory:6060" \
           "[Media].[Grimmory].widget.username=env:GRIMMORY_USER" \
           "[Media].[Grimmory].widget.password=env:GRIMMORY_PASS" \
-          # Automation group
           "[Automation].[Sonarr].icon=literal:sonarr.png" \
           "[Automation].[Sonarr].description=literal:TV Series Manager" \
           "[Automation].[Sonarr].server=literal:chill-penguin" \
@@ -138,7 +135,6 @@ in
           "[Automation].[Bazarr].widget.type=literal:bazarr" \
           "[Automation].[Bazarr].widget.url=literal:http://bazarr:6767" \
           "[Automation].[Bazarr].widget.key=env:BAZARR_API_KEY" \
-          # Downloads group
           "[Downloads].[Gluetun].icon=literal:gluetun.png" \
           "[Downloads].[Gluetun].description=literal:VPN Client" \
           "[Downloads].[Gluetun].server=literal:chill-penguin" \
@@ -158,12 +154,10 @@ in
           "[Downloads].[VueTorrent].container=literal:vuetorrent" \
           "[Downloads].[VueTorrent].widget.type=literal:qbittorrent" \
           "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000" \
-          # Services group
           "[Services].[SearXNG].icon=literal:sh-searxng" \
           "[Services].[SearXNG].description=literal:Metasearch Engine" \
           "[Services].[SearXNG].server=literal:chill-penguin" \
           "[Services].[SearXNG].container=literal:searxng" \
-          # Management group
           "[Management].[Cloudflared].icon=literal:cloudflare.png" \
           "[Management].[Cloudflared].description=literal:Cloudflare Tunnel" \
           "[Management].[Cloudflared].server=literal:chill-penguin" \
@@ -180,7 +174,6 @@ in
           "[Management].[Muximux].description=literal:Lightweight Portal" \
           "[Management].[Muximux].server=literal:chill-penguin" \
           "[Management].[Muximux].container=literal:muximux" \
-          # Utilities group
           "[Utilities].[Plex Auto Languages].icon=literal:plex.png" \
           "[Utilities].[Plex Auto Languages].description=literal:Language Manager" \
           "[Utilities].[Plex Auto Languages].server=literal:chill-penguin" \
@@ -205,7 +198,6 @@ in
           "[Utilities].[MeTube].description=literal:YouTube Downloader" \
           "[Utilities].[MeTube].server=literal:chill-penguin" \
           "[Utilities].[MeTube].container=literal:metube" \
-          # Infrastructure group
           "[Infrastructure].[SearXNG Cache].icon=literal:redis.png" \
           "[Infrastructure].[SearXNG Cache].description=literal:Search Cache" \
           "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin" \

@@ -22,7 +22,7 @@ let
     CURRENT_RELEASE_URL=""
     # We follow redirects to get the stable versioned URL (e.g., .../releases/download/v2.32.1/...)
     # instead of the final signed URL which changes every time due to expiration tokens.
-    if CURRENT_RELEASE_URL="$(${pkgs.curl}/bin/curl -fsSLI "$ASSET_URL" | grep -i "^location:" | grep "/releases/download/" | head -n 1 | tr -d '\r' | sed 's/^[Ll]ocation: //')" ; then
+    if CURRENT_RELEASE_URL="$(${pkgs.curl}/bin/curl -fsSLI "$ASSET_URL" | ${pkgs.gnugrep}/bin/grep -i "^location:" | ${pkgs.gnugrep}/bin/grep "/releases/download/" | ${pkgs.coreutils}/bin/head -n 1 | ${pkgs.coreutils}/bin/tr -d '\r' | ${pkgs.gnused}/bin/sed 's/^[Ll]ocation: //')" ; then
       if [ -z "$CURRENT_RELEASE_URL" ]; then
          echo "Could not resolve stable release URL, falling back to basic check."
          if [ ! -f "$PUBLIC_DIR/index.html" ]; then NEEDS_DOWNLOAD=1; fi
