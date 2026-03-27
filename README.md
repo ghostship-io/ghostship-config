@@ -17,7 +17,6 @@ To create an identical state across personal workstations, servers, and embedded
 - **Fish Shell**: Primary interactive shell with a rich plugin ecosystem.
 - **Starship**: Cross-shell prompt for a consistent visual experience.
 - **direnv & nix-direnv**: Automatic shell activation.
-- **Inshellisense**: IDE-style autocomplete for the CLI.
 - **Modern CLI Utils**: `eza` (ls), `bat` (cat), `fd` (find), `zoxide` (cd), `fzf` (search), `nh` (nix helper).
 
 ## 💻 Systems

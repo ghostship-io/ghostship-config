@@ -2,10 +2,7 @@
 
 {
   programs.fish = {
-    interactiveShellInit = ''
-      # Initialize inshellisense
-      test -f ~/.inshellisense/fish/init.fish && source ~/.inshellisense/fish/init.fish
-
+    interactiveShellInit = lib.mkAfter ''
       # Source SSH agent environment if it exists
       if test -f ~/.config/ssh-agent.env
         source ~/.config/ssh-agent.env

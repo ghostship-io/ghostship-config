@@ -30,7 +30,6 @@
     cifs-utils
     fastfetch
     eza
-    inshellisense
 
     # Playwright for Gemini MCP (Disabled on chill-penguin for initial cross-build)
   ] ++ lib.optional (!(osConfig.networking.hostName == "chill-penguin")) playwright-driver.browsers;
@@ -40,13 +39,6 @@
   home.file = {
     ".nix-profile" = {
       source = config.lib.file.mkOutOfStoreSymlink "/etc/profiles/per-user/${config.home.username}";
-    };
-    ".config/inshellisense/config.json" = {
-      text = builtins.toJSON {
-        shell = "fish";
-        showHelp = true;
-        completionMode = "shell";
-      };
     };
     ".agents/AGENTS.md" = {
       source = ./config/AGENTS.md;
@@ -107,9 +99,11 @@
       j = "z";
       run = ",";
     };
-    interactiveShellInit = ''
-      # Set sponge plugin delay as universal variable (persists across sessions)
-      set -U sponge_delay 10
+    interactiveShellInit = lib.mkBefore ''
+      # Set sponge plugin delay as universal variable if not already set
+      if not set -q sponge_delay
+        set -U sponge_delay 10
+      end
     '';
     functions = {
       cd = {
