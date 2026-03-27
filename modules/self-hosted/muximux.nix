@@ -138,6 +138,13 @@
           "IT Tools.color"=literal:"#2c9a66"
           "IT Tools.enabled"=literal:"true"
           "IT Tools.dd"=literal:"true"
+          OmniTools.name=literal:"OmniTools"
+          OmniTools.url=literal:"https://omnitools.ghostship.io"
+          OmniTools.scale=literal:1
+          OmniTools.icon=literal:"fa-toolbox"
+          OmniTools.color=literal:"#ff9800"
+          OmniTools.enabled=literal:"true"
+          OmniTools.dd=literal:"true"
           SearXNG.name=literal:"SearXNG"
           SearXNG.url=literal:"https://searxng.ghostship.io"
           SearXNG.scale=literal:1

@@ -19,6 +19,7 @@
     ./bentopdf.nix
     ./convertx.nix
     ./it-tools.nix
+    ./omnitools.nix
     ./metube.nix
     ./recyclarr.nix
     ./bazarr.nix
