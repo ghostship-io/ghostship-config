@@ -84,11 +84,15 @@ PY
           "plugins[searx.plugins.hash_plugin.SXNGPlugin].active=yaml:true"
           "plugins[searx.plugins.self_info.SXNGPlugin].active=yaml:true"
           "engines[name=google].disabled=yaml:false"
-          "engines[name=duckduckgo].disabled=yaml:false"
           "engines[name=brave].disabled=yaml:false"
-          "engines[name=mojeek].disabled=yaml:false"
-          "engines[name=yep].disabled=yaml:false"
           "engines[name=wikipedia].disabled=yaml:false"
+          "engines[name=wikidata].disabled=yaml:false"
+          "engines[name=wolframalpha].disabled=yaml:false"
+          "engines[name=startpage].disabled=yaml:false"
+          "engines[name=duckduckgo].disabled=yaml:true"
+          "engines[name=mojeek].disabled=yaml:true"
+          "engines[name=yep].disabled=yaml:true"
+          "engines[name=karmasearch].disabled=yaml:true"
           "engines[name=annas archive].disabled=yaml:false"
         )
 
