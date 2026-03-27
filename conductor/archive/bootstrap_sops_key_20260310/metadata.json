@@ -1,8 +1,0 @@
-{
-  "track_id": "bootstrap_sops_key_20260310",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-03-10T20:01:00Z",
-  "updated_at": "2026-03-10T20:01:00Z",
-  "description": "Bootstrap SOPS Key Generation for New Hosts"
-}

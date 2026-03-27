@@ -1,8 +1,0 @@
-{
-  "track_id": "nixos_init_20260225",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-02-25T12:00:00Z",
-  "updated_at": "2026-02-25T12:00:00Z",
-  "description": "Initialize Base Flake Structure and Bootstrap First Host"
-}

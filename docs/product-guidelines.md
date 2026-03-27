@@ -4,7 +4,7 @@
 - **Modular Design**: Maintain strict separation between hardware-specific logic in `hosts/`, shared system modules in `modules/`, and user-level configurations in `home/`.
 - **Absolute Reproducibility**: Every system must be rebuildable from scratch to an identical state using the declarative Nix configuration.
 - **Security First**: No secrets in plain text. All sensitive data (API keys, passwords, credentials) must be managed through `sops-nix`.
-- **Literate Documentation**: Provide clear inline rationale for non-trivial Nix expressions and maintain up-to-date documentation in the `conductor/` directory.
+- **Literate Documentation**: Provide clear inline rationale for non-trivial Nix expressions and maintain up-to-date documentation in the `docs/` directory.
 
 ## Documentation Standards
 - **Inline Rationale**: All non-trivial Nix expressions MUST include detailed inline comments explaining the *intent* and any "gotchas" discovered during implementation.
@@ -57,10 +57,10 @@
 Gemini CLI instructions and expert personas are managed via a centralized `gemini.md` file deployed globally to `~/.gemini/gemini.md` via Home Manager. This ensures a consistent, distilled, and always-available set of directives across all hosts in the fleet.
 
 ### Guidelines for Instructions Deployment
-- **Centralization**: All core directives, system-native workflows (e.g., `nh`, flakes), and expertise sections (e.g., Python) MUST reside in `home/config/gemini.md`.
+- **Centralization**: All core directives, system-native workflows (e.g., `nh`, flakes), and expertise sections (e.g., Python) MUST reside in `home/config/AGENTS.md`.
 - **Home Manager Integration**: The file MUST be symlinked to `~/.gemini/gemini.md` using the `home.file` option in `home/nixos.nix`.
 - **Expertise Distillation**: Prefer concise, high-signal "Expertise Sections" within the global file over maintaining numerous individual skill files, unless a skill requires complex assets or scripts.
-- **Conductor Validation**: Instructions MUST emphasize autonomous execution of verification steps within the Conductor workflow. Gemini should attempt all verification itself using available tools (SSH, `lsblk`, `nix-store`, etc.) and only ask the user to run things if it cannot accomplish the verification autonomously.
+- **Autonomous Verification**: Instructions MUST emphasize autonomous execution of verification steps. Agents should attempt all verification themselves using available tools (SSH, `lsblk`, `nix-store`, etc.) and only ask the user to run things if they cannot accomplish the verification autonomously.
 
 ### Rationale
 This model prioritizes visibility, simplicity, and cross-host consistency while reducing the overhead of managing individual ZIP-packaged skills for text-based directives.

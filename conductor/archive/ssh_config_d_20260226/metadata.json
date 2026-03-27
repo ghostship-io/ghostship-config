@@ -1,8 +1,0 @@
-{
-  "track_id": "ssh_config_d_20260226",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-02-26T17:20:00Z",
-  "updated_at": "2026-02-26T17:20:00Z",
-  "description": "Update the ssh config to include any files in .ssh/conf.d/* and to make sure that directory is created and owned by the user."
-}

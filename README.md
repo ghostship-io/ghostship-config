@@ -166,4 +166,4 @@ notify-send "Task Complete" "The build has finished."
 - `hosts/`: Hardware-specific configurations for each machine.
 - `modules/`: Shared system-level NixOS modules (common, services, etc.).
 - `home/`: User-level Home Manager configurations.
-- `conductor/`: Project management, specifications, and implementation plans.
+- `docs/`: Project documentation (product guidelines, tech stack, implementation plans).

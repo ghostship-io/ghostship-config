@@ -1,8 +1,0 @@
-{
-  "track_id": "gemini_notification_hook_20260227",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-02-27T19:20:00Z",
-  "updated_at": "2026-02-27T19:20:00Z",
-  "description": "Add a Gemini CLI AfterAgent hook to trigger notifications using notify-send when waiting for input."
-}

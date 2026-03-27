@@ -1,8 +1,0 @@
-{
-  "track_id": "armored_armadillo_20260310",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-03-10T12:00:00Z",
-  "updated_at": "2026-03-10T12:00:00Z",
-  "description": "Add a new host named armored-armadillo which is identical to launch-octopus. it's another wsl2 host."
-}

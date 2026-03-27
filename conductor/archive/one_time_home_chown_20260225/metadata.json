@@ -1,8 +1,0 @@
-{
-  "track_id": "one_time_home_chown_20260225",
-  "type": "chore",
-  "status": "new",
-  "created_at": "2026-02-25T17:00:00Z",
-  "updated_at": "2026-02-25T17:00:00Z",
-  "description": "Add a one-time chown -R nixos:nixos using a sentinel file in home-manager activation"
-}

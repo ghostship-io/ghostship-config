@@ -1,8 +1,0 @@
-{
-  "track_id": "ssh_agent_keychain_20260226",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-02-26T12:34:56Z",
-  "updated_at": "2026-02-26T12:34:56Z",
-  "description": "Add an ssh agent, it should start automatically on startup and I want it to automatically register any ssh key's that I have. I dont want to use the gpg one because it had issues. Figure out the best most seamless agent."
-}

@@ -12,6 +12,10 @@ result-*
 *.swp
 *~
 
+# Agent tools
+.opencode/
+.ruff_cache/
+
 # OS
 .DS_Store
 

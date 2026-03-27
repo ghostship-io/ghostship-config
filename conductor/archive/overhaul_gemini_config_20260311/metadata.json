@@ -1,8 +1,0 @@
-{
-  "track_id": "overhaul_gemini_config_20260311",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-03-11T12:00:00Z",
-  "updated_at": "2026-03-11T12:00:00Z",
-  "description": "Overhaul Gemini configuration, convert system skill to global gemini.md, and refactor wsl module to develop."
-}
