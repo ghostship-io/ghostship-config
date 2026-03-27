@@ -104,6 +104,7 @@ in
       "--health-timeout=10s"
       "--health-retries=5"
       "--health-start-period=1m"
+      "--health-on-failure=kill"
     ];
     environment = {
       TZ = "UTC";

@@ -21,7 +21,11 @@ in
       "--group-add=989"
       "--group-add=131"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:3000/ || exit 1"
-      "--health-interval=disable"
+      "--health-interval=30s"
+      "--health-timeout=10s"
+      "--health-retries=5"
+      "--health-start-period=1m"
+      "--health-on-failure=kill"
     ];
     environment = {
       HOMEPAGE_ALLOWED_HOSTS = "homepage.ghostship.io";
