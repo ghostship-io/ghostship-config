@@ -41,7 +41,15 @@ in
 
   system.activationScripts.bazarr-config = {
     text = ''
-      CONFIG_FILE="/srv/apps/bazarr/config.yaml"
+      CONFIG_DIR="/srv/apps/bazarr/config"
+      CONFIG_FILE="$CONFIG_DIR/config.yaml"
+      LEGACY_CONFIG_FILE="/srv/apps/bazarr/config.yaml"
+
+      mkdir -p "$CONFIG_DIR"
+
+      if [ ! -f "$CONFIG_FILE" ] && [ -f "$LEGACY_CONFIG_FILE" ]; then
+        cp "$LEGACY_CONFIG_FILE" "$CONFIG_FILE"
+      fi
 
       if [ -f "$CONFIG_FILE" ] && [ -f "${bazarr-secrets}" ] && [ -f "${plex-secrets}" ] && [ -f "${sonarr-secrets}" ] && [ -f "${radarr-secrets}" ]; then
         echo "Surgically updating Bazarr config..."
@@ -68,9 +76,13 @@ in
           subdl.api_key=env:BAZARR_SUBDL_API_KEY \
           general.instance_name=literal:"Ghostship Bazarr" \
           analytics.enabled=literal:false
-        
+
         chown 3000:3000 "$CONFIG_FILE"
         chmod 644 "$CONFIG_FILE"
+
+        if [ -f "$LEGACY_CONFIG_FILE" ]; then
+          rm -f "$LEGACY_CONFIG_FILE"
+        fi
       fi
     '';
   };
