@@ -60,22 +60,25 @@ in
         . "${radarr-secrets}"
         set +a
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" \
-          --secrets-file "${bazarr-secrets}" \
-          --secrets-file "${plex-secrets}" \
-          --secrets-file "${sonarr-secrets}" \
-          --secrets-file "${radarr-secrets}" \
-          auth.apikey=env:BAZARR_API_KEY \
-          general.flask_secret_key=env:BAZARR_FLASK_SECRET_KEY \
-          opensubtitlescom.password=env:BAZARR_OPENSUBTITLES_PASS \
-          plex.apikey=env:PLEX_API_KEY \
-          plex.encryption_key=env:BAZARR_PLEX_ENCRYPTION_KEY \
-          plex.token=env:BAZARR_PLEX_TOKEN \
-          radarr.apikey=env:RADARR_API_KEY \
-          sonarr.apikey=env:SONARR_API_KEY \
-          subdl.api_key=env:BAZARR_SUBDL_API_KEY \
-          general.instance_name=literal:"Ghostship Bazarr" \
+        bazarr_args=(
+          --secrets-file "${bazarr-secrets}"
+          --secrets-file "${plex-secrets}"
+          --secrets-file "${sonarr-secrets}"
+          --secrets-file "${radarr-secrets}"
+          auth.apikey=env:BAZARR_API_KEY
+          general.flask_secret_key=env:BAZARR_FLASK_SECRET_KEY
+          opensubtitlescom.password=env:BAZARR_OPENSUBTITLES_PASS
+          plex.apikey=env:PLEX_API_KEY
+          plex.encryption_key=env:BAZARR_PLEX_ENCRYPTION_KEY
+          plex.token=env:BAZARR_PLEX_TOKEN
+          radarr.apikey=env:RADARR_API_KEY
+          sonarr.apikey=env:SONARR_API_KEY
+          subdl.api_key=env:BAZARR_SUBDL_API_KEY
+          general.instance_name=literal:"Ghostship Bazarr"
           analytics.enabled=literal:false
+        )
+
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${bazarr_args[@]}"
 
         chown 3000:3000 "$CONFIG_FILE"
         chmod 644 "$CONFIG_FILE"

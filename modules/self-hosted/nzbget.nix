@@ -45,37 +45,40 @@
         . "$SECRETS_FILE"
         set +a
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" \
-          --secrets-file "$SECRETS_FILE" \
-          Server1.Active=literal:yes \
-          Server1.Name=literal:news.eweka.nl \
-          Server1.Host=literal:news.eweka.nl \
-          Server1.Encryption=literal:yes \
-          Server1.Port=literal:443 \
-          Server1.Username=env:NZBGET_SERVER1_USER \
-          Server1.Password=env:NZBGET_SERVER1_PASS \
-          Server1.Connections=literal:25 \
-          Server2.Active=literal:yes \
-          Server2.Name=literal:eu.usenetprime.com \
-          Server2.Host=literal:eu.usenetprime.com \
-          Server2.Encryption=literal:yes \
-          Server2.Port=literal:443 \
-          Server2.Username=env:NZBGET_SERVER2_USER \
-          Server2.Password=env:NZBGET_SERVER2_PASS \
-          Server2.Connections=literal:10 \
-          Server2.Level=literal:99 \
-          Server2.Optional=literal:yes \
-          Category1.Name=literal:sonarr \
-          Category1.Unpack=literal:yes \
-          Category2.Name=literal:radarr \
-          Category2.Unpack=literal:yes \
-          Category3.Name=literal:prowlarr \
-          Category3.Unpack=literal:yes \
-          ControlUsername=literal:ghostship \
-          ControlPassword=literal:"" \
-          UpdateCheck=literal:none \
-          DestDir=literal:/downloads/Usenet \
+        nzb_args=(
+          --secrets-file "$SECRETS_FILE"
+          Server1.Active=literal:yes
+          Server1.Name=literal:news.eweka.nl
+          Server1.Host=literal:news.eweka.nl
+          Server1.Encryption=literal:yes
+          Server1.Port=literal:443
+          Server1.Username=env:NZBGET_SERVER1_USER
+          Server1.Password=env:NZBGET_SERVER1_PASS
+          Server1.Connections=literal:25
+          Server2.Active=literal:yes
+          Server2.Name=literal:eu.usenetprime.com
+          Server2.Host=literal:eu.usenetprime.com
+          Server2.Encryption=literal:yes
+          Server2.Port=literal:443
+          Server2.Username=env:NZBGET_SERVER2_USER
+          Server2.Password=env:NZBGET_SERVER2_PASS
+          Server2.Connections=literal:10
+          Server2.Level=literal:99
+          Server2.Optional=literal:yes
+          Category1.Name=literal:sonarr
+          Category1.Unpack=literal:yes
+          Category2.Name=literal:radarr
+          Category2.Unpack=literal:yes
+          Category3.Name=literal:prowlarr
+          Category3.Unpack=literal:yes
+          ControlUsername=literal:ghostship
+          ControlPassword=literal:""
+          UpdateCheck=literal:none
+          DestDir=literal:/downloads/Usenet
           "InterDir=literal:''${DestDir}/.incomplete"
+        )
+
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${nzb_args[@]}"
         
         chown 3000:3000 "$CONFIG_FILE"
         chmod 644 "$CONFIG_FILE"

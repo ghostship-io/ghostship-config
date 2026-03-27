@@ -73,18 +73,21 @@ let
       # Remove legacy KV-style lines from the old broken writer.
       ${pkgs.gnused}/bin/sed -i '/^WebUI\./d' "$CONFIG_FILE"
 
-      ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" \
-        Preferences.WebUI\\Address=literal:* \
-        Preferences.WebUI\\Port=literal:5000 \
-        Preferences.WebUI\\ServerDomains=literal:* \
-        Preferences.WebUI\\AuthSubnetWhitelist=literal:127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 \
-        Preferences.WebUI\\AuthSubnetWhitelistEnabled=literal:true \
-        Preferences.WebUI\\CSRFProtection=literal:false \
-        Preferences.WebUI\\ClickjackingProtection=literal:false \
-        Preferences.WebUI\\HostHeaderValidation=literal:false \
-        Preferences.WebUI\\ReverseProxySupportEnabled=literal:true \
-        Preferences.WebUI\\AlternativeUIEnabled=literal:true \
+      vt_args=(
+        Preferences.WebUI\\Address=literal:*
+        Preferences.WebUI\\Port=literal:5000
+        Preferences.WebUI\\ServerDomains=literal:*
+        Preferences.WebUI\\AuthSubnetWhitelist=literal:127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+        Preferences.WebUI\\AuthSubnetWhitelistEnabled=literal:true
+        Preferences.WebUI\\CSRFProtection=literal:false
+        Preferences.WebUI\\ClickjackingProtection=literal:false
+        Preferences.WebUI\\HostHeaderValidation=literal:false
+        Preferences.WebUI\\ReverseProxySupportEnabled=literal:true
+        Preferences.WebUI\\AlternativeUIEnabled=literal:true
         Preferences.WebUI\\RootFolder=literal:/vuetorrent-ui/public
+      )
+
+      ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${vt_args[@]}"
       
       echo "VueTorrent config updated"
     fi

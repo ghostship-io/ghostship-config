@@ -39,17 +39,21 @@ in
         set -a
         . "$SECRETS_FILE"
         set +a
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" \
-          --secrets-file "$SECRETS_FILE" \
-          Config.ApiKey=env:RADARR_API_KEY \
-          Config.AuthenticationMethod=literal:External \
-          Config.AuthenticationRequired=literal:DisabledForLocalAddresses \
-          Config.InstanceName=literal:"Ghostship Radarr" \
-          Config.AnalyticsEnabled=literal:False \
-          Config.UpdateMechanic=literal:Manual \
-          Config.EnableSsl=literal:False \
-          Config.LaunchBrowser=literal:False \
+
+        radarr_args=(
+          --secrets-file "$SECRETS_FILE"
+          Config.ApiKey=env:RADARR_API_KEY
+          Config.AuthenticationMethod=literal:External
+          Config.AuthenticationRequired=literal:DisabledForLocalAddresses
+          Config.InstanceName=literal:"Ghostship Radarr"
+          Config.AnalyticsEnabled=literal:False
+          Config.UpdateMechanic=literal:Manual
+          Config.EnableSsl=literal:False
+          Config.LaunchBrowser=literal:False
           Config.UpdateMechanism=literal:Docker
+        )
+
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${radarr_args[@]}"
         chown 3000:3000 "$CONFIG_FILE"
       fi
     '';

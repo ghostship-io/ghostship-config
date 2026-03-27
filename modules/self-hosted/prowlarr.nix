@@ -32,17 +32,21 @@ in
         set -a
         . "$SECRETS_FILE"
         set +a
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" \
-          --secrets-file "$SECRETS_FILE" \
-          Config.ApiKey=env:PROWLARR_API_KEY \
-          Config.AuthenticationMethod=literal:External \
-          Config.AuthenticationRequired=literal:DisabledForLocalAddresses \
-          Config.InstanceName=literal:"Ghostship Prowlarr" \
-          Config.AnalyticsEnabled=literal:False \
-          Config.UpdateMechanic=literal:Manual \
-          Config.EnableSsl=literal:False \
-          Config.LaunchBrowser=literal:False \
+
+        prowlarr_args=(
+          --secrets-file "$SECRETS_FILE"
+          Config.ApiKey=env:PROWLARR_API_KEY
+          Config.AuthenticationMethod=literal:External
+          Config.AuthenticationRequired=literal:DisabledForLocalAddresses
+          Config.InstanceName=literal:"Ghostship Prowlarr"
+          Config.AnalyticsEnabled=literal:False
+          Config.UpdateMechanic=literal:Manual
+          Config.EnableSsl=literal:False
+          Config.LaunchBrowser=literal:False
           Config.UpdateMechanism=literal:Docker
+        )
+
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${prowlarr_args[@]}"
         chown 3000:3000 "$CONFIG_FILE"
       fi
     '';

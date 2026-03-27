@@ -53,11 +53,12 @@ in
         # Update settings.yaml if it exists
         if [ -f "$SETTINGS_FILE" ]; then
           echo "Surgically updating Homepage settings..."
-          ${pkgs.ghostship-config}/bin/ghostship-config set "$SETTINGS_FILE" \
-            title=literal:"Ghostship Dashboard" \
+          settings_args=(
+            title=literal:"Ghostship Dashboard"
             quicklaunch.hideInternetSearch=literal:true
-        fi
-
+          )
+          ${pkgs.ghostship-config}/bin/ghostship-config set "$SETTINGS_FILE" "${settings_args[@]}"
+          fi
         # Update services.yaml if it exists
         if [ -f "$SERVICES_FILE" ]; then
           echo "Surgically updating Homepage services..."
@@ -249,29 +250,33 @@ in
         WIDGETS_FILE="/srv/apps/homepage/widgets.yaml"
         if [ -f "$WIDGETS_FILE" ]; then
           echo "Surgically updating Homepage widgets..."
-          ${pkgs.ghostship-config}/bin/ghostship-config set "$WIDGETS_FILE" \
-            "0.resources.cpu=literal:true" \
-            "0.resources.memory=literal:true" \
-            "0.resources.disk=literal:/" \
-            "0.resources.network=literal:true" \
-            "1.search.provider=literal:custom" \
-            "1.search.url=literal:https://searxng.ghostship.io/search?q=" \
-            "1.search.focus=literal:true" \
-            "1.search.target=literal:_self" \
-            "1.search.suggestionUrl=literal:https://searxng.ghostship.io/autocompleter?q=" \
-            "1.search.showSearchSuggestions=literal:true" \
-            "2.openmeteo.label=literal:\"the owner's local area\"" \
-            "2.openmeteo.latitude=literal:a home coordinate" \
-            "2.openmeteo.longitude=literal:a home coordinate" \
-            "2.openmeteo.timezone=literal:Pacific/Honolulu" \
+          widget_args=(
+            "0.resources.cpu=literal:true"
+            "0.resources.memory=literal:true"
+            "0.resources.disk=literal:/"
+            "0.resources.network=literal:true"
+            "1.search.provider=literal:custom"
+            "1.search.url=literal:https://searxng.ghostship.io/search?q="
+            "1.search.focus=literal:true"
+            "1.search.target=literal:_self"
+            "1.search.suggestionUrl=literal:https://searxng.ghostship.io/autocompleter?q="
+            "1.search.showSearchSuggestions=literal:true"
+            "2.openmeteo.label=literal:\"the owner's local area\""
+            "2.openmeteo.latitude=literal:a home coordinate"
+            "2.openmeteo.longitude=literal:a home coordinate"
+            "2.openmeteo.timezone=literal:Pacific/Honolulu"
             "2.openmeteo.units=literal:imperial"
+          )
+          ${pkgs.ghostship-config}/bin/ghostship-config set "$WIDGETS_FILE" "${widget_args[@]}"
         fi
 
         # Update docker.yaml if it exists
         if [ -f "$DOCKER_FILE" ]; then
           echo "Surgically updating Homepage docker config..."
-          ${pkgs.ghostship-config}/bin/ghostship-config set "$DOCKER_FILE" \
+          docker_args=(
             chill-penguin.socket=literal:/var/run/podman.sock
+          )
+          ${pkgs.ghostship-config}/bin/ghostship-config set "$DOCKER_FILE" "${docker_args[@]}"
         fi
 
         chown -R apps:apps /srv/apps/homepage

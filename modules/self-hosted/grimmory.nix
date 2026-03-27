@@ -52,9 +52,13 @@ in
         set +a
         mkdir -p "$(dirname "$ENV_FILE")"
         touch "$ENV_FILE"
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" \
-          DATABASE_USERNAME=env:GRIMMORY_DB_USER \
+
+        grimmory_args=(
+          DATABASE_USERNAME=env:GRIMMORY_DB_USER
           DATABASE_PASSWORD=env:GRIMMORY_DB_PASS
+        )
+
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" "${grimmory_args[@]}"
         chown 3000:3000 "$ENV_FILE"
         chmod 600 "$ENV_FILE"
       fi

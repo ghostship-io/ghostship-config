@@ -36,9 +36,13 @@ in
         set -a
         . "${plex-secrets}"
         set +a
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" \
-          --secrets-file "${plex-secrets}" \
+
+        pal_args=(
+          --secrets-file "${plex-secrets}"
           plexautolanguages.plex.token=env:PLEX_API_KEY
+        )
+
+        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${pal_args[@]}"
         chown 3000:3000 "$CONFIG_FILE"
       fi
     '';

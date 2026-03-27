@@ -10,34 +10,36 @@ let
     PREFS_FILE="$PMS_DIR/Preferences.xml"
 
     # Apply yq transformations to the Preferences.xml
-    if [ ! -f "$PREFS_FILE" ]; then
+    if [ -f "$PREFS_FILE" ]; then
+      echo "Updating Plex Preferences.xml via ghostship-config..."
+      
+      plex_args=(
+        Preferences.@FriendlyName=literal:"Ghostship Plex"
+        Preferences.@LanNetworksBandwidth=literal:"192.168.200.0/255.255.255.0,10.89.0.0/255.255.255.0"
+        Preferences.@customConnections=literal:http://192.168.200.135:32400
+        Preferences.@allowedNetworks=literal:"192.168.200.0/255.255.255.0,10.89.0.0/255.255.255.0"
+        Preferences.@lanNetworks=literal:192.168.200.0/255.255.255.0
+        Preferences.@ManualPortMappingMode=literal:1
+        Preferences.@TranscoderQuality=literal:1
+        Preferences.@ButlerStartHour=literal:3
+        Preferences.@ButlerEndHour=literal:6
+        Preferences.@ButlerTaskRefreshLibraries=literal:1
+        Preferences.@FSEventLibraryUpdatesEnabled=literal:1
+        Preferences.@ScheduledLibraryUpdateInterval=literal:21600
+        Preferences.@GenerateBIFBehavior=literal:never
+        Preferences.@GenerateVADBehavior=literal:scheduled
+        Preferences.@AcceptedEULA=literal:1
+      )
+
+      ${pkgs.ghostship-config}/bin/ghostship-config set "$PREFS_FILE" "${plex_args[@]}"
+
+      # Ensure permissions are correct after yq edit
+      chown 3000:3000 "$PREFS_FILE"
+      chmod 600 "$PREFS_FILE"
+      echo "Plex Preferences.xml updated"
+    else
       echo "Plex Preferences.xml not found at $PREFS_FILE, skipping update"
-      exit 0
     fi
-
-    echo "Updating Plex Preferences.xml via ghostship-config..."
-    ${pkgs.ghostship-config}/bin/ghostship-config set "$PREFS_FILE" \
-      Preferences.@FriendlyName=literal:"Ghostship Plex" \
-      Preferences.@LanNetworksBandwidth=literal:"192.168.200.0/255.255.255.0,10.89.0.0/255.255.255.0" \
-      Preferences.@customConnections=literal:http://192.168.200.135:32400 \
-      Preferences.@allowedNetworks=literal:"192.168.200.0/255.255.255.0,10.89.0.0/255.255.255.0" \
-      Preferences.@lanNetworks=literal:192.168.200.0/255.255.255.0 \
-      Preferences.@ManualPortMappingMode=literal:1 \
-      Preferences.@TranscoderQuality=literal:1 \
-      Preferences.@ButlerStartHour=literal:3 \
-      Preferences.@ButlerEndHour=literal:6 \
-      Preferences.@ButlerTaskRefreshLibraries=literal:1 \
-      Preferences.@FSEventLibraryUpdatesEnabled=literal:1 \
-      Preferences.@ScheduledLibraryUpdateInterval=literal:21600 \
-      Preferences.@GenerateBIFBehavior=literal:never \
-      Preferences.@GenerateVADBehavior=literal:scheduled \
-      Preferences.@AcceptedEULA=literal:1
-
-    
-    # Ensure permissions are correct after yq edit
-    chown 3000:3000 "$PREFS_FILE"
-    chmod 600 "$PREFS_FILE"
-    echo "Plex Preferences.xml updated"
   '';
 in
 {
