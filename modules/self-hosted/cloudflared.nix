@@ -10,7 +10,7 @@
     cmd = [
       "sh"
       "-lc"
-      "export TUNNEL_TOKEN=\"$CLOUDFLARED_TUNNEL_TOKEN\"; exec cloudflared tunnel --no-autoupdate run"
+      "exec cloudflared tunnel --no-autoupdate run --token \"$CLOUDFLARED_TUNNEL_TOKEN\""
     ];
     environmentFiles = [
       "/run/secrets/cloudflared-secrets"
