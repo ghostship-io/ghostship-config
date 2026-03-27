@@ -217,6 +217,11 @@ in
             "[Utilities].[ConvertX].server=literal:chill-penguin"
             "[Utilities].[ConvertX].container=literal:convertx"
             
+            "[Utilities].[OmniTools].icon=literal:sh-toolbox"
+            "[Utilities].[OmniTools].description=literal:Omni Toolkit"
+            "[Utilities].[OmniTools].server=literal:chill-penguin"
+            "[Utilities].[OmniTools].container=literal:omni-tools"
+            
             "[Utilities].[IT-Tools].icon=literal:it-tools.png"
             "[Utilities].[IT-Tools].description=literal:Developer Tools"
             "[Utilities].[IT-Tools].server=literal:chill-penguin"
