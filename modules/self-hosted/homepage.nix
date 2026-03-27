@@ -191,9 +191,9 @@ in
           "[Management].[Cloudflared].server=literal:chill-penguin" \
           "[Management].[Cloudflared].container=literal:cloudflared" \
           "[Management].[Cloudflared].widget.type=literal:cloudflared" \
-          "[Management].[Cloudflared].widget.accountid=literal:the owner's local area" \
-          "[Management].[Cloudflared].widget.tunnelid=literal:d0e34b31-7ec6-432d-82b8-70323bc3d921" \
-          "[Management].[Cloudflared].widget.key=env:CLOUDFLARE_API_TOKEN" \
+          "[Management].[Cloudflared].widget.accountid=env:CLOUDFLARED_ACCOUNT_ID" \
+          "[Management].[Cloudflared].widget.tunnelid=env:CLOUDFLARED_TUNNEL_ID" \
+          "[Management].[Cloudflared].widget.key=env:CLOUDFLARED_API_TOKEN" \
           "[Infrastructure].[SearXNG].icon=literal:sh-searxng" \
           "[Infrastructure].[SearXNG].description=literal:\"Metasearch Engine\"" \
           "[Infrastructure].[SearXNG].server=literal:chill-penguin" \

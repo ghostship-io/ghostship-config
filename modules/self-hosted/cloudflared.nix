@@ -7,7 +7,11 @@
     extraOptions = [
       "--network=ghostship_net"
     ];
-    cmd = [ "tunnel" "--no-autoupdate" "run" ];
+    cmd = [
+      "sh"
+      "-lc"
+      "export TUNNEL_TOKEN=\"$CLOUDFLARED_TUNNEL_TOKEN\"; exec cloudflared tunnel --no-autoupdate run"
+    ];
     environmentFiles = [
       "/run/secrets/cloudflared-secrets"
     ];
