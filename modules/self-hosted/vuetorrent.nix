@@ -9,30 +9,35 @@ let
     CONFIG_DIR="/srv/apps/vuetorrent"
     CONFIG_FILE="$CONFIG_DIR/qBittorrent/qBittorrent.conf"
     UI_DIR="$CONFIG_DIR/ui"
+    PUBLIC_DIR="$UI_DIR/public"
 
     # 1. Ensure directories exist
-    mkdir -p "$CONFIG_DIR/qBittorrent" "$UI_DIR"
+    mkdir -p "$CONFIG_DIR/qBittorrent" "$PUBLIC_DIR"
     chown -R 3000:3000 "$CONFIG_DIR"
 
-    # 2. Download VueTorrent UI if missing
-    if [ ! -f "$UI_DIR/index.html" ]; then
+    # 2. Download VueTorrent UI if the alt UI root is missing.
+    if [ ! -f "$PUBLIC_DIR/index.html" ]; then
       echo "Downloading VueTorrent UI..."
+      rm -rf "$PUBLIC_DIR"
+      mkdir -p "$PUBLIC_DIR"
       TEMP_ZIP=$(mktemp)
       ${pkgs.curl}/bin/curl -L "https://github.com/WDaan/VueTorrent/releases/latest/download/vuetorrent.zip" -o "$TEMP_ZIP"
       TEMP_EXTRACT=$(mktemp -d)
       ${pkgs.unzip}/bin/unzip -o "$TEMP_ZIP" -d "$TEMP_EXTRACT"
-      
-      # The zip usually contains a 'vuetorrent' folder with a 'public' subfolder
+
+      # The zip usually contains a 'vuetorrent' folder with a 'public' subfolder.
+      # qBittorrent expects the alternative UI root to be the parent directory
+      # that contains the public/ tree, so keep that structure intact.
       if [ -d "$TEMP_EXTRACT/vuetorrent/public" ]; then
-        cp -r "$TEMP_EXTRACT/vuetorrent/public/." "$UI_DIR/"
+        cp -r "$TEMP_EXTRACT/vuetorrent/public/." "$PUBLIC_DIR/"
       elif [ -d "$TEMP_EXTRACT/vuetorrent" ]; then
-        cp -r "$TEMP_EXTRACT/vuetorrent/." "$UI_DIR/"
+        cp -r "$TEMP_EXTRACT/vuetorrent/." "$PUBLIC_DIR/"
       else
-        cp -r "$TEMP_EXTRACT/." "$UI_DIR/"
+        cp -r "$TEMP_EXTRACT/." "$PUBLIC_DIR/"
       fi
-      
+
       rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
-      chown -R 3000:3000 "$UI_DIR"
+      chown -R 3000:3000 "$PUBLIC_DIR"
       echo "VueTorrent UI downloaded and extracted"
     fi
 
@@ -47,15 +52,14 @@ let
         Preferences.WebUI\\Address=literal:* \
         Preferences.WebUI\\Port=literal:5000 \
         Preferences.WebUI\\ServerDomains=literal:* \
-        Preferences.WebUI\\AuthSubnetWhitelist=literal:0.0.0.0/0 \
+        Preferences.WebUI\\AuthSubnetWhitelist=literal:127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 \
         Preferences.WebUI\\AuthSubnetWhitelistEnabled=literal:true \
         Preferences.WebUI\\CSRFProtection=literal:false \
         Preferences.WebUI\\ClickjackingProtection=literal:false \
         Preferences.WebUI\\HostHeaderValidation=literal:false \
         Preferences.WebUI\\ReverseProxySupportEnabled=literal:true \
         Preferences.WebUI\\AlternativeUIEnabled=literal:true \
-        Preferences.WebUI\\RootFolder=literal:/vuetorrent-ui \
-        Preferences.WebUI\\Username=literal:admin
+        Preferences.WebUI\\RootFolder=literal:/vuetorrent-ui
       
       echo "VueTorrent config updated"
     fi
@@ -81,7 +85,7 @@ in
     };
     volumes = [
       "/srv/apps/vuetorrent:/config"
-      "/srv/apps/vuetorrent/ui:/vuetorrent-ui:ro"
+      "/srv/apps/vuetorrent/ui/public:/vuetorrent-ui/public:ro"
       "/mnt/share/Downloads:/downloads"
     ];
   };
@@ -96,6 +100,7 @@ in
     "d /srv/apps/vuetorrent 0755 apps apps -"
     "d /srv/apps/vuetorrent/qBittorrent 0755 apps apps -"
     "d /srv/apps/vuetorrent/ui 0755 apps apps -"
+    "d /srv/apps/vuetorrent/ui/public 0755 apps apps -"
   ];
 
   system.activationScripts.vuetorrent-config = {

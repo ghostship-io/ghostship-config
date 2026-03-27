@@ -9,7 +9,6 @@ let
   prowlarr-secrets = config.sops.secrets."prowlarr-secrets".path;
   bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
   cloudflared-secrets = config.sops.secrets."cloudflared-secrets".path;
-  homeassistant-secrets = config.sops.secrets."homeassistant-secrets".path;
 in
 
 {
@@ -72,9 +71,7 @@ in
           --secrets-file "${prowlarr-secrets}" \
           --secrets-file "${bazarr-secrets}" \
           --secrets-file "${cloudflared-secrets}" \
-          --secrets-file "${homeassistant-secrets}" \
           "[Calendar].[Calendar].icon=literal:mdi-calendar" \
-          "[Calendar].[Calendar].description=literal:\"Release Calendar\"" \
           "[Calendar].[Calendar].widget.type=literal:calendar" \
           "[Calendar].[Calendar].widget.view=literal:agenda" \
           "[Calendar].[Calendar].widget.timezone=literal:Pacific/Honolulu" \
@@ -92,10 +89,6 @@ in
           "[Plex].[Tautulli].widget.type=literal:tautulli" \
           "[Plex].[Tautulli].widget.url=literal:http://tautulli:8181" \
           "[Plex].[Tautulli].widget.key=env:TAUTULLI_API_KEY" \
-          "[Plex].[FileFlows].icon=literal:fileflows.png" \
-          "[Plex].[FileFlows].description=literal:\"Video Processing\"" \
-          "[Plex].[FileFlows].server=literal:chill-penguin" \
-          "[Plex].[FileFlows].container=literal:fileflows" \
           "[Plex].[Plex Auto Languages].icon=literal:plex.png" \
           "[Plex].[Plex Auto Languages].description=literal:\"Language Manager\"" \
           "[Plex].[Plex Auto Languages].server=literal:chill-penguin" \
@@ -120,10 +113,10 @@ in
           "[Library].[RomM].container=literal:romm" \
           "[Library].[RomM].widget.type=literal:romm" \
           "[Library].[RomM].widget.url=literal:http://romm:8080" \
-          "[Library].[Booklore].icon=literal:sh-booklore" \
-          "[Library].[Booklore].description=literal:\"Ebook Manager\"" \
-          "[Library].[Booklore].server=literal:chill-penguin" \
-          "[Library].[Booklore].container=literal:booklore" \
+          "[Library].[Grimmory].icon=literal:sh-booklore" \
+          "[Library].[Grimmory].description=literal:\"Ebook Manager\"" \
+          "[Library].[Grimmory].server=literal:chill-penguin" \
+          "[Library].[Grimmory].container=literal:grimmory" \
           "[Library].[Manyfold].icon=literal:manyfold.png" \
           "[Library].[Manyfold].description=literal:\"3D Model Manager\"" \
           "[Library].[Manyfold].server=literal:chill-penguin" \
@@ -170,12 +163,6 @@ in
           "[Utilities].[ConvertX].description=literal:\"File Converter\"" \
           "[Utilities].[ConvertX].server=literal:chill-penguin" \
           "[Utilities].[ConvertX].container=literal:convertx" \
-          "[Utilities].[Syncthing].icon=literal:syncthing.png" \
-          "[Utilities].[Syncthing].description=literal:\"File Synchronization\"" \
-          "[Utilities].[Syncthing].server=literal:chill-penguin" \
-          "[Utilities].[Syncthing].container=literal:syncthing" \
-          "[Utilities].[Syncthing].widget.type=literal:syncthing" \
-          "[Utilities].[Syncthing].widget.url=literal:http://syncthing:8384" \
           "[Utilities].[IT-Tools].icon=literal:it-tools.png" \
           "[Utilities].[IT-Tools].description=literal:\"Developer Tools\"" \
           "[Utilities].[IT-Tools].server=literal:chill-penguin" \
@@ -191,26 +178,6 @@ in
           "[Automation].[Bazarr].widget.type=literal:bazarr" \
           "[Automation].[Bazarr].widget.url=literal:http://bazarr:6767" \
           "[Automation].[Bazarr].widget.key=env:BAZARR_API_KEY" \
-          "[Automation].[PriceGhost].icon=literal:ghost.png" \
-          "[Automation].[PriceGhost].description=literal:\"Price Tracker\"" \
-          "[Automation].[PriceGhost].server=literal:chill-penguin" \
-          "[Automation].[PriceGhost].container=literal:priceghost" \
-          "[Automation].[Recyclarr].icon=literal:recyclarr.png" \
-          "[Automation].[Recyclarr].description=literal:\"Trash Guides Sync\"" \
-          "[Automation].[Recyclarr].server=literal:chill-penguin" \
-          "[Automation].[Recyclarr].container=literal:recyclarr" \
-          "[Automation].[Activepieces].icon=literal:activepieces.png" \
-          "[Automation].[Activepieces].description=literal:\"Automation Tool\"" \
-          "[Automation].[Activepieces].server=literal:chill-penguin" \
-          "[Automation].[Activepieces].container=literal:activepieces" \
-          "[Automation].[Zerobyte].icon=literal:zerobyte.png" \
-          "[Automation].[Zerobyte].description=literal:\"Backup Automation\"" \
-          "[Automation].[Zerobyte].server=literal:chill-penguin" \
-          "[Automation].[Zerobyte].container=literal:zerobyte" \
-          "[Automation].[Warracker].icon=literal:warracker.png" \
-          "[Automation].[Warracker].description=literal:\"Warranty Tracker\"" \
-          "[Automation].[Warracker].server=literal:chill-penguin" \
-          "[Automation].[Warracker].container=literal:warracker" \
           "[Management].[Homepage].icon=literal:homepage.png" \
           "[Management].[Homepage].description=literal:Dashboard" \
           "[Management].[Homepage].server=literal:chill-penguin" \
@@ -224,29 +191,13 @@ in
           "[Management].[Cloudflared].server=literal:chill-penguin" \
           "[Management].[Cloudflared].container=literal:cloudflared" \
           "[Management].[Cloudflared].widget.type=literal:cloudflared" \
-          "[Management].[Cloudflared].widget.accountid=literal:\"the owner's local area\"" \
-          "[Management].[Cloudflared].widget.tunnelid=literal:\"d0e34b31-7ec6-432d-82b8-70323bc3d921\"" \
+          "[Management].[Cloudflared].widget.accountid=literal:the owner's local area" \
+          "[Management].[Cloudflared].widget.tunnelid=literal:d0e34b31-7ec6-432d-82b8-70323bc3d921" \
           "[Management].[Cloudflared].widget.key=env:TUNNEL_TOKEN" \
-          "[Management].[Arcane].icon=literal:arcane.png" \
-          "[Management].[Arcane].description=literal:\"Docker Management\"" \
-          "[Management].[Arcane].server=literal:chill-penguin" \
-          "[Management].[Arcane].container=literal:arcane" \
-          "[Management].[Docker Autoheal].icon=literal:docker.png" \
-          "[Management].[Docker Autoheal].description=literal:\"Container Monitor\"" \
-          "[Management].[Docker Autoheal].server=literal:chill-penguin" \
-          "[Management].[Docker Autoheal].container=literal:docker-autoheal" \
-          "[Infrastructure].[Llama.cpp].icon=literal:sh-ollama" \
-          "[Infrastructure].[Llama.cpp].description=literal:\"LLM Inference Server\"" \
-          "[Infrastructure].[Llama.cpp].server=literal:chill-penguin" \
-          "[Infrastructure].[Llama.cpp].container=literal:llama-vulkan" \
-          "[Infrastructure].[AnythingLLM].icon=literal:sh-anything-llm.png" \
-          "[Infrastructure].[AnythingLLM].description=literal:\"Local AI Hub\"" \
-          "[Infrastructure].[AnythingLLM].server=literal:chill-penguin" \
-          "[Infrastructure].[AnythingLLM].container=literal:anythingllm" \
-          "[Infrastructure].[OpenClaw].icon=literal:sh-open-webui" \
-          "[Infrastructure].[OpenClaw].description=literal:\"Complexity-based Agent\"" \
-          "[Infrastructure].[OpenClaw].server=literal:chill-penguin" \
-          "[Infrastructure].[OpenClaw].container=literal:openclaw-ghostship" \
+          "[Infrastructure].[OpenWebUI].icon=literal:sh-open-webui" \
+          "[Infrastructure].[OpenWebUI].description=literal:\"AI Interface\"" \
+          "[Infrastructure].[OpenWebUI].server=literal:chill-penguin" \
+          "[Infrastructure].[OpenWebUI].container=literal:open-webui" \
           "[Infrastructure].[SearXNG].icon=literal:sh-searxng" \
           "[Infrastructure].[SearXNG].description=literal:\"Metasearch Engine\"" \
           "[Infrastructure].[SearXNG].server=literal:chill-penguin" \
@@ -255,29 +206,15 @@ in
           "[Infrastructure].[SearXNG Cache].description=literal:\"Search Cache\"" \
           "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin" \
           "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey" \
-          "[Infrastructure].[Home Assistant].icon=literal:home-assistant.png" \
-          "[Infrastructure].[Home Assistant].description=literal:\"Home Automation\"" \
-          "[Infrastructure].[Home Assistant].server=literal:chill-penguin" \
-          "[Infrastructure].[Home Assistant].container=literal:homeassistant" \
-          "[Infrastructure].[Home Assistant].widget.type=literal:homeassistant" \
-          "[Infrastructure].[Home Assistant].widget.url=literal:http://homeassistant:8123" \
-          "[Infrastructure].[Home Assistant].widget.key=env:HOMEASSISTANT_TOKEN" \
           "[Infrastructure].[RomM DB].icon=literal:mariadb.png" \
           "[Infrastructure].[RomM DB].description=literal:\"RomM Database\"" \
           "[Infrastructure].[RomM DB].server=literal:chill-penguin" \
           "[Infrastructure].[RomM DB].container=literal:romm-db" \
-          "[Infrastructure].[Booklore DB].icon=literal:mariadb.png" \
-          "[Infrastructure].[Booklore DB].description=literal:\"Booklore Database\"" \
-          "[Infrastructure].[Booklore DB].server=literal:chill-penguin" \
-          "[Infrastructure].[Booklore DB].container=literal:booklore-db" \
-          "[Infrastructure].[Warracker DB].icon=literal:postgresql.png" \
-          "[Infrastructure].[Warracker DB].description=literal:\"Warracker Database\"" \
-          "[Infrastructure].[Warracker DB].server=literal:chill-penguin" \
-          "[Infrastructure].[Warracker DB].container=literal:warracker-db" \
-          "[Infrastructure].[PriceGhost DB].icon=literal:postgresql.png" \
-          "[Infrastructure].[PriceGhost DB].description=literal:\"PriceGhost Database\"" \
-          "[Infrastructure].[PriceGhost DB].server=literal:chill-penguin" \
-          "[Infrastructure].[PriceGhost DB].container=literal:priceghost-db"
+          "[Infrastructure].[Grimmory DB].icon=literal:mariadb.png" \
+          "[Infrastructure].[Grimmory DB].description=literal:\"Grimmory Database\"" \
+          "[Infrastructure].[Grimmory DB].server=literal:chill-penguin" \
+          "[Infrastructure].[Grimmory DB].container=literal:grimmory-db"
+
       fi
 
       # Update widgets.yaml if it exists
