@@ -177,6 +177,7 @@ in
           "[Automation].[Bazarr].container=literal:bazarr" \
           "[Automation].[Bazarr].widget.type=literal:bazarr" \
           "[Automation].[Bazarr].widget.url=literal:http://bazarr:6767" \
+          "[Automation].[Bazarr].widget.key=env:BAZARR_API_KEY" \
           "[Management].[Cloudflared].icon=literal:cloudflare.png" \
           "[Management].[Cloudflared].description=literal:"Cloudflare Tunnel"" \
           "[Management].[Cloudflared].server=literal:chill-penguin" \
