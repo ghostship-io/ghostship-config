@@ -253,7 +253,7 @@ in
             "[Infrastructure].[Grimmory DB].container=literal:grimmory-db"
           )
 
-          ${pkgs.ghostship-config}/bin/ghostship-config set --allow-missing "$SERVICES_FILE" "''${service_args[@]}"
+          ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
         fi
 
         # Update widgets.yaml if it exists

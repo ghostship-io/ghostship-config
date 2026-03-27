@@ -37,7 +37,7 @@ To create an identical state across personal workstations, servers, and embedded
 - **Secrets Management**: Encrypted `secrets.yaml` integrated directly into NixOS modules via `sops-nix`.
 
 ### Agent Tooling
-- **Unified Assistant Stack**: Gemini, OpenCode, and Codex share a common `~/.agents` instruction/skills source, aligned MCP servers, and a Gemini delegation MCP for repo research and planning.
+- **Unified Assistant Stack**: AGENT, OpenCode, and Codex share a common `~/.agents` instruction/skills source, aligned MCP servers, and an AGENT delegation MCP for repo research and planning.
 
 ### Self-Hosted Services
 The repo includes 25 containerized services running on Podman:

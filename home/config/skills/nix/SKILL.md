@@ -37,7 +37,7 @@ For system-level validation, use standard `nix` and `nixos-rebuild` commands. Yo
     - Use `writeShellScriptBin` or `symlinkJoin` to create system-wide wrappers (e.g., `dig` -> `drill`, `vim` -> `nvim`).
 
 ### 4. Validation & Testing (MANDATORY)
-Gemini MUST always validate Nix/NixOS configurations. You are NOT permitted to apply or deploy changes; your responsibility ends at providing verified, buildable code.
+The AGENT MUST always validate Nix/NixOS configurations. You are NOT permitted to apply or deploy changes; your responsibility ends at providing verified, buildable code.
 - **Syntax Check**: Use `nix-instantiate --parse <file>` for quick syntax validation.
 - **Evaluation Test (THE GOLD STANDARD)**: Use `nixos-rebuild build --flake .` to verify that the entire NixOS configuration evaluates and builds correctly. This MUST be performed before claiming success.
 - **Unit Testing**: For complex logic in modules, utilize `lib.runTests` or create a minimal flake-based test environment.

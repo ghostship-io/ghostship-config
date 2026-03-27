@@ -9,7 +9,7 @@ date_added: "2026-02-20"
 
 # Python Expert Skill
 
-This skill extends Gemini CLI with specialized workflows for modern Python development, emphasizing reproducibility, strict environment management, and comprehensive testing.
+This skill extends the AGENT CLI with specialized workflows for modern Python development, emphasizing reproducibility, strict environment management, and comprehensive testing.
 
 ## Core Directives
 
