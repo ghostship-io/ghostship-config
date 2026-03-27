@@ -22,7 +22,7 @@ in
       HLTB_API_ENABLED = "true";
       ALLOWED_HOSTS = "*";
       TRUSTED_PROXIES = "10.89.0.0/24";
-      ENABLE_CSP = "false";
+      ENABLE_CSP = "true";
       ROMM_HTTP_PROXY = "true";
       ROMM_BASE_URL = "https://romm.ghostship.io";
     };
