@@ -21,10 +21,7 @@ in
       "--group-add=989"
       "--group-add=131"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:3000/ || exit 1"
-      "--health-interval=30s"
-      "--health-timeout=10s"
-      "--health-retries=5"
-      "--health-start-period=1m"
+      "--health-interval=disable"
     ];
     environment = {
       HOMEPAGE_ALLOWED_HOSTS = "homepage.ghostship.io";
@@ -148,6 +145,15 @@ in
             "[Automation].[Bazarr].widget.key=env:BAZARR_API_KEY"
             
             # Downloads group
+            "[Downloads].[Cloudflared].icon=literal:cloudflare.png"
+            "[Downloads].[Cloudflared].description=literal:Cloudflare Tunnel"
+            "[Downloads].[Cloudflared].server=literal:chill-penguin"
+            "[Downloads].[Cloudflared].container=literal:cloudflared"
+            "[Downloads].[Cloudflared].widget.type=literal:cloudflared"
+            "[Downloads].[Cloudflared].widget.accountid=env:CLOUDFLARED_ACCOUNT_ID"
+            "[Downloads].[Cloudflared].widget.tunnelid=env:CLOUDFLARED_TUNNEL_ID"
+            "[Downloads].[Cloudflared].widget.key=env:CLOUDFLARED_API_TOKEN"
+
             "[Downloads].[Gluetun].icon=literal:gluetun.png"
             "[Downloads].[Gluetun].description=literal:VPN Client"
             "[Downloads].[Gluetun].server=literal:chill-penguin"
@@ -177,15 +183,6 @@ in
             "[Services].[SearXNG].container=literal:searxng"
             
             # Management group
-            "[Management].[Cloudflared].icon=literal:cloudflare.png"
-            "[Management].[Cloudflared].description=literal:Cloudflare Tunnel"
-            "[Management].[Cloudflared].server=literal:chill-penguin"
-            "[Management].[Cloudflared].container=literal:cloudflared"
-            "[Management].[Cloudflared].widget.type=literal:cloudflared"
-            "[Management].[Cloudflared].widget.accountid=env:CLOUDFLARED_ACCOUNT_ID"
-            "[Management].[Cloudflared].widget.tunnelid=env:CLOUDFLARED_TUNNEL_ID"
-            "[Management].[Cloudflared].widget.key=env:CLOUDFLARED_API_TOKEN"
-            
             "[Management].[Homepage].icon=literal:homepage.png"
             "[Management].[Homepage].description=literal:Dashboard"
             "[Management].[Homepage].server=literal:chill-penguin"
