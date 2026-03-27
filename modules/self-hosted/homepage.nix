@@ -117,14 +117,6 @@ in
           "[Library].[Grimmory].description=literal:\"Ebook Manager\"" \
           "[Library].[Grimmory].server=literal:chill-penguin" \
           "[Library].[Grimmory].container=literal:grimmory" \
-          "[Library].[Manyfold].icon=literal:manyfold.png" \
-          "[Library].[Manyfold].description=literal:\"3D Model Manager\"" \
-          "[Library].[Manyfold].server=literal:chill-penguin" \
-          "[Library].[Manyfold].container=literal:manyfold" \
-          "[Library].[Huntarr].icon=literal:huntarr.png" \
-          "[Library].[Huntarr].description=literal:\"Content Searcher\"" \
-          "[Library].[Huntarr].server=literal:chill-penguin" \
-          "[Library].[Huntarr].container=literal:huntarr" \
           "[Downloads].[Gluetun].icon=literal:gluetun.png" \
           "[Downloads].[Gluetun].description=literal:\"VPN Client\"" \
           "[Downloads].[Gluetun].server=literal:chill-penguin" \
