@@ -9,7 +9,7 @@ in
     user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=/bin/sh -c 'for _ in $(seq 1 24); do mariadb-admin ping -h 127.0.0.1 && exit 0; sleep 5; done; exit 1'"
+      "--health-cmd=mariadb-admin ping -h 127.0.0.1 || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
@@ -45,7 +45,7 @@ in
     ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" \
       --secrets-file "${romm-secrets}" \
       MYSQL_USER=env:ROMM_DB_USER \
-      MYSQL_PASSWORD=env:ROMM_DB_PASSWORD
+      MYSQL_PASSWORD=env:ROMM_DB_PASS
 
     chown 3000:3000 "$ENV_FILE"
     chmod 600 "$ENV_FILE"

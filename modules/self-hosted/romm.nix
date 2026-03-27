@@ -66,7 +66,7 @@ in
     ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" \
       --secrets-file "${romm-secrets}" \
       DB_USER=env:ROMM_DB_USER \
-      DB_PASSWD=env:ROMM_DB_PASSWORD \
+      DB_PASSWD=env:ROMM_DB_PASS \
       ROMM_AUTH_SECRET_KEY=env:ROMM_AUTH_SECRET \
       IGDB_CLIENT_ID=env:ROMM_IGDB_CLIENT_ID \
       IGDB_CLIENT_SECRET=env:ROMM_IGDB_CLIENT_SECRET \

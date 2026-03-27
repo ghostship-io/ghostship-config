@@ -47,8 +47,8 @@ in
         touch "$ENV_FILE"
         ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" \
           MYSQL_USER=env:GRIMMORY_DB_USER \
-          MYSQL_PASSWORD=env:GRIMMORY_DB_PASSWORD \
-          MYSQL_ROOT_PASSWORD=env:GRIMMORY_MYSQL_ROOT_PASSWORD
+          MYSQL_PASSWORD=env:GRIMMORY_DB_PASS \
+          MYSQL_ROOT_PASSWORD=env:GRIMMORY_MYSQL_ROOT_PASS
         chown 3000:3000 "$ENV_FILE"
         chmod 600 "$ENV_FILE"
       fi

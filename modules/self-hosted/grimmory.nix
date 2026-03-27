@@ -8,7 +8,7 @@ in
     image = "grimmory/grimmory:latest";
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=wget -q --spider http://127.0.0.1:6060 || exit 1"
+      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:6060/ || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
@@ -54,7 +54,7 @@ in
         touch "$ENV_FILE"
         ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" \
           DATABASE_USERNAME=env:GRIMMORY_DB_USER \
-          DATABASE_PASSWORD=env:GRIMMORY_DB_PASSWORD
+          DATABASE_PASSWORD=env:GRIMMORY_DB_PASS
         chown 3000:3000 "$ENV_FILE"
         chmod 600 "$ENV_FILE"
       fi
