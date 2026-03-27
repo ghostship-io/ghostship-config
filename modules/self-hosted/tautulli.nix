@@ -10,10 +10,10 @@ in
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=/bin/sh -c 'for _ in $(seq 1 30); do wget -q --spider http://127.0.0.1:8181/ && exit 0; sleep 2; done; exit 1'"
-      "--health-interval=1m"
+      "--health-interval=30s"
       "--health-timeout=75s"
-      "--health-retries=3"
-      "--health-start-period=30s"
+      "--health-retries=5"
+      "--health-start-period=1m"
     ];
     environment = {
       TZ = "UTC";

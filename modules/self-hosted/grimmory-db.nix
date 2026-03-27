@@ -10,10 +10,10 @@ in
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=mariadb-admin ping -h 127.0.0.1 || exit 1"
-      "--health-interval=10s"
+      "--health-interval=30s"
       "--health-timeout=5s"
       "--health-retries=5"
-      "--health-start-period=30s"
+      "--health-start-period=1m"
     ];
     environment = {
       PUID = "3000";

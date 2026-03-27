@@ -20,9 +20,9 @@ in
       "--group-add=989"
       "--group-add=131"
       "--health-cmd=wget --quiet --tries=1 --spider http://localhost:3000 || exit 1"
-      "--health-interval=10s"
-      "--health-retries=3"
-      "--health-start-period=30s"
+      "--health-interval=30s"
+      "--health-retries=5"
+      "--health-start-period=1m"
     ];
     environment = {
       HOMEPAGE_ALLOWED_HOSTS = "homepage.ghostship.io";
@@ -31,7 +31,7 @@ in
     volumes = [
       "/srv/apps/homepage:/app/config:rw"
       "/run/podman/podman.sock:/var/run/podman.sock:ro"
-      "/sys:/sys:ro"
+      "/sys/class/net:/sys/class/net:ro"
     ];
   };
 
