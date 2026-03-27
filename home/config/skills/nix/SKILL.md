@@ -19,9 +19,8 @@ This skill extends Gemini CLI with specialized knowledge and workflows for Nix a
 - **SpecialArgs**: When defining `nixosConfigurations`, always pass `inputs` and `self` via `specialArgs` to make them available in all modules.
 
 ### 2. Native Nix Operations
-For all system-level operations, use the standard `nix` and `nixos-rebuild` commands:
-- **Rebuild & Apply**: `sudo nixos-rebuild switch --flake .`
-- **System Test**: `nixos-rebuild build --flake .`
+For system-level validation, use standard `nix` and `nixos-rebuild` commands. You MUST NEVER apply configurations (switch/boot) automatically; always build to verify validity:
+- **System Validation (Build)**: `nixos-rebuild build --flake .`
 - **Search Packages**: `nix search nixpkgs <query>`
 - **Garbage Collection**: `sudo nix-collect-garbage -d`
 
@@ -37,11 +36,10 @@ For all system-level operations, use the standard `nix` and `nixos-rebuild` comm
 - **Wrappers**:
     - Use `writeShellScriptBin` or `symlinkJoin` to create system-wide wrappers (e.g., `dig` -> `drill`, `vim` -> `nvim`).
 
-### 4. Validation & Testing (Pre-Deployment)
-Gemini MUST always validate Nix/NixOS configurations before suggesting or applying a deployment. This ensures syntax correctness and evaluation integrity even if the target host is remote or inaccessible.
+### 4. Validation & Testing (MANDATORY)
+Gemini MUST always validate Nix/NixOS configurations. You are NOT permitted to apply or deploy changes; your responsibility ends at providing verified, buildable code.
 - **Syntax Check**: Use `nix-instantiate --parse <file>` for quick syntax validation.
-- **Evaluation Test**: Use `nixos-rebuild build --flake .` to verify that the entire NixOS configuration evaluates and builds correctly. This is the gold standard for pre-deployment validation.
-- **Dry Activation**: If on a compatible system, use `nixos-rebuild dry-activate` to see what changes would be applied without modifying the system state.
+- **Evaluation Test (THE GOLD STANDARD)**: Use `nixos-rebuild build --flake .` to verify that the entire NixOS configuration evaluates and builds correctly. This MUST be performed before claiming success.
 - **Unit Testing**: For complex logic in modules, utilize `lib.runTests` or create a minimal flake-based test environment.
 
 ### 5. System-Wide Preferences
@@ -78,5 +76,5 @@ When a service doesn't support structured configuration directories (like `.d/`)
 
 ## Interaction Protocol
 1. **Analyze First**: Before suggesting a change, identify if it affects a Flake, a NixOS module, or a user-level configuration (Home Manager).
-2. **Implementation**: Provide the standard `nixos-rebuild` or `nix` command for the task.
-3. **Brevity & Directness**: Provide code snippets followed by the specific command to execute them.
+2. **Validation First**: Always provide the `nixos-rebuild build --flake .` command alongside your changes to ensure the user can verify them.
+3. **Brevity & Directness**: Provide code snippets followed by the specific command to validate them.
