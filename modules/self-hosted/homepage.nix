@@ -19,8 +19,9 @@ in
       "--network=ghostship_net"
       "--group-add=989"
       "--group-add=131"
-      "--health-cmd=wget --quiet --tries=1 --spider http://localhost:3000 || exit 1"
+      "--health-cmd=wget --quiet --tries=1 --spider http://127.0.0.1:3000 || exit 1"
       "--health-interval=30s"
+      "--health-timeout=10s"
       "--health-retries=5"
       "--health-start-period=1m"
     ];
@@ -214,7 +215,7 @@ in
           "0.resources.cpu=literal:true" \
           "0.resources.memory=literal:true" \
           "0.resources.disk=literal:/" \
-          "0.resources.network=literal:true" \
+          "0.resources.network=literal:wld0" \
           "1.search.provider=literal:custom" \
           "1.search.url=literal:https://searxng.ghostship.io/search?q=" \
           "1.search.focus=literal:true" \
