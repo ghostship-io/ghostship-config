@@ -11,7 +11,7 @@ let
     UI_DIR="$CONFIG_DIR/ui"
     PUBLIC_DIR="$UI_DIR/public"
     RELEASE_MARKER="$CONFIG_DIR/.vuetorrent-release-url"
-    ASSET_URL="https://github.com/WDaan/VueTorrent/releases/latest/download/vuetorrent.zip"
+    ASSET_URL="https://github.com/VueTorrent/VueTorrent/releases/latest/download/vuetorrent.zip"
 
     # 1. Ensure directories exist
     mkdir -p "$CONFIG_DIR/qBittorrent" "$PUBLIC_DIR"
@@ -20,8 +20,13 @@ let
     # 2. Refresh VueTorrent only when the upstream release URL changes.
     NEEDS_DOWNLOAD=0
     CURRENT_RELEASE_URL=""
-    if CURRENT_RELEASE_URL="$(${pkgs.curl}/bin/curl -fsSLI -L "$ASSET_URL" -o /dev/null -w '%{url_effective}')" ; then
-      if [ ! -f "$PUBLIC_DIR/index.html" ] || [ ! -f "$RELEASE_MARKER" ] || [ "$(${pkgs.coreutils}/bin/cat "$RELEASE_MARKER")" != "$CURRENT_RELEASE_URL" ]; then
+    # We follow redirects to get the stable versioned URL (e.g., .../releases/download/v2.32.1/...)
+    # instead of the final signed URL which changes every time due to expiration tokens.
+    if CURRENT_RELEASE_URL="$(${pkgs.curl}/bin/curl -fsSLI "$ASSET_URL" | grep -i "^location:" | grep "/releases/download/" | head -n 1 | tr -d '\r' | sed 's/^[Ll]ocation: //')" ; then
+      if [ -z "$CURRENT_RELEASE_URL" ]; then
+         echo "Could not resolve stable release URL, falling back to basic check."
+         if [ ! -f "$PUBLIC_DIR/index.html" ]; then NEEDS_DOWNLOAD=1; fi
+      elif [ ! -f "$PUBLIC_DIR/index.html" ] || [ ! -f "$RELEASE_MARKER" ] || [ "$(${pkgs.coreutils}/bin/cat "$RELEASE_MARKER")" != "$CURRENT_RELEASE_URL" ]; then
         NEEDS_DOWNLOAD=1
       fi
     elif [ ! -f "$PUBLIC_DIR/index.html" ]; then
@@ -38,8 +43,8 @@ let
       ${pkgs.unzip}/bin/unzip -o "$TEMP_ZIP" -d "$TEMP_EXTRACT"
 
       # The zip usually contains a 'vuetorrent' folder with a 'public' subfolder.
-      # qBittorrent expects the alternative UI root to be the parent directory
-      # that contains the public/ tree, so keep that structure intact.
+      # qBittorrent 5.x expects the RootFolder to point DIRECTLY to the directory 
+      # containing index.html for it to work correctly without 500 errors.
       if [ -d "$TEMP_EXTRACT/vuetorrent/public" ]; then
         cp -r "$TEMP_EXTRACT/vuetorrent/public/." "$PUBLIC_DIR/"
       elif [ -d "$TEMP_EXTRACT/vuetorrent" ]; then
@@ -51,7 +56,7 @@ let
       rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
       chown -R 3000:3000 "$PUBLIC_DIR"
       printf '%s\n' "$CURRENT_RELEASE_URL" > "$RELEASE_MARKER"
-      echo "VueTorrent UI downloaded and extracted"
+      echo "VueTorrent UI downloaded and extracted (Version marker: $CURRENT_RELEASE_URL)"
     fi
 
     # 3. Update config if it exists
@@ -72,7 +77,7 @@ let
         Preferences.WebUI\\HostHeaderValidation=literal:false \
         Preferences.WebUI\\ReverseProxySupportEnabled=literal:true \
         Preferences.WebUI\\AlternativeUIEnabled=literal:true \
-        Preferences.WebUI\\RootFolder=literal:/vuetorrent-ui
+        Preferences.WebUI\\RootFolder=literal:/vuetorrent-ui/public
       
       echo "VueTorrent config updated"
     fi
