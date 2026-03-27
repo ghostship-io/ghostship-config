@@ -126,10 +126,6 @@ in
           "[Downloads].[VueTorrent].container=literal:vuetorrent" \
           "[Downloads].[VueTorrent].widget.type=literal:qbittorrent" \
           "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000" \
-          "[Downloads].[MeTube].icon=literal:metube.png" \
-          "[Downloads].[MeTube].description=literal:"YouTube Downloader"" \
-          "[Downloads].[MeTube].server=literal:chill-penguin" \
-          "[Downloads].[MeTube].container=literal:metube" \
           "[Utilities].[Plex Auto Languages].icon=literal:plex.png" \
           "[Utilities].[Plex Auto Languages].description=literal:"Language Manager"" \
           "[Utilities].[Plex Auto Languages].server=literal:chill-penguin" \
@@ -181,7 +177,6 @@ in
           "[Automation].[Bazarr].container=literal:bazarr" \
           "[Automation].[Bazarr].widget.type=literal:bazarr" \
           "[Automation].[Bazarr].widget.url=literal:http://bazarr:6767" \
-          "[Automation].[Bazarr].widget.key=env:BAZARR_API_KEY" \
           "[Management].[Cloudflared].icon=literal:cloudflare.png" \
           "[Management].[Cloudflared].description=literal:"Cloudflare Tunnel"" \
           "[Management].[Cloudflared].server=literal:chill-penguin" \
