@@ -6,11 +6,11 @@
     user = "3000:3000";
     extraOptions = [
       "--network=container:gluetun"
-      "--health-cmd=wget -q --spider http://127.0.0.1:5001/ || exit 1"
-      "--health-interval=1m"
+      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:5001/ || exit 1"
+      "--health-interval=30s"
       "--health-timeout=10s"
-      "--health-retries=3"
-      "--health-start-period=30s"
+      "--health-retries=5"
+      "--health-start-period=1m"
     ];
     environment = {
       TZ = "UTC";

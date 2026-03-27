@@ -150,6 +150,10 @@ in
           "[Utilities].[IT-Tools].description=literal:\"Developer Tools\"" \
           "[Utilities].[IT-Tools].server=literal:chill-penguin" \
           "[Utilities].[IT-Tools].container=literal:it-tools" \
+          "[Utilities].[MeTube].icon=literal:metube.png" \
+          "[Utilities].[MeTube].description=literal:"YouTube Downloader"" \
+          "[Utilities].[MeTube].server=literal:chill-penguin" \
+          "[Utilities].[MeTube].container=literal:metube" \
           "[Automation].[Sonarr].icon=literal:sonarr.png" \
           "[Automation].[Sonarr].description=literal:"TV Series Manager"" \
           "[Automation].[Sonarr].server=literal:chill-penguin" \

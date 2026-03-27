@@ -5,11 +5,11 @@
     image = "ghcr.io/flaresolverr/flaresolverr:latest";
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=curl -f http://127.0.0.1:8191 || exit 1"
-      "--health-interval=1m"
+      "--health-cmd=curl -f --connect-timeout 5 http://127.0.0.1:8191/ || exit 1"
+      "--health-interval=30s"
       "--health-timeout=10s"
-      "--health-retries=3"
-      "--health-start-period=30s"
+      "--health-retries=5"
+      "--health-start-period=1m"
     ];
     environment = {
       TZ = "UTC";

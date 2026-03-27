@@ -6,11 +6,11 @@
     user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=curl -f http://127.0.0.1:3000 || exit 1"
-      "--health-interval=1m"
+      "--health-cmd=curl -f --connect-timeout 5 http://127.0.0.1:3000/ || exit 1"
+      "--health-interval=30s"
       "--health-timeout=10s"
-      "--health-retries=3"
-      "--health-start-period=30s"
+      "--health-retries=5"
+      "--health-start-period=1m"
     ];
     environment = {
       HTTP_ALLOWED = "true";

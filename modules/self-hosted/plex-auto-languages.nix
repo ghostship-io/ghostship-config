@@ -10,10 +10,10 @@ in
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=pgrep -f main.py || exit 1"
-      "--health-interval=1m"
+      "--health-interval=30s"
       "--health-timeout=10s"
-      "--health-retries=3"
-      "--health-start-period=30s"
+      "--health-retries=5"
+      "--health-start-period=1m"
     ];
     environment = {
       TZ = "UTC";
