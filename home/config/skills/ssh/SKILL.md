@@ -31,7 +31,7 @@ When you need to modify a file on a remote server, **ALWAYS** follow this prefer
 ### 3. Root Access Protocol
 If a task requires root privileges (e.g., modifying system files or managing services) and your current user does not have sufficient `sudo` rights or if interactive `sudo` is complex:
 - **Protocol**: Stop and ask the user to create an "agentroot" tmux session on the target server.
-- **Instruction to User**: "Please create a root tmux session on `<host>` using this command: `tmux new-session -s agentroot 'sudo -i' # ctrl+b d`"
+- **Instruction to User**: "Please create a root tmux session on `<host>` using this command: `tmux new-session -s agentroot 'sudo -i' # ctrl+b d to disconnect`"
 
 - **Usage**: Once the session is created, you can interact with it via `ssh <host> -t "tmux attach -t agentroot"`.
 
