@@ -89,13 +89,6 @@
           RomM.color=literal:"#553f99"
           RomM.enabled=literal:"true"
           RomM.dd=literal:"false"
-          MeTube.name=literal:"MeTube"
-          MeTube.url=literal:"https://metube.ghostship.io"
-          MeTube.scale=literal:1
-          MeTube.icon=literal:"muximux-cloud-download2"
-          MeTube.color=literal:"#ff4c41"
-          MeTube.enabled=literal:"true"
-          MeTube.dd=literal:"true"
           Synology.name=literal:"Synology"
           Synology.url=literal:"https://synology.ghostship.io"
           Synology.scale=literal:1
@@ -124,6 +117,13 @@
           OmniTools.color=literal:"#ff9800"
           OmniTools.enabled=literal:"true"
           OmniTools.dd=literal:"true"
+          MeTube.name=literal:"MeTube"
+          MeTube.url=literal:"https://metube.ghostship.io"
+          MeTube.scale=literal:1
+          MeTube.icon=literal:"muximux-cloud-download2"
+          MeTube.color=literal:"#ff4c41"
+          MeTube.enabled=literal:"true"
+          MeTube.dd=literal:"true"
           ConvertX.name=literal:"ConvertX"
           ConvertX.url=literal:"https://convertx.ghostship.io"
           ConvertX.scale=literal:1
