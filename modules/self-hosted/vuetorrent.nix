@@ -35,8 +35,11 @@ let
 
     if [ "$NEEDS_DOWNLOAD" -eq 1 ]; then
       echo "Downloading VueTorrent UI..."
-      rm -rf "$PUBLIC_DIR"
+      # Create directory if it doesn't exist, but don't delete it if it does
+      # to preserve inode for bind mounts.
       mkdir -p "$PUBLIC_DIR"
+      ${pkgs.coreutils}/bin/rm -rf "$PUBLIC_DIR"/*
+      
       TEMP_ZIP=$(mktemp)
       ${pkgs.curl}/bin/curl -L "$ASSET_URL" -o "$TEMP_ZIP"
       TEMP_EXTRACT=$(mktemp -d)
@@ -46,17 +49,21 @@ let
       # qBittorrent 5.x expects the RootFolder to point DIRECTLY to the directory 
       # containing index.html for it to work correctly without 500 errors.
       if [ -d "$TEMP_EXTRACT/vuetorrent/public" ]; then
-        cp -r "$TEMP_EXTRACT/vuetorrent/public/." "$PUBLIC_DIR/"
+        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/vuetorrent/public/." "$PUBLIC_DIR/"
       elif [ -d "$TEMP_EXTRACT/vuetorrent" ]; then
-        cp -r "$TEMP_EXTRACT/vuetorrent/." "$PUBLIC_DIR/"
+        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/vuetorrent/." "$PUBLIC_DIR/"
       else
-        cp -r "$TEMP_EXTRACT/." "$PUBLIC_DIR/"
+        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/." "$PUBLIC_DIR/"
       fi
 
       rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
       chown -R 3000:3000 "$PUBLIC_DIR"
       printf '%s\n' "$CURRENT_RELEASE_URL" > "$RELEASE_MARKER"
       echo "VueTorrent UI downloaded and extracted (Version marker: $CURRENT_RELEASE_URL)"
+      
+      # UI changed, we MUST restart to ensure the container picks it up
+      # especially since we replaced files in a bind-mounted directory.
+      ${pkgs.systemd}/bin/systemctl restart podman-vuetorrent.service || true
     fi
 
     # 3. Update config if it exists
