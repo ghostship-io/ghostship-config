@@ -7,8 +7,11 @@ in
   virtualisation.oci-containers.containers."searxng" = {
     image = "searxng/searxng:latest";
     user = "3000:3000";
+    ports = [
+      "5002:5002"
+    ];
     extraOptions = [
-      "--network=container:gluetun"
+      "--network=ghostship_net"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:5002/ || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
@@ -22,11 +25,6 @@ in
     volumes = [
       "/srv/apps/searxng:/etc/searxng:rw"
     ];
-  };
-
-  systemd.services.podman-searxng = {
-    after = [ "podman-gluetun.service" ];
-    bindsTo = [ "podman-gluetun.service" ];
   };
 
   systemd.tmpfiles.rules = [
@@ -52,17 +50,33 @@ from ruamel.yaml import YAML
 path = Path("/srv/apps/searxng/settings.yml")
 yaml = YAML(typ="rt")
 yaml.preserve_quotes = True
-data = yaml.load(path.read_text())
+data = yaml.load(path.read_text()) or {}
 
+# 1. Clean up legacy plugin keys that break validation
 bad_keys = [
     key for key in data
     if isinstance(key, str) and key.startswith("plugins[")
 ]
-if bad_keys:
-    for key in bad_keys:
-        del data[key]
-    with path.open("w") as handle:
-        yaml.dump(data, handle)
+for key in bad_keys:
+    del data[key]
+
+# 2. Ensure 'engines' list exists and contains placeholders for the ones we want to configure
+if "engines" not in data or not isinstance(data["engines"], list):
+    data["engines"] = []
+
+target_engines = [
+    "google", "brave", "wikipedia", "wikidata", "wolframalpha", 
+    "startpage", "duckduckgo", "mojeek", "yep", "karmasearch", "annas archive"
+]
+
+existing_engines = {e.get("name") for e in data["engines"] if isinstance(e, dict) and "name" in e}
+
+for engine_name in target_engines:
+    if engine_name not in existing_engines:
+        data["engines"].append({"name": engine_name})
+
+with path.open("w") as handle:
+    yaml.dump(data, handle)
 PY
 
         if [ -z "''${SEARXNG_SECRET_KEY:-}" ]; then
