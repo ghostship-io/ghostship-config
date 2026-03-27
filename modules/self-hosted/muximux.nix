@@ -75,13 +75,6 @@
           Prowlarr.icon=literal:"muximux-paw"
           Prowlarr.color=literal:"#e45124"
           Prowlarr.enabled=literal:"true"
-          RomM.name=literal:"RomM"
-          RomM.url=literal:"https://romm.ghostship.io"
-          RomM.scale=literal:1
-          RomM.icon=literal:"muximux-gamepad"
-          RomM.color=literal:"#553f99"
-          RomM.enabled=literal:"true"
-          RomM.dd=literal:"false"
           Grimmory.name=literal:"Grimmory"
           Grimmory.url=literal:"https://grimmory.ghostship.io"
           Grimmory.scale=literal:1
@@ -89,6 +82,13 @@
           Grimmory.color=literal:"#49da7e"
           Grimmory.enabled=literal:"true"
           Grimmory.dd=literal:"false"
+          RomM.name=literal:"RomM"
+          RomM.url=literal:"https://romm.ghostship.io"
+          RomM.scale=literal:1
+          RomM.icon=literal:"muximux-gamepad"
+          RomM.color=literal:"#553f99"
+          RomM.enabled=literal:"true"
+          RomM.dd=literal:"false"
           MeTube.name=literal:"MeTube"
           MeTube.url=literal:"https://metube.ghostship.io"
           MeTube.scale=literal:1
