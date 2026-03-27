@@ -20,6 +20,7 @@
     };
     volumes = [
       "/srv/apps/nzbget:/config"
+      "/srv/apps/nzbget/scripts:/scripts"
       "/mnt/share/Downloads:/downloads"
     ];
   };
@@ -32,6 +33,7 @@
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/nzbget 0755 apps apps -"
+    "d /srv/apps/nzbget/scripts 0755 apps apps -"
   ];
 
   system.activationScripts.nzbget-config = {
@@ -75,11 +77,11 @@
           ControlPassword=literal:""
           UpdateCheck=literal:none
           DestDir=literal:/downloads/Usenet
-          "InterDir=literal:''${DestDir}/.incomplete"
+          "InterDir=literal:/downloads/Usenet/.incomplete"
         )
 
         ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${nzb_args[@]}"
-        
+
         chown 3000:3000 "$CONFIG_FILE"
         chmod 644 "$CONFIG_FILE"
       fi
