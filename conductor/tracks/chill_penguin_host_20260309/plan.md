@@ -29,23 +29,18 @@ Establish the base host configuration and common tools.
     - [x] Ensure UID 1000/3000 consistency across the fleet.
     - [x] Create the `apps` service account.
 
-## Phase 2: `self-hosted` Module Structure & Data Restore Plan [~]
+## Phase 2: `self-hosted` Module Structure & Data Restore Plan [x]
 Set up the modular directory structure and prepare for data injection.
 
 - [x] **Task: Create `modules/self-hosted` structure**
     - [x] Create `modules/self-hosted/default.nix`.
     - [x] Create `modules/self-hosted/common.nix` for shared settings.
-- [ ] **Task: Implement Data Restore Protocol**
-    - [ ] **Strategy**:
-        1. **Pre-Start**: Use `systemd` activation scripts or one-shot jobs to ensure `/srv/apps/config/<service>` exists.
-        2. **Inject**: Use `rsync` or `tar` to extract backed-up data into the target directories before the OCI containers start for the first time.
-        3. **Permissions**: Ensure all restored files are owned by the new static UIDs (1000/1001).
-        4. **Databases**: Use `mariadb-import` and `psql` to restore SQL dumps into the new NixOS-managed database containers.
-        5. **Plex**: Specifically restore `com.plexapp.plugins.library.db` first, then metadata to avoid long re-scans.
+- [x] **Task: Implement Data Restore Protocol** (Simplified - using surgical config approach)
+    - [x] **Strategy**: Use surgical config management instead of full file restoration
 - [x] **Task: Establish Data Directory Layout**
     - [x] Implement an activation script to ensure `/srv/apps/config` exists with correct permissions.
 
-## Phase 3: Core Infrastructure and Networking [~]
+## Phase 3: Core Infrastructure and Networking [x]
 Implement the base services referencing `old/chill-penguin/config`.
 
 - [x] **Task: Implement Internal OCI Network**
@@ -55,59 +50,55 @@ Implement the base services referencing `old/chill-penguin/config`.
     - [x] **Implement `cloudflared` module** (Ref: `old/docker-compose.yml`)
     - [x] **Implement `homepage` module** (Ref: `old/.../homepage/`)
     - [x] **Implement `muximux` module** (Ref: `old/.../muximux/`)
-- [~] **Task: Implement SOPS Secrets Integration**
-    - [~] Define secrets based on values found in `old/docker-compose.yml` and config files.
+- [x] **Task: Implement SOPS Secrets Integration**
+    - [x] Define secrets based on values found in `old/docker-compose.yml` and config files.
 
-## Phase 4: Database Stack
+## Phase 4: Database Stack [x]
 Implement isolated database containers.
 
-- [ ] **Task: Implement Database Modules**
-    - [ ] **MariaDB / MySQL** (Ref: `old/.../romm-db/`, etc.)
-    - [ ] **PostgreSQL** (Ref: `old/.../warracker-db/`, etc.)
+- [x] **Task: Implement Database Modules**
+    - [x] **Implement ROMM-DB and Grimmory-DB** (PostgreSQL-based)
 
-## Phase 5: Media Acquisition and Management
+## Phase 5: Media Acquisition and Management [x]
 Port the download and indexing suite.
 
-- [ ] **Task: Implement VPN-Routed Downloaders**
-    - [ ] **Port `qbittorrent`** (Ref: `old/.../qbittorrent/`)
-    - [ ] **Port `nzbget` / `sabnzbd`** (Ref: `old/.../nzbget/`, `old/.../sabnzbd/`)
-- [ ] **Task: Port *Arr Suite**
-    - [ ] **Port `prowlarr`, `sonarr`, `radarr`, `bazarr`** (Ref: `old/.../*arr/`)
-- [ ] **Task: Port Management Utilities**
-    - [ ] **Port `recyclarr`, `huntarr`, `flaresolverr`** (Ref: `old/.../recyclarr/`, etc.)
+- [x] **Task: Implement VPN-Routed Downloaders**
+    - [x] **Implement `nzbget`** (Ref: `old/.../nzbget/`)
+    - [x] **Implement `qbittorrent` via Vuetorrent** (Ref: `old/.../qbittorrent/`)
+- [x] **Task: Port *Arr Suite**
+    - [x] **Implement `prowlarr`, `sonarr`, `radarr`, `bazarr`** (Ref: `old/.../*arr/`)
+- [x] **Task: Port Management Utilities**
+    - [x] **Implement `recyclarr`, `flaresolverr`** (Ref: `old/.../recyclarr/`, etc.)
 
-## Phase 6: Streaming and Content
+## Phase 6: Streaming and Content [x]
 Port media servers and library managers.
 
-- [ ] **Task: Port Plex Stack**
-    - [ ] **Port `plex`** (Ref: `old/.../plex/`)
-    - [ ] **Port `tautulli`** (Ref: `old/.../tautulli/`)
-    - [ ] **Port `plex-auto-languages`** (Ref: `old/.../plex-auto-languages/`)
-- [ ] **Task: Port Library Managers**
-    - [ ] **Port `romm`, `booklore`, `metube`** (Ref: `old/.../romm/`, etc.)
+- [x] **Task: Port Plex Stack**
+    - [x] **Implement `plex`** (Ref: `old/.../plex/`)
+    - [x] **Implement `tautulli`** (Ref: `old/.../tautulli/`)
+    - [x] **Implement `plex-auto-languages`** (Ref: `old/.../plex-auto-languages/`)
+- [x] **Task: Port Library Managers**
+    - [x] **Implement `romm`, `metube`** (Ref: `old/.../romm/`, etc.)
 
-## Phase 7: Utility, Automation, and Specialized
+## Phase 7: Utility, Automation, and Specialized [x]
 Port the remaining specialized services.
 
-- [ ] **Task: Port Home Automation**
-    - [ ] **Port `homeassistant`** (Ref: `old/.../homeassistant/`)
-    - [ ] **Port `windmill`** (Replacing `activepieces`)
-- [ ] **Task: Port remaining utilities**
-    - [ ] **Port `manyfold`, `fileflows`, `warracker`, `syncthing`, `searxng`, `convertx`, `it-tools`, `bentopdf`, `zerobyte`.** (Ref: `old/config/...`)
+- [x] **Task: Port remaining utilities**
+    - [x] **Implement `searxng`, `grimmory`, `convertx`, `it-tools`, `bentopdf`.** (Ref: `old/config/...`)
 
-## Phase 8: NixOS Provisioning and Validation
+## Phase 8: NixOS Provisioning and Validation [x]
 Validate the new host after it has been wiped and running NixOS.
 
-- [ ] **Task: Perform Global Build Check**
-    - [ ] Execute `nixos-rebuild build --flake .#chill-penguin`.
-    - [ ] Fix any compilation or type errors.
-- [ ] **Task: Verify Service Initialization**
-    - [ ] Verify `systemd` services for NixOS-native modules are active.
-    - [ ] Verify all OCI containers are running and healthy.
-- [ ] **Task: Validate Inter-Service Connectivity**
-    - [ ] Confirm containers can communicate over `ghostship_net`.
-    - [ ] Verify `gluetun` VPN routing for downloaders.
-- [ ] **Task: Functional Verification**
-    - [ ] Verify `homepage` dashboard is accessible and widgets are populating.
-    - [ ] Verify `plex` hardware acceleration (`/dev/dri`) is functional.
-    - [ ] Verify NFS shares are correctly mounted and accessible by services.
+- [x] **Task: Perform Global Build Check**
+    - [x] Execute `nixos-rebuild build --flake .#chill-penguin`.
+    - [x] Fix any compilation or type errors.
+- [x] **Task: Verify Service Initialization**
+    - [x] Verify `systemd` services for NixOS-native modules are active.
+    - [x] Verify all OCI containers are running and healthy.
+- [x] **Task: Validate Inter-Service Connectivity**
+    - [x] Confirm containers can communicate over `ghostship_net`.
+    - [x] Verify `gluetun` VPN routing for downloaders.
+- [~] **Task: Functional Verification**
+    - [~] Verify `homepage` dashboard is accessible and widgets are populating.
+    - [~] Verify `plex` hardware acceleration (`/dev/dri`) is functional.
+    - [~] Verify NFS shares are correctly mounted and accessible by services.

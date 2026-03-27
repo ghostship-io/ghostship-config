@@ -16,15 +16,15 @@ To create an identical state across personal workstations, servers, and embedded
 ### Development & Shell
 - **Fish Shell**: Primary interactive shell with a rich plugin ecosystem.
 - **Starship**: Cross-shell prompt for a consistent visual experience.
-- **devenv**: Declarative development environments.
 - **direnv & nix-direnv**: Automatic shell activation.
 - **Inshellisense**: IDE-style autocomplete for the CLI.
 - **Modern CLI Utils**: `eza` (ls), `bat` (cat), `fd` (find), `zoxide` (cd), `fzf` (search), `nh` (nix helper).
 
 ## 💻 Systems
-- **launch-octopus**: Primary WSL2 development environment on Windows 11.
+- **launch-octopus**: WSL2 development environment on Windows 11.
+- **armored-armadillo**: Secondary WSL2 development environment.
 - **boomer-kuwanger**: Dedicated emulation-focused NixOS PC running on a Minisforum HX100G.
-- **chill-penguin**: Mac Studio M1 Ultra (Apple Silicon) - Successfully running the official NixOS ARM64 installer (Kernel 6.19.9-asahi). Partitioned with a 3.6 TiB Btrfs layout (`@`, `@home`, `@nix`, `@log`) with ZSTD compression. Currently in the installation phase.
+- **chill-penguin**: Mac Studio M1 Ultra (Apple Silicon) - Running NixOS on kernel 6.19.9-asahi with Fedora's GRUB chainloader. Partitioned with a 3.6 TiB Btrfs layout (`@`, `@home`, `@nix`, `@log`) with ZSTD compression.
 
 ## ✨ Key Features
 
@@ -39,6 +39,34 @@ To create an identical state across personal workstations, servers, and embedded
 
 ### Agent Tooling
 - **Unified Assistant Stack**: Gemini, OpenCode, and Codex share a common `~/.agents` instruction/skills source, aligned MCP servers, and a Gemini delegation MCP for repo research and planning.
+
+### Self-Hosted Services
+The repo includes 25 containerized services running on Podman:
+
+| Service | Purpose |
+|---------|---------|
+| Gluetun | VPN tunnel forarr services |
+| Cloudflared | Cloudflare tunnel |
+| Homepage | Dashboard |
+| Muximux | Alternative dashboard |
+| Tautulli | Plex monitoring |
+| Plex | Media server |
+| Prowlarr | Indexer manager |
+| Sonarr | TV downloader |
+| Radarr | Movie downloader |
+| NZBGet | NZB downloader |
+| Vuetorrent | qBittorrent web UI |
+| FlareSolverr | Cloudflare bypass |
+| BentoPDF | PDF tools |
+| ConvertX | Transcoding |
+| IT-Tools | Developer tools |
+| MeTube | YouTube downloader |
+| Recyclarr | arr config sync |
+| Bazarr | Subtitle downloader |
+| Plex-Auto-Languages | Auto language detection |
+| SearXNG + Valkey | Metasearch engine |
+| ROMM | ROM game manager |
+| Grimmory | Game collection manager |
 
 ### Surgical Configuration Management (`ghostship-config`)
 - **Unified Tooling**: A fleet-wide Python utility (`ghostship-config`) for idempotent, surgical updates to XML, YAML, INI, and KV files.
