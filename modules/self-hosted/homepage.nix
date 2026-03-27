@@ -249,9 +249,6 @@ in
           )
 
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
-
-          # Cleanup any potential duplicates
-          ${pkgs.ghostship-config}/bin/ghostship-config delete "$SERVICES_FILE" "[Media].[IT-Tools]"
         fi
 
         # Update widgets.yaml if it exists
