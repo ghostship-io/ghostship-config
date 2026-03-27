@@ -10,18 +10,30 @@ let
     CONFIG_FILE="$CONFIG_DIR/qBittorrent/qBittorrent.conf"
     UI_DIR="$CONFIG_DIR/ui"
     PUBLIC_DIR="$UI_DIR/public"
+    RELEASE_MARKER="$CONFIG_DIR/.vuetorrent-release-url"
+    ASSET_URL="https://github.com/WDaan/VueTorrent/releases/latest/download/vuetorrent.zip"
 
     # 1. Ensure directories exist
     mkdir -p "$CONFIG_DIR/qBittorrent" "$PUBLIC_DIR"
     chown -R 3000:3000 "$CONFIG_DIR"
 
-    # 2. Download VueTorrent UI if the alt UI root is missing.
-    if [ ! -f "$PUBLIC_DIR/index.html" ]; then
+    # 2. Refresh VueTorrent only when the upstream release URL changes.
+    NEEDS_DOWNLOAD=0
+    CURRENT_RELEASE_URL=""
+    if CURRENT_RELEASE_URL="$(${pkgs.curl}/bin/curl -fsSLI -L "$ASSET_URL" -o /dev/null -w '%{url_effective}')" ; then
+      if [ ! -f "$PUBLIC_DIR/index.html" ] || [ ! -f "$RELEASE_MARKER" ] || [ "$(${pkgs.coreutils}/bin/cat "$RELEASE_MARKER")" != "$CURRENT_RELEASE_URL" ]; then
+        NEEDS_DOWNLOAD=1
+      fi
+    elif [ ! -f "$PUBLIC_DIR/index.html" ]; then
+      NEEDS_DOWNLOAD=1
+    fi
+
+    if [ "$NEEDS_DOWNLOAD" -eq 1 ]; then
       echo "Downloading VueTorrent UI..."
       rm -rf "$PUBLIC_DIR"
       mkdir -p "$PUBLIC_DIR"
       TEMP_ZIP=$(mktemp)
-      ${pkgs.curl}/bin/curl -L "https://github.com/WDaan/VueTorrent/releases/latest/download/vuetorrent.zip" -o "$TEMP_ZIP"
+      ${pkgs.curl}/bin/curl -L "$ASSET_URL" -o "$TEMP_ZIP"
       TEMP_EXTRACT=$(mktemp -d)
       ${pkgs.unzip}/bin/unzip -o "$TEMP_ZIP" -d "$TEMP_EXTRACT"
 
@@ -38,6 +50,7 @@ let
 
       rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
       chown -R 3000:3000 "$PUBLIC_DIR"
+      printf '%s\n' "$CURRENT_RELEASE_URL" > "$RELEASE_MARKER"
       echo "VueTorrent UI downloaded and extracted"
     fi
 
