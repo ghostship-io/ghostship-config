@@ -112,6 +112,7 @@ in
             "[Media].[Grimmory].widget.url=literal:http://grimmory:6060"
             "[Media].[Grimmory].widget.username=env:GRIMMORY_USER"
             "[Media].[Grimmory].widget.password=env:GRIMMORY_PASS"
+            "[Media].[Grimmory].dd=yaml:false"
             
             # Automation group
             "[Automation].[Sonarr].icon=literal:sonarr.png"
@@ -225,6 +226,10 @@ in
             "[Utilities].[MeTube].description=literal:YouTube Downloader"
             "[Utilities].[MeTube].server=literal:chill-penguin"
             "[Utilities].[MeTube].container=literal:metube"
+            "[Utilities].[OmniTools].icon=literal:sh-omni-tools"
+            "[Utilities].[OmniTools].description=literal:Web Tools"
+            "[Utilities].[OmniTools].server=literal:chill-penguin"
+            "[Utilities].[OmniTools].container=literal:omni-tools"
             
             # Infrastructure group
             "[Infrastructure].[SearXNG Cache].icon=literal:redis.png"
@@ -244,6 +249,9 @@ in
           )
 
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
+
+          # Cleanup any potential duplicates
+          ${pkgs.ghostship-config}/bin/ghostship-config delete "$SERVICES_FILE" "[Media].[IT-Tools]"
         fi
 
         # Update widgets.yaml if it exists
