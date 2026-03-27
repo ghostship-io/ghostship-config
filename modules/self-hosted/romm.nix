@@ -20,11 +20,10 @@ in
       DB_NAME = "romm";
       HASHEOUS_API_ENABLED = "true";
       HLTB_API_ENABLED = "true";
-      ALLOWED_HOSTS = "*";
-      TRUSTED_PROXIES = "10.89.0.0/24";
-      ENABLE_CSP = "true";
+      ALLOWED_HOSTS = "romm.ghostship.io,apps.ghostship.io,*";
+      TRUSTED_PROXIES = "*";
+      ENABLE_CSP = "false";
       ROMM_HTTP_PROXY = "true";
-      ROMM_BASE_URL = "https://romm.ghostship.io";
     };
     environmentFiles = [
       "/srv/apps/romm/romm.env"
@@ -41,6 +40,21 @@ in
   systemd.services.podman-romm = {
     after = [ "mnt-share.mount" ];
     wants = [ "mnt-share.mount" ];
+    postStart = ''
+      # Wait for container to be ready
+      for i in {1..30}; do
+        if ${pkgs.podman}/bin/podman exec romm ls /etc/nginx/conf.d/default.conf >/dev/null 2>&1; then
+          break
+        fi
+        sleep 1
+      done
+
+      echo "Applying manual patches to RomM nginx config..."
+      ${pkgs.podman}/bin/podman exec romm sed -i '/location \/ {/a \        add_header Content-Security-Policy "frame-ancestors https://*.ghostship.io https://ghostship.io https://apps.ghostship.io;" always;' /etc/nginx/conf.d/default.conf
+      ${pkgs.podman}/bin/podman exec romm sed -i 's/add_header Cross-Origin-Embedder-Policy/#add_header Cross-Origin-Embedder-Policy/' /etc/nginx/conf.d/default.conf
+      ${pkgs.podman}/bin/podman exec romm sed -i 's/add_header Cross-Origin-Opener-Policy/#add_header Cross-Origin-Opener-Policy/' /etc/nginx/conf.d/default.conf
+      ${pkgs.podman}/bin/podman exec romm nginx -s reload
+    '';
   };
 
   systemd.tmpfiles.rules = [
@@ -57,10 +71,14 @@ in
 
     if [ -f "$CONFIG_FILE" ]; then
       echo "Surgically updating RomM config.yml..."
-      ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" \
-        library_path=literal:/romm/library \
-        assets_path=literal:/romm/assets \
+      
+      romm_cfg_args=(
+        library_path=literal:/romm/library
+        assets_path=literal:/romm/assets
         resources_path=literal:/romm/resources
+      )
+
+      ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "${romm_cfg_args[@]}"
       chown 3000:3000 "$CONFIG_FILE"
     fi
 
@@ -68,17 +86,20 @@ in
     mkdir -p "$(dirname "$ENV_FILE")"
     touch "$ENV_FILE"
 
-    ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" \
-      --secrets-file "${romm-secrets}" \
-      DB_USER=env:ROMM_DB_USER \
-      DB_PASSWD=env:ROMM_DB_PASS \
-      ROMM_AUTH_SECRET_KEY=env:ROMM_AUTH_SECRET \
-      IGDB_CLIENT_ID=env:ROMM_IGDB_CLIENT_ID \
-      IGDB_CLIENT_SECRET=env:ROMM_IGDB_CLIENT_SECRET \
-      RETROACHIEVEMENTS_API_KEY=env:ROMM_RETROACHIEVEMENTS_API_KEY \
-      STEAMGRIDDB_API_KEY=env:ROMM_STEAMGRIDDB_API_KEY \
-      SCREENSCRAPER_USER=env:ROMM_SCREENSCRAPER_USER \
+    romm_env_args=(
+      --secrets-file "${romm-secrets}"
+      DB_USER=env:ROMM_DB_USER
+      DB_PASSWD=env:ROMM_DB_PASS
+      ROMM_AUTH_SECRET_KEY=env:ROMM_AUTH_SECRET
+      IGDB_CLIENT_ID=env:ROMM_IGDB_CLIENT_ID
+      IGDB_CLIENT_SECRET=env:ROMM_IGDB_CLIENT_SECRET
+      RETROACHIEVEMENTS_API_KEY=env:ROMM_RETROACHIEVEMENTS_API_KEY
+      STEAMGRIDDB_API_KEY=env:ROMM_STEAMGRIDDB_API_KEY
+      SCREENSCRAPER_USER=env:ROMM_SCREENSCRAPER_USER
       SCREENSCRAPER_PASSWORD=env:ROMM_SCREENSCRAPER_PASS
+    )
+
+    ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" "${romm_env_args[@]}"
 
     chown 3000:3000 "$ENV_FILE"
     chmod 600 "$ENV_FILE"
