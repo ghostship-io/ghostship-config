@@ -97,8 +97,8 @@ map \$request_uri \$coop_header {
 
 server {
     root /var/www/html;
-    listen \${ROMM_PORT};
-    \${IPV6_LISTEN}
+    listen \''${ROMM_PORT};
+    \''${IPV6_LISTEN}
     server_name localhost;
 
     proxy_set_header Host \$http_host;
@@ -144,7 +144,7 @@ server {
     # Internally redirect download requests
     location /library/ {
         internal;
-        alias "\${ROMM_BASE_PATH}/library/";
+        alias "\''${ROMM_BASE_PATH}/library/";
     }
 
     # Internal decoding endpoint, used to decode base64 encoded data
