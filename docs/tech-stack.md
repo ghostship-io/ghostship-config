@@ -29,6 +29,6 @@
 - **Fish Shell**: The primary interactive shell, pre-configured with aliases and plugins.
 
 ## AI & Automation
-- **Gemini CLI**: Local AI agent interface with custom Nix packaging and Home Manager configuration.
+- **AGENT CLI**: Local AI agent interface with custom Nix packaging and Home Manager configuration.
 - **browser-use MCP**: Model Context Protocol server for browser automation, integrated with Nix-native browser binaries and using headless mode.
-- **Gemini Global Instructions**: Distilled expert system definitions and personas managed via a global `gemini.md` in Home Manager.
+- **AGENT Global Instructions**: Distilled expert system definitions and personas managed via a global `gemini.md` in Home Manager.

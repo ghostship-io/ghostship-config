@@ -31,7 +31,7 @@
     fastfetch
     eza
 
-    # Playwright for Gemini MCP (Disabled on chill-penguin for initial cross-build)
+    # Playwright for AGENT MCP (Disabled on chill-penguin for initial cross-build)
   ] ++ lib.optional (!(osConfig.networking.hostName == "chill-penguin")) playwright-driver.browsers;
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage

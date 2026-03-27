@@ -52,9 +52,9 @@
 - **Upstream Alignment**: Where possible, contribute improvements back to upstream projects (e.g., nixpkgs, home-manager) rather than maintaining local forks or complex overrides.
 - **Naming Conventions**: Use descriptive, snake_case names for options and module files, adhering to common nixpkgs conventions.
 
-## Gemini CLI Global Instructions
+## AGENT CLI Global Instructions
 
-Gemini CLI instructions and expert personas are managed via a centralized `gemini.md` file deployed globally to `~/.gemini/gemini.md` via Home Manager. This ensures a consistent, distilled, and always-available set of directives across all hosts in the fleet.
+AGENT CLI instructions and expert personas are managed via a centralized `gemini.md` file deployed globally to `~/.gemini/gemini.md` via Home Manager. This ensures a consistent, distilled, and always-available set of directives across all hosts in the fleet.
 
 ### Guidelines for Instructions Deployment
 - **Centralization**: All core directives, system-native workflows (e.g., `nh`, flakes), and expertise sections (e.g., Python) MUST reside in `home/config/AGENTS.md`.

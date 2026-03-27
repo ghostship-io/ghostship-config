@@ -66,7 +66,7 @@ in
             {
               name = "notify-waiting";
               type = "command";
-              command = "notify-send \"Gemini\" \"Waiting for input...\" -u critical";
+              command = "notify-send \"AGENT\" \"Waiting for input...\" -u critical";
             }
           ];
         }
