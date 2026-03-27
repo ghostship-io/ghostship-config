@@ -193,11 +193,7 @@ in
           "[Management].[Cloudflared].widget.type=literal:cloudflared" \
           "[Management].[Cloudflared].widget.accountid=literal:the owner's local area" \
           "[Management].[Cloudflared].widget.tunnelid=literal:d0e34b31-7ec6-432d-82b8-70323bc3d921" \
-          "[Management].[Cloudflared].widget.key=env:TUNNEL_TOKEN" \
-          "[Infrastructure].[OpenWebUI].icon=literal:sh-open-webui" \
-          "[Infrastructure].[OpenWebUI].description=literal:\"AI Interface\"" \
-          "[Infrastructure].[OpenWebUI].server=literal:chill-penguin" \
-          "[Infrastructure].[OpenWebUI].container=literal:open-webui" \
+          "[Management].[Cloudflared].widget.key=env:CLOUDFLARE_API_TOKEN" \
           "[Infrastructure].[SearXNG].icon=literal:sh-searxng" \
           "[Infrastructure].[SearXNG].description=literal:\"Metasearch Engine\"" \
           "[Infrastructure].[SearXNG].server=literal:chill-penguin" \
