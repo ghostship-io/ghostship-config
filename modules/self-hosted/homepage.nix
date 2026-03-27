@@ -217,11 +217,6 @@ in
             "[Utilities].[ConvertX].server=literal:chill-penguin"
             "[Utilities].[ConvertX].container=literal:convertx"
             
-            "[Utilities].[OmniTools].icon=literal:sh-toolbox"
-            "[Utilities].[OmniTools].description=literal:Omni Toolkit"
-            "[Utilities].[OmniTools].server=literal:chill-penguin"
-            "[Utilities].[OmniTools].container=literal:omni-tools"
-            
             "[Utilities].[IT-Tools].icon=literal:it-tools.png"
             "[Utilities].[IT-Tools].description=literal:Developer Tools"
             "[Utilities].[IT-Tools].server=literal:chill-penguin"
@@ -231,8 +226,9 @@ in
             "[Utilities].[MeTube].description=literal:YouTube Downloader"
             "[Utilities].[MeTube].server=literal:chill-penguin"
             "[Utilities].[MeTube].container=literal:metube"
-            "[Utilities].[OmniTools].icon=literal:sh-omni-tools"
-            "[Utilities].[OmniTools].description=literal:Web Tools"
+
+            "[Utilities].[OmniTools].icon=literal:mdi-toolbox"
+            "[Utilities].[OmniTools].description=literal:Omni Toolkit"
             "[Utilities].[OmniTools].server=literal:chill-penguin"
             "[Utilities].[OmniTools].container=literal:omni-tools"
             
