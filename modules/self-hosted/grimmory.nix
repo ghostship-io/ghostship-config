@@ -8,9 +8,9 @@ in
     image = "grimmory/grimmory:latest";
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=/bin/sh -c 'for _ in $(seq 1 45); do wget -q --spider http://127.0.0.1:6060 && exit 0; sleep 2; done; exit 1'"
+      "--health-cmd=wget -q --spider http://127.0.0.1:6060 || exit 1"
       "--health-interval=30s"
-      "--health-timeout=100s"
+      "--health-timeout=10s"
       "--health-retries=5"
       "--health-start-period=1m"
     ];

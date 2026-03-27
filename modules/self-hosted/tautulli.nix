@@ -9,9 +9,9 @@ in
     user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=/bin/sh -c 'for _ in $(seq 1 30); do wget -q --spider http://127.0.0.1:8181/ && exit 0; sleep 2; done; exit 1'"
+      "--health-cmd=wget -q --spider http://127.0.0.1:8181/ || exit 1"
       "--health-interval=30s"
-      "--health-timeout=75s"
+      "--health-timeout=10s"
       "--health-retries=5"
       "--health-start-period=1m"
     ];
