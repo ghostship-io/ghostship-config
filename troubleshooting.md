@@ -242,3 +242,62 @@ Conclusion:
 - The pane-3 metadata row bug is real and reproducible with fresh filenames; it is not a cache artifact.
 - Replacing the metadata rows with the safe manual-row implementation is sufficient for the full `Setup` component when mounted directly.
 - The remaining crash on the routed `/setup` page comes from an additional trigger in the real router/auth startup path, not from stale caching of the old Setup chunk.
+
+## 2026-03-27: `CG()` is not the second trigger; the auth shell alone is not either
+
+Checks performed:
+- Published `romm-setup-route-livefix-nocg-test.html`, a fresh routed `/setup` page using `Setup-livefix.js` but skipping `CG()`
+- Confirmed `romm-setup-route-livefix-nocg-test.html` still crashes
+- Published `romm-authsetup-livefix-test.html`, which mounts the auth shell and `Setup-livefix.js` directly without the router
+- Confirmed `romm-authsetup-livefix-test.html` works
+
+Conclusion:
+- The second iframe trigger is not caused by `CG()` startup fetches.
+- The auth shell plus patched Setup is not sufficient to trigger the second crash.
+- The remaining suspect surface is the real router path or the `RomM` root wrapper around `router-view`.
+
+## 2026-03-27: Correction on the `authrouter` isolation step
+
+Checks performed:
+- Re-read the generated `Auth-DEfpmLbn.js` and `index-authrouter-livefix(-novt).js` test bundles
+- Verified the `authrouter` pages mount `Auth` as the app root while the `/setup` route also renders `Auth`
+
+Conclusion:
+- `romm-authrouter-livefix-test.html` and `romm-authrouter-livefix-novt-test.html` double-nest the auth shell.
+- Those crashes are not a clean router-only isolation.
+- The next valid split should mount the original `RomM` root (or a trivial single `router-view` root) with a custom single-auth router.
+
+## 2026-03-27: Clean minimal router confirms the remaining trigger is in the full router config
+
+Checks performed:
+- Published `romm-e5-minrouter-setup-livefix-test.html`, which mounts the original `RomM` root with a custom single-route `/setup` router and `Setup-livefix.js`
+- Published `romm-routerview-minrouter-setup-livefix-test.html`, which mounts a trivial `router-view` root with the same custom single-route `/setup` router and `Setup-livefix.js`
+- Confirmed both pages work in the iframe
+
+Conclusion:
+- The `RomM` root wrapper is not the remaining trigger.
+- Generic `vue-router` rendering of the patched Setup route is not the remaining trigger.
+- The remaining crash lives in the real full router configuration, most likely its navigation guards or other full-route-table-specific startup behavior.
+
+## 2026-03-27: Correction from live heartbeat: real `/setup` redirects away immediately
+
+Checks performed:
+- Queried `http://127.0.0.1:8080/api/heartbeat` inside the running RomM container
+- Confirmed `SYSTEM.SHOW_SETUP_WIZARD` is `false`
+
+Conclusion:
+- In the real app, `/setup` will not render the Setup wizard under the full router.
+- The guard sends `/setup` to `login` when there is no current user, or to `home` when there is one.
+- Earlier “routed `/setup` crash” results are ambiguous until the actual post-guard target route is made visible.
+
+## 2026-03-27: Correction on chunk-level route tests
+
+Checks performed:
+- Re-read the route chunk imports for `Auth-DEfpmLbn.js`, `Login-CnAfCT08.js`, `Main-CyWiqIVJ.js`, and `Setup-rt7B6UJc.js`
+- Verified they all import `./index-C1YMu947.js` for shared runtime helpers
+- Confirmed the main bundle still contains a top-level `RG()` boot call
+
+Conclusion:
+- Any test page that imports one of those route chunks without replacing the `./index-C1YMu947.js` dependency also executes the original app boot in parallel.
+- Those chunk-based tests are contaminated and cannot be treated as clean route/component isolation.
+- Future route tests need a patched no-boot runtime copy and patched chunk copies that import that runtime instead of the original booting main bundle.

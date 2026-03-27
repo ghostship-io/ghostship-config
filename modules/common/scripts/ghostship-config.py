@@ -112,6 +112,7 @@ class YAMLDriver:
         self.yaml.preserve_quotes = True
         self.data = self.yaml.load(content)
         self.dirty = False
+        self.allow_missing = False
 
     def _coerce_value(self, current, value):
         if not isinstance(value, str):
@@ -160,7 +161,12 @@ class YAMLDriver:
         parts.append("".join(curr))
         return parts
 
-    def _select_from_list(self, items, selector):
+    def _new_selector_container(self, next_part):
+        if next_part and re.fullmatch(r"\[(.+)\]", next_part):
+            return []
+        return {}
+
+    def _select_from_list(self, items, selector, create_missing=False):
         if selector.isdigit():
             index = int(selector)
             if 0 <= index < len(items):
@@ -179,7 +185,19 @@ class YAMLDriver:
 
         for item in items:
             if isinstance(item, dict) and selector in item:
-                return item[selector]
+                val = item[selector]
+                if val is None:
+                    item[selector] = {}
+                    self.dirty = True
+                    return item[selector]
+                return val
+
+        if create_missing:
+            # Create a new mapping with the selector as a key (likely a group name or service name)
+            new_item = {selector: {}}
+            items.append(new_item)
+            self.dirty = True
+            return new_item[selector]
 
         return None
 
@@ -198,7 +216,9 @@ class YAMLDriver:
             if match:
                 list_name, selector = match.groups()
                 if list_name:
-                    items = curr.get(list_name, [])
+                    if not isinstance(curr, dict):
+                        return None, None
+                    items = curr.get(list_name)
                 else:
                     items = curr
 
@@ -216,46 +236,142 @@ class YAMLDriver:
                 if curr is None:
                     return None, None
             elif part.isdigit() and isinstance(curr, list):
-                curr = curr[int(part)]
+                index = int(part)
+                if not (0 <= index < len(curr)):
+                    return None, None
+                curr = curr[index]
             elif isinstance(curr, dict):
-                curr = curr.setdefault(part, {})
+                curr = curr.get(part)
+                if curr is None:
+                    return None, None
             else:
                 return None, None
         return curr, parts[-1]
 
     def set(self, path, value):
-        target, key = self._get_target(path)
-        if target is None:
-            logging.warning(f"Path not found: {path}")
-            return
+        parts = self._split_path(path)
+        curr = self.data
+
+        for i, part in enumerate(parts[:-1]):
+            # Attribute selector: [key=val] or [key]
+            match = re.fullmatch(r"(.*)\[(.+)\]", part)
+            if match:
+                list_name, selector = match.groups()
+                if list_name:
+                    items = curr.setdefault(list_name, [])
+                else:
+                    items = curr
+
+                if isinstance(items, list):
+                    # Try to find existing
+                    found = False
+                    if selector.isdigit():
+                        index = int(selector)
+                        if 0 <= index < len(items):
+                            curr = items[index]
+                            found = True
+                    elif "=" in selector:
+                        attr_key, attr_val = selector.split("=", 1)
+                        for item in items:
+                            if isinstance(item, dict) and str(item.get(attr_key)) == attr_val:
+                                curr = item
+                                found = True
+                                break
+                    else:
+                        for item in items:
+                            if isinstance(item, dict) and selector in item:
+                                curr = item[selector]
+                                if curr is None:
+                                    item[selector] = self._new_selector_container(
+                                        parts[i + 1]
+                                    )
+                                    curr = item[selector]
+                                    self.dirty = True
+                                found = True
+                                break
+
+                    if not found:
+                        if selector.isdigit():
+                            logging.warning(f"Index out of range for path part: {part}")
+                            return
+                        elif "=" in selector:
+                            logging.warning(f"Attribute selector not found and creation not supported for: {part}")
+                            return
+                        else:
+                            # Create new service entry in group
+                            new_service = {
+                                selector: self._new_selector_container(
+                                    parts[i + 1]
+                                )
+                            }
+                            items.append(new_service)
+                            curr = new_service[selector]
+                            self.dirty = True
+                elif isinstance(items, dict):
+                    curr = self._select_from_mapping(items, selector)
+                    if curr is None:
+                        logging.warning(f"Selector {selector} not found in mapping for path part: {part}")
+                        return
+                else:
+                    logging.warning(f"Expected list or mapping for selector, got {type(items)}")
+                    return
+            elif part.isdigit() and isinstance(curr, list):
+                curr = curr[int(part)]
+            elif isinstance(curr, dict):
+                curr = curr.setdefault(part, {})
+            else:
+                logging.warning(f"Path part {part} not found or invalid type")
+                return
+
+        # Handle the leaf
+        target = curr
+        key = parts[-1]
 
         key_match = re.fullmatch(r"(.*)\[(.+)\]", key)
         if key_match:
             list_name, selector = key_match.groups()
             if list_name:
-                items = target.get(list_name, [])
+                items = target.setdefault(list_name, [])
             else:
                 items = target
 
             if isinstance(items, list):
-                if not selector.isdigit():
+                if selector.isdigit():
+                    index = int(selector)
+                    if not (0 <= index < len(items)):
+                        logging.warning(f"Index out of range for key: {path}")
+                        return
+
+                    current = items[index]
+                    typed_value = self._coerce_value(current, value)
+
+                    if current != typed_value:
+                        items[index] = typed_value
+                        self.dirty = True
+                    return
+                elif "=" not in selector:
+                    # Key selector for list of dicts: [Utilities].[OmniTools]
+                    found_item = None
+                    for item in items:
+                        if isinstance(item, dict) and selector in item:
+                            found_item = item
+                            break
+
+                    if found_item is not None:
+                        current = found_item[selector]
+                        typed_value = self._coerce_value(current, value)
+                        if found_item[selector] != typed_value:
+                            found_item[selector] = typed_value
+                            self.dirty = True
+                    else:
+                        items.append({selector: value})
+                        self.dirty = True
+                    return
+                else:
                     logging.warning(
                         f"Unsupported list selector for key: {path}"
                     )
                     return
-
-                index = int(selector)
-                if not (0 <= index < len(items)):
-                    logging.warning(f"Index out of range for key: {path}")
-                    return
-
-                current = items[index]
-                typed_value = self._coerce_value(current, value)
-
-                if current != typed_value:
-                    items[index] = typed_value
-                    self.dirty = True
-                return
 
             if not isinstance(items, dict):
                 logging.warning(f"Expected list or mapping for key: {path}")
@@ -269,11 +385,60 @@ class YAMLDriver:
                 self.dirty = True
             return
 
-        current = target.get(key)
+        if isinstance(target, dict):
+            current = target.get(key)
+        else:
+            current = None
+
         typed_value = self._coerce_value(current, value)
 
         if current != typed_value:
-            target[key] = typed_value
+            if isinstance(target, dict):
+                target[key] = typed_value
+                self.dirty = True
+            else:
+                if not self.allow_missing:
+                    logging.warning(
+                        f"Cannot set {key} on non-dict target for path {path}"
+                    )
+    def delete(self, path):
+        target, key = self._get_target(path)
+        if target is None:
+            if not self.allow_missing:
+                logging.warning(f"Path not found: {path}")
+            return
+
+        key_match = re.fullmatch(r"(.*)\[(.+)\]", key)
+        if key_match:
+            list_name, selector = key_match.groups()
+            if list_name:
+                items = target.get(list_name)
+            else:
+                items = target
+
+            if isinstance(items, list):
+                if selector.isdigit():
+                    index = int(selector)
+                    if 0 <= index < len(items):
+                        items.pop(index)
+                        self.dirty = True
+                    return
+                elif "=" not in selector:
+                    # Key selector for list of dicts: [Media].[IT-Tools]
+                    for i, item in enumerate(items):
+                        if isinstance(item, dict) and selector in item:
+                            items.pop(i)
+                            self.dirty = True
+                            return
+                return
+
+            if isinstance(items, dict) and selector in items:
+                del items[selector]
+                self.dirty = True
+            return
+
+        if isinstance(target, dict) and key in target:
+            del target[key]
             self.dirty = True
 
     def serialize(self):
@@ -342,11 +507,12 @@ class KVDriver:
 
 
 class ConfigManager:
-    def __init__(self, file_path, format_override=None):
+    def __init__(self, file_path, format_override=None, allow_missing=False):
         self.file_path = file_path
         self.format = format_override or self._detect_format()
         self.driver = None
         self.content = ""
+        self.allow_missing = allow_missing
 
     def _detect_format(self):
         if os.path.basename(self.file_path) == "qBittorrent.conf":
@@ -375,6 +541,9 @@ class ConfigManager:
             self.driver = INIDriver(self.content)
         elif self.format == "kv":
             self.driver = KVDriver(self.content)
+
+        if self.driver:
+            self.driver.allow_missing = self.allow_missing
 
     def save(self, dry_run=False):
         if not self.driver or not self.driver.dirty:
@@ -715,10 +884,55 @@ WebUI\\Port=5000
         assert r.resolve('yaml:"0.0.0.0"') == "0.0.0.0"
         logging.info("YAML resolver tests passed")
 
+    def test_yaml_upsert_list():
+        content = """
+- Calendar:
+  - Calendar:
+      icon: mdi-calendar
+- Media:
+  - Plex:
+      icon: plex.png
+"""
+        with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False) as f:
+            f.write(content.encode())
+            path = f.name
+        try:
+            m = ConfigManager(path)
+            m.load()
+            # Test updating existing item in existing group
+            m.driver.set("[Media].[Plex].icon", "plex-new.png")
+            # Test adding new item to existing group
+            m.driver.set("[Media].[RomM].icon", "romm.png")
+            # Test adding new group and item
+            m.driver.set("[Utilities].[OmniTools].icon", "fa-wrench")
+            m.save()
+
+            yaml = YAML(typ="safe")
+            with open(path, "r") as f:
+                data = yaml.load(f)
+                
+                # Verify Media group updates
+                media_group = next(g["Media"] for g in data if "Media" in g)
+                plex = next(s["Plex"] for s in media_group if "Plex" in s)
+                assert plex["icon"] == "plex-new.png"
+                
+                romm = next(s["RomM"] for s in media_group if "RomM" in s)
+                assert romm["icon"] == "romm.png"
+                
+                # Verify Utilities group creation
+                utils_group = next(g["Utilities"] for g in data if "Utilities" in g)
+                omni = next(s["OmniTools"] for s in utils_group if "OmniTools" in s)
+                assert omni["icon"] == "fa-wrench"
+                
+            logging.info("YAML list upsert/creation tests passed")
+        finally:
+            os.unlink(path)
+
     test_xml()
     test_yaml()
     test_yaml_poisoned_scalar_repair()
     test_yaml_complex_paths()
+    test_yaml_upsert_list()
     test_ini()
     test_qbittorrent_conf_detection()
     test_kv()
@@ -731,15 +945,18 @@ WebUI\\Port=5000
 def main():
     parser = argparse.ArgumentParser(description="Surgical Config Updater")
     parser.add_argument(
-        "command", choices=["set"], nargs="?", help="Action to perform"
+        "command", choices=["set", "delete"], nargs="?", help="Action to perform"
     )
     parser.add_argument("file", nargs="?", help="Path to config file")
-    parser.add_argument("patches", nargs="*", help="Key=Value pairs")
+    parser.add_argument("patches", nargs="*", help="Key=Value pairs or Paths to delete")
     parser.add_argument(
         "--dry-run", action="store_true", help="Don't write to disk"
     )
     parser.add_argument("--format", help="Override format detection")
     parser.add_argument("--test", action="store_true", help="Run self-tests")
+    parser.add_argument(
+        "--allow-missing", action="store_true", help="Don't warn if path not found"
+    )
     parser.add_argument(
         "--secrets-file",
         action="append",
@@ -762,21 +979,25 @@ def main():
         sys.exit(0)
 
     resolver = ValueResolver(secrets_files=args.secrets_file)
-    manager = ConfigManager(args.file, args.format)
+    manager = ConfigManager(args.file, args.format, allow_missing=args.allow_missing)
     manager.load()
 
     if manager.driver:
-        for patch in args.patches:
-            match = re.match(r"(.+)=(env|file|literal|yaml):(.*)", patch)
-            if match:
-                key, prefix, val_ref = match.groups()
-                val = resolver.resolve(f"{prefix}:{val_ref}")
-                manager.driver.set(key, val)
-            elif "=" in patch:
-                key, val = patch.split("=", 1)
-                manager.driver.set(key, val)
-            else:
-                logging.warning(f"Invalid patch format: {patch}")
+        if args.command == "set":
+            for patch in args.patches:
+                match = re.match(r"(.+)=(env|file|literal|yaml):(.*)", patch)
+                if match:
+                    key, prefix, val_ref = match.groups()
+                    val = resolver.resolve(f"{prefix}:{val_ref}")
+                    manager.driver.set(key, val)
+                elif "=" in patch:
+                    key, val = patch.split("=", 1)
+                    manager.driver.set(key, val)
+                else:
+                    logging.warning(f"Invalid patch format: {patch}")
+        elif args.command == "delete":
+            for path in args.patches:
+                manager.driver.delete(path)
 
     manager.save(args.dry_run)
 
