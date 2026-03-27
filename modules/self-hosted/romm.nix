@@ -20,6 +20,11 @@ in
       DB_NAME = "romm";
       HASHEOUS_API_ENABLED = "true";
       HLTB_API_ENABLED = "true";
+      ALLOWED_HOSTS = "*";
+      TRUSTED_PROXIES = "10.89.0.0/24";
+      ENABLE_CSP = "false";
+      ROMM_HTTP_PROXY = "true";
+      ROMM_BASE_URL = "https://romm.ghostship.io";
     };
     environmentFiles = [
       "/srv/apps/romm/romm.env"

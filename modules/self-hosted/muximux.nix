@@ -94,7 +94,7 @@
           RomM.icon=literal:"muximux-gamepad" \
           RomM.color=literal:"#553f99" \
           RomM.enabled=literal:"true" \
-          RomM.dd=literal:"true" \
+          RomM.dd=literal:"false" \
           Tautulli.name=literal:"Tautulli" \
           Tautulli.url=literal:"https://tautulli.ghostship.io" \
           Tautulli.scale=literal:1 \
