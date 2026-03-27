@@ -9,6 +9,7 @@ let
   prowlarr-secrets = config.sops.secrets."prowlarr-secrets".path;
   bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
   cloudflared-secrets = config.sops.secrets."cloudflared-secrets".path;
+  grimmory-secrets = config.sops.secrets."grimmory-secrets".path;
 in
 
 {
@@ -73,6 +74,7 @@ in
           --secrets-file "${prowlarr-secrets}" \
           --secrets-file "${bazarr-secrets}" \
           --secrets-file "${cloudflared-secrets}" \
+          --secrets-file "${grimmory-secrets}" \
           "[Calendar].[Calendar].icon=literal:mdi-calendar" \
           "[Calendar].[Calendar].widget.type=literal:calendar" \
           "[Calendar].[Calendar].widget.view=literal:agenda" \
@@ -101,6 +103,10 @@ in
           "[Media].[Grimmory].description=literal:"Ebook Manager"" \
           "[Media].[Grimmory].server=literal:chill-penguin" \
           "[Media].[Grimmory].container=literal:grimmory" \
+          "[Media].[Grimmory].widget.type=literal:booklore" \
+          "[Media].[Grimmory].widget.url=literal:http://grimmory:6060" \
+          "[Media].[Grimmory].widget.username=env:GRIMMORY_USER" \
+          "[Media].[Grimmory].widget.password=env:GRIMMORY_PASS" \
           "[Downloads].[Gluetun].icon=literal:gluetun.png" \
           "[Downloads].[Gluetun].description=literal:\"VPN Client\"" \
           "[Downloads].[Gluetun].server=literal:chill-penguin" \
