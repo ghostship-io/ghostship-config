@@ -73,7 +73,7 @@ in
           "engines[name=genius].disabled=yaml:true"
         )
 
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$SETTINGS_FILE" "''${searx_args[@]}"
+        ${pkgs.ghostship-config}/bin/ghostship-config set --allow-missing "$SETTINGS_FILE" "${searx_args[@]}"
         
         chown 3000:3000 "$SETTINGS_FILE"
       fi
