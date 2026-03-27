@@ -74,3 +74,18 @@ Live patch behavior:
 
 Purpose:
 - Test whether RomM's startup focus behavior is the frame-only crash trigger while leaving standalone behavior unchanged.
+
+## 2026-03-27: RomM main document is frame-allowed, but auth cookies are not iframe-safe
+
+Checks performed:
+- Reviewed a live browser header capture for `https://romm.ghostship.io/` inside the iframe
+- Confirmed the response includes `Content-Security-Policy: frame-ancestors https://apps.ghostship.io 'self';`
+- Confirmed the response includes `Cross-Origin-Embedder-Policy: unsafe-none` and `Cross-Origin-Opener-Policy: unsafe-none`
+- Confirmed the running container is healthy again with `podman ps`
+- Re-read the live `/backend/main.py` inside the running container and confirmed it still uses `same_site="lax" if OIDC_ENABLED else "strict"` plus `https_only=False`
+
+Conclusion:
+- The top-level RomM document is not being blocked by the usual iframe headers.
+- The remaining header-level issue is the RomM auth cookie policy itself.
+- Because `apps.ghostship.io` embedding `romm.ghostship.io` is cross-site, `SameSite=Strict` prevents `romm_session` from being sent in the iframe even though the standalone tab works.
+- The next durable fix should be RomM emitting `SameSite=None; Secure` for its session cookie, and likely doing the same for any CSRF cookie used by authenticated API requests.
