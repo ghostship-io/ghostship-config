@@ -19,7 +19,7 @@ in
       DATABASE_URL = "jdbc:mariadb://grimmory-db:3306/grimmory";
       USER_ID = "3000";
       GROUP_ID = "3000";
-      BOOKLORE_PORT = "6060";
+      GRIMMORY_PORT = "6060";
     };
     environmentFiles = [
       "/srv/apps/grimmory/grimmory.env"

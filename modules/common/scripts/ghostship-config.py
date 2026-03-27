@@ -651,8 +651,9 @@ WebUI\\Port=5000
                     "WebUI\\AuthSubnetWhitelistEnabled = true" in res
                 )
                 assert (
-                    "WebUI\\AuthSubnetWhitelist = 127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-                    in res
+                    "WebUI\\AuthSubnetWhitelist = "
+                    "127.0.0.0/8,10.0.0.0/8,"
+                    "172.16.0.0/12,192.168.0.0/16" in res
                 )
                 assert "WebUI\\RootFolder = /vuetorrent-ui" in res
             logging.info("qBittorrent INI detection tests passed")
