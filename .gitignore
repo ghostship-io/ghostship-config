@@ -13,8 +13,8 @@ result-*
 *~
 
 # Agent tools
-.opencode/
-.ruff_cache/
+.opencode
+.ruff_cache
 
 # OS
 .DS_Store
