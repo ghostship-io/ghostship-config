@@ -8,60 +8,18 @@ let
 
     CONFIG_DIR="/srv/apps/vuetorrent"
     CONFIG_FILE="$CONFIG_DIR/qBittorrent/qBittorrent.conf"
-    UI_DIR="$CONFIG_DIR/ui"
-    RELEASE_MARKER="$CONFIG_DIR/.vuetorrent-release-url"
-    ASSET_URL="https://github.com/VueTorrent/VueTorrent/releases/latest/download/vuetorrent.zip"
+    LEGACY_UI_DIR="$CONFIG_DIR/ui"
+    LEGACY_RELEASE_MARKER="$CONFIG_DIR/.vuetorrent-release-url"
 
     # 1. Ensure directories exist
-    mkdir -p "$CONFIG_DIR/qBittorrent" "$UI_DIR"
+    mkdir -p "$CONFIG_DIR/qBittorrent"
     chown -R 3000:3000 "$CONFIG_DIR"
 
-    # 2. Refresh VueTorrent only when the upstream release URL changes.
-    NEEDS_DOWNLOAD=0
-    CURRENT_RELEASE_URL=""
-    # We follow redirects to get the stable versioned URL (e.g., .../releases/download/v2.32.1/...)
-    # instead of the final signed URL which changes every time due to expiration tokens.
-    if CURRENT_RELEASE_URL="$(${pkgs.curl}/bin/curl -fsSLI "$ASSET_URL" | ${pkgs.gnugrep}/bin/grep -i "^location:" | ${pkgs.gnugrep}/bin/grep "/releases/download/" | ${pkgs.coreutils}/bin/head -n 1 | ${pkgs.coreutils}/bin/tr -d '\r' | ${pkgs.gnused}/bin/sed 's/^[Ll]ocation: //')" ; then
-      if [ -z "$CURRENT_RELEASE_URL" ]; then
-         echo "Could not resolve stable release URL, falling back to basic check."
-         if [ ! -f "$UI_DIR/index.html" ]; then NEEDS_DOWNLOAD=1; fi
-      elif [ ! -f "$UI_DIR/index.html" ] || [ ! -f "$RELEASE_MARKER" ] || [ "$(${pkgs.coreutils}/bin/cat "$RELEASE_MARKER")" != "$CURRENT_RELEASE_URL" ]; then
-        NEEDS_DOWNLOAD=1
-      fi
-    elif [ ! -f "$UI_DIR/index.html" ]; then
-      NEEDS_DOWNLOAD=1
-    fi
-
-    if [ "$NEEDS_DOWNLOAD" -eq 1 ]; then
-      echo "Downloading VueTorrent UI..."
-      # Create directory if it doesn't exist, but don't delete it if it does
-      # to preserve inode for bind mounts.
-      mkdir -p "$UI_DIR"
-      ${pkgs.coreutils}/bin/rm -rf "$UI_DIR"/*
-      
-      TEMP_ZIP=$(mktemp)
-      ${pkgs.curl}/bin/curl -L "$ASSET_URL" -o "$TEMP_ZIP"
-      TEMP_EXTRACT=$(mktemp -d)
-      ${pkgs.unzip}/bin/unzip -o "$TEMP_ZIP" -d "$TEMP_EXTRACT"
-
-      # qBittorrent 5.x expects the RootFolder to point directly to the
-      # directory containing index.html. Keep VueTorrent flattened there.
-      if [ -d "$TEMP_EXTRACT/vuetorrent/public" ]; then
-        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/vuetorrent/public/." "$UI_DIR/"
-      elif [ -d "$TEMP_EXTRACT/vuetorrent" ]; then
-        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/vuetorrent/." "$UI_DIR/"
-      else
-        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/." "$UI_DIR/"
-      fi
-
-      rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
-      chown -R 3000:3000 "$UI_DIR"
-      printf '%s\n' "$CURRENT_RELEASE_URL" > "$RELEASE_MARKER"
-      echo "VueTorrent UI downloaded and extracted (Version marker: $CURRENT_RELEASE_URL)"
-      
-      # UI changed, we MUST restart to ensure the container picks it up
-      # especially since we replaced files in a bind-mounted directory.
-      ${pkgs.systemd}/bin/systemctl restart podman-vuetorrent.service || true
+    # 2. Remove the legacy manual VueTorrent download state. The supported
+    # LSIO Docker mod now supplies the UI inside the container.
+    if [ -e "$LEGACY_UI_DIR" ] || [ -e "$LEGACY_RELEASE_MARKER" ]; then
+      echo "Removing legacy VueTorrent UI state..."
+      ${pkgs.coreutils}/bin/rm -rf "$LEGACY_UI_DIR" "$LEGACY_RELEASE_MARKER"
     fi
 
     # 3. Update config if it exists
@@ -82,7 +40,7 @@ let
         Preferences.WebUI\\HostHeaderValidation=literal:false
         Preferences.WebUI\\ReverseProxySupportEnabled=literal:true
         Preferences.WebUI\\AlternativeUIEnabled=literal:true
-        Preferences.WebUI\\RootFolder=literal:/vuetorrent-ui
+        Preferences.WebUI\\RootFolder=literal:/vuetorrent
       )
 
       ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_args[@]}"
@@ -94,7 +52,6 @@ in
 {
   virtualisation.oci-containers.containers."vuetorrent" = {
     image = "lscr.io/linuxserver/qbittorrent:latest";
-    user = "3000:3000";
     extraOptions = [
       "--network=container:gluetun"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 https://google.com || exit 1"
@@ -109,10 +66,10 @@ in
       PUID = "3000";
       PGID = "3000";
       WEBUI_PORT = "5000";
+      DOCKER_MODS = "ghcr.io/vuetorrent/vuetorrent-lsio-mod:latest";
     };
     volumes = [
       "/srv/apps/vuetorrent:/config"
-      "/srv/apps/vuetorrent/ui:/vuetorrent-ui:ro"
       "/mnt/share/Downloads:/downloads"
     ];
   };
@@ -126,7 +83,6 @@ in
   systemd.tmpfiles.rules = [
     "d /srv/apps/vuetorrent 0755 apps apps -"
     "d /srv/apps/vuetorrent/qBittorrent 0755 apps apps -"
-    "d /srv/apps/vuetorrent/ui 0755 apps apps -"
   ];
 
   system.activationScripts.vuetorrent-config = {
