@@ -258,10 +258,10 @@ in
         if [ -f "$WIDGETS_FILE" ]; then
           echo "Surgically updating Homepage widgets..."
           widget_args=(
-            "0.resources.cpu=literal:true"
-            "0.resources.memory=literal:true"
+            "0.resources.cpu=yaml:true"
+            "0.resources.memory=yaml:true"
             "0.resources.disk=literal:/"
-            "0.resources.network=literal:true"
+            "0.resources.network=yaml:true"
             "1.search.provider=literal:custom"
             "1.search.url=literal:https://searxng.ghostship.io/search?q="
             "1.search.focus=literal:true"
