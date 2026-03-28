@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ghostship-config YAML Upserts**: Fixed Homepage-style list-group creation in `ghostship-config.py` so paths like `[Utilities].[OmniTools].icon` create missing groups with the correct list container and pass the script self-tests again.
 - **RomM iframe startup hook**: Added a `podman-romm` `postStart` hook that patches RomM's routed iframe crash trigger in the active hashed frontend bundle and cleans up temporary debug assets created during live investigation.
 - **VueTorrent WebUI pathing**: Stopped reapplying `/vuetorrent-ui/public` as qBittorrent's `WebUI\\RootFolder`. VueTorrent is now flattened into `/srv/apps/vuetorrent/ui`, mounted at `/vuetorrent-ui`, and served from the directory that actually contains `index.html`, fixing fresh-client `500` responses with `Unacceptable file type, only regular file is allowed.`.
+- **Gluetun PIA compatibility**: The `podman-gluetun` `preStart` hook now mirrors legacy `OPENVPN_PASS` into `OPENVPN_PASSWORD` before writing `/run/secrets/gluetun-runtime.env`, keeping the current Gluetun image compatible with the existing secret bundle on `chill-penguin`.
 
 ### Added
 - **ghostship-config Utility**: A self-verifying, idempotent configuration manager for surgical updates to XML, YAML, INI, and KV files. Supports secure secret injection via environment/file references.

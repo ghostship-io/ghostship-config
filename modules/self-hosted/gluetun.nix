@@ -59,9 +59,11 @@ in
     . "${gluetun-secrets}"
     set +a
 
+    OPENVPN_PASSWORD_COMPAT="''${OPENVPN_PASSWORD:-''${OPENVPN_PASS:-}}"
     API_KEY="$HTTP_CONTROL_SERVER_API_KEY"
     mkdir -p /run/secrets
     cat > ${gluetun-runtime-env} <<EOF
+OPENVPN_PASSWORD=$OPENVPN_PASSWORD_COMPAT
 GLUETUN_API_KEY=$API_KEY
 HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE={"auth":"apikey","apikey":"$API_KEY","routes":["GET /v1/publicip/ip","GET /v1/openvpn/portforwarded"]}
 EOF
