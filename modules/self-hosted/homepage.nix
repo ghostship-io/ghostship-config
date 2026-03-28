@@ -34,7 +34,8 @@ in
     volumes = [
       "/srv/apps/homepage:/app/config:rw"
       "/run/podman/podman.sock:/var/run/podman.sock:ro"
-      "/sys:/sys:ro"
+      "/sys/class/net:/sys/class/net:ro"
+      "/sys/devices/platform:/sys/devices/platform:ro"
     ];
   };
 
