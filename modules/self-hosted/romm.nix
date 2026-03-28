@@ -24,7 +24,7 @@ let
       fi
     done
 
-    "$podman_bin" exec -u 0 "$container" python - <<'PY'
+    "$podman_bin" exec -i -u 0 "$container" python - <<'PY'
 from pathlib import Path
 import re
 
