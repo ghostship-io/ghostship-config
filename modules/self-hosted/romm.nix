@@ -2,6 +2,72 @@
 
 let
   romm-secrets = config.sops.secrets."romm-secrets".path;
+  romm-iframe-fix = pkgs.writeShellScript "romm-iframe-fix" ''
+    set -euo pipefail
+
+    podman_bin="${pkgs.podman}/bin/podman"
+    container="romm"
+    ready=0
+    attempts=0
+
+    while [ "$ready" -eq 0 ]; do
+      if "$podman_bin" exec -u 0 "$container" test -f /var/www/html/index.html \
+        >/dev/null 2>&1; then
+        ready=1
+      else
+        attempts=$((attempts + 1))
+        if [ "$attempts" -ge 60 ]; then
+          echo "RomM container never became ready for iframe patching" >&2
+          exit 1
+        fi
+        sleep 1
+      fi
+    done
+
+    "$podman_bin" exec -u 0 "$container" sh -lc '
+      set -eu
+
+      bundle=$(
+        sed -n '"'"'"'"'"'"'"'"'s@.*src="/assets/\([^"]*index-[^"]*\.js\)".*@/var/www/html/assets/\1@p'"'"'"'"'"'"'"'"' \
+          /var/www/html/index.html | head -n 1
+      )
+
+      if [ -z "$bundle" ] || [ ! -f "$bundle" ]; then
+        echo "Unable to locate active RomM bundle from index.html" >&2
+        exit 1
+      fi
+
+      original="Ll.beforeResolve(async()=>{await LU().captured})"
+      patched="Ll.beforeResolve(async()=>{})"
+
+      if grep -qF "$patched" "$bundle"; then
+        :
+      elif grep -qF "$original" "$bundle"; then
+        sed -i "s#''${original}#''${patched}#" "$bundle"
+      else
+        echo "RomM iframe patch target not found in $bundle" >&2
+        exit 1
+      fi
+
+      rm -f \
+        /var/www/html/assets/index-*-noguards.js \
+        /var/www/html/assets/index-*-noresolve.js \
+        /var/www/html/assets/index-*.js.pre-noresolve-* \
+        /var/www/html/assets/index-authlogin-direct.js \
+        /var/www/html/assets/index-authloginshell-direct.js \
+        /var/www/html/assets/index-login-minrouter.js \
+        /var/www/html/assets/index-runtime-noboot.js \
+        /var/www/html/iframe-authlogin-direct.html \
+        /var/www/html/iframe-authloginshell-direct.html \
+        /var/www/html/iframe-login-clean.html \
+        /var/www/html/iframe-login-minrouter.html \
+        /var/www/html/iframe-login-noguards.html \
+        /var/www/html/iframe-login-noresolve.html \
+        /var/www/html/iframe-test.html \
+        /var/www/html/index.html.pre-iframe-guard-* \
+        /var/www/html/romm-iframe-probe.html
+    '
+  '';
 in
 {
   virtualisation.oci-containers.containers."romm" = {
@@ -34,6 +100,9 @@ in
   systemd.services.podman-romm = {
     after = [ "mnt-share.mount" ];
     wants = [ "mnt-share.mount" ];
+    postStart = ''
+      ${romm-iframe-fix}
+    '';
   };
 
   systemd.tmpfiles.rules = [

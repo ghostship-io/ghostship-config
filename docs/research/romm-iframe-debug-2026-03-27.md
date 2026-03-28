@@ -180,3 +180,87 @@ Recommended next order:
    - authenticated `Main -> Home`
    - unauthenticated `Auth -> Login`
 4. Only after that, resume route/component-level narrowing.
+
+## 2026-03-28 Live Host-Port Follow-Up
+
+A direct live-host test on `chill-penguin` settled the current unauthenticated case.
+
+### What changed for the live test
+
+- `podman-romm.service` was temporarily overridden on the host to publish `8080` as host port `18080`
+- the public Cloudflare-protected hostname was bypassed by testing `http://192.168.200.82:18080/`
+- a same-origin parent probe page was added in the RomM container to load child pages in a real iframe and verify whether the browser session stayed queryable afterward
+
+### Definitive A/B result
+
+- stock child page: `/login?next=/`
+  - after the iframe loaded, `agent-browser --session stock-ab get title` timed out after 6 seconds (`EXIT:124`)
+- patched stock-bundle child page: `/iframe-login-noresolve.html`
+  - this is the same live stock bundle except `Ll.beforeResolve(async()=>{await LU().captured})` was changed to a no-op
+  - after the iframe loaded, `agent-browser --session noresolve get title` returned immediately (`EXIT:0`)
+
+### Conclusion
+
+For the current live unauthenticated iframe path, the crash trigger is the real router `beforeResolve` hook:
+
+- `Ll.beforeResolve(async () => { await LU().captured; })`
+- `LU()` calls `document.startViewTransition()` when available
+
+Disabling only that hook on the live stock bundle stops the iframe wedge. That rules out framing headers, Cloudflare, host-port exposure, cookies, `CG()`, and the login component by itself as the primary trigger for the current `/login` iframe crash.
+
+### Caveat
+
+The `noresolve` variant surfaced a non-fatal runtime error:
+
+- `TypeError: Cannot read properties of null (reading 'refs')`
+
+So the deeper bug likely sits inside the same navigation / transition path, but the empirically proven trigger for the actual iframe crash is the `beforeResolve -> LU().captured -> document.startViewTransition()` path.
+
+### Live manual fix tests
+
+Two live follow-up patches were tested directly in the running RomM container:
+
+1. `index.html` preload shim
+   - injected an iframe-only script before the stock module entry
+   - attempted to undefine `document.startViewTransition`
+   - result: **did not fix** the live stock `/login?next=/` iframe wedge
+
+2. direct stock-bundle swap
+   - restored normal `index.html`
+   - replaced `/var/www/html/assets/index-C1YMu947.js` with the `beforeResolve(async()=>{})` variant
+   - result: **worked**
+   - stock iframe probe stayed responsive
+   - top-level `http://192.168.200.82:18080/login?next=/` still loaded normally with title `Login`
+
+Current live-testing conclusion:
+
+- the reliable live mitigation is to remove the real router `beforeResolve` wait from the served bundle
+- the attempted iframe-only preload shim is not sufficient on its own
+
+## 2026-03-28 Muximux And Cache Follow-Up
+
+A disposable Muximux instance was exposed on `http://192.168.200.82:18081/` and pointed directly at the live host-published RomM port:
+
+- Muximux test parent: `http://192.168.200.82:18081/`
+- RomM child target: `http://192.168.200.82:18080/`
+
+`agent-browser` loaded the Muximux page, clicked the `RomM` tile, and RomM's login form rendered inside the iframe successfully. The page title remained responsive as `RomM - ghostship.io`.
+
+Conclusion:
+
+- Muximux itself is not the crash trigger.
+- The remaining broken behavior on `https://romm.ghostship.io` is consistent with public-origin cache state rather than a generic RomM-in-Muximux embed bug.
+
+## 2026-03-28 Persistent Hook Plan
+
+The repo now carries a persistent `systemd.services.podman-romm.postStart` hook in `modules/self-hosted/romm.nix` that:
+
+- waits for the running container to expose `/var/www/html/index.html`
+- locates the active hashed `index-*.js` bundle from `index.html`
+- rewrites `Ll.beforeResolve(async()=>{await LU().captured})` to `Ll.beforeResolve(async()=>{})`
+- removes the temporary iframe/debug files created during this investigation
+
+Important implementation detail:
+
+- the hook must use `podman exec -u 0`
+- some live debug files were root-owned inside the container, so cleanup fails under the normal `3000:3000` RomM runtime user
