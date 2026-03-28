@@ -26,8 +26,8 @@ in
     };
     volumes = [
       "/srv/apps/bazarr:/config"
-      "/mnt/share/Library/Movies:/movies:ro"
-      "/mnt/share/Library/TV:/tv:ro"
+      "/mnt/share/Library/Movies:/movies"
+      "/mnt/share/Library/TV:/tv"
     ];
   };
 
