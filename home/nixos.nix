@@ -56,6 +56,7 @@
     ".agents/skills/python" = { source = ./config/skills/python; force = true; };
     ".agents/skills/build123d" = { source = ./config/skills/build123d; force = true; };
     ".agents/skills/ssh" = { source = ./config/skills/ssh; force = true; };
+    ".agents/skills/agent-browser" = { source = ./config/skills/agent-browser; force = true; };
   };
 
   # You can also manage environment variables through 'home.sessionVariables'.

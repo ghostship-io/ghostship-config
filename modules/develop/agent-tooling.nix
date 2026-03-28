@@ -16,10 +16,6 @@ let
   ];
 
   mcpServers = {
-    "agent-browser" = {
-      command = "npx";
-      args = [ "-y" "agent-browser-mcp" ];
-    };
     "Multi-CLI" = {
       command = "npx";
       args = [ "-y" "@osanoai/multicli@latest" ];
