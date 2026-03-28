@@ -31,6 +31,9 @@
     fastfetch
     eza
 
+    # Agent Browser CLI
+    (pkgs.writeShellScriptBin "agent-browser" "exec ${pkgs.nodejs}/bin/npx -y agent-browser \"$@\"")
+
     # Playwright for AGENT MCP (Disabled on chill-penguin for initial cross-build)
   ] ++ lib.optional (!(osConfig.networking.hostName == "chill-penguin")) playwright-driver.browsers;
 

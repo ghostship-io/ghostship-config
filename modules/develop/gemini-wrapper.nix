@@ -33,6 +33,13 @@ let
       fi
     }
 
+    check_agent_browser() {
+      if [ ! -d "$HOME/.agent-browser" ]; then
+        ${pkgs.nodejs}/bin/npx -y agent-browser install --with-deps
+      fi
+    }
+
+    check_agent_browser
     ${lib.concatMapStrings (extension: ''
     check_extension "${extension.name}" "${extension.repo}"
 '') agentTooling.geminiExtensions}

@@ -1,6 +1,10 @@
 { pkgs, ... }:
 
 let
+  agent-browser = pkgs.writeShellScriptBin "agent-browser" ''
+    exec ${pkgs.nodejs}/bin/npx -y agent-browser "$@"
+  '';
+
   runtimeInputs = [
     pkgs.coreutils
     pkgs.git
@@ -8,6 +12,7 @@ let
     pkgs.openssh
     pkgs.playwright-driver.browsers
     pkgs.uv
+    agent-browser
   ];
 
   mcpServers = {
