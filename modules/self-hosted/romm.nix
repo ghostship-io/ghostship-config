@@ -24,49 +24,53 @@ let
       fi
     done
 
-    "$podman_bin" exec -u 0 "$container" sh -lc '
-      set -eu
+    "$podman_bin" exec -u 0 "$container" python - <<'PY'
+from pathlib import Path
+import re
 
-      bundle=$(
-        sed -n '"'"'"'"'"'"'"'"'s@.*src="/assets/\([^"]*index-[^"]*\.js\)".*@/var/www/html/assets/\1@p'"'"'"'"'"'"'"'"' \
-          /var/www/html/index.html | head -n 1
-      )
+index_path = Path("/var/www/html/index.html")
+match = re.search(
+    r'src="(/assets/[^"]*index-[^"]*\.js)"',
+    index_path.read_text(),
+)
+if not match:
+    raise SystemExit("Unable to locate active RomM bundle from index.html")
 
-      if [ -z "$bundle" ] || [ ! -f "$bundle" ]; then
-        echo "Unable to locate active RomM bundle from index.html" >&2
-        exit 1
-      fi
+bundle_path = Path("/var/www/html" + match.group(1))
+text = bundle_path.read_text()
+original = "Ll.beforeResolve(async()=>{await LU().captured})"
+patched = "Ll.beforeResolve(async()=>{})"
 
-      original="Ll.beforeResolve(async()=>{await LU().captured})"
-      patched="Ll.beforeResolve(async()=>{})"
+if patched not in text:
+    if original not in text:
+        raise SystemExit(
+            f"RomM iframe patch target not found in {bundle_path}"
+        )
+    bundle_path.write_text(text.replace(original, patched, 1))
 
-      if grep -qF "$patched" "$bundle"; then
-        :
-      elif grep -qF "$original" "$bundle"; then
-        sed -i "s#''${original}#''${patched}#" "$bundle"
-      else
-        echo "RomM iframe patch target not found in $bundle" >&2
-        exit 1
-      fi
-
-      rm -f \
-        /var/www/html/assets/index-*-noguards.js \
-        /var/www/html/assets/index-*-noresolve.js \
-        /var/www/html/assets/index-*.js.pre-noresolve-* \
-        /var/www/html/assets/index-authlogin-direct.js \
-        /var/www/html/assets/index-authloginshell-direct.js \
-        /var/www/html/assets/index-login-minrouter.js \
-        /var/www/html/assets/index-runtime-noboot.js \
-        /var/www/html/iframe-authlogin-direct.html \
-        /var/www/html/iframe-authloginshell-direct.html \
-        /var/www/html/iframe-login-clean.html \
-        /var/www/html/iframe-login-minrouter.html \
-        /var/www/html/iframe-login-noguards.html \
-        /var/www/html/iframe-login-noresolve.html \
-        /var/www/html/iframe-test.html \
-        /var/www/html/index.html.pre-iframe-guard-* \
-        /var/www/html/romm-iframe-probe.html
-    '
+for pattern in (
+    "/var/www/html/assets/index-*-noguards.js",
+    "/var/www/html/assets/index-*-noresolve.js",
+    "/var/www/html/assets/index-*.js.pre-noresolve-*",
+    "/var/www/html/assets/index-authlogin-direct.js",
+    "/var/www/html/assets/index-authloginshell-direct.js",
+    "/var/www/html/assets/index-login-minrouter.js",
+    "/var/www/html/assets/index-runtime-noboot.js",
+    "/var/www/html/iframe-authlogin-direct.html",
+    "/var/www/html/iframe-authloginshell-direct.html",
+    "/var/www/html/iframe-login-clean.html",
+    "/var/www/html/iframe-login-minrouter.html",
+    "/var/www/html/iframe-login-noguards.html",
+    "/var/www/html/iframe-login-noresolve.html",
+    "/var/www/html/iframe-test.html",
+    "/var/www/html/index.html.pre-iframe-guard-*",
+    "/var/www/html/romm-iframe-probe.html",
+):
+    for path in bundle_path.parent.parent.glob(pattern.replace(
+        "/var/www/html/", ""
+    )):
+        path.unlink(missing_ok=True)
+PY
   '';
 in
 {
