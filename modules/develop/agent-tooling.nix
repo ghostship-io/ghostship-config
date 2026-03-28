@@ -15,19 +15,7 @@ let
     agent-browser
   ];
 
-  mcpServers = {
-    "Multi-CLI" = {
-      command = "npx";
-      args = [ "-y" "@osanoai/multicli@latest" ];
-      timeout = 600000;
-    };
-  };
-
   geminiExtensions = [
-    {
-      name = "conductor";
-      repo = "https://github.com/gemini-cli-extensions/conductor";
-    }
     {
       name = "gemini-cli-security";
       repo = "https://github.com/gemini-cli-extensions/security";
@@ -51,6 +39,6 @@ let
   };
 in
 {
-  inherit runtimeInputs mcpServers geminiExtensions opencodePlugins superpowers;
+  inherit runtimeInputs geminiExtensions opencodePlugins superpowers;
   runtimeBinPath = pkgs.lib.makeBinPath runtimeInputs;
 }

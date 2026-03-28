@@ -2,24 +2,6 @@
 
 let
   cfg = config.myOptions.autoUpgrade;
-  agentTooling = import ../develop/agent-tooling.nix { inherit pkgs; };
-
-  refreshPackages = lib.concatMapStringsSep "\n" (server:
-    if server.command == "npx" && (builtins.length server.args) >= 2 then
-      let
-        package = builtins.elemAt server.args 1;
-      in
-      ''
-        timeout 10s ${pkgs.nodejs}/bin/npx -y "${package}@latest" --help >/dev/null 2>&1 &
-      ''
-    else if server.command == "uvx" && (builtins.length server.args) >= 1 then
-      let
-        package = builtins.elemAt server.args 0;
-      in
-      ''
-        timeout 10s ${pkgs.uv}/bin/uvx "${package}" --help >/dev/null 2>&1 &
-      ''
-    else "") (lib.attrValues agentTooling.mcpServers);
 in
 {
   options.myOptions.autoUpgrade = {
@@ -40,14 +22,5 @@ in
         allowReboot = false;
       };
     })
-    {
-      system.activationScripts.agentMcpRefresh = {
-        text = ''
-          echo "Refreshing agent MCP packages in background..."
-          ${refreshPackages}
-          wait
-        '';
-      };
-    }
   ];
 }

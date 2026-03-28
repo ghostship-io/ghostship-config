@@ -7,16 +7,6 @@ let
 
   opencode-config = builtins.toJSON {
     "$schema" = "https://opencode.ai/config.json";
-    mcp = lib.mapAttrs (_: server:
-      {
-        type = "local";
-        command = [ server.command ] ++ server.args;
-        enabled = true;
-      }
-      // lib.optionalAttrs (server ? timeout) {
-        timeout = server.timeout;
-      }
-    ) agentTooling.mcpServers;
     plugin = [
       "superpowers@git+https://github.com/obra/superpowers.git"
     ];

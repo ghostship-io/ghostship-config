@@ -41,12 +41,6 @@ PY
   tomlTableName = name:
     if builtins.match "^[A-Za-z0-9_]+$" name != null then name else ''"${name}"'';
 
-  mcpConfig = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: server: ''
-    [mcp_servers.${tomlTableName name}]
-    command = "${server.command}"
-    args = ${toTomlArray server.args}${lib.optionalString (server ? timeout) "\n    tool_timeout_sec = ${toString (builtins.div server.timeout 1000)}"}
-  '') agentTooling.mcpServers);
-
   notifyConfig = ''
 notify = ["${codex-notify}/bin/codex-notify"]
 
@@ -62,7 +56,6 @@ notification_method = "auto"
     (lib.concatStringsSep "\n" (map (entry: ''  { path = "${entry.path}", enabled = true },'') skillConfig))
     '']''
     notifyConfig
-    mcpConfig
   ];
 
   codex-script = pkgs.writeShellScriptBin "codex" ''

@@ -30,15 +30,6 @@ in
         respectGitIgnore = false;
       };
     };
-    mcpServers = lib.mapAttrs (_: server:
-      {
-        command = server.command;
-        args = server.args;
-      }
-      // lib.optionalAttrs (server ? timeout) {
-        timeout = server.timeout;
-      }
-    ) agentTooling.mcpServers;
     skills = {
       enabled = true;
       default = [ ];
