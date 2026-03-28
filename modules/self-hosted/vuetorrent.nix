@@ -9,12 +9,11 @@ let
     CONFIG_DIR="/srv/apps/vuetorrent"
     CONFIG_FILE="$CONFIG_DIR/qBittorrent/qBittorrent.conf"
     UI_DIR="$CONFIG_DIR/ui"
-    PUBLIC_DIR="$UI_DIR/public"
     RELEASE_MARKER="$CONFIG_DIR/.vuetorrent-release-url"
     ASSET_URL="https://github.com/VueTorrent/VueTorrent/releases/latest/download/vuetorrent.zip"
 
     # 1. Ensure directories exist
-    mkdir -p "$CONFIG_DIR/qBittorrent" "$PUBLIC_DIR"
+    mkdir -p "$CONFIG_DIR/qBittorrent" "$UI_DIR"
     chown -R 3000:3000 "$CONFIG_DIR"
 
     # 2. Refresh VueTorrent only when the upstream release URL changes.
@@ -25,11 +24,11 @@ let
     if CURRENT_RELEASE_URL="$(${pkgs.curl}/bin/curl -fsSLI "$ASSET_URL" | ${pkgs.gnugrep}/bin/grep -i "^location:" | ${pkgs.gnugrep}/bin/grep "/releases/download/" | ${pkgs.coreutils}/bin/head -n 1 | ${pkgs.coreutils}/bin/tr -d '\r' | ${pkgs.gnused}/bin/sed 's/^[Ll]ocation: //')" ; then
       if [ -z "$CURRENT_RELEASE_URL" ]; then
          echo "Could not resolve stable release URL, falling back to basic check."
-         if [ ! -f "$PUBLIC_DIR/index.html" ]; then NEEDS_DOWNLOAD=1; fi
-      elif [ ! -f "$PUBLIC_DIR/index.html" ] || [ ! -f "$RELEASE_MARKER" ] || [ "$(${pkgs.coreutils}/bin/cat "$RELEASE_MARKER")" != "$CURRENT_RELEASE_URL" ]; then
+         if [ ! -f "$UI_DIR/index.html" ]; then NEEDS_DOWNLOAD=1; fi
+      elif [ ! -f "$UI_DIR/index.html" ] || [ ! -f "$RELEASE_MARKER" ] || [ "$(${pkgs.coreutils}/bin/cat "$RELEASE_MARKER")" != "$CURRENT_RELEASE_URL" ]; then
         NEEDS_DOWNLOAD=1
       fi
-    elif [ ! -f "$PUBLIC_DIR/index.html" ]; then
+    elif [ ! -f "$UI_DIR/index.html" ]; then
       NEEDS_DOWNLOAD=1
     fi
 
@@ -37,27 +36,26 @@ let
       echo "Downloading VueTorrent UI..."
       # Create directory if it doesn't exist, but don't delete it if it does
       # to preserve inode for bind mounts.
-      mkdir -p "$PUBLIC_DIR"
-      ${pkgs.coreutils}/bin/rm -rf "$PUBLIC_DIR"/*
+      mkdir -p "$UI_DIR"
+      ${pkgs.coreutils}/bin/rm -rf "$UI_DIR"/*
       
       TEMP_ZIP=$(mktemp)
       ${pkgs.curl}/bin/curl -L "$ASSET_URL" -o "$TEMP_ZIP"
       TEMP_EXTRACT=$(mktemp -d)
       ${pkgs.unzip}/bin/unzip -o "$TEMP_ZIP" -d "$TEMP_EXTRACT"
 
-      # The zip usually contains a 'vuetorrent' folder with a 'public' subfolder.
-      # qBittorrent 5.x expects the RootFolder to point DIRECTLY to the directory 
-      # containing index.html for it to work correctly without 500 errors.
+      # qBittorrent 5.x expects the RootFolder to point directly to the
+      # directory containing index.html. Keep VueTorrent flattened there.
       if [ -d "$TEMP_EXTRACT/vuetorrent/public" ]; then
-        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/vuetorrent/public/." "$PUBLIC_DIR/"
+        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/vuetorrent/public/." "$UI_DIR/"
       elif [ -d "$TEMP_EXTRACT/vuetorrent" ]; then
-        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/vuetorrent/." "$PUBLIC_DIR/"
+        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/vuetorrent/." "$UI_DIR/"
       else
-        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/." "$PUBLIC_DIR/"
+        ${pkgs.coreutils}/bin/cp -r "$TEMP_EXTRACT/." "$UI_DIR/"
       fi
 
       rm -rf "$TEMP_EXTRACT" "$TEMP_ZIP"
-      chown -R 3000:3000 "$PUBLIC_DIR"
+      chown -R 3000:3000 "$UI_DIR"
       printf '%s\n' "$CURRENT_RELEASE_URL" > "$RELEASE_MARKER"
       echo "VueTorrent UI downloaded and extracted (Version marker: $CURRENT_RELEASE_URL)"
       
@@ -84,7 +82,7 @@ let
         Preferences.WebUI\\HostHeaderValidation=literal:false
         Preferences.WebUI\\ReverseProxySupportEnabled=literal:true
         Preferences.WebUI\\AlternativeUIEnabled=literal:true
-        Preferences.WebUI\\RootFolder=literal:/vuetorrent-ui/public
+        Preferences.WebUI\\RootFolder=literal:/vuetorrent-ui
       )
 
       ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_args[@]}"
@@ -114,7 +112,7 @@ in
     };
     volumes = [
       "/srv/apps/vuetorrent:/config"
-      "/srv/apps/vuetorrent/ui/public:/vuetorrent-ui/public:ro"
+      "/srv/apps/vuetorrent/ui:/vuetorrent-ui:ro"
       "/mnt/share/Downloads:/downloads"
     ];
   };
@@ -129,7 +127,6 @@ in
     "d /srv/apps/vuetorrent 0755 apps apps -"
     "d /srv/apps/vuetorrent/qBittorrent 0755 apps apps -"
     "d /srv/apps/vuetorrent/ui 0755 apps apps -"
-    "d /srv/apps/vuetorrent/ui/public 0755 apps apps -"
   ];
 
   system.activationScripts.vuetorrent-config = {
