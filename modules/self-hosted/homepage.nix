@@ -34,7 +34,7 @@ in
     volumes = [
       "/srv/apps/homepage:/app/config:rw"
       "/run/podman/podman.sock:/var/run/podman.sock:ro"
-      "/sys/class/net:/sys/class/net:ro"
+      "/sys:/sys:ro"
     ];
   };
 
@@ -261,7 +261,7 @@ in
             "0.resources.cpu=yaml:true"
             "0.resources.memory=yaml:true"
             "0.resources.disk=literal:/"
-            "0.resources.network=yaml:true"
+            "0.resources.network=literal:end0"
             "1.search.provider=literal:custom"
             "1.search.url=literal:https://searxng.ghostship.io/search?q="
             "1.search.focus=literal:true"
