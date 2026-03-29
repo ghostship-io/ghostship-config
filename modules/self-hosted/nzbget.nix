@@ -60,7 +60,7 @@
           Server1.Username=env:NZBGET_SERVER1_USER
           Server1.Password=env:NZBGET_SERVER1_PASS
           Server1.Cipher=literal:TLS_AES_256_GCM_SHA384
-          Server1.Connections=literal:25
+          Server1.Connections=literal:30
           Server2.Active=literal:yes
           Server2.Name=literal:eu.usenetprime.com
           Server2.Host=literal:eu.usenetprime.com
@@ -72,6 +72,11 @@
           Server2.Connections=literal:10
           Server2.Level=literal:99
           Server2.Optional=literal:yes
+          ArticleCache=literal:500
+          PostStrategy=literal:aggressive
+          DirectWrite=literal:no
+          WriteBuffer=literal:512
+          DetailTarget=literal:none
           ControlUsername=literal:ghostship
           ControlPassword=literal:""
           UpdateCheck=literal:none
