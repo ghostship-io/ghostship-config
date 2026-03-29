@@ -9,7 +9,7 @@ in
     image = "ghcr.io/berriai/litellm:main-latest";
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\" || exit 1"
+      "--health-cmd=python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/readiness')\" || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"

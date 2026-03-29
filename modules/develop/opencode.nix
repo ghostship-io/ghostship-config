@@ -10,6 +10,19 @@ let
      plugin = [
        "superpowers@git+https://github.com/obra/superpowers.git"
      ];
+     provider = {
+       openrouter = {
+         models = {
+           "minimax/minimax-m2.5:free" = { };
+           "nvidia/nemotron-3-super-120b-a12b:free" = { };
+           "arcee-ai/trinity-large-preview:free" = { };
+           "nvidia/nemotron-3-nano-30b-a3b:free" = { };
+           "qwen/qwen3-coder:free" = { };
+           "qwen/qwen3-next-80b-a3b-instruct:free" = { };
+           "openai/gpt-oss-120b:free" = { };
+         };
+       };
+     };
    };
 
   opencode-script = pkgs.writeShellScriptBin "opencode" ''

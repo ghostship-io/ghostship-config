@@ -1,6 +1,6 @@
 ---
 name: ssh
-description: Use when managing remote servers via standard SSH and SCP commands. Includes instructions for file transfers, local editing preferences, and root access protocol.
+description: Use when managing remote servers via standard SSH and SCP commands. Includes instructions for file transfers and local editing preferences.
 category: devops
 risk: high
 source: workspace
@@ -27,13 +27,6 @@ When you need to modify a file on a remote server, **ALWAYS** follow this prefer
     - `scp ./local_copy <host>:/path/to/remote/file`
 4.  **Fix Permissions**: After uploading, ensure the file has the correct ownership and permissions on the remote server.
     - `ssh <host> "chmod <perms> /path/to/remote/file && chown <user>:<group> /path/to/remote/file"`
-
-### 3. Root Access Protocol
-If a task requires root privileges (e.g., modifying system files or managing services) and your current user does not have sufficient `sudo` rights or if interactive `sudo` is complex:
-- **Protocol**: Stop and ask the user to create an "agentroot" tmux session on the target server.
-- **Instruction to User**: "Please create a root tmux session on `<host>` using this command: `tmux new-session -s agentroot 'sudo -i' # ctrl+b d to disconnect`"
-
-- **Usage**: Once the session is created, you can interact with it via `ssh <host> -t "tmux attach -t agentroot"`.
 
 ## Best Practices
 
