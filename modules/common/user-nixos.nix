@@ -33,8 +33,8 @@
   security.sudo.extraConfig = ''
     # Disable the sudo lecture (the "With great power comes great responsibility" warning)
     Defaults lecture="never"
-    # Require password re-authentication every 15 minutes
-    Defaults timestamp_timeout=15
+    # Require password re-authentication every 8 hours
+    Defaults timestamp_timeout=480
   '';
 
   users.groups.nixos.gid = 1000;

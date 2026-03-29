@@ -24,7 +24,7 @@
   services.ssh-agent.enable = true;
 
   systemd.user.services.ssh-agent.Service = {
-    ExecStart = lib.mkForce "${pkgs.openssh}/bin/ssh-agent -D -a /run/user/1000/ssh-agent -t 15m";
+    ExecStart = lib.mkForce "${pkgs.openssh}/bin/ssh-agent -D -a /run/user/1000/ssh-agent -t 8h";
     ExecStartPre = "-${pkgs.coreutils}/bin/rm -f /run/user/1000/ssh-agent";
     ExecStartPost = let
       script = pkgs.writeShellScript "ssh-agent-post-start" ''
