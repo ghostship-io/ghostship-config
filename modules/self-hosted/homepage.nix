@@ -244,7 +244,7 @@ in
             "[Utilities].[MeTube].server=literal:chill-penguin"
             "[Utilities].[MeTube].container=literal:metube"
 
-            "[Utilities].[OmniTools].icon=literal:mdi-toolbox"
+            "[Utilities].[OmniTools].icon=literal:sh-it-tools"
             "[Utilities].[OmniTools].description=literal:Omni Toolkit"
             "[Utilities].[OmniTools].server=literal:chill-penguin"
             "[Utilities].[OmniTools].container=literal:omni-tools"
