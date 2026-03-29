@@ -34,9 +34,33 @@
     # Agent Browser CLI
     (pkgs.writeShellScriptBin "agent-browser" "exec ${pkgs.nodejs}/bin/npx -y agent-browser \"$@\"")
 
-    # CloakBrowser wrappers
-    (pkgs.writeShellScriptBin "cloak-vpn" "exec ${pkgs.nodejs}/bin/npx -y agent-browser --connect http://localhost:9222 \"$@\"")
-    (pkgs.writeShellScriptBin "cloak-direct" "exec ${pkgs.nodejs}/bin/npx -y agent-browser --connect http://localhost:9223 \"$@\"")
+    # CloakBrowser wrappers (Manager-backed)
+    (let
+      wrapper = name: ''
+        MANAGER="http://localhost:8080"
+        # Get ID
+        ID=$(${pkgs.curl}/bin/curl -s $MANAGER/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"${name}\") | .id")
+        if [ -z "$ID" ] || [ "$ID" = "null" ]; then
+          echo "Error: Profile ${name} not found"
+          exit 1
+        fi
+        # Ensure launched
+        STATUS=$(${pkgs.curl}/bin/curl -s $MANAGER/api/profiles/$ID/status | ${pkgs.jq}/bin/jq -r .status)
+        if [ "$STATUS" != "running" ]; then
+          echo "Launching profile ${name}..."
+          ${pkgs.curl}/bin/curl -s -X POST $MANAGER/api/profiles/$ID/launch > /dev/null
+          sleep 3
+        fi
+        # Connect
+        exec ${pkgs.nodejs}/bin/npx -y agent-browser --connect "$MANAGER/api/profiles/$ID/cdp" "$@"
+      '';
+    in pkgs.symlinkJoin {
+      name = "cloak-wrappers";
+      paths = [
+        (pkgs.writeShellScriptBin "cloak-vpn" (wrapper "VPN"))
+        (pkgs.writeShellScriptBin "cloak-direct" (wrapper "Direct"))
+      ];
+    })
 
     # Playwright for AGENT MCP (Disabled on chill-penguin for initial cross-build)
   ] ++ lib.optional (!(osConfig.networking.hostName == "chill-penguin")) playwright-driver.browsers;
