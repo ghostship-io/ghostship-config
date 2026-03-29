@@ -37,7 +37,7 @@
     # CloakBrowser wrappers (Manager-backed)
     (let
       wrapper = name: ''
-        MANAGER="http://localhost:8080"
+        MANAGER="http://chill-penguin:8080"
         # Get ID
         ID=$(${pkgs.curl}/bin/curl -s $MANAGER/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"${name}\") | .id")
         if [ -z "$ID" ] || [ "$ID" = "null" ]; then
@@ -141,8 +141,7 @@
       agent-root = {
         description = "Launch tmux with root access for agent";
         body = ''
-          tmux new-session -d -n "agent-root" 'sudo -i; tmux kill-session'
-          tmux attach
+          tmux new-session -s agent-root 'sudo -i'
         '';
       };
       cd = {

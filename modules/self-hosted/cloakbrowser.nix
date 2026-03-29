@@ -52,7 +52,7 @@ in
     image = "cloakhq/cloakbrowser-manager:latest";
     ports = [ 
       "8080:8080"      # Manager UI & API
-      "5100-5110:5100-5110" # CDP ports for profiles
+      "5100-5110:5100-5110" # CDP ports for profiles (testing)
     ];
     environment = {
       # Optional: set an auth token if desired
@@ -112,8 +112,8 @@ in
 
   # Open ports
   networking.firewall.allowedTCPPorts = [ 
-    8080 # Manager UI
-    5100 5101 5102 5103 5104 5105 # CDP Ports
+    8080 # Manager UI & CDP Proxy
+    5100 5101 5102 5103 5104 5105 # CDP Ports (testing)
   ];
 
   systemd.tmpfiles.rules = [
