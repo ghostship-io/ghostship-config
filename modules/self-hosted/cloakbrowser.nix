@@ -1,191 +1,138 @@
 { config, lib, pkgs, ... }:
 
 let
-  # Standalone Python script that acts as the entrypoint
-  # - Cleans up stale processes and lock files
-  # - Initializes the database and creates "Direct" and "VPN" profiles if missing
-  # - Starts the manager on internal port 8081
-  # - Provides a lightweight HTTP/WebSocket proxy on port 8080 that strips the 'Origin' header
-  cloakbrowser-entrypoint = pkgs.writeText "cloakbrowser-entrypoint.py" ''
+  cloakbrowser-startup = pkgs.writeText "cloakbrowser-startup.py" ''
     import os
     import sys
-    import subprocess
-    import asyncio
-    import sqlite3
     from pathlib import Path
-    from aiohttp import web, ClientSession, WSMsgType
 
-    # --- Configuration ---
-    DATA_DIR = Path("/data")
     APP_DIR = Path("/app")
-    PORT_PROXY = 8080
-    PORT_MANAGER = 8081
+    MAIN_PATH = APP_DIR / "backend" / "main.py"
 
-    # --- Cleanup ---
-    def cleanup():
-        print("Cleaning up stale processes and locks...")
-        # Kill stale Xvnc, Chrome, and xclip processes
-        subprocess.run(["pkill", "-f", "Xvnc :[0-9]"], check=False)
-        subprocess.run(["pkill", "-f", "cloakbrowser.*chrome"], check=False)
-        subprocess.run(["pkill", "-f", "chromium.*fingerprint"], check=False)
-        subprocess.run(["pkill", "-f", "xclip"], check=False)
-        
-        # Delete Chrome lock files from persistent volume
-        for lock in DATA_DIR.glob("profiles/**/SingletonLock"):
-            lock.unlink(missing_ok=True)
-        for lock in DATA_DIR.glob("profiles/**/SingletonCookie"):
-            lock.unlink(missing_ok=True)
-        for lock in DATA_DIR.glob("profiles/**/SingletonSocket"):
-            lock.unlink(missing_ok=True)
-        
-        # Clear X11 locks from /tmp
-        for lock in Path("/tmp").glob(".X1*-lock"):
-            lock.unlink(missing_ok=True)
+    ORIGINAL_CLASS = """class AuthMiddleware:
+    \"\"\"Raw ASGI middleware for optional token auth.
 
-    # --- Profile Management ---
+    Uses raw ASGI instead of BaseHTTPMiddleware because the latter
+    breaks WebSocket routes (wraps request body, preventing WS upgrade).
+    \"\"\"
+"""
+
+    PATCHED_CLASS = """def _strip_origin_header(scope: Scope) -> None:
+    \"\"\"Remove Origin from the ASGI header list in-place.\"\"\"
+    headers = scope.get(\"headers\", [])
+    if not headers:
+        return
+
+    filtered = [(key, val) for key, val in headers if key != b\"origin\"]
+    if len(filtered) != len(headers):
+        scope[\"headers\"] = filtered
+
+
+class AuthMiddleware:
+    \"\"\"Raw ASGI middleware for optional token auth.
+
+    Uses raw ASGI instead of BaseHTTPMiddleware because the latter
+    breaks WebSocket routes (wraps request body, preventing WS upgrade).
+    \"\"\"
+"""
+
+    ORIGINAL_CALL = """    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        # Pass through if auth disabled, or non-HTTP/WS scope (e.g. lifespan)
+        if not AUTH_TOKEN or scope[\"type\"] not in (\"http\", \"websocket\"):
+            await self.app(scope, receive, send)
+            return
+"""
+
+    PATCHED_CALL = """    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        # Replace the old reverse-proxy workaround at the app boundary.
+        if scope[\"type\"] in (\"http\", \"websocket\"):
+            _strip_origin_header(scope)
+
+        # Pass through if auth disabled, or non-HTTP/WS scope (e.g. lifespan)
+        if not AUTH_TOKEN or scope[\"type\"] not in (\"http\", \"websocket\"):
+            await self.app(scope, receive, send)
+            return
+"""
+
+    def patch_manager():
+        print(f"Patching {MAIN_PATH} to strip Origin in AuthMiddleware...")
+        text = MAIN_PATH.read_text()
+
+        if PATCHED_CLASS in text and PATCHED_CALL in text:
+            print("CloakBrowser origin patch already applied.")
+            return
+
+        if ORIGINAL_CLASS not in text:
+            raise RuntimeError(
+                "CloakBrowser patch anchor missing: AuthMiddleware class"
+            )
+
+        if ORIGINAL_CALL not in text:
+            raise RuntimeError(
+                "CloakBrowser patch anchor missing: AuthMiddleware.__call__"
+            )
+
+        text = text.replace(ORIGINAL_CLASS, PATCHED_CLASS, 1)
+        text = text.replace(ORIGINAL_CALL, PATCHED_CALL, 1)
+        MAIN_PATH.write_text(text)
+        print("CloakBrowser origin patch applied.")
+
     def init_profiles():
         print("Initializing database and default profiles...")
         sys.path.append(str(APP_DIR))
         try:
             from backend import database as db
             db.init_db()
-            
+
             profiles = db.list_profiles()
             existing_names = {p["name"] for p in profiles}
-            
+
             if "VPN" not in existing_names:
                 print("Creating VPN profile...")
                 db.create_profile(
-                    name="VPN", 
-                    proxy="http://gluetun:8888", 
-                    humanize=True, 
-                    geoip=True, 
-                    platform="windows"
+                    name="VPN",
+                    proxy="http://gluetun:8888",
+                    humanize=True,
+                    geoip=True,
+                    platform="windows",
                 )
                 print("VPN profile created.")
-            
+
             if "Direct" not in existing_names:
                 print("Creating Direct profile...")
                 db.create_profile(
-                    name="Direct", 
-                    proxy=None, 
-                    humanize=True, 
-                    geoip=True, 
-                    platform="windows"
+                    name="Direct",
+                    proxy=None,
+                    humanize=True,
+                    geoip=True,
+                    platform="windows",
                 )
                 print("Direct profile created.")
-        except Exception as e:
-            print(f"Failed to initialize profiles: {e}")
-            # Non-critical, the manager should still start
-            pass
+        except Exception as exc:
+            print(f"Failed to initialize profiles: {exc}")
 
-    # --- Origin-Stripping Proxy ---
-    async def proxy_handler(request):
-        url = f"http://127.0.0.1:{PORT_MANAGER}{request.rel_url}"
-        # Strip "Origin" to bypass CSWSH checks in the manager
-        headers = {k: v for k, v in request.headers.items() if k.lower() != "origin"}
-        
-        # WebSocket support for CDP and VNC
-        if request.headers.get("Upgrade", "").lower() == "websocket":
-            ws_server = web.WebSocketResponse()
-            await ws_server.prepare(request)
-            
-            async with ClientSession() as session:
-                async with session.ws_connect(url, headers=headers) as ws_client:
-                    async def forward(src, dst):
-                        try:
-                            async for msg in src:
-                                if msg.type == WSMsgType.TEXT:
-                                    await dst.send_str(msg.data)
-                                elif msg.type == WSMsgType.BINARY:
-                                    await dst.send_bytes(msg.data)
-                                elif msg.type == WSMsgType.CLOSE:
-                                    await dst.close()
-                                    break
-                                elif msg.type == WSMsgType.ERROR:
-                                    break
-                        except Exception:
-                            pass
-                    
-                    await asyncio.gather(
-                        forward(ws_server, ws_client),
-                        forward(ws_client, ws_server)
-                    )
-            return ws_server
-        
-        # Standard HTTP proxying
-        async with ClientSession() as session:
-            try:
-                async with session.request(
-                    method=request.method,
-                    url=url,
-                    headers=headers,
-                    data=await request.read(),
-                    allow_redirects=False
-                ) as resp:
-                    body = await resp.read()
-                    return web.Response(
-                        body=body,
-                        status=resp.status,
-                        headers=resp.headers
-                    )
-            except Exception as e:
-                return web.Response(text=f"Proxy error: {e}", status=502)
-
-    async def main():
-        import logging
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-        cleanup()
+    def main():
+        patch_manager()
         init_profiles()
-        
-        print(f"Starting manager on 127.0.0.1:{PORT_MANAGER}...")
-        manager_proc = await asyncio.create_subprocess_exec(
-            "uvicorn", "backend.main:app", 
-            "--host", "127.0.0.1", 
-            "--port", str(PORT_MANAGER), 
-            "--log-level", "warning",
-            cwd=str(APP_DIR)
-        )
-        
-        print(f"Starting Origin-stripping proxy on 0.0.0.0:{PORT_PROXY}...")
-        proxy_app = web.Application()
-        proxy_app.router.add_route("*", "/{path:.*}", proxy_handler)
-        
-        runner = web.AppRunner(proxy_app)
-        await runner.setup()
-        site = web.TCPSite(runner, "0.0.0.0", PORT_PROXY)
-        await site.start()
-        
-        print("CloakBrowser is ready and accepting connections!")
-        
-        try:
-            # Keep the script running as long as the manager is alive
-            await manager_proc.wait()
-        except (asyncio.CancelledError, KeyboardInterrupt):
-            print("Shutting down...")
-            manager_proc.terminate()
-            await manager_proc.wait()
-            await runner.cleanup()
+        os.execv("/entrypoint.sh", ["/entrypoint.sh"])
 
     if __name__ == "__main__":
-        asyncio.run(main())
+        main()
   '';
 
 in
 {
-  # CloakBrowser Manager
   virtualisation.oci-containers.containers."cloakbrowser" = {
     image = "cloakhq/cloakbrowser-manager:latest";
     extraOptions = [ "--network=ghostship_net" ];
     ports = [ "8080:8080" ];
-    
-    # Run the custom entrypoint script
+
     entrypoint = "/usr/local/bin/python3";
-    cmd = [ "/cloakbrowser-entrypoint.py" ];
+    cmd = [ "/cloakbrowser-startup.py" ];
 
     volumes = [
       "/srv/apps/cloakbrowser/data:/data"
-      "${cloakbrowser-entrypoint}:/cloakbrowser-entrypoint.py:ro"
+      "${cloakbrowser-startup}:/cloakbrowser-startup.py:ro"
     ];
   };
 

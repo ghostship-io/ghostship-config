@@ -4,6 +4,7 @@ This file serves as the primary memory and persistent fact store for AI agents w
 
 ## Lessons Learned
 
+- **CloakBrowser Origin Patch Point**: In `cloakhq/cloakbrowser-manager`, the clean site-wide place to neutralize browser `Origin` headers is the raw ASGI `AuthMiddleware` in `/app/backend/main.py`, not the individual VNC/CDP routes. A startup patch that inserts a helper before `class AuthMiddleware` and strips `scope["headers"]` for `http` and `websocket` requests preserves the native manager/WebSocket stack and avoids the fragile aiohttp proxy workaround.
 - **PyLoad LSIO Startup Ownership**: `lscr.io/linuxserver/pyload-ng` changes `/downloads` ownership in `/etc/s6-overlay/s6-rc.d/init-pyload-config/run` via `lsiown abc:abc /downloads`, not via a safe static `fix-attrs` unit override. On `chill-penguin`, `user = "3000:3000"` also breaks LSIO startup because `/config` setup and later `s6-setuidgid abc` expect a root PID 1. Keep the container in the supported root-run mode with `PUID`/`PGID`, and patch that specific init script stanza by exact content match instead of mounting a `fix-attrs/down` file into `s6-rc.d`.
 - **PyLoad Config Format**: `pyload.cfg` is its own typed config format, not KV/INI. `ghostship-config` must special-case the basename `pyload.cfg` and update existing `section.key` entries in-place (for example `download.max_downloads` and `webui.autologin`) instead of appending `section.key=value` lines at EOF, which PyLoad ignores and logs as parser errors.
 
