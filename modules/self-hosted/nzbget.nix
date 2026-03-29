@@ -72,10 +72,13 @@
           Server2.Connections=literal:10
           Server2.Level=literal:99
           Server2.Optional=literal:yes
+          DirectUnpack=literal:yes
           ArticleCache=literal:500
           PostStrategy=literal:aggressive
           DirectWrite=literal:no
           WriteBuffer=literal:512
+          ParBuffer=literal:128
+          PasswordDetector:PassAction=literal:markbad
           DetailTarget=literal:none
           ControlUsername=literal:ghostship
           ControlPassword=literal:""
