@@ -1,15 +1,15 @@
 { config, lib, pkgs, ... }:
 
 let
-  cloakbrowser-startup = pkgs.writeText "cloakbrowser-startup.py" (lib.strings.trimIndent ''
-    import os
-    import sys
-    from pathlib import Path
+  cloakbrowser-startup = pkgs.writeText "cloakbrowser-startup.py" ''
+import os
+import sys
+from pathlib import Path
 
-    APP_DIR = Path("/app")
-    MAIN_PATH = APP_DIR / "backend" / "main.py"
+APP_DIR = Path("/app")
+MAIN_PATH = APP_DIR / "backend" / "main.py"
 
-    ORIGINAL_CLASS = """class AuthMiddleware:
+ORIGINAL_CLASS = """class AuthMiddleware:
     \"\"\"Raw ASGI middleware for optional token auth.
 
     Uses raw ASGI instead of BaseHTTPMiddleware because the latter
@@ -17,7 +17,7 @@ let
     \"\"\"
 """
 
-    PATCHED_CLASS = """def _strip_origin_header(scope: Scope) -> None:
+PATCHED_CLASS = """def _strip_origin_header(scope: Scope) -> None:
     \"\"\"Remove Origin from the ASGI header list in-place.\"\"\"
     headers = scope.get(\"headers\", [])
     if not headers:
@@ -36,14 +36,14 @@ class AuthMiddleware:
     \"\"\"
 """
 
-    ORIGINAL_CALL = """    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+ORIGINAL_CALL = """    async def __call__(self, scope: Scope, receive: Receive, send: Send):
         # Pass through if auth disabled, or non-HTTP/WS scope (e.g. lifespan)
         if not AUTH_TOKEN or scope[\"type\"] not in (\"http\", \"websocket\"):
             await self.app(scope, receive, send)
             return
 """
 
-    PATCHED_CALL = """    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+PATCHED_CALL = """    async def __call__(self, scope: Scope, receive: Receive, send: Send):
         # Replace the old reverse-proxy workaround at the app boundary.
         if scope[\"type\"] in (\"http\", \"websocket\"):
             _strip_origin_header(scope)
@@ -54,71 +54,71 @@ class AuthMiddleware:
             return
 """
 
-    def patch_manager():
-        print(f"Patching {MAIN_PATH} to strip Origin in AuthMiddleware...")
-        text = MAIN_PATH.read_text()
+def patch_manager():
+    print(f"Patching {MAIN_PATH} to strip Origin in AuthMiddleware...")
+    text = MAIN_PATH.read_text()
 
-        if PATCHED_CLASS in text and PATCHED_CALL in text:
-            print("CloakBrowser origin patch already applied.")
-            return
+    if PATCHED_CLASS in text and PATCHED_CALL in text:
+        print("CloakBrowser origin patch already applied.")
+        return
 
-        if ORIGINAL_CLASS not in text:
-            raise RuntimeError(
-                "CloakBrowser patch anchor missing: AuthMiddleware class"
+    if ORIGINAL_CLASS not in text:
+        raise RuntimeError(
+            "CloakBrowser patch anchor missing: AuthMiddleware class"
+        )
+
+    if ORIGINAL_CALL not in text:
+        raise RuntimeError(
+            "CloakBrowser patch anchor missing: AuthMiddleware.__call__"
+        )
+
+    text = text.replace(ORIGINAL_CLASS, PATCHED_CLASS, 1)
+    text = text.replace(ORIGINAL_CALL, PATCHED_CALL, 1)
+    MAIN_PATH.write_text(text)
+    print("CloakBrowser origin patch applied.")
+
+def init_profiles():
+    print("Initializing database and default profiles...")
+    sys.path.append(str(APP_DIR))
+    try:
+        from backend import database as db
+        db.init_db()
+
+        profiles = db.list_profiles()
+        existing_names = {p["name"] for p in profiles}
+
+        if "VPN" not in existing_names:
+            print("Creating VPN profile...")
+            db.create_profile(
+                name="VPN",
+                proxy="http://gluetun:8888",
+                humanize=True,
+                geoip=True,
+                platform="windows",
             )
+            print("VPN profile created.")
 
-        if ORIGINAL_CALL not in text:
-            raise RuntimeError(
-                "CloakBrowser patch anchor missing: AuthMiddleware.__call__"
+        if "Direct" not in existing_names:
+            print("Creating Direct profile...")
+            db.create_profile(
+                name="Direct",
+                proxy=None,
+                humanize=True,
+                geoip=True,
+                platform="windows",
             )
+            print("Direct profile created.")
+    except Exception as exc:
+        print(f"Failed to initialize profiles: {exc}")
 
-        text = text.replace(ORIGINAL_CLASS, PATCHED_CLASS, 1)
-        text = text.replace(ORIGINAL_CALL, PATCHED_CALL, 1)
-        MAIN_PATH.write_text(text)
-        print("CloakBrowser origin patch applied.")
+def main():
+    patch_manager()
+    init_profiles()
+    os.execv("/entrypoint.sh", ["/entrypoint.sh"])
 
-    def init_profiles():
-        print("Initializing database and default profiles...")
-        sys.path.append(str(APP_DIR))
-        try:
-            from backend import database as db
-            db.init_db()
-
-            profiles = db.list_profiles()
-            existing_names = {p["name"] for p in profiles}
-
-            if "VPN" not in existing_names:
-                print("Creating VPN profile...")
-                db.create_profile(
-                    name="VPN",
-                    proxy="http://gluetun:8888",
-                    humanize=True,
-                    geoip=True,
-                    platform="windows",
-                )
-                print("VPN profile created.")
-
-            if "Direct" not in existing_names:
-                print("Creating Direct profile...")
-                db.create_profile(
-                    name="Direct",
-                    proxy=None,
-                    humanize=True,
-                    geoip=True,
-                    platform="windows",
-                )
-                print("Direct profile created.")
-        except Exception as exc:
-            print(f"Failed to initialize profiles: {exc}")
-
-    def main():
-        patch_manager()
-        init_profiles()
-        os.execv("/entrypoint.sh", ["/entrypoint.sh"])
-
-    if __name__ == "__main__":
-        main()
-  '');
+if __name__ == "__main__":
+    main()
+'';
 
 in
 {
