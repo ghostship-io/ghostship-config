@@ -149,4 +149,4 @@ Once booted into the new system:
     ```bash
     tar -xf plex_metadata.tar -C "/var/lib/plex/Library/Application Support/Plex Media Server"
     ```
-4.  **Switch Config**: Run `nh os switch .` to finalize the system state.
+4.  **Switch Config**: Run `sudo nixos-rebuild switch --flake .#chill-penguin` to finalize the system state.

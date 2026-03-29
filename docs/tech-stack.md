@@ -20,7 +20,7 @@
 - **Custom Secret Scripts**: `secrets-get-public-key`, `secrets-add-key`, `secrets-remove-key`, and `secrets-reencrypt` for per-host key management.
 
 ## Development & Utility Tools
-- **nh (Nix Helper)**: A modern, user-friendly wrapper for common Nix CLI operations.
+- **Native Nix CLI**: `nix`, `nixos-rebuild`, and `switch-to-configuration` are the primary system management tools.
 - **direnv & nix-direnv**: For automatic, fast, and persistent development environment loading.
 - **nvd (Nix Visual Diff)**: For analyzing differences between Nix package generations.
 - **comma (, )**: To run any binary from nixpkgs without permanent installation.

@@ -17,7 +17,7 @@ To create an identical state across personal workstations, servers, and embedded
 - **Fish Shell**: Primary interactive shell with a rich plugin ecosystem.
 - **Starship**: Cross-shell prompt for a consistent visual experience.
 - **direnv & nix-direnv**: Automatic shell activation.
-- **Modern CLI Utils**: `eza` (ls), `bat` (cat), `fd` (find), `zoxide` (cd), `fzf` (search), `nh` (nix helper).
+- **Modern CLI Utils**: `eza` (ls), `bat` (cat), `fd` (find), `zoxide` (cd), `fzf` (search), `nvd`, and `comma`.
 
 ## 💻 Systems
 - **launch-octopus**: WSL2 development environment on Windows 11.
@@ -40,7 +40,7 @@ To create an identical state across personal workstations, servers, and embedded
 - **Unified Assistant Stack**: AGENT, OpenCode, and Codex share a common `~/.agents` instruction/skills source, aligned MCP servers, and an AGENT delegation MCP for repo research and planning.
 
 ### Self-Hosted Services
-The repo includes 25 containerized services running on Podman:
+The repo includes a broad set of containerized services running on Podman:
 
 | Service | Purpose |
 |---------|---------|
@@ -66,6 +66,7 @@ The repo includes 25 containerized services running on Podman:
 | SearXNG + Valkey | Metasearch engine |
 | ROMM | ROM game manager |
 | Grimmory | Game collection manager |
+| Hermes | Agent terminal and Ghostship utility shell |
 
 ### Surgical Configuration Management (`ghostship-config`)
 - **Unified Tooling**: A fleet-wide Python utility (`ghostship-config`) for idempotent, surgical updates to XML, YAML, INI, and KV files.
@@ -77,13 +78,14 @@ The repo includes 25 containerized services running on Podman:
 ## 📖 Usage
 
 ### Apply Configuration
-To rebuild the system and switch to the latest configuration using `nh` (Nix Helper):
+To rebuild the current host and switch to the latest configuration:
 ```bash
-nh os switch .
+sudo nixos-rebuild switch --flake .#(hostname)
 ```
-Alternatively, for traditional `nixos-rebuild`:
+
+To build without switching first:
 ```bash
-sudo nixos-rebuild switch --flake .#launch-octopus
+sudo nixos-rebuild build --flake .#(hostname)
 ```
 
 ### 🆕 Bootstrap a New Host
@@ -124,7 +126,7 @@ The system is configured for automated daily maintenance:
 - **Generation Cleanup**: System generations older than 7 days are automatically purged to optimize disk space.
 - **Manual Cleanup**: To manually trigger a cleanup and keep only the last 5 generations:
 ```bash
-nh clean all --keep 5
+sudo nix-collect-garbage -d
 ```
 
 ### Manage Secrets

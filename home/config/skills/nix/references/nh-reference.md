@@ -1,10 +1,10 @@
-# NH Reference Cheatsheet
+# Nix Command Reference
 
 | Task | Command |
 | :--- | :--- |
-| **Apply OS Config** | `nh os switch` |
-| **Boot OS Config** | `nh os boot` |
-| **Build OS Config** | `nh os build` |
-| **Search Packages** | `nh search <pkg>` |
-| **System Clean** | `nh clean all` |
+| **Apply OS Config** | `sudo nixos-rebuild switch --flake .#(hostname)` |
+| **Boot OS Config** | `sudo nixos-rebuild boot --flake .#(hostname)` |
+| **Build OS Config** | `sudo nixos-rebuild build --flake .#(hostname)` |
+| **Search Packages** | `nix search nixpkgs <pkg>` |
+| **System Clean** | `sudo nix-collect-garbage -d` |
 | **Update Flake** | `nix flake update` |

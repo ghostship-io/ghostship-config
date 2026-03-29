@@ -1,4 +1,4 @@
-{ config, ... }:
+{ config, pkgs, ... }:
 
 let
   litellm-secrets = config.sops.secrets."litellm-secrets".path;
@@ -63,5 +63,24 @@ in
 POSTGRES_PASSWORD=$LITELLM_DB_PASS
 EOF
     chmod 600 ${litellm-db-runtime-env}
+  '';
+
+  systemd.services.podman-litellm-db.postStart = ''
+    set -a
+    . "${litellm-secrets}"
+    set +a
+
+    for _ in $(seq 1 30); do
+      if ${pkgs.podman}/bin/podman exec litellm-db pg_isready -U litellm >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+
+    ${pkgs.podman}/bin/podman exec -i litellm-db \
+      psql -U litellm -d litellm -v ON_ERROR_STOP=1 \
+      --set=password="$LITELLM_DB_PASS" <<'SQL'
+ALTER ROLE litellm WITH PASSWORD :'password';
+SQL
   '';
 }

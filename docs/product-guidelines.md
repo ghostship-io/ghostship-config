@@ -25,7 +25,7 @@
 
 ## User Experience (UX) & Environment
 - **Feature-Rich CLI**: The default user environment should be optimized for productivity, featuring a robust shell (e.g., Zsh or Fish), modern CLI replacements (e.g., `bat`, `eza`, `fd`), and pre-configured development tools.
-- **Developer-Centric Focus**: Prioritize tools and aliases that streamline Nix-related tasks (e.g., `nh`, `nix-tree`, `nix-output-monitor`).
+- **Developer-Centric Focus**: Prioritize tools and aliases that streamline Nix-related tasks (e.g., `nix search`, `nix-tree`, `nix-output-monitor`).
 
 ## Consistency & Upstream Alignment
 - **Identity Management**: 
@@ -57,7 +57,7 @@
 AGENT CLI instructions and expert personas are managed via a centralized `gemini.md` file deployed globally to `~/.gemini/gemini.md` via Home Manager. This ensures a consistent, distilled, and always-available set of directives across all hosts in the fleet.
 
 ### Guidelines for Instructions Deployment
-- **Centralization**: All core directives, system-native workflows (e.g., `nh`, flakes), and expertise sections (e.g., Python) MUST reside in `home/config/AGENTS.md`.
+- **Centralization**: All core directives, system-native workflows (e.g., `nixos-rebuild`, flakes), and expertise sections (e.g., Python) MUST reside in `home/config/AGENTS.md`.
 - **Home Manager Integration**: The file MUST be symlinked to `~/.gemini/gemini.md` using the `home.file` option in `home/nixos.nix`.
 - **Expertise Distillation**: Prefer concise, high-signal "Expertise Sections" within the global file over maintaining numerous individual skill files, unless a skill requires complex assets or scripts.
 - **Autonomous Verification**: Instructions MUST emphasize autonomous execution of verification steps. Agents should attempt all verification themselves using available tools (SSH, `lsblk`, `nix-store`, etc.) and only ask the user to run things if they cannot accomplish the verification autonomously.

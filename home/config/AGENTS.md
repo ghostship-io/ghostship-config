@@ -53,7 +53,7 @@ Treat EVERY repository as a potential high-quality open-source project.
 
 ### NixOS & System Management
 - **Environment**: ALWAYS use **Nix Flakes** and **`direnv`** for seamless activation.
-- **Management**: PRIORITIZE **`nh`** (Nix Helper) for EVERY operation it supports (`switch`, `build`, `search`, `clean`).
+- **Management**: Use native Nix commands for system management: `nix`, `nixos-rebuild`, and `switch-to-configuration`. Do not use `nh`.
 - **One-off**: Use **`,` (comma)** for ephemeral execution of utilities.
 
 ### Browsing & Web Research
