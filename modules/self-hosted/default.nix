@@ -34,6 +34,5 @@
     ./romm.nix
     ./grimmory-db.nix
     ./grimmory.nix
-    ./hermes.nix
   ];
 }
