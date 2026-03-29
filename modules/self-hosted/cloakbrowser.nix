@@ -81,7 +81,7 @@ let
 
     # --- Origin-Stripping Proxy ---
     async def proxy_handler(request):
-        url = f"http://127.0.0.1:{PORT_MANAGER}''${request.rel_url}"
+        url = f"http://127.0.0.1:{PORT_MANAGER}{request.rel_url}"
         # Strip "Origin" to bypass CSWSH checks in the manager
         headers = {k: v for k, v in request.headers.items() if k.lower() != "origin"}
         
@@ -133,6 +133,8 @@ let
                 return web.Response(text=f"Proxy error: {e}", status=502)
 
     async def main():
+        import logging
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
         cleanup()
         init_profiles()
         
