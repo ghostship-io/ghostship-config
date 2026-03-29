@@ -50,6 +50,8 @@
 
         nzb_args=(
           --secrets-file "$SECRETS_FILE"
+          DestDir=literal:/downloads/Usenet
+          InterDir=literal:/downloads/Usenet/.incomplete
           Server1.Active=literal:yes
           Server1.Name=literal:news.eweka.nl
           Server1.Host=literal:news.eweka.nl
@@ -68,17 +70,15 @@
           Server2.Connections=literal:10
           Server2.Level=literal:99
           Server2.Optional=literal:yes
+          ControlUsername=literal:ghostship
+          ControlPassword=literal:""
+          UpdateCheck=literal:none
           Category1.Name=literal:sonarr
           Category1.Unpack=literal:yes
           Category2.Name=literal:radarr
           Category2.Unpack=literal:yes
           Category3.Name=literal:prowlarr
           Category3.Unpack=literal:yes
-          ControlUsername=literal:ghostship
-          ControlPassword=literal:""
-          UpdateCheck=literal:none
-          DestDir=literal:/downloads/Usenet
-          "InterDir=literal:/downloads/Usenet/.incomplete"
         )
 
         ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${nzb_args[@]}"
