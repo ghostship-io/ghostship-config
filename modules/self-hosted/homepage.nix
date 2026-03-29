@@ -235,6 +235,13 @@ in
             "[Utilities].[OmniTools].container=literal:omni-tools"
             
             # Infrastructure group
+            "[Infrastructure].[CloakBrowser].icon=literal:sh-cloakbrowser"
+            "[Infrastructure].[CloakBrowser].description=literal:Stealth Browser Manager"
+            "[Infrastructure].[CloakBrowser].server=literal:chill-penguin"
+            "[Infrastructure].[CloakBrowser].container=literal:cloakbrowser-manager"
+            "[Infrastructure].[CloakBrowser].widget.type=literal:custom"
+            "[Infrastructure].[CloakBrowser].widget.url=literal:http://cloakbrowser-manager:8080"
+            
             "[Infrastructure].[SearXNG Cache].icon=literal:redis.png"
             "[Infrastructure].[SearXNG Cache].description=literal:Search Cache"
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"

@@ -110,6 +110,13 @@
           Bazarr.color=literal:"#9c36b5"
           Bazarr.enabled=literal:"true"
           Bazarr.dd=literal:"true"
+          CloakBrowser.name=literal:"CloakBrowser"
+          CloakBrowser.url=literal:"https://cloakbrowser.ghostship.io"
+          CloakBrowser.scale=literal:1
+          CloakBrowser.icon=literal:"sh-cloakbrowser"
+          CloakBrowser.color=literal:"#000000"
+          CloakBrowser.enabled=literal:"true"
+          CloakBrowser.dd=literal:"true"
           OmniTools.name=literal:"OmniTools"
           OmniTools.url=literal:"https://omnitools.ghostship.io"
           OmniTools.scale=literal:1
