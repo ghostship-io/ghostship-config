@@ -1,42 +1,9 @@
-{ config, pkgs, ... }:
+{ config, ... }:
 
 let
   litellm-secrets = config.sops.secrets."litellm-secrets".path;
   litellm-runtime-env = "/run/secrets/litellm-runtime.env";
   litellm-chatgpt-token-dir = "/root/.config/litellm/chatgpt";
-  litellm-config = pkgs.writeText "litellm-config.yaml" ''
-    model_list:
-      - model_name: chatgpt/gpt-5.4
-        model_info:
-          mode: responses
-        litellm_params:
-          model: chatgpt/gpt-5.4
-      - model_name: chatgpt/gpt-5.4-pro
-        model_info:
-          mode: responses
-        litellm_params:
-          model: chatgpt/gpt-5.4-pro
-      - model_name: chatgpt/gpt-5.3-codex
-        model_info:
-          mode: responses
-        litellm_params:
-          model: chatgpt/gpt-5.3-codex
-      - model_name: chatgpt/gpt-5.3-codex-spark
-        model_info:
-          mode: responses
-        litellm_params:
-          model: chatgpt/gpt-5.3-codex-spark
-      - model_name: chatgpt/gpt-5.3-instant
-        model_info:
-          mode: responses
-        litellm_params:
-          model: chatgpt/gpt-5.3-instant
-      - model_name: chatgpt/gpt-5.3-chat-latest
-        model_info:
-          mode: responses
-        litellm_params:
-          model: chatgpt/gpt-5.3-chat-latest
-  '';
 in
 
 {
@@ -64,7 +31,6 @@ in
       CHATGPT_TOKEN_DIR = litellm-chatgpt-token-dir;
     };
     cmd = [
-      "--config" "/etc/litellm/config.yaml"
       "--port" "4000"
       "--num_workers" "1"
     ];
@@ -73,7 +39,6 @@ in
       litellm-runtime-env
     ];
     volumes = [
-      "${litellm-config}:/etc/litellm/config.yaml:ro"
       "/srv/apps/litellm/chatgpt:${litellm-chatgpt-token-dir}"
     ];
   };
