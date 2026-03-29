@@ -34,34 +34,6 @@
     # Agent Browser CLI
     (pkgs.writeShellScriptBin "agent-browser" "exec ${pkgs.nodejs}/bin/npx -y agent-browser \"$@\"")
 
-    # CloakBrowser wrappers (Manager-backed)
-    (let
-      wrapper = name: port: ''
-        MANAGER="http://chill-penguin:8080"
-        # Get ID
-        ID=$(${pkgs.curl}/bin/curl -s $MANAGER/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"${name}\") | .id")
-        if [ -z "$ID" ] || [ "$ID" = "null" ]; then
-          echo "Error: Profile ${name} not found"
-          exit 1
-        fi
-        # Ensure launched
-        STATUS=$(${pkgs.curl}/bin/curl -s $MANAGER/api/profiles/$ID/status | ${pkgs.jq}/bin/jq -r .status)
-        if [ "$STATUS" != "running" ]; then
-          echo "Launching profile ${name}..."
-          ${pkgs.curl}/bin/curl -s -X POST $MANAGER/api/profiles/$ID/launch > /dev/null
-          sleep 3
-        fi
-        # Connect directly to CDP port
-        exec ${pkgs.nodejs}/bin/npx -y agent-browser connect "http://chill-penguin:${port}" "$@"
-      '';
-    in pkgs.symlinkJoin {
-      name = "cloak-wrappers";
-      paths = [
-        (pkgs.writeShellScriptBin "cloak-vpn" (wrapper "VPN" "5100"))
-        (pkgs.writeShellScriptBin "cloak-direct" (wrapper "Direct" "5101"))
-      ];
-    })
-
     # Playwright for AGENT MCP (Disabled on chill-penguin for initial cross-build)
   ] ++ lib.optional (!(osConfig.networking.hostName == "chill-penguin")) playwright-driver.browsers;
 
