@@ -48,13 +48,15 @@ let
   extensions-json = pkgs.writeText "extensions.json" (builtins.toJSON extensions-policy);
   ublock-json = pkgs.writeText "ublock-origin.json" (builtins.toJSON ublock-policy);
 
-  # mitmproxy script to strip Origin header
+  # mitmproxy script to strip Origin header from all requests including WebSockets
   strip-origin-py = pkgs.writeText "strip-origin.py" ''
     from mitmproxy import http
 
     def request(flow: http.HTTPFlow) -> None:
         if "Origin" in flow.request.headers:
-            del flow.request.headers["Origin"]
+            flow.request.headers.pop("Origin")
+        if "origin" in flow.request.headers:
+            flow.request.headers.pop("origin")
   '';
 
   # Runtime entrypoint to setup proxy AND run original entrypoint
@@ -66,7 +68,8 @@ let
 
     # Start mitmproxy in background to strip Origin header
     # Listen on 8080 (external), forward to 8081 (manager)
-    mitmdump -s ${strip-origin-py} --mode reverse:http://localhost:8081 --listen-port 8080 --set termlog_level=error &
+    # Using --web-open-browser false to prevent issues
+    mitmdump -s ${strip-origin-py} --mode reverse:http://localhost:8081 --listen-port 8080 --set termlog_level=info &
 
     # The original entrypoint starts uvicorn on 8080.
     # We must patch the original entrypoint script to use 8081 instead.
@@ -103,9 +106,11 @@ in
     after = [ "podman-cloakbrowser.service" ];
     wantedBy = [ "multi-user.target" ];
     script = ''
-      # We must use 8081 here because 8080 (mitmproxy) might not be ready
-      # but the manager on 8081 will be.
-      until ${pkgs.curl}/bin/curl -s http://localhost:8081/api/status > /dev/null; do sleep 2; done
+      # Wait for Manager directly on 8081
+      until ${pkgs.curl}/bin/curl -s http://localhost:8081/api/status > /dev/null; do
+        sleep 2
+      done
+      
       create_profile() {
         NAME=$1; PROXY=$2;
         EXISTS=$(${pkgs.curl}/bin/curl -s http://localhost:8081/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
