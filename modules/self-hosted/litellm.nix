@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 
 {
   virtualisation.oci-containers.containers."litellm" = {
@@ -9,6 +9,9 @@
     environment = {
       LITELLM_LOG = "DEBUG";
     };
+    environmentFiles = [
+      config.sops.secrets."litellm-secrets".path
+    ];
     volumes = [
       "/srv/apps/litellm:/app/config"
     ];
