@@ -16,6 +16,7 @@ in
     image = "ghcr.io/ghostship-io/ghostship-hermes:latest";
     extraOptions = [
       "--network=ghostship_net"
+      "--tmpfs=/tmp:rw,exec,mode=1777"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:7681/ || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
@@ -27,6 +28,8 @@ in
       TTYD_PORT = "7681";
       TTYD_TITLE = "Ghostship Hermes";
       TTYD_SESSION_NAME = "hermes";
+      SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
+      NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
       SEARXNG_URL = "http://gluetun:5002";
       SONARR_URL = "http://sonarr:8989";
       RADARR_URL = "http://radarr:7878";
