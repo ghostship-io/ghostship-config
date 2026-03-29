@@ -118,7 +118,7 @@
           CloakBrowser.enabled=literal:"true"
           CloakBrowser.dd=literal:"true"
           LiteLLM.name=literal:"LiteLLM"
-          LiteLLM.url=literal:"https://litellm.ghostship.io"
+          LiteLLM.url=literal:"https://litellm.ghostship.io/ui"
           LiteLLM.scale=literal:1
           LiteLLM.icon=literal:"fa-train"
           LiteLLM.color=literal:"#3b82f6"
