@@ -11,24 +11,9 @@
       STORE_MODEL_IN_DB = "True";
       USE_PRISMA_MIGRATE = "True";
     };
-    cmd = [
-      "--config" "/app/config/config.yaml"
-      "--port" "4000"
-    ];
     environmentFiles = [
       config.sops.secrets."litellm-secrets".path
     ];
-    volumes = [
-      "/srv/apps/litellm:/app/config"
-    ];
-  };
-
-  system.activationScripts.litellm-config = {
-    text = ''
-      mkdir -p /srv/apps/litellm
-      cp ${./litellm-config.yaml} /srv/apps/litellm/config.yaml
-      chown -R apps:apps /srv/apps/litellm
-    '';
   };
 
   systemd.tmpfiles.rules = [
