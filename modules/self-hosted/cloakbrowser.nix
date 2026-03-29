@@ -48,22 +48,62 @@ let
   extensions-json = pkgs.writeText "extensions.json" (builtins.toJSON extensions-policy);
   ublock-json = pkgs.writeText "ublock-origin.json" (builtins.toJSON ublock-policy);
 
+  # Nginx config to strip Origin header and proxy to Manager
+  nginx-config = pkgs.writeText "cloakbrowser-proxy.conf" ''
+    server {
+        listen 8080;
+        
+        location / {
+            proxy_pass http://cloakbrowser:8080;
+            proxy_http_version 1.1;
+            
+            # WebSocket support
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            
+            # Strip Origin header to bypass CSWSH check
+            proxy_set_header Origin "";
+            
+            # Standard headers
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Timeouts for long-lived CDP connections
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+        }
+    }
+  '';
+
 in
 {
-  # CloakBrowser Manager (renamed to cloakbrowser)
+  # CloakBrowser Manager
   virtualisation.oci-containers.containers."cloakbrowser" = {
     image = "cloakhq/cloakbrowser-manager:latest";
-    ports = [ 
-      "8080:8080"
-      "5100-5101:5100-5101"
-    ];
+    # We do NOT map 8080 to the host here; the proxy will handle it
     extraOptions = [ "--network=ghostship_net" ];
     volumes = [
       "/srv/apps/cloakbrowser/data:/data"
+      # System-wide policy paths
       "${extensions-json}:/etc/chromium/policies/managed/extensions.json:ro"
       "${ublock-json}:/etc/chromium/policies/managed/ublock-origin.json:ro"
       "${extensions-json}:/etc/opt/chrome/policies/managed/extensions.json:ro"
       "${ublock-json}:/etc/opt/chrome/policies/managed/ublock-origin.json:ro"
+      # Portable Chromium specific policy path
+      "${extensions-json}:/root/.cloakbrowser/chromium-145.0.7632.159.7/policies/managed/extensions.json:ro"
+      "${ublock-json}:/root/.cloakbrowser/chromium-145.0.7632.159.7/policies/managed/ublock-origin.json:ro"
+    ];
+  };
+
+  # Proxy to strip Origin header
+  virtualisation.oci-containers.containers."cloakbrowser-proxy" = {
+    image = "nginx:alpine";
+    ports = [ "8080:8080" ];
+    extraOptions = [ "--network=ghostship_net" ];
+    volumes = [
+      "${nginx-config}:/etc/nginx/conf.d/default.conf:ro"
     ];
   };
 
@@ -73,12 +113,16 @@ in
     after = [ "podman-cloakbrowser.service" ];
     wantedBy = [ "multi-user.target" ];
     script = ''
-      until ${pkgs.curl}/bin/curl -s http://localhost:8080/api/status > /dev/null; do sleep 2; done
+      # Wait for Manager
+      until ${pkgs.curl}/bin/curl -s http://cloakbrowser:8080/api/status > /dev/null; do
+        sleep 2
+      done
+      
       create_profile() {
         NAME=$1; PROXY=$2;
-        EXISTS=$(${pkgs.curl}/bin/curl -s http://localhost:8080/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
+        EXISTS=$(${pkgs.curl}/bin/curl -s http://cloakbrowser:8080/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
         if [ -z "$EXISTS" ]; then
-          ${pkgs.curl}/bin/curl -s -X POST http://localhost:8080/api/profiles -H "Content-Type: application/json" \
+          ${pkgs.curl}/bin/curl -s -X POST http://cloakbrowser:8080/api/profiles -H "Content-Type: application/json" \
             -d "{\"name\": \"$NAME\", \"proxy\": $PROXY, \"humanize\": true, \"geoip\": true, \"platform\": \"windows\"}"
         fi
       }
@@ -88,32 +132,8 @@ in
     serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
   };
 
-  # CDP Bridge using socat to expose CDP ports from container localhost to host 0.0.0.0
-  # This avoids the Manager's WebSocket proxy origin check entirely.
-  systemd.services."cloakbrowser-cdp-bridge-direct" = {
-    description = "Bridge CloakBrowser Direct CDP Port";
-    after = [ "podman-cloakbrowser.service" ];
-    wantedBy = [ "multi-user.target" ];
-    script = ''
-      # Map host 9222 to container localhost 5100
-      ${pkgs.socat}/bin/socat TCP-LISTEN:9222,fork,reuseaddr TCP:127.0.0.1:5100
-    '';
-    serviceConfig = { Restart = "always"; RestartSec = 5; };
-  };
-
-  systemd.services."cloakbrowser-cdp-bridge-vpn" = {
-    description = "Bridge CloakBrowser VPN CDP Port";
-    after = [ "podman-cloakbrowser.service" ];
-    wantedBy = [ "multi-user.target" ];
-    script = ''
-      # Map host 9223 to container localhost 5101
-      ${pkgs.socat}/bin/socat TCP-LISTEN:9223,fork,reuseaddr TCP:127.0.0.1:5101
-    '';
-    serviceConfig = { Restart = "always"; RestartSec = 5; };
-  };
-
-  # Open ports
-  networking.firewall.allowedTCPPorts = [ 8080 9222 9223 ];
+  # Open port 8080 (CDP ports remain internal to ghostship_net)
+  networking.firewall.allowedTCPPorts = [ 8080 ];
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/cloakbrowser 0755 apps apps -"
