@@ -53,13 +53,16 @@ in
     image = "cloakhq/cloakbrowser-manager:latest";
     ports = [ 
       "8080:8080"
-      "5100-5102:5100-5102" # CDP ports for profiles
+      "5100-5101:5100-5101" # Reduced to 2 ports as requested
     ];
     extraOptions = [ "--network=ghostship_net" ];
     volumes = [
       "/srv/apps/cloakbrowser/data:/data"
+      # Mount policies in multiple possible locations to ensure they are picked up
       "${extensions-json}:/etc/chromium/policies/managed/extensions.json:ro"
       "${ublock-json}:/etc/chromium/policies/managed/ublock-origin.json:ro"
+      "${extensions-json}:/etc/opt/chrome/policies/managed/extensions.json:ro"
+      "${ublock-json}:/etc/opt/chrome/policies/managed/ublock-origin.json:ro"
     ];
   };
 
@@ -84,8 +87,8 @@ in
     serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
   };
 
-  # Open ports (remove 9222 as standalone is gone)
-  networking.firewall.allowedTCPPorts = [ 8080 5100 5101 5102 ];
+  # Open ports
+  networking.firewall.allowedTCPPorts = [ 8080 5100 5101 ];
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/cloakbrowser 0755 apps apps -"
