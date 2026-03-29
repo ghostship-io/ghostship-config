@@ -73,7 +73,7 @@
           Server2.Optional=literal:yes
           ArticleCache=literal:500
           DirectWrite=literal:no
-          WriteBuffer=literal:512
+          WriteBuffer=literal:4096
           PostStrategy=literal:aggressive
           ControlPort=literal:5001
           DetailTarget=literal:none
