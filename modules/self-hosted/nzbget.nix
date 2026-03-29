@@ -72,6 +72,7 @@
           Server2.Connections=literal:10
           Server2.Level=literal:99
           Server2.Optional=literal:yes
+          FakeDetector:BannedExtensions=literal:.exe,.dll,.msi,.bat,.cmd,.ps1,.vbs,.vbe,.js,.jse,.scr,.pif,.application,.gadget,.jar,.com
           DirectUnpack=literal:yes
           ArticleCache=literal:500
           PostStrategy=literal:aggressive
