@@ -57,8 +57,8 @@ let
             del flow.request.headers["Origin"]
   '';
 
-  # Runtime entrypoint to setup proxy and manager
-  entrypoint-script = pkgs.writeShellScript "cloakbrowser-entrypoint" ''
+  # Runtime entrypoint to setup proxy AND run original entrypoint
+  patch-script = pkgs.writeShellScript "cloakbrowser-patch" ''
     # Install mitmproxy if not present
     if ! command -v mitmdump &> /dev/null; then
       apt-get update && apt-get install -y mitmproxy
@@ -68,11 +68,12 @@ let
     # Listen on 8080 (external), forward to 8081 (manager)
     mitmdump -s ${strip-origin-py} --mode reverse:http://localhost:8081 --listen-port 8080 --set termlog_level=error &
 
-    # Start the manager on 8081
-    # We override the command parts from the original entrypoint.sh
-    export DISPLAY=:100 # default
-    cd /app
-    exec uvicorn backend.main:app --host 0.0.0.0 --port 8081 --log-level warning
+    # The original entrypoint starts uvicorn on 8080.
+    # We must patch the original entrypoint script to use 8081 instead.
+    sed -i 's/--port 8080/--port 8081/g' /entrypoint.sh
+
+    # Execute the original entrypoint
+    exec /entrypoint.sh
   '';
 
 in
@@ -85,8 +86,8 @@ in
       "5100-5101:5100-5101"
     ];
     extraOptions = [ "--network=ghostship_net" ];
-    # Use our custom entrypoint
-    entrypoint = "${entrypoint-script}";
+    # Use our patch script as the entrypoint
+    entrypoint = "${patch-script}";
     volumes = [
       "/srv/apps/cloakbrowser/data:/data"
       "${extensions-json}:/etc/chromium/policies/managed/extensions.json:ro"
@@ -97,19 +98,19 @@ in
   };
 
   # Automatic profile creation for Manager
-  # Note: curl now points to localhost:8081 inside the container, 
-  # or localhost:8080 through the proxy.
   systemd.services."cloakbrowser-init-profiles" = {
     description = "Initialize CloakBrowser profiles";
     after = [ "podman-cloakbrowser.service" ];
     wantedBy = [ "multi-user.target" ];
     script = ''
-      until ${pkgs.curl}/bin/curl -s http://localhost:8080/api/status > /dev/null; do sleep 2; done
+      # We must use 8081 here because 8080 (mitmproxy) might not be ready
+      # but the manager on 8081 will be.
+      until ${pkgs.curl}/bin/curl -s http://localhost:8081/api/status > /dev/null; do sleep 2; done
       create_profile() {
         NAME=$1; PROXY=$2;
-        EXISTS=$(${pkgs.curl}/bin/curl -s http://localhost:8080/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
+        EXISTS=$(${pkgs.curl}/bin/curl -s http://localhost:8081/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
         if [ -z "$EXISTS" ]; then
-          ${pkgs.curl}/bin/curl -s -X POST http://localhost:8080/api/profiles -H "Content-Type: application/json" \
+          ${pkgs.curl}/bin/curl -s -X POST http://localhost:8081/api/profiles -H "Content-Type: application/json" \
             -d "{\"name\": \"$NAME\", \"proxy\": $PROXY, \"humanize\": true, \"geoip\": true, \"platform\": \"windows\"}"
         fi
       }
