@@ -13,7 +13,7 @@
     ./prowlarr.nix
     ./sonarr.nix
     ./radarr.nix
-#    ./nzbget.nix
+    ./nzbget.nix
     ./vuetorrent.nix
     ./flaresolverr.nix
     ./cloakbrowser.nix

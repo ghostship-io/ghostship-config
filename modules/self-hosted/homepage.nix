@@ -37,6 +37,17 @@ in
       "/sys/class/net:/sys/class/net:ro"
       "/sys/devices/platform:/sys/devices/platform:ro"
     ];
+    environmentFiles = [
+      gluetun-secrets
+      plex-secrets
+      tautulli-secrets
+      sonarr-secrets
+      radarr-secrets
+      prowlarr-secrets
+      bazarr-secrets
+      cloudflared-secrets
+      grimmory-secrets
+    ];
   };
 
   systemd.tmpfiles.rules = [
