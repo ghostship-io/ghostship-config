@@ -48,33 +48,15 @@ let
   extensions-json = pkgs.writeText "extensions.json" (builtins.toJSON extensions-policy);
   ublock-json = pkgs.writeText "ublock-origin.json" (builtins.toJSON ublock-policy);
 
-  # Nginx config to strip Origin header and proxy to Manager
-  nginx-config = pkgs.writeText "cloakbrowser-proxy.conf" ''
-    server {
-        listen 8080;
-        
-        location / {
-            proxy_pass http://cloakbrowser:8080;
-            proxy_http_version 1.1;
-            
-            # WebSocket support
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            
-            # Strip Origin header to bypass CSWSH check
-            proxy_set_header Origin "";
-            
-            # Standard headers
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            
-            # Timeouts for long-lived CDP connections
-            proxy_read_timeout 3600s;
-            proxy_send_timeout 3600s;
-        }
-    }
+  # Runtime patch script to disable CSWSH in the container
+  patch-script = pkgs.writeShellScript "cloakbrowser-patch" ''
+    # Patch main.py to disable WebSocket origin check
+    if [ -f /app/backend/main.py ]; then
+      # Insert 'return True' at the start of _check_websocket_origin
+      sed -i '/async def _check_websocket_origin(websocket: WebSocket) -> bool:/a \    return True' /app/backend/main.py
+    fi
+    # Execute the original entrypoint
+    exec /entrypoint.sh
   '';
 
 in
@@ -82,8 +64,9 @@ in
   # CloakBrowser Manager
   virtualisation.oci-containers.containers."cloakbrowser" = {
     image = "cloakhq/cloakbrowser-manager:latest";
-    # We do NOT map 8080 to the host here; the proxy will handle it
+    ports = [ "8080:8080" ];
     extraOptions = [ "--network=ghostship_net" ];
+    entrypoint = "${patch-script}";
     volumes = [
       "/srv/apps/cloakbrowser/data:/data"
       # System-wide policy paths
@@ -97,32 +80,21 @@ in
     ];
   };
 
-  # Proxy to strip Origin header
-  virtualisation.oci-containers.containers."cloakbrowser-proxy" = {
-    image = "nginx:alpine";
-    ports = [ "8080:8080" ];
-    extraOptions = [ "--network=ghostship_net" ];
-    volumes = [
-      "${nginx-config}:/etc/nginx/conf.d/default.conf:ro"
-    ];
-  };
-
   # Automatic profile creation for Manager
   systemd.services."cloakbrowser-init-profiles" = {
     description = "Initialize CloakBrowser profiles";
     after = [ "podman-cloakbrowser.service" ];
     wantedBy = [ "multi-user.target" ];
     script = ''
-      # Wait for Manager
-      until ${pkgs.curl}/bin/curl -s http://cloakbrowser:8080/api/status > /dev/null; do
+      until ${pkgs.curl}/bin/curl -s http://localhost:8080/api/status > /dev/null; do
         sleep 2
       done
       
       create_profile() {
         NAME=$1; PROXY=$2;
-        EXISTS=$(${pkgs.curl}/bin/curl -s http://cloakbrowser:8080/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
+        EXISTS=$(${pkgs.curl}/bin/curl -s http://localhost:8080/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
         if [ -z "$EXISTS" ]; then
-          ${pkgs.curl}/bin/curl -s -X POST http://cloakbrowser:8080/api/profiles -H "Content-Type: application/json" \
+          ${pkgs.curl}/bin/curl -s -X POST http://localhost:8080/api/profiles -H "Content-Type: application/json" \
             -d "{\"name\": \"$NAME\", \"proxy\": $PROXY, \"humanize\": true, \"geoip\": true, \"platform\": \"windows\"}"
         fi
       }
@@ -132,7 +104,7 @@ in
     serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
   };
 
-  # Open port 8080 (CDP ports remain internal to ghostship_net)
+  # Open port 8080
   networking.firewall.allowedTCPPorts = [ 8080 ];
 
   systemd.tmpfiles.rules = [
