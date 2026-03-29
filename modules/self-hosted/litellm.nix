@@ -10,20 +10,32 @@
       LITELLM_LOG = "DEBUG";
       STORE_MODEL_IN_DB = "True";
       USE_PRISMA_MIGRATE = "True";
-      # USE_PRISMA_DB_PUSH = "True";
-      
       # Production best practices
       PROXY_BATCH_WRITE_AT = "60";
       DATABASE_CONNECTION_POOL_LIMIT = "10";
       ALLOW_REQUESTS_ON_DB_UNAVAILABLE = "True";
       DISABLE_LOAD_DOTENV = "True";
-
-      # Use a minimal JSON config to trigger features if env vars alone aren't enough
-      LITELLM_CONFIG_JSON = ''{"model_list": [], "litellm_settings": {"drop_params": true, "set_verbose": true}}'';
     };
+    cmd = [
+      "--config" "/app/config/config.yaml"
+      "--port" "4000"
+    ];
     environmentFiles = [
       config.sops.secrets."litellm-secrets".path
     ];
+    volumes = [
+      "/srv/apps/litellm:/app/config"
+    ];
+  };
+
+  system.activationScripts.litellm-config = {
+    text = ''
+      mkdir -p /srv/apps/litellm
+      if [ ! -f /srv/apps/litellm/config.yaml ]; then
+        echo "model_list: []" > /srv/apps/litellm/config.yaml
+      fi
+      chown -R apps:apps /srv/apps/litellm
+    '';
   };
 
   systemd.tmpfiles.rules = [
