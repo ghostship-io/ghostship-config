@@ -203,6 +203,11 @@ in
             "[Services].[LiteLLM].server=literal:chill-penguin"
             "[Services].[LiteLLM].container=literal:litellm"
 
+            "[Services].[Hermes].icon=literal:mdi-robot-outline"
+            "[Services].[Hermes].description=literal:Agent Terminal"
+            "[Services].[Hermes].server=literal:chill-penguin"
+            "[Services].[Hermes].container=literal:hermes"
+
             "[Services].[pyLoad].icon=literal:sh-pyload"
             "[Services].[pyLoad].description=literal:Download Manager"
             "[Services].[pyLoad].server=literal:chill-penguin"

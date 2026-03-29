@@ -124,6 +124,13 @@
           LiteLLM.color=literal:"#3b82f6"
           LiteLLM.enabled=literal:"true"
           LiteLLM.dd=literal:"true"
+          Hermes.name=literal:"Hermes"
+          Hermes.url=literal:"https://hermes.ghostship.io"
+          Hermes.scale=literal:1
+          Hermes.icon=literal:"fa-terminal"
+          Hermes.color=literal:"#06b6d4"
+          Hermes.enabled=literal:"true"
+          Hermes.dd=literal:"true"
           pyLoad.name=literal:"pyLoad"
           pyLoad.url=literal:"https://pyload.ghostship.io"
           pyLoad.scale=literal:1
