@@ -5,12 +5,12 @@ let
 
   opencode-superpowers-plugin = builtins.head agentTooling.opencodePlugins;
 
-  opencode-config = builtins.toJSON {
-    "$schema" = "https://opencode.ai/config.json";
-    plugin = [
-      "superpowers@git+https://github.com/obra/superpowers.git"
-    ];
-  };
+   opencode-config = builtins.toJSON {
+     "$schema" = "https://opencode.ai/config.json";
+     plugin = [
+       "superpowers@git+https://github.com/obra/superpowers.git"
+     ];
+   };
 
   opencode-script = pkgs.writeShellScriptBin "opencode" ''
     set -euo pipefail
