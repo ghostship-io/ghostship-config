@@ -7,10 +7,14 @@
       "--network=ghostship_net"
     ];
     environment = {
-      LITELLM_LOG = "DEBUG";
+      LITELLM_LOG = "INFO";
       STORE_MODEL_IN_DB = "True";
-      # USE_PRISMA_DB_PUSH = "True"; # Alternative to migrate
       USE_PRISMA_MIGRATE = "True";
+      # Production best practices
+      PROXY_BATCH_WRITE_AT = "60";
+      DATABASE_CONNECTION_POOL_LIMIT = "10";
+      ALLOW_REQUESTS_ON_DB_UNAVAILABLE = "True";
+      DISABLE_LOAD_DOTENV = "True";
     };
     environmentFiles = [
       config.sops.secrets."litellm-secrets".path
