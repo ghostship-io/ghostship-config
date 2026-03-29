@@ -75,8 +75,8 @@
           DirectWrite=literal:no
           WriteBuffer=literal:512
           PostStrategy=literal:aggressive
-          DetailTarget=literal:none
           ControlPort=literal:5001
+          DetailTarget=literal:none
           ParBuffer=literal:128
           DirectRename=literal:yes
           DirectUnpack=literal:yes
