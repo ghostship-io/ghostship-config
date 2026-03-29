@@ -527,6 +527,73 @@ class KVDriver:
         return "\n".join(self.lines) + "\n"
 
 
+class PyLoadDriver:
+    section_re = re.compile(r'^(?P<section>[a-z_]+)\s+-\s+"[^"]+":\s*$')
+    option_re = re.compile(
+        r'^(?P<indent>\s*)(?P<type>.+?)\s+'
+        r'(?P<key>[a-z_]+)\s+:\s+"(?P<label>[^"]*)"\s+=\s*'
+        r'(?P<value>.*)$'
+    )
+
+    def __init__(self, content):
+        self.lines = content.splitlines()
+        self.dirty = False
+        self.allow_missing = False
+
+    def _normalize_value(self, type_spec, value):
+        if type_spec == "bool":
+            lowered = str(value).strip().lower()
+            if lowered == "true":
+                return "True"
+            if lowered == "false":
+                return "False"
+        return str(value)
+
+    def set(self, path, value):
+        if "." not in path:
+            logging.warning("PyLoad path must be section.key: %s", path)
+            return
+
+        target_section, target_key = path.split(".", 1)
+        current_section = None
+
+        for index, line in enumerate(self.lines):
+            section_match = self.section_re.match(line)
+            if section_match:
+                current_section = section_match.group("section")
+                continue
+
+            option_match = self.option_re.match(line)
+            if option_match is None or current_section != target_section:
+                continue
+
+            if option_match.group("key") != target_key:
+                continue
+
+            new_value = self._normalize_value(
+                option_match.group("type"),
+                value,
+            )
+            if option_match.group("value") == new_value:
+                return
+
+            self.lines[index] = (
+                f'{option_match.group("indent")}'
+                f'{option_match.group("type")} '
+                f'{option_match.group("key")} : '
+                f'"{option_match.group("label")}" = '
+                f"{new_value}"
+            )
+            self.dirty = True
+            return
+
+        if not self.allow_missing:
+            logging.warning("PyLoad path not found: %s", path)
+
+    def serialize(self):
+        return "\n".join(self.lines) + "\n"
+
+
 class ConfigManager:
     def __init__(self, file_path, format_override=None, allow_missing=False):
         self.file_path = file_path
@@ -538,6 +605,8 @@ class ConfigManager:
     def _detect_format(self):
         if os.path.basename(self.file_path) == "qBittorrent.conf":
             return "ini"
+        if os.path.basename(self.file_path) == "pyload.cfg":
+            return "pyload"
 
         ext = os.path.splitext(self.file_path)[1].lower()
         if ext == ".xml":
@@ -562,6 +631,8 @@ class ConfigManager:
             self.driver = INIDriver(self.content)
         elif self.format == "kv":
             self.driver = KVDriver(self.content)
+        elif self.format == "pyload":
+            self.driver = PyLoadDriver(self.content)
 
         if self.driver:
             self.driver.allow_missing = self.allow_missing
@@ -868,6 +939,63 @@ WebUI\\Port=5000
         finally:
             os.unlink(path)
 
+    def test_pyload_cfg():
+        content = """version: 2
+
+download - "Download":
+\tint max_downloads : "Maximum parallel downloads" = 3
+
+general - "General":
+\tdebug;trace;stack debug_level : "Debug level" = trace
+\tbool folder_per_package : "Create folder for each package" = False
+\tfolder storage_folder : "Download folder" = /downloads
+
+webui - "Web Interface":
+\tbool autologin : "Skip login if single user" = False
+\tint session_lifetime : "Session lifetime (minutes)" = 44640
+"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, "pyload.cfg")
+            with open(path, "w") as f:
+                f.write(content)
+
+            m = ConfigManager(path)
+            assert m.format == "pyload"
+            m.load()
+            m.driver.set("download.max_downloads", "10")
+            m.driver.set("general.storage_folder", "/downloads/PyLoad")
+            m.driver.set("general.debug_level", "debug")
+            m.driver.set("general.folder_per_package", "true")
+            m.driver.set("webui.session_lifetime", "5256000")
+            m.driver.set("webui.autologin", "true")
+            m.save()
+
+            with open(path, "r") as f:
+                res = f.read()
+                assert (
+                    "int max_downloads : "
+                    '"Maximum parallel downloads" = 10' in res
+                )
+                assert (
+                    'folder storage_folder : "Download folder" = '
+                    "/downloads/PyLoad" in res
+                )
+                assert 'debug_level : "Debug level" = debug' in res
+                assert (
+                    'bool folder_per_package : '
+                    '"Create folder for each package" = True' in res
+                )
+                assert (
+                    'bool autologin : '
+                    '"Skip login if single user" = True' in res
+                )
+                assert (
+                    'int session_lifetime : '
+                    '"Session lifetime (minutes)" = 5256000' in res
+                )
+                assert "download.max_downloads=10" not in res
+            logging.info("PyLoad cfg tests passed")
+
     def test_resolver():
         with tempfile.NamedTemporaryFile(delete=False) as f:
             f.write(b"KEY1=VAL1\nexport KEY2 = VAL2")
@@ -963,6 +1091,7 @@ WebUI\\Port=5000
     test_ini()
     test_qbittorrent_conf_detection()
     test_kv()
+    test_pyload_cfg()
     test_resolver()
     test_resolver_multiple_files()
     test_resolver_yaml()

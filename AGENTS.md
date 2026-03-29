@@ -5,6 +5,7 @@ This file serves as the primary memory and persistent fact store for AI agents w
 ## Lessons Learned
 
 - **PyLoad LSIO Startup Ownership**: `lscr.io/linuxserver/pyload-ng` changes `/downloads` ownership in `/etc/s6-overlay/s6-rc.d/init-pyload-config/run` via `lsiown abc:abc /downloads`, not via a safe static `fix-attrs` unit override. On `chill-penguin`, `user = "3000:3000"` also breaks LSIO startup because `/config` setup and later `s6-setuidgid abc` expect a root PID 1. Keep the container in the supported root-run mode with `PUID`/`PGID`, and patch that specific init script stanza by exact content match instead of mounting a `fix-attrs/down` file into `s6-rc.d`.
+- **PyLoad Config Format**: `pyload.cfg` is its own typed config format, not KV/INI. `ghostship-config` must special-case the basename `pyload.cfg` and update existing `section.key` entries in-place (for example `download.max_downloads` and `webui.autologin`) instead of appending `section.key=value` lines at EOF, which PyLoad ignores and logs as parser errors.
 
 - **modDirVersion Alignment**: When using `prev.buildLinux` or similar kernel build functions in Nix, `modDirVersion` must exactly match the version string the kernel expects (often found in the top-level `Makefile`). A mismatch (e.g., `6.18.10-asahi` vs `6.18.10`) will cause a build failure late in the process during module installation.
 
