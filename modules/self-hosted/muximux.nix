@@ -82,6 +82,13 @@
           Grimmory.color=literal:"#49da7e"
           Grimmory.enabled=literal:"true"
           Grimmory.dd=literal:"false"
+          Hermes.name=literal:"Hermes"
+          Hermes.url=literal:"https://hermes.ghostship.io"
+          Hermes.scale=literal:1
+          Hermes.icon=literal:"fa-terminal"
+          Hermes.color=literal:"#06b6d4"
+          Hermes.enabled=literal:"true"
+          Hermes.dd=literal:"false"
           RomM.name=literal:"RomM"
           RomM.url=literal:"https://romm.ghostship.io"
           RomM.scale=literal:1
@@ -117,13 +124,6 @@
           CloakBrowser.color=literal:"#000000"
           CloakBrowser.enabled=literal:"true"
           CloakBrowser.dd=literal:"true"
-          Hermes.name=literal:"Hermes"
-          Hermes.url=literal:"https://hermes.ghostship.io"
-          Hermes.scale=literal:1
-          Hermes.icon=literal:"fa-terminal"
-          Hermes.color=literal:"#06b6d4"
-          Hermes.enabled=literal:"true"
-          Hermes.dd=literal:"true"
           pyLoad.name=literal:"pyLoad"
           pyLoad.url=literal:"https://pyload.ghostship.io"
           pyLoad.scale=literal:1

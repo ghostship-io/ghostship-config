@@ -198,7 +198,7 @@ in
             "[Services].[CloakBrowser].server=literal:chill-penguin"
             "[Services].[CloakBrowser].container=literal:cloakbrowser"
 
-            "[Services].[Hermes].icon=literal:mdi-robot-outline"
+            "[Services].[Hermes].icon=literal:mdi-robot-excited-outline-#06b6d4"
             "[Services].[Hermes].description=literal:Agent Terminal"
             "[Services].[Hermes].server=literal:chill-penguin"
             "[Services].[Hermes].container=literal:hermes"
