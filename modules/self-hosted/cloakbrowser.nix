@@ -48,76 +48,33 @@ let
 
 in
 {
-  virtualisation.oci-containers.containers."cloakbrowser-manager" = {
-    image = "cloakhq/cloakbrowser-manager:latest";
-    ports = [ 
-      "8080:8080"      # Manager UI & API
-      "5100-5102:5100-5102" # CDP ports for profiles (testing)
+  # Standalone Direct Profile for testing
+  virtualisation.oci-containers.containers."cloak-direct" = {
+    image = "cloakhq/cloakbrowser:latest";
+    # Use cloakserve to start CDP server.
+    # --listen=0.0.0.0:9222 ensures it is reachable from outside.
+    # --fingerprint: use a seed for persistence.
+    cmd = [ 
+      "cloakserve", 
+      "--listen=0.0.0.0:9222", 
+      "--fingerprint=direct-test",
+      "--humanize=True"
     ];
-    environment = {
-      # Optional: set an auth token if desired
-      # AUTH_TOKEN = "your-secret-token";
-    };
+    ports = [ "9222:9222" ];
     extraOptions = [
       "--network=ghostship_net"
     ];
     volumes = [
-      "/srv/apps/cloakbrowser-manager/data:/data"
+      "/srv/apps/cloakbrowser-direct:/home/cloak/.config/cloakbrowser"
       "${extensions-json}:/etc/chromium/policies/managed/extensions.json:ro"
       "${ublock-json}:/etc/chromium/policies/managed/ublock-origin.json:ro"
     ];
   };
 
-  # Automatic profile creation after service starts
-  systemd.services."cloakbrowser-init-profiles" = {
-    description = "Initialize CloakBrowser profiles";
-    after = [ "podman-cloakbrowser-manager.service" ];
-    wantedBy = [ "multi-user.target" ];
-    script = ''
-      # Wait for Manager API to be ready
-      until ${pkgs.curl}/bin/curl -s http://localhost:8080/api/status > /dev/null; do
-        sleep 2
-      done
-
-      # Function to create profile if it doesn't exist
-      create_profile_if_missing() {
-        NAME=$1
-        PROXY=$2
-        EXISTS=$(${pkgs.curl}/bin/curl -s http://localhost:8080/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
-        
-        if [ -z "$EXISTS" ]; then
-          echo "Creating profile: $NAME"
-          ${pkgs.curl}/bin/curl -s -X POST http://localhost:8080/api/profiles \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"name\": \"$NAME\",
-              \"proxy\": $PROXY,
-              \"humanize\": true,
-              \"geoip\": true,
-              \"platform\": \"windows\"
-            }"
-        else
-          echo "Profile $NAME already exists with ID: $EXISTS"
-        fi
-      }
-
-      create_profile_if_missing "VPN" "\"http://gluetun:8888\""
-      create_profile_if_missing "Direct" "null"
-    '';
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-  };
-
-  # Open ports
-  networking.firewall.allowedTCPPorts = [ 
-    8080 # Manager UI & CDP Proxy
-    5100 5101 5102 5103 5104 5105 # CDP Ports (testing)
-  ];
+  # Open port 9222
+  networking.firewall.allowedTCPPorts = [ 9222 ];
 
   systemd.tmpfiles.rules = [
-    "d /srv/apps/cloakbrowser-manager 0755 apps apps -"
-    "d /srv/apps/cloakbrowser-manager/data 0755 apps apps -"
+    "d /srv/apps/cloakbrowser-direct 0755 apps apps -"
   ];
 }
