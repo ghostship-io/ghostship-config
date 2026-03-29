@@ -69,11 +69,6 @@
     mode = "0400";
   };
 
-  sops.secrets."litellm-secrets" = {
-    sopsFile = ../../secrets.yaml;
-    mode = "0400";
-  };
-
   sops.secrets."hermes-secrets" = {
     sopsFile = ../../secrets.yaml;
     mode = "0400";

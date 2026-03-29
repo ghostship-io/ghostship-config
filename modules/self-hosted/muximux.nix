@@ -117,13 +117,6 @@
           CloakBrowser.color=literal:"#000000"
           CloakBrowser.enabled=literal:"true"
           CloakBrowser.dd=literal:"true"
-          LiteLLM.name=literal:"LiteLLM"
-          LiteLLM.url=literal:"https://litellm.ghostship.io/ui"
-          LiteLLM.scale=literal:1
-          LiteLLM.icon=literal:"fa-train"
-          LiteLLM.color=literal:"#3b82f6"
-          LiteLLM.enabled=literal:"true"
-          LiteLLM.dd=literal:"true"
           Hermes.name=literal:"Hermes"
           Hermes.url=literal:"https://hermes.ghostship.io"
           Hermes.scale=literal:1

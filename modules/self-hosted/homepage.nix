@@ -198,11 +198,6 @@ in
             "[Services].[CloakBrowser].server=literal:chill-penguin"
             "[Services].[CloakBrowser].container=literal:cloakbrowser"
 
-            "[Services].[LiteLLM].icon=literal:sh-openai"
-            "[Services].[LiteLLM].description=literal:LLM Gateway"
-            "[Services].[LiteLLM].server=literal:chill-penguin"
-            "[Services].[LiteLLM].container=literal:litellm"
-
             "[Services].[Hermes].icon=literal:mdi-robot-outline"
             "[Services].[Hermes].description=literal:Agent Terminal"
             "[Services].[Hermes].server=literal:chill-penguin"
@@ -270,11 +265,6 @@ in
             "[Infrastructure].[SearXNG Cache].description=literal:Search Cache"
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
-            
-            "[Infrastructure].[LiteLLM DB].icon=literal:postgresql.png"
-            "[Infrastructure].[LiteLLM DB].description=literal:LiteLLM Database"
-            "[Infrastructure].[LiteLLM DB].server=literal:chill-penguin"
-            "[Infrastructure].[LiteLLM DB].container=literal:litellm-db"
             
             "[Infrastructure].[RomM DB].icon=literal:mariadb.png"
             "[Infrastructure].[RomM DB].description=literal:RomM Database"
