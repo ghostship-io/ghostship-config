@@ -9,6 +9,8 @@ let
     ExtensionInstallForcelist = [
       "${ublock-id};https://clients2.google.com/service/update2/crx"
     ];
+    HomepageLocation = "https://nixos.org";
+    ShowHomeButton = true;
   };
 
   # uBlock Origin Managed Storage (Configuration)
