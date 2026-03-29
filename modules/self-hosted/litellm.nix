@@ -7,7 +7,7 @@
       "--network=ghostship_net"
     ];
     environment = {
-      LITELLM_LOG = "INFO";
+      LITELLM_LOG = "DEBUG";
       STORE_MODEL_IN_DB = "True";
       USE_PRISMA_MIGRATE = "True";
       # Production best practices
