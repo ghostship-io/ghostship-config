@@ -255,6 +255,11 @@ in
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
             
+            "[Infrastructure].[LiteLLM DB].icon=literal:postgresql.png"
+            "[Infrastructure].[LiteLLM DB].description=literal:LiteLLM Database"
+            "[Infrastructure].[LiteLLM DB].server=literal:chill-penguin"
+            "[Infrastructure].[LiteLLM DB].container=literal:litellm-db"
+            
             "[Infrastructure].[RomM DB].icon=literal:mariadb.png"
             "[Infrastructure].[RomM DB].description=literal:RomM Database"
             "[Infrastructure].[RomM DB].server=literal:chill-penguin"
