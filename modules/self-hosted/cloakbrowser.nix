@@ -48,34 +48,16 @@ let
 
 in
 {
-  # Standalone Direct Profile for testing (Directly accessible via 9222)
-  virtualisation.oci-containers.containers."cloak-direct" = {
-    image = "cloakhq/cloakbrowser:latest";
-    cmd = [ 
-      "cloakserve", 
-      "--listen=0.0.0.0:9222", 
-      "--fingerprint=direct-test",
-      "--humanize=True"
-    ];
-    ports = [ "9222:9222" ];
-    extraOptions = [ "--network=ghostship_net" ];
-    volumes = [
-      "/srv/apps/cloakbrowser-direct:/home/cloak/.config/cloakbrowser"
-      "${extensions-json}:/etc/chromium/policies/managed/extensions.json:ro"
-      "${ublock-json}:/etc/chromium/policies/managed/ublock-origin.json:ro"
-    ];
-  };
-
-  # Manager for VPN and multi-profile management
-  virtualisation.oci-containers.containers."cloakbrowser-manager" = {
+  # CloakBrowser Manager (renamed to cloakbrowser)
+  virtualisation.oci-containers.containers."cloakbrowser" = {
     image = "cloakhq/cloakbrowser-manager:latest";
     ports = [ 
       "8080:8080"
-      "5100-5102:5100-5102"
+      "5100-5102:5100-5102" # CDP ports for profiles
     ];
     extraOptions = [ "--network=ghostship_net" ];
     volumes = [
-      "/srv/apps/cloakbrowser-manager/data:/data"
+      "/srv/apps/cloakbrowser/data:/data"
       "${extensions-json}:/etc/chromium/policies/managed/extensions.json:ro"
       "${ublock-json}:/etc/chromium/policies/managed/ublock-origin.json:ro"
     ];
@@ -84,7 +66,7 @@ in
   # Automatic profile creation for Manager
   systemd.services."cloakbrowser-init-profiles" = {
     description = "Initialize CloakBrowser profiles";
-    after = [ "podman-cloakbrowser-manager.service" ];
+    after = [ "podman-cloakbrowser.service" ];
     wantedBy = [ "multi-user.target" ];
     script = ''
       until ${pkgs.curl}/bin/curl -s http://localhost:8080/api/status > /dev/null; do sleep 2; done
@@ -102,12 +84,11 @@ in
     serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
   };
 
-  # Open ports
-  networking.firewall.allowedTCPPorts = [ 8080 9222 5100 5101 5102 ];
+  # Open ports (remove 9222 as standalone is gone)
+  networking.firewall.allowedTCPPorts = [ 8080 5100 5101 5102 ];
 
   systemd.tmpfiles.rules = [
-    "d /srv/apps/cloakbrowser-direct 0755 apps apps -"
-    "d /srv/apps/cloakbrowser-manager 0755 apps apps -"
-    "d /srv/apps/cloakbrowser-manager/data 0755 apps apps -"
+    "d /srv/apps/cloakbrowser 0755 apps apps -"
+    "d /srv/apps/cloakbrowser/data 0755 apps apps -"
   ];
 }

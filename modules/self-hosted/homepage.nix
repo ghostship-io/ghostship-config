@@ -238,7 +238,7 @@ in
             "[Infrastructure].[CloakBrowser].icon=literal:cloak.png"
             "[Infrastructure].[CloakBrowser].description=literal:Stealth Browser Manager"
             "[Infrastructure].[CloakBrowser].server=literal:chill-penguin"
-            "[Infrastructure].[CloakBrowser].container=literal:cloakbrowser-manager"
+            "[Infrastructure].[CloakBrowser].container=literal:cloakbrowser"
             
             "[Infrastructure].[SearXNG Cache].icon=literal:redis.png"
             "[Infrastructure].[SearXNG Cache].description=literal:Search Cache"
