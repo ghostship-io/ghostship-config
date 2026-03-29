@@ -54,16 +54,16 @@ in
     after = [ "podman-cloakbrowser.service" ];
     wantedBy = [ "multi-user.target" ];
     script = ''
-      # Wait for Manager directly on 8081
-      until ${pkgs.curl}/bin/curl -s http://localhost:8081/api/status > /dev/null; do
+      # Wait for Manager directly on 8080
+      until ${pkgs.curl}/bin/curl -s http://localhost:8080/api/status > /dev/null; do
         sleep 2
       done
       
       create_profile() {
         NAME=$1; PROXY=$2;
-        EXISTS=$(${pkgs.curl}/bin/curl -s http://localhost:8081/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
+        EXISTS=$(${pkgs.curl}/bin/curl -s http://localhost:8080/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
         if [ -z "$EXISTS" ]; then
-          ${pkgs.curl}/bin/curl -s -X POST http://localhost:8081/api/profiles -H "Content-Type: application/json" \
+          ${pkgs.curl}/bin/curl -s -X POST http://localhost:8080/api/profiles -H "Content-Type: application/json" \
             -d "{\"name\": \"$NAME\", \"proxy\": $PROXY, \"humanize\": true, \"geoip\": true, \"platform\": \"windows\"}"
         fi
       }
