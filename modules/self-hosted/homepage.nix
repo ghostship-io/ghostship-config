@@ -193,15 +193,15 @@ in
             "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000"
             
             # Services group
-            "[Services].[CloakBrowser].icon=literal:sh-google-chrome"
-            "[Services].[CloakBrowser].description=literal:Stealth Browser Manager"
-            "[Services].[CloakBrowser].server=literal:chill-penguin"
-            "[Services].[CloakBrowser].container=literal:cloakbrowser"
-
             "[Services].[Hermes].icon=literal:mdi-robot-excited-outline-#06b6d4"
             "[Services].[Hermes].description=literal:Agent Terminal"
             "[Services].[Hermes].server=literal:chill-penguin"
             "[Services].[Hermes].container=literal:hermes"
+
+            "[Services].[CloakBrowser].icon=literal:sh-google-chrome"
+            "[Services].[CloakBrowser].description=literal:Stealth Browser Manager"
+            "[Services].[CloakBrowser].server=literal:chill-penguin"
+            "[Services].[CloakBrowser].container=literal:cloakbrowser"
 
             "[Services].[pyLoad].icon=literal:sh-pyload"
             "[Services].[pyLoad].description=literal:Download Manager"
