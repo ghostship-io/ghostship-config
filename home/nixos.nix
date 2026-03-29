@@ -52,7 +52,7 @@
           sleep 3
         fi
         # Connect directly to CDP port
-        exec ${pkgs.nodejs}/bin/npx -y agent-browser --connect "http://chill-penguin:${port}" "$@"
+        exec ${pkgs.nodejs}/bin/npx -y agent-browser connect "http://chill-penguin:${port}" "$@"
       '';
     in pkgs.symlinkJoin {
       name = "cloak-wrappers";
