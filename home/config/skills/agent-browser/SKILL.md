@@ -1,84 +1,77 @@
 ---
 name: agent-browser
-description: Expert in browser automation using the agent-browser CLI. Use when you need to navigate, interact with, or extract data from web pages.
+description: Use when you need to perform headless browser automation, including navigating pages, interacting with elements, bypassing CAPTCHAs, or systematically crawling documentation.
 ---
 
 # agent-browser
 
-You are an expert in using `agent-browser`, a fast native CLI for headless browser automation. This tool is designed for AI agents to interact with the web efficiently.
+Expert guidance for using `agent-browser`, a fast native CLI for headless browser automation.
 
-> **Note**: For a complete and up-to-date list of all supported commands, subcommands, and options, run `agent-browser` without any arguments.
+## Core Interaction Patterns
 
-## Core Workflow
+### 1. The "@ref" Pattern (Recommended)
+Always prefer using the generated refs from a snapshot. They are the most robust and context-efficient way to interact.
+- **Get Refs**: `agent-browser snapshot -i`
+- **Click**: `agent-browser click @e1`
+- **Fill**: `agent-browser fill @e2 "my search term"`
+- **Focus**: `agent-browser focus @e3`
 
-1.  **Navigate**: `agent-browser open <url>`
-2.  **Understand**: `agent-browser snapshot -i` (Get interactive elements with refs like `@e1`)
-3.  **Interact**: `agent-browser click @e1`, `agent-browser fill @e2 "text"`, etc.
-4.  **Verify**: Re-snapshot or `agent-browser screenshot` to confirm state.
+### 2. Semantic Selection
+When you need to find an element without a ref or across page refreshes:
+- **By Role and Name**: `agent-browser find role button click --name "Submit"`
+- **By Text Content**: `agent-browser find text "Accept All" click`
+- **By Placeholder**: `agent-browser find placeholder "Search documentation..." fill "nixos-rebuild"`
+- **By Label**: `agent-browser find label "Username" type "myuser"`
 
-## Advanced Usage Patterns
+### 3. Verification & Vision
+Always verify the state of the page after an interaction:
+- **Annotated Screenshot**: `agent-browser screenshot --annotate` (Labels elements with their @refs visually)
+- **Get State**: `agent-browser get url`, `agent-browser get title`
+- **Check Visibility**: `agent-browser is visible "@e1"`
 
-### Efficient Discovery
-Reduce context usage by filtering snapshots:
-- `agent-browser snapshot -i`: Interactive elements only.
-- `agent-browser snapshot -c`: Compact tree (no empty structural elements).
-- `agent-browser snapshot -d <n>`: Limit tree depth.
-- `agent-browser snapshot -s "<selector>"`: Scope to a specific CSS selector.
+## Bypassing Protections (Cloudflare, reCAPTCHA)
 
-### Semantic Locators
-Robust element selection when refs are insufficient:
-- `agent-browser find role <role> <action> --name "<name>"` (e.g., `role button click --name "Submit"`)
-- `agent-browser find label "<text>" <action>`
-- `agent-browser find text "<text>" <action>`
-- `agent-browser find placeholder "<text>" <action>`
+To bypass modern bot detection, use the following techniques:
 
-### Waiting and Reliability
-- `agent-browser wait --load networkidle`: Wait for network activity to settle.
-- `agent-browser wait <selector> --state <attached|detached|visible|hidden>`: Precise element state waiting.
-- `agent-browser wait --text "<text>"`: Wait for specific text to appear.
+### 1. Anti-Detection Flags
+Always start with flags that hide automation markers. You must close the daemon before changing args.
+`agent-browser close --all && agent-browser --args "--no-sandbox,--disable-blink-features=AutomationControlled" open <url>`
 
-### Visual and Debugging Tools
-- `agent-browser screenshot --annotate`: Overlays ref labels (@e1, @e2) on the image. Excellent for visual reasoning.
-- `agent-browser console [--clear]`: View browser console logs.
-- `agent-browser errors [--clear]`: View page errors.
-- `agent-browser inspect`: Opens Chrome DevTools for the active page (useful in headed mode).
+### 2. Profile Persistence
+Cloudflare often trusts established sessions. Use a persistent profile to save cookies and local storage:
+`agent-browser --profile ~/.browser-sessions/docs open <url>`
 
-## Comprehensive Command Reference
+### 3. Patient Waiting
+Many "managed challenges" (Cloudflare Turnstile) auto-solve if the agent remains still for 5-10 seconds.
+`agent-browser open <url> && agent-browser wait 10000 && agent-browser snapshot -i`
 
-### Browser and Sessions
-- `agent-browser set viewport <w> <h>`: Change window size.
-- `agent-browser session list`: List all active sessions.
-- `agent-browser close --all`: Close every active session and the daemon.
+### 4. Targeting Iframes
+CAPTCHAs often live in iframes. If `@ref` is missing in `snapshot -i`, use the `find` command to target the frame:
+`agent-browser find role Iframe click --name "reCAPTCHA"`
+`agent-browser find role Iframe click --name "Widget containing a Cloudflare security challenge"`
 
-### Storage and Network
-- `agent-browser cookies [get|set|clear]`: Manage session cookies.
-- `agent-browser storage <local|session>`: Manage web storage.
-- `agent-browser network requests`: View recent network requests.
-- `agent-browser network route <url> --abort`: Block specific network requests.
+## Systematic Documentation Crawling
 
-### Tabs and Navigation
-- `agent-browser tab [new|list|close|<n>]`: Manage multiple tabs.
-- `agent-browser back` / `forward` / `reload`: Standard history control.
+When an agent needs to "read the manual," follow this systematic pattern:
 
-### Authentication Vault
-- `agent-browser auth save <name> --url <url> --username <user> --password <pass>`: Securely store credentials.
-- `agent-browser auth login <name>`: Automatically fill login forms and authenticate.
+### 1. Map the Structure
+Identify the navigation or sidebar container:
+`agent-browser open <root_url> && agent-browser snapshot -s "nav, .sidebar, .toc"`
 
-### Observability Dashboard
-- `agent-browser dashboard start`: Launch the live observability dashboard (default: port 4848).
-- `agent-browser dashboard stop`: Stop the dashboard.
+### 2. Extract Links
+Collect refs for all documentation links in that scope:
+`agent-browser snapshot -i -s ".sidebar"`
 
-## Tips for AI Efficiency
+### 3. Sequential Processing
+Visit links one by one. Do NOT open multiple tabs unless necessary, to conserve memory/context.
+`agent-browser click @e5 && agent-browser wait --load networkidle && agent-browser snapshot -c`
 
-1.  **Prefer Refs**: Always use `@e1` style refs from `snapshot`. They are deterministic and faster than re-querying the DOM.
-2.  **Chain Actions**: Combine related steps using `&&`:
-    `agent-browser open google.com && agent-browser wait --load networkidle && agent-browser snapshot -i`
-3.  **Handle Popups**: Check for modals, cookie banners, or shadow DOM in a new `snapshot` if interactions fail.
-4.  **Batch Mode**: For complex sequences, use `agent-browser batch` to pipe a JSON array of commands.
-5.  **Headed Mode**: Use `--headed` if you need to visually debug an interaction.
+### 4. State Management
+Maintain a list of "visited" URLs in your internal memory to avoid infinite loops or re-reading the same page.
 
 ## Troubleshooting
 
-- **ERR_NAME_NOT_RESOLVED**: Verify connectivity. If in WSL, try `ping google.com`.
-- **Action timed out**: The default timeout is 25s. Increase via `AGENT_BROWSER_DEFAULT_TIMEOUT` if necessary.
-- **Ref expired**: If the page navigates significantly, take a new `snapshot` to get fresh refs.
+- **"Daemon already running"**: Use `agent-browser close --all` before changing `--args` or `--engine`.
+- **Element Not Found**: Ensure the page has fully loaded. Use `agent-browser wait --load networkidle` or `agent-browser wait 5000`.
+- **Ref Expired**: Navigation or DOM updates invalidate refs. Take a fresh `snapshot` after any action that changes the page.
+- **Shadow DOM**: If an element is visible but not in the snapshot, try a more specific selector with `snapshot -s`.
