@@ -138,6 +138,13 @@
       end
     '';
     functions = {
+      agent-root = {
+        description = "Launch tmux with root access for agent";
+        body = ''
+          tmux new-session -d -n "agent-root" 'sudo -i; tmux kill-session'
+          tmux attach
+        '';
+      };
       cd = {
         description = "Change directory and auto-ls";
         body = ''
