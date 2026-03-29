@@ -1,7 +1,8 @@
-{ config, pkgs, ... }:
+{ config, ... }:
 
 let
   litellm-secrets = config.sops.secrets."litellm-secrets".path;
+  litellm-db-runtime-env = "/run/secrets/litellm-db-runtime.env";
 in
 
 {
@@ -18,10 +19,10 @@ in
     environment = {
       POSTGRES_USER = "litellm";
       POSTGRES_DB = "litellm";
-      POSTGRES_PASSWORD = "env:LITELLM_DB_PASS";
     };
     environmentFiles = [
       litellm-secrets
+      litellm-db-runtime-env
     ];
     volumes = [
       "/srv/apps/litellm-db:/var/lib/postgresql/data"
@@ -31,4 +32,36 @@ in
   systemd.tmpfiles.rules = [
     "d /srv/apps/litellm-db 0755 apps apps -"
   ];
+
+  systemd.services.podman-litellm-db.preStart = ''
+    if [ ! -f "${litellm-secrets}" ]; then
+      echo "Waiting for LiteLLM secrets at ${litellm-secrets}..."
+      for _ in $(seq 1 30); do
+        if [ -f "${litellm-secrets}" ]; then
+          break
+        fi
+        sleep 1
+      done
+    fi
+
+    if [ ! -f "${litellm-secrets}" ]; then
+      echo "Missing LiteLLM secrets file at ${litellm-secrets}" >&2
+      exit 1
+    fi
+
+    set -a
+    . "${litellm-secrets}"
+    set +a
+
+    if [ -z "''${LITELLM_DB_PASS:-}" ]; then
+      echo "Missing LITELLM_DB_PASS in ${litellm-secrets}" >&2
+      exit 1
+    fi
+
+    mkdir -p /run/secrets
+    cat > ${litellm-db-runtime-env} <<EOF
+POSTGRES_PASSWORD=$LITELLM_DB_PASS
+EOF
+    chmod 600 ${litellm-db-runtime-env}
+  '';
 }

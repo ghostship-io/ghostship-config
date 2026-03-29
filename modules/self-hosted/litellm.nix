@@ -1,7 +1,8 @@
-{ config, pkgs, ... }:
+{ config, ... }:
 
 let
   litellm-secrets = config.sops.secrets."litellm-secrets".path;
+  litellm-runtime-env = "/run/secrets/litellm-runtime.env";
 in
 
 {
@@ -33,6 +34,7 @@ in
     ];
     environmentFiles = [
       litellm-secrets
+      litellm-runtime-env
     ];
   };
 
@@ -51,6 +53,26 @@ in
         sleep 1
       done
     fi
+
+    if [ ! -f "${litellm-secrets}" ]; then
+      echo "Missing LiteLLM secrets file at ${litellm-secrets}" >&2
+      exit 1
+    fi
+
+    set -a
+    . "${litellm-secrets}"
+    set +a
+
+    if [ -z "''${LITELLM_DATABASE_URL:-}" ]; then
+      echo "Missing LITELLM_DATABASE_URL in ${litellm-secrets}" >&2
+      exit 1
+    fi
+
+    mkdir -p /run/secrets
+    cat > ${litellm-runtime-env} <<EOF
+DATABASE_URL=$LITELLM_DATABASE_URL
+EOF
+    chmod 600 ${litellm-runtime-env}
   '';
 
   systemd.tmpfiles.rules = [
