@@ -2,12 +2,14 @@
 
 let
   hermes-secrets = config.sops.secrets."hermes-secrets".path;
+  romm-secrets = config.sops.secrets."romm-secrets".path;
   sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
   radarr-secrets = config.sops.secrets."radarr-secrets".path;
   prowlarr-secrets = config.sops.secrets."prowlarr-secrets".path;
   plex-secrets = config.sops.secrets."plex-secrets".path;
   tautulli-secrets = config.sops.secrets."tautulli-secrets".path;
   bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
+  grimmory-secrets = config.sops.secrets."grimmory-secrets".path;
 in
 {
   virtualisation.oci-containers.containers."hermes" = {
@@ -43,16 +45,18 @@ in
     };
     environmentFiles = [
       hermes-secrets
+      romm-secrets
       sonarr-secrets
       radarr-secrets
       prowlarr-secrets
       plex-secrets
       tautulli-secrets
       bazarr-secrets
+      grimmory-secrets
     ];
     volumes = [
       "/srv/apps/hermes/home:/home/hermes/.hermes:rw"
-      "/srv/apps/hermes/nix:/nix:rw"
+      "hermes-nix:/nix:rw"
     ];
   };
 
@@ -76,6 +80,5 @@ in
   systemd.tmpfiles.rules = [
     "d /srv/apps/hermes 0755 apps apps -"
     "d /srv/apps/hermes/home 0755 apps apps -"
-    "d /srv/apps/hermes/nix 0755 apps apps -"
   ];
 }
