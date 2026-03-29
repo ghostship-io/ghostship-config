@@ -31,6 +31,7 @@ To create an identical state across personal workstations, servers, and embedded
 - **notify-send Bridge**: Forwards Linux notifications to the Windows Action Center with native branding.
 - **wsl-open**: Seamlessly open Linux files/directories in Windows applications.
 - **win-home Symlink**: Direct access to your Windows user profile at `~/win-home`.
+- **Z Mount (`/mnt/z`)**: WSL2 hosts mount the shared Synology export directly over NFS with systemd automounting for better performance and graceful off-network behavior.
 - **WSLENV Integration**: Shared environment variables between host and guest.
 
 ### Security

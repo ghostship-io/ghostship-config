@@ -1,7 +1,5 @@
 { ... }:
 
 {
-  sops.secrets = {
-    smb-secrets = { };
-  };
+  sops.secrets = { };
 }

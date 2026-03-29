@@ -23,7 +23,7 @@ This skill provides specialized knowledge for operating within a WSL2 environmen
 ### 2. Filesystem & Mounts
 - **Windows Drives**: Automatically mounted under `/mnt/`. (e.g., C: drive is `/mnt/c/`).
 - **User Profile**: The Windows user home directory is available via the `~/win-home` symlink (e.g., `/home/nixos/win-home`) or directly at `/mnt/c/Users/<WindowsUser>/`.
-- **Z: Drive (Network/SMB)**: Managed via the `mount-z` script. It is mounted at `/mnt/z/`. Always check if it's already mounted before attempting access.
+- **Z Mount (`/mnt/z`)**: Managed as a direct NFS mount on WSL hosts. It is mounted lazily via systemd automount, so always check whether it is currently mounted before assuming the share is available.
 - **WSLENV**: Use the `WSLENV` environment variable to share and translate paths between environments (e.g., `USERPROFILE/p`).
 
 ### 3. Privileged Operations
