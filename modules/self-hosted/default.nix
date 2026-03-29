@@ -28,6 +28,7 @@
     ./searxng.nix
     ./searxng-valkey.nix
     ./litellm.nix
+    ./pyload.nix
     ./romm-db.nix
     ./romm.nix
     ./grimmory-db.nix

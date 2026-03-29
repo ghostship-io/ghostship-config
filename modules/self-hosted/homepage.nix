@@ -192,6 +192,11 @@ in
             "[Services].[LiteLLM].server=literal:chill-penguin"
             "[Services].[LiteLLM].container=literal:litellm"
 
+            "[Services].[pyLoad].icon=literal:sh-pyload"
+            "[Services].[pyLoad].description=literal:Download Manager"
+            "[Services].[pyLoad].server=literal:chill-penguin"
+            "[Services].[pyLoad].container=literal:pyload"
+
             "[Services].[SearXNG].icon=literal:sh-searxng"
             "[Services].[SearXNG].description=literal:Metasearch Engine"
             "[Services].[SearXNG].server=literal:chill-penguin"

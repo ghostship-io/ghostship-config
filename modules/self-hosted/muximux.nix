@@ -124,6 +124,13 @@
           LiteLLM.color=literal:"#3b82f6"
           LiteLLM.enabled=literal:"true"
           LiteLLM.dd=literal:"true"
+          pyLoad.name=literal:"pyLoad"
+          pyLoad.url=literal:"https://pyload.ghostship.io"
+          pyLoad.scale=literal:1
+          pyLoad.icon=literal:"fa-download"
+          pyLoad.color=literal:"#ffcc00"
+          pyLoad.enabled=literal:"true"
+          pyLoad.dd=literal:"true"
           SearXNG.name=literal:"SearXNG"
           SearXNG.url=literal:"https://searxng.ghostship.io"
           SearXNG.scale=literal:1
