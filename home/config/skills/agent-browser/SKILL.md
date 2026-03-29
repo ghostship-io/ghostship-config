@@ -1,6 +1,6 @@
 ---
 name: agent-browser
-description: Use when you need to perform headless browser automation, including navigating pages, interacting with elements, bypassing CAPTCHAs, or systematically crawling documentation.
+description: Use when you need to perform headless browser automation, including navigating pages, interacting with elements, or systematically crawling documentation.
 ---
 
 # agent-browser
@@ -37,27 +37,6 @@ When multiple agents are working in the same environment, use isolated sessions 
 - **Close Session**: `agent-browser --session <name> close`
 
 **CRITICAL**: Every command in a multi-agent workflow MUST include the `--session <name>` flag to target the correct browser instance.
-
-## Bypassing Protections (Cloudflare, reCAPTCHA)
-
-To bypass modern bot detection, use the following techniques:
-
-### 1. Anti-Detection Flags
-Always start with flags that hide automation markers. You must close the daemon before changing args.
-`agent-browser close --all && agent-browser --args "--no-sandbox,--disable-blink-features=AutomationControlled" open <url>`
-
-### 2. Profile Persistence
-Cloudflare often trusts established sessions. Use a persistent profile to save cookies and local storage:
-`agent-browser --profile ~/.browser-sessions/docs open <url>`
-
-### 3. Patient Waiting
-Many "managed challenges" (Cloudflare Turnstile) auto-solve if the agent remains still for 5-10 seconds.
-`agent-browser open <url> && agent-browser wait 10000 && agent-browser snapshot -i`
-
-### 4. Targeting Iframes
-CAPTCHAs often live in iframes. If `@ref` is missing in `snapshot -i`, use the `find` command to target the frame:
-`agent-browser find role Iframe click --name "reCAPTCHA"`
-`agent-browser find role Iframe click --name "Widget containing a Cloudflare security challenge"`
 
 ## Systematic Documentation Crawling
 
