@@ -8,13 +8,31 @@
     ];
     environment = {
       LITELLM_LOG = "DEBUG";
+      STORE_MODEL_IN_DB = "True";
+      USE_PRISMA_MIGRATE = "True";
+      # Load from environmentFiles
+      LITELLM_MASTER_KEY = "os.environ/LITELLM_MASTER_KEY";
+      DATABASE_URL = "os.environ/DATABASE_URL";
+      LITELLM_SALT_KEY = "os.environ/LITELLM_SALT_KEY";
     };
+    cmd = [
+      "--config" "/app/config/config.yaml"
+      "--port" "4000"
+    ];
     environmentFiles = [
       config.sops.secrets."litellm-secrets".path
     ];
     volumes = [
       "/srv/apps/litellm:/app/config"
     ];
+  };
+
+  system.activationScripts.litellm-config = {
+    text = ''
+      mkdir -p /srv/apps/litellm
+      cp ${./litellm-config.yaml} /srv/apps/litellm/config.yaml
+      chown -R apps:apps /srv/apps/litellm
+    '';
   };
 
   systemd.tmpfiles.rules = [
