@@ -13,16 +13,19 @@ let
   '';
 
   # Runtime entrypoint to setup proxy AND run original entrypoint
-  patch-script = pkgs.writeShellScript "cloakbrowser-patch" ''
-    # Install mitmproxy if not present
+  # We use writeText so we can control the exact #! interpreter path inside the container
+  patch-script = pkgs.writeText "cloakbrowser-patch.sh" ''
+    #!/bin/bash
+    set -e
+
+    # Install mitmproxy, curl, and jq if not present
     if ! command -v mitmdump &> /dev/null; then
-      apt-get update && apt-get install -y mitmproxy
+      apt-get update && apt-get install -y mitmproxy curl jq
     fi
 
     # Start mitmproxy in background to strip Origin header
     # Listen on 8080 (external), forward to 8081 (manager)
-    # Using --web-open-browser false to prevent issues
-    mitmdump -s ${strip-origin-py} --mode reverse:http://localhost:8081 --listen-port 8080 --set termlog_level=error &
+    mitmdump -s /strip-origin.py --mode reverse:http://127.0.0.1:8081 --listen-port 8080 --set termlog_level=error &
 
     # The original entrypoint starts uvicorn on 8080.
     # We must patch the original entrypoint script to use 8081 instead.
@@ -38,10 +41,15 @@ in
   virtualisation.oci-containers.containers."cloakbrowser" = {
     image = "cloakhq/cloakbrowser-manager:latest";
     extraOptions = [ "--network=ghostship_net" ];
-    # Use our patch script as the entrypoint
-    entrypoint = "${patch-script}";
+    
+    # We execute bash directly to run our mounted script
+    entrypoint = "/bin/bash";
+    cmd = [ "/cloakbrowser-patch.sh" ];
+
     volumes = [
       "/srv/apps/cloakbrowser/data:/data"
+      "${patch-script}:/cloakbrowser-patch.sh:ro"
+      "${strip-origin-py}:/strip-origin.py:ro"
     ];
   };
 
