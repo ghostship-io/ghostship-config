@@ -182,12 +182,12 @@ in
             "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000"
             
             # Services group
-            "[Services].[CloakBrowser].icon=literal:mdi-google-chrome"
+            "[Services].[CloakBrowser].icon=literal:sh-google-chrome"
             "[Services].[CloakBrowser].description=literal:Stealth Browser Manager"
             "[Services].[CloakBrowser].server=literal:chill-penguin"
             "[Services].[CloakBrowser].container=literal:cloakbrowser"
 
-            "[Services].[LiteLLM].icon=literal:mdi-train"
+            "[Services].[LiteLLM].icon=literal:sh-openai"
             "[Services].[LiteLLM].description=literal:LLM Gateway"
             "[Services].[LiteLLM].server=literal:chill-penguin"
             "[Services].[LiteLLM].container=literal:litellm"
