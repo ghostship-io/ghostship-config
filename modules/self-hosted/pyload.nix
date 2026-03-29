@@ -27,6 +27,10 @@
   systemd.services.podman-pyload = {
     after = [ "mnt-share.mount" ];
     wants = [ "mnt-share.mount" ];
+    serviceConfig.PreStart = [
+      "${pkgs.coreutils}/bin/chown" "-R" "3000:3000" "/srv/apps/pyload"
+      "${pkgs.coreutils}/bin/chown" "-R" "3000:3000" "/mnt/share/Downloads/PyLoad"
+    ];
   };
 
   systemd.tmpfiles.rules = [
