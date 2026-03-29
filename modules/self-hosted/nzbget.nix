@@ -78,6 +78,7 @@
           PostStrategy=literal:aggressive
           DetailTarget=literal:none
           ParBuffer=literal:128
+          DirectRename=literal:yes
           DirectUnpack=literal:yes
           FakeDetector:BannedExtensions=literal:.exe,.dll,.msi,.bat,.cmd,.ps1,.vbs,.vbe,.js,.jse,.scr,.pif,.application,.gadget,.jar,.com
           PasswordDetector:PassAction=literal:markbad
