@@ -1,42 +1,57 @@
 { config, pkgs, ... }:
 
+let
+  litellm-secrets = config.sops.secrets."litellm-secrets".path;
+in
+
 {
   virtualisation.oci-containers.containers."litellm" = {
     image = "ghcr.io/berriai/litellm:main-latest";
     extraOptions = [
       "--network=ghostship_net"
+      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:4000/health || exit 1"
+      "--health-interval=30s"
+      "--health-timeout=10s"
+      "--health-retries=5"
+      "--health-start-period=1m"
+      "--health-on-failure=kill"
     ];
     environment = {
-      LITELLM_LOG = "DEBUG";
+      LITELLM_LOG = "ERROR";
+      LITELLM_MODE = "PRODUCTION";
       STORE_MODEL_IN_DB = "True";
       USE_PRISMA_MIGRATE = "True";
-      # Production best practices
       PROXY_BATCH_WRITE_AT = "60";
       DATABASE_CONNECTION_POOL_LIMIT = "10";
       ALLOW_REQUESTS_ON_DB_UNAVAILABLE = "True";
       DISABLE_LOAD_DOTENV = "True";
+      LITELLM_MIGRATION_DIR = "/app/migrations";
     };
     cmd = [
-      "--config" "/app/config/config.yaml"
       "--port" "4000"
+      "--num_workers" "1"
     ];
     environmentFiles = [
-      config.sops.secrets."litellm-secrets".path
-    ];
-    volumes = [
-      "/srv/apps/litellm:/app/config"
+      litellm-secrets
     ];
   };
 
-  system.activationScripts.litellm-config = {
-    text = ''
-      mkdir -p /srv/apps/litellm
-      if [ ! -f /srv/apps/litellm/config.yaml ]; then
-        echo "model_list: []" > /srv/apps/litellm/config.yaml
-      fi
-      chown -R apps:apps /srv/apps/litellm
-    '';
+  systemd.services.podman-litellm = {
+    after = [ "podman-litellm-db.service" ];
+    wants = [ "podman-litellm-db.service" ];
   };
+
+  systemd.services.podman-litellm.preStart = ''
+    if [ ! -f "${litellm-secrets}" ]; then
+      echo "Waiting for LiteLLM secrets at ${litellm-secrets}..."
+      for _ in $(seq 1 30); do
+        if [ -f "${litellm-secrets}" ]; then
+          break
+        fi
+        sleep 1
+      done
+    fi
+  '';
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/litellm 0755 apps apps -"

@@ -2,7 +2,6 @@
 
 let
   bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
-  plex-secrets = config.sops.secrets."plex-secrets".path;
   sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
   radarr-secrets = config.sops.secrets."radarr-secrets".path;
 in
@@ -52,26 +51,21 @@ in
         cp "$LEGACY_CONFIG_FILE" "$CONFIG_FILE"
       fi
 
-      if [ -f "$CONFIG_FILE" ] && [ -f "${bazarr-secrets}" ] && [ -f "${plex-secrets}" ] && [ -f "${sonarr-secrets}" ] && [ -f "${radarr-secrets}" ]; then
+      if [ -f "$CONFIG_FILE" ] && [ -f "${bazarr-secrets}" ] && [ -f "${sonarr-secrets}" ] && [ -f "${radarr-secrets}" ]; then
         echo "Surgically updating Bazarr config..."
         set -a
         . "${bazarr-secrets}"
-        . "${plex-secrets}"
         . "${sonarr-secrets}"
         . "${radarr-secrets}"
         set +a
 
         bazarr_args=(
           --secrets-file "${bazarr-secrets}"
-          --secrets-file "${plex-secrets}"
           --secrets-file "${sonarr-secrets}"
           --secrets-file "${radarr-secrets}"
           auth.apikey=env:BAZARR_API_KEY
           general.flask_secret_key=env:BAZARR_FLASK_SECRET_KEY
           opensubtitlescom.password=env:BAZARR_OPENSUBTITLES_PASS
-          plex.apikey=env:PLEX_API_KEY
-          plex.encryption_key=env:BAZARR_PLEX_ENCRYPTION_KEY
-          plex.token=env:BAZARR_PLEX_TOKEN
           radarr.apikey=env:RADARR_API_KEY
           sonarr.apikey=env:SONARR_API_KEY
           subdl.api_key=env:BAZARR_SUBDL_API_KEY

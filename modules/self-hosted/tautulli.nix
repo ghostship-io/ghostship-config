@@ -2,6 +2,7 @@
 
 let
   tautulli-secrets = config.sops.secrets."tautulli-secrets".path;
+  plex-secrets = config.sops.secrets."plex-secrets".path;
 in
 {
   virtualisation.oci-containers.containers."tautulli" = {
@@ -40,6 +41,7 @@ in
         
         tautulli_args=(
           --secrets-file "${tautulli-secrets}"
+          --secrets-file "${plex-secrets}"
           General.first_run_complete=literal:1
           General.http_proxy=literal:1
           General.show_advanced_settings=literal:1
@@ -55,7 +57,7 @@ in
           PMS.pms_logs_folder=literal:/logs
           PMS.pms_client_id=literal:"4ac0a66d-79e0-4387-9322-11e6d31c1e48"
           PMS.pms_identifier=literal:9e16052c701c68f20d9955220df9f1a0e8acf57e
-          PMS.pms_token=env:TAUTULLI_PLEX_TOKEN
+          PMS.pms_token=env:PLEX_TOKEN
           General.api_key=env:TAUTULLI_API_KEY
         )
 
