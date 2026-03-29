@@ -175,6 +175,7 @@ in
   virtualisation.oci-containers.containers."cloakbrowser" = {
     image = "cloakhq/cloakbrowser-manager:latest";
     extraOptions = [ "--network=ghostship_net" ];
+    ports = [ "8080:8080" ];
     
     # Run the custom entrypoint script
     entrypoint = "/usr/local/bin/python3";
