@@ -1,9 +1,58 @@
 { config, pkgs, ... }:
 
+let
+  pyloadInitConfigRun =
+    let
+      upstream = ''
+        #!/usr/bin/with-contenv bash
+        # shellcheck shell=bash
+
+        # create our folders
+        mkdir -p \
+            /config/settings \
+            /downloads
+
+        # default config file
+        cp -n \
+            /defaults/pyload.cfg \
+            /config/settings/pyload.cfg
+
+        # permissions
+        lsiown -R abc:abc \
+            /config
+        lsiown abc:abc \
+            /downloads
+      '';
+      originalPermissionsBlock = ''
+        # permissions
+        lsiown -R abc:abc \
+            /config
+        lsiown abc:abc \
+            /downloads
+      '';
+      patchedPermissionsBlock = ''
+        # permissions
+        lsiown -R abc:abc \
+            /config
+
+        echo "**** Skipping ownership changes for /downloads; host permissions are managed outside the container. ****"
+      '';
+      patched = builtins.replaceStrings
+        [ originalPermissionsBlock ]
+        [ patchedPermissionsBlock ]
+        upstream;
+    in
+    assert patched != upstream;
+    pkgs.writeTextFile {
+      name = "pyload-init-pyload-config-run";
+      executable = true;
+      text = patched;
+    };
+in
+
 {
   virtualisation.oci-containers.containers."pyload" = {
     image = "lscr.io/linuxserver/pyload-ng:latest";
-    user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:8000/ || exit 1"
@@ -18,29 +67,21 @@
       PGID = "3000";
       TZ = "UTC";
     };
-     volumes = [
-       "/srv/apps/pyload:/config"
-       "/mnt/share/Downloads:/downloads"
-       "/var/lib/pyload/s6/fix-attrs/down:/etc/s6-overlay/s6-rc.d/fix-attrs/down:ro"
-     ];
+    volumes = [
+      "/srv/apps/pyload:/config"
+      "/mnt/share/Downloads:/downloads"
+      "${pyloadInitConfigRun}:/etc/s6-overlay/s6-rc.d/init-pyload-config/run:ro"
+    ];
   };
 
-   systemd.services.podman-pyload = {
-     after = [ "mnt-share.mount" ];
-     wants = [ "mnt-share.mount" ];
-   };
+  systemd.services.podman-pyload = {
+    after = [ "mnt-share.mount" ];
+    wants = [ "mnt-share.mount" ];
+  };
 
-   systemd.tmpfiles.rules = [
-     "d /srv/apps/pyload 0755 apps apps -"
-     "d /var/lib/pyload/s6/fix-attrs 0755 root root -"
-   ];
-
-   system.activationScripts.pyload-s6-down = {
-     text = ''
-       mkdir -p /var/lib/pyload/s6/fix-attrs
-       : > /var/lib/pyload/s6/fix-attrs/down
-     '';
-   };
+  systemd.tmpfiles.rules = [
+    "d /srv/apps/pyload 0755 apps apps -"
+  ];
 
   system.activationScripts.pyload-config = {
     text = ''
