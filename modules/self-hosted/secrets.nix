@@ -42,10 +42,12 @@
     mode = "0400";
   };
 
+/*
   sops.secrets."nzbget-secrets" = {
     sopsFile = ../../secrets.yaml;
     mode = "0400";
   };
+*/
 
   sops.secrets."bazarr-secrets" = {
     sopsFile = ../../secrets.yaml;
