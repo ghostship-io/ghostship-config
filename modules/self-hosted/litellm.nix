@@ -10,10 +10,6 @@
       LITELLM_LOG = "DEBUG";
       STORE_MODEL_IN_DB = "True";
       USE_PRISMA_MIGRATE = "True";
-      # Load from environmentFiles
-      LITELLM_MASTER_KEY = "os.environ/LITELLM_MASTER_KEY";
-      DATABASE_URL = "os.environ/DATABASE_URL";
-      LITELLM_SALT_KEY = "os.environ/LITELLM_SALT_KEY";
     };
     cmd = [
       "--config" "/app/config/config.yaml"
