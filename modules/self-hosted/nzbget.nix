@@ -59,6 +59,7 @@
           Server1.Port=literal:443
           Server1.Username=env:NZBGET_SERVER1_USER
           Server1.Password=env:NZBGET_SERVER1_PASS
+          Server1.Cipher=literal:TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256
           Server1.Connections=literal:25
           Server2.Active=literal:yes
           Server2.Name=literal:eu.usenetprime.com
@@ -67,6 +68,7 @@
           Server2.Port=literal:443
           Server2.Username=env:NZBGET_SERVER2_USER
           Server2.Password=env:NZBGET_SERVER2_PASS
+          Server2.Cipher=literal:TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256
           Server2.Connections=literal:10
           Server2.Level=literal:99
           Server2.Optional=literal:yes
