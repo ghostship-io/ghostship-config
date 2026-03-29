@@ -51,7 +51,7 @@ let
             db.init_db()
             
             profiles = db.list_profiles()
-            existing_names = {p['name'] for p in profiles}
+            existing_names = {p["name"] for p in profiles}
             
             if "VPN" not in existing_names:
                 print("Creating VPN profile...")
@@ -82,11 +82,11 @@ let
     # --- Origin-Stripping Proxy ---
     async def proxy_handler(request):
         url = f"http://127.0.0.1:{PORT_MANAGER}''${request.rel_url}"
-        # Strip 'Origin' to bypass CSWSH checks in the manager
-        headers = {k: v for k, v in request.headers.items() if k.lower() != 'origin'}
+        # Strip "Origin" to bypass CSWSH checks in the manager
+        headers = {k: v for k, v in request.headers.items() if k.lower() != "origin"}
         
         # WebSocket support for CDP and VNC
-        if request.headers.get('Upgrade', '').lower() == 'websocket':
+        if request.headers.get("Upgrade", "").lower() == "websocket":
             ws_server = web.WebSocketResponse()
             await ws_server.prepare(request)
             
@@ -147,11 +147,11 @@ let
         
         print(f"Starting Origin-stripping proxy on 0.0.0.0:{PORT_PROXY}...")
         proxy_app = web.Application()
-        proxy_app.router.add_route('*', '/{path:.*}', proxy_handler)
+        proxy_app.router.add_route("*", "/{path:.*}", proxy_handler)
         
         runner = web.AppRunner(proxy_app)
         await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', PORT_PROXY)
+        site = web.TCPSite(runner, "0.0.0.0", PORT_PROXY)
         await site.start()
         
         print("CloakBrowser is ready and accepting connections!")
