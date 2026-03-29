@@ -36,7 +36,7 @@
 
     # CloakBrowser wrappers (Manager-backed)
     (let
-      wrapper = name: ''
+      wrapper = name: port: ''
         MANAGER="http://chill-penguin:8080"
         # Get ID
         ID=$(${pkgs.curl}/bin/curl -s $MANAGER/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"${name}\") | .id")
@@ -51,14 +51,14 @@
           ${pkgs.curl}/bin/curl -s -X POST $MANAGER/api/profiles/$ID/launch > /dev/null
           sleep 3
         fi
-        # Connect
-        exec ${pkgs.nodejs}/bin/npx -y agent-browser --connect "$MANAGER/api/profiles/$ID/cdp" "$@"
+        # Connect directly to CDP port
+        exec ${pkgs.nodejs}/bin/npx -y agent-browser --connect "http://chill-penguin:${port}" "$@"
       '';
     in pkgs.symlinkJoin {
       name = "cloak-wrappers";
       paths = [
-        (pkgs.writeShellScriptBin "cloak-vpn" (wrapper "VPN"))
-        (pkgs.writeShellScriptBin "cloak-direct" (wrapper "Direct"))
+        (pkgs.writeShellScriptBin "cloak-vpn" (wrapper "VPN" "5100"))
+        (pkgs.writeShellScriptBin "cloak-direct" (wrapper "Direct" "5101"))
       ];
     })
 
