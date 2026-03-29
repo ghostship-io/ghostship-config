@@ -18,24 +18,29 @@
       PGID = "3000";
       TZ = "UTC";
     };
-    volumes = [
-      "/srv/apps/pyload:/config"
-      "/mnt/share/Downloads:/downloads"
-    ];
+     volumes = [
+       "/srv/apps/pyload:/config"
+       "/mnt/share/Downloads:/downloads"
+       "/var/lib/pyload/s6/fix-attrs/down:/etc/s6-overlay/s6-rc.d/fix-attrs/down:ro"
+     ];
   };
 
-  systemd.services.podman-pyload = {
-    after = [ "mnt-share.mount" ];
-    wants = [ "mnt-share.mount" ];
-    serviceConfig.PreStart = [
-      "${pkgs.coreutils}/bin/chown" "-R" "3000:3000" "/srv/apps/pyload"
-      "${pkgs.coreutils}/bin/chown" "-R" "3000:3000" "/mnt/share/Downloads/PyLoad"
-    ];
-  };
+   systemd.services.podman-pyload = {
+     after = [ "mnt-share.mount" ];
+     wants = [ "mnt-share.mount" ];
+   };
 
-  systemd.tmpfiles.rules = [
-    "d /srv/apps/pyload 0755 apps apps -"
-  ];
+   systemd.tmpfiles.rules = [
+     "d /srv/apps/pyload 0755 apps apps -"
+     "d /var/lib/pyload/s6/fix-attrs 0755 root root -"
+   ];
+
+   system.activationScripts.pyload-s6-down = {
+     text = ''
+       mkdir -p /var/lib/pyload/s6/fix-attrs
+       : > /var/lib/pyload/s6/fix-attrs/down
+     '';
+   };
 
   system.activationScripts.pyload-config = {
     text = ''
