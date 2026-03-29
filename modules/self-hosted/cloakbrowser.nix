@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  cloakbrowser-startup = pkgs.writeText "cloakbrowser-startup.py" ''
+  cloakbrowser-startup = pkgs.writeText "cloakbrowser-startup.py" (lib.strings.trimIndent ''
     import os
     import sys
     from pathlib import Path
@@ -118,7 +118,7 @@ class AuthMiddleware:
 
     if __name__ == "__main__":
         main()
-  '';
+  '');
 
 in
 {
