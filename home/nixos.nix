@@ -34,6 +34,10 @@
     # Agent Browser CLI
     (pkgs.writeShellScriptBin "agent-browser" "exec ${pkgs.nodejs}/bin/npx -y agent-browser \"$@\"")
 
+    # CloakBrowser wrappers
+    (pkgs.writeShellScriptBin "cloak-vpn" "exec ${pkgs.nodejs}/bin/npx -y agent-browser --connect http://localhost:9222 \"$@\"")
+    (pkgs.writeShellScriptBin "cloak-direct" "exec ${pkgs.nodejs}/bin/npx -y agent-browser --connect http://localhost:9223 \"$@\"")
+
     # Playwright for AGENT MCP (Disabled on chill-penguin for initial cross-build)
   ] ++ lib.optional (!(osConfig.networking.hostName == "chill-penguin")) playwright-driver.browsers;
 

@@ -16,6 +16,7 @@
     ./nzbget.nix
     ./vuetorrent.nix
     ./flaresolverr.nix
+    ./cloakbrowser.nix
     ./bentopdf.nix
     ./convertx.nix
     ./it-tools.nix
