@@ -20,7 +20,10 @@ let
 
     # Install mitmproxy, curl, and jq if not present
     if ! command -v mitmdump &> /dev/null; then
-      apt-get update && apt-get install -y mitmproxy curl jq
+      apt-get update && apt-get install -y curl jq wget tar
+      wget -qO /tmp/mitm.tar.gz https://downloads.mitmproxy.org/10.2.4/mitmproxy-10.2.4-linux-aarch64.tar.gz
+      tar -xzf /tmp/mitm.tar.gz -C /usr/local/bin mitmdump
+      rm /tmp/mitm.tar.gz
     fi
 
     # Start mitmproxy in background to strip Origin header
