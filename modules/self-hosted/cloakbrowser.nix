@@ -48,14 +48,31 @@ let
   extensions-json = pkgs.writeText "extensions.json" (builtins.toJSON extensions-policy);
   ublock-json = pkgs.writeText "ublock-origin.json" (builtins.toJSON ublock-policy);
 
-  # Runtime patch script to disable CSWSH in the container
-  patch-script = pkgs.writeShellScript "cloakbrowser-patch" ''
-    # Patch main.py if not already patched
-    if ! grep -q "return True # PATCED" /app/backend/main.py; then
-      sed -i '96i\    return True # PATCED' /app/backend/main.py
+  # mitmproxy script to strip Origin header
+  strip-origin-py = pkgs.writeText "strip-origin.py" ''
+    from mitmproxy import http
+
+    def request(flow: http.HTTPFlow) -> None:
+        if "Origin" in flow.request.headers:
+            del flow.request.headers["Origin"]
+  '';
+
+  # Runtime entrypoint to setup proxy and manager
+  entrypoint-script = pkgs.writeShellScript "cloakbrowser-entrypoint" ''
+    # Install mitmproxy if not present
+    if ! command -v mitmdump &> /dev/null; then
+      apt-get update && apt-get install -y mitmproxy
     fi
-    # Execute the original entrypoint
-    exec /entrypoint.sh
+
+    # Start mitmproxy in background to strip Origin header
+    # Listen on 8080 (external), forward to 8081 (manager)
+    mitmdump -s ${strip-origin-py} --mode reverse:http://localhost:8081 --listen-port 8080 --set termlog_level=error &
+
+    # Start the manager on 8081
+    # We override the command parts from the original entrypoint.sh
+    export DISPLAY=:100 # default
+    cd /app
+    exec uvicorn backend.main:app --host 0.0.0.0 --port 8081 --log-level warning
   '';
 
 in
@@ -68,7 +85,8 @@ in
       "5100-5101:5100-5101"
     ];
     extraOptions = [ "--network=ghostship_net" ];
-    entrypoint = "${patch-script}";
+    # Use our custom entrypoint
+    entrypoint = "${entrypoint-script}";
     volumes = [
       "/srv/apps/cloakbrowser/data:/data"
       "${extensions-json}:/etc/chromium/policies/managed/extensions.json:ro"
@@ -79,6 +97,8 @@ in
   };
 
   # Automatic profile creation for Manager
+  # Note: curl now points to localhost:8081 inside the container, 
+  # or localhost:8080 through the proxy.
   systemd.services."cloakbrowser-init-profiles" = {
     description = "Initialize CloakBrowser profiles";
     after = [ "podman-cloakbrowser.service" ];
