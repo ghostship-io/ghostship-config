@@ -52,7 +52,7 @@ in
     image = "cloakhq/cloakbrowser-manager:latest";
     ports = [ 
       "8080:8080"      # Manager UI & API
-      "5100-5110:5100-5110" # CDP ports for profiles (testing)
+      "5100-5102:5100-5102" # CDP ports for profiles (testing)
     ];
     environment = {
       # Optional: set an auth token if desired

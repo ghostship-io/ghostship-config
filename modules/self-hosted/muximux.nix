@@ -113,7 +113,7 @@
           CloakBrowser.name=literal:"CloakBrowser"
           CloakBrowser.url=literal:"https://cloakbrowser.ghostship.io"
           CloakBrowser.scale=literal:1
-          CloakBrowser.icon=literal:"sh-cloakbrowser"
+          CloakBrowser.icon=literal:"muximux-cloak"
           CloakBrowser.color=literal:"#000000"
           CloakBrowser.enabled=literal:"true"
           CloakBrowser.dd=literal:"true"
