@@ -20,9 +20,11 @@ This skill extends Gemini CLI with specialized knowledge and workflows for Nix a
 
 ### 2. Native Nix Operations
 For system-level validation, use standard `nix` and `nixos-rebuild` commands. You MUST NEVER apply configurations (switch/boot) automatically; always build to verify validity:
-- **System Validation (Build)**: `nixos-rebuild build --flake .`
+- **System Validation (Build)**: `nixos-rebuild build --flake .#<hostname>`
 - **Search Packages**: `nix search nixpkgs <query>`
-- **Garbage Collection**: `sudo nix-collect-garbage -d`
+- **Garbage Collection**: `nix-collect-garbage -d`
+- **Privilege Model**: If a command must change system state, run it from a root shell or a direct root SSH session.
+- **Legacy Tooling**: Prefer `nix shell` over `nix-shell`, and do not recommend `nh`.
 
 ### 3. Idiomatic Nix Development
 - **Packaging**:
@@ -39,7 +41,7 @@ For system-level validation, use standard `nix` and `nixos-rebuild` commands. Yo
 ### 4. Validation & Testing (MANDATORY)
 The AGENT MUST always validate Nix/NixOS configurations. You are NOT permitted to apply or deploy changes; your responsibility ends at providing verified, buildable code.
 - **Syntax Check**: Use `nix-instantiate --parse <file>` for quick syntax validation.
-- **Evaluation Test (THE GOLD STANDARD)**: Use `nixos-rebuild build --flake .` to verify that the entire NixOS configuration evaluates and builds correctly. This MUST be performed before claiming success.
+- **Evaluation Test (THE GOLD STANDARD)**: Use `nixos-rebuild build --flake .#<hostname>` to verify that the entire NixOS configuration evaluates and builds correctly. This MUST be performed before claiming success.
 - **Unit Testing**: For complex logic in modules, utilize `lib.runTests` or create a minimal flake-based test environment.
 
 ### 5. System-Wide Preferences
@@ -70,11 +72,12 @@ When a service doesn't support structured configuration directories (like `.d/`)
 
 ## Workflow References
 
+- **Command Reference**: See [command-reference.md](references/command-reference.md) for native Nix commands and repo-specific deployment patterns.
 - **Flakes**: See [flake-patterns.md](references/flake-patterns.md) for boilerplate.
 - **Modules**: See [module-patterns.md](references/module-patterns.md) for NixOS module structure.
 - **Packaging**: See [packaging.md](references/packaging.md) for standard derivation examples.
 
 ## Interaction Protocol
 1. **Analyze First**: Before suggesting a change, identify if it affects a Flake, a NixOS module, or a user-level configuration (Home Manager).
-2. **Validation First**: Always provide the `nixos-rebuild build --flake .` command alongside your changes to ensure the user can verify them.
+2. **Validation First**: Always provide the `nixos-rebuild build --flake .#<hostname>` command alongside your changes to ensure the user can verify them.
 3. **Brevity & Directness**: Provide code snippets followed by the specific command to validate them.

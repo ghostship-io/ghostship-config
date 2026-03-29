@@ -78,14 +78,17 @@ The repo includes a broad set of containerized services running on Podman:
 ## 📖 Usage
 
 ### Apply Configuration
-To rebuild the current host and switch to the latest configuration:
+Run system-changing commands from a root shell or direct root SSH session.
+
+To build the current host before applying it:
 ```bash
-sudo nixos-rebuild switch --flake .#(hostname)
+nixos-rebuild build --flake .#(hostname)
+./result/bin/switch-to-configuration switch
 ```
 
 To build without switching first:
 ```bash
-sudo nixos-rebuild build --flake .#(hostname)
+nixos-rebuild build --flake .#(hostname)
 ```
 
 ### 🆕 Bootstrap a New Host
@@ -94,19 +97,18 @@ When setting up a brand-new machine, follow these steps to integrate it into the
 1. **Boot into NixOS**: Start the system from a NixOS installer (ISO) or a minimal existing installation.
 2. **Clone the Repository**:
    ```bash
-   nix-shell -p git
-   git clone https://github.com/jpetrucciani/nixos-config.git ~/nixos-config
+   nix shell nixpkgs#git -c git clone https://github.com/jpetrucciani/nixos-config.git ~/nixos-config
    cd ~/nixos-config
    ```
 3. **Run the Bootstrap Script**:
-   The installer-time script uses `nix-shell` to provide `age-keygen`, `jq`, and `nixos-generate-config`, then sets the hostname, ensures `/etc/nix/secrets/age.key` exists without overwriting an existing key, and prints a JSON payload containing the hostname, public key, and hardware configuration:
+   The installer-time script provides `age-keygen`, `jq`, and `nixos-generate-config`, then sets the hostname, ensures `/etc/nix/secrets/age.key` exists without overwriting an existing key, and prints a JSON payload containing the hostname, public key, and hardware configuration:
    ```bash
-   sudo ./bootstrap.sh NEW_HOSTNAME
+   ./bootstrap.sh NEW_HOSTNAME
    ```
 4. **Register the Host**:
-   - On your management machine, run the existing registration helper and paste the JSON when prompted:
+   - On your management machine, open a root shell, run the existing registration helper, and paste the JSON when prompted:
      ```bash
-     sudo sops-register-host
+     sops-register-host
      ```
    - Paste the JSON block and press `Ctrl+D`.
    - This will automatically:
@@ -117,7 +119,11 @@ When setting up a brand-new machine, follow these steps to integrate it into the
 5. **Finalize Setup**:
    - Add `NEW_HOSTNAME` to `flake.nix` under `nixosConfigurations`.
    - Commit and push the changes.
-   - On the new host, apply the configuration: `sudo nixos-rebuild switch --flake .#NEW_HOSTNAME`.
+   - On the new host, build and apply the configuration from a root shell:
+     ```bash
+     nixos-rebuild build --flake .#NEW_HOSTNAME
+     ./result/bin/switch-to-configuration switch
+     ```
 
 ### Manage Secrets
 
@@ -126,7 +132,7 @@ The system is configured for automated daily maintenance:
 - **Generation Cleanup**: System generations older than 7 days are automatically purged to optimize disk space.
 - **Manual Cleanup**: To manually trigger a cleanup and keep only the last 5 generations:
 ```bash
-sudo nix-collect-garbage -d
+nix-collect-garbage -d
 ```
 
 ### Manage Secrets

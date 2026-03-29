@@ -5,7 +5,7 @@ let
     export SOPS_AGE_KEY_FILE=/etc/nix/secrets/age.key
     if [ "$(id -u)" -ne 0 ]; then
       echo "Error: This script requires root privileges."
-      echo "Please run with: sudo sops-edit"
+      echo "Please run from a root shell: sops-edit"
       exit 1
     fi
     REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
@@ -21,7 +21,7 @@ let
     export SOPS_AGE_KEY_FILE=/etc/nix/secrets/age.key
     if [ "$(id -u)" -ne 0 ]; then
       echo "Error: This script requires root privileges."
-      echo "Please run with: sudo sops-decrypt"
+      echo "Please run from a root shell: sops-decrypt"
       exit 1
     fi
     REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
@@ -51,7 +51,7 @@ let
     export SOPS_AGE_KEY_FILE=/etc/nix/secrets/age.key
     if [ "$(id -u)" -ne 0 ]; then
       echo "Error: This script requires root privileges."
-      echo "Please run with: sudo sops-encrypt"
+      echo "Please run from a root shell: sops-encrypt"
       exit 1
     fi
     REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
@@ -82,7 +82,7 @@ let
   sops-list-keys = pkgs.writeShellScriptBin "sops-list-keys" ''
     if [ "$(id -u)" -ne 0 ]; then
       echo "Error: This script requires root privileges."
-      echo "Please run with: sudo sops-list-keys"
+      echo "Please run from a root shell: sops-list-keys"
       exit 1
     fi
     REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
@@ -105,7 +105,7 @@ let
     export SOPS_AGE_KEY_FILE=/etc/nix/secrets/age.key
     if [ "$(id -u)" -ne 0 ]; then
       echo "Error: This script requires root privileges."
-      echo "Please run with: sudo sops-reencrypt"
+      echo "Please run from a root shell: sops-reencrypt"
       exit 1
     fi
     REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
@@ -130,7 +130,7 @@ let
   sops-add-key = pkgs.writeShellScriptBin "sops-add-key" ''
     if [ "$(id -u)" -ne 0 ]; then
       echo "Error: This script requires root privileges."
-      echo "Please run with: sudo sops-add-key"
+      echo "Please run from a root shell: sops-add-key"
       exit 1
     fi
     REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
@@ -170,7 +170,7 @@ let
   sops-remove-key = pkgs.writeShellScriptBin "sops-remove-key" ''
     if [ "$(id -u)" -ne 0 ]; then
       echo "Error: This script requires root privileges."
-      echo "Please run with: sudo sops-remove-key"
+      echo "Please run from a root shell: sops-remove-key"
       exit 1
     fi
     REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
@@ -199,7 +199,7 @@ let
     export SOPS_AGE_KEY_FILE=/etc/nix/secrets/age.key
     if [ "$(id -u)" -ne 0 ]; then
       echo "Error: This script requires root privileges."
-      echo "Please run with: sudo sops-register-host"
+      echo "Please run from a root shell: sops-register-host"
       exit 1
     fi
     REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
@@ -264,7 +264,7 @@ EOF
     echo "1. Verify .sops.yaml changes."
     echo "2. Add '$HOSTNAME' to 'flake.nix' in the 'nixosConfigurations' section."
     echo "3. Commit and push the changes."
-    echo "4. On the new host, run: sudo nixos-rebuild switch --flake .#$HOSTNAME"
+    echo "4. On the new host, from a root shell run: nixos-rebuild build --flake .#$HOSTNAME && ./result/bin/switch-to-configuration switch"
     echo "--------------------------------------------------------------------------------"
   '';
 in

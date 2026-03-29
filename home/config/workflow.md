@@ -127,7 +127,8 @@ Before marking any task complete, verify:
 
 ### Rebuild and Switch
 ```bash
-sudo nixos-rebuild switch --flake .#launch-octopus
+nixos-rebuild build --flake .#launch-octopus
+./result/bin/switch-to-configuration switch
 ```
 
 ### Edit Secrets

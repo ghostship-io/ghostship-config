@@ -27,7 +27,7 @@ This skill provides specialized knowledge for operating within a WSL2 environmen
 - **WSLENV**: Use the `WSLENV` environment variable to share and translate paths between environments (e.g., `USERPROFILE/p`).
 
 ### 3. Privileged Operations
-- **Sudo (Linux)**: Use `sudo` for NixOS system changes or privileged file operations within WSL.
+- **Linux Privilege Escalation**: Use a root shell for NixOS system changes or privileged file operations within WSL.
 - **UAC (Windows)**: WSL cannot natively escalate to "Run as Administrator" for Windows binaries. If a Windows command requires administrative privileges (e.g., modifying system-wide registry or protected files), you MUST ask the user to run the command in an elevated Windows PowerShell terminal.
 
 ### 4. WSL2 Specific Quirks
