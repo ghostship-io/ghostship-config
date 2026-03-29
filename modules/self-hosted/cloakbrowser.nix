@@ -56,6 +56,9 @@ in
       "5100-5101:5100-5101" # Reduced to 2 ports as requested
     ];
     extraOptions = [ "--network=ghostship_net" ];
+    environment = {
+      DISABLE_CSWSH = "True";
+    };
     volumes = [
       "/srv/apps/cloakbrowser/data:/data"
       # Mount policies in multiple possible locations to ensure they are picked up
