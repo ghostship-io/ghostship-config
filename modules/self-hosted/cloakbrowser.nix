@@ -48,12 +48,9 @@ let
 
 in
 {
-  # Standalone Direct Profile for testing
+  # Standalone Direct Profile for testing (Directly accessible via 9222)
   virtualisation.oci-containers.containers."cloak-direct" = {
     image = "cloakhq/cloakbrowser:latest";
-    # Use cloakserve to start CDP server.
-    # --listen=0.0.0.0:9222 ensures it is reachable from outside.
-    # --fingerprint: use a seed for persistence.
     cmd = [ 
       "cloakserve", 
       "--listen=0.0.0.0:9222", 
@@ -61,9 +58,7 @@ in
       "--humanize=True"
     ];
     ports = [ "9222:9222" ];
-    extraOptions = [
-      "--network=ghostship_net"
-    ];
+    extraOptions = [ "--network=ghostship_net" ];
     volumes = [
       "/srv/apps/cloakbrowser-direct:/home/cloak/.config/cloakbrowser"
       "${extensions-json}:/etc/chromium/policies/managed/extensions.json:ro"
@@ -71,10 +66,48 @@ in
     ];
   };
 
-  # Open port 9222
-  networking.firewall.allowedTCPPorts = [ 9222 ];
+  # Manager for VPN and multi-profile management
+  virtualisation.oci-containers.containers."cloakbrowser-manager" = {
+    image = "cloakhq/cloakbrowser-manager:latest";
+    ports = [ 
+      "8080:8080"
+      "5100-5102:5100-5102"
+    ];
+    extraOptions = [ "--network=ghostship_net" ];
+    volumes = [
+      "/srv/apps/cloakbrowser-manager/data:/data"
+      "${extensions-json}:/etc/chromium/policies/managed/extensions.json:ro"
+      "${ublock-json}:/etc/chromium/policies/managed/ublock-origin.json:ro"
+    ];
+  };
+
+  # Automatic profile creation for Manager
+  systemd.services."cloakbrowser-init-profiles" = {
+    description = "Initialize CloakBrowser profiles";
+    after = [ "podman-cloakbrowser-manager.service" ];
+    wantedBy = [ "multi-user.target" ];
+    script = ''
+      until ${pkgs.curl}/bin/curl -s http://localhost:8080/api/status > /dev/null; do sleep 2; done
+      create_profile() {
+        NAME=$1; PROXY=$2;
+        EXISTS=$(${pkgs.curl}/bin/curl -s http://localhost:8080/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
+        if [ -z "$EXISTS" ]; then
+          ${pkgs.curl}/bin/curl -s -X POST http://localhost:8080/api/profiles -H "Content-Type: application/json" \
+            -d "{\"name\": \"$NAME\", \"proxy\": $PROXY, \"humanize\": true, \"geoip\": true, \"platform\": \"windows\"}"
+        fi
+      }
+      create_profile "VPN" "\"http://gluetun:8888\""
+      create_profile "Direct" "null"
+    '';
+    serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
+  };
+
+  # Open ports
+  networking.firewall.allowedTCPPorts = [ 8080 9222 5100 5101 5102 ];
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/cloakbrowser-direct 0755 apps apps -"
+    "d /srv/apps/cloakbrowser-manager 0755 apps apps -"
+    "d /srv/apps/cloakbrowser-manager/data 0755 apps apps -"
   ];
 }
