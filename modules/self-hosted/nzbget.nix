@@ -17,7 +17,6 @@
       TZ = "UTC";
       PUID = "3000";
       PGID = "3000";
-      NZBGET_PORT = "5001";
     };
     volumes = [
       "/srv/apps/nzbget:/config"
@@ -77,6 +76,7 @@
           WriteBuffer=literal:512
           PostStrategy=literal:aggressive
           DetailTarget=literal:none
+          ControlPort=literal:5001
           ParBuffer=literal:128
           DirectRename=literal:yes
           DirectUnpack=literal:yes
