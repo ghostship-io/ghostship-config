@@ -9,6 +9,7 @@
     environment = {
       LITELLM_LOG = "DEBUG";
       STORE_MODEL_IN_DB = "True";
+      # USE_PRISMA_DB_PUSH = "True"; # Alternative to migrate
       USE_PRISMA_MIGRATE = "True";
     };
     environmentFiles = [
