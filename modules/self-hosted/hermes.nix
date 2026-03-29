@@ -1,6 +1,17 @@
-{ config, ... }:
+{ config, pkgs, ... }:
 
 let
+  hermes-startup = pkgs.writeText "hermes-startup.sh" ''
+    set -eu
+
+    mkdir -p /tmp
+    chmod 1777 /tmp
+
+    export SSL_CERT_FILE="''${SSL_CERT_FILE:-/etc/ssl/certs/ca-bundle.crt}"
+    export NIX_SSL_CERT_FILE="''${NIX_SSL_CERT_FILE:-/etc/ssl/certs/ca-bundle.crt}"
+
+    exec /nix/store/4avjjjj02q5m84w4q1k7lrf5g8mkwkmb-ghostship-hermes-runtime/bin/ghostship-hermes-runtime entrypoint
+  '';
   hermes-secrets = config.sops.secrets."hermes-secrets".path;
   romm-secrets = config.sops.secrets."romm-secrets".path;
   sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
@@ -14,9 +25,10 @@ in
 {
   virtualisation.oci-containers.containers."hermes" = {
     image = "ghcr.io/ghostship-io/ghostship-hermes:latest";
+    entrypoint = "/bin/sh";
+    cmd = [ "/hermes-startup.sh" ];
     extraOptions = [
       "--network=ghostship_net"
-      "--tmpfs=/tmp:rw,exec,mode=1777"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:7681/ || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
@@ -28,8 +40,6 @@ in
       TTYD_PORT = "7681";
       TTYD_TITLE = "Ghostship Hermes";
       TTYD_SESSION_NAME = "hermes";
-      SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
-      NIX_SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
       SEARXNG_URL = "http://gluetun:5002";
       SONARR_URL = "http://sonarr:8989";
       RADARR_URL = "http://radarr:7878";
@@ -60,6 +70,7 @@ in
     volumes = [
       "/srv/apps/hermes/home:/home/hermes/.hermes:rw"
       "hermes-nix:/nix:rw"
+      "${hermes-startup}:/hermes-startup.sh:ro"
     ];
   };
 
