@@ -37,9 +37,6 @@ in
   # CloakBrowser Manager
   virtualisation.oci-containers.containers."cloakbrowser" = {
     image = "cloakhq/cloakbrowser-manager:latest";
-    ports = [ 
-      "8080:8080"
-    ];
     extraOptions = [ "--network=ghostship_net" ];
     # Use our patch script as the entrypoint
     entrypoint = "${patch-script}";
@@ -54,16 +51,16 @@ in
     after = [ "podman-cloakbrowser.service" ];
     wantedBy = [ "multi-user.target" ];
     script = ''
-      # Wait for Manager directly on 8080
-      until ${pkgs.curl}/bin/curl -s http://localhost:8080/api/status > /dev/null; do
+      # Wait for Manager directly on 8081 inside the container
+      until ${pkgs.podman}/bin/podman exec cloakbrowser curl -s http://127.0.0.1:8081/api/status > /dev/null; do
         sleep 2
       done
       
       create_profile() {
         NAME=$1; PROXY=$2;
-        EXISTS=$(${pkgs.curl}/bin/curl -s http://localhost:8080/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
+        EXISTS=$(${pkgs.podman}/bin/podman exec cloakbrowser curl -s http://127.0.0.1:8081/api/profiles | ${pkgs.jq}/bin/jq -r ".[] | select(.name==\"$NAME\") | .id")
         if [ -z "$EXISTS" ]; then
-          ${pkgs.curl}/bin/curl -s -X POST http://localhost:8080/api/profiles -H "Content-Type: application/json" \
+          ${pkgs.podman}/bin/podman exec cloakbrowser curl -s -X POST http://127.0.0.1:8081/api/profiles -H "Content-Type: application/json" \
             -d "{\"name\": \"$NAME\", \"proxy\": $PROXY, \"humanize\": true, \"geoip\": true, \"platform\": \"windows\"}"
         fi
       }
@@ -72,9 +69,6 @@ in
     '';
     serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
   };
-
-  # Open port 8080 (CDP ports remain internal to ghostship_net)
-  networking.firewall.allowedTCPPorts = [ 8080 ];
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/cloakbrowser 0755 apps apps -"
