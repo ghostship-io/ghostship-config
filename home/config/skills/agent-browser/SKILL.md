@@ -29,6 +29,15 @@ Always verify the state of the page after an interaction:
 - **Get State**: `agent-browser get url`, `agent-browser get title`
 - **Check Visibility**: `agent-browser is visible "@e1"`
 
+## Multi-Agent Coordination
+
+When multiple agents are working in the same environment, use isolated sessions to prevent state collisions:
+- **Named Session**: `agent-browser --session <name> open <url>`
+- **List Sessions**: `agent-browser session list`
+- **Close Session**: `agent-browser --session <name> close`
+
+**CRITICAL**: Every command in a multi-agent workflow MUST include the `--session <name>` flag to target the correct browser instance.
+
 ## Bypassing Protections (Cloudflare, reCAPTCHA)
 
 To bypass modern bot detection, use the following techniques:
