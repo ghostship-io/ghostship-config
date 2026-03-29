@@ -48,6 +48,16 @@ let
   extensions-json = pkgs.writeText "extensions.json" (builtins.toJSON extensions-policy);
   ublock-json = pkgs.writeText "ublock-origin.json" (builtins.toJSON ublock-policy);
 
+  # Runtime patch script to disable CSWSH in the container
+  patch-script = pkgs.writeShellScript "cloakbrowser-patch" ''
+    # Patch main.py if not already patched
+    if ! grep -q "return True # PATCED" /app/backend/main.py; then
+      sed -i '96i\    return True # PATCED' /app/backend/main.py
+    fi
+    # Execute the original entrypoint
+    exec /entrypoint.sh
+  '';
+
 in
 {
   # CloakBrowser Manager (renamed to cloakbrowser)
@@ -55,15 +65,12 @@ in
     image = "cloakhq/cloakbrowser-manager:latest";
     ports = [ 
       "8080:8080"
-      "5100-5101:5100-5101" # Reduced to 2 ports as requested
+      "5100-5101:5100-5101"
     ];
     extraOptions = [ "--network=ghostship_net" ];
-    environment = {
-      DISABLE_CSWSH = "True";
-    };
+    entrypoint = "${patch-script}";
     volumes = [
       "/srv/apps/cloakbrowser/data:/data"
-      # Mount policies in multiple possible locations to ensure they are picked up
       "${extensions-json}:/etc/chromium/policies/managed/extensions.json:ro"
       "${ublock-json}:/etc/chromium/policies/managed/ublock-origin.json:ro"
       "${extensions-json}:/etc/opt/chrome/policies/managed/extensions.json:ro"
