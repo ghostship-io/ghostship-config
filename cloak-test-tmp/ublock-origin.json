@@ -1,0 +1,29 @@
+{
+  "toOverwrite": {
+    "filterLists": [
+      "user-filters",
+      "ublock-filters",
+      "ublock-badware",
+      "ublock-privacy",
+      "ublock-unbreak",
+      "ublock-quick-fixes",
+      "easylist",
+      "easyprivacy",
+      "urlhaus-1",
+      "plowe-0",
+      "adguard-generic",
+      "ublock-cookies-easylist",
+      "fanboy-cookiemonster",
+      "easylist-notifications",
+      "easylist-annoyances",
+      "adguard-popup-overlays",
+      "fanboy-social",
+      "easylist-chat",
+      "fanboy-ai-suggestions"
+    ],
+    "userSettings": {
+      "advancedSettings": true,
+      "dynamicFilteringEnabled": true
+    }
+  }
+}

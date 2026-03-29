@@ -1,0 +1,6 @@
+[
+  {"command": "connect", "url": "ws://chill-penguin:8080/api/profiles/509f096a-4bca-4af0-9cf6-d4aa2b9be144/cdp"},
+  {"command": "open", "url": "https://ifconfig.me"},
+  {"command": "wait", "condition": "networkidle"},
+  {"command": "get", "subcommand": "text", "selector": "body"}
+]

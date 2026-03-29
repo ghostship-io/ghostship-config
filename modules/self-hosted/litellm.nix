@@ -1,0 +1,20 @@
+{ pkgs, ... }:
+
+{
+  virtualisation.oci-containers.containers."litellm" = {
+    image = "ghcr.io/berriai/litellm:main-latest";
+    extraOptions = [
+      "--network=ghostship_net"
+    ];
+    environment = {
+      LITELLM_LOG = "DEBUG";
+    };
+    volumes = [
+      "/srv/apps/litellm:/app/config"
+    ];
+  };
+
+  systemd.tmpfiles.rules = [
+    "d /srv/apps/litellm 0755 apps apps -"
+  ];
+}

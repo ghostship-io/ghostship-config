@@ -27,6 +27,7 @@
     ./plex-auto-languages.nix
     ./searxng.nix
     ./searxng-valkey.nix
+    ./litellm.nix
     ./romm-db.nix
     ./romm.nix
     ./grimmory-db.nix

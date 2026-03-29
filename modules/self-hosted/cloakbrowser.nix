@@ -64,7 +64,6 @@ in
   # CloakBrowser Manager
   virtualisation.oci-containers.containers."cloakbrowser" = {
     image = "cloakhq/cloakbrowser-manager:latest";
-    ports = [ "8080:8080" ];
     extraOptions = [ "--network=ghostship_net" ];
     entrypoint = "${patch-script}";
     volumes = [
@@ -103,9 +102,6 @@ in
     '';
     serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
   };
-
-  # Open port 8080
-  networking.firewall.allowedTCPPorts = [ 8080 ];
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/cloakbrowser 0755 apps apps -"
