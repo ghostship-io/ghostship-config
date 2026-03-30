@@ -117,6 +117,27 @@
     nix-direnv.enable = true;
   };
 
+  programs.bash = {
+    completion.enable = true;
+    interactiveShellInit = ''
+      bind 'set show-all-if-ambiguous on'
+      bind 'set completion-ignore-case on'
+
+      HISTCONTROL=ignoredups:erasedups
+      HISTSIZE=10000
+      HISTFILESIZE=10000
+
+      shopt -s histappend
+      shopt -s checkwinsize
+
+      case ";$PROMPT_COMMAND;" in
+        *";history -a;"*) ;;
+        "") PROMPT_COMMAND='history -a' ;;
+        *) PROMPT_COMMAND="history -a; $PROMPT_COMMAND" ;;
+      esac
+    '';
+  };
+
   # Set your time zone.
   time.timeZone = "UTC"; # User should override this in host config if needed
 

@@ -27,6 +27,8 @@ for secrets.
 ## Role Model
 
 - Server-role hosts use a minimal Home Manager profile and default to `bash`.
+- All Bash shells, including root, get the same global completion and history
+  defaults from the NixOS layer.
 - Develop-role hosts use the richer interactive profile and default to `fish`.
 - WSL-role hosts layer WSL-specific mounts, Windows interop, and notification
   helpers on top of the develop profile.
