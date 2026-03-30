@@ -132,7 +132,7 @@ in
     cmd = [ "/cloakbrowser-startup.py" ];
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:8080/ || exit 1"
+      "--health-cmd=/usr/local/bin/python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/\", timeout=5).read(1)' || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
