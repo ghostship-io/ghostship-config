@@ -26,6 +26,26 @@
     '';
   };
 
+  systemd.services.podman-auto-update = {
+    description = "Run native Podman auto-update for Ghostship containers";
+    after = [ "network-online.target" "init-ghostship-net.service" ];
+    wants = [ "network-online.target" "init-ghostship-net.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.podman}/bin/podman auto-update";
+    };
+  };
+
+  systemd.timers.podman-auto-update = {
+    description = "Daily native Podman auto-update for Ghostship containers";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      Persistent = true;
+      RandomizedDelaySec = "30m";
+    };
+  };
+
   # Base directory for all app configurations with strict ownership
   systemd.tmpfiles.rules = [
     "d /srv/apps 0755 apps apps -"

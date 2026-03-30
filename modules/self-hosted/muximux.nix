@@ -3,6 +3,10 @@
 {
   virtualisation.oci-containers.containers."muximux" = {
     image = "linuxserver/muximux:latest";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     user = "0:3000";
     extraOptions = [
       "--network=ghostship_net"

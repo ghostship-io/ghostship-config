@@ -7,6 +7,10 @@ in
 {
   virtualisation.oci-containers.containers."recyclarr" = {
     image = "ghcr.io/recyclarr/recyclarr:latest";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"

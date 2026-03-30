@@ -8,6 +8,10 @@ in
 {
   virtualisation.oci-containers.containers."gluetun" = {
     image = "qmcgaw/gluetun";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     user = "0:3000";
     # Gluetun usually needs some root capabilities for network management
     # but we will try to restrict it where possible.

@@ -124,6 +124,10 @@ in
 {
   virtualisation.oci-containers.containers."cloakbrowser" = {
     image = "cloakhq/cloakbrowser-manager:latest";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     extraOptions = [ "--network=ghostship_net" ];
     ports = [ "8080:8080" ];
 

@@ -3,6 +3,10 @@
 {
   virtualisation.oci-containers.containers."flaresolverr" = {
     image = "ghcr.io/flaresolverr/flaresolverr:latest";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=curl -f --connect-timeout 5 http://127.0.0.1:8191/ || exit 1"

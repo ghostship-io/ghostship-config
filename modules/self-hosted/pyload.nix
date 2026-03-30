@@ -53,6 +53,10 @@ in
 {
   virtualisation.oci-containers.containers."pyload" = {
     image = "lscr.io/linuxserver/pyload-ng:latest";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:8000/api || exit 1"

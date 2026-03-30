@@ -6,6 +6,10 @@ in
 {
   virtualisation.oci-containers.containers."searxng" = {
     image = "searxng/searxng:latest";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     user = "3000:3000";
     extraOptions = [
       "--network=container:gluetun"

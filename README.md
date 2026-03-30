@@ -69,6 +69,10 @@ The repo includes a broad set of containerized services running on Podman:
 | Grimmory | Game collection manager |
 | Hermes | Agent terminal and Ghostship utility shell |
 
+The self-hosted stack uses native Podman auto-update on a daily timer, and
+all OCI containers are configured to pull the latest registry image before
+recreation.
+
 ### Surgical Configuration Management (`ghostship-config`)
 - **Unified Tooling**: A fleet-wide Python utility (`ghostship-config`) for idempotent, surgical updates to XML, YAML, INI, and KV files.
 - **Identity Enforcement**: Automatically enforces "Ghostship Standard" identity (e.g., `InstanceName`, `FriendlyName`) across all self-hosted apps.

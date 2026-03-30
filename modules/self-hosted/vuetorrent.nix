@@ -52,6 +52,10 @@ in
 {
   virtualisation.oci-containers.containers."vuetorrent" = {
     image = "lscr.io/linuxserver/qbittorrent:latest";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     extraOptions = [
       "--network=container:gluetun"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 https://google.com || exit 1"

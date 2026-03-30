@@ -3,6 +3,10 @@
 {
   virtualisation.oci-containers.containers."bentopdf" = {
     image = "bentopdf/bentopdf:latest";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:8080/ || exit 1"

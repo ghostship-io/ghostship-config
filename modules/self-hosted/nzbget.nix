@@ -3,6 +3,10 @@
 {
   virtualisation.oci-containers.containers."nzbget" = {
     image = "lscr.io/linuxserver/nzbget:latest";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     user = "3000:3000";
     extraOptions = [
       "--network=container:gluetun"

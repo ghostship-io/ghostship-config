@@ -3,6 +3,10 @@
 {
   virtualisation.oci-containers.containers."convertx" = {
     image = "ghcr.io/c4illin/convertx:latest";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"

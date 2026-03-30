@@ -3,6 +3,10 @@
 {
   virtualisation.oci-containers.containers."it-tools" = {
     image = "corentinth/it-tools:latest";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:80/ || exit 1"
