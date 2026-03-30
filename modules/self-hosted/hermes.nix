@@ -11,7 +11,7 @@ let
     export NIX_SSL_CERT_FILE="''${NIX_SSL_CERT_FILE:-/etc/ssl/certs/ca-bundle.crt}"
 
     if [ -x /home/hermes/.hermes/hermes-agent/venv/bin/hermes ]; then
-      ${pkgs.gnused}/bin/sed -i '1s|.*|#!/bin/python3|' /home/hermes/.hermes/hermes-agent/venv/bin/hermes
+      /bin/sed -i '1s|.*|#!/bin/python3|' /home/hermes/.hermes/hermes-agent/venv/bin/hermes
     fi
 
     exec /nix/store/4avjjjj02q5m84w4q1k7lrf5g8mkwkmb-ghostship-hermes-runtime/bin/ghostship-hermes-runtime entrypoint
