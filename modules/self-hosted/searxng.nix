@@ -10,7 +10,7 @@ in
     labels = {
       "io.containers.autoupdate" = "registry";
     };
-    user = "3000:3000";
+    user = "apps:apps";
     extraOptions = [
       "--network=container:gluetun"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:5002/ || exit 1"
@@ -80,7 +80,7 @@ in
 
         ${pkgs.ghostship-config}/bin/ghostship-config set "$SETTINGS_FILE" "''${searx_args[@]}"
         
-        chown 3000:3000 "$SETTINGS_FILE"
+        chown apps:apps "$SETTINGS_FILE"
       fi
     '';
   };
