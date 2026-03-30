@@ -8,6 +8,11 @@
     mode = "0440";
   };
 
+  sops.secrets."dockerhub-secrets" = {
+    sopsFile = ../../secrets.yaml;
+    mode = "0400";
+  };
+
   sops.secrets."cloudflared-secrets" = {
     sopsFile = ../../secrets.yaml;
     owner = "apps";
