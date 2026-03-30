@@ -7,7 +7,7 @@
     labels = {
       "io.containers.autoupdate" = "registry";
     };
-    user = "0:3000";
+    user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
     ];
