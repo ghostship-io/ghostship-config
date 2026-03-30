@@ -1,47 +1,12 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 
 {
-  # WSL-specific networking tweaks
-  # Disable systemd-resolved to let WSL manage /etc/resolv.conf
-  services.resolved.enable = false;
-
-  # Explicitly ensure we are not using networkd in WSL as per user preference
-  networking.useNetworkd = false;
-  systemd.network.enable = false;
-
-  # WSL-specific integration
-  wsl = {
-    enable = true;
-    interop.register = true;
-    wslConf = {
-      automount.enabled = true;
-      interop.enabled = true;
-    };
-    
-    # Enable Docker Desktop integration (provided by WSL)
-    # This automatically adds the 'docker' group and configures the socket.
-    docker-desktop.enable = true;
-
-    # Expose specific binaries to /bin for 'wsl -e' or direct execution from Windows
-    extraBin = [
-      { src = "${pkgs.coreutils}/bin/whoami"; }
-    ];
-  };
-
-  # Share USERPROFILE from Windows to WSL and translate the path (/p)
-  # This makes $USERPROFILE available in WSL as /mnt/c/Users/$USER
-  environment.variables.WSLENV = "USERPROFILE/p";
-
-  environment.systemPackages = [
-    # Allows opening files and directories in Windows applications
-    # e.g., 'wsl-open .' opens the current folder in Windows Explorer
+  home.packages = [
     pkgs.wsl-open
-
-    # WSL notify-send Bridge
     (pkgs.writeShellScriptBin "notify-send" "
       # WSL notify-send Bridge (Forward to Windows)
       # Hardcoded to use Windows Terminal icon for branding.
-      
+
       APP_NAME=\"WSL\"
       SUMMARY=\"\"
       BODY=\"\"
@@ -71,13 +36,10 @@
 
       [ -z \"\$SUMMARY\" ] && exit 1
 
-      # Escape single quotes for PowerShell
       SUMMARY_ESCAPED=\$(echo \"\$SUMMARY\" | sed \"s/'/''/g\")
       BODY_ESCAPED=\$(echo \"\$BODY\" | sed \"s/'/''/g\")
       APP_NAME_ESCAPED=\$(echo \"\$APP_NAME\" | sed \"s/'/''/g\")
 
-      # Invoke PowerShell to show the toast
-      # We use \\\$ to ensure the dollar signs reach PowerShell without being expanded by bash.
       /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"
           [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > \\\$null
           \\\$wtPackage = Get-AppxPackage -Name Microsoft.WindowsTerminal
@@ -90,18 +52,17 @@
               \\\$imageNode = (\\\$RawXml.toast.visual.binding.image | Where-Object { \\\$_.id -eq '1' })
               if (\\\$imageNode) { \\\$imageNode.SetAttribute('src', \\\$iconPath) }
           }
-          
-          # Set critical urgency attributes if requested
+
           if ('$URGENCY' -eq 'critical') {
               \\\$RawXml.toast.SetAttribute('scenario', 'reminder')
           }
 
           \\\$SerializedXml = [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime]::New()
           \\\$SerializedXml.LoadXml(\\\$RawXml.OuterXml)
-          
+
           \\\$Toast = [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime]::New(\\\$SerializedXml)
           \\\$Toast.Tag = '\$APP_NAME_ESCAPED'; \\\$Toast.Group = 'WSL'
-          
+
           if ('$URGENCY' -eq 'critical') {
               \\\$Toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::High
           }
@@ -111,32 +72,62 @@
     ")
   ];
 
-  # Activation script to create ~/win-home symlink for the nixos user
-  system.activationScripts.wslHomeSymlink = {
-    text = ''
-      # Note: Activation scripts run as root, but we want to create the link for the 'nixos' user
-      # We need to get the USERPROFILE from the environment if possible,
-      # but WSLENV variables might not be available here.
-      # As a fallback, we can use powershell.exe to detect it.
+  programs.fish = {
+    interactiveShellInit = lib.mkAfter ''
+      if test -f ~/.config/ssh-agent.env
+        source ~/.config/ssh-agent.env
+      end
+    '';
+    shellAliases = {
+      open = "wsl-open";
+    };
+    functions = {
+      fish_title = {
+        body = ''
+          echo $argv[1]
+        '';
+      };
+    };
+  };
 
-      WSL_USER="nixos"
-      USER_HOME="/home/$WSL_USER"
+  services.ssh-agent.enable = true;
 
-      if [ -d "$USER_HOME" ]; then
-        # Use PowerShell to get the Windows username and construct the home path
-        WIN_USER=$(/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command '$env:UserName' 2>/dev/null | tr -d '\r')
+  systemd.user.services.ssh-agent.Service = {
+    ExecStart = lib.mkForce "${pkgs.openssh}/bin/ssh-agent -D -a /run/user/1000/ssh-agent -t 8h";
+    ExecStartPre = "-${pkgs.coreutils}/bin/rm -f /run/user/1000/ssh-agent";
+    ExecStartPost = let
+      script = pkgs.writeShellScript "ssh-agent-post-start" ''
+        ${pkgs.coreutils}/bin/mkdir -p $HOME/.config
+        ARGS=$(${pkgs.procps}/bin/ps -p $1 -o args=)
+        SOCK=$(echo "$ARGS" | ${pkgs.gnugrep}/bin/grep -oP '(?<=-a\\s)\\S+')
 
-        if [ -n "$WIN_USER" ]; then
-          WIN_HOME="/mnt/c/Users/$WIN_USER"
+        if [ -n "$SOCK" ]; then
+          echo "set -gx SSH_AUTH_SOCK $SOCK;" > $HOME/.config/ssh-agent.env
+          echo "set -gx SSH_AGENT_PID $1;" >> $HOME/.config/ssh-agent.env
+        else
+          echo "Could not find socket in ssh-agent arguments: $ARGS" >&2
+          exit 1
+        fi
+      '';
+    in "${script} $MAINPID";
+  };
 
-          if [ -n "$WIN_USER" ] && [ -d "$WIN_HOME" ]; then
-            echo "Creating symlink $USER_HOME/win-home -> $WIN_HOME"
-            ln -sf "$WIN_HOME" "$USER_HOME/win-home"
-            chown -h $WSL_USER:nixos "$USER_HOME/win-home"
-          fi
+  home.activation.wslHomeSymlink = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    WSL_USER="nixos"
+    USER_HOME="/home/$WSL_USER"
+
+    if [ -d "$USER_HOME" ]; then
+      WIN_USER=$(/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command '$env:UserName' 2>/dev/null | tr -d '\r')
+
+      if [ -n "$WIN_USER" ]; then
+        WIN_HOME="/mnt/c/Users/$WIN_USER"
+
+        if [ -d "$WIN_HOME" ]; then
+          echo "Creating symlink $USER_HOME/win-home -> $WIN_HOME"
+          ln -sf "$WIN_HOME" "$USER_HOME/win-home"
+          chown -h $WSL_USER:nixos "$USER_HOME/win-home"
         fi
       fi
-    '';
-    deps = [ "users" ];
-  };
+    fi
+  '';
 }

@@ -1,8 +1,12 @@
 { config, pkgs, lib, ... }:
 
+let
+  roles = config.ghostship.host.roles or { };
+in
+
 {
   # Global shell configuration
-  programs.fish.enable = true;
+  programs.fish.enable = roles.develop or false;
 
   # Allow manual password changes to persist
   users.mutableUsers = true;
@@ -22,7 +26,7 @@
     group = "nixos";
     description = "nixos";
     extraGroups = [ "wheel" "networkmanager" ];
-    shell = pkgs.fish;
+    shell = if roles.develop or false then pkgs.fish else pkgs.bashInteractive;
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFh0VLGYtDCgU2MKtiHmHf8al1iq12zpFQR2g1yEpHkL owner@home.local"
     ];

@@ -1,7 +1,8 @@
-{ inputs, pkgs, ... }:
+{ pkgs, ... }:
 
 {
   imports = [
+    ./host-roles.nix
     ./automation.nix
     ./user-nixos.nix
     ./users.nix
@@ -38,9 +39,6 @@
     "L+ /usr/bin/bwrap - - - - ${pkgs.bubblewrap}/bin/bwrap"
   ];
 
-  # Disable firmware compression for Asahi kernel compatibility
-  hardware.firmwareCompression = "none";
-
   # Common System Packages
   environment.systemPackages = with pkgs; [
     # Tech Stack Tools
@@ -56,14 +54,14 @@
     neovim
     curl
     wget
+    jq
+    yq-go
     htop
     lsof        # List open files
     strace      # System call tracer
     psmisc      # killall, fuser, pstree
     file        # File type detection
     tree        # Directory tree viewer
-    jq
-    yq-go
     bubblewrap
     binutils    # Provides strings
     python3
@@ -87,8 +85,6 @@
 
     # Standard Utilities
     _7zz
-    fd
-    fzf
     ncdu        # Disk usage analyzer
     ldns        # Provides drill
     xdotool

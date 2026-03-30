@@ -1,17 +1,21 @@
-{ config, pkgs, ... }:
+{ ... }:
 
 {
   imports = [
     ./hardware-configuration.nix
     ../../modules/common/default.nix
     ../../modules/develop/default.nix
+    ../../modules/wsl/default.nix
   ];
 
   # Hostname
   networking.hostName = "launch-octopus";
 
-  # WSL Integration
-  wsl.enable = true;
+  ghostship.host.roles = {
+    develop = true;
+    wsl = true;
+  };
+
   wsl.defaultUser = "nixos";
 
   # Automation
@@ -20,9 +24,6 @@
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.nixos = {
     extraGroups = [ "wheel" ];
-    packages = with pkgs; [
-      # User specific packages can also go here
-    ];
   };
 
   # This value determines the NixOS release from which the default

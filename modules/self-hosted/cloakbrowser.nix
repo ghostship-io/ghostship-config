@@ -128,11 +128,17 @@ in
     labels = {
       "io.containers.autoupdate" = "registry";
     };
-    extraOptions = [ "--network=ghostship_net" ];
-    ports = [ "8080:8080" ];
-
     entrypoint = "/usr/local/bin/python3";
     cmd = [ "/cloakbrowser-startup.py" ];
+    extraOptions = [
+      "--network=ghostship_net"
+      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:8080/ || exit 1"
+      "--health-interval=30s"
+      "--health-timeout=10s"
+      "--health-retries=5"
+      "--health-start-period=1m"
+      "--health-on-failure=kill"
+    ];
 
     volumes = [
       "/srv/apps/cloakbrowser/data:/data"

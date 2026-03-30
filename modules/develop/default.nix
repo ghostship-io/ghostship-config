@@ -1,9 +1,14 @@
-{ ... }:
+{ pkgs, ... }:
 
+let
+  agent-browser = pkgs.writeShellScriptBin "agent-browser" ''
+    exec ${pkgs.nodejs}/bin/npx -y agent-browser "$@"
+  '';
+in
 {
+  environment.systemPackages = [ agent-browser ];
+
   imports = [
-    ./wsl.nix
-    ./wsl-mounts.nix
     ./secrets.nix
     ./gemini-wrapper.nix
     ./gemini.nix

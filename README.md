@@ -1,181 +1,102 @@
 # Unified NixOS Configuration Fleet
 
-A robust, modular, and reproducible NixOS configuration repository managing a diverse fleet of systems—replacing legacy Ansible-based infrastructure with a modern, declarative Nix-native approach.
+This repository manages a small mixed NixOS fleet with one Apple Silicon
+server, one AMD desktop, and two WSL2 development hosts. The repo is flake
+based, uses Home Manager for the `nixos` user profile, and uses `sops-nix`
+for secrets.
 
-## 🚀 Vision
-To create an identical state across personal workstations, servers, and embedded devices using Nix Flakes and Home Manager, ensuring absolute reproducibility and seamless platform integration (especially for WSL2).
+## Hosts
 
-## 🛠 Tech Stack
+| Host | Role | Notes |
+| --- | --- | --- |
+| `launch-octopus` | `develop + wsl` | Primary WSL2 development environment |
+| `armored-armadillo` | `develop + wsl` | Secondary WSL2 development environment |
+| `chill-penguin` | `server` | Apple Silicon self-hosted server |
+| `boomer-kuwanger` | `server` | AMD desktop with a minimal server-style user profile |
 
-### Core Ecosystem
-- **Nix & Nix Flakes**: Dependency management and standardized outputs.
-- **NixOS**: The primary operating system.
-- **Home Manager**: Declarative user environment and dotfile management.
-- **sops-nix**: Secure secret management using Mozilla SOPS (age/gpg).
+## Layout
 
-### Development & Shell
-- **Fish Shell**: Primary interactive shell with a rich plugin ecosystem.
-- **Starship**: Cross-shell prompt for a consistent visual experience.
-- **direnv & nix-direnv**: Automatic shell activation.
-- **Modern CLI Utils**: `eza` (ls), `bat` (cat), `fd` (find), `zoxide` (cd), `fzf` (search), `nvd`, and `comma`.
+- `flake.nix`: shared host construction and top-level outputs
+- `hosts/`: per-host configuration and role assignment
+- `modules/common/`: shared NixOS base modules
+- `modules/develop/`: develop-role system tooling and wrappers
+- `modules/wsl/`: WSL-only system integration
+- `modules/self-hosted/`: flat Podman service inventory
+- `home/profiles/`: Home Manager base, server, develop, and WSL profile layers
 
-## 💻 Systems
-- **launch-octopus**: WSL2 development environment on Windows 11.
-- **armored-armadillo**: Secondary WSL2 development environment.
-- **boomer-kuwanger**: Dedicated emulation-focused NixOS PC running on a Minisforum HX100G.
-- **chill-penguin**: Mac Studio M1 Ultra (Apple Silicon) - Running NixOS on kernel 6.19.9-asahi with Fedora's GRUB chainloader. Partitioned with a 3.6 TiB Btrfs layout (`@`, `@home`, `@nix`, `@log`) with ZSTD compression.
+## Role Model
 
-## ✨ Key Features
+- Server-role hosts use a minimal Home Manager profile and default to `bash`.
+- Develop-role hosts use the richer interactive profile and default to `fish`.
+- WSL-role hosts layer WSL-specific mounts, Windows interop, and notification
+  helpers on top of the develop profile.
+- System packages are reserved for host/admin essentials, service/runtime
+  dependencies, and a small system-wide convenience baseline. Interactive shell
+  tooling lives in Home Manager.
 
-### WSL2 Integration
-- **notify-send Bridge**: Forwards Linux notifications to the Windows Action Center with native branding.
-- **wsl-open**: Seamlessly open Linux files/directories in Windows applications.
-- **win-home Symlink**: Direct access to your Windows user profile at `~/win-home`.
-- **Z Mount (`/mnt/z`)**: WSL2 hosts mount the shared Synology export directly over NFS with systemd automounting for better performance and graceful off-network behavior.
-- **WSLENV Integration**: Shared environment variables between host and guest.
+## Self-Hosted Stack
 
-### Security
-- **Secrets Management**: Encrypted `secrets.yaml` integrated directly into NixOS modules via `sops-nix`.
+The container stack lives in the flat
+[`modules/self-hosted/default.nix`](/home/nixos/nixos-config/modules/self-hosted/default.nix)
+inventory. Services use Podman, native healthchecks, and registry auto-update.
+Only Plex exposes host ports; every other service is intended to stay on
+internal networking and be reached through the reverse-proxy/tunnel path.
 
-### Agent Tooling
-- **Unified Assistant Stack**: AGENT, OpenCode, and Codex share a common `~/.agents` instruction/skills source, aligned MCP servers, and an AGENT delegation MCP for repo research and planning.
+Key public services include Plex, Homepage, Muximux, the `arr` stack,
+qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes, and
+PyLoad.
 
-### Self-Hosted Services
-The repo includes a broad set of containerized services running on Podman:
+## Usage
 
-| Service | Purpose |
-|---------|---------|
-| Gluetun | VPN tunnel forarr services |
-| Cloudflared | Cloudflare tunnel |
-| Homepage | Dashboard |
-| Muximux | Alternative dashboard |
-| Tautulli | Plex monitoring |
-| Plex | Media server |
-| Prowlarr | Indexer manager |
-| Sonarr | TV downloader |
-| Radarr | Movie downloader |
-| NZBGet | NZB downloader |
-| Vuetorrent | qBittorrent web UI |
-| FlareSolverr | Cloudflare bypass |
-| BentoPDF | PDF tools |
-| ConvertX | Transcoding |
-| IT-Tools | Developer tools |
-| MeTube | YouTube downloader |
-| Recyclarr | arr config sync |
-| Bazarr | Subtitle downloader |
-| Plex-Auto-Languages | Auto language detection |
-| SearXNG + Valkey | Metasearch engine |
-| ROMM | ROM game manager |
-| Grimmory | Game collection manager |
-| Hermes | Agent terminal and Ghostship utility shell |
-
-The self-hosted stack uses native Podman auto-update on a daily timer, and
-all OCI containers are configured to pull the latest registry image before
-recreation.
-
-### Surgical Configuration Management (`ghostship-config`)
-- **Unified Tooling**: A fleet-wide Python utility (`ghostship-config`) for idempotent, surgical updates to XML, YAML, INI, and KV files.
-- **Identity Enforcement**: Automatically enforces "Ghostship Standard" identity (e.g., `InstanceName`, `FriendlyName`) across all self-hosted apps.
-- **Privacy First**: Automatically disables analytics and ensures update mechanics are set to "Manual" (since Nix handles versioning).
-- **Secure Secrets**: Injects secrets from environment variables or files using `env:` or `file:` prefixes, ensuring sensitive values never appear in process lists or the Nix store.
-- **Idempotency**: Only writes to disk if a change is actually needed, reducing I/O and service restarts.
-
-## 📖 Usage
-
-### Apply Configuration
 Run system-changing commands from a root shell or direct root SSH session.
 
-To build the current host before applying it:
+Build the current host:
+
 ```bash
-nixos-rebuild build --flake .#(hostname)
+nixos-rebuild build --flake .#$(hostname)
+```
+
+Apply the built generation:
+
+```bash
 ./result/bin/switch-to-configuration switch
 ```
 
-To build without switching first:
+Build a different host without switching:
+
 ```bash
-nixos-rebuild build --flake .#(hostname)
+nixos-rebuild build --flake .#chill-penguin
 ```
 
-### 🆕 Bootstrap a New Host
-When setting up a brand-new machine, follow these steps to integrate it into the fleet:
+## Secrets
 
-1. **Boot into NixOS**: Start the system from a NixOS installer (ISO) or a minimal existing installation.
-2. **Clone the Repository**:
-   ```bash
-   nix shell nixpkgs#git -c git clone https://github.com/jpetrucciani/nixos-config.git ~/nixos-config
-   cd ~/nixos-config
-   ```
-3. **Run the Bootstrap Script**:
-   The installer-time script provides `age-keygen`, `jq`, and `nixos-generate-config`, then sets the hostname, ensures `/etc/nix/secrets/age.key` exists without overwriting an existing key, and prints a JSON payload containing the hostname, public key, and hardware configuration:
-   ```bash
-   ./bootstrap.sh NEW_HOSTNAME
-   ```
-4. **Register the Host**:
-   - On your management machine, open a root shell, run the existing registration helper, and paste the JSON when prompted:
-     ```bash
-     sops-register-host
-     ```
-   - Paste the JSON block and press `Ctrl+D`.
-   - This will automatically:
-     - Add the public key to `.sops.yaml`.
-     - Update secrets access list.
-     - Create `hosts/NEW_HOSTNAME/hardware-configuration.nix`.
-     - Re-encrypt `secrets.yaml`.
-5. **Finalize Setup**:
-   - Add `NEW_HOSTNAME` to `flake.nix` under `nixosConfigurations`.
-   - Commit and push the changes.
-   - On the new host, build and apply the configuration from a root shell:
-     ```bash
-     nixos-rebuild build --flake .#NEW_HOSTNAME
-     ./result/bin/switch-to-configuration switch
-     ```
+- `secrets.yaml` is the encrypted source of truth.
+- `secrets.dec.yaml` is the ignored plaintext mirror used for inspection and
+  edits before re-encryption.
+- Service bundles use `*-secrets` names and are consumed directly by the
+  relevant modules.
 
-### Manage Secrets
+Helper commands:
 
-The system is configured for automated daily maintenance:
-- **Garbage Collection**: Unused store paths are automatically deleted daily.
-- **Generation Cleanup**: System generations older than 7 days are automatically purged to optimize disk space.
-- **Manual Cleanup**: To manually trigger a cleanup and keep only the last 5 generations:
 ```bash
-nix-collect-garbage -d
+secrets-edit secrets.yaml
+secrets-list-keys
+secrets-add-key <age1...> [system-name]
+secrets-reencrypt
+generate-age-key
+secrets-get-public-key
 ```
 
-### Manage Secrets
-The configuration includes several helper scripts for managing secrets via `sops-nix`:
+## Bootstrap
 
-- **List public keys**: Show all public keys and their associated systems defined in `.sops.yaml`:
-  ```bash
-  secrets-list-keys
-  ```
-- **Edit secrets**: Decrypt and edit the secrets file:
-  ```bash
-  secrets-edit secrets.yaml
-  ```
-- **Add a new key**: Add a new age public key and optionally associate it with a system:
-  ```bash
-  secrets-add-key <age1...> [system-name]
-  ```
-- **Re-encrypt**: After adding/removing keys, re-encrypt the secrets file to apply the new access list:
-  ```bash
-  secrets-reencrypt
-  ```
-- **Generate age key**: Create a new age key pair if one doesn't exist:
-  ```bash
-  generate-age-key
-  ```
-- **Get public key**: Show the public key derived from the local age key:
-  ```bash
-  secrets-get-public-key
-  ```
+Use `./bootstrap.sh NEW_HOSTNAME` from a temporary NixOS install to generate
+the host registration JSON and ensure `/etc/nix/secrets/age.key` exists. Then
+register the host, add it to `flake.nix`, commit the new host files, and apply
+the configuration with `nixos-rebuild`.
 
-### Notifications
-Standard Linux notification commands are automatically forwarded to Windows:
-```bash
-notify-send "Task Complete" "The build has finished."
-```
+## Notes
 
-## 📂 Structure
-- `hosts/`: Hardware-specific configurations for each machine.
-- `modules/`: Shared system-level NixOS modules (common, services, etc.).
-- `home/`: User-level Home Manager configurations.
-- `docs/`: Project documentation (product guidelines, tech stack, implementation plans).
+- `nh` is installed as a convenience tool, but the documented workflow in this
+  repo is native `nix` and `nixos-rebuild`.
+- WSL hosts expose `wsl-open`, a Windows notification bridge for `notify-send`,
+  a `~/win-home` symlink, and an NFS automount at `/mnt/z`.

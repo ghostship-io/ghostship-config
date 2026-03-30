@@ -2,12 +2,17 @@
 
 {
   imports = [
+    # Infra
     ./common.nix
     ./secrets.nix
     ./gluetun.nix
     ./cloudflared.nix
+
+    # Dashboards
     ./homepage.nix
     ./muximux.nix
+
+    # Media and downloads
     ./tautulli.nix
     ./plex.nix
     ./prowlarr.nix
@@ -16,19 +21,23 @@
     ./nzbget.nix
     ./vuetorrent.nix
     ./flaresolverr.nix
-    ./cloakbrowser.nix
-    ./bentopdf.nix
-    ./convertx.nix
-    ./it-tools.nix
-    ./omnitools.nix
-    ./metube.nix
     ./recyclarr.nix
     ./bazarr.nix
     ./plex-auto-languages.nix
     ./searxng.nix
     ./searxng-valkey.nix
-    ./hermes.nix
     ./pyload.nix
+
+    # Apps and utilities
+    ./cloakbrowser.nix
+    ./hermes.nix
+    ./bentopdf.nix
+    ./convertx.nix
+    ./it-tools.nix
+    ./omnitools.nix
+    ./metube.nix
+
+    # Games
     ./romm-db.nix
     ./romm.nix
     ./grimmory-db.nix

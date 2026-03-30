@@ -1,14 +1,17 @@
-{ config, pkgs, ... }:
+{ pkgs, ... }:
 
 {
   imports = [
     ./hardware-configuration.nix
     ../../modules/common/default.nix
-    ../../modules/common/secrets.nix
   ];
 
   # Hostname
   networking.hostName = "boomer-kuwanger";
+
+  ghostship.host.roles = {
+    server = true;
+  };
 
   # Enable Hyprland
   programs.hyprland = {

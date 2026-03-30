@@ -1,4 +1,4 @@
-{ config, pkgs, lib, inputs, ... }:
+{ pkgs, lib, ... }:
 
 let
   asahiFirmwareDirectory = /boot/asahi;
@@ -6,12 +6,16 @@ let
 in
 {
   imports = [
-    ../../modules/common
-    ../../modules/self-hosted
+    ../../modules/common/default.nix
+    ../../modules/self-hosted/default.nix
     ./hardware-configuration.nix
   ];
 
   # Apple Silicon support - handled by nixos-apple-silicon
+  ghostship.host.roles = {
+    server = true;
+  };
+
   hardware.asahi = {
     enable = true;
     setupAsahiSound = false;
@@ -19,6 +23,7 @@ in
   } // lib.optionalAttrs hasAsahiFirmwareDirectory {
     peripheralFirmwareDirectory = asahiFirmwareDirectory;
   };
+  hardware.firmwareCompression = "none";
 
   # Network
   networking.hostName = "chill-penguin";
