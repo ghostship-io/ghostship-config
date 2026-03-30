@@ -1,6 +1,14 @@
-{ config, ... }:
+{ config, pkgs, ... }:
 
 let
+  hermes-startup = pkgs.writeText "hermes-startup.sh" ''
+    set -eu
+
+    mkdir -p /tmp
+    chmod 1777 /tmp
+
+    exec /nix/store/4avjjjj02q5m84w4q1k7lrf5g8mkwkmb-ghostship-hermes-runtime/bin/ghostship-hermes-runtime entrypoint
+  '';
   hermes-secrets = config.sops.secrets."hermes-secrets".path;
   romm-secrets = config.sops.secrets."romm-secrets".path;
   sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
@@ -47,6 +55,8 @@ in
       CLOAKBROWSER_URL = "http://cloakbrowser:8080";
       SYNOLOGY_VERIFY_SSL = "false";
     };
+    entrypoint = "/bin/sh";
+    cmd = [ "/hermes-startup.sh" ];
     environmentFiles = [
       hermes-secrets
       romm-secrets
@@ -61,6 +71,7 @@ in
     volumes = [
       "/srv/apps/hermes/home:/home/hermes/.hermes:rw"
       "hermes-nix:/nix:rw"
+      "${hermes-startup}:/hermes-startup.sh:ro"
     ];
   };
 
