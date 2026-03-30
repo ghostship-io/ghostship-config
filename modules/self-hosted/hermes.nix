@@ -1,28 +1,7 @@
-{ config, pkgs, ... }:
+{ config, ... }:
 
 let
-  hermes-startup = pkgs.writeText "hermes-startup.sh" ''
-    set -eu
-
-    mkdir -p /tmp
-    chmod 1777 /tmp
-
-    export SSL_CERT_FILE="''${SSL_CERT_FILE:-/etc/ssl/certs/ca-bundle.crt}"
-    export NIX_SSL_CERT_FILE="''${NIX_SSL_CERT_FILE:-/etc/ssl/certs/ca-bundle.crt}"
-    export OPENROUTER_API_KEY="''${OPENROUTER_API_KEY:-''${LITELLM_OPENROUTER_API_KEY:-}}"
-
-    if [ -x /home/hermes/.hermes/hermes-agent/venv/bin/hermes ]; then
-      printf '%s\n' \
-        '#!/bin/sh' \
-        'exec python3 "$HERMES_HOME/hermes-agent/hermes" chat "$@"' \
-        > /home/hermes/.hermes/hermes-agent/venv/bin/hermes
-      chmod 0755 /home/hermes/.hermes/hermes-agent/venv/bin/hermes
-    fi
-
-    exec /nix/store/4avjjjj02q5m84w4q1k7lrf5g8mkwkmb-ghostship-hermes-runtime/bin/ghostship-hermes-runtime entrypoint
-  '';
   hermes-secrets = config.sops.secrets."hermes-secrets".path;
-  litellm-secrets = config.sops.secrets."litellm-secrets".path;
   romm-secrets = config.sops.secrets."romm-secrets".path;
   sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
   radarr-secrets = config.sops.secrets."radarr-secrets".path;
@@ -39,8 +18,6 @@ in
     labels = {
       "io.containers.autoupdate" = "registry";
     };
-    entrypoint = "/bin/sh";
-    cmd = [ "/hermes-startup.sh" ];
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:7681/ || exit 1"
@@ -72,7 +49,6 @@ in
     };
     environmentFiles = [
       hermes-secrets
-      litellm-secrets
       romm-secrets
       sonarr-secrets
       radarr-secrets
@@ -85,7 +61,6 @@ in
     volumes = [
       "/srv/apps/hermes/home:/home/hermes/.hermes:rw"
       "hermes-nix:/nix:rw"
-      "${hermes-startup}:/hermes-startup.sh:ro"
     ];
   };
 
