@@ -2,7 +2,7 @@
 
 {
   virtualisation.oci-containers.containers."searxng-valkey" = {
-    image = "valkey/valkey:latest";
+    image = "docker.io/valkey/valkey:latest";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";

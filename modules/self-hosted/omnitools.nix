@@ -2,7 +2,7 @@
 
 {
   virtualisation.oci-containers.containers."omni-tools" = {
-    image = "iib0011/omni-tools:latest";
+    image = "docker.io/iib0011/omni-tools:latest";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";

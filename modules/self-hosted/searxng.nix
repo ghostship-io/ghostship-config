@@ -5,7 +5,7 @@ let
 in
 {
   virtualisation.oci-containers.containers."searxng" = {
-    image = "searxng/searxng:latest";
+    image = "docker.io/searxng/searxng:latest";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";

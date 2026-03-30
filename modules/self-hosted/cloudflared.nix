@@ -7,7 +7,7 @@ in
 
 {
   virtualisation.oci-containers.containers."cloudflared" = {
-    image = "cloudflare/cloudflared:latest";
+    image = "docker.io/cloudflare/cloudflared:latest";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";

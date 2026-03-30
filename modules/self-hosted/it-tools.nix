@@ -2,7 +2,7 @@
 
 {
   virtualisation.oci-containers.containers."it-tools" = {
-    image = "corentinth/it-tools:latest";
+    image = "docker.io/corentinth/it-tools:latest";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";

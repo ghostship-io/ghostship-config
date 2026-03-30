@@ -2,7 +2,7 @@
 
 {
   virtualisation.oci-containers.containers."muximux" = {
-    image = "linuxserver/muximux:latest";
+    image = "docker.io/linuxserver/muximux:latest";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";

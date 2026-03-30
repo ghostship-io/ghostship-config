@@ -7,7 +7,7 @@ in
 
 {
   virtualisation.oci-containers.containers."gluetun" = {
-    image = "qmcgaw/gluetun";
+    image = "docker.io/qmcgaw/gluetun:latest";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";

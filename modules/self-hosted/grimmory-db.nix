@@ -5,7 +5,7 @@ let
 in
 {
   virtualisation.oci-containers.containers."grimmory-db" = {
-    image = "mariadb:11";
+    image = "docker.io/library/mariadb:11";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";

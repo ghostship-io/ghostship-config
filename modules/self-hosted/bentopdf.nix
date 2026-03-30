@@ -2,7 +2,7 @@
 
 {
   virtualisation.oci-containers.containers."bentopdf" = {
-    image = "bentopdf/bentopdf:latest";
+    image = "docker.io/bentopdf/bentopdf:latest";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";

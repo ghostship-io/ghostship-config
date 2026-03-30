@@ -5,7 +5,7 @@ let
 in
 {
   virtualisation.oci-containers.containers."grimmory" = {
-    image = "grimmory/grimmory:latest";
+    image = "docker.io/grimmory/grimmory:latest";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";

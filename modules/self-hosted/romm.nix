@@ -75,7 +75,7 @@ PY
 in
 {
   virtualisation.oci-containers.containers."romm" = {
-    image = "rommapp/romm:latest";
+    image = "docker.io/rommapp/romm:latest";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";

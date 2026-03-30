@@ -123,7 +123,7 @@ if __name__ == "__main__":
 in
 {
   virtualisation.oci-containers.containers."cloakbrowser" = {
-    image = "cloakhq/cloakbrowser-manager:latest";
+    image = "docker.io/cloakhq/cloakbrowser-manager:latest";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";
