@@ -73,6 +73,13 @@ EOF
       exit 1
     fi
 
+    case "$token" in
+      \"*\")
+        token="''${token#\"}"
+        token="''${token%\"}"
+        ;;
+    esac
+
     echo "Waiting for PriceBuddy to become ready for agent token sync..."
     token_id=""
     for _ in $(${pkgs.coreutils}/bin/seq 1 120); do
@@ -137,7 +144,7 @@ PHP
     fi
 
     cat > "$token_file" <<EOF
-PRICEBUDDY_API_TOKEN=''${token_id}|''${token}
+PRICEBUDDY_API_TOKEN="''${token_id}|''${token}"
 EOF
 
     ${pkgs.coreutils}/bin/chmod 600 "$token_file"
