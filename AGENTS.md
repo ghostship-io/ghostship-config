@@ -203,4 +203,6 @@ This file serves as the primary memory and persistent fact store for AI agents w
 
 - **PriceBuddy Env Generation Belongs In PreStart**: PriceBuddy env files must be written from a service `preStart` hook, not `system.activationScripts`. In this repo `sops-install-secrets` makes the secret bundle available in the service start path, and writing `/srv/apps/pricebuddy/{pricebuddy.env,pricebuddy-db.env,pricebuddy-agent.env}` from `podman-pricebuddy` startup avoids missing-file failures on the MySQL container.
 
+- **PriceBuddy Startup Needs Process Env**: The PriceBuddy image's `start-app.sh` reads `DB_HOST`, `DB_USERNAME`, `DB_PASSWORD`, and related values from the process environment, not from the mounted Laravel `.env` file. Keep `environmentFiles = [ pricebuddy.env ]` on the app container so the DB wait loop sees the right host name.
+
 - **Plaintext Secret Mirrors Stay Local**: `secrets.dec.yaml` is only a working plaintext mirror for editing secrets. Never add it to Git or stage it for commit; only the encrypted `secrets.yaml` belongs in the repository.
