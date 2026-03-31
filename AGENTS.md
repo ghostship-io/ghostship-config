@@ -200,6 +200,7 @@ This file serves as the primary memory and persistent fact store for AI agents w
 - **PriceBuddy Agent Token Bootstrap**: PriceBuddy does not expose a simple static agent token in its startup env; the durable API token should be minted from the seeded `pricebuddy@ghostship.io` account after first boot and written to `/srv/apps/pricebuddy/pricebuddy-agent.env`. The app login itself can stay `pricebuddy/pricebuddy`, but the API token is a separate long-lived credential.
 
 - **PriceBuddy Token Seeding**: PriceBuddy's agent token is now sourced from `pricebuddy-secrets` as `PRICEBUDDY_API_TOKEN` and written to `/srv/apps/pricebuddy/pricebuddy-agent.env` during activation. The startup hook must seed the matching hashed Sanctum row for the seeded user; it should not mint a fresh token at runtime anymore.
+- **PriceBuddy Bearer Format**: The agent-facing `/srv/apps/pricebuddy/pricebuddy-agent.env` file must contain Sanctum's `id|token` bearer string, not just the raw secret token. The raw token from `pricebuddy-secrets` is only the source material; the row id must be prefixed so `Authorization: Bearer ...` works against the API.
 
 - **PriceBuddy Env Generation Belongs In PreStart**: PriceBuddy env files must be written from a service `preStart` hook, not `system.activationScripts`. In this repo `sops-install-secrets` makes the secret bundle available in the service start path, and writing `/srv/apps/pricebuddy/{pricebuddy.env,pricebuddy-db.env,pricebuddy-agent.env}` from `podman-pricebuddy` startup avoids missing-file failures on the MySQL container.
 

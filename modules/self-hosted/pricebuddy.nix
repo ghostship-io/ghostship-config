@@ -47,12 +47,8 @@ MYSQL_ROOT_PASSWORD=$PRICEBUDDY_MYSQL_ROOT_PASS
 MYSQL_ROOT_HOST=127.0.0.1
 EOF
 
-    cat > "$agent_env_file" <<EOF
-PRICEBUDDY_API_TOKEN=$PRICEBUDDY_API_TOKEN
-EOF
-
-    ${pkgs.coreutils}/bin/chmod 600 "$app_env_file" "$db_env_file" "$agent_env_file"
-    ${pkgs.coreutils}/bin/chown 3000:3000 "$app_env_file" "$db_env_file" "$agent_env_file"
+    ${pkgs.coreutils}/bin/chmod 600 "$app_env_file" "$db_env_file"
+    ${pkgs.coreutils}/bin/chown 3000:3000 "$app_env_file" "$db_env_file"
   '';
   pricebuddy-pre-start = pkgs.writeShellScriptBin "pricebuddy-pre-start" ''
     set -eu
@@ -78,9 +74,9 @@ EOF
     fi
 
     echo "Waiting for PriceBuddy to become ready for agent token sync..."
-    synced=0
+    token_id=""
     for _ in $(${pkgs.coreutils}/bin/seq 1 120); do
-      if "$podman_bin" exec -i -e PRICEBUDDY_API_TOKEN="$token" "$container" php <<'PHP'
+      if token_id="$("$podman_bin" exec -i -e PRICEBUDDY_API_TOKEN="$token" "$container" php <<'PHP'
 <?php
 require '/app/vendor/autoload.php';
 $app = require '/app/bootstrap/app.php';
@@ -120,22 +116,32 @@ $payload = [
 
 if ($existing) {
     $query->update($payload);
+    $tokenId = $existing->id;
 } else {
     $payload['created_at'] = now();
-    \Illuminate\Support\Facades\DB::table('personal_access_tokens')->insert($payload);
+    $tokenId = \Illuminate\Support\Facades\DB::table('personal_access_tokens')->insertGetId($payload);
 }
+echo $tokenId;
 PHP
-      then
-        synced=1
-        break
+      )"; then
+        if [ -n "$token_id" ]; then
+          break
+        fi
       fi
       ${pkgs.coreutils}/bin/sleep 1
     done
 
-    if [ "$synced" -ne 1 ]; then
+    if [ -z "$token_id" ]; then
       echo "Failed to sync the PriceBuddy API token" >&2
       exit 1
     fi
+
+    cat > "$token_file" <<EOF
+PRICEBUDDY_API_TOKEN=''${token_id}|''${token}
+EOF
+
+    ${pkgs.coreutils}/bin/chmod 600 "$token_file"
+    ${pkgs.coreutils}/bin/chown 3000:3000 "$token_file"
   '';
 in
 {

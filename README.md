@@ -49,8 +49,9 @@ qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes,
 PyLoad, RSS-Bridge, and PriceBuddy.
 
 PriceBuddy seeds a `pricebuddy@ghostship.io` / `pricebuddy` login and reads a
-persistent agent API token from the `pricebuddy-secrets` bundle into
-`/srv/apps/pricebuddy/pricebuddy-agent.env`.
+persistent agent API token from the `pricebuddy-secrets` bundle. The live
+`/srv/apps/pricebuddy/pricebuddy-agent.env` file contains the Sanctum bearer
+token in `id|token` form for direct API use.
 
 ## Usage
 
