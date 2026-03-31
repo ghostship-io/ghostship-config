@@ -48,9 +48,9 @@ Key services include Plex, Homepage, Muximux, the `arr` stack,
 qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes,
 PyLoad, RSS-Bridge, and PriceBuddy.
 
-PriceBuddy seeds a `pricebuddy@ghostship.io` / `pricebuddy` login and writes a
-persistent agent API token to `/srv/apps/pricebuddy/pricebuddy-agent.env` on
-first start.
+PriceBuddy seeds a `pricebuddy@ghostship.io` / `pricebuddy` login and reads a
+persistent agent API token from the `pricebuddy-secrets` bundle into
+`/srv/apps/pricebuddy/pricebuddy-agent.env`.
 
 ## Usage
 

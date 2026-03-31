@@ -5,21 +5,28 @@ let
   pricebuddy-env = "/srv/apps/pricebuddy/pricebuddy.env";
   pricebuddy-db-env = "/srv/apps/pricebuddy/pricebuddy-db.env";
   pricebuddy-agent-env = "/srv/apps/pricebuddy/pricebuddy-agent.env";
-  pricebuddy-agent-token-script = pkgs.writeShellScriptBin "pricebuddy-agent-token" ''
+  pricebuddy-token-sync = pkgs.writeShellScriptBin "pricebuddy-token-sync" ''
     set -eu
 
     podman_bin="${pkgs.podman}/bin/podman"
     token_file="${pricebuddy-agent-env}"
     container="pricebuddy"
 
-    if [ -s "$token_file" ] && ${pkgs.gnugrep}/bin/grep -q '^PRICEBUDDY_API_TOKEN=' "$token_file"; then
-      exit 0
+    if [ ! -s "$token_file" ]; then
+      echo "Missing PriceBuddy agent token file: $token_file" >&2
+      exit 1
     fi
 
-    echo "Waiting for PriceBuddy to become ready for agent token minting..."
+    token="$(${pkgs.gnused}/bin/sed -n 's/^PRICEBUDDY_API_TOKEN=//p' "$token_file" | ${pkgs.coreutils}/bin/head -n 1)"
+    if [ -z "$token" ]; then
+      echo "PriceBuddy agent token file does not contain PRICEBUDDY_API_TOKEN" >&2
+      exit 1
+    fi
+
+    echo "Waiting for PriceBuddy to become ready for agent token sync..."
+    synced=0
     for _ in $(${pkgs.coreutils}/bin/seq 1 120); do
-      if token=$(
-        "$podman_bin" exec -i "$container" php <<'PHP'
+      if "$podman_bin" exec -i -e PRICEBUDDY_API_TOKEN="$token" "$container" php <<'PHP'
 <?php
 require '/app/vendor/autoload.php';
 $app = require '/app/bootstrap/app.php';
@@ -27,32 +34,54 @@ $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
 $email = env('APP_USER_EMAIL');
+$token = env('PRICEBUDDY_API_TOKEN');
+
+if (! $token) {
+    fwrite(STDERR, "PriceBuddy API token is missing\n");
+    exit(1);
+}
+
 $user = \App\Models\User::where('email', $email)->first();
 if (! $user) {
     fwrite(STDERR, "PriceBuddy bootstrap user not found\n");
     exit(1);
 }
 
-echo $user->createToken('ghostship-agent')->plainTextToken;
+$tokenHash = hash('sha256', $token);
+$query = \Illuminate\Support\Facades\DB::table('personal_access_tokens')
+    ->where('tokenable_type', \App\Models\User::class)
+    ->where('tokenable_id', $user->id)
+    ->where('name', 'ghostship-agent');
+$existing = $query->first();
+$payload = [
+    'tokenable_type' => \App\Models\User::class,
+    'tokenable_id' => $user->id,
+    'name' => 'ghostship-agent',
+    'token' => $tokenHash,
+    'abilities' => json_encode(['*']),
+    'last_used_at' => null,
+    'expires_at' => null,
+    'updated_at' => now(),
+];
+
+if ($existing) {
+    $query->update($payload);
+} else {
+    $payload['created_at'] = now();
+    \Illuminate\Support\Facades\DB::table('personal_access_tokens')->insert($payload);
+}
 PHP
-      ); then
-        if [ -n "$token" ]; then
-          break
-        fi
+      then
+        synced=1
+        break
       fi
       ${pkgs.coreutils}/bin/sleep 1
     done
 
-    if [ -z "$token" ]; then
-      echo "Failed to mint a PriceBuddy API token" >&2
+    if [ "$synced" -ne 1 ]; then
+      echo "Failed to sync the PriceBuddy API token" >&2
       exit 1
     fi
-
-    ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$token_file")"
-    {
-      printf 'PRICEBUDDY_API_TOKEN=%s\n' "$token"
-    } > "$token_file"
-    ${pkgs.coreutils}/bin/chmod 600 "$token_file"
   '';
 in
 {
@@ -127,7 +156,7 @@ in
       "podman-pricebuddy-scraper.service"
     ];
     postStart = ''
-      ${pricebuddy-agent-token-script}/bin/pricebuddy-agent-token
+      ${pricebuddy-token-sync}/bin/pricebuddy-token-sync
     '';
   };
 
@@ -142,6 +171,7 @@ in
       CONFIG_DIR="/srv/apps/pricebuddy"
       APP_ENV_FILE="${pricebuddy-env}"
       DB_ENV_FILE="${pricebuddy-db-env}"
+      AGENT_ENV_FILE="${pricebuddy-agent-env}"
 
       if [ -f "${pricebuddy-secrets}" ]; then
         echo "Surgically updating PriceBuddy env files..."
@@ -152,12 +182,12 @@ in
         ${pkgs.coreutils}/bin/mkdir -p "$CONFIG_DIR"
 
         cat > "$APP_ENV_FILE" <<EOF
-        APP_KEY=$PRICEBUDDY_APP_KEY
+APP_KEY=$PRICEBUDDY_APP_KEY
 APP_ENV=production
 APP_DEBUG=false
-        APP_USER_EMAIL=$PRICEBUDDY_APP_USER_EMAIL
-        APP_USER_PASSWORD=$PRICEBUDDY_APP_USER_PASSWORD
-        DB_HOST=pricebuddy-db
+APP_USER_EMAIL=$PRICEBUDDY_APP_USER_EMAIL
+APP_USER_PASSWORD=$PRICEBUDDY_APP_USER_PASSWORD
+DB_HOST=pricebuddy-db
 DB_PORT=3306
 DB_USERNAME=$PRICEBUDDY_DB_USER
 DB_PASSWORD=$PRICEBUDDY_DB_PASS
@@ -174,8 +204,12 @@ MYSQL_ROOT_PASSWORD=$PRICEBUDDY_MYSQL_ROOT_PASS
 MYSQL_ROOT_HOST=127.0.0.1
 EOF
 
-        ${pkgs.coreutils}/bin/chmod 600 "$APP_ENV_FILE" "$DB_ENV_FILE"
-        ${pkgs.coreutils}/bin/chown 3000:3000 "$APP_ENV_FILE" "$DB_ENV_FILE"
+        cat > "$AGENT_ENV_FILE" <<EOF
+PRICEBUDDY_API_TOKEN=$PRICEBUDDY_API_TOKEN
+EOF
+
+        ${pkgs.coreutils}/bin/chmod 600 "$APP_ENV_FILE" "$DB_ENV_FILE" "$AGENT_ENV_FILE"
+        ${pkgs.coreutils}/bin/chown 3000:3000 "$APP_ENV_FILE" "$DB_ENV_FILE" "$AGENT_ENV_FILE"
       fi
     '';
   };
