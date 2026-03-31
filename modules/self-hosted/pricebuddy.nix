@@ -5,6 +5,60 @@ let
   pricebuddy-env = "/srv/apps/pricebuddy/pricebuddy.env";
   pricebuddy-db-env = "/srv/apps/pricebuddy/pricebuddy-db.env";
   pricebuddy-agent-env = "/srv/apps/pricebuddy/pricebuddy-agent.env";
+  pricebuddy-env-sync = pkgs.writeShellScriptBin "pricebuddy-env-sync" ''
+    set -eu
+
+    config_dir="/srv/apps/pricebuddy"
+    app_env_file="${pricebuddy-env}"
+    db_env_file="${pricebuddy-db-env}"
+    agent_env_file="${pricebuddy-agent-env}"
+
+    if [ ! -f "${pricebuddy-secrets}" ]; then
+      echo "Missing PriceBuddy secret file: ${pricebuddy-secrets}" >&2
+      exit 1
+    fi
+
+    set -a
+    . "${pricebuddy-secrets}"
+    set +a
+
+    ${pkgs.coreutils}/bin/mkdir -p "$config_dir"
+
+    cat > "$app_env_file" <<EOF
+APP_KEY=$PRICEBUDDY_APP_KEY
+APP_ENV=production
+APP_DEBUG=false
+APP_USER_EMAIL=$PRICEBUDDY_APP_USER_EMAIL
+APP_USER_PASSWORD=$PRICEBUDDY_APP_USER_PASSWORD
+DB_HOST=pricebuddy-db
+DB_PORT=3306
+DB_USERNAME=$PRICEBUDDY_DB_USER
+DB_PASSWORD=$PRICEBUDDY_DB_PASS
+DB_DATABASE=pricebuddy
+SCRAPER_BASE_URL=http://pricebuddy-scraper:3000
+AFFILIATE_ENABLED=false
+EOF
+
+    cat > "$db_env_file" <<EOF
+MYSQL_DATABASE=pricebuddy
+MYSQL_USER=$PRICEBUDDY_DB_USER
+MYSQL_PASSWORD=$PRICEBUDDY_DB_PASS
+MYSQL_ROOT_PASSWORD=$PRICEBUDDY_MYSQL_ROOT_PASS
+MYSQL_ROOT_HOST=127.0.0.1
+EOF
+
+    cat > "$agent_env_file" <<EOF
+PRICEBUDDY_API_TOKEN=$PRICEBUDDY_API_TOKEN
+EOF
+
+    ${pkgs.coreutils}/bin/chmod 600 "$app_env_file" "$db_env_file" "$agent_env_file"
+    ${pkgs.coreutils}/bin/chown 3000:3000 "$app_env_file" "$db_env_file" "$agent_env_file"
+  '';
+  pricebuddy-pre-start = pkgs.writeShellScriptBin "pricebuddy-pre-start" ''
+    set -eu
+
+    ${pricebuddy-env-sync}/bin/pricebuddy-env-sync
+  '';
   pricebuddy-token-sync = pkgs.writeShellScriptBin "pricebuddy-token-sync" ''
     set -eu
 
@@ -155,6 +209,9 @@ in
       "podman-pricebuddy-db.service"
       "podman-pricebuddy-scraper.service"
     ];
+    preStart = ''
+      ${pricebuddy-pre-start}/bin/pricebuddy-pre-start
+    '';
     postStart = ''
       ${pricebuddy-token-sync}/bin/pricebuddy-token-sync
     '';
@@ -166,51 +223,4 @@ in
     "d /srv/apps/pricebuddy-db 0755 apps apps -"
   ];
 
-  system.activationScripts.pricebuddy-config = {
-    text = ''
-      CONFIG_DIR="/srv/apps/pricebuddy"
-      APP_ENV_FILE="${pricebuddy-env}"
-      DB_ENV_FILE="${pricebuddy-db-env}"
-      AGENT_ENV_FILE="${pricebuddy-agent-env}"
-
-      if [ -f "${pricebuddy-secrets}" ]; then
-        echo "Surgically updating PriceBuddy env files..."
-        set -a
-        . "${pricebuddy-secrets}"
-        set +a
-
-        ${pkgs.coreutils}/bin/mkdir -p "$CONFIG_DIR"
-
-        cat > "$APP_ENV_FILE" <<EOF
-APP_KEY=$PRICEBUDDY_APP_KEY
-APP_ENV=production
-APP_DEBUG=false
-APP_USER_EMAIL=$PRICEBUDDY_APP_USER_EMAIL
-APP_USER_PASSWORD=$PRICEBUDDY_APP_USER_PASSWORD
-DB_HOST=pricebuddy-db
-DB_PORT=3306
-DB_USERNAME=$PRICEBUDDY_DB_USER
-DB_PASSWORD=$PRICEBUDDY_DB_PASS
-DB_DATABASE=pricebuddy
-SCRAPER_BASE_URL=http://pricebuddy-scraper:3000
-AFFILIATE_ENABLED=false
-EOF
-
-        cat > "$DB_ENV_FILE" <<EOF
-MYSQL_DATABASE=pricebuddy
-MYSQL_USER=$PRICEBUDDY_DB_USER
-MYSQL_PASSWORD=$PRICEBUDDY_DB_PASS
-MYSQL_ROOT_PASSWORD=$PRICEBUDDY_MYSQL_ROOT_PASS
-MYSQL_ROOT_HOST=127.0.0.1
-EOF
-
-        cat > "$AGENT_ENV_FILE" <<EOF
-PRICEBUDDY_API_TOKEN=$PRICEBUDDY_API_TOKEN
-EOF
-
-        ${pkgs.coreutils}/bin/chmod 600 "$APP_ENV_FILE" "$DB_ENV_FILE" "$AGENT_ENV_FILE"
-        ${pkgs.coreutils}/bin/chown 3000:3000 "$APP_ENV_FILE" "$DB_ENV_FILE" "$AGENT_ENV_FILE"
-      fi
-    '';
-  };
 }

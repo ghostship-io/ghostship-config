@@ -201,4 +201,6 @@ This file serves as the primary memory and persistent fact store for AI agents w
 
 - **PriceBuddy Token Seeding**: PriceBuddy's agent token is now sourced from `pricebuddy-secrets` as `PRICEBUDDY_API_TOKEN` and written to `/srv/apps/pricebuddy/pricebuddy-agent.env` during activation. The startup hook must seed the matching hashed Sanctum row for the seeded user; it should not mint a fresh token at runtime anymore.
 
+- **PriceBuddy Env Generation Belongs In PreStart**: PriceBuddy env files must be written from a service `preStart` hook, not `system.activationScripts`. In this repo `sops-install-secrets` makes the secret bundle available in the service start path, and writing `/srv/apps/pricebuddy/{pricebuddy.env,pricebuddy-db.env,pricebuddy-agent.env}` from `podman-pricebuddy` startup avoids missing-file failures on the MySQL container.
+
 - **Plaintext Secret Mirrors Stay Local**: `secrets.dec.yaml` is only a working plaintext mirror for editing secrets. Never add it to Git or stage it for commit; only the encrypted `secrets.yaml` belongs in the repository.
