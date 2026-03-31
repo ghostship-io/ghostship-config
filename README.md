@@ -44,9 +44,13 @@ inventory. Services use Podman, native healthchecks, and registry auto-update.
 Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
-Key public services include Plex, Homepage, Muximux, the `arr` stack,
-qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes, and
-PyLoad.
+Key services include Plex, Homepage, Muximux, the `arr` stack,
+qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes,
+PyLoad, RSS-Bridge, and PriceBuddy.
+
+PriceBuddy seeds a `pricebuddy@ghostship.io` / `pricebuddy` login and writes a
+persistent agent API token to `/srv/apps/pricebuddy/pricebuddy-agent.env` on
+first start.
 
 ## Usage
 

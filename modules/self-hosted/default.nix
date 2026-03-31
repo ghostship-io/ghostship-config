@@ -36,6 +36,8 @@
     ./it-tools.nix
     ./omnitools.nix
     ./metube.nix
+    ./rss-bridge.nix
+    ./pricebuddy.nix
 
     # Games
     ./romm-db.nix

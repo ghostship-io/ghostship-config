@@ -69,6 +69,11 @@
     mode = "0400";
   };
 
+  sops.secrets."pricebuddy-secrets" = {
+    sopsFile = ../../secrets.yaml;
+    mode = "0400";
+  };
+
   sops.secrets."searxng-secrets" = {
     sopsFile = ../../secrets.yaml;
     mode = "0400";

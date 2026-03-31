@@ -216,6 +216,16 @@ in
             "[Services].[SearXNG].description=literal:Metasearch Engine"
             "[Services].[SearXNG].server=literal:chill-penguin"
             "[Services].[SearXNG].container=literal:searxng"
+
+            "[Services].[RSS-Bridge].icon=literal:mdi-rss"
+            "[Services].[RSS-Bridge].description=literal:Feed Bridge"
+            "[Services].[RSS-Bridge].server=literal:chill-penguin"
+            "[Services].[RSS-Bridge].container=literal:rss-bridge"
+
+            "[Services].[PriceBuddy].icon=literal:mdi-currency-usd"
+            "[Services].[PriceBuddy].description=literal:Price Tracker"
+            "[Services].[PriceBuddy].server=literal:chill-penguin"
+            "[Services].[PriceBuddy].container=literal:pricebuddy"
             
             # Management group
             "[Management].[Homepage].icon=literal:homepage.png"
@@ -279,6 +289,11 @@ in
             "[Infrastructure].[Grimmory DB].description=literal:Grimmory Database"
             "[Infrastructure].[Grimmory DB].server=literal:chill-penguin"
             "[Infrastructure].[Grimmory DB].container=literal:grimmory-db"
+
+            "[Infrastructure].[PriceBuddy DB].icon=literal:mdi-database"
+            "[Infrastructure].[PriceBuddy DB].description=literal:PriceBuddy Database"
+            "[Infrastructure].[PriceBuddy DB].server=literal:chill-penguin"
+            "[Infrastructure].[PriceBuddy DB].container=literal:pricebuddy-db"
           )
 
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
