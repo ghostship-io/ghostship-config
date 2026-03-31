@@ -217,12 +217,12 @@ in
             "[Services].[SearXNG].server=literal:chill-penguin"
             "[Services].[SearXNG].container=literal:searxng"
 
-            "[Services].[RSS-Bridge].icon=literal:mdi-rss"
+            "[Services].[RSS-Bridge].icon=literal:mdi-rss-#f97316"
             "[Services].[RSS-Bridge].description=literal:Feed Bridge"
             "[Services].[RSS-Bridge].server=literal:chill-penguin"
             "[Services].[RSS-Bridge].container=literal:rss-bridge"
 
-            "[Services].[PriceBuddy].icon=literal:mdi-currency-usd"
+            "[Services].[PriceBuddy].icon=literal:mdi-currency-usd-#22c55e"
             "[Services].[PriceBuddy].description=literal:Price Tracker"
             "[Services].[PriceBuddy].server=literal:chill-penguin"
             "[Services].[PriceBuddy].container=literal:pricebuddy"
@@ -279,7 +279,17 @@ in
             "[Infrastructure].[SearXNG Cache].description=literal:Search Cache"
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
-            
+
+            "[Infrastructure].[PriceBuddy Scraper].icon=literal:mdi-robot-outline-#0ea5e9"
+            "[Infrastructure].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
+            "[Infrastructure].[PriceBuddy Scraper].server=literal:chill-penguin"
+            "[Infrastructure].[PriceBuddy Scraper].container=literal:pricebuddy-scraper"
+
+            "[Infrastructure].[PriceBuddy DB].icon=literal:mdi-database-#8b5cf6"
+            "[Infrastructure].[PriceBuddy DB].description=literal:PriceBuddy Database"
+            "[Infrastructure].[PriceBuddy DB].server=literal:chill-penguin"
+            "[Infrastructure].[PriceBuddy DB].container=literal:pricebuddy-db"
+
             "[Infrastructure].[RomM DB].icon=literal:mariadb.png"
             "[Infrastructure].[RomM DB].description=literal:RomM Database"
             "[Infrastructure].[RomM DB].server=literal:chill-penguin"
@@ -290,10 +300,6 @@ in
             "[Infrastructure].[Grimmory DB].server=literal:chill-penguin"
             "[Infrastructure].[Grimmory DB].container=literal:grimmory-db"
 
-            "[Infrastructure].[PriceBuddy DB].icon=literal:mdi-database"
-            "[Infrastructure].[PriceBuddy DB].description=literal:PriceBuddy Database"
-            "[Infrastructure].[PriceBuddy DB].server=literal:chill-penguin"
-            "[Infrastructure].[PriceBuddy DB].container=literal:pricebuddy-db"
           )
 
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
