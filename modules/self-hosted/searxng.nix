@@ -5,6 +5,7 @@ let
   mkEngine = name: extra: { inherit name; disabled = false; } // extra;
   searxng-keep-only = [
     # General / web / context
+    "brave"
     "brave.news"
     "google"
     "hackernews"
@@ -126,6 +127,7 @@ let
 
     # Emphasize broader and less-filtered discovery engines.
     (mkEngine "arxiv" { weight = 4; })
+    (mkEngine "brave" { weight = 4; timeout = 5.0; })
     (mkEngine "brave.images" { weight = 4; timeout = 5.0; })
     (mkEngine "brave.news" { weight = 4; timeout = 5.0; })
     (mkEngine "brave.videos" { weight = 4; timeout = 5.0; })
