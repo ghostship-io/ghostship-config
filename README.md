@@ -48,6 +48,12 @@ Key services include Plex, Homepage, Muximux, the `arr` stack,
 qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes,
 PyLoad, RSS-Bridge, PriceBuddy, and Honcho.
 
+SearXNG is intended to run as an internal-only search hub on `ghostship_net`
+with a Nix-managed max-open engine allowlist, and internal consumers such as
+Hermes should use the container-network address `http://searxng:5002`. The
+engine inventory is regenerated in `podman-searxng` `preStart` so curated
+engine changes and container restarts stay coupled during `nixos-rebuild`.
+
 PriceBuddy seeds a `pricebuddy@ghostship.io` / `pricebuddy` login and reads a
 persistent agent API token from the `pricebuddy-secrets` bundle. The live
 `/srv/apps/pricebuddy/pricebuddy-agent.env` file contains a shell-safe
