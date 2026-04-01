@@ -1,12 +1,10 @@
 { pkgs, ... }:
 
 let
-  agent-browser = pkgs.writeShellScriptBin "agent-browser" ''
-    exec ${pkgs.nodejs}/bin/npx -y agent-browser "$@"
-  '';
+  agentTooling = import ./agent-tooling.nix { inherit pkgs; };
 in
 {
-  environment.systemPackages = [ agent-browser ];
+  environment.systemPackages = [ agentTooling.agentBrowser ];
 
   imports = [
     ./secrets.nix
