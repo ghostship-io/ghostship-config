@@ -23,20 +23,11 @@ let
     };
   };
 
-  opencode-script = pkgs.writeShellScriptBin "opencode" ''
-    set -euo pipefail
-    exec ${pkgs.nodejs}/bin/npx -y opencode-ai "$@"
-  '';
-
-  opencode-cli = pkgs.symlinkJoin {
+  opencode-cli = agentTooling.mkNpxAgentWrapper {
     name = "opencode";
-    paths = [ opencode-script ];
-    nativeBuildInputs = [ pkgs.makeWrapper ];
-    postBuild = ''
-      wrapProgram $out/bin/opencode \
-        --prefix PATH : ${agentTooling.runtimeBinPath} \
-        --set SSH_AUTH_SOCK "/run/user/1000/ssh-agent" \
-        --set NODE_NO_WARNINGS 1
+    npmPackage = "opencode-ai";
+    extraEnvironment = ''
+      export SSH_AUTH_SOCK="/run/user/1000/ssh-agent"
     '';
   };
 in

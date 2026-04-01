@@ -38,6 +38,20 @@ for secrets.
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.
 
+## Agent Launchers
+
+- Develop hosts expose `codex`, `gemini`, `opencode`, `agent-browser`, and
+  `openspec` through Nix-managed wrapper scripts.
+- `codex`, `gemini`, `opencode`, and `openspec` all execute through `npx -y`
+  so they resolve the latest upstream CLI at launch time instead of relying on
+  a pinned npm install in the Nix store.
+- Before `codex`, `gemini`, or `opencode` launches, the shared wrapper
+  attempts a best-effort global `skills` refresh and, when started anywhere
+  inside an OpenSpec repo, runs `openspec update` from the repo root so the
+  latest slash-command scaffolding stays active.
+- Gemini also refreshes any managed Gemini extensions on launch. Wrapper-side
+  update failures warn and continue instead of blocking the agent start.
+
 ## Self-Hosted Stack
 
 The container stack lives in the flat

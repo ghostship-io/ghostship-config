@@ -1,4 +1,9 @@
-{ pkgs, lib, inputs, ... }:
+{
+  pkgs,
+  lib,
+  inputs,
+  ...
+}:
 
 let
   agentTooling = import ./agent-tooling.nix {
@@ -6,68 +11,73 @@ let
   };
   libsecretPath = lib.makeLibraryPath [ pkgs.libsecret ];
 
-  base-gemini = pkgs.writeShellScriptBin "gemini-base" ''
-    set -euo pipefail
-
-    check_extension() {
-      name="$1"
-      repo="$2"
-      dir="$HOME/.gemini/extensions/$name"
-      remote_head="$(${pkgs.git}/bin/git ls-remote "$repo" HEAD | cut -f1)"
-      local_head=""
-
-      if [ -d "$dir" ] && [ ! -d "$dir/.git" ]; then
-        return 0
-      fi
-
-      if [ -z "$remote_head" ]; then
-        return 0
-      fi
-
-      if [ -d "$dir/.git" ]; then
-        local_head="$(${pkgs.git}/bin/git -C "$dir" rev-parse HEAD 2>/dev/null || true)"
-      fi
-
-      if [ -z "$local_head" ]; then
-        ${pkgs.nodejs}/bin/npx -y @google/gemini-cli extensions install "$repo" --auto-update --consent
-      elif [ "$local_head" != "$remote_head" ]; then
-        ${pkgs.nodejs}/bin/npx -y @google/gemini-cli extensions update "$name" || true
-      fi
-    }
-
-    check_agent_browser() {
-      if [ ! -d "$HOME/.agent-browser" ]; then
-        ${pkgs.nodejs}/bin/npx -y agent-browser install --with-deps
-      fi
-    }
-
-    check_agent_browser
-    ${lib.concatMapStrings (extension: ''
-    check_extension "${extension.name}" "${extension.repo}"
-'') agentTooling.geminiExtensions}
-
-    export LD_LIBRARY_PATH="${libsecretPath}${if libsecretPath != "" then ":" else ""}$LD_LIBRARY_PATH"
-    ${pkgs.nodejs}/bin/npx -y @google/gemini-cli "$@"
-  '';
-
-  base-skills = pkgs.writeShellScriptBin "skills-base" ''
-    npx -y skills "$@"
-  '';
-
-  gemini-cli = pkgs.symlinkJoin {
+  gemini-cli = agentTooling.mkNpxAgentWrapper {
     name = "gemini";
-    paths = [ base-gemini base-skills ];
-    nativeBuildInputs = [ pkgs.makeWrapper ];
-    postBuild = ''
-      wrapProgram $out/bin/gemini-base \
-        --prefix PATH : ${agentTooling.runtimeBinPath} \
-        --prefix LD_LIBRARY_PATH : ${libsecretPath} \
-        --set NODE_NO_WARNINGS 1
-      mv $out/bin/gemini-base $out/bin/gemini
+    npmPackage = "@google/gemini-cli";
+    extraEnvironment = ''
+      export LD_LIBRARY_PATH="${libsecretPath}${
+        if libsecretPath != "" then ":" else ""
+      }''${LD_LIBRARY_PATH:-}"
+    '';
+    preLaunchHook = ''
+      ensure_agent_browser_runtime() {
+        if [ -d "$HOME/.agent-browser" ]; then
+          return 0
+        fi
 
-      wrapProgram $out/bin/skills-base \
-        --set NODE_NO_WARNINGS 1
-      mv $out/bin/skills-base $out/bin/skills
+        log_info "installing agent-browser runtime"
+
+        if ! browser_output="$(${pkgs.nodejs}/bin/npx -y agent-browser install --with-deps 2>&1)"; then
+          log_warn "agent-browser runtime install failed, continuing"
+          if [ -n "$browser_output" ]; then
+            printf '%s\n' "$browser_output" >&2
+          fi
+          return 0
+        fi
+
+        if [ -n "$browser_output" ]; then
+          printf '%s\n' "$browser_output" >&2
+        fi
+      }
+
+      refresh_extension() {
+        name="$1"
+        repo="$2"
+        dir="$HOME/.gemini/extensions/$name"
+
+        if [ -d "$dir" ] && [ ! -d "$dir/.git" ]; then
+          return 0
+        fi
+
+        if [ -d "$dir/.git" ]; then
+          log_info "refreshing $name"
+          if ! extension_output="$(${pkgs.nodejs}/bin/npx -y @google/gemini-cli extensions update "$name" 2>&1)"; then
+            log_warn "$name refresh failed, continuing"
+            if [ -n "$extension_output" ]; then
+              printf '%s\n' "$extension_output" >&2
+            fi
+            return 0
+          fi
+        else
+          log_info "installing $name"
+          if ! extension_output="$(${pkgs.nodejs}/bin/npx -y @google/gemini-cli extensions install "$repo" --auto-update --consent 2>&1)"; then
+            log_warn "$name install failed, continuing"
+            if [ -n "$extension_output" ]; then
+              printf '%s\n' "$extension_output" >&2
+            fi
+            return 0
+          fi
+        fi
+
+        if [ -n "$extension_output" ]; then
+          printf '%s\n' "$extension_output" >&2
+        fi
+      }
+
+      ensure_agent_browser_runtime
+      ${lib.concatMapStrings (extension: ''
+        refresh_extension "${extension.name}" "${extension.repo}"
+      '') agentTooling.geminiExtensions}
     '';
   };
 in
