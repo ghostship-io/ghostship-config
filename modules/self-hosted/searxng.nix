@@ -2,7 +2,7 @@
 
 let
   searxng-secrets = config.sops.secrets."searxng-secrets".path;
-  searxng-pypi-engine = pkgs.writeText "searxng-pypi.py" ''
+  searxng-pypi-engine = pkgs.writeText "searxng-pypi_exact.py" ''
     # SPDX-License-Identifier: AGPL-3.0-or-later
     """PyPI exact-match package lookup via the JSON API."""
 
@@ -237,7 +237,12 @@ let
     (mkEngine "packagist" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
     (mkEngine "pkg.go.dev" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
     (mkEngine "pub.dev" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
-    (mkEngine "pypi" { categories = [ "packages" ]; weight = 10; timeout = 8.0; })
+    (mkEngine "pypi" {
+      engine = "pypi_exact";
+      categories = [ "packages" ];
+      weight = 10;
+      timeout = 8.0;
+    })
     (mkEngine "reddit" { weight = 2; categories = [ "social media" "general" ]; })
     (mkEngine "repology" { categories = [ "packages" ]; weight = 8; timeout = 8.0; })
     (mkEngine "reuters" { weight = 6; categories = [ "news" ]; timeout = 5.0; })
@@ -326,7 +331,7 @@ in
     };
     volumes = [
       "/srv/apps/searxng:/etc/searxng:rw"
-      "${searxng-pypi-engine}:/usr/local/searxng/searx/engines/pypi.py:ro"
+      "${searxng-pypi-engine}:/usr/local/searxng/searx/engines/pypi_exact.py:ro"
     ];
   };
 
