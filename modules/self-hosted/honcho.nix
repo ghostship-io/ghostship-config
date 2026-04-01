@@ -22,25 +22,32 @@ let
     ${pkgs.coreutils}/bin/mkdir -p "$app_root"
     export UV_CACHE_DIR="''${UV_CACHE_DIR:-$app_root/.uv-cache}"
     ${pkgs.coreutils}/bin/mkdir -p "$UV_CACHE_DIR"
+    export UV_PYTHON="${pkgs.python311}/bin/python3.11"
+    export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}:''${LD_LIBRARY_PATH:-}"
+
+    if [ -d "$repo_dir" ]; then
+      ${pkgs.coreutils}/bin/chmod -R u+rwX "$repo_dir" || true
+    fi
 
     if [ ! -f "$version_file" ] || [ "$(${pkgs.coreutils}/bin/cat "$version_file")" != "$source_version" ]; then
       ${pkgs.coreutils}/bin/rm -rf "$repo_dir"
       ${pkgs.coreutils}/bin/mkdir -p "$repo_dir"
       ${pkgs.coreutils}/bin/cp -a "$source_dir"/. "$repo_dir"/
+      ${pkgs.coreutils}/bin/chmod -R u+rwX "$repo_dir"
       ${pkgs.coreutils}/bin/printf '%s\n' "$source_version" > "$version_file"
     fi
 
     cd "$repo_dir"
 
     if [ ! -x .venv/bin/python ]; then
-      uv sync --frozen --no-group dev
+      uv sync --frozen --no-group dev --python "$UV_PYTHON"
     fi
 
     wait_for_port() {
       host="$1"
       port="$2"
 
-      python - "$host" "$port" <<'PY'
+      "$UV_PYTHON" - "$host" "$port" <<'PY'
 import socket
 import sys
 import time
@@ -87,7 +94,8 @@ PY
       pkgs.findutils
       pkgs.git
       pkgs.gnugrep
-      pkgs.python313
+      pkgs.python311
+      pkgs.stdenv.cc.cc.lib
       pkgs.uv
     ];
     pathsToLink = [ "/bin" ];
@@ -132,6 +140,29 @@ DERIVER_PROVIDER=google
 LLM_EMBEDDING_PROVIDER=gemini
 LLM_GEMINI_API_KEY=$LITELLM_GEMINI_API_KEY
 METRICS_ENABLED=true
+DIALECTIC__LEVELS__medium__PROVIDER=google
+DIALECTIC__LEVELS__medium__MODEL=gemini-2.5-flash-lite
+DIALECTIC__LEVELS__medium__THINKING_BUDGET_TOKENS=0
+DIALECTIC__LEVELS__medium__MAX_TOOL_ITERATIONS=2
+DIALECTIC__LEVELS__high__PROVIDER=google
+DIALECTIC__LEVELS__high__MODEL=gemini-2.5-flash-lite
+DIALECTIC__LEVELS__high__THINKING_BUDGET_TOKENS=0
+DIALECTIC__LEVELS__high__MAX_TOOL_ITERATIONS=4
+DIALECTIC__LEVELS__max__PROVIDER=google
+DIALECTIC__LEVELS__max__MODEL=gemini-2.5-flash-lite
+DIALECTIC__LEVELS__max__THINKING_BUDGET_TOKENS=0
+DIALECTIC__LEVELS__max__MAX_TOOL_ITERATIONS=10
+DIALECTIC__LEVELS__minimal__PROVIDER=google
+DIALECTIC__LEVELS__minimal__MODEL=gemini-2.5-flash-lite
+DIALECTIC__LEVELS__minimal__THINKING_BUDGET_TOKENS=0
+DIALECTIC__LEVELS__minimal__MAX_TOOL_ITERATIONS=1
+DIALECTIC__LEVELS__minimal__MAX_OUTPUT_TOKENS=250
+DIALECTIC__LEVELS__minimal__TOOL_CHOICE=any
+DIALECTIC__LEVELS__low__PROVIDER=google
+DIALECTIC__LEVELS__low__MODEL=gemini-2.5-flash-lite
+DIALECTIC__LEVELS__low__THINKING_BUDGET_TOKENS=0
+DIALECTIC__LEVELS__low__MAX_TOOL_ITERATIONS=5
+DIALECTIC__LEVELS__low__TOOL_CHOICE=any
 EOF
 
     ${pkgs.coreutils}/bin/chmod 600 "$env_file"
@@ -165,21 +196,12 @@ EOF
 in
 {
   virtualisation.oci-containers.containers."honcho" = {
-    image = "honcho:latest";
+    image = "localhost/honcho:latest";
     imageFile = honcho-image;
     pull = "never";
-    labels = {
-      "io.containers.autoupdate" = "registry";
-    };
     user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\", timeout=5).read(1)' || exit 1"
-      "--health-interval=30s"
-      "--health-timeout=10s"
-      "--health-retries=5"
-      "--health-start-period=15m"
-      "--health-on-failure=kill"
     ];
     environmentFiles = [
       honcho-env
@@ -190,12 +212,9 @@ in
   };
 
   virtualisation.oci-containers.containers."honcho-deriver" = {
-    image = "honcho:latest";
+    image = "localhost/honcho:latest";
     imageFile = honcho-image;
     pull = "never";
-    labels = {
-      "io.containers.autoupdate" = "registry";
-    };
     user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
