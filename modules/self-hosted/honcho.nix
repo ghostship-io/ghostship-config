@@ -1,7 +1,6 @@
 { config, pkgs, ... }:
 
 let
-  honcho-secrets = config.sops.secrets."honcho-secrets".path;
   litellm-secrets = config.sops.secrets."litellm-secrets".path;
   honcho-env = "/srv/apps/honcho/honcho.env";
   honcho-source = pkgs.fetchFromGitHub {
@@ -109,7 +108,7 @@ PY
     config_dir="/srv/apps/honcho"
     env_file="${honcho-env}"
 
-    for secret_file in "${honcho-secrets}" "${litellm-secrets}"; do
+    for secret_file in "${litellm-secrets}"; do
       if [ ! -f "$secret_file" ]; then
         echo "Missing Honcho secret file: $secret_file" >&2
         exit 1
@@ -117,13 +116,13 @@ PY
     done
 
     set -a
-    . "${honcho-secrets}"
     . "${litellm-secrets}"
     set +a
 
     ${pkgs.coreutils}/bin/mkdir -p "$config_dir"
 
     cat > "$env_file" <<EOF
+HONCHO_API_KEY=honcho
 AUTH_USE_AUTH=false
 CACHE_ENABLED=true
 CACHE_URL=redis://honcho-redis:6379/0?suppress=true
@@ -135,22 +134,13 @@ LLM_GEMINI_API_KEY=$LITELLM_GEMINI_API_KEY
 METRICS_ENABLED=true
 EOF
 
-    if [ -n "''${HONCHO_API_KEY:-}" ]; then
-      tmp_env_file="$env_file.tmp"
-      {
-        ${pkgs.coreutils}/bin/printf 'HONCHO_API_KEY=%s\n' "$HONCHO_API_KEY"
-        ${pkgs.coreutils}/bin/cat "$env_file"
-      } > "$tmp_env_file"
-      ${pkgs.coreutils}/bin/mv "$tmp_env_file" "$env_file"
-    fi
-
     ${pkgs.coreutils}/bin/chmod 600 "$env_file"
     ${pkgs.coreutils}/bin/chown -R 3000:3000 "$config_dir"
   '';
   honcho-pre-start = pkgs.writeShellScriptBin "honcho-pre-start" ''
     set -eu
 
-    for secret_file in "${honcho-secrets}" "${litellm-secrets}"; do
+    for secret_file in "${litellm-secrets}"; do
       if [ ! -f "$secret_file" ]; then
         echo "Waiting for Honcho secret file at $secret_file..."
         for _ in $(seq 1 60); do
@@ -161,7 +151,7 @@ EOF
         done
       fi
 
-      if [ ! -f "$secret_file" ]; then
+    if [ ! -f "$secret_file" ]; then
         echo "Missing Honcho secret file at $secret_file" >&2
         exit 1
       fi

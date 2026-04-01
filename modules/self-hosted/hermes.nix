@@ -30,7 +30,6 @@ EOF
     exec /nix/store/4avjjjj02q5m84w4q1k7lrf5g8mkwkmb-ghostship-hermes-runtime/bin/ghostship-hermes-runtime entrypoint
   '';
   hermes-secrets = config.sops.secrets."hermes-secrets".path;
-  honcho-secrets = config.sops.secrets."honcho-secrets".path;
   romm-secrets = config.sops.secrets."romm-secrets".path;
   sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
   radarr-secrets = config.sops.secrets."radarr-secrets".path;
@@ -74,6 +73,7 @@ in
       FLARESOLVERR_URL = "http://flaresolverr:8191";
       PYLOAD_URL = "http://pyload:8000";
       CLOAKBROWSER_URL = "http://cloakbrowser:8080";
+      HONCHO_API_KEY = "honcho";
       HONCHO_BASE_URL = "http://honcho:8000";
       SYNOLOGY_VERIFY_SSL = "false";
     };
@@ -81,7 +81,6 @@ in
     cmd = [ "/hermes-startup.sh" ];
     environmentFiles = [
       hermes-secrets
-      honcho-secrets
       romm-secrets
       sonarr-secrets
       radarr-secrets
@@ -112,21 +111,6 @@ in
 
     if [ ! -f "${hermes-secrets}" ]; then
       echo "Missing Hermes secrets file at ${hermes-secrets}" >&2
-      exit 1
-    fi
-
-    if [ ! -f "${honcho-secrets}" ]; then
-      echo "Waiting for Honcho secrets at ${honcho-secrets}..."
-      for _ in $(seq 1 30); do
-        if [ -f "${honcho-secrets}" ]; then
-          break
-        fi
-        sleep 1
-      done
-    fi
-
-    if [ ! -f "${honcho-secrets}" ]; then
-      echo "Missing Honcho secrets file at ${honcho-secrets}" >&2
       exit 1
     fi
   '';

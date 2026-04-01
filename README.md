@@ -55,8 +55,8 @@ persistent agent API token from the `pricebuddy-secrets` bundle. The live
 
 Honcho runs locally as an internal API, worker, database, and Redis stack for
 Hermes. Hermes writes `~/.honcho/config.json` at startup, points it at
-`http://honcho:8000`, and reads a stubbed `HONCHO_API_KEY=honcho` value from
-the `honcho-secrets` bundle while Honcho itself keeps `AUTH_USE_AUTH=false`.
+`http://honcho:8000`, and uses a fixed placeholder `HONCHO_API_KEY=honcho`
+while Honcho itself keeps `AUTH_USE_AUTH=false`.
 
 ## Usage
 
