@@ -93,6 +93,13 @@
           Hermes.color=literal:"#06b6d4"
           Hermes.enabled=literal:"true"
           Hermes.dd=literal:"false"
+          Honcho.name=literal:"Honcho"
+          Honcho.url=literal:"https://honcho.ghostship.io"
+          Honcho.scale=literal:1
+          Honcho.icon=literal:"fa-brain"
+          Honcho.color=literal:"#8b5cf6"
+          Honcho.enabled=literal:"true"
+          Honcho.dd=literal:"true"
           RomM.name=literal:"RomM"
           RomM.url=literal:"https://romm.ghostship.io"
           RomM.scale=literal:1

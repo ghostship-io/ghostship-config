@@ -7,9 +7,30 @@ let
     mkdir -p /tmp
     chmod 1777 /tmp
 
+    mkdir -p /home/hermes/.honcho
+    if [ -n "''${HONCHO_API_KEY:-}" ] && [ -n "''${HONCHO_BASE_URL:-}" ]; then
+      cat > /home/hermes/.honcho/config.json <<EOF
+{
+  "apiKey": "$HONCHO_API_KEY",
+  "baseUrl": "$HONCHO_BASE_URL",
+  "hosts": {
+    "hermes": {
+      "workspace": "hermes",
+      "peerName": "hermes",
+      "aiPeer": "hermes",
+      "memoryMode": "hybrid",
+      "enabled": true
+    }
+  }
+}
+EOF
+      chown -R 3000:3000 /home/hermes/.honcho
+    fi
+
     exec /nix/store/4avjjjj02q5m84w4q1k7lrf5g8mkwkmb-ghostship-hermes-runtime/bin/ghostship-hermes-runtime entrypoint
   '';
   hermes-secrets = config.sops.secrets."hermes-secrets".path;
+  honcho-secrets = config.sops.secrets."honcho-secrets".path;
   romm-secrets = config.sops.secrets."romm-secrets".path;
   sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
   radarr-secrets = config.sops.secrets."radarr-secrets".path;
@@ -53,12 +74,14 @@ in
       FLARESOLVERR_URL = "http://flaresolverr:8191";
       PYLOAD_URL = "http://pyload:8000";
       CLOAKBROWSER_URL = "http://cloakbrowser:8080";
+      HONCHO_BASE_URL = "http://honcho:8000";
       SYNOLOGY_VERIFY_SSL = "false";
     };
     entrypoint = "/bin/sh";
     cmd = [ "/hermes-startup.sh" ];
     environmentFiles = [
       hermes-secrets
+      honcho-secrets
       romm-secrets
       sonarr-secrets
       radarr-secrets
@@ -70,6 +93,7 @@ in
     ];
     volumes = [
       "/srv/apps/hermes/home:/home/hermes/.hermes:rw"
+      "/srv/apps/hermes/home/.honcho:/home/hermes/.honcho:rw"
       "hermes-nix:/nix:rw"
       "${hermes-startup}:/hermes-startup.sh:ro"
     ];
@@ -90,10 +114,26 @@ in
       echo "Missing Hermes secrets file at ${hermes-secrets}" >&2
       exit 1
     fi
+
+    if [ ! -f "${honcho-secrets}" ]; then
+      echo "Waiting for Honcho secrets at ${honcho-secrets}..."
+      for _ in $(seq 1 30); do
+        if [ -f "${honcho-secrets}" ]; then
+          break
+        fi
+        sleep 1
+      done
+    fi
+
+    if [ ! -f "${honcho-secrets}" ]; then
+      echo "Missing Honcho secrets file at ${honcho-secrets}" >&2
+      exit 1
+    fi
   '';
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/hermes 0755 apps apps -"
     "d /srv/apps/hermes/home 0755 apps apps -"
+    "d /srv/apps/hermes/home/.honcho 0755 apps apps -"
   ];
 }

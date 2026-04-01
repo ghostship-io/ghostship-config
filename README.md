@@ -46,12 +46,17 @@ internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, the `arr` stack,
 qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes,
-PyLoad, RSS-Bridge, and PriceBuddy.
+PyLoad, RSS-Bridge, PriceBuddy, and Honcho.
 
 PriceBuddy seeds a `pricebuddy@ghostship.io` / `pricebuddy` login and reads a
 persistent agent API token from the `pricebuddy-secrets` bundle. The live
 `/srv/apps/pricebuddy/pricebuddy-agent.env` file contains a shell-safe
 `PRICEBUDDY_API_TOKEN="id|token"` bearer line for direct API use.
+
+Honcho runs locally as an internal API, worker, database, and Redis stack for
+Hermes. Hermes writes `~/.honcho/config.json` at startup, points it at
+`http://honcho:8000`, and reads a stubbed `HONCHO_API_KEY=honcho` value from
+the `honcho-secrets` bundle while Honcho itself keeps `AUTH_USE_AUTH=false`.
 
 ## Usage
 

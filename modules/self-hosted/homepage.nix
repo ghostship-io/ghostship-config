@@ -202,6 +202,11 @@ in
             "[Services].[Hermes].server=literal:chill-penguin"
             "[Services].[Hermes].container=literal:hermes"
 
+            "[Services].[Honcho].icon=literal:mdi-brain-#8b5cf6"
+            "[Services].[Honcho].description=literal:Agent Memory"
+            "[Services].[Honcho].server=literal:chill-penguin"
+            "[Services].[Honcho].container=literal:honcho"
+
             "[Services].[CloakBrowser].icon=literal:sh-google-chrome"
             "[Services].[CloakBrowser].description=literal:Stealth Browser Manager"
             "[Services].[CloakBrowser].server=literal:chill-penguin"
@@ -279,6 +284,16 @@ in
             "[Infrastructure].[SearXNG Cache].description=literal:Search Cache"
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
+
+            "[Infrastructure].[Honcho Redis].icon=literal:redis.png"
+            "[Infrastructure].[Honcho Redis].description=literal:Honcho Cache"
+            "[Infrastructure].[Honcho Redis].server=literal:chill-penguin"
+            "[Infrastructure].[Honcho Redis].container=literal:honcho-redis"
+
+            "[Infrastructure].[Honcho DB].icon=literal:mdi-database-#8b5cf6"
+            "[Infrastructure].[Honcho DB].description=literal:Honcho Database"
+            "[Infrastructure].[Honcho DB].server=literal:chill-penguin"
+            "[Infrastructure].[Honcho DB].container=literal:honcho-db"
 
             "[Infrastructure].[PriceBuddy Scraper].icon=literal:mdi-robot-outline-#0ea5e9"
             "[Infrastructure].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"

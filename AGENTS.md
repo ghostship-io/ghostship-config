@@ -209,4 +209,6 @@ This file serves as the primary memory and persistent fact store for AI agents w
 
 - **PriceBuddy Startup Needs Process Env**: The PriceBuddy image's `start-app.sh` reads `DB_HOST`, `DB_USERNAME`, `DB_PASSWORD`, and related values from the process environment, not from the mounted Laravel `.env` file. Keep `environmentFiles = [ pricebuddy.env ]` on the app container so the DB wait loop sees the right host name.
 
+- **Honcho Local Stack Shape**: Honcho now runs as a local `honcho` API container plus `honcho-db` and `honcho-redis` sidecars, with a separate `honcho-deriver` worker. Hermes writes `~/.honcho/config.json` at startup and points its `baseUrl` at `http://honcho:8000`; the API token can stay stubbed as `HONCHO_API_KEY=honcho` because Honcho runs with `AUTH_USE_AUTH=false`. Honcho's runtime env file is generated from `honcho-secrets` plus the existing `litellm-secrets` so `LLM_GEMINI_API_KEY` is available for the deriver.
+
 - **Plaintext Secret Mirrors Stay Local**: `secrets.dec.yaml` is only a working plaintext mirror for editing secrets. Never add it to Git or stage it for commit; only the encrypted `secrets.yaml` belongs in the repository.
