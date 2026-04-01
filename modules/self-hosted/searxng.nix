@@ -5,6 +5,7 @@ let
   mkEngine = name: extra: { inherit name; disabled = false; } // extra;
   searxng-keep-only = [
     # General / web / context
+    "brave"
     "google"
     "hackernews"
     "mojeek"
@@ -13,12 +14,15 @@ let
     "wikipedia"
 
     # News
+    "brave.news"
     "duckduckgo news"
     "google news"
     "reuters"
     "wikinews"
 
     # Images / video / media
+    "brave.images"
+    "brave.videos"
     "dailymotion"
     "deviantart"
     "duckduckgo images"
@@ -124,6 +128,10 @@ let
     # Emphasize broader and less-filtered discovery engines.
     (mkEngine "arxiv" { weight = 4; })
     (mkEngine "bt4g" { weight = 3; categories = [ "files" ]; })
+    (mkEngine "brave" { weight = 4; timeout = 4.0; })
+    (mkEngine "brave.images" { weight = 3; timeout = 4.0; })
+    (mkEngine "brave.news" { weight = 3; timeout = 4.0; })
+    (mkEngine "brave.videos" { weight = 3; timeout = 4.0; })
     (mkEngine "duckduckgo images" { weight = 3; timeout = 5.0; })
     (mkEngine "duckduckgo news" { weight = 3; timeout = 5.0; })
     (mkEngine "duckduckgo videos" { weight = 3; timeout = 5.0; })
