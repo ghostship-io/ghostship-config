@@ -5,23 +5,28 @@ let
   mkEngine = name: extra: { inherit name; disabled = false; } // extra;
   searxng-keep-only = [
     # General / web / context
+    "brave"
+    "brave.news"
     "duckduckgo"
     "google"
     "hackernews"
     "mojeek"
+    "qwant"
+    "qwant news"
     "reddit"
-    "startpage"
     "wikidata"
     "wikipedia"
 
     # News
     "duckduckgo news"
     "google news"
+    "qwant news"
     "reuters"
-    "startpage news"
     "wikinews"
 
     # Images / video / media
+    "brave.images"
+    "brave.videos"
     "dailymotion"
     "deviantart"
     "duckduckgo images"
@@ -30,12 +35,12 @@ let
     "google videos"
     "mixcloud"
     "mojeek images"
-    "mojeek news"
     "openverse"
+    "qwant images"
+    "qwant videos"
     "radio browser"
     "sepiasearch"
     "soundcloud"
-    "startpage images"
     "wikicommons.audio"
     "wikicommons.images"
     "wikicommons.videos"
@@ -68,9 +73,9 @@ let
     "alpine linux packages"
     "arch linux wiki"
     "askubuntu"
+    "brave"
     "cachy os packages"
     "crates.io"
-    "docker hub"
     "fdroid"
     "gentoo"
     "github"
@@ -98,7 +103,6 @@ let
     "voidlinux"
 
     # Files / books / torrents / max-open surfaces
-    "annas archive"
     "bt4g"
     "piratebay"
     "wikicommons.files"
@@ -129,8 +133,11 @@ let
     (mkEngine "openmeteo" { categories = [ "weather" ]; })
 
     # Emphasize broader and less-filtered discovery engines.
-    (mkEngine "annas archive" { weight = 4; categories = [ "files" "books" ]; })
     (mkEngine "arxiv" { weight = 4; })
+    (mkEngine "brave" { weight = 4; timeout = 5.0; })
+    (mkEngine "brave.images" { weight = 4; timeout = 5.0; })
+    (mkEngine "brave.news" { weight = 4; timeout = 5.0; })
+    (mkEngine "brave.videos" { weight = 4; timeout = 5.0; })
     (mkEngine "bt4g" { weight = 3; categories = [ "files" ]; })
     (mkEngine "duckduckgo" { categories = [ ]; timeout = 5.0; weight = 1; })
     (mkEngine "duckduckgo images" { weight = 3; timeout = 5.0; })
@@ -146,16 +153,16 @@ let
     (mkEngine "hackernews" { weight = 3; categories = [ "q&a" "it" ]; })
     (mkEngine "mojeek" { weight = 3; timeout = 5.0; })
     (mkEngine "mojeek images" { weight = 2; timeout = 5.0; })
-    (mkEngine "mojeek news" { weight = 2; timeout = 5.0; })
     (mkEngine "openairepublications" { weight = 2; })
     (mkEngine "openverse" { weight = 3; })
+    (mkEngine "qwant" { weight = 3; timeout = 5.0; })
+    (mkEngine "qwant images" { weight = 3; timeout = 5.0; })
+    (mkEngine "qwant news" { weight = 3; timeout = 5.0; })
+    (mkEngine "qwant videos" { weight = 3; timeout = 5.0; })
     (mkEngine "reddit" { weight = 3; categories = [ "social media" "general" ]; })
     (mkEngine "reuters" { weight = 4; categories = [ "news" ]; })
     (mkEngine "sepiasearch" { weight = 3; })
     (mkEngine "stackoverflow" { weight = 3; categories = [ "q&a" "it" ]; })
-    (mkEngine "startpage" { weight = 2; timeout = 5.0; })
-    (mkEngine "startpage images" { weight = 2; timeout = 5.0; })
-    (mkEngine "startpage news" { weight = 2; timeout = 5.0; })
     (mkEngine "wikicommons.files" { weight = 2; categories = [ "files" "wikimedia" ]; })
     (mkEngine "wikicommons.images" { weight = 2; categories = [ "images" "wikimedia" ]; })
     (mkEngine "youtube" { weight = 4; categories = [ "videos" "music" ]; })
