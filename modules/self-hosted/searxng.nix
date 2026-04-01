@@ -65,6 +65,61 @@ let
             }
         ]
   '';
+  searxng-wttr-engine = pkgs.writeText "searxng-wttr_exact.py" ''
+    # SPDX-License-Identifier: AGPL-3.0-or-later
+    """wttr.in weather lookup with a plain JSON parser."""
+
+    from urllib.parse import quote
+
+    from searx.network import raise_for_httperror
+
+    about = {
+        'website': 'https://wttr.in',
+        'wikidata_id': 'Q107586666',
+        'official_api_documentation': 'https://github.com/chubin/wttr.in#json-output',
+        'use_official_api': True,
+        'require_api_key': False,
+        'results': 'JSON',
+    }
+
+    categories = ['weather']
+    paging = False
+    base_url = 'https://wttr.in'
+
+
+    def request(query, params):
+        params['query'] = query.strip()
+        params['url'] = f"{base_url}/{quote(params['query'])}?format=j1&lang=en"
+        params['raise_for_httperror'] = False
+        return params
+
+
+    def response(resp):
+        if resp.status_code == 404:
+            return []
+
+        raise_for_httperror(resp)
+
+        payload = resp.json()
+        current = (payload.get('current_condition') or [{}])[0]
+        title = f"{resp.search_params['query']} weather"
+        desc = current.get('weatherDesc') or [{}]
+        condition = (desc[0].get('value') if desc else None) or 'Unknown'
+        content = (
+            f"{condition}; {current.get('temp_C', '?')} C; "
+            f"feels like {current.get('FeelsLikeC', '?')} C; "
+            f"humidity {current.get('humidity', '?')}%; "
+            f"wind {current.get('windspeedKmph', '?')} km/h"
+        )
+
+        return [
+            {
+                'url': f"{base_url}/{quote(resp.search_params['query'])}",
+                'title': title,
+                'content': content,
+            }
+        ]
+  '';
   mkEngine = name: extra: {
     inherit name;
     disabled = false;
@@ -191,7 +246,11 @@ let
     (mkEngine "etymonline" { categories = [ "dictionaries" ]; })
     (mkEngine "lingva" { categories = [ "translate" ]; })
     (mkEngine "mymemory translated" { categories = [ "translate" ]; })
-    (mkEngine "wttr.in" { categories = [ "weather" ]; timeout = 8.0; })
+    (mkEngine "wttr.in" {
+      engine = "wttr_exact";
+      categories = [ "weather" ];
+      timeout = 8.0;
+    })
 
     # Emphasize broader and less-filtered discovery engines.
     (mkEngine "arxiv" { weight = 4; })
@@ -332,6 +391,7 @@ in
     volumes = [
       "/srv/apps/searxng:/etc/searxng:rw"
       "${searxng-pypi-engine}:/usr/local/searxng/searx/engines/pypi_exact.py:ro"
+      "${searxng-wttr-engine}:/usr/local/searxng/searx/engines/wttr_exact.py:ro"
     ];
   };
 
