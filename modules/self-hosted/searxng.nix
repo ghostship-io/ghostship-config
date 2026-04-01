@@ -2,7 +2,74 @@
 
 let
   searxng-secrets = config.sops.secrets."searxng-secrets".path;
-  mkEngine = name: extra: { inherit name; disabled = false; } // extra;
+  searxng-pypi-engine = pkgs.writeText "searxng-pypi.py" ''
+    # SPDX-License-Identifier: AGPL-3.0-or-later
+    """PyPI exact-match package lookup via the JSON API."""
+
+    from urllib.parse import quote
+
+    from dateutil import parser
+    from searx.network import raise_for_httperror
+
+    about = {
+        'website': 'https://pypi.org',
+        'wikidata_id': 'Q2984686',
+        'official_api_documentation': 'https://docs.pypi.org/api/json/',
+        'use_official_api': True,
+        'require_api_key': False,
+        'results': 'JSON',
+    }
+
+    categories = ['it', 'packages']
+    paging = False
+    base_url = 'https://pypi.org'
+
+
+    def request(query, params):
+        package_name = query.strip()
+        params['package_name'] = package_name
+        params['url'] = f"{base_url}/pypi/{quote(package_name)}/json"
+        params['raise_for_httperror'] = False
+        return params
+
+
+    def response(resp):
+        if resp.status_code == 404:
+            return []
+
+        raise_for_httperror(resp)
+
+        payload = resp.json()
+        info = payload.get('info', {})
+        urls = payload.get('urls') or []
+        release_url = info.get('package_url')
+
+        published_date = None
+        for artifact in urls:
+            upload_time = artifact.get('upload_time_iso_8601') or artifact.get('upload_time')
+            if upload_time:
+                published_date = parser.parse(upload_time)
+                break
+
+        return [
+            {
+                'template': 'packages.html',
+                'url': release_url or f"{base_url}/project/{info.get('name', resp.search_params['package_name'])}/",
+                'title': info.get('name', resp.search_params['package_name']),
+                'package_name': info.get('name', resp.search_params['package_name']),
+                'content': info.get('summary') or "",
+                'version': info.get('version'),
+                'homepage': info.get('home_page') or info.get('project_url'),
+                'license_name': info.get('license') or "",
+                'publishedDate': published_date,
+            }
+        ]
+  '';
+  mkEngine = name: extra: {
+    inherit name;
+    disabled = false;
+    inactive = false;
+  } // extra;
   searxng-keep-only = [
     # General / web / context
     "brave"
@@ -259,6 +326,7 @@ in
     };
     volumes = [
       "/srv/apps/searxng:/etc/searxng:rw"
+      "${searxng-pypi-engine}:/usr/local/searxng/searx/engines/pypi.py:ro"
     ];
   };
 
