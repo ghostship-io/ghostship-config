@@ -17,6 +17,7 @@
 ### Task Initialization
 - **Sync**: Before starting, ensure your local state matches the remote (if applicable).
 - **Research**: Perform empirical research to validate the current state and task requirements.
+- **Planning Artifacts**: Keep active spec-driven planning artifacts in the repo-local `openspec/` tree so every supported CLI agent can share the same workflow context.
 
 ### Implementation & Testing
 - **Implementation**: Write high-quality, idiomatic code.

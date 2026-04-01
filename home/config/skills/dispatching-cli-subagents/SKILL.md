@@ -20,9 +20,10 @@ When you need to delegate work to another agent, you must execute them as a non-
 Optimized for zero-shot reasoning, architectural analysis, and extension-based auditing.
 * **Available Roles/Extensions:**
   - **Security Auditor:** Uses the `gemini-cli-security` extension for automated vulnerability scanning.
-  - **Superpowers:** Uses the `superpowers` extension for advanced planning and execution patterns.
+  - **Spec Workflow:** Uses the repo-local OpenSpec `opsx` commands and `openspec-*` skills under `.gemini/` for spec-driven planning and execution.
 * **Orchestration Patterns:**
   - **Automated Security Review:** `gemini -p "/security:analyze"` (scans for vulnerabilities).
+  - **OpenSpec Proposal:** `gemini -p "/opsx:propose add-home-manager-cleanup"`
   - **Codebase Discovery:** `gemini -p "Analyze the architecture of @src/ and report dependencies."`
 * **Key Flags:**
   - `-p <prompt>`: Non-interactive execution.

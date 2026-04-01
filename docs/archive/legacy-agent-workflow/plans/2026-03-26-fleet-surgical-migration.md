@@ -1,6 +1,6 @@
 # Fleet-Wide Surgical Configuration Migration Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Historical note: this archived plan predates the current repo-local OpenSpec workflow.
 
 **Goal:** Convert all self-hosted services to a "Pure Surgical" configuration model using `ghostship-config`. Remove all full-file templates, `cp`, `install`, and `envsubst` logic. Enforce the "Ghostship Standard" (identity, privacy, secrets).
 

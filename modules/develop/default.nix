@@ -1,10 +1,15 @@
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 let
-  agentTooling = import ./agent-tooling.nix { inherit pkgs; };
+  agentTooling = import ./agent-tooling.nix {
+    inherit pkgs inputs;
+  };
 in
 {
-  environment.systemPackages = [ agentTooling.agentBrowser ];
+  environment.systemPackages = [
+    agentTooling.agentBrowser
+    agentTooling.openspecCli
+  ];
 
   imports = [
     ./secrets.nix

@@ -1,6 +1,6 @@
 # WSL Z Drive NFS Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Historical note: this archived plan predates the current repo-local OpenSpec workflow.
 
 **Goal:** Replace the WSL-only `/mnt/z` SMB/CIFS mount path with a direct Synology NFS mount that reuses `chill-penguin`'s tuning and fails gracefully off-network.
 

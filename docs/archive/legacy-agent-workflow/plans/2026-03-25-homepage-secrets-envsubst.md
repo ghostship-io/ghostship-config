@@ -1,6 +1,6 @@
 # Homepage Secrets Envsubst Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Historical note: this archived plan predates the current repo-local OpenSpec workflow.
 
 **Goal:** Move all Homepage widget secrets into one sops-managed env file and render `services.yaml` through `envsubst` during activation.
 

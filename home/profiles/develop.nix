@@ -6,6 +6,20 @@
     ../../modules/develop/codex.nix
   ];
 
+  home.activation.removeLegacySuperpowers = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf \
+      "$HOME/.agents/skills/superpowers" \
+      "$HOME/.config/opencode/plugins/superpowers" \
+      "$HOME/.gemini/extensions/superpowers"
+
+    enablement_file="$HOME/.gemini/extensions/extension-enablement.json"
+    if test -f "$enablement_file"; then
+      tmp_file="$(${pkgs.coreutils}/bin/mktemp)"
+      ${pkgs.jq}/bin/jq 'del(.superpowers)' "$enablement_file" > "$tmp_file"
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/mv "$tmp_file" "$enablement_file"
+    fi
+  '';
+
   home.file = {
     ".agents/skills/nix" = {
       source = ../config/skills/nix;

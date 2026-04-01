@@ -1,6 +1,8 @@
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 let
+  openspecCli = inputs.openspec.packages.${pkgs.stdenv.hostPlatform.system}.default;
+
   browserRuntimeLibs = [
     pkgs."alsa-lib"
     pkgs."at-spi2-atk"
@@ -46,6 +48,7 @@ let
     pkgs.xdg-utils
     pkgs.uv
     agentBrowser
+    openspecCli
   ];
 
   geminiExtensions = [
@@ -53,26 +56,10 @@ let
       name = "gemini-cli-security";
       repo = "https://github.com/gemini-cli-extensions/security";
     }
-    {
-      name = "superpowers";
-      repo = "https://github.com/obra/superpowers";
-    }
   ];
-
-  opencodePlugins = [
-    {
-      name = "superpowers";
-      repo = "https://github.com/obra/superpowers.git";
-    }
-  ];
-
-  superpowers = {
-    name = "superpowers";
-    repo = "https://github.com/obra/superpowers.git";
-  };
 in
 {
-  inherit agentBrowser browserRuntimeLdLibraryPath;
-  inherit runtimeInputs geminiExtensions opencodePlugins superpowers;
+  inherit agentBrowser browserRuntimeLdLibraryPath openspecCli;
+  inherit runtimeInputs geminiExtensions;
   runtimeBinPath = pkgs.lib.makeBinPath runtimeInputs;
 }

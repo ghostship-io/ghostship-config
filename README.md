@@ -17,6 +17,8 @@ for secrets.
 ## Layout
 
 - `flake.nix`: shared host construction and top-level outputs
+- `openspec/`: repo-local spec, change, and task artifacts shared by Codex,
+  Gemini, and OpenCode
 - `hosts/`: per-host configuration and role assignment
 - `modules/common/`: shared NixOS base modules
 - `modules/develop/`: develop-role system tooling and wrappers

@@ -1,0 +1,26 @@
+schema: spec-driven
+context: |
+  Tech stack: Nix flakes, NixOS modules, Home Manager, Podman, and fish
+  shells on develop hosts.
+  Use native nix, nixos-rebuild, and switch-to-configuration commands. Do not
+  use nh.
+  Active CLI agents in this repo are codex, gemini, and opencode.
+  Keep agent workflow docs and generated change artifacts in the repo so all
+  three CLIs can use the same planning layer.
+  Documentation is part of the work: update README.md, CHANGELOG.md, and
+  AGENTS.md when behavior or workflow changes.
+
+rules:
+  proposal:
+    - State whether the change affects develop hosts, server hosts, Home
+      Manager, or repo-only workflow files.
+    - Call out any host activation or manual cleanup implications.
+  design:
+    - Prefer Nix-native packaging and declarative cleanup over ad-hoc install
+      steps.
+    - Preserve the repo's shared ~/.agents skill model for non-OpenSpec skills.
+  tasks:
+    - Include concrete nix eval/build verification commands when changing host
+      or Home Manager config.
+    - Mention README.md, CHANGELOG.md, and AGENTS.md updates when they are part
+      of the change.

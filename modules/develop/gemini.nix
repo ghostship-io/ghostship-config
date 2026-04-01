@@ -1,8 +1,4 @@
-{ pkgs, lib, ... }:
-
-let
-  agentTooling = import ./agent-tooling.nix { inherit pkgs; };
-in
+{ ... }:
 
 {
   environment.etc."gemini-cli/settings.json".text = builtins.toJSON {

@@ -14,7 +14,11 @@ result-*
 *~
 
 # Agent tools
-.opencode/
+.opencode/*
+!.opencode/command/
+!.opencode/command/**
+!.opencode/skills/
+!.opencode/skills/**
 .ruff_cache/
 
 # OS

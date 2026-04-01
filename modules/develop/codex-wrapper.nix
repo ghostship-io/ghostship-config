@@ -1,7 +1,9 @@
-{ pkgs, lib, ... }:
+{ pkgs, lib, inputs, ... }:
 
 let
-  agentTooling = import ./agent-tooling.nix { inherit pkgs; };
+  agentTooling = import ./agent-tooling.nix {
+    inherit pkgs inputs;
+  };
   homeDirectory = "/home/nixos";
 
   codex-notify = pkgs.writeShellScriptBin "codex-notify" ''
@@ -28,7 +30,6 @@ PY
     { name = "python"; }
     { name = "build123d"; }
     { name = "ssh"; }
-    { name = "superpowers"; pathSuffix = "/skills"; }
   ];
 
   skillConfig = map (skill: {
@@ -37,9 +38,6 @@ PY
   }) skills;
 
   toTomlArray = values: "[ " + lib.concatStringsSep ", " (map (value: "\"${value}\"") values) + " ]";
-
-  tomlTableName = name:
-    if builtins.match "^[A-Za-z0-9_]+$" name != null then name else ''"${name}"'';
 
   notifyConfig = ''
 notify = ["${codex-notify}/bin/codex-notify"]
@@ -60,30 +58,6 @@ notification_method = "auto"
 
   codex-script = pkgs.writeShellScriptBin "codex" ''
     set -euo pipefail
-
-    sync_checkout() {
-      name="$1"
-      repo="$2"
-      dir="$3"
-      remote_head="$(${pkgs.git}/bin/git ls-remote "$repo" HEAD | cut -f1)"
-      local_head=""
-
-      if [ -z "$remote_head" ]; then
-        return 0
-      fi
-
-      if [ -d "$dir/.git" ]; then
-        local_head="$(${pkgs.git}/bin/git -C "$dir" rev-parse HEAD 2>/dev/null || true)"
-      fi
-
-      if [ -z "$local_head" ] || [ "$local_head" != "$remote_head" ]; then
-        rm -rf "$dir"
-        mkdir -p "$(dirname "$dir")"
-        ${pkgs.git}/bin/git clone --depth 1 "$repo" "$dir" >/dev/null 2>&1 || true
-      fi
-    }
-
-    sync_checkout "${agentTooling.superpowers.name}" "${agentTooling.superpowers.repo}" "$HOME/.agents/skills/${agentTooling.superpowers.name}"
 
     PATH=${agentTooling.runtimeBinPath}:$PATH
     export SSH_AUTH_SOCK="/run/user/1000/ssh-agent"

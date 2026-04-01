@@ -1,6 +1,6 @@
 # Comprehensive Fleet Configuration Customization Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Historical note: this archived plan predates the current repo-local OpenSpec workflow.
 
 **Goal:** Port all customized environment settings from `chill-penguin-root` into Nix modules using `ghostship-config` surgical updates. 
 

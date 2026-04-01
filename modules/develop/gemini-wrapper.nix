@@ -1,7 +1,9 @@
-{ pkgs, lib, ... }:
+{ pkgs, lib, inputs, ... }:
 
 let
-  agentTooling = import ./agent-tooling.nix { inherit pkgs; };
+  agentTooling = import ./agent-tooling.nix {
+    inherit pkgs inputs;
+  };
   libsecretPath = lib.makeLibraryPath [ pkgs.libsecret ];
 
   base-gemini = pkgs.writeShellScriptBin "gemini-base" ''

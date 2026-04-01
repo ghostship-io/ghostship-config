@@ -1,6 +1,6 @@
 # Podman Auto-Update Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Historical note: this archived plan predates the current repo-local OpenSpec workflow.
 
 **Goal:** Make every self-hosted Podman container pull the latest image by default and add a daily native Podman auto-update job for the stack.
 
@@ -174,7 +174,7 @@ Expected:
 
 Run:
 ```bash
-git add modules/self-hosted/common.nix modules/self-hosted/*.nix README.md CHANGELOG.md AGENTS.md docs/superpowers/plans/2026-03-30-podman-auto-update.md
+git add modules/self-hosted/common.nix modules/self-hosted/*.nix README.md CHANGELOG.md AGENTS.md docs/archive/legacy-agent-workflow/plans/2026-03-30-podman-auto-update.md
 git commit -m "feat(podman): auto-update self-hosted images"
 ```
 
