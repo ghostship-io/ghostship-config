@@ -7,7 +7,6 @@
     labels = {
       "io.containers.autoupdate" = "registry";
     };
-    user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=php -r 'exit(@file_get_contents(\"http://127.0.0.1/\") === false ? 1 : 0);' || exit 1"

@@ -158,7 +158,6 @@ in
     labels = {
       "io.containers.autoupdate" = "registry";
     };
-    user = "3000:3000";
     environmentFiles = [
       pricebuddy-env
     ];
@@ -206,7 +205,6 @@ in
     labels = {
       "io.containers.autoupdate" = "registry";
     };
-    user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:3000/\", timeout=5).read(1)' || exit 1"
