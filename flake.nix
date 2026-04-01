@@ -31,36 +31,64 @@
     };
   };
 
-  outputs = {
-    self,
-    nixpkgs,
-    home-manager,
-    nixos-wsl,
-    nix-index-database,
-    apple-silicon,
-    ...
-  }@inputs:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      home-manager,
+      nixos-wsl,
+      nix-index-database,
+      apple-silicon,
+      ...
+    }@inputs:
     let
-      mkHost = modules:
+      supportedSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
+      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+      pkgsFor = system: nixpkgs.legacyPackages.${system};
+
+      mkHost =
+        modules:
         nixpkgs.lib.nixosSystem {
           specialArgs = { inherit inputs self; };
-          modules =
-            modules
-            ++ [
-              inputs.sops-nix.nixosModules.sops
-              home-manager.nixosModules.home-manager
-              {
-                home-manager.useGlobalPkgs = true;
-                home-manager.useUserPackages = true;
-                home-manager.users.nixos = ./home/nixos.nix;
-                home-manager.sharedModules = [
-                  nix-index-database.homeModules.nix-index
-                ];
-              }
-            ];
+          modules = modules ++ [
+            inputs.sops-nix.nixosModules.sops
+            home-manager.nixosModules.home-manager
+            {
+              home-manager.useGlobalPkgs = true;
+              home-manager.useUserPackages = true;
+              home-manager.users.nixos = ./home/nixos.nix;
+              home-manager.sharedModules = [
+                nix-index-database.homeModules.nix-index
+              ];
+            }
+          ];
         };
     in
     {
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = pkgsFor system;
+        in
+        {
+          default = pkgs.mkShellNoCC {
+            packages = with pkgs; [
+              age
+              git
+              gnugrep
+              gnused
+              jq
+              nixfmt
+              sops
+              ssh-to-age
+            ];
+          };
+        }
+      );
+
       nixosConfigurations = {
         launch-octopus = mkHost [
           nixos-wsl.nixosModules.default

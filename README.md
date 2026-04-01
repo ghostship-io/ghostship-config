@@ -76,6 +76,17 @@ Build the current host:
 nixos-rebuild build --flake .#$(hostname)
 ```
 
+Enter the repo shell with direnv or Nix:
+
+```bash
+direnv allow
+# or
+nix develop
+```
+
+The flake exposes a default Linux dev shell so `use flake` works on the WSL
+development hosts and on Apple Silicon Linux systems.
+
 Apply the built generation:
 
 ```bash

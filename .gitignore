@@ -5,6 +5,7 @@ result-*
 .worktrees/
 *.drv
 *.log
+.envrc
 
 # Editor
 .vscode/

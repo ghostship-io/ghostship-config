@@ -4,6 +4,9 @@ This file serves as the primary memory and persistent fact store for AI agents w
 
 ## Lessons Learned
 
+- **`use flake` Needs a Default Shell Output**: In this repo, `.envrc` uses `use flake`, so the root `flake.nix` must expose either `devShells.<system>.default` or `packages.<system>.default`. A flake that only exports `nixosConfigurations` still evaluates and builds fine, but `direnv` on `launch-octopus` falls back with `does not provide attribute 'devShells.x86_64-linux.default'`.
+- **Use `pkgs.nixfmt` in Current nixpkgs**: In this flake's current `nixos-unstable` input, `pkgs.nixfmt-rfc-style` now aliases `pkgs.nixfmt` and emits an evaluation warning. For repo shells and package lists, prefer `nixfmt` directly to keep `nix develop` and `direnv` clean.
+
 - **Docker Desktop VHDX Path Variant**: On this WSL host, Docker Desktop stores its backing disk at `C:\Users\the owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx`, not the older `...\wsl\data\docker_data.vhdx` path. When checking or compacting Docker Desktop storage, verify the live path under `%LOCALAPPDATA%\Docker\wsl\disk\` first.
 
 - **WSL Lxss BasePath Is Not Guaranteed**: On Windows PowerShell 5.1, iterating `HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss` can yield distro entries without a usable `BasePath`. WSL VHDX compaction scripts must not call `Join-Path` on that value blindly; guard it first and fall back to scanning standard VHDX locations such as `%LOCALAPPDATA%\Packages\*\LocalState\*.vhdx`.
