@@ -6,6 +6,7 @@ let
   searxng-keep-only = [
     # General / web / context
     "brave"
+    "bing"
     "google"
     "hackernews"
     "mojeek"
@@ -54,6 +55,7 @@ let
     "wordnik"
 
     # Translation / dictionaries / weather / maps / misc helpers
+    "apple maps"
     "currency"
     "dictzone"
     "duckduckgo weather"
@@ -69,14 +71,13 @@ let
     "askubuntu"
     "cachy os packages"
     "crates.io"
+    "devicons"
     "fdroid"
-    "gentoo"
     "github"
     "gitea.com"
     "gitlab"
     "google play apps"
     "hex"
-    "hoogle"
     "lib.rs"
     "lucide"
     "mankier"
@@ -88,10 +89,12 @@ let
     "pkg.go.dev"
     "pub.dev"
     "pypi"
+    "repology"
     "rubygems"
     "selfhst icons"
     "sourcehut"
     "stackoverflow"
+    "svgrepo"
     "superuser"
     "voidlinux"
 
@@ -111,6 +114,7 @@ let
 
     # Movies / shopping
     "imdb"
+    "moviepilot"
     "rottentomatoes"
     "tmdb"
   ];
@@ -127,33 +131,59 @@ let
 
     # Emphasize broader and less-filtered discovery engines.
     (mkEngine "arxiv" { weight = 4; })
+    (mkEngine "alpine linux packages" { categories = [ "packages" ]; weight = 4; timeout = 5.0; })
+    (mkEngine "apple maps" { categories = [ "map" ]; weight = 3; timeout = 5.0; })
+    (mkEngine "arch linux wiki" { categories = [ "software wikis" "it" ]; weight = 4; timeout = 5.0; })
+    (mkEngine "bing" { categories = [ "general" "web" ]; weight = 1; timeout = 5.0; })
     (mkEngine "bt4g" { weight = 3; categories = [ "files" ]; })
     (mkEngine "brave" { weight = 4; timeout = 4.0; })
     (mkEngine "brave.images" { weight = 3; timeout = 4.0; })
-    (mkEngine "brave.news" { weight = 3; timeout = 4.0; })
+    (mkEngine "brave.news" { weight = 3; categories = [ "news" ]; timeout = 4.0; })
     (mkEngine "brave.videos" { weight = 3; timeout = 4.0; })
+    (mkEngine "devicons" { categories = [ "icons" ]; weight = 3; timeout = 5.0; })
     (mkEngine "duckduckgo images" { weight = 3; timeout = 5.0; })
-    (mkEngine "duckduckgo news" { weight = 3; timeout = 5.0; })
+    (mkEngine "duckduckgo news" { weight = 4; categories = [ "news" ]; timeout = 5.0; })
     (mkEngine "duckduckgo videos" { weight = 3; timeout = 5.0; })
+    (mkEngine "erowid" { categories = [ "other" ]; weight = 5; timeout = 5.0; })
     (mkEngine "fdroid" { categories = [ "apps" "packages" ]; })
     (mkEngine "github" { weight = 4; categories = [ "repos" "it" ]; })
     (mkEngine "google" { weight = 1; categories = [ "general" "web" "it" ]; })
     (mkEngine "google images" { weight = 1; })
-    (mkEngine "google news" { weight = 1; })
+    (mkEngine "google news" { weight = 5; categories = [ "news" ]; timeout = 5.0; })
+    (mkEngine "google play apps" { categories = [ "apps" ]; weight = 4; timeout = 5.0; })
     (mkEngine "google scholar" { weight = 2; timeout = 5.0; })
     (mkEngine "google videos" { weight = 1; })
     (mkEngine "hackernews" { weight = 3; categories = [ "q&a" "it" ]; })
+    (mkEngine "imdb" { categories = [ "movies" ]; weight = 5; timeout = 5.0; })
+    (mkEngine "lucide" { categories = [ "icons" ]; weight = 3; timeout = 5.0; })
+    (mkEngine "material icons" { categories = [ "icons" ]; weight = 4; timeout = 5.0; })
     (mkEngine "mojeek" { weight = 3; timeout = 5.0; })
     (mkEngine "mojeek images" { weight = 2; timeout = 5.0; })
+    (mkEngine "moviepilot" { categories = [ "movies" ]; weight = 2; timeout = 5.0; })
+    (mkEngine "nixos wiki" { categories = [ "software wikis" ]; weight = 4; timeout = 5.0; })
+    (mkEngine "npm" { categories = [ "packages" ]; weight = 4; timeout = 5.0; })
     (mkEngine "openairepublications" { weight = 2; })
     (mkEngine "openverse" { weight = 3; })
-    (mkEngine "reddit" { weight = 3; categories = [ "social media" "general" ]; })
-    (mkEngine "reuters" { weight = 4; categories = [ "news" ]; })
+    (mkEngine "openstreetmap" { categories = [ "map" ]; weight = 4; })
+    (mkEngine "photon" { categories = [ "map" ]; weight = 2; })
+    (mkEngine "pypi" { categories = [ "packages" ]; weight = 5; timeout = 5.0; })
+    (mkEngine "reddit" { weight = 2; categories = [ "social media" "general" ]; })
+    (mkEngine "repology" { categories = [ "packages" ]; weight = 4; timeout = 5.0; })
+    (mkEngine "reuters" { weight = 6; categories = [ "news" ]; timeout = 5.0; })
+    (mkEngine "rottentomatoes" { categories = [ "movies" ]; weight = 4; timeout = 5.0; })
     (mkEngine "sepiasearch" { weight = 3; })
+    (mkEngine "selfhst icons" { categories = [ "icons" ]; weight = 4; timeout = 5.0; })
+    (mkEngine "soundcloud" { categories = [ "music" ]; weight = 5; timeout = 5.0; })
     (mkEngine "stackoverflow" { weight = 3; categories = [ "q&a" "it" ]; })
+    (mkEngine "svgrepo" { categories = [ "icons" ]; weight = 2; timeout = 5.0; })
+    (mkEngine "tmdb" { categories = [ "movies" ]; weight = 3; timeout = 5.0; })
+    (mkEngine "wikipedia" { categories = [ "general" ]; weight = 5; timeout = 5.0; })
+    (mkEngine "wikidata" { categories = [ "general" ]; weight = 2; timeout = 5.0; })
+    (mkEngine "wikicommons.audio" { categories = [ "music" "wikimedia" ]; weight = 2; timeout = 5.0; })
     (mkEngine "wikicommons.files" { weight = 2; categories = [ "files" "wikimedia" ]; })
     (mkEngine "wikicommons.images" { weight = 2; categories = [ "images" "wikimedia" ]; })
-    (mkEngine "youtube" { weight = 4; categories = [ "videos" "music" ]; })
+    (mkEngine "wikicommons.videos" { categories = [ "videos" "wikimedia" ]; weight = 2; timeout = 5.0; })
+    (mkEngine "youtube" { weight = 6; categories = [ "videos" "music" ]; timeout = 5.0; })
 
     # Default-off engines that are useful for agentic search when healthy.
     (mkEngine "gitlab" { categories = [ "repos" "it" ]; })
