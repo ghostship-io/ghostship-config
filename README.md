@@ -50,7 +50,7 @@ PyLoad, RSS-Bridge, PriceBuddy, and Honcho.
 
 SearXNG is intended to run as an internal-only search hub on `ghostship_net`
 with a Nix-managed max-open engine allowlist, and internal consumers such as
-Hermes should use the container-network address `http://searxng:5002`. The
+Hermes should use the container-network address `http://searxng:8080`. The
 engine inventory is regenerated in `podman-searxng` `preStart` so curated
 engine changes and container restarts stay coupled during `nixos-rebuild`.
 

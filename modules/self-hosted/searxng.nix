@@ -182,7 +182,7 @@ let
     "search.autocomplete=yaml:${builtins.toJSON "duckduckgo"}"
     "search.formats=yaml:${builtins.toJSON [ "html" "json" ]}"
 
-    "server.port=yaml:${builtins.toJSON 5002}"
+    "server.port=yaml:${builtins.toJSON 8080}"
     "server.bind_address=yaml:${builtins.toJSON "0.0.0.0"}"
     "server.image_proxy=yaml:${builtins.toJSON true}"
     "server.limiter=yaml:${builtins.toJSON false}"
@@ -216,7 +216,7 @@ in
     user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:5002/config || exit 1"
+      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:8080/config || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
@@ -224,8 +224,8 @@ in
       "--health-on-failure=kill"
     ];
     environment = {
-      SEARXNG_PORT = "5002";
-      GRANIAN_PORT = "5002";
+      SEARXNG_PORT = "8080";
+      GRANIAN_PORT = "8080";
     };
     volumes = [
       "/srv/apps/searxng:/etc/searxng:rw"

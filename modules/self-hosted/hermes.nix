@@ -59,7 +59,7 @@ in
       TTYD_PORT = "7681";
       TTYD_TITLE = "Ghostship Hermes";
       TTYD_SESSION_NAME = "hermes";
-      SEARXNG_URL = "http://searxng:5002";
+      SEARXNG_URL = "http://searxng:8080";
       SONARR_URL = "http://sonarr:8989";
       RADARR_URL = "http://radarr:7878";
       PROWLARR_URL = "http://prowlarr:9696";
