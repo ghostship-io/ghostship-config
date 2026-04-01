@@ -174,7 +174,7 @@ let
     "general.instance_name=yaml:${builtins.toJSON "Ghostship Search"}"
 
     "search.safe_search=yaml:${builtins.toJSON 0}"
-    "search.autocomplete=yaml:${builtins.toJSON "duckduckgo"}"
+    "search.autocomplete=yaml:${builtins.toJSON "bing"}"
     "search.formats=yaml:${builtins.toJSON [ "html" "json" ]}"
 
     "server.port=yaml:${builtins.toJSON 8080}"
