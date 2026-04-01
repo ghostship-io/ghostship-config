@@ -5,8 +5,6 @@ let
   mkEngine = name: extra: { inherit name; disabled = false; } // extra;
   searxng-keep-only = [
     # General / web / context
-    "brave"
-    "brave.news"
     "google"
     "hackernews"
     "mojeek"
@@ -21,8 +19,6 @@ let
     "wikinews"
 
     # Images / video / media
-    "brave.images"
-    "brave.videos"
     "dailymotion"
     "deviantart"
     "duckduckgo images"
@@ -127,10 +123,6 @@ let
 
     # Emphasize broader and less-filtered discovery engines.
     (mkEngine "arxiv" { weight = 4; })
-    (mkEngine "brave" { weight = 4; timeout = 5.0; })
-    (mkEngine "brave.images" { weight = 4; timeout = 5.0; })
-    (mkEngine "brave.news" { weight = 4; timeout = 5.0; })
-    (mkEngine "brave.videos" { weight = 4; timeout = 5.0; })
     (mkEngine "bt4g" { weight = 3; categories = [ "files" ]; })
     (mkEngine "duckduckgo images" { weight = 3; timeout = 5.0; })
     (mkEngine "duckduckgo news" { weight = 3; timeout = 5.0; })
@@ -147,7 +139,7 @@ let
     (mkEngine "mojeek images" { weight = 2; timeout = 5.0; })
     (mkEngine "openairepublications" { weight = 2; })
     (mkEngine "openverse" { weight = 3; })
-    (mkEngine "reddit" { weight = 3; categories = [ "social media" "general" "it" ]; })
+    (mkEngine "reddit" { weight = 3; categories = [ "social media" "general" ]; })
     (mkEngine "reuters" { weight = 4; categories = [ "news" ]; })
     (mkEngine "sepiasearch" { weight = 3; })
     (mkEngine "stackoverflow" { weight = 3; categories = [ "q&a" "it" ]; })
