@@ -5,14 +5,10 @@ let
   mkEngine = name: extra: { inherit name; disabled = false; } // extra;
   searxng-keep-only = [
     # General / web / context
-    "brave"
     "brave.news"
-    "duckduckgo"
     "google"
     "hackernews"
     "mojeek"
-    "qwant"
-    "qwant news"
     "reddit"
     "wikidata"
     "wikipedia"
@@ -20,7 +16,6 @@ let
     # News
     "duckduckgo news"
     "google news"
-    "qwant news"
     "reuters"
     "wikinews"
 
@@ -36,8 +31,6 @@ let
     "mixcloud"
     "mojeek images"
     "openverse"
-    "qwant images"
-    "qwant videos"
     "radio browser"
     "sepiasearch"
     "soundcloud"
@@ -73,7 +66,6 @@ let
     "alpine linux packages"
     "arch linux wiki"
     "askubuntu"
-    "brave"
     "cachy os packages"
     "crates.io"
     "fdroid"
@@ -134,18 +126,16 @@ let
 
     # Emphasize broader and less-filtered discovery engines.
     (mkEngine "arxiv" { weight = 4; })
-    (mkEngine "brave" { weight = 4; timeout = 5.0; })
     (mkEngine "brave.images" { weight = 4; timeout = 5.0; })
     (mkEngine "brave.news" { weight = 4; timeout = 5.0; })
     (mkEngine "brave.videos" { weight = 4; timeout = 5.0; })
     (mkEngine "bt4g" { weight = 3; categories = [ "files" ]; })
-    (mkEngine "duckduckgo" { categories = [ ]; timeout = 5.0; weight = 1; })
     (mkEngine "duckduckgo images" { weight = 3; timeout = 5.0; })
     (mkEngine "duckduckgo news" { weight = 3; timeout = 5.0; })
     (mkEngine "duckduckgo videos" { weight = 3; timeout = 5.0; })
     (mkEngine "fdroid" { categories = [ "apps" "packages" ]; })
     (mkEngine "github" { weight = 4; categories = [ "repos" "it" ]; })
-    (mkEngine "google" { weight = 1; })
+    (mkEngine "google" { weight = 1; categories = [ "general" "web" "it" ]; })
     (mkEngine "google images" { weight = 1; })
     (mkEngine "google news" { weight = 1; })
     (mkEngine "google scholar" { weight = 2; timeout = 5.0; })
@@ -155,11 +145,7 @@ let
     (mkEngine "mojeek images" { weight = 2; timeout = 5.0; })
     (mkEngine "openairepublications" { weight = 2; })
     (mkEngine "openverse" { weight = 3; })
-    (mkEngine "qwant" { weight = 3; timeout = 5.0; })
-    (mkEngine "qwant images" { weight = 3; timeout = 5.0; })
-    (mkEngine "qwant news" { weight = 3; timeout = 5.0; })
-    (mkEngine "qwant videos" { weight = 3; timeout = 5.0; })
-    (mkEngine "reddit" { weight = 3; categories = [ "social media" "general" ]; })
+    (mkEngine "reddit" { weight = 3; categories = [ "social media" "general" "it" ]; })
     (mkEngine "reuters" { weight = 4; categories = [ "news" ]; })
     (mkEngine "sepiasearch" { weight = 3; })
     (mkEngine "stackoverflow" { weight = 3; categories = [ "q&a" "it" ]; })
