@@ -53,10 +53,12 @@ persistent agent API token from the `pricebuddy-secrets` bundle. The live
 `/srv/apps/pricebuddy/pricebuddy-agent.env` file contains a shell-safe
 `PRICEBUDDY_API_TOKEN="id|token"` bearer line for direct API use.
 
-Honcho runs locally as an internal API, worker, database, and Redis stack for
-Hermes. Hermes writes `~/.honcho/config.json` at startup, points it at
-`http://honcho:8000`, and uses a fixed placeholder `HONCHO_API_KEY=honcho`
-while Honcho itself keeps `AUTH_USE_AUTH=false`.
+Honcho runs locally as a single s6-supervised container plus database and
+Redis sidecars for Hermes. The Honcho container starts the API and deriver
+internally, with `DERIVER_WORKERS=2` by default. Hermes writes
+`~/.honcho/config.json` at startup, points it at `http://honcho:8000`, and uses
+a fixed placeholder `HONCHO_API_KEY=honcho` while Honcho itself keeps
+`AUTH_USE_AUTH=false`.
 
 ## Usage
 

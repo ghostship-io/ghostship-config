@@ -16,6 +16,7 @@ let
     app_root="/app"
     repo_dir="$app_root/repo"
     version_file="$repo_dir/.ghostship-honcho-version"
+    setup_lock="$app_root/.ghostship-honcho.lock"
     source_version="v3.0.3"
     source_dir="${honcho-source}"
 
@@ -29,19 +30,40 @@ let
       ${pkgs.coreutils}/bin/chmod -R u+rwX "$repo_dir" || true
     fi
 
-    if [ ! -f "$version_file" ] || [ "$(${pkgs.coreutils}/bin/cat "$version_file")" != "$source_version" ]; then
-      ${pkgs.coreutils}/bin/rm -rf "$repo_dir"
-      ${pkgs.coreutils}/bin/mkdir -p "$repo_dir"
-      ${pkgs.coreutils}/bin/cp -a "$source_dir"/. "$repo_dir"/
-      ${pkgs.coreutils}/bin/chmod -R u+rwX "$repo_dir"
-      ${pkgs.coreutils}/bin/printf '%s\n' "$source_version" > "$version_file"
-    fi
+    ensure_repo() {
+      if [ -f "$version_file" ] && [ "$(${pkgs.coreutils}/bin/cat "$version_file")" = "$source_version" ] && [ -x .venv/bin/python ]; then
+        return 0
+      fi
 
+      while ! ${pkgs.coreutils}/bin/mkdir "$setup_lock" 2>/dev/null; do
+        if [ -f "$version_file" ] && [ "$(${pkgs.coreutils}/bin/cat "$version_file")" = "$source_version" ] && [ -x .venv/bin/python ]; then
+          return 0
+        fi
+        sleep 1
+      done
+
+      trap '${pkgs.coreutils}/bin/rmdir "$setup_lock"' EXIT INT TERM
+
+      if [ ! -f "$version_file" ] || [ "$(${pkgs.coreutils}/bin/cat "$version_file")" != "$source_version" ]; then
+        ${pkgs.coreutils}/bin/rm -rf "$repo_dir"
+        ${pkgs.coreutils}/bin/mkdir -p "$repo_dir"
+        ${pkgs.coreutils}/bin/cp -a "$source_dir"/. "$repo_dir"/
+        ${pkgs.coreutils}/bin/chmod -R u+rwX "$repo_dir"
+        ${pkgs.coreutils}/bin/printf '%s\n' "$source_version" > "$version_file"
+      fi
+
+      cd "$repo_dir"
+
+      if [ ! -x .venv/bin/python ]; then
+        uv sync --frozen --no-group dev --python "$UV_PYTHON"
+      fi
+
+      trap - EXIT INT TERM
+      ${pkgs.coreutils}/bin/rmdir "$setup_lock"
+    }
+
+    ensure_repo
     cd "$repo_dir"
-
-    if [ ! -x .venv/bin/python ]; then
-      uv sync --frozen --no-group dev --python "$UV_PYTHON"
-    fi
 
     wait_for_port() {
       host="$1"
@@ -69,12 +91,40 @@ PY
     wait_for_port honcho-db 5432
     wait_for_port honcho-redis 6379
 
+    wait_for_http() {
+      host="$1"
+      port="$2"
+      path="$3"
+
+      "$UV_PYTHON" - "$host" "$port" "$path" <<'PY'
+import sys
+import time
+import urllib.request
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+path = sys.argv[3]
+url = f"http://{host}:{port}{path}"
+
+for _ in range(120):
+    try:
+        with urllib.request.urlopen(url, timeout=2) as response:
+            response.read(1)
+            raise SystemExit(0)
+    except Exception:
+        time.sleep(1)
+
+raise SystemExit(1)
+PY
+    }
+
     case "$mode" in
       api)
         .venv/bin/python scripts/provision_db.py
         exec .venv/bin/fastapi run --host 0.0.0.0 src/main.py
         ;;
       deriver)
+        wait_for_http 127.0.0.1 8000 /openapi.json
         exec .venv/bin/python -m src.deriver
         ;;
       *)
@@ -88,6 +138,9 @@ PY
     paths = [
       honcho-startup
       honcho-source
+      honcho-s6-services
+      pkgs.s6
+      pkgs.s6-linux-utils
       pkgs.bashInteractive
       pkgs.cacert
       pkgs.coreutils
@@ -98,15 +151,23 @@ PY
       pkgs.stdenv.cc.cc.lib
       pkgs.uv
     ];
-    pathsToLink = [ "/bin" ];
+    pathsToLink = [ "/bin" "/etc" ];
   };
+  honcho-s6-services = pkgs.runCommand "honcho-s6-services" { } ''
+    mkdir -p "$out/etc/s6/services/api" "$out/etc/s6/services/deriver"
+    ln -s ${pkgs.writeShellScript "honcho-api-run" ''
+      exec /bin/honcho-startup api
+    ''} "$out/etc/s6/services/api/run"
+    ln -s ${pkgs.writeShellScript "honcho-deriver-run" ''
+      exec /bin/honcho-startup deriver
+    ''} "$out/etc/s6/services/deriver/run"
+  '';
   honcho-image = pkgs.dockerTools.buildImage {
     name = "honcho";
     tag = "latest";
     copyToRoot = honcho-root;
     config = {
-      Entrypoint = [ "/bin/honcho-startup" ];
-      Cmd = [ "api" ];
+      Entrypoint = [ "/bin/s6-svscan" "/etc/s6/services" ];
       WorkingDir = "/app/repo";
     };
   };
@@ -136,6 +197,7 @@ CACHE_ENABLED=true
 CACHE_URL=redis://honcho-redis:6379/0?suppress=true
 DB_CONNECTION_URI=postgresql+psycopg://honcho:honcho@honcho-db:5432/honcho
 DERIVER_ENABLED=true
+DERIVER_WORKERS=2
 DERIVER_PROVIDER=google
 LLM_EMBEDDING_PROVIDER=gemini
 LLM_GEMINI_API_KEY=$LITELLM_GEMINI_API_KEY
@@ -199,27 +261,9 @@ in
     image = "localhost/honcho:latest";
     imageFile = honcho-image;
     pull = "never";
-    user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
     ];
-    environmentFiles = [
-      honcho-env
-    ];
-    volumes = [
-      "/srv/apps/honcho:/app:rw"
-    ];
-  };
-
-  virtualisation.oci-containers.containers."honcho-deriver" = {
-    image = "localhost/honcho:latest";
-    imageFile = honcho-image;
-    pull = "never";
-    user = "3000:3000";
-    extraOptions = [
-      "--network=ghostship_net"
-    ];
-    cmd = [ "deriver" ];
     environmentFiles = [
       honcho-env
     ];
@@ -286,20 +330,6 @@ in
       "podman-honcho-redis.service"
     ];
     bindsTo = [
-      "podman-honcho-db.service"
-      "podman-honcho-redis.service"
-    ];
-    preStart = "${honcho-pre-start}/bin/honcho-pre-start";
-  };
-
-  systemd.services.podman-honcho-deriver = {
-    after = [
-      "podman-honcho.service"
-      "podman-honcho-db.service"
-      "podman-honcho-redis.service"
-    ];
-    bindsTo = [
-      "podman-honcho.service"
       "podman-honcho-db.service"
       "podman-honcho-redis.service"
     ];
