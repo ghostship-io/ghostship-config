@@ -127,7 +127,7 @@ let
     "dictzone"
     "lingva"
     "mymemory translated"
-    "openmeteo"
+    "wttr.in"
     "openstreetmap"
     "photon"
 
@@ -191,7 +191,7 @@ let
     (mkEngine "etymonline" { categories = [ "dictionaries" ]; })
     (mkEngine "lingva" { categories = [ "translate" ]; })
     (mkEngine "mymemory translated" { categories = [ "translate" ]; })
-    (mkEngine "openmeteo" { categories = [ "weather" ]; })
+    (mkEngine "wttr.in" { categories = [ "weather" ]; timeout = 8.0; })
 
     # Emphasize broader and less-filtered discovery engines.
     (mkEngine "arxiv" { weight = 4; })
