@@ -58,7 +58,6 @@ let
     "apple maps"
     "currency"
     "dictzone"
-    "duckduckgo weather"
     "lingva"
     "mymemory translated"
     "openmeteo"
@@ -122,7 +121,6 @@ let
     (mkEngine "currency" { categories = [ "currency" ]; })
     (mkEngine "ddg definitions" { categories = [ "define" "dictionaries" ]; })
     (mkEngine "dictzone" { categories = [ "translate" "dictionaries" ]; })
-    (mkEngine "duckduckgo weather" { categories = [ "weather" ]; })
     (mkEngine "etymonline" { categories = [ "dictionaries" ]; })
     (mkEngine "lingva" { categories = [ "translate" ]; })
     (mkEngine "mymemory translated" { categories = [ "translate" ]; })
@@ -130,7 +128,7 @@ let
 
     # Emphasize broader and less-filtered discovery engines.
     (mkEngine "arxiv" { weight = 4; })
-    (mkEngine "alpine linux packages" { categories = [ "packages" ]; weight = 5; timeout = 8.0; })
+    (mkEngine "alpine linux packages" { categories = [ "packages" ]; weight = 6; timeout = 8.0; })
     (mkEngine "apple maps" { categories = [ "map" ]; weight = 3; timeout = 5.0; })
     (mkEngine "arch linux wiki" { categories = [ "software wikis" "it" ]; weight = 4; timeout = 5.0; })
     (mkEngine "bing" { categories = [ "general" "web" ]; weight = 1; timeout = 5.0; })
@@ -144,7 +142,9 @@ let
     (mkEngine "duckduckgo news" { weight = 4; categories = [ "news" ]; timeout = 5.0; })
     (mkEngine "duckduckgo videos" { weight = 3; timeout = 5.0; })
     (mkEngine "erowid" { categories = [ "other" ]; weight = 5; timeout = 8.0; })
-    (mkEngine "fdroid" { categories = [ "apps" "packages" ]; timeout = 8.0; })
+    (mkEngine "cachy os packages" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
+    (mkEngine "crates.io" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
+    (mkEngine "fdroid" { categories = [ "apps" ]; weight = 2; timeout = 8.0; })
     (mkEngine "github" { weight = 4; categories = [ "repos" "it" ]; })
     (mkEngine "google" { weight = 1; categories = [ "general" "web" "it" ]; })
     (mkEngine "google images" { weight = 1; })
@@ -153,6 +153,7 @@ let
     (mkEngine "google scholar" { weight = 2; timeout = 5.0; })
     (mkEngine "google videos" { weight = 1; })
     (mkEngine "hackernews" { weight = 3; categories = [ "q&a" "it" ]; })
+    (mkEngine "hex" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
     (mkEngine "imdb" { categories = [ "movies" ]; weight = 5; timeout = 5.0; })
     (mkEngine "lucide" { categories = [ "icons" ]; weight = 3; timeout = 8.0; })
     (mkEngine "material icons" { categories = [ "icons" ]; weight = 4; timeout = 8.0; })
@@ -160,22 +161,28 @@ let
     (mkEngine "mojeek images" { weight = 2; timeout = 5.0; })
     (mkEngine "moviepilot" { categories = [ "movies" ]; weight = 2; timeout = 5.0; })
     (mkEngine "nixos wiki" { categories = [ "software wikis" ]; weight = 4; timeout = 5.0; })
-    (mkEngine "npm" { categories = [ "packages" ]; weight = 5; timeout = 8.0; })
+    (mkEngine "lib.rs" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
+    (mkEngine "npm" { categories = [ "packages" ]; weight = 3; timeout = 8.0; })
     (mkEngine "openairepublications" { weight = 2; })
     (mkEngine "openverse" { weight = 3; })
     (mkEngine "openstreetmap" { categories = [ "map" ]; weight = 4; })
     (mkEngine "photon" { categories = [ "map" ]; weight = 2; })
-    (mkEngine "pypi" { categories = [ "packages" ]; weight = 6; timeout = 8.0; })
+    (mkEngine "packagist" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
+    (mkEngine "pkg.go.dev" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
+    (mkEngine "pub.dev" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
+    (mkEngine "pypi" { categories = [ "packages" ]; weight = 10; timeout = 8.0; })
     (mkEngine "reddit" { weight = 2; categories = [ "social media" "general" ]; })
-    (mkEngine "repology" { categories = [ "packages" ]; weight = 5; timeout = 8.0; })
+    (mkEngine "repology" { categories = [ "packages" ]; weight = 8; timeout = 8.0; })
     (mkEngine "reuters" { weight = 6; categories = [ "news" ]; timeout = 5.0; })
     (mkEngine "rottentomatoes" { categories = [ "movies" ]; weight = 4; timeout = 5.0; })
+    (mkEngine "rubygems" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
     (mkEngine "sepiasearch" { weight = 3; })
     (mkEngine "selfhst icons" { categories = [ "icons" ]; weight = 4; timeout = 8.0; })
     (mkEngine "soundcloud" { categories = [ "music" ]; weight = 5; timeout = 8.0; })
     (mkEngine "stackoverflow" { weight = 3; categories = [ "q&a" "it" ]; })
     (mkEngine "tmdb" { categories = [ "movies" ]; weight = 3; timeout = 5.0; })
-    (mkEngine "wikipedia" { categories = [ "general" ]; weight = 5; timeout = 5.0; })
+    (mkEngine "voidlinux" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
+    (mkEngine "wikipedia" { categories = [ "general" ]; weight = 7; timeout = 8.0; })
     (mkEngine "wikidata" { categories = [ "general" ]; weight = 2; timeout = 5.0; })
     (mkEngine "wikicommons.audio" { categories = [ "music" "wikimedia" ]; weight = 2; timeout = 5.0; })
     (mkEngine "wikicommons.files" { weight = 2; categories = [ "files" "wikimedia" ]; })
