@@ -9,9 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Muximux service placement**: Removed Honcho from the generated Muximux tile
-  list, kept the existing Homepage Honcho entry, and promoted PriceBuddy to the
-  Muximux main bar directly after Grimmory so host activations no longer depend
-  on manual `settings.ini.php` edits.
+  list, promoted PriceBuddy to the Muximux main bar directly after Grimmory,
+  and keep the generated dashboard layout aligned with the retired Honcho
+  stack.
+- **Honcho retirement**: Removed the Honcho self-hosted stack, dropped Hermes'
+  `HONCHO_*` integration wiring and shared Honcho compatibility-state
+  management, removed Homepage Honcho entries, and removed the stale
+  `litellm-secrets` declaration now that the service is retired.
 - **PriceBuddy token verification**: Normalized the managed
   `pricebuddy-agent.env` bearer rewrite so repeated post-start runs preserve a
   single `id|token` pair, and added host-managed post-start checks for the app

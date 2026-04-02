@@ -15,11 +15,10 @@ The generated Muximux configuration SHALL place Grimmory and PriceBuddy on the m
 - **WHEN** the Muximux configuration is generated from the repo-managed module
 - **THEN** no Honcho Muximux service entry is emitted
 
-### Requirement: Homepage SHALL retain the existing Honcho entry
-This change SHALL NOT remove or disable the existing Homepage Honcho service entry.
+### Requirement: Homepage SHALL omit Honcho after stack retirement
+Once Honcho is retired from the Ghostship stack, Homepage SHALL omit the Honcho service and infrastructure entries.
 
-#### Scenario: Homepage keeps Honcho while Muximux removes it
+#### Scenario: Homepage removes Honcho while Muximux also omits it
 - **WHEN** the updated host configuration is generated
-- **THEN** Homepage still includes the Honcho service entry
+- **THEN** Homepage does not include the Honcho service entry
 - **AND** Muximux does not include the Honcho service entry
-

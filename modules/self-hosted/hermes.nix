@@ -11,10 +11,6 @@ let
   bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
   grimmory-secrets = config.sops.secrets."grimmory-secrets".path;
   hermes-home = "/srv/apps/hermes/home";
-  legacy-honcho-dir = "${hermes-home}/.honcho";
-  legacy-honcho-config = "${legacy-honcho-dir}/config.json";
-  shared-honcho-dir = "${hermes-home}/shared/honcho";
-  shared-honcho-config = "${shared-honcho-dir}/config.json";
 in
 {
   virtualisation.oci-containers.containers."hermes" = {
@@ -50,8 +46,6 @@ in
       FLARESOLVERR_URL = "http://flaresolverr:8191";
       PYLOAD_URL = "http://pyload:8000";
       CLOAKBROWSER_URL = "http://cloakbrowser:8080";
-      HONCHO_API_KEY = "honcho";
-      HONCHO_BASE_URL = "http://honcho:8000";
       SYNOLOGY_VERIFY_SSL = "false";
     };
     environmentFiles = [
@@ -85,22 +79,10 @@ in
       echo "Missing Hermes secrets file at ${hermes-secrets}" >&2
       exit 1
     fi
-
-    install -d -m 0755 -o apps -g apps "${hermes-home}/shared" "${shared-honcho-dir}"
-
-    if [ -d "${legacy-honcho-dir}" ] && ! find "${shared-honcho-dir}" -mindepth 1 -print -quit | grep -q .; then
-      cp -a "${legacy-honcho-dir}/." "${shared-honcho-dir}/"
-      chown -R apps:apps "${shared-honcho-dir}"
-    elif [ -f "${legacy-honcho-config}" ] && [ ! -f "${shared-honcho-config}" ]; then
-      cp -a "${legacy-honcho-config}" "${shared-honcho-config}"
-      chown apps:apps "${shared-honcho-config}"
-    fi
   '';
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/hermes 0755 apps apps -"
     "d /srv/apps/hermes/home 0755 apps apps -"
-    "d /srv/apps/hermes/home/shared 0755 apps apps -"
-    "d /srv/apps/hermes/home/shared/honcho 0755 apps apps -"
   ];
 }

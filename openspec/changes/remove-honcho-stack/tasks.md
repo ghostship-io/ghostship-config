@@ -1,18 +1,18 @@
 ## 1. Retire Honcho from the managed stack
 
-- [ ] 1.1 Remove `./honcho.nix` from `modules/self-hosted/default.nix` and delete the retired Honcho module implementation.
-- [ ] 1.2 Remove all remaining repo references to managed Honcho services, including Homepage and any service inventory that still advertises Honcho.
+- [x] 1.1 Remove `./honcho.nix` from `modules/self-hosted/default.nix` and delete the retired Honcho module implementation.
+- [x] 1.2 Remove all remaining repo references to managed Honcho services, including Homepage and any service inventory that still advertises Honcho.
 
 ## 2. Remove dependent integrations and stale secrets
 
-- [ ] 2.1 Remove Hermes `HONCHO_*` environment wiring, legacy/shared Honcho compatibility-state management, and any retained `shared/honcho` tmpfiles or migration logic.
-- [ ] 2.2 Remove the Honcho-only `litellm-secrets` declaration and encrypted secret material, then verify no repo references to `litellm-secrets` remain.
-- [ ] 2.3 Update `openspec/specs/muximux-service-placement/spec.md`, `README.md`, `CHANGELOG.md`, and `AGENTS.md` to reflect that Honcho is no longer part of the supported Ghostship stack.
+- [x] 2.1 Remove Hermes `HONCHO_*` environment wiring, legacy/shared Honcho compatibility-state management, and any retained `shared/honcho` tmpfiles or migration logic.
+- [x] 2.2 Remove the Honcho-only `litellm-secrets` declaration and encrypted secret material, then verify no repo references to `litellm-secrets` remain.
+- [x] 2.3 Update `openspec/specs/muximux-service-placement/spec.md`, `README.md`, `CHANGELOG.md`, and `AGENTS.md` to reflect that Honcho is no longer part of the supported Ghostship stack.
 
 ## 3. Validate the retired configuration
 
-- [ ] 3.1 Run `nix flake check --no-build -L` from the repo root.
-- [ ] 3.2 Run `nix eval .#nixosConfigurations.chill-penguin.config.system.build.toplevel.drvPath` to confirm the host configuration still evaluates after Honcho removal.
+- [x] 3.1 Run `nix flake check --no-build -L` from the repo root.
+- [x] 3.2 Run `nix eval .#nixosConfigurations.chill-penguin.config.system.build.toplevel.drvPath` to confirm the host configuration still evaluates after Honcho removal.
 
 ## 4. Deploy and clean host state
 

@@ -95,7 +95,7 @@ internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, the `arr` stack,
 qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes,
-PyLoad, RSS-Bridge, PriceBuddy, and Honcho.
+PyLoad, RSS-Bridge, and PriceBuddy.
 
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions
@@ -124,18 +124,12 @@ files, scraper reachability, and final bearer-token shape without treating
 upstream auth-route bugs or third-party Cloudflare challenges as Ghostship env
 regressions.
 
-Honcho runs locally as a single s6-supervised container plus database and
-Redis sidecars for Hermes. The Honcho container starts the API and deriver
-internally, with `DERIVER_WORKERS=2` by default. Hermes writes
-its durable state to `/srv/apps/hermes/home` through the image's native
-`HERMES_HOME=/home/hermes/.hermes` layout and relies on the image's native
-entrypoint instead of a repo-side startup shim. Honcho compatibility data now
-lives under `/srv/apps/hermes/home/shared/honcho`, with the image recreating
-`/home/hermes/.honcho` as a compatibility link at runtime. The service still
-points Honcho integration at `http://honcho:8000` and uses the fixed placeholder
-`HONCHO_API_KEY=honcho` while Honcho itself keeps `AUTH_USE_AUTH=false`.
-Homepage keeps the Honcho tile, while Muximux intentionally omits Honcho and
-keeps PriceBuddy on the main bar immediately after Grimmory.
+Hermes writes its durable state to `/srv/apps/hermes/home` through the image's
+native `HERMES_HOME=/home/hermes/.hermes` layout and relies on the image's
+native entrypoint instead of a repo-side startup shim. Honcho is retired from
+the Ghostship stack, so Hermes no longer exports `HONCHO_*` integration
+settings and both Homepage and Muximux omit Honcho entirely. Muximux keeps
+PriceBuddy on the main bar immediately after Grimmory.
 
 ## Usage
 

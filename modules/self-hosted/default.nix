@@ -31,7 +31,6 @@
     # Apps and utilities
     ./cloakbrowser.nix
     ./hermes.nix
-    ./honcho.nix
     ./bentopdf.nix
     ./convertx.nix
     ./it-tools.nix
