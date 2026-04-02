@@ -141,6 +141,9 @@ changelog.
 - RomM `4.8.0` started cleanly in an unpatched same-origin iframe harness on
   `chill-penguin`; a stale `postStart` bundle rewrite was the cause of the live
   startup failure, not the upstream container itself.
+- Muximux should embed RomM through a same-origin `/romm/` reverse proxy to the
+  internal `http://romm:8080` service, not the public `https://romm.ghostship.io`
+  hostname.
 - Repo edits to `modules/self-hosted/romm.nix` are not live until the host is
   rebuilt. Inspect the live container files before treating a repo change as
   tested.

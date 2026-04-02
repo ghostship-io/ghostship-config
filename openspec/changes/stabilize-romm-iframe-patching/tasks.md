@@ -1,14 +1,14 @@
 ## 1. Reproduce and classify the live regression
 
 - [x] 1.1 Disable or bypass the current RomM `postStart` iframe patch on `chill-penguin` long enough to start the unmodified 4.8.0 image.
-- [ ] 1.2 Verify whether the unpatched image still fails in the actual Muximux iframe path and record whether the failure is an iframe regression, a startup issue, or both.
-- [ ] 1.3 Capture the live evidence needed for the change notes, including the service state, relevant RomM logs, and the active frontend/runtime behavior in Muximux.
+- [x] 1.2 Verify whether the unpatched image still fails in the actual Muximux iframe path and record whether the failure is an iframe regression, a startup issue, or both.
+- [x] 1.3 Capture the live evidence needed for the change notes, including the service state, relevant RomM logs, and the active frontend/runtime behavior in Muximux.
 
 ## 2. Replace the brittle mitigation path
 
 - [x] 2.1 Update `modules/self-hosted/romm.nix` so RomM startup no longer depends on a single exact minified bundle string or hashed asset filename.
-- [ ] 2.2 If the unpatched image still regresses in iframe mode, implement the chosen durable runtime-shim or equivalent mitigation and ensure startup cleanly no-ops when the mitigation is already satisfied or unnecessary.
-- [ ] 2.3 If the unpatched image does not regress, keep the obsolete iframe patch path removed and document why the remaining Muximux failure is outside RomM.
+- [x] 2.2 Implement the proven Muximux same-origin `/romm/` reverse proxy in the repo and make it survive container restarts and Podman IP churn.
+- [x] 2.3 If the unpatched image does not regress, keep the obsolete iframe patch path removed and document why the remaining Muximux failure is outside RomM.
 
 ## 3. Verify and document the host change
 

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Muximux RomM embedding**: Switched Muximux's RomM tile to a same-origin
+  `/romm/` reverse proxy and now install a managed Muximux nginx vhost that
+  proxies RomM by service name on `ghostship_net`, because the public
+  `romm.ghostship.io` hostname is Cloudflare Access-protected and not a stable
+  iframe target.
 - **RomM startup hook removal**: Removed the stale `podman-romm` post-start
   bundle rewrite after validating that the upstream RomM `4.8.0` image starts
   cleanly without it; the failing patch target was the source of the live

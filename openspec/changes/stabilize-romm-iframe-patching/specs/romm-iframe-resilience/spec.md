@@ -34,6 +34,22 @@ routine upstream frontend rebuilds do not break service startup.
 - **THEN** the startup logic SHALL exit successfully rather than failing on a
   missing old patch target
 
+### Requirement: Muximux SHALL embed RomM through a same-origin path
+If the live failure path is caused by embedding the public RomM hostname inside
+Muximux, the portal SHALL use a same-origin reverse proxy path instead of the
+public Cloudflare-protected origin.
+
+#### Scenario: Muximux points at the public RomM hostname
+- **WHEN** live validation shows `https://romm.ghostship.io` is not a stable
+  iframe target inside Muximux
+- **THEN** the managed Muximux configuration SHALL point the RomM tile at a
+  same-origin path such as `/romm/`
+
+#### Scenario: Muximux proxy path is regenerated
+- **WHEN** the Muximux container restarts or its config volume is recreated
+- **THEN** the managed config SHALL reinstall the RomM reverse proxy path using
+  the internal RomM service name instead of a container IP
+
 ### Requirement: RomM startup failures SHALL identify the failing stage
 The RomM host workflow SHALL distinguish validation failures, mitigation
 application failures, and application runtime failures so operators can tell

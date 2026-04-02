@@ -1,5 +1,78 @@
 { pkgs, ... }:
 
+let
+  muximuxDefaultSite = pkgs.writeText "muximux-default.conf" ''
+    server {
+    	listen 80 default_server;
+
+    	listen 443 ssl;
+
+    	root /config/www/muximux;
+    	index index.html index.htm index.php;
+
+    	server_name _;
+
+    	ssl_certificate /config/keys/cert.crt;
+        ssl_certificate_key /config/keys/cert.key;
+
+        client_max_body_size 0;
+
+    	location /romm/ {
+    		proxy_pass http://romm:8080/;
+    		proxy_http_version 1.1;
+    		proxy_set_header Host romm:8080;
+    		proxy_set_header X-Forwarded-Host $host;
+    		proxy_set_header X-Forwarded-Proto $scheme;
+    		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    		proxy_set_header Accept-Encoding "";
+
+            # RomM emits root-relative asset and API paths even when proxied.
+    		sub_filter_once off;
+    		sub_filter_types application/javascript text/css;
+    		sub_filter 'href="/' 'href="/romm/';
+    		sub_filter 'src="/' 'src="/romm/';
+    		sub_filter '"/assets/' '"/romm/assets/';
+    		sub_filter '"/api/' '"/romm/api/';
+    		sub_filter "'/assets/" "'/romm/assets/";
+    		sub_filter "'/api/" "'/romm/api/";
+    		sub_filter 'BASE_URL:"/"' 'BASE_URL:"/romm/"';
+    	}
+
+    	location /assets/ {
+    		proxy_pass http://romm:8080/assets/;
+    		proxy_http_version 1.1;
+    		proxy_set_header Host romm:8080;
+    		proxy_set_header X-Forwarded-Host $host;
+    		proxy_set_header X-Forwarded-Proto $scheme;
+    		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    	}
+
+    	location /api/ {
+    		proxy_pass http://romm:8080/api/;
+    		proxy_http_version 1.1;
+    		proxy_set_header Host romm:8080;
+    		proxy_set_header X-Forwarded-Host $host;
+    		proxy_set_header X-Forwarded-Proto $scheme;
+    		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    	}
+
+    	location / {
+    		try_files $uri $uri/ /index.html /index.php?$args =404;
+    	}
+
+    	location ~ \.php$ {
+    		fastcgi_split_path_info ^(.+\.php)(/.+)$;
+    		# With php5-cgi alone:
+    		fastcgi_pass 127.0.0.1:9000;
+    		# With php5-fpm:
+    		#fastcgi_pass unix:/var/run/php5-fpm.sock;
+    		fastcgi_index index.php;
+    		include /etc/nginx/fastcgi_params;
+    	}
+    }
+  '';
+in
+
 {
   virtualisation.oci-containers.containers."muximux" = {
     image = "docker.io/linuxserver/muximux:latest";
@@ -23,8 +96,14 @@
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/muximux 0755 apps apps -"
+    "d /srv/apps/muximux/nginx/site-confs 0755 apps apps -"
     "d /srv/apps/muximux/www/muximux 0755 apps apps -"
   ];
+
+  systemd.services.podman-muximux.preStart = ''
+    install -d -m0755 -o apps -g apps /srv/apps/muximux/nginx/site-confs
+    install -m0644 -o apps -g apps ${muximuxDefaultSite} /srv/apps/muximux/nginx/site-confs/default
+  '';
 
   system.activationScripts.muximux-config = {
     text = ''
@@ -101,7 +180,7 @@
           Honcho.enabled=literal:"true"
           Honcho.dd=literal:"true"
           RomM.name=literal:"RomM"
-          RomM.url=literal:"https://romm.ghostship.io"
+          RomM.url=literal:"/romm/"
           RomM.scale=literal:1
           RomM.icon=literal:"muximux-gamepad"
           RomM.color=literal:"#553f99"
