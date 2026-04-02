@@ -13,6 +13,6 @@
 
 ## 3. Verify and document the host change
 
-- [ ] 3.1 Evaluate the updated Muximux config and build the target host system with the new shim asset and injection path.
-- [ ] 3.2 Apply the updated config on `chill-penguin`, remove any ad hoc live RomM file edits, then verify `systemctl status podman-romm.service --no-pager -l`, `podman ps`, direct `/romm/`, and the iframe behavior at `/#RomM`.
+- [x] 3.1 Evaluate the updated Muximux config and build the target host system with the new shim asset and injection path.
+- [x] 3.2 Apply the updated config on `chill-penguin`, remove any ad hoc live RomM file edits, then verify `systemctl status podman-romm.service --no-pager -l`, `podman ps`, direct `/romm/`, and the iframe behavior at `/#RomM`.
 - [x] 3.3 Update `README.md`, `CHANGELOG.md`, and `AGENTS.md` with the shim-based mitigation workflow and any durable live-validation lessons from the new fix.
