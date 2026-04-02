@@ -33,8 +33,8 @@ let
     { name = "nix"; }
     { name = "wsl2"; }
     { name = "python"; }
-    { name = "build123d"; }
     { name = "ssh"; }
+    { name = "skill-creator"; }
   ];
 
   skillConfig = map (skill: {

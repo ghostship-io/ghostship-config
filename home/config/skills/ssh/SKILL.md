@@ -1,36 +1,17 @@
 ---
 name: ssh
-description: Use when managing remote servers via standard SSH and SCP commands. Includes instructions for file transfers and local editing preferences.
-category: devops
-risk: high
-source: workspace
-date_added: "2026-03-27"
+description: Use for remote host work over ssh or scp, especially when a task needs remote commands, file transfer, or root-shell guidance.
 ---
 
-# SSH & Remote Management Expert
+# ssh
 
-This skill provides instructions for managing remote servers using standard OpenSSH tools (`ssh`, `scp`) available in the local environment. It emphasizes a robust workflow for file editing and strict protocols for elevated access.
+Use this skill when the work happens on another host.
 
-## Core Directives
+## Core workflow
 
-### 1. Connecting to Servers
-Use standard `ssh` commands to execute remote tasks. Leverage aliases defined in `~/.ssh/config` for simplicity.
-- **Run Command**: `ssh <host> "<command>"`
-- **Interactive Shell**: If you need to run multiple commands that depend on state (like `cd`), either chain them with `&&` or use a single `ssh` call with a heredoc.
-
-### 2. File Transfer Workflow (Preference)
-When you need to modify a file on a remote server, **ALWAYS** follow this preferred local-first workflow:
-1.  **Download**: Use `scp` to copy the file from the server to your local workspace.
-    - `scp <host>:/path/to/remote/file ./local_copy`
-2.  **Modify**: Use local tools (like `replace` or `write_file`) to edit the file in your local workspace.
-3.  **Upload**: Use `scp` to send the modified file back to the server.
-    - `scp ./local_copy <host>:/path/to/remote/file`
-4.  **Fix Permissions**: After uploading, ensure the file has the correct ownership and permissions on the remote server.
-    - `ssh <host> "chmod <perms> /path/to/remote/file && chown <user>:<group> /path/to/remote/file"`
-
-## Best Practices
-
-- **Atomic Uploads**: When uploading critical config files, upload to a temporary location first (`/tmp/file.new`), then move it to the final destination in a single `ssh` command to minimize downtime or partial config states.
-- **Verification**: Always verify changes on the remote server immediately after an upload (e.g., check file content with `cat` and service status with `systemctl status`).
-- **SSH Config**: Assume `~/.ssh/config` is the source of truth for host aliases and connection parameters.
-- **Error Handling**: Check the exit code of `ssh` and `scp` commands. A non-zero exit code indicates a failure that must be diagnosed.
+- Prefer `ssh <host> '<command>'` for targeted remote commands.
+- For file edits, download with `scp`, edit locally, upload back, then verify on
+  the remote host.
+- For privileged remote work, use a root shell or a direct root SSH host. Do
+  not recommend `sudo`.
+- Verify the final remote state after uploads, restarts, or deploy steps.

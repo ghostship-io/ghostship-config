@@ -33,16 +33,12 @@
       source = ../config/skills/python;
       force = true;
     };
-    ".agents/skills/build123d" = {
-      source = ../config/skills/build123d;
-      force = true;
-    };
     ".agents/skills/ssh" = {
       source = ../config/skills/ssh;
       force = true;
     };
-    ".agents/skills/agent-browser" = {
-      source = ../config/skills/agent-browser;
+    ".agents/skills/skill-creator" = {
+      source = ../config/skills/skill-creator;
       force = true;
     };
   };
@@ -140,10 +136,22 @@
       };
     };
     plugins = [
-      { name = "autopair"; src = pkgs.fishPlugins.autopair.src; }
-      { name = "sponge"; src = pkgs.fishPlugins.sponge.src; }
-      { name = "puffer"; src = pkgs.fishPlugins.puffer.src; }
-      { name = "colored-man-pages"; src = pkgs.fishPlugins.colored-man-pages.src; }
+      {
+        name = "autopair";
+        src = pkgs.fishPlugins.autopair.src;
+      }
+      {
+        name = "sponge";
+        src = pkgs.fishPlugins.sponge.src;
+      }
+      {
+        name = "puffer";
+        src = pkgs.fishPlugins.puffer.src;
+      }
+      {
+        name = "colored-man-pages";
+        src = pkgs.fishPlugins.colored-man-pages.src;
+      }
     ];
   };
 }

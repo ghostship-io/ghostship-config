@@ -52,6 +52,16 @@ for secrets.
 - Gemini also refreshes any managed Gemini extensions on launch. Wrapper-side
   update failures warn and continue instead of blocking the agent start.
 
+## Shared Skills
+
+- Shared repo-managed skills live under `home/config/skills/` and are linked
+  into `~/.agents/skills/` on develop hosts.
+- The curated shared set is `nix`, `python`, `ssh`, `wsl2`, and a vendored
+  upstream `skill-creator` package pinned to
+  `vercel-labs/agent-browser` `v0.9.3`.
+- Repo-local OpenSpec assets under `.codex/`, `.gemini/`, and `.opencode/`
+  are a separate layer from the shared `~/.agents/skills` inventory.
+
 ## Self-Hosted Stack
 
 The container stack lives in the flat
@@ -88,13 +98,13 @@ Run system-changing commands from a root shell or direct root SSH session.
 
 Build the current host:
 
-```bash
-nixos-rebuild build --flake .#$(hostname)
+```fish
+nixos-rebuild build --flake .#(hostname)
 ```
 
 Enter the repo shell with direnv or Nix:
 
-```bash
+```fish
 direnv allow
 # or
 nix develop
@@ -105,13 +115,13 @@ development hosts and on Apple Silicon Linux systems.
 
 Apply the built generation:
 
-```bash
+```fish
 ./result/bin/switch-to-configuration switch
 ```
 
 Build a different host without switching:
 
-```bash
+```fish
 nixos-rebuild build --flake .#chill-penguin
 ```
 

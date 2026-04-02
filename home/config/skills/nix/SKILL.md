@@ -1,83 +1,34 @@
 ---
 name: nix
-description: Expert in writing Nix Flakes, packaging software, managing NixOS modules, and using native Nix commands. Use for any operations involving Nix configurations, flakes, packaging, or system-wide Nix/NixOS changes.
-category: devops
-risk: medium
-source: community
-date_added: "2026-02-20"
+description: Use for Nix flakes, NixOS modules, Home Manager, packaging, and native nix or nixos-rebuild workflows in this repo.
 ---
 
-# Nix & NixOS Expert Skill
+# nix
 
-This skill extends Gemini CLI with specialized knowledge and workflows for Nix and NixOS, emphasizing modern patterns (Flakes) and native `nix` commands.
+Use this skill for any repo work that changes flake wiring, NixOS modules,
+Home Manager modules, package definitions, or host builds.
 
-## Core Directives
+## Core workflow
 
-### 1. Unified Environment (Flakes & Direnv)
-- **Always use Flakes**: Default to `flake.nix` for all project environments and configurations.
-- **Direnv Integration**: Prioritize `direnv` with `nix-direnv` (e.g., `use flake`) for seamless, persistent shell activation.
-- **SpecialArgs**: When defining `nixosConfigurations`, always pass `inputs` and `self` via `specialArgs` to make them available in all modules.
+- Prefer native `nix`, `nixos-rebuild`, and `switch-to-configuration`. Do not
+  use `nh`.
+- Build first. Do not switch or deploy unless the user explicitly asks for it.
+- Keep host or admin defaults in NixOS modules and interactive user tooling in
+  Home Manager.
+- Use package references like `${pkgs.package}/bin/cmd` instead of hardcoded
+  `/bin` paths.
+- When behavior or workflow changes, update `README.md`, `CHANGELOG.md`, and
+  `AGENTS.md`.
 
-### 2. Native Nix Operations
-For system-level validation, use standard `nix` and `nixos-rebuild` commands. You MUST NEVER apply configurations (switch/boot) automatically; always build to verify validity:
-- **System Validation (Build)**: `nixos-rebuild build --flake .#<hostname>`
-- **Search Packages**: `nix search nixpkgs <query>`
-- **Garbage Collection**: `nix-collect-garbage -d`
-- **Privilege Model**: If a command must change system state, run it from a root shell or a direct root SSH session.
-- **Legacy Tooling**: Prefer `nix shell` over `nix-shell`, and do not recommend `nh`.
+## Verification
 
-### 3. Idiomatic Nix Development
-- **Packaging**:
-    - Use appropriate builder helpers: `stdenv.mkDerivation`, `buildPythonPackage`, `buildNpmPackage`, `buildGoModule`, `buildRustPackage`.
-    - Avoid hardcoding `/bin/` paths; use `${pkgs.package}/bin/cmd`.
-    - Handle dynamic linking with `nix-ld` when necessary.
-- **Modules**:
-    - Structure modules with clear `options` and `config` separation.
-    - Use `lib.types` for strictly typed options.
-    - Prefer `mkIf` and `mkEnableOption` for conditional logic.
-- **Wrappers**:
-    - Use `writeShellScriptBin` or `symlinkJoin` to create system-wide wrappers (e.g., `dig` -> `drill`, `vim` -> `nvim`).
+- For host or Home Manager changes, verify with `nix build .#nixosConfigurations.<host>.config.system.build.toplevel -L`.
+- If a command needs privileges, tell the user to run it from a root shell or a
+  direct root SSH session.
 
-### 4. Validation & Testing (MANDATORY)
-The AGENT MUST always validate Nix/NixOS configurations. You are NOT permitted to apply or deploy changes; your responsibility ends at providing verified, buildable code.
-- **Syntax Check**: Use `nix-instantiate --parse <file>` for quick syntax validation.
-- **Evaluation Test (THE GOLD STANDARD)**: Use `nixos-rebuild build --flake .#<hostname>` to verify that the entire NixOS configuration evaluates and builds correctly. This MUST be performed before claiming success.
-- **Unit Testing**: For complex logic in modules, utilize `lib.runTests` or create a minimal flake-based test environment.
+## Read when needed
 
-### 5. System-Wide Preferences
-- **Experimental Features**: `nix-command`, `flakes`.
-- **Optimization**: Enable `auto-optimise-store`.
-- **Safety**: `nixpkgs.config.allowUnfree = true` (only when necessary) and `NIXPKGS_ALLOW_ALIASES = "0"`.
-- **Ephemeral Run**: Use `nix shell nixpkgs#<package> -c <command>` for one-off utility execution or testing when a program or library is not available in the current environment.
-
-### 6. Surgical Configuration Manipulation (ghostship-config)
-When a service doesn't support structured configuration directories (like `.d/`) and its config is partially managed by the app itself, use `ghostship-config` in activation scripts to surgically inject Nix-managed settings.
-- **Why**: Ensures a "Source of Truth" from Nix is applied while preserving app-managed state (e.g., sessions, dynamic preferences) that would be lost if Nix managed the whole file.
-- **Pattern**: Use `system.activationScripts` (NixOS) or `home.activation` (Home Manager) to run `ghostship-config set` commands.
-- **Example Usage**:
-  ```nix
-  system.activationScripts.myAppConfig = {
-    text = let
-      config = "/var/lib/myapp/config.yaml";
-    in ''
-      if [ -f "${config}" ]; then
-        ${pkgs.ghostship-config}/bin/ghostship-config set "${config}" \
-          "server.port=yaml:8080" \
-          "ui.theme=literal:dark"
-      fi
-    '';
-  };
-  ```
-- **Supported Formats**: `json`, `yaml`, `toml`, `xml`, `ini`, `conf`.
-
-## Workflow References
-
-- **Command Reference**: See [command-reference.md](references/command-reference.md) for native Nix commands and repo-specific deployment patterns.
-- **Flakes**: See [flake-patterns.md](references/flake-patterns.md) for boilerplate.
-- **Modules**: See [module-patterns.md](references/module-patterns.md) for NixOS module structure.
-- **Packaging**: See [packaging.md](references/packaging.md) for standard derivation examples.
-
-## Interaction Protocol
-1. **Analyze First**: Before suggesting a change, identify if it affects a Flake, a NixOS module, or a user-level configuration (Home Manager).
-2. **Validation First**: Always provide the `nixos-rebuild build --flake .#<hostname>` command alongside your changes to ensure the user can verify them.
-3. **Brevity & Directness**: Provide code snippets followed by the specific command to validate them.
+- [Command and deploy patterns](references/command-reference.md)
+- [Flake patterns](references/flake-patterns.md)
+- [Module patterns](references/module-patterns.md)
+- [Packaging patterns](references/packaging.md)

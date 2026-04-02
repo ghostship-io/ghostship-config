@@ -58,7 +58,7 @@ Treat EVERY repository as a potential high-quality open-source project.
 - **One-off**: Use **`,` (comma)** for ephemeral execution of utilities.
 
 ### Browsing & Web Research
-- **agent-browser**: Expert in browser automation and web navigation. Use this when you need to research or interact with a website. Run `agent-browser` by itself to see all commands. Always use the `agent-browser` skill for detailed guidance.
+- **agent-browser**: Use this CLI when you need browser automation or web navigation. Run `agent-browser` by itself to inspect the command surface. Do not assume this repo provides a shared `agent-browser` skill.
 
 ### Python (Gold Standard)
 - **Layout**: ALWAYS use the **`src/` layout** to prevent accidental imports and ensure testing against the installed package.
