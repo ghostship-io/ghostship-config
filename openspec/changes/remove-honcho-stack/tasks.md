@@ -16,6 +16,6 @@
 
 ## 4. Deploy and clean host state
 
-- [ ] 4.1 Push `main`, then on `chill-penguin` run `git -C /home/nixos/nixos-config pull --ff-only origin main`, `nixos-rebuild build --flake .#chill-penguin -L`, and `./result/bin/switch-to-configuration switch`.
-- [ ] 4.2 Verify `podman-honcho.service`, `podman-honcho-db.service`, and `podman-honcho-redis.service` are no longer managed or running, and verify Hermes no longer exposes Honcho integration.
-- [ ] 4.3 Remove retired host state from `/srv/apps/honcho`, `/srv/apps/honcho-db`, `/srv/apps/honcho-redis`, and `/srv/apps/hermes/home/shared/honcho`, then confirm the cleanup on `chill-penguin`.
+- [x] 4.1 Push `main`, then on `chill-penguin` run `git -C /home/nixos/nixos-config pull --ff-only origin main`, `nixos-rebuild build --flake .#chill-penguin -L`, and `./result/bin/switch-to-configuration switch`.
+- [x] 4.2 Verify `podman-honcho.service`, `podman-honcho-db.service`, and `podman-honcho-redis.service` are no longer managed or running, and verify Hermes no longer exposes Honcho integration.
+- [x] 4.3 Remove retired host state from `/srv/apps/honcho`, `/srv/apps/honcho-db`, `/srv/apps/honcho-redis`, and `/srv/apps/hermes/home/shared/honcho`, then confirm the cleanup on `chill-penguin`.
