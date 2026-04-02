@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **RomM startup hook removal**: Removed the stale `podman-romm` post-start
+  bundle rewrite after validating that the upstream RomM `4.8.0` image starts
+  cleanly without it; the failing patch target was the source of the live
+  startup wedge.
 - **OpenSpec init defaults**: The develop-host `openspec` wrapper now injects
   `--tools codex,gemini,opencode --profile core` for `openspec init` unless
   the caller passes explicit `--tools` or `--profile` flags.

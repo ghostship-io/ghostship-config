@@ -78,6 +78,10 @@ Key services include Plex, Homepage, Muximux, the `arr` stack,
 qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes,
 PyLoad, RSS-Bridge, PriceBuddy, and Honcho.
 
+RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
+without the old post-start bundle rewrite. Validate future iframe regressions
+against a live unpatched container before reintroducing any frontend patch.
+
 SearXNG is intended to run as an internal-only search hub on `ghostship_net`
 with a Nix-managed max-open engine allowlist, and internal consumers such as
 Hermes should use the container-network address `http://searxng:8080`. The

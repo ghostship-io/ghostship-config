@@ -138,13 +138,14 @@ changelog.
 - Cloudflare Access in front of `romm.ghostship.io` can block iframe loads
   before RomM itself renders. Distinguish public-access issues from origin
   issues.
-- For the current live RomM iframe mitigation, the important patch point is the
-  router `beforeResolve` view-transition hook.
+- RomM `4.8.0` started cleanly in an unpatched same-origin iframe harness on
+  `chill-penguin`; a stale `postStart` bundle rewrite was the cause of the live
+  startup failure, not the upstream container itself.
 - Repo edits to `modules/self-hosted/romm.nix` are not live until the host is
   rebuilt. Inspect the live container files before treating a repo change as
   tested.
-- Persistent RomM bundle patching should use `podman exec -u 0 -i` and a Python
-  rewrite, not nested shell-quoted `sed`.
+- Validate future RomM iframe regressions against a live unpatched container
+  before adding any new mitigation.
 - Validate RomM iframe regressions against the live served bundle, not just the
   unit definition.
 
