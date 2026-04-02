@@ -107,6 +107,9 @@ The current mitigation keeps RomM's bundle untouched and injects an
 iframe-only shim from the Muximux proxy immediately before RomM's main module
 script. Do not switch that back to a generic `<head>` prepend; it broke the
 asset base and left RomM looping on chunk imports.
+The proxy also injects a real `<base href="/romm/">` into RomM's HTML so newer
+bundles that ship an empty Vite `BASE_URL` still boot the router under `/romm/`
+instead of briefly landing on the in-app not-found route.
 
 SearXNG is intended to run as an internal-only search hub on `ghostship_net`
 with a Nix-managed max-open engine allowlist, and internal consumers such as

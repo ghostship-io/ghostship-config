@@ -160,8 +160,11 @@ let
     		proxy_set_header Accept-Encoding "";
 
             # RomM emits root-relative asset and API paths even when proxied.
+            # Newer builds also ship an empty Vite env object, so Vue Router
+            # falls back to the document <base> tag for its runtime base.
     		sub_filter_once off;
     		sub_filter_types text/html application/javascript text/css;
+		sub_filter '<head>' '<head><base href="/romm/" />';
     		sub_filter 'src="/assets/index-' 'src="/romm-iframe-shim.js?v=${rommIframeShimVersion}"></script><script type="module" crossorigin src="/romm/assets/index-';
     		sub_filter 'href="/' 'href="/romm/';
     		sub_filter 'src="/' 'src="/romm/';
@@ -169,8 +172,20 @@ let
     		sub_filter '"/api/' '"/romm/api/';
     		sub_filter "'/assets/" "'/romm/assets/";
     		sub_filter "'/api/" "'/romm/api/";
+            # Keep the older bundle rewrite as a compatibility fallback.
     		sub_filter 'BASE_URL:"/"' 'BASE_URL:"/romm/"';
     	}
+
+        location /ws/socket.io/ {
+            proxy_pass http://romm:8080/ws/socket.io/;
+            proxy_http_version 1.1;
+            proxy_set_header Host romm:8080;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
 
     	location /assets/ {
     		proxy_pass http://romm:8080/assets/;

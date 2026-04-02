@@ -166,6 +166,11 @@ changelog.
   replacing RomM's main module `src="/assets/index-...` tag in the proxied
   HTML, not by blindly prepending `<head>` content. The generic `<head>`
   injection path broke RomM's asset base and caused looping chunk imports.
+- Current RomM bundles can ship `var z5={};` with no rewritable `BASE_URL`
+  literal. Keep the `/romm/` proxy durable by injecting a real
+  `<base href="/romm/">` into the proxied HTML so Vue Router detects the
+  correct base at runtime, and treat the old `BASE_URL:"/"` rewrite as a
+  compatibility fallback for older builds.
 - Repo edits to `modules/self-hosted/romm.nix` are not live until the host is
   rebuilt. Inspect the live container files before treating a repo change as
   tested.

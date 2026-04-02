@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **RomM proxy base-path fix**: Muximux's same-origin `/romm/` proxy now
+  injects a real document `<base href="/romm/">` for RomM before the app
+  boots, which keeps current and future bundles on the correct router base
+  even when they ship an empty Vite env object instead of a rewritable
+  `BASE_URL` literal. The proxy also now handles RomM's leaked
+  `/ws/socket.io/` root websocket path instead of returning a Muximux-side
+  `404`.
 - **Hermes workspace mount**: Added a dedicated persistent Hermes workspace at
   `/srv/apps/hermes/workspace`, bind-mounted directly into the container at
   `/home/hermes/workspace` while leaving the native `/home/hermes/.hermes`
