@@ -152,6 +152,10 @@ changelog.
 - Muximux should embed RomM through a same-origin `/romm/` reverse proxy to the
   internal `http://romm:8080` service, not the public `https://romm.ghostship.io`
   hostname.
+- If the RomM iframe shim needs to load before the app bundle, inject it by
+  replacing RomM's main module `src="/assets/index-...` tag in the proxied
+  HTML, not by blindly prepending `<head>` content. The generic `<head>`
+  injection path broke RomM's asset base and caused looping chunk imports.
 - Repo edits to `modules/self-hosted/romm.nix` are not live until the host is
   rebuilt. Inspect the live container files before treating a repo change as
   tested.

@@ -95,6 +95,10 @@ against a live unpatched container before reintroducing any frontend patch.
 Muximux embeds RomM through a same-origin `/romm/` reverse proxy because the
 public `romm.ghostship.io` origin sits behind Cloudflare Access and is not a
 stable iframe target.
+The current mitigation keeps RomM's bundle untouched and injects an
+iframe-only shim from the Muximux proxy immediately before RomM's main module
+script. Do not switch that back to a generic `<head>` prepend; it broke the
+asset base and left RomM looping on chunk imports.
 
 SearXNG is intended to run as an internal-only search hub on `ghostship_net`
 with a Nix-managed max-open engine allowlist, and internal consumers such as

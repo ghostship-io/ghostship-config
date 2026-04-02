@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bundle rewrite after validating that the upstream RomM `4.8.0` image starts
   cleanly without it; the failing patch target was the source of the live
   startup wedge.
+- **RomM iframe shim**: Muximux now injects an iframe-only RomM runtime shim
+  ahead of RomM's main module entry instead of rewriting the served RomM bundle
+  on disk, and the shim cache-bust is owned by the Muximux config so Chrome can
+  be forced onto corrected injection changes without touching RomM assets.
 - **OpenSpec init defaults**: The develop-host `openspec` wrapper now injects
   `--tools codex,gemini,opencode --profile core` for `openspec init` unless
   the caller passes explicit `--tools` or `--profile` flags.

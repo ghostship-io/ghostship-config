@@ -1,6 +1,135 @@
 { pkgs, ... }:
 
 let
+  rommIframeShimVersion = "20260402-2";
+  rommIframeShim = pkgs.writeText "romm-iframe-shim.js" ''
+    (() => {
+      if (window.top === window.self) {
+        return;
+      }
+
+      const shimVersion = "${rommIframeShimVersion}";
+      const resolved = Promise.resolve();
+      const noop = () => {};
+
+      const startViewTransitionShim = callback => {
+        if (typeof callback === "function") {
+          try {
+            callback();
+          } catch (error) {
+            queueMicrotask(() => {
+              throw error;
+            });
+          }
+        }
+
+        return {
+          ready: resolved,
+          finished: resolved,
+          updateCallbackDone: resolved,
+          skipTransition: noop,
+        };
+      };
+
+      const defineDocumentGetter = (name, value) => {
+        try {
+          Object.defineProperty(document, name, {
+            configurable: true,
+            get: () => value,
+          });
+        } catch (_error) {}
+      };
+
+      const safeMethod = fn => function (...args) {
+        if (!this || !this.isConnected) {
+          return undefined;
+        }
+
+        try {
+          return fn.apply(this, args);
+        } catch (_error) {
+          return undefined;
+        }
+      };
+
+      try {
+        Object.defineProperty(document, "startViewTransition", {
+          configurable: true,
+          writable: true,
+          value: startViewTransitionShim,
+        });
+      } catch (_error) {
+        document.startViewTransition = startViewTransitionShim;
+      }
+
+      defineDocumentGetter("hidden", false);
+      defineDocumentGetter("visibilityState", "visible");
+
+      try {
+        document.hasFocus = () => true;
+      } catch (_error) {}
+
+      if (window.HTMLElement?.prototype?.focus) {
+        HTMLElement.prototype.focus = safeMethod(HTMLElement.prototype.focus);
+      }
+
+      if (window.Element?.prototype?.scrollIntoView) {
+        Element.prototype.scrollIntoView = safeMethod(Element.prototype.scrollIntoView);
+      }
+
+      if (window.matchMedia) {
+        const originalMatchMedia = window.matchMedia.bind(window);
+        window.matchMedia = query => {
+          const result = originalMatchMedia(query);
+
+          if (!query || !query.includes("prefers-reduced-motion")) {
+            return result;
+          }
+
+          return new Proxy(result, {
+            get(target, prop, receiver) {
+              if (prop === "matches") {
+                return true;
+              }
+
+              return Reflect.get(target, prop, receiver);
+            },
+          });
+        };
+      }
+
+      document.documentElement.setAttribute("data-romm-iframe-shim", shimVersion);
+
+      const style = document.createElement("style");
+      style.textContent = `
+        html[data-romm-iframe-shim],
+        html[data-romm-iframe-shim] * {
+          scroll-behavior: auto !important;
+        }
+
+        html[data-romm-iframe-shim] *,
+        html[data-romm-iframe-shim] *::before,
+        html[data-romm-iframe-shim] *::after {
+          animation-delay: 0s !important;
+          animation-duration: 0s !important;
+          transition-delay: 0s !important;
+          transition-duration: 0s !important;
+        }
+      `;
+      (document.head || document.documentElement).appendChild(style);
+
+      window.__rommIframeShim = { version: shimVersion };
+      window.addEventListener("error", event => {
+        console.debug("[romm-iframe-shim:error]", event.message);
+      }, true);
+      window.addEventListener("unhandledrejection", event => {
+        console.debug(
+          "[romm-iframe-shim:rejection]",
+          String(event.reason?.message ?? event.reason)
+        );
+      }, true);
+    })();
+  '';
   muximuxDefaultSite = pkgs.writeText "muximux-default.conf" ''
     server {
     	listen 80 default_server;
@@ -17,6 +146,10 @@ let
 
         client_max_body_size 0;
 
+    	location = /romm-iframe-shim.js {
+    		add_header Cache-Control "no-store";
+    	}
+
     	location /romm/ {
     		proxy_pass http://romm:8080/;
     		proxy_http_version 1.1;
@@ -28,7 +161,8 @@ let
 
             # RomM emits root-relative asset and API paths even when proxied.
     		sub_filter_once off;
-    		sub_filter_types application/javascript text/css;
+    		sub_filter_types text/html application/javascript text/css;
+    		sub_filter 'src="/assets/index-' 'src="/romm-iframe-shim.js?v=${rommIframeShimVersion}"></script><script type="module" crossorigin src="/romm/assets/index-';
     		sub_filter 'href="/' 'href="/romm/';
     		sub_filter 'src="/' 'src="/romm/';
     		sub_filter '"/assets/' '"/romm/assets/';
@@ -102,7 +236,9 @@ in
 
   systemd.services.podman-muximux.preStart = ''
     install -d -m0755 -o apps -g apps /srv/apps/muximux/nginx/site-confs
+    install -d -m0755 -o apps -g apps /srv/apps/muximux/www/muximux
     install -m0644 -o apps -g apps ${muximuxDefaultSite} /srv/apps/muximux/nginx/site-confs/default
+    install -m0644 -o apps -g apps ${rommIframeShim} /srv/apps/muximux/www/muximux/romm-iframe-shim.js
   '';
 
   system.activationScripts.muximux-config = {
