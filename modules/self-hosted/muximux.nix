@@ -416,6 +416,83 @@ in
         )
 
         ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${mux_args[@]}"
+
+        temp_file="$(mktemp)"
+        ${pkgs.gawk}/bin/awk '
+          function flush_section(emit_now,    i) {
+            if (!have_section) {
+              return
+            }
+
+            if (section_name == "Honcho") {
+              section_len = 0
+              have_section = 0
+              section_name = ""
+              return
+            }
+
+            if (section_name == "PriceBuddy") {
+              pricebuddy_len = section_len
+              for (i = 1; i <= section_len; i++) {
+                pricebuddy_lines[i] = section_lines[i]
+              }
+              have_pricebuddy = 1
+              section_len = 0
+              have_section = 0
+              section_name = ""
+              return
+            }
+
+            if (emit_now) {
+              for (i = 1; i <= section_len; i++) {
+                print section_lines[i]
+              }
+              if (section_name == "Grimmory" && have_pricebuddy) {
+                for (i = 1; i <= pricebuddy_len; i++) {
+                  print pricebuddy_lines[i]
+                }
+                have_pricebuddy = 0
+              }
+            }
+
+            section_len = 0
+            have_section = 0
+            section_name = ""
+          }
+
+          BEGIN {
+            have_section = 0
+            have_pricebuddy = 0
+            section_len = 0
+            pricebuddy_len = 0
+          }
+
+          /^\[/ {
+            flush_section(1)
+            have_section = 1
+            section_name = $0
+            sub(/^\[/, "", section_name)
+            sub(/\]$/, "", section_name)
+          }
+
+          {
+            if (have_section) {
+              section_lines[++section_len] = $0
+            } else {
+              print
+            }
+          }
+
+          END {
+            flush_section(1)
+            if (have_pricebuddy) {
+              for (i = 1; i <= pricebuddy_len; i++) {
+                print pricebuddy_lines[i]
+              }
+            }
+          }
+        ' "$CONFIG_FILE" > "$temp_file"
+        mv "$temp_file" "$CONFIG_FILE"
         
         chown apps:apps "$CONFIG_FILE"
       fi
