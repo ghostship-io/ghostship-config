@@ -99,9 +99,13 @@ persistent agent API token from the `pricebuddy-secrets` bundle. The live
 Honcho runs locally as a single s6-supervised container plus database and
 Redis sidecars for Hermes. The Honcho container starts the API and deriver
 internally, with `DERIVER_WORKERS=2` by default. Hermes writes
-`~/.honcho/config.json` at startup, points it at `http://honcho:8000`, and uses
-a fixed placeholder `HONCHO_API_KEY=honcho` while Honcho itself keeps
-`AUTH_USE_AUTH=false`.
+its durable state to `/srv/apps/hermes/home` through the image's native
+`HERMES_HOME=/home/hermes/.hermes` layout and relies on the image's native
+entrypoint instead of a repo-side startup shim. Honcho compatibility data now
+lives under `/srv/apps/hermes/home/shared/honcho`, with the image recreating
+`/home/hermes/.honcho` as a compatibility link at runtime. The service still
+points Honcho integration at `http://honcho:8000` and uses the fixed placeholder
+`HONCHO_API_KEY=honcho` while Honcho itself keeps `AUTH_USE_AUTH=false`.
 
 ## Usage
 

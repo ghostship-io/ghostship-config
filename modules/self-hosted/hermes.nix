@@ -1,34 +1,6 @@
-{ config, pkgs, ... }:
+{ config, ... }:
 
 let
-  hermes-startup = pkgs.writeText "hermes-startup.sh" ''
-    set -eu
-
-    mkdir -p /tmp
-    chmod 1777 /tmp
-
-    mkdir -p /home/hermes/.honcho
-    if [ -n "''${HONCHO_API_KEY:-}" ] && [ -n "''${HONCHO_BASE_URL:-}" ]; then
-      cat > /home/hermes/.honcho/config.json <<EOF
-{
-  "apiKey": "$HONCHO_API_KEY",
-  "baseUrl": "$HONCHO_BASE_URL",
-  "hosts": {
-    "hermes": {
-      "workspace": "hermes",
-      "peerName": "hermes",
-      "aiPeer": "hermes",
-      "memoryMode": "hybrid",
-      "enabled": true
-    }
-  }
-}
-EOF
-      chown -R 3000:3000 /home/hermes/.honcho
-    fi
-
-    exec /nix/store/4avjjjj02q5m84w4q1k7lrf5g8mkwkmb-ghostship-hermes-runtime/bin/ghostship-hermes-runtime entrypoint
-  '';
   hermes-secrets = config.sops.secrets."hermes-secrets".path;
   romm-secrets = config.sops.secrets."romm-secrets".path;
   sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
@@ -38,6 +10,11 @@ EOF
   tautulli-secrets = config.sops.secrets."tautulli-secrets".path;
   bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
   grimmory-secrets = config.sops.secrets."grimmory-secrets".path;
+  hermes-home = "/srv/apps/hermes/home";
+  legacy-honcho-dir = "${hermes-home}/.honcho";
+  legacy-honcho-config = "${legacy-honcho-dir}/config.json";
+  shared-honcho-dir = "${hermes-home}/shared/honcho";
+  shared-honcho-config = "${shared-honcho-dir}/config.json";
 in
 {
   virtualisation.oci-containers.containers."hermes" = {
@@ -77,8 +54,6 @@ in
       HONCHO_BASE_URL = "http://honcho:8000";
       SYNOLOGY_VERIFY_SSL = "false";
     };
-    entrypoint = "/bin/sh";
-    cmd = [ "/hermes-startup.sh" ];
     environmentFiles = [
       hermes-secrets
       romm-secrets
@@ -91,10 +66,7 @@ in
       grimmory-secrets
     ];
     volumes = [
-      "/srv/apps/hermes/home:/home/hermes/.hermes:rw"
-      "/srv/apps/hermes/home/.honcho:/home/hermes/.honcho:rw"
-      "hermes-nix:/nix:rw"
-      "${hermes-startup}:/hermes-startup.sh:ro"
+      "${hermes-home}:/home/hermes/.hermes:rw"
     ];
   };
 
@@ -113,11 +85,22 @@ in
       echo "Missing Hermes secrets file at ${hermes-secrets}" >&2
       exit 1
     fi
+
+    install -d -m 0755 -o apps -g apps "${hermes-home}/shared" "${shared-honcho-dir}"
+
+    if [ -d "${legacy-honcho-dir}" ] && ! find "${shared-honcho-dir}" -mindepth 1 -print -quit | grep -q .; then
+      cp -a "${legacy-honcho-dir}/." "${shared-honcho-dir}/"
+      chown -R apps:apps "${shared-honcho-dir}"
+    elif [ -f "${legacy-honcho-config}" ] && [ ! -f "${shared-honcho-config}" ]; then
+      cp -a "${legacy-honcho-config}" "${shared-honcho-config}"
+      chown apps:apps "${shared-honcho-config}"
+    fi
   '';
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/hermes 0755 apps apps -"
     "d /srv/apps/hermes/home 0755 apps apps -"
-    "d /srv/apps/hermes/home/.honcho 0755 apps apps -"
+    "d /srv/apps/hermes/home/shared 0755 apps apps -"
+    "d /srv/apps/hermes/home/shared/honcho 0755 apps apps -"
   ];
 }

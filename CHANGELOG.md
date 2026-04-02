@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Hermes native image layout**: Removed the repo-side Hermes startup shim,
+  entrypoint override, command override, writable `/nix` volume, and separate
+  `.honcho` bind mount so `chill-penguin` now follows the image's native
+  `/usr/local/bin/ghostship-hermes-runtime entrypoint` contract. The host-side
+  Honcho config is migrated into `/srv/apps/hermes/home/shared/honcho` so the
+  image can recreate `/home/hermes/.honcho` through its native compatibility
+  layout.
 - **Muximux RomM embedding**: Switched Muximux's RomM tile to a same-origin
   `/romm/` reverse proxy and now install a managed Muximux nginx vhost that
   proxies RomM by service name on `ghostship_net`, because the public

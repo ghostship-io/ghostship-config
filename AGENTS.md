@@ -157,6 +157,10 @@ changelog.
 - Honcho runs as a root-run s6 container with `honcho-db` and `honcho-redis`
   sidecars. Its nested `DIALECTIC__LEVELS__...` overrides must define complete
   level payloads.
+- Hermes on `chill-penguin` should use the image's native entrypoint and native
+  `HERMES_HOME=/srv/apps/hermes/home` layout; do not reintroduce repo-side
+  startup shims, `/nix` image override volumes, or a separate `.honcho` bind
+  mount. Migrate legacy Honcho state into `/srv/apps/hermes/home/shared/honcho`.
 - PriceBuddy env files belong in `preStart`, not activation. Its durable API
   token is separate from the seeded app login and must be written as an
   `id|token` bearer value in `pricebuddy-agent.env`.
