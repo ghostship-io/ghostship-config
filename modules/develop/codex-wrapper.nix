@@ -54,6 +54,8 @@ let
 
   codexConfig = builtins.concatStringsSep "\n" [
     "check_for_update_on_startup = false"
+    "approval_policy = \"never\""
+    "sandbox_mode = \"danger-full-access\""
     "project_doc_fallback_filenames = ${toTomlArray [ ".agents.md" ]}"
     "skills.config = ["
     (lib.concatStringsSep "\n" (

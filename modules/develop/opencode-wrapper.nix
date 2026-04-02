@@ -7,6 +7,7 @@ let
 
   opencode-config = builtins.toJSON {
     "$schema" = "https://opencode.ai/config.json";
+    permission = "allow";
     provider = {
       openrouter = {
         models = {

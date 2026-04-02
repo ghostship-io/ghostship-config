@@ -29,6 +29,9 @@ changelog.
 - `nix eval .#...` reads the tracked flake source, not arbitrary untracked
   files in the working tree. Stage or track new files before relying on flake
   evaluation.
+- Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
+  YOLO or allow-all; changes to those defaults are only live after the
+  relevant NixOS rebuild or Home Manager switch.
 
 ## WSL and Windows
 
