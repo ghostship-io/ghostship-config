@@ -45,6 +45,7 @@ $character\
 right_format = """
 [─╯](mauve)\
 """
+scan_timeout = 30000
 palette = 'catppuccin_mocha'
 
 [palettes.catppuccin_mocha]

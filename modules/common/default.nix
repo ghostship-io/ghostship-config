@@ -115,6 +115,7 @@
   programs.direnv = {
     enable = true;
     nix-direnv.enable = true;
+    settings.global.warn_timeout = "30s";
   };
 
   programs.bash = {

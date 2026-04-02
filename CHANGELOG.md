@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- **Shell flake timeouts**: Increased Starship's prompt scan timeout and
+  direnv's warning timeout to 30 seconds so slow `use flake` environments have
+  more time to initialize before the prompt or warning path gives up.
+
 ## [0.1.9] - 2026-04-02
 
 ### Removed
