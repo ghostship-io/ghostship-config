@@ -80,6 +80,12 @@ EOF
         ;;
     esac
 
+    case "$token" in
+      *'|'*)
+        token="''${token##*|}"
+        ;;
+    esac
+
     echo "Waiting for PriceBuddy to become ready for agent token sync..."
     token_id=""
     for _ in $(${pkgs.coreutils}/bin/seq 1 120); do
@@ -149,6 +155,72 @@ EOF
 
     ${pkgs.coreutils}/bin/chmod 600 "$token_file"
     ${pkgs.coreutils}/bin/chown 3000:3000 "$token_file"
+  '';
+  pricebuddy-runtime-verify = pkgs.writeShellScriptBin "pricebuddy-runtime-verify" ''
+    set -eu
+
+    podman_bin="${pkgs.podman}/bin/podman"
+    app_env_file="${pricebuddy-env}"
+    db_env_file="${pricebuddy-db-env}"
+    token_file="${pricebuddy-agent-env}"
+    container="pricebuddy"
+
+    for required_file in "$app_env_file" "$db_env_file" "$token_file"; do
+      if [ ! -s "$required_file" ]; then
+        echo "Missing PriceBuddy runtime artifact: $required_file" >&2
+        exit 1
+      fi
+    done
+
+    if ! ${pkgs.gnugrep}/bin/grep -qx 'DB_HOST=pricebuddy-db' "$app_env_file"; then
+      echo "PriceBuddy app env is missing DB_HOST=pricebuddy-db" >&2
+      exit 1
+    fi
+
+    if ! ${pkgs.gnugrep}/bin/grep -qx 'SCRAPER_BASE_URL=http://pricebuddy-scraper:3000' "$app_env_file"; then
+      echo "PriceBuddy app env is missing the expected SCRAPER_BASE_URL" >&2
+      exit 1
+    fi
+
+    token="$(${pkgs.gnused}/bin/sed -n 's/^PRICEBUDDY_API_TOKEN=//p' "$token_file" | ${pkgs.coreutils}/bin/head -n 1)"
+    if [ -z "$token" ]; then
+      echo "PriceBuddy agent token file does not contain PRICEBUDDY_API_TOKEN" >&2
+      exit 1
+    fi
+
+    case "$token" in
+      \"*\")
+        token="''${token#\"}"
+        token="''${token%\"}"
+        ;;
+    esac
+
+    if ! ${pkgs.gawk}/bin/awk -F'|' 'NF == 2 && length($1) > 0 && length($2) > 0 { ok = 1 } END { exit ok ? 0 : 1 }' <<EOF
+$token
+EOF
+    then
+      echo "PriceBuddy agent token is not a single <id>|<raw-token> pair" >&2
+      exit 1
+    fi
+
+    echo "Waiting for PriceBuddy scraper verification..."
+    for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
+      # Verify only Ghostship-managed wiring here, not app auth flows or third-party targets.
+      if "$podman_bin" exec -i "$container" php <<'PHP'
+<?php
+$url = getenv('SCRAPER_BASE_URL') ?: 'http://pricebuddy-scraper:3000';
+$context = stream_context_create(['http' => ['timeout' => 5]]);
+$body = @file_get_contents($url, false, $context);
+exit($body === false ? 1 : 0);
+PHP
+      then
+        exit 0
+      fi
+      ${pkgs.coreutils}/bin/sleep 1
+    done
+
+    echo "PriceBuddy app container could not reach the scraper sidecar" >&2
+    exit 1
   '';
 in
 {
@@ -230,6 +302,7 @@ in
     '';
     postStart = ''
       ${pricebuddy-token-sync}/bin/pricebuddy-token-sync
+      ${pricebuddy-runtime-verify}/bin/pricebuddy-runtime-verify
     '';
   };
 

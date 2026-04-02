@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Muximux service placement**: Removed Honcho from the generated Muximux tile
+  list, kept the existing Homepage Honcho entry, and promoted PriceBuddy to the
+  Muximux main bar directly after Grimmory so host activations no longer depend
+  on manual `settings.ini.php` edits.
+- **PriceBuddy token verification**: Normalized the managed
+  `pricebuddy-agent.env` bearer rewrite so repeated post-start runs preserve a
+  single `id|token` pair, and added host-managed post-start checks for the app
+  env files, scraper reachability, and final token format without conflating
+  known upstream auth-route or Cloudflare target issues with Ghostship runtime
+  wiring.
 - **OpenCode programming free-model refresh**: The develop-host `opencode`
   wrapper now refreshes a generated OpenCode config once per UTC day from
   OpenRouter's ranked programming free-model frontend endpoint, stores that

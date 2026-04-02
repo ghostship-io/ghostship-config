@@ -117,7 +117,12 @@ engine changes and container restarts stay coupled during `nixos-rebuild`.
 PriceBuddy seeds a `pricebuddy@ghostship.io` / `pricebuddy` login and reads a
 persistent agent API token from the `pricebuddy-secrets` bundle. The live
 `/srv/apps/pricebuddy/pricebuddy-agent.env` file contains a shell-safe
-`PRICEBUDDY_API_TOKEN="id|token"` bearer line for direct API use.
+`PRICEBUDDY_API_TOKEN="id|token"` bearer line for direct API use. The host
+token-sync now strips any previously persisted token ID before rewriting that
+file, and the managed `podman-pricebuddy` post-start path verifies the app env
+files, scraper reachability, and final bearer-token shape without treating
+upstream auth-route bugs or third-party Cloudflare challenges as Ghostship env
+regressions.
 
 Honcho runs locally as a single s6-supervised container plus database and
 Redis sidecars for Hermes. The Honcho container starts the API and deriver
@@ -129,6 +134,8 @@ lives under `/srv/apps/hermes/home/shared/honcho`, with the image recreating
 `/home/hermes/.honcho` as a compatibility link at runtime. The service still
 points Honcho integration at `http://honcho:8000` and uses the fixed placeholder
 `HONCHO_API_KEY=honcho` while Honcho itself keeps `AUTH_USE_AUTH=false`.
+Homepage keeps the Honcho tile, while Muximux intentionally omits Honcho and
+keeps PriceBuddy on the main bar immediately after Grimmory.
 
 ## Usage
 
