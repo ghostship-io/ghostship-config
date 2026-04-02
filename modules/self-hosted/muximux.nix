@@ -419,76 +419,65 @@ in
 
         temp_file="$(mktemp)"
         ${pkgs.gawk}/bin/awk '
-          function flush_section(emit_now,    i) {
+          function flush_section(    key) {
             if (!have_section) {
               return
             }
 
-            if (section_name == "Honcho") {
-              section_len = 0
-              have_section = 0
-              section_name = ""
-              return
+            key = section_name
+            if (!(key in seen_section)) {
+              seen_section[key] = 1
+              section_order[++section_count] = key
             }
+            section_data[key] = section_data[key] section_buffer
 
-            if (section_name == "PriceBuddy") {
-              pricebuddy_len = section_len
-              for (i = 1; i <= section_len; i++) {
-                pricebuddy_lines[i] = section_lines[i]
-              }
-              have_pricebuddy = 1
-              section_len = 0
-              have_section = 0
-              section_name = ""
-              return
-            }
-
-            if (emit_now) {
-              for (i = 1; i <= section_len; i++) {
-                print section_lines[i]
-              }
-              if (section_name == "Bazarr" && have_pricebuddy) {
-                for (i = 1; i <= pricebuddy_len; i++) {
-                  print pricebuddy_lines[i]
-                }
-                have_pricebuddy = 0
-              }
-            }
-
-            section_len = 0
+            section_buffer = ""
             have_section = 0
             section_name = ""
           }
 
           BEGIN {
             have_section = 0
-            have_pricebuddy = 0
-            section_len = 0
-            pricebuddy_len = 0
+            section_count = 0
+            preamble = ""
           }
 
           /^\[/ {
-            flush_section(1)
+            flush_section()
             have_section = 1
             section_name = $0
             sub(/^\[/, "", section_name)
             sub(/\]$/, "", section_name)
+            section_buffer = $0 ORS
+            next
           }
 
           {
             if (have_section) {
-              section_lines[++section_len] = $0
+              section_buffer = section_buffer $0 ORS
             } else {
-              print
+              preamble = preamble $0 ORS
             }
           }
 
           END {
-            flush_section(1)
-            if (have_pricebuddy) {
-              for (i = 1; i <= pricebuddy_len; i++) {
-                print pricebuddy_lines[i]
+            flush_section()
+            printf "%s", preamble
+
+            for (i = 1; i <= section_count; i++) {
+              name = section_order[i]
+              if (name == "Honcho" || name == "PriceBuddy") {
+                continue
               }
+
+              printf "%s", section_data[name]
+              if (name == "Bazarr" && ("PriceBuddy" in section_data)) {
+                printf "%s", section_data["PriceBuddy"]
+              }
+            }
+
+            if (!("Bazarr" in section_data) && ("PriceBuddy" in section_data)) {
+              printf "%s", section_data["PriceBuddy"]
             }
           }
         ' "$CONFIG_FILE" > "$temp_file"
