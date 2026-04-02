@@ -73,11 +73,6 @@
   ];
 
   programs.fish = {
-    interactiveShellInit = lib.mkAfter ''
-      if test -f ~/.config/ssh-agent.env
-        source ~/.config/ssh-agent.env
-      end
-    '';
     shellAliases = {
       open = "wsl-open";
     };
@@ -88,28 +83,6 @@
         '';
       };
     };
-  };
-
-  services.ssh-agent.enable = true;
-
-  systemd.user.services.ssh-agent.Service = {
-    ExecStart = lib.mkForce "${pkgs.openssh}/bin/ssh-agent -D -a /run/user/1000/ssh-agent -t 8h";
-    ExecStartPre = "-${pkgs.coreutils}/bin/rm -f /run/user/1000/ssh-agent";
-    ExecStartPost = let
-      script = pkgs.writeShellScript "ssh-agent-post-start" ''
-        ${pkgs.coreutils}/bin/mkdir -p $HOME/.config
-        ARGS=$(${pkgs.procps}/bin/ps -p $1 -o args=)
-        SOCK=$(echo "$ARGS" | ${pkgs.gnugrep}/bin/grep -oP '(?<=-a\\s)\\S+')
-
-        if [ -n "$SOCK" ]; then
-          echo "set -gx SSH_AUTH_SOCK $SOCK;" > $HOME/.config/ssh-agent.env
-          echo "set -gx SSH_AGENT_PID $1;" >> $HOME/.config/ssh-agent.env
-        else
-          echo "Could not find socket in ssh-agent arguments: $ARGS" >&2
-          exit 1
-        fi
-      '';
-    in "${script} $MAINPID";
   };
 
   home.activation.wslHomeSymlink = lib.hm.dag.entryAfter [ "writeBoundary" ] ''

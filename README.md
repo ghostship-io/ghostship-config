@@ -57,6 +57,10 @@ for secrets.
   `sandbox_mode = "danger-full-access"`, Gemini sets
   `general.defaultApprovalMode = "yolo"`, and OpenCode sets
   `permission = "allow"`.
+- Develop hosts keep `ssh-agent` on the fixed socket
+  `/run/user/1000/ssh-agent` with a `12h` key lifetime, and they cache
+  `sudo` credentials globally for `12h` so fresh agent PTYs do not prompt on
+  every new shell.
 - Those launcher defaults only take effect after the relevant develop-host
   NixOS rebuild or Home Manager switch applies the generated config files.
 - Gemini also refreshes any managed Gemini extensions on launch. Wrapper-side

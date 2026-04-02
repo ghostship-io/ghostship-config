@@ -37,8 +37,10 @@ in
   security.sudo.extraConfig = ''
     # Disable the sudo lecture (the "With great power comes great responsibility" warning)
     Defaults lecture="never"
-    # Require password re-authentication every 8 hours
-    Defaults timestamp_timeout=480
+  '' + lib.optionalString (roles.develop or false) ''
+    # Share sudo auth across develop-host agent shells for up to 12 hours.
+    Defaults timestamp_type=global
+    Defaults timestamp_timeout=720
   '';
 
   users.groups.nixos.gid = 1000;

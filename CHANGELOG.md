@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Develop auth cache policy**: Moved the managed `ssh-agent` setup into the
+  develop Home Manager profile, switched it to a fixed `/run/user/1000/ssh-agent`
+  socket with a `12h` key lifetime, removed the brittle WSL-only post-start
+  parser that could leave the user service failed, and made develop-host
+  `sudo` credential caching global with a `12h` timeout so fresh agent PTYs do
+  not constantly re-prompt while server-only hosts keep the stricter default
+  scope.
 - **Hermes native image layout**: Removed the repo-side Hermes startup shim,
   entrypoint override, command override, writable `/nix` volume, and separate
   `.honcho` bind mount so `chill-penguin` now follows the image's native

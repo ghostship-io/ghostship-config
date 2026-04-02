@@ -32,6 +32,11 @@ changelog.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; changes to those defaults are only live after the
   relevant NixOS rebuild or Home Manager switch.
+- Develop hosts should keep `ssh-agent` on the fixed
+  `/run/user/1000/ssh-agent` socket directly; do not parse the `ssh-agent`
+  command line in a post-start hook to rediscover the socket.
+- Develop-host `sudo` caching is intentionally `timestamp_type=global` with a
+  `12h` timeout so fresh agent PTYs share the same auth window.
 
 ## WSL and Windows
 

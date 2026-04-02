@@ -1,10 +1,17 @@
 { lib, pkgs, ... }:
 
+let
+  sshAgentSock = "/run/user/1000/ssh-agent";
+in
 {
   imports = [
     ../../modules/develop/opencode.nix
     ../../modules/develop/codex.nix
   ];
+
+  home.sessionVariables = {
+    SSH_AUTH_SOCK = sshAgentSock;
+  };
 
   home.activation.removeLegacySuperpowers = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf \
@@ -60,6 +67,13 @@
   programs.bat.enable = true;
   programs.fd.enable = true;
   programs.ripgrep.enable = true;
+
+  services.ssh-agent.enable = true;
+
+  systemd.user.services.ssh-agent.Service = {
+    ExecStart = lib.mkForce "${pkgs.openssh}/bin/ssh-agent -D -a ${sshAgentSock} -t 12h";
+    ExecStartPre = "-${pkgs.coreutils}/bin/rm -f ${sshAgentSock}";
+  };
 
   programs.eza = {
     enable = true;
