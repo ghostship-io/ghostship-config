@@ -52,11 +52,18 @@ for secrets.
   attempts a best-effort global `skills` refresh and, when started anywhere
   inside an OpenSpec repo, runs `openspec update` from the repo root so the
   latest slash-command scaffolding stays active.
+- Before `opencode` launches, the wrapper also refreshes a generated OpenCode
+  config under `XDG_STATE_HOME/opencode/programming-free-models.json` (or
+  `~/.local/state/opencode/programming-free-models.json`) once per UTC day
+  from OpenRouter's ranked programming free-model frontend endpoint and points
+  `OPENCODE_CONFIG` at that generated file. The generated model list comes
+  directly from the endpoint-derived programming free models.
 - Develop-host launcher configs now default to explicit YOLO or allow-all
   execution: Codex sets `approval_policy = "never"` with
   `sandbox_mode = "danger-full-access"`, Gemini sets
-  `general.defaultApprovalMode = "yolo"`, and OpenCode sets
-  `permission = "allow"`.
+  `general.defaultApprovalMode = "yolo"`, and OpenCode's static Nix-managed
+  config now only sets `permission = "allow"` while the wrapper-managed
+  generated config owns the OpenRouter model list.
 - Develop hosts keep `ssh-agent` on the fixed socket
   `/run/user/1000/ssh-agent` with a `12h` key lifetime, and they cache
   `sudo` credentials globally for `12h` so fresh agent PTYs do not prompt on

@@ -38,8 +38,10 @@ let
 
   baseRuntimeInputs = [
     pkgs.coreutils
+    pkgs.curl
     pkgs.git
     pkgs.gnugrep
+    pkgs.jq
     pkgs.nodejs
     pkgs.openssh
     pkgs.playwright-driver.browsers
@@ -188,6 +190,77 @@ let
     }
   '';
 
+  mkOpencodeProgrammingFreeModelsHook = ''
+    refresh_opencode_programming_free_models() {
+      opencode_models_url='https://openrouter.ai/api/frontend/models/find?categories=programming&fmt=cards&max_price=0&order=top-weekly'
+      opencode_state_dir="''${XDG_STATE_HOME:-$HOME/.local/state}/opencode"
+      opencode_generated_config="$opencode_state_dir/programming-free-models.json"
+      opencode_refresh_stamp="$opencode_state_dir/programming-free-models.date"
+      opencode_today="$(date -u +%F)"
+
+      mkdir -p "$opencode_state_dir"
+
+      if [ -f "$opencode_generated_config" ] &&
+         [ -f "$opencode_refresh_stamp" ] &&
+         [ "$(${pkgs.coreutils}/bin/cat "$opencode_refresh_stamp")" = "$opencode_today" ]; then
+        export OPENCODE_CONFIG="$opencode_generated_config"
+        return 0
+      fi
+
+      log_info "refreshing opencode programming free models"
+
+      response_file="$(mktemp "$opencode_state_dir/openrouter-models.XXXXXX.json")"
+      config_file="$(mktemp "$opencode_state_dir/opencode-config.XXXXXX.json")"
+      stamp_file="$(mktemp "$opencode_state_dir/opencode-refresh.XXXXXX")"
+
+      if ! ${pkgs.curl}/bin/curl --fail --silent --show-error --location \
+        "$opencode_models_url" > "$response_file"; then
+        log_warn "opencode model refresh fetch failed, continuing"
+        rm -f "$response_file" "$config_file" "$stamp_file"
+        if [ -f "$opencode_generated_config" ]; then
+          export OPENCODE_CONFIG="$opencode_generated_config"
+        fi
+        return 0
+      fi
+
+      if ! ${pkgs.jq}/bin/jq -ce '
+        .data.models
+        | map(
+            select((.endpoint.pricing.prompt // "") == "0")
+            | select((.endpoint.pricing.completion // "") == "0")
+            | (.endpoint.model_variant_slug // "")
+          )
+        | map(select(length > 0))
+        | if length == 0 then error("no free programming models returned") else . end
+        | {
+            "$schema": "https://opencode.ai/config.json",
+            permission: "allow",
+            provider: {
+              openrouter: {
+                models: (reduce .[] as $model ({}; .[$model] = {}))
+              }
+            }
+          }
+      ' "$response_file" > "$config_file"; then
+        log_warn "opencode model refresh parse failed, continuing"
+        rm -f "$response_file" "$config_file" "$stamp_file"
+        if [ -f "$opencode_generated_config" ]; then
+          export OPENCODE_CONFIG="$opencode_generated_config"
+        fi
+        return 0
+      fi
+
+      printf '%s\n' "$opencode_today" > "$stamp_file"
+      mv "$config_file" "$opencode_generated_config"
+      mv "$stamp_file" "$opencode_refresh_stamp"
+      rm -f "$response_file"
+
+      export OPENCODE_CONFIG="$opencode_generated_config"
+    }
+
+    refresh_opencode_programming_free_models
+  '';
+
   mkNpxAgentWrapper =
     {
       name,
@@ -223,6 +296,7 @@ in
   inherit
     agentBrowser
     browserRuntimeLdLibraryPath
+    mkOpencodeProgrammingFreeModelsHook
     mkNpxAgentWrapper
     openspecCli
     ;
