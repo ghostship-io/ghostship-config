@@ -305,11 +305,8 @@ in
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
 
           ${pkgs.yq-go}/bin/yq -i '
-            del(
-              .[] | select(has("Services")) | .Services[] | select(has("Honcho")),
-              .[] | select(has("Infrastructure")) | .Infrastructure[] | select(has("Honcho Redis")),
-              .[] | select(has("Infrastructure")) | .Infrastructure[] | select(has("Honcho DB"))
-            )
+            (.[] | select(has("Services")) | .Services) |= map(select(has("Honcho") | not))
+            | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("Honcho Redis") or has("Honcho DB")) | not))
           ' "$SERVICES_FILE"
         fi
 
