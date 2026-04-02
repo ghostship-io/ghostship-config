@@ -11,6 +11,7 @@ let
   bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
   grimmory-secrets = config.sops.secrets."grimmory-secrets".path;
   hermes-home = "/srv/apps/hermes/home";
+  hermes-workspace = "/srv/apps/hermes/workspace";
 in
 {
   virtualisation.oci-containers.containers."hermes" = {
@@ -61,6 +62,7 @@ in
     ];
     volumes = [
       "${hermes-home}:/home/hermes/.hermes:rw"
+      "${hermes-workspace}:/home/hermes/workspace:rw"
     ];
   };
 
@@ -84,5 +86,6 @@ in
   systemd.tmpfiles.rules = [
     "d /srv/apps/hermes 0755 apps apps -"
     "d /srv/apps/hermes/home 0755 apps apps -"
+    "d /srv/apps/hermes/workspace 0755 apps apps -"
   ];
 }

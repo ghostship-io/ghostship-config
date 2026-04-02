@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Hermes workspace mount**: Added a dedicated persistent Hermes workspace at
+  `/srv/apps/hermes/workspace`, bind-mounted directly into the container at
+  `/home/hermes/workspace` while leaving the native `/home/hermes/.hermes`
+  state mount unchanged.
 - **Muximux service placement**: Removed Honcho from the generated Muximux tile
   list, promoted PriceBuddy to the Muximux main bar directly after Grimmory,
   and keep the generated dashboard layout aligned with the retired Honcho

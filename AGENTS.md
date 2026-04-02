@@ -179,7 +179,9 @@ changelog.
 - Hermes on `chill-penguin` should use the image's native entrypoint and native
   `HERMES_HOME=/srv/apps/hermes/home` layout; do not reintroduce repo-side
   startup shims, `/nix` image override volumes, or Honcho compatibility-state
-  mounts or migration logic.
+  mounts or migration logic. Persistent operator workspace data belongs in
+  `/srv/apps/hermes/workspace`, mounted directly at `/home/hermes/workspace`,
+  not under `/srv/apps/hermes/home`.
 - PriceBuddy env files belong in `preStart`, not activation. Its durable API
   token is separate from the seeded app login and must be written as an
   `id|token` bearer value in `pricebuddy-agent.env`.

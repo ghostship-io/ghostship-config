@@ -128,8 +128,11 @@ Hermes writes its durable state to `/srv/apps/hermes/home` through the image's
 native `HERMES_HOME=/home/hermes/.hermes` layout and relies on the image's
 native entrypoint instead of a repo-side startup shim. Honcho is retired from
 the Ghostship stack, so Hermes no longer exports `HONCHO_*` integration
-settings and both Homepage and Muximux omit Honcho entirely. Muximux keeps
-PriceBuddy on the main bar immediately after Grimmory.
+settings and both Homepage and Muximux omit Honcho entirely. Hermes also
+exposes a separate persistent workspace at `/home/hermes/workspace`, backed by
+`/srv/apps/hermes/workspace` on the host, so operator-managed files do not have
+to live inside the native Hermes home tree. Muximux keeps PriceBuddy on the
+main bar immediately after Grimmory.
 
 ## Usage
 
