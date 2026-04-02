@@ -12,10 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wrapper now refreshes a generated OpenCode config once per UTC day from
   OpenRouter's ranked programming free-model frontend endpoint, stores that
   generated config under the user's state directory, exports `OPENCODE_CONFIG`
-  to it at launch, and sources the free programming models from that endpoint.
-  The static OpenRouter model maps were removed from both Nix-managed OpenCode
-  config paths, which now only retain the explicit `permission = "allow"`
-  default.
+  to it at launch, sources the free programming models from that endpoint, and
+  rewrites the generated OpenCode model display labels from `(free)` to
+  `(ghostship-free)`. The static OpenRouter model maps were removed from both
+  Nix-managed OpenCode config paths, which now only retain the explicit
+  `permission = "allow"` default.
 - **Develop auth cache policy**: Moved the managed `ssh-agent` setup into the
   develop Home Manager profile, switched it to a fixed `/run/user/1000/ssh-agent`
   socket with a `12h` key lifetime, removed the brittle WSL-only post-start

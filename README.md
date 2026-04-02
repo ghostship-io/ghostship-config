@@ -57,7 +57,8 @@ for secrets.
   `~/.local/state/opencode/programming-free-models.json`) once per UTC day
   from OpenRouter's ranked programming free-model frontend endpoint and points
   `OPENCODE_CONFIG` at that generated file. The generated model list comes
-  directly from the endpoint-derived programming free models.
+  directly from the endpoint-derived programming free models and preserves the
+  endpoint names with `(free)` rewritten to `(ghostship-free)`.
 - Develop-host launcher configs now default to explicit YOLO or allow-all
   execution: Codex sets `approval_policy = "never"` with
   `sandbox_mode = "danger-full-access"`, Gemini sets

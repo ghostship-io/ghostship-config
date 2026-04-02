@@ -224,20 +224,39 @@ let
       fi
 
       if ! ${pkgs.jq}/bin/jq -ce '
+        def ghostship_name:
+          if (. // "") | length == 0 then .
+          elif test("\\(free\\)$") then sub("\\(free\\)$"; "(ghostship-free)")
+          else . + " (ghostship-free)"
+          end;
+
         .data.models
         | map(
             select((.endpoint.pricing.prompt // "") == "0")
             | select((.endpoint.pricing.completion // "") == "0")
-            | (.endpoint.model_variant_slug // "")
+            | {
+                id: (.endpoint.model_variant_slug // ""),
+                name: ((.name // "") | ghostship_name)
+              }
           )
-        | map(select(length > 0))
+        | map(select(.id | length > 0))
         | if length == 0 then error("no free programming models returned") else . end
         | {
             "$schema": "https://opencode.ai/config.json",
             permission: "allow",
             provider: {
               openrouter: {
-                models: (reduce .[] as $model ({}; .[$model] = {}))
+                models: (
+                  reduce .[] as $model (
+                    {};
+                    .[$model.id] = (
+                      if ($model.name | length) > 0
+                      then { name: $model.name }
+                      else {}
+                      end
+                    )
+                  )
+                )
               }
             }
           }

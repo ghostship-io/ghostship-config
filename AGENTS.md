@@ -35,8 +35,9 @@ changelog.
 - The develop-host `opencode` wrapper owns the OpenRouter model list at
   runtime. It refreshes `programming-free-models.json` under
   `XDG_STATE_HOME/opencode` once per UTC day from OpenRouter's ranked
-  programming free-model frontend endpoint; do not reintroduce static
-  OpenRouter model maps into the Nix-managed OpenCode config files.
+  programming free-model frontend endpoint and rewrites generated free-model
+  display labels to `(ghostship-free)`; do not reintroduce static OpenRouter
+  model maps into the Nix-managed OpenCode config files.
 - Develop hosts should keep `ssh-agent` on the fixed
   `/run/user/1000/ssh-agent` socket directly; do not parse the `ssh-agent`
   command line in a post-start hook to rediscover the socket.
