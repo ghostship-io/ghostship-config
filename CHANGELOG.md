@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/home/hermes/workspace` while leaving the native `/home/hermes/.hermes`
   state mount unchanged.
 - **Muximux service placement**: Removed Honcho from the generated Muximux tile
-  list, promoted PriceBuddy to the Muximux main bar directly after Grimmory,
+  list, moved PriceBuddy back into the Muximux dropdown directly after Bazarr,
   and keep the generated dashboard layout aligned with the retired Honcho
   stack.
 - **Honcho retirement**: Removed the Honcho self-hosted stack, dropped Hermes'

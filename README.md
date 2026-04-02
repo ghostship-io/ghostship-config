@@ -131,8 +131,8 @@ the Ghostship stack, so Hermes no longer exports `HONCHO_*` integration
 settings and both Homepage and Muximux omit Honcho entirely. Hermes also
 exposes a separate persistent workspace at `/home/hermes/workspace`, backed by
 `/srv/apps/hermes/workspace` on the host, so operator-managed files do not have
-to live inside the native Hermes home tree. Muximux keeps PriceBuddy on the
-main bar immediately after Grimmory.
+to live inside the native Hermes home tree. Muximux keeps PriceBuddy in the
+dropdown immediately after Bazarr.
 
 ## Usage
 

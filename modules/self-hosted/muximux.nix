@@ -307,7 +307,7 @@ in
           PriceBuddy.icon=literal:"fa-money"
           PriceBuddy.color=literal:"#22c55e"
           PriceBuddy.enabled=literal:"true"
-          PriceBuddy.dd=literal:"false"
+          PriceBuddy.dd=literal:"true"
           Hermes.name=literal:"Hermes"
           Hermes.url=literal:"https://hermes.ghostship.io"
           Hermes.scale=literal:1
@@ -447,7 +447,7 @@ in
               for (i = 1; i <= section_len; i++) {
                 print section_lines[i]
               }
-              if (section_name == "Grimmory" && have_pricebuddy) {
+              if (section_name == "Bazarr" && have_pricebuddy) {
                 for (i = 1; i <= pricebuddy_len; i++) {
                   print pricebuddy_lines[i]
                 }

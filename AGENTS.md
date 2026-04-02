@@ -190,7 +190,7 @@ changelog.
   gate Ghostship-managed wiring such as env generation, scraper reachability,
   and final bearer-token shape.
 - On `chill-penguin`, Muximux intentionally omits Honcho while keeping
-  PriceBuddy on the main bar immediately after Grimmory; Homepage remains the
+  PriceBuddy in the dropdown immediately after Bazarr; Homepage remains the
   place where Honcho stays visible.
 - Muximux does not tolerate `user = "3000:3000"` in the current image; keep it
   on `0:3000`.
