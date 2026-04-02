@@ -52,6 +52,13 @@ for secrets.
   attempts a best-effort global `skills` refresh and, when started anywhere
   inside an OpenSpec repo, runs `openspec update` from the repo root so the
   latest slash-command scaffolding stays active.
+- Develop-host launcher configs now default to explicit YOLO or allow-all
+  execution: Codex sets `approval_policy = "never"` with
+  `sandbox_mode = "danger-full-access"`, Gemini sets
+  `general.defaultApprovalMode = "yolo"`, and OpenCode sets
+  `permission = "allow"`.
+- Those launcher defaults only take effect after the relevant develop-host
+  NixOS rebuild or Home Manager switch applies the generated config files.
 - Gemini also refreshes any managed Gemini extensions on launch. Wrapper-side
   update failures warn and continue instead of blocking the agent start.
 

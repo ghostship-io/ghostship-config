@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Honcho config is migrated into `/srv/apps/hermes/home/shared/honcho` so the
   image can recreate `/home/hermes/.honcho` through its native compatibility
   layout.
+- **Develop agent launcher defaults**: Develop-host `codex`, `gemini`, and
+  `opencode` now declare explicit YOLO or allow-all execution defaults in
+  their generated configs instead of relying on mixed upstream behavior.
 - **Muximux RomM embedding**: Switched Muximux's RomM tile to a same-origin
   `/romm/` reverse proxy and now install a managed Muximux nginx vhost that
   proxies RomM by service name on `ghostship_net`, because the public
