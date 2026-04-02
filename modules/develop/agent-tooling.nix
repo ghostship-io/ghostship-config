@@ -6,6 +6,8 @@
 
 let
   openspecPackage = "@fission-ai/openspec@latest";
+  defaultOpenspecTools = "codex,gemini,opencode";
+  defaultOpenspecProfile = "core";
 
   browserRuntimeLibs = [
     pkgs."alsa-lib"
@@ -63,6 +65,42 @@ let
 
     PATH=${baseRuntimeBinPath}:$PATH
     export NODE_NO_WARNINGS=1
+
+    if [ "$#" -gt 0 ] && [ "$1" = "init" ]; then
+      has_tools_arg=0
+      has_profile_arg=0
+
+      for arg in "$@"; do
+        case "$arg" in
+          --tools|--tools=*)
+            has_tools_arg=1
+            ;;
+          --profile|--profile=*)
+            has_profile_arg=1
+            ;;
+        esac
+
+        if [ "$has_tools_arg" -eq 1 ] && [ "$has_profile_arg" -eq 1 ]; then
+          break
+        fi
+      done
+
+      if [ "$has_tools_arg" -eq 0 ] || [ "$has_profile_arg" -eq 0 ]; then
+        init_args=("$1")
+
+        if [ "$has_tools_arg" -eq 0 ]; then
+          init_args+=(--tools ${defaultOpenspecTools})
+        fi
+
+        if [ "$has_profile_arg" -eq 0 ]; then
+          init_args+=(--profile ${defaultOpenspecProfile})
+        fi
+
+        init_args+=("''${@:2}")
+
+        exec ${pkgs.nodejs}/bin/npx -y ${openspecPackage} "''${init_args[@]}"
+      fi
+    fi
 
     exec ${pkgs.nodejs}/bin/npx -y ${openspecPackage} "$@"
   '';

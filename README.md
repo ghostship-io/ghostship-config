@@ -45,6 +45,9 @@ for secrets.
 - `codex`, `gemini`, `opencode`, and `openspec` all execute through `npx -y`
   so they resolve the latest upstream CLI at launch time instead of relying on
   a pinned npm install in the Nix store.
+- The `openspec` wrapper defaults `openspec init` to
+  `--tools codex,gemini,opencode --profile core` unless you pass explicit
+  `--tools` or `--profile` values.
 - Before `codex`, `gemini`, or `opencode` launches, the shared wrapper
   attempts a best-effort global `skills` refresh and, when started anywhere
   inside an OpenSpec repo, runs `openspec update` from the repo root so the
