@@ -1,6 +1,6 @@
 ---
 name: python
-description: Use for Python project structure, uv-based workflows, and this repo's Python defaults around ruff, mypy, and pytest.
+description: Use for Python project structure, uv-based workflows, and this repo's Python defaults around ruff, basedpyright, pytest, and full type coverage.
 ---
 
 # python
@@ -10,10 +10,16 @@ Use this skill for Python packaging, scripts, tooling, and test workflows.
 ## Core workflow
 
 - Use `uv` for dependency management and command execution.
-- Follow the repo defaults from `home/config/AGENTS.md`: `src/` layout,
-  `pyproject.toml`, `uv.lock`, `ruff`, and `mypy`.
+- Add `ruff`, `pytest`, and `basedpyright` with
+  `uv add --dev ruff pytest basedpyright` for project tooling.
+- Use the `src/` layout for importable code.
+- Keep project metadata in `pyproject.toml` and commit `uv.lock` when
+  dependency state changes.
 - Keep system dependencies in Nix when Python packages alone are not enough.
-- Verify formatting, linting, typing, and tests before claiming completion.
+- Use `ruff format .` for auto-formatting and `ruff check .` for linting.
+- Use `basedpyright` for type checking and treat complete type coverage as the
+  default standard for new and modified code.
+- Use `pytest` for the full test run before claiming completion.
 
 ## Read when needed
 

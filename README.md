@@ -57,7 +57,8 @@ for secrets.
 - Shared repo-managed skills live under `home/config/skills/` and are linked
   into `~/.agents/skills/` on develop hosts.
 - The curated shared set is `nix`, `python`, `ssh`, `wsl2`, and a vendored
-  upstream `skill-creator` package pinned to
+  `skills-creator` package pinned to the upstream `skill-creator`
+  source at
   `vercel-labs/agent-browser` `v0.9.3`.
 - Repo-local OpenSpec assets under `.codex/`, `.gemini/`, and `.opencode/`
   are a separate layer from the shared `~/.agents/skills` inventory.
@@ -156,4 +157,4 @@ the configuration with `nixos-rebuild`.
 - `nh` is installed as a convenience tool, but the documented workflow in this
   repo is native `nix` and `nixos-rebuild`.
 - WSL hosts expose `wsl-open`, a Windows notification bridge for `notify-send`,
-  a `~/win-home` symlink, and an NFS automount at `/mnt/z`.
+  and an NFS automount at `/mnt/z`. Prefer `/mnt/c/...` for Windows files.

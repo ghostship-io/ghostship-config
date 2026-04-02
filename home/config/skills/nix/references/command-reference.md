@@ -3,6 +3,9 @@
 ## Principles
 - Prefer native `nix`, `nixos-rebuild`, and `switch-to-configuration` commands.
 - Build first, then apply. Do not collapse validation and deployment into one step unless there is a specific reason.
+- Only build a host locally when the target architecture matches the current
+  machine. Otherwise prefer a remote build on the target host, architecture-aware
+  builders, or evaluation-only checks.
 - If a command needs elevated privileges, run it from a root shell or a direct root SSH session.
 - Prefer `nix shell` over `nix-shell`.
 - Use `-L` when you want build logs; omit extra output flags unless they are known to work in the current environment.
@@ -42,6 +45,9 @@ nix eval .#nixosConfigurations.chill-penguin.config.networking.hostName
 ```bash
 nixos-rebuild build --flake .#chill-penguin
 ```
+
+Only use that local build command when the current machine can build for the
+target host architecture.
 
 ### Inspect the built system closure
 ```bash

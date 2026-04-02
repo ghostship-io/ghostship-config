@@ -22,7 +22,10 @@ Home Manager modules, package definitions, or host builds.
 
 ## Verification
 
-- For host or Home Manager changes, verify with `nix build .#nixosConfigurations.<host>.config.system.build.toplevel -L`.
+- Only use a local `nix build .#nixosConfigurations.<host>.config.system.build.toplevel -L`
+  when the target host architecture matches the current machine. If it does not
+  match, use another validation path such as remote host builds, evaluation-only
+  checks, or architecture-appropriate builders.
 - If a command needs privileges, tell the user to run it from a root shell or a
   direct root SSH session.
 

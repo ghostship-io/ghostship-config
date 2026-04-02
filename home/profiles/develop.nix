@@ -37,8 +37,8 @@
       source = ../config/skills/ssh;
       force = true;
     };
-    ".agents/skills/skill-creator" = {
-      source = ../config/skills/skill-creator;
+    ".agents/skills/skills-creator" = {
+      source = ../config/skills/skills-creator;
       force = true;
     };
   };

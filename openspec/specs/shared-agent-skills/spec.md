@@ -4,7 +4,7 @@
 TBD - created by archiving change rewrite-shared-skills. Update Purpose after archive.
 ## Requirements
 ### Requirement: Curated shared skill inventory
-The repo SHALL expose exactly five shared repo-managed skills under `home/config/skills/`: `nix`, `python`, `ssh`, `wsl2`, and `skill-creator`.
+The repo SHALL expose exactly five shared repo-managed skills under `home/config/skills/`: `nix`, `python`, `ssh`, `wsl2`, and `skills-creator`.
 
 #### Scenario: Removed shared skills are no longer present
 - **WHEN** the shared skill tree is inspected after the change
@@ -12,7 +12,7 @@ The repo SHALL expose exactly five shared repo-managed skills under `home/config
 
 #### Scenario: Retained shared skills remain available
 - **WHEN** the shared skill tree is inspected after the change
-- **THEN** `nix`, `python`, `ssh`, `wsl2`, and `skill-creator` SHALL exist as shared repo-managed skills
+- **THEN** `nix`, `python`, `ssh`, `wsl2`, and `skills-creator` SHALL exist as shared repo-managed skills
 
 ### Requirement: Rewritten local skills use a minimal modular format
 The local shared skills `nix`, `python`, `ssh`, and `wsl2` SHALL use frontmatter containing only `name` and `description`, and SHALL keep detailed optional flows in one-level-deep modules instead of large SKILL bodies.
@@ -26,14 +26,14 @@ The local shared skills `nix`, `python`, `ssh`, and `wsl2` SHALL use frontmatter
 - **THEN** that detail SHALL live in directly linked `references/` or `scripts/` content no deeper than one level below the skill root
 
 ### Requirement: Vendored upstream skills preserve upstream package contents
-The shared `skill-creator` skill SHALL be vendored exactly from `vercel-labs/agent-browser` tag `v0.9.3` and SHALL preserve the upstream package contents instead of being rewritten into local style.
+The shared `skills-creator` skill SHALL be vendored exactly from `vercel-labs/agent-browser` tag `v0.9.3` `skill-creator` package and SHALL preserve the upstream package contents instead of being rewritten into local style.
 
 #### Scenario: Vendored package keeps upstream layout
-- **WHEN** `home/config/skills/skill-creator/` is inspected
+- **WHEN** `home/config/skills/skills-creator/` is inspected
 - **THEN** it SHALL contain the upstream `SKILL.md`, `LICENSE.txt`, `references/`, and `scripts/` package contents from the pinned upstream source
 
 #### Scenario: Vendored package is not rewritten
-- **WHEN** `skill-creator` is compared to the pinned upstream package
+- **WHEN** `skills-creator` is compared to the pinned upstream package
 - **THEN** its wording and bundled resources SHALL match the pinned upstream package rather than a locally rewritten variant
 
 ### Requirement: Shared skill wiring reflects the curated inventory
@@ -57,4 +57,3 @@ Active documentation for the shared skill inventory SHALL describe the curated s
 #### Scenario: Shared and repo-local skill layers are distinguished
 - **WHEN** active documentation describes the repo’s agent skill surfaces
 - **THEN** it SHALL distinguish the shared `~/.agents/skills` layer from the repo-local OpenSpec-generated files under `.codex/`, `.gemini/`, and `.opencode/`
-

@@ -12,8 +12,12 @@ develop hosts.
 
 - Prefer explicit Windows executable paths or known `.exe` commands for
   non-interactive Windows-side work.
-- Use `~/win-home` or `/mnt/c/...` for Windows files, and treat `/mnt/z` as a
-  lazy mount that may need checking before use.
+- Prefer `/mnt/c/...` for Windows files, and treat `/mnt/z` as a lazy mount
+  that may need checking before use.
+- Use `wslpath` for path conversion:
+  `wslpath -u 'C:\path\to\file'` for Windows to Linux,
+  `wslpath -w /linux/path` for Linux to Windows-style,
+  and `wslpath -m /linux/path` for slash-separated Windows-style paths.
 - For system changes inside WSL, use a root shell. For Windows admin tasks,
   tell the user to run the command in an elevated Windows terminal.
 

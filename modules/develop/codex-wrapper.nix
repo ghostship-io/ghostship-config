@@ -34,7 +34,7 @@ let
     { name = "wsl2"; }
     { name = "python"; }
     { name = "ssh"; }
-    { name = "skill-creator"; }
+    { name = "skills-creator"; }
   ];
 
   skillConfig = map (skill: {
