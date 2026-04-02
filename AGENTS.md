@@ -98,6 +98,10 @@ changelog.
   service `preStart`, not in `system.activationScripts`.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
+- Homepage `services.yaml` updates can leave stale entries behind when keys are
+  removed from the generated source set. Add an explicit `pkgs.yq-go` prune step
+  in activation for retired service entries instead of relying on
+  `ghostship-config set` to delete them.
 - For Apple Silicon:
   keep `hardware.firmwareCompression = "none"`;
   treat `/boot/asahi` as `chill-penguin`-specific;

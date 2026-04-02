@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `HONCHO_*` integration wiring and shared Honcho compatibility-state
   management, removed Homepage Honcho entries, and removed the stale
   `litellm-secrets` declaration now that the service is retired.
+- **Homepage stale-entry pruning**: Homepage activation now explicitly deletes
+  stale `Honcho`, `Honcho Redis`, and `Honcho DB` entries from `services.yaml`
+  after `ghostship-config set` so retired services do not linger in the live UI.
 - **PriceBuddy token verification**: Normalized the managed
   `pricebuddy-agent.env` bearer rewrite so repeated post-start runs preserve a
   single `id|token` pair, and added host-managed post-start checks for the app

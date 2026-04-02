@@ -303,6 +303,14 @@ in
           )
 
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
+
+          ${pkgs.yq-go}/bin/yq -i '
+            del(
+              .[] | select(has("Services")) | .Services[] | select(has("Honcho")),
+              .[] | select(has("Infrastructure")) | .Infrastructure[] | select(has("Honcho Redis")),
+              .[] | select(has("Infrastructure")) | .Infrastructure[] | select(has("Honcho DB"))
+            )
+          ' "$SERVICES_FILE"
         fi
 
         # Update widgets.yaml if it exists
