@@ -13,5 +13,5 @@
 ## 3. Verify and document the host change
 
 - [x] 3.1 Evaluate and build the host config with `nix eval --impure .#nixosConfigurations.chill-penguin.config.systemd.services.podman-romm.postStart` and `nix build .#nixosConfigurations.chill-penguin.config.system.build.toplevel -L`.
-- [ ] 3.2 Apply the updated config on `chill-penguin`, then verify `systemctl status podman-romm.service --no-pager -l`, `podman ps`, and the iframe behavior against the live served RomM app through Muximux.
+- [x] 3.2 Apply the updated config on `chill-penguin`, then verify `systemctl status podman-romm.service --no-pager -l`, `podman ps`, and the iframe behavior against the live served RomM app through Muximux.
 - [x] 3.3 Update `README.md`, `CHANGELOG.md`, and `AGENTS.md` with any durable RomM upgrade and iframe-mitigation workflow changes discovered during the fix.
