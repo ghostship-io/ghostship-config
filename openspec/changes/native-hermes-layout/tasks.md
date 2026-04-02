@@ -18,6 +18,6 @@
 
 ## 4. Host cutover validation
 
-- [ ] 4.1 Apply the rebuilt config on `chill-penguin` using the repo's preferred deploy flow.
-- [ ] 4.2 Verify the live container uses the image's native startup contract with `podman inspect hermes` and `systemctl status podman-hermes.service --no-pager`.
-- [ ] 4.3 Verify the migrated Honcho config is available through the native Hermes layout and that the legacy bind-mounted path is no longer required.
+- [x] 4.1 Apply the rebuilt config on `chill-penguin` using the repo's preferred deploy flow.
+- [x] 4.2 Verify the live container uses the image's native startup contract with `podman inspect hermes` and `systemctl status podman-hermes.service --no-pager`.
+- [x] 4.3 Verify the migrated Honcho config is available through the native Hermes layout and that the legacy bind-mounted path is no longer required.
