@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Global `rg` availability**: Added `ripgrep` to the shared
+  `environment.systemPackages` baseline so server-role hosts such as
+  `chill-penguin` have `rg` available out of the box.
 - **OpenSpec worktree path**: Corrected the develop-host `openspec` wrapper's
   Ghostship propose override to point at `.worktrees/<name>/` and updated the
   checked-in OpenSpec propose assets to match.

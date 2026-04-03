@@ -54,6 +54,7 @@
     neovim
     curl
     wget
+    ripgrep
     jq
     yq-go
     htop
