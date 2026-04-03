@@ -154,3 +154,10 @@ This skill supports the "actions on a change" model:
 
 - **Can be invoked anytime**: Before all artifacts are done (if tasks exist), after partial implementation, interleaved with other actions
 - **Allows artifact updates**: If implementation reveals design issues, suggest updating artifacts - not phase-locked, work fluidly
+
+<!-- ghostship:.codex-openspec-apply-change:begin -->
+## Ghostship Override
+
+- If implementation gets stuck on a bug, failing test, or unexpected behavior, use `systematic-debugging` if it is available.
+- Do root-cause-first debugging before proposing or applying fixes.
+<!-- ghostship:.codex-openspec-apply-change:end -->

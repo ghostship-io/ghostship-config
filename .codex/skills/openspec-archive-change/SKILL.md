@@ -112,3 +112,11 @@ All artifacts complete. All tasks complete.
 - Show clear summary of what happened
 - If sync is requested, use openspec-sync-specs approach (agent-driven)
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting
+
+<!-- ghostship:.codex-openspec-archive-change:begin -->
+## Ghostship Override
+
+- Before archive, commit the change branch and fast-forward merge it back into `main`.
+- Run the archive flow from the main worktree after that merge.
+- After archive succeeds, delete the change worktree with `git worktree remove <worktree-path>`.
+<!-- ghostship:.codex-openspec-archive-change:end -->

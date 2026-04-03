@@ -24,6 +24,9 @@ changelog.
   upstream `skill-creator` package in `vercel-labs/agent-browser` `v0.9.3`.
 - OpenSpec slash commands and agent assets are project-local. Refresh them by
   running `openspec update` in an OpenSpec-enabled repo.
+- The develop-host `openspec` wrapper reapplies append-only Ghostship
+  propose/apply/archive snippets after both `openspec init` and
+  `openspec update` without a separate OpenSpec config directory.
 - `.envrc` uses `use flake`, so the root `flake.nix` must expose either
   `devShells.<system>.default` or `packages.<system>.default`.
 - `nix eval .#...` reads the tracked flake source, not arbitrary untracked
@@ -194,12 +197,6 @@ changelog.
   re-persisting `pricebuddy-agent.env`, and post-start verification should only
   gate Ghostship-managed wiring such as env generation, scraper reachability,
   and final bearer-token shape.
-- Changedetection.io should keep its own dedicated `Changedetection`
-  CloakBrowser profile and derive `PLAYWRIGHT_DRIVER_URL` from the live profile
-  ID at runtime; do not hard-code CloakBrowser UUIDs in Nix or reuse the
-  default `Direct` or `VPN` profiles as the service's managed browser target.
-  The repo-managed service/container name is `changedetection`, and its durable
-  state lives under `/srv/apps/changedetection`.
 - On `chill-penguin`, Muximux intentionally omits Honcho while keeping
   PriceBuddy in the dropdown immediately after Bazarr; Homepage remains the
   place where Honcho stays visible.

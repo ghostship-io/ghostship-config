@@ -52,6 +52,10 @@ for secrets.
   attempts a best-effort global `skills` refresh and, when started anywhere
   inside an OpenSpec repo, runs `openspec update` from the repo root so the
   latest slash-command scaffolding stays active.
+- The wrapper also reapplies personal OpenSpec overrides after both
+  `openspec init` and `openspec update`, but those overrides are append-only:
+  the wrapper keeps the upstream generated workflow files and adds only three
+  built-in Ghostship propose/apply/archive snippets on top.
 - Before `opencode` launches, the wrapper also refreshes a generated OpenCode
   config under `XDG_STATE_HOME/opencode/programming-free-models.json` (or
   `~/.local/state/opencode/programming-free-models.json`) once per UTC day
@@ -95,7 +99,7 @@ internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, the `arr` stack,
 qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes,
-PyLoad, RSS-Bridge, Changedetection.io, and PriceBuddy.
+PyLoad, RSS-Bridge, and PriceBuddy.
 
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions
@@ -127,14 +131,6 @@ files, scraper reachability, and final bearer-token shape without treating
 upstream auth-route bugs or third-party Cloudflare challenges as Ghostship env
 regressions.
 
-Changedetection.io runs as the internal `changedetection` Ghostship service and resolves its
-browser-backed Playwright endpoint from the dedicated `Changedetection`
-CloakBrowser profile at startup. Keep that CDP URL derived from the live
-profile ID in `/srv/apps/cloakbrowser/data/profiles.db` instead of hard-coding
-profile UUIDs in the repo. Its durable state lives under
-`/srv/apps/changedetection`. Public routing for `changedetection.ghostship.io`
-may still depend on external Cloudflare or tunnel config not defined here.
-
 Hermes writes its durable state to `/srv/apps/hermes/home` through the image's
 native `HERMES_HOME=/home/hermes/.hermes` layout and relies on the image's
 native entrypoint instead of a repo-side startup shim. Honcho is retired from
@@ -143,8 +139,7 @@ settings and both Homepage and Muximux omit Honcho entirely. Hermes also
 exposes a separate persistent workspace at `/home/hermes/workspace`, backed by
 `/srv/apps/hermes/workspace` on the host, so operator-managed files do not have
 to live inside the native Hermes home tree. Muximux keeps PriceBuddy in the
-dropdown immediately after Bazarr and now places Changedetection immediately
-after RSS-Bridge.
+dropdown immediately after Bazarr.
 
 ## Usage
 

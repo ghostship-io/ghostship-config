@@ -152,3 +152,11 @@ Target archive directory already exists.
 - Show clear summary of what happened
 - If sync is requested, use the Skill tool to invoke `openspec-sync-specs` (agent-driven)
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting
+
+<!-- ghostship:opencode-opsx-archive:begin -->
+## Ghostship Override
+
+- Before archive, commit the change branch and fast-forward merge it back into `main`.
+- Run the archive flow from the main worktree after that merge.
+- After archive succeeds, delete the change worktree with `git worktree remove <worktree-path>`.
+<!-- ghostship:opencode-opsx-archive:end -->

@@ -39,6 +39,7 @@ let
   baseRuntimeInputs = [
     pkgs.coreutils
     pkgs.curl
+    pkgs.gawk
     pkgs.git
     pkgs.gnugrep
     pkgs.jq
@@ -68,6 +69,232 @@ let
     PATH=${baseRuntimeBinPath}:$PATH
     export NODE_NO_WARNINGS=1
 
+    strip_marked_block() {
+      file="$1"
+      begin="$2"
+      end="$3"
+      tmp="$(${pkgs.coreutils}/bin/mktemp)"
+
+      ${pkgs.gawk}/bin/awk -v begin="$begin" -v end="$end" '
+        $0 == begin { skipping = 1; next }
+        $0 == end { skipping = 0; next }
+        !skipping { print }
+      ' "$file" > "$tmp"
+
+      ${pkgs.coreutils}/bin/mv "$tmp" "$file"
+    }
+
+    append_markdown_override() {
+      src="$1"
+      dest="$2"
+      block_id="$3"
+
+      if [ ! -f "$src" ] || [ ! -f "$dest" ]; then
+        return 0
+      fi
+
+      begin="<!-- ghostship:$block_id:begin -->"
+      end="<!-- ghostship:$block_id:end -->"
+
+      strip_marked_block "$dest" "$begin" "$end"
+
+      tmp="$(${pkgs.coreutils}/bin/mktemp)"
+      {
+        ${pkgs.coreutils}/bin/cat "$dest"
+        printf '\n%s\n' "$begin"
+        ${pkgs.coreutils}/bin/cat "$src"
+        printf '%s\n' "$end"
+      } > "$tmp"
+
+      ${pkgs.coreutils}/bin/mv "$tmp" "$dest"
+    }
+
+    insert_toml_prompt_override() {
+      src="$1"
+      dest="$2"
+      block_id="$3"
+
+      if [ ! -f "$src" ] || [ ! -f "$dest" ]; then
+        return 0
+      fi
+
+      begin="<!-- ghostship:$block_id:begin -->"
+      end="<!-- ghostship:$block_id:end -->"
+
+      strip_marked_block "$dest" "$begin" "$end"
+
+      tmp="$(${pkgs.coreutils}/bin/mktemp)"
+      ${pkgs.gawk}/bin/awk -v begin="$begin" -v end="$end" -v src="$src" '
+        { lines[++n] = $0 }
+        END {
+          if (n == 0) {
+            exit 0
+          }
+
+          inserted = 0
+
+          for (i = 1; i <= n; i++) {
+            if (!inserted && i == n && lines[i] == "\"\"\"") {
+              print ""
+              print begin
+              while ((getline line < src) > 0) print line
+              close(src)
+              print end
+              print lines[i]
+              inserted = 1
+            } else {
+              print lines[i]
+            }
+          }
+
+          if (!inserted) {
+            print ""
+            print begin
+            while ((getline line < src) > 0) print line
+            close(src)
+            print end
+          }
+        }
+      ' "$dest" > "$tmp"
+
+      ${pkgs.coreutils}/bin/mv "$tmp" "$dest"
+    }
+
+    create_override_file() {
+      key="$1"
+      tmp="$(${pkgs.coreutils}/bin/mktemp)"
+
+      case "$key" in
+        propose)
+          ${pkgs.coreutils}/bin/cat > "$tmp" <<'EOF'
+## Ghostship Override
+
+- Before `openspec new change`, use `using-git-worktrees` if it is available.
+- Create or reuse `.worktree/<name>/`.
+- Run the change creation and artifact generation flow from that worktree, not from `main`.
+EOF
+          ;;
+        apply)
+          ${pkgs.coreutils}/bin/cat > "$tmp" <<'EOF'
+## Ghostship Override
+
+- If implementation gets stuck on a bug, failing test, or unexpected behavior, use `systematic-debugging` if it is available.
+- Do root-cause-first debugging before proposing or applying fixes.
+EOF
+          ;;
+        archive)
+          ${pkgs.coreutils}/bin/cat > "$tmp" <<'EOF'
+## Ghostship Override
+
+- Before archive, commit the change branch and fast-forward merge it back into `main`.
+- Run the archive flow from the main worktree after that merge.
+- After archive succeeds, delete the change worktree with `git worktree remove <worktree-path>`.
+EOF
+          ;;
+        *)
+          rm -f "$tmp"
+          return 1
+          ;;
+      esac
+
+      printf '%s\n' "$tmp"
+    }
+
+    apply_personal_openspec_overrides() {
+      project_root="$1"
+
+      if [ ! -d "$project_root/openspec" ]; then
+        return 0
+      fi
+
+      propose_override="$(create_override_file propose)"
+      apply_override="$(create_override_file apply)"
+      archive_override="$(create_override_file archive)"
+
+      for tool_dir in .codex .gemini .opencode; do
+        append_markdown_override \
+          "$propose_override" \
+          "$project_root/$tool_dir/skills/openspec-propose/SKILL.md" \
+          "$tool_dir-openspec-propose"
+        append_markdown_override \
+          "$apply_override" \
+          "$project_root/$tool_dir/skills/openspec-apply-change/SKILL.md" \
+          "$tool_dir-openspec-apply-change"
+        append_markdown_override \
+          "$archive_override" \
+          "$project_root/$tool_dir/skills/openspec-archive-change/SKILL.md" \
+          "$tool_dir-openspec-archive-change"
+      done
+
+      if [ -d "$project_root/.gemini/commands/opsx" ]; then
+        insert_toml_prompt_override \
+          "$propose_override" \
+          "$project_root/.gemini/commands/opsx/propose.toml" \
+          "gemini-opsx-propose"
+        insert_toml_prompt_override \
+          "$apply_override" \
+          "$project_root/.gemini/commands/opsx/apply.toml" \
+          "gemini-opsx-apply"
+        insert_toml_prompt_override \
+          "$archive_override" \
+          "$project_root/.gemini/commands/opsx/archive.toml" \
+          "gemini-opsx-archive"
+      fi
+
+      if [ -d "$project_root/.opencode/command" ]; then
+        append_markdown_override \
+          "$propose_override" \
+          "$project_root/.opencode/command/opsx-propose.md" \
+          "opencode-opsx-propose"
+        append_markdown_override \
+          "$apply_override" \
+          "$project_root/.opencode/command/opsx-apply.md" \
+          "opencode-opsx-apply"
+        append_markdown_override \
+          "$archive_override" \
+          "$project_root/.opencode/command/opsx-archive.md" \
+          "opencode-opsx-archive"
+      fi
+
+      rm -f "$propose_override" "$apply_override" "$archive_override"
+    }
+
+    resolve_command_target() {
+      shift || true
+      target=""
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --tools|--profile)
+            shift 2
+            ;;
+          --description|--schema)
+            shift 2
+            ;;
+          --tools=*|--profile=*|--description=*|--schema=*|--force|-h|--help)
+            shift
+            ;;
+          --*)
+            shift
+            ;;
+          *)
+            target="$1"
+            shift
+            ;;
+        esac
+      done
+
+      if [ -n "$target" ]; then
+        ${pkgs.coreutils}/bin/realpath -m "$target"
+      else
+        ${pkgs.coreutils}/bin/pwd -P
+      fi
+    }
+
+    run_upstream_openspec() {
+      ${pkgs.nodejs}/bin/npx -y ${openspecPackage} "$@"
+    }
+
     if [ "$#" -gt 0 ] && [ "$1" = "init" ]; then
       has_tools_arg=0
       has_profile_arg=0
@@ -87,21 +314,36 @@ let
         fi
       done
 
-      if [ "$has_tools_arg" -eq 0 ] || [ "$has_profile_arg" -eq 0 ]; then
-        init_args=("$1")
+      init_args=("init")
 
-        if [ "$has_tools_arg" -eq 0 ]; then
-          init_args+=(--tools ${defaultOpenspecTools})
-        fi
-
-        if [ "$has_profile_arg" -eq 0 ]; then
-          init_args+=(--profile ${defaultOpenspecProfile})
-        fi
-
-        init_args+=("''${@:2}")
-
-        exec ${pkgs.nodejs}/bin/npx -y ${openspecPackage} "''${init_args[@]}"
+      if [ "$has_tools_arg" -eq 0 ]; then
+        init_args+=(--tools ${defaultOpenspecTools})
       fi
+
+      if [ "$has_profile_arg" -eq 0 ]; then
+        init_args+=(--profile ${defaultOpenspecProfile})
+      fi
+
+      init_args+=("''${@:2}")
+      init_target="$(resolve_command_target "''${init_args[@]}")"
+
+      if run_upstream_openspec "''${init_args[@]}"; then
+        apply_personal_openspec_overrides "$init_target"
+        exit 0
+      fi
+
+      exit "$?"
+    fi
+
+    if [ "$#" -gt 0 ] && [ "$1" = "update" ]; then
+      update_target="$(resolve_command_target "$@")"
+
+      if run_upstream_openspec "$@"; then
+        apply_personal_openspec_overrides "$update_target"
+        exit 0
+      fi
+
+      exit "$?"
     fi
 
     exec ${pkgs.nodejs}/bin/npx -y ${openspecPackage} "$@"
@@ -175,7 +417,7 @@ let
 
       if ! openspec_output="$(
         cd "$openspec_root" &&
-        ${pkgs.nodejs}/bin/npx -y ${openspecPackage} update . 2>&1
+        ${openspecCli}/bin/openspec update . 2>&1
       )"; then
         log_warn "openspec refresh failed, continuing"
         if [ -n "$openspec_output" ]; then
