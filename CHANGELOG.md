@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **WSL Nix daemon concurrency**: WSL hosts now cap `nix.settings.max-jobs`
+  at `8` instead of inheriting `auto`, which was resolving to `22` on
+  `launch-octopus` and letting concurrent flake shells, agent sessions, and
+  host builds push `nix-daemon` into multi-gigabyte memory spikes and socket
+  stalls.
 - **Personal OpenSpec workflow**: Develop hosts now reapply append-only
   Ghostship propose/apply/archive snippets after both `openspec init` and
   `openspec update` so upstream workflow files stay intact while worktree-first

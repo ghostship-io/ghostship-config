@@ -95,6 +95,10 @@ changelog.
 - Use native Nix commands in repo docs and operations: `nix`, `nixos-rebuild`,
   and `switch-to-configuration`.
 - Prefer `-L` for build logs.
+- WSL hosts should cap `nix.settings.max-jobs` instead of inheriting `auto`;
+  on `launch-octopus`, `auto` resolved to `22` and repeatedly left
+  `nix-daemon` unresponsive under concurrent flake shells, agent sessions, and
+  host builds.
 - When using `buildLinux`-style functions, `modDirVersion` must match the
   kernel's expected version string exactly.
 - If generated config depends on `sops`-managed secrets, put it in the relevant
