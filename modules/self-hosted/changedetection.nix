@@ -2,7 +2,6 @@
 
 let
   changedetection-state-dir = "/srv/apps/changedetection";
-  legacy-changedetection-state-dir = "/srv/apps/changedetectionio";
   changedetection-env = "${changedetection-state-dir}/changedetection.env";
   changedetection-profile-bootstrap = pkgs.writeTextFile {
     name = "changedetection-profile-bootstrap.py";
@@ -132,26 +131,6 @@ let
           main()
     '';
   };
-  changedetection-pre-start = pkgs.writeShellScript "changedetection-pre-start" ''
-    set -euo pipefail
-
-    if [ -d "${legacy-changedetection-state-dir}" ]; then
-      if [ ! -e "${changedetection-state-dir}" ] || [ -z "$(${pkgs.findutils}/bin/find "${changedetection-state-dir}" -mindepth 1 -print -quit 2>/dev/null)" ]; then
-        rmdir "${changedetection-state-dir}" 2>/dev/null || true
-        mv "${legacy-changedetection-state-dir}" "${changedetection-state-dir}"
-      else
-        shopt -s dotglob nullglob
-        legacy_entries=("${legacy-changedetection-state-dir}"/*)
-        if [ ''${#legacy_entries[@]} -gt 0 ]; then
-          mv "${legacy-changedetection-state-dir}"/* "${changedetection-state-dir}/"
-        fi
-        shopt -u dotglob nullglob
-        rmdir "${legacy-changedetection-state-dir}" 2>/dev/null || true
-      fi
-    fi
-
-    ${changedetection-profile-bootstrap}
-  '';
 in
 {
   virtualisation.oci-containers.containers."changedetection" = {
@@ -186,7 +165,7 @@ in
   systemd.services.podman-changedetection = {
     after = [ "podman-cloakbrowser.service" ];
     requires = [ "podman-cloakbrowser.service" ];
-    preStart = "${changedetection-pre-start}";
+    preStart = "${changedetection-profile-bootstrap}";
   };
 
   systemd.tmpfiles.rules = [
