@@ -153,6 +153,7 @@ Target archive directory already exists.
 - If sync is requested, use the Skill tool to invoke `openspec-sync-specs` (agent-driven)
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting
 
+
 <!-- ghostship:opencode-opsx-archive:begin -->
 ## Ghostship Override
 
