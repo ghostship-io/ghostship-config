@@ -61,8 +61,9 @@ in
       grimmory-secrets
     ];
     volumes = [
-      "${hermes-home}:/home/hermes/.hermes:rw"
-      "${hermes-workspace}:/home/hermes/workspace:rw"
+      "${hermes-home}:/opt/data:rw"
+      "${hermes-workspace}:/workspace:rw"
+      "hermes-nix:/nix:rw"
     ];
   };
 

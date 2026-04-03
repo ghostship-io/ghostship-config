@@ -25,10 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `BASE_URL` literal. The proxy also now handles RomM's leaked
   `/ws/socket.io/` root websocket path instead of returning a Muximux-side
   `404`.
-- **Hermes workspace mount**: Added a dedicated persistent Hermes workspace at
-  `/srv/apps/hermes/workspace`, bind-mounted directly into the container at
-  `/home/hermes/workspace` while leaving the native `/home/hermes/.hermes`
-  state mount unchanged.
+- **Hermes workstation layout**: Updated Hermes to follow the new workstation
+  image contract by mounting `/srv/apps/hermes/home` at `/opt/data`,
+  `/srv/apps/hermes/workspace` at `/workspace`, and restoring a persistent
+  named Podman volume for `/nix` so workstation-managed Nix installs and build
+  outputs survive container replacement.
 - **Muximux service placement**: Removed Honcho from the generated Muximux tile
   list, moved PriceBuddy back into the Muximux dropdown directly after Bazarr,
   and keep the generated dashboard layout aligned with the retired Honcho
@@ -62,13 +63,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sudo` credential caching global with a `12h` timeout so fresh agent PTYs do
   not constantly re-prompt while server-only hosts keep the stricter default
   scope.
-- **Hermes native image layout**: Removed the repo-side Hermes startup shim,
-  entrypoint override, command override, writable `/nix` volume, and separate
-  `.honcho` bind mount so `chill-penguin` now follows the image's native
-  `/usr/local/bin/ghostship-hermes-runtime entrypoint` contract. The host-side
-  Honcho config is migrated into `/srv/apps/hermes/home/shared/honcho` so the
-  image can recreate `/home/hermes/.honcho` through its native compatibility
-  layout.
+- **Hermes native image entrypoint**: Removed the repo-side Hermes startup
+  shim, entrypoint override, command override, and separate `.honcho` bind
+  mount so `chill-penguin` follows the image's native
+  `/usr/local/bin/ghostship-hermes-runtime entrypoint` contract while the
+  current workstation layout owns the persisted `/opt/data`, `/workspace`, and
+  `/nix` mounts.
 - **Develop agent launcher defaults**: Develop-host `codex`, `gemini`, and
   `opencode` now declare explicit YOLO or allow-all execution defaults in
   their generated configs instead of relying on mixed upstream behavior.

@@ -132,14 +132,15 @@ upstream auth-route bugs or third-party Cloudflare challenges as Ghostship env
 regressions.
 
 Hermes writes its durable state to `/srv/apps/hermes/home` through the image's
-native `HERMES_HOME=/home/hermes/.hermes` layout and relies on the image's
+workstation-style `HERMES_HOME=/opt/data` layout and relies on the image's
 native entrypoint instead of a repo-side startup shim. Honcho is retired from
 the Ghostship stack, so Hermes no longer exports `HONCHO_*` integration
-settings and both Homepage and Muximux omit Honcho entirely. Hermes also
-exposes a separate persistent workspace at `/home/hermes/workspace`, backed by
-`/srv/apps/hermes/workspace` on the host, so operator-managed files do not have
-to live inside the native Hermes home tree. Muximux keeps PriceBuddy in the
-dropdown immediately after Bazarr.
+settings and both Homepage and Muximux omit Honcho entirely. Hermes also mounts
+`/srv/apps/hermes/workspace` directly at `/workspace`, which is now the
+canonical in-container work-products path. The container also persists `/nix`
+through a named Podman volume so Hermes-managed Nix installs and build outputs
+survive container replacement. Muximux keeps PriceBuddy in the dropdown
+immediately after Bazarr.
 
 ## Usage
 
