@@ -1,7 +1,8 @@
 # hermes-native-layout Specification
 
 ## Purpose
-TBD - created by archiving change native-hermes-layout. Update Purpose after archive.
+Define the persisted runtime layout and activation contract for the self-hosted
+Hermes workstation on `chill-penguin`.
 
 ## Requirements
 ### Requirement: Hermes SHALL use the image's native startup contract
@@ -17,52 +18,43 @@ with a repo-side startup shim.
 - **THEN** it SHALL not depend on a hardcoded Nix store path for
   `ghostship-hermes-runtime`
 
-### Requirement: Hermes SHALL persist state through the native Hermes home layout
-The self-hosted Hermes service SHALL persist durable state through the image's
-native `HERMES_HOME` layout at `/home/hermes/.hermes`.
+### Requirement: Hermes SHALL persist state through the workstation data root
+The self-hosted Hermes service SHALL persist durable state by mounting the
+existing host path `/srv/apps/hermes/home` at `/opt/data` inside the container.
 
-#### Scenario: Durable Hermes state mount is preserved
+#### Scenario: Durable Hermes data mount is generated
 - **WHEN** the Hermes container is configured on `chill-penguin`
-- **THEN** `/srv/apps/hermes/home` SHALL remain mounted at
-  `/home/hermes/.hermes`
-- **THEN** the legacy writable `/nix` volume SHALL not be required for normal
-  Hermes startup
-- **THEN** the separate `/home/hermes/.honcho` bind mount SHALL not be used
+- **THEN** `/srv/apps/hermes/home` SHALL be mounted at `/opt/data`
+- **AND** the container SHALL not require `/home/hermes/.hermes` to be the
+  primary persisted mount target
 
-### Requirement: Hermes SHALL expose a persistent workspace outside HERMES_HOME
+### Requirement: Hermes SHALL expose a persistent workspace at `/workspace`
 The self-hosted Hermes service SHALL expose a direct persistent workspace at
-`/home/hermes/workspace` backed by `/srv/apps/hermes/workspace` on
-`chill-penguin`.
+`/workspace` backed by `/srv/apps/hermes/workspace` on `chill-penguin`.
 
-#### Scenario: Hermes workspace bind mount is generated
+#### Scenario: Hermes workspace mount is generated
 - **WHEN** the Hermes container definition is evaluated for `chill-penguin`
-- **THEN** `/srv/apps/hermes/workspace` SHALL be mounted at
-  `/home/hermes/workspace`
+- **THEN** `/srv/apps/hermes/workspace` SHALL be mounted at `/workspace`
 - **AND** `/srv/apps/hermes/workspace` SHALL be managed as a durable host
   directory under `/srv/apps`
-- **AND** the existing Hermes home mount at `/home/hermes/.hermes` SHALL remain
-  in place
 
-### Requirement: Legacy Honcho config SHALL be migrated into the native Hermes layout
-The self-hosted Hermes migration SHALL preserve the existing Honcho config by
-moving it into the image's native shared Honcho location.
+### Requirement: Hermes SHALL persist Nix state through a named volume
+The self-hosted Hermes service SHALL mount `/nix` through a named Podman volume
+so Hermes-managed Nix software and build outputs survive container replacement.
 
-#### Scenario: Existing Honcho config is present on the host
-- **WHEN** `/srv/apps/hermes/home/.honcho/config.json` exists before the Hermes
-  cutover
-- **THEN** the migration SHALL create
-  `/srv/apps/hermes/home/shared/honcho/config.json`
-- **THEN** the migrated config SHALL preserve the existing Honcho host settings
-- **THEN** Hermes startup SHALL not require the legacy host path to remain bind
-  mounted separately
+#### Scenario: Hermes Nix volume is configured
+- **WHEN** the Hermes container definition is evaluated for `chill-penguin`
+- **THEN** it SHALL include a named volume mounted at `/nix`
+- **AND** the named volume SHALL not require a host bind mount under
+  `/srv/apps/hermes`
 
 ### Requirement: Native layout cutover SHALL be verifiable after activation
-The Hermes native-layout migration SHALL provide a clear host-side verification
-path after the NixOS switch.
+The Hermes layout migration SHALL provide a clear host-side verification path
+after the NixOS switch.
 
 #### Scenario: Post-switch verification
 - **WHEN** the updated Hermes service is activated on `chill-penguin`
 - **THEN** operators SHALL be able to verify through container inspection that
-  Hermes uses the image's native startup contract
-- **THEN** operators SHALL be able to verify that the Honcho config is
-  available through the native Hermes layout
+  Hermes uses `/opt/data` and `/workspace` as the persisted mount targets
+- **AND** operators SHALL be able to verify that Hermes mounts a persistent
+  `/nix` volume
