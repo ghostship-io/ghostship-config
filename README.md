@@ -56,6 +56,8 @@ for secrets.
   `openspec init` and `openspec update`, but those overrides are append-only:
   the wrapper keeps the upstream generated workflow files and adds only three
   built-in Ghostship propose/apply/archive snippets on top.
+- The Ghostship propose override points change work at
+  `.worktrees/<change-name>/`, not `.worktree/<change-name>/`.
 - Before `opencode` launches, the wrapper also refreshes a generated OpenCode
   config under `XDG_STATE_HOME/opencode/programming-free-models.json` (or
   `~/.local/state/opencode/programming-free-models.json`) once per UTC day

@@ -113,6 +113,6 @@ After completing all artifacts, summarize:
 ## Ghostship Override
 
 - Before `openspec new change`, use `using-git-worktrees` if it is available.
-- Create or reuse `.worktree/<name>/`.
+- Create or reuse `.worktrees/<name>/`.
 - Run the change creation and artifact generation flow from that worktree, not from `main`.
 <!-- ghostship:.opencode-openspec-propose:end -->
