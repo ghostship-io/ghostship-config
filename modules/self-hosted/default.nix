@@ -36,6 +36,7 @@
     ./it-tools.nix
     ./omnitools.nix
     ./metube.nix
+    ./changedetectionio.nix
     ./rss-bridge.nix
     ./pricebuddy.nix
 

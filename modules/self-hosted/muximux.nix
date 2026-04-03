@@ -386,6 +386,13 @@ in
           RSS-Bridge.color=literal:"#f97316"
           RSS-Bridge.enabled=literal:"true"
           RSS-Bridge.dd=literal:"true"
+          Changedetection.name=literal:"Changedetection"
+          Changedetection.url=literal:"https://changedetection.ghostship.io"
+          Changedetection.scale=literal:1
+          Changedetection.icon=literal:"fa-eye"
+          Changedetection.color=literal:"#0ea5e9"
+          Changedetection.enabled=literal:"true"
+          Changedetection.dd=literal:"true"
           OmniTools.name=literal:"OmniTools"
           OmniTools.url=literal:"https://omnitools.ghostship.io"
           OmniTools.scale=literal:1

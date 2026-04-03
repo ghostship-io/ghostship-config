@@ -108,6 +108,17 @@ def init_profiles():
                 platform="windows",
             )
             print("Direct profile created.")
+
+        if "Changedetection" not in existing_names:
+            print("Creating Changedetection profile...")
+            db.create_profile(
+                name="Changedetection",
+                proxy=None,
+                humanize=True,
+                geoip=True,
+                platform="windows",
+            )
+            print("Changedetection profile created.")
     except Exception as exc:
         print(f"Failed to initialize profiles: {exc}")
 

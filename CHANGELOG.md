@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Changedetection.io stack**: Added a managed internal
+  `changedetection.io` service with durable state under
+  `/srv/apps/changedetectionio`, a dedicated default `Changedetection`
+  CloakBrowser profile, runtime-derived profile-backed `PLAYWRIGHT_DRIVER_URL`
+  wiring, a Homepage `Services` entry, and a Muximux tile immediately after
+  RSS-Bridge. Public routing for `changedetection.ghostship.io` may still
+  depend on external Cloudflare or tunnel configuration.
 - **RomM proxy base-path fix**: Muximux's same-origin `/romm/` proxy now
   injects a real document `<base href="/romm/">` for RomM before the app
   boots, which keeps current and future bundles on the correct router base
