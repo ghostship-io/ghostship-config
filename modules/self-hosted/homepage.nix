@@ -225,7 +225,7 @@ in
             "[Services].[Changedetection].icon=literal:mdi-eye-refresh-outline-#0ea5e9"
             "[Services].[Changedetection].description=literal:Website Change Monitor"
             "[Services].[Changedetection].server=literal:chill-penguin"
-            "[Services].[Changedetection].container=literal:changedetectionio"
+            "[Services].[Changedetection].container=literal:changedetection"
 
             "[Services].[PriceBuddy].icon=literal:mdi-currency-usd-#22c55e"
             "[Services].[PriceBuddy].description=literal:Price Tracker"

@@ -127,11 +127,12 @@ files, scraper reachability, and final bearer-token shape without treating
 upstream auth-route bugs or third-party Cloudflare challenges as Ghostship env
 regressions.
 
-Changedetection.io runs as an internal Ghostship service and resolves its
+Changedetection.io runs as the internal `changedetection` Ghostship service and resolves its
 browser-backed Playwright endpoint from the dedicated `Changedetection`
 CloakBrowser profile at startup. Keep that CDP URL derived from the live
 profile ID in `/srv/apps/cloakbrowser/data/profiles.db` instead of hard-coding
-profile UUIDs in the repo. Public routing for `changedetection.ghostship.io`
+profile UUIDs in the repo. Its durable state lives under
+`/srv/apps/changedetection`. Public routing for `changedetection.ghostship.io`
 may still depend on external Cloudflare or tunnel config not defined here.
 
 Hermes writes its durable state to `/srv/apps/hermes/home` through the image's

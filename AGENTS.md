@@ -198,6 +198,8 @@ changelog.
   CloakBrowser profile and derive `PLAYWRIGHT_DRIVER_URL` from the live profile
   ID at runtime; do not hard-code CloakBrowser UUIDs in Nix or reuse the
   default `Direct` or `VPN` profiles as the service's managed browser target.
+  The repo-managed service/container name is `changedetection`, and its durable
+  state lives under `/srv/apps/changedetection`.
 - On `chill-penguin`, Muximux intentionally omits Honcho while keeping
   PriceBuddy in the dropdown immediately after Bazarr; Homepage remains the
   place where Honcho stays visible.
