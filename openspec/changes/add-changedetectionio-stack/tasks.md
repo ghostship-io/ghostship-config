@@ -12,5 +12,5 @@
 
 ## 3. Verification and rollout
 
-- [ ] 3.1 Verify the Nix definitions with `nix eval .#nixosConfigurations.chill-penguin.config.virtualisation.oci-containers.containers.changedetectionio.image --raw` and `nixos-rebuild build --flake .#chill-penguin -L`.
-- [ ] 3.2 Activate on `chill-penguin`, then verify the live stack has the `Changedetection` CloakBrowser profile, a working profile-backed CDP URL, a Homepage `Services` tile, and a Muximux entry after `RSS-Bridge`.
+- [x] 3.1 Verify the Nix definitions with `nix eval .#nixosConfigurations.chill-penguin.config.virtualisation.oci-containers.containers.changedetectionio.image --raw` and `nixos-rebuild build --flake .#chill-penguin -L`.
+- [x] 3.2 Activate on `chill-penguin`, then verify the live stack has the `Changedetection` CloakBrowser profile, a working profile-backed CDP URL, a Homepage `Services` tile, and a Muximux entry after `RSS-Bridge`.
