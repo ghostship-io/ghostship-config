@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   env files, scraper reachability, and final token format without conflating
   known upstream auth-route or Cloudflare target issues with Ghostship runtime
   wiring.
+- **PriceBuddy orphan-price pruning**: Added a managed `podman-pricebuddy`
+  post-start cleanup that deletes stale `prices` rows whose `url_id` no longer
+  exists, mitigating the upstream product-delete path that bulk-deletes URLs
+  without firing the `Url` model hook that normally purges price history.
 - **OpenCode programming free-model refresh**: The develop-host `opencode`
   wrapper now refreshes a generated OpenCode config once per UTC day from
   OpenRouter's ranked programming free-model frontend endpoint, stores that

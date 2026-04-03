@@ -194,6 +194,9 @@ changelog.
   re-persisting `pricebuddy-agent.env`, and post-start verification should only
   gate Ghostship-managed wiring such as env generation, scraper reachability,
   and final bearer-token shape.
+- PriceBuddy's upstream product cleanup bulk-deletes `urls` and skips the
+  `Url` model delete hook that normally purges `prices`; keep the host-managed
+  post-start orphan-price prune so stale price rows do not survive deletions.
 - On `chill-penguin`, Muximux intentionally omits Honcho while keeping
   PriceBuddy in the dropdown immediately after Bazarr; Homepage remains the
   place where Honcho stays visible.
