@@ -123,10 +123,9 @@ persistent agent API token from the `pricebuddy-secrets` bundle. The live
 `PRICEBUDDY_API_TOKEN="id|token"` bearer line for direct API use. The host
 token-sync now strips any previously persisted token ID before rewriting that
 file, and the managed `podman-pricebuddy` post-start path verifies the app env
-files, prunes orphaned price-history rows left behind by the upstream product
-delete path, and verifies scraper reachability plus the final bearer-token
-shape without treating upstream auth-route bugs or third-party Cloudflare
-challenges as Ghostship env regressions.
+files, scraper reachability, and final bearer-token shape without treating
+upstream auth-route bugs or third-party Cloudflare challenges as Ghostship env
+regressions.
 
 Hermes writes its durable state to `/srv/apps/hermes/home` through the image's
 native `HERMES_HOME=/home/hermes/.hermes` layout and relies on the image's

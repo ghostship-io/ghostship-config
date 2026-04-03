@@ -156,44 +156,6 @@ EOF
     ${pkgs.coreutils}/bin/chmod 600 "$token_file"
     ${pkgs.coreutils}/bin/chown 3000:3000 "$token_file"
   '';
-  pricebuddy-orphan-price-prune = pkgs.writeShellScriptBin "pricebuddy-orphan-price-prune" ''
-    set -eu
-
-    podman_bin="${pkgs.podman}/bin/podman"
-    db_env_file="${pricebuddy-db-env}"
-    container="pricebuddy-db"
-
-    if [ ! -s "$db_env_file" ]; then
-      echo "Missing PriceBuddy database env file: $db_env_file" >&2
-      exit 1
-    fi
-
-    mysql_root_password="$(${pkgs.gnused}/bin/sed -n 's/^MYSQL_ROOT_PASSWORD=//p' "$db_env_file" | ${pkgs.coreutils}/bin/head -n 1)"
-    if [ -z "$mysql_root_password" ]; then
-      echo "PriceBuddy database env file does not contain MYSQL_ROOT_PASSWORD" >&2
-      exit 1
-    fi
-
-    orphan_count="$("$podman_bin" exec -i "$container" mysql -uroot -p"$mysql_root_password" -Nse "
-      SELECT COUNT(*)
-      FROM prices AS prices
-      LEFT JOIN urls AS urls ON urls.id = prices.url_id
-      WHERE urls.id IS NULL;
-    " pricebuddy)"
-
-    if [ "$orphan_count" -eq 0 ]; then
-      exit 0
-    fi
-
-    "$podman_bin" exec -i "$container" mysql -uroot -p"$mysql_root_password" -Nse "
-      DELETE prices
-      FROM prices AS prices
-      LEFT JOIN urls AS urls ON urls.id = prices.url_id
-      WHERE urls.id IS NULL;
-    " pricebuddy
-
-    echo "Pruned $orphan_count orphaned PriceBuddy price rows."
-  '';
   pricebuddy-runtime-verify = pkgs.writeShellScriptBin "pricebuddy-runtime-verify" ''
     set -eu
 
@@ -340,7 +302,6 @@ in
     '';
     postStart = ''
       ${pricebuddy-token-sync}/bin/pricebuddy-token-sync
-      ${pricebuddy-orphan-price-prune}/bin/pricebuddy-orphan-price-prune
       ${pricebuddy-runtime-verify}/bin/pricebuddy-runtime-verify
     '';
   };
