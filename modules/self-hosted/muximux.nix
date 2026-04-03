@@ -488,16 +488,22 @@ in
 
             for (i = 1; i <= section_count; i++) {
               name = section_order[i]
-              if (name == "Honcho" || name == "PriceBuddy") {
+              if (name == "Honcho" || name == "PriceBuddy" || name == "Changedetection") {
                 continue
               }
 
               printf "%s", section_data[name]
+              if (name == "RSS-Bridge" && ("Changedetection" in section_data)) {
+                printf "%s", section_data["Changedetection"]
+              }
               if (name == "Bazarr" && ("PriceBuddy" in section_data)) {
                 printf "%s", section_data["PriceBuddy"]
               }
             }
 
+            if (!("RSS-Bridge" in section_data) && ("Changedetection" in section_data)) {
+              printf "%s", section_data["Changedetection"]
+            }
             if (!("Bazarr" in section_data) && ("PriceBuddy" in section_data)) {
               printf "%s", section_data["PriceBuddy"]
             }
