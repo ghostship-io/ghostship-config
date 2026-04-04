@@ -29,6 +29,15 @@
     options = "--delete-older-than 7d";
   };
 
+  security.pam.loginLimits = [
+    {
+      domain = "*";
+      type = "soft";
+      item = "nofile";
+      value = "65536";
+    }
+  ];
+
   nixpkgs.config.allowAliases = false;
 
   environment.variables = {

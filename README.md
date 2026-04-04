@@ -212,3 +212,8 @@ the configuration with `nixos-rebuild`.
 - WSL hosts cap `nix.settings.max-jobs` at `8` so concurrent flake shells,
   agent sessions, and host builds do not wedge `nix-daemon` under `auto`
   parallelism.
+- WSL hosts also cap `nix.settings.cores` at `4` so each build job cannot
+  fan out across all reported host threads and recreate the same memory-pressure
+  stalls from inside a smaller job queue.
+- Login sessions raise the soft `nofile` limit to `65536` to keep busy shells,
+  editors, and agent workflows from running into a low default descriptor cap.

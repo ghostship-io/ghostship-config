@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **WSL Nix build fanout**: WSL hosts now cap `nix.settings.cores` at `4` so
+  each daemon-dispatched build job cannot claim all reported CPU threads and
+  recreate the same memory-pressure stalls inside an `8`-job queue.
+- **Login descriptor headroom**: Added a shared soft `nofile` login limit of
+  `65536` so shell-heavy local workflows have more file descriptor headroom
+  before hitting per-session limits.
 - **Global `rg` availability**: Added `ripgrep` to the shared
   `environment.systemPackages` baseline so server-role hosts such as
   `chill-penguin` have `rg` available out of the box.

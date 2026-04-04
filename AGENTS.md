@@ -101,6 +101,9 @@ changelog.
   on `launch-octopus`, `auto` resolved to `22` and repeatedly left
   `nix-daemon` unresponsive under concurrent flake shells, agent sessions, and
   host builds.
+- WSL hosts should also cap `nix.settings.cores`; leaving per-job core fanout
+  at `0` lets each queued build try to use every reported host thread and can
+  recreate the same memory-pressure stalls even after `max-jobs` is reduced.
 - When using `buildLinux`-style functions, `modDirVersion` must match the
   kernel's expected version string exactly.
 - If generated config depends on `sops`-managed secrets, put it in the relevant

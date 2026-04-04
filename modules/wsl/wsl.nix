@@ -5,6 +5,7 @@
   # once. Letting the daemon use every reported core makes it easy to saturate
   # memory and leave new clients waiting on a busy daemon.
   nix.settings.max-jobs = lib.mkForce 8;
+  nix.settings.cores = lib.mkDefault 4;
 
   services.resolved.enable = false;
   networking.useNetworkd = false;
