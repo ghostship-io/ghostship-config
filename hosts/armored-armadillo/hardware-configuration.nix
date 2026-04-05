@@ -11,66 +11,20 @@
   boot.kernelModules = [ "kvm-amd" ];
   boot.extraModulePackages = [ ];
 
-  fileSystems."/lib/modules/6.6.87.2-microsoft-standard-WSL2" =
-    { device = "none";
-      fsType = "overlay";
-    };
-
-  fileSystems."/mnt/wsl" =
-    { device = "none";
-      fsType = "tmpfs";
-    };
-
-  fileSystems."/usr/lib/wsl/drivers" =
-    { device = "drivers";
-      fsType = "9p";
-    };
-
   fileSystems."/" =
     { device = "/dev/disk/by-uuid/e9e884ab-46d8-442f-8d88-0145feaa4138";
       fsType = "ext4";
     };
 
-  fileSystems."/mnt/wslg" =
-    { device = "none";
-      fsType = "tmpfs";
-    };
-
-  fileSystems."/mnt/wslg/distro" =
-    { device = "";
-      fsType = "none";
-      options = [ "bind" ];
-    };
-
-  fileSystems."/usr/lib/wsl/lib" =
-    { device = "none";
-      fsType = "overlay";
-    };
-
-  fileSystems."/tmp/.X11-unix" =
-    { device = "/mnt/wslg/.X11-unix";
-      fsType = "none";
-      options = [ "bind" ];
-    };
-
-  fileSystems."/mnt/wslg/doc" =
-    { device = "none";
-      fsType = "overlay";
-    };
-
-  fileSystems."/mnt/c" =
-    { device = "C:\\134";
-      fsType = "9p";
-    };
-
-  fileSystems."/mnt/wslg/run/user/1000" =
-    { device = "tmpfs";
-      fsType = "tmpfs";
-    };
-
   swapDevices =
     [ { device = "/dev/disk/by-uuid/353b5456-f417-4d81-b50b-201cf8bb114a"; }
     ];
+
+  # Enables DHCP on each ethernet and wireless interface. In case of scripted networking
+  # (the default) this is the recommended approach. When using systemd-networkd it's
+  # still possible to use this option, but it's recommended to use it in conjunction
+  # with explicit per-interface declarations with `networking.interfaces.<interface>.useDHCP`.
+  networking.useDHCP = lib.mkDefault true;
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
 }

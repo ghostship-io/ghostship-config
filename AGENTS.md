@@ -42,6 +42,10 @@ changelog.
   can be Nix-generated symlinks into the store. Do not rely on direct writes to
   those paths for persistence; keep durable hostname changes in declarative
   config and use runtime hostname changes only as best-effort bootstrap help.
+- WSL host `hardware-configuration.nix` files should stay minimal like
+  `launch-octopus`: keep real root/swap/kernel/platform facts, but drop
+  generated WSL pseudo-filesystems such as `/mnt/wsl*`, `/usr/lib/wsl/*`,
+  `/mnt/c`, and `/tmp/.X11-unix`.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode
