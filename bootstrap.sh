@@ -3,11 +3,17 @@
 
 set -euo pipefail
 
-hostname_value="${1:-$(hostname)}"
-json_path="${2:-}"
+if [ "$#" -lt 1 ] || [ -z "${1:-}" ]; then
+  echo "Usage: sudo ./bootstrap.sh <hostname> [json-path]" >&2
+  exit 1
+fi
 
-if [ "$(id -u)" -ne 0 ]; then
-  echo "Error: run bootstrap as root so it can manage /etc/nix/secrets/age.key." >&2
+hostname_value="$1"
+json_path="${2:-}"
+apply_command="sudo nixos-rebuild switch --flake .#${hostname_value}"
+
+if [ "$(id -u)" -ne 0 ] || [ -z "${SUDO_USER:-}" ]; then
+  echo "Error: run bootstrap with sudo so it can manage /etc/nix/secrets/age.key." >&2
   exit 1
 fi
 
@@ -68,3 +74,5 @@ if [ -n "$json_path" ]; then
 else
   printf '%s\n' "$json"
 fi
+
+printf 'Apply command: %s\n' "$apply_command" >&2

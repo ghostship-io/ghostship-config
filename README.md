@@ -199,13 +199,15 @@ secrets-get-public-key
 
 ## Bootstrap
 
-Use `./bootstrap.sh NEW_HOSTNAME` from a temporary NixOS install to generate
-the host registration JSON and ensure `/etc/nix/secrets/age.key` exists.
-`bootstrap.sh` is tracked as executable so it can be run directly. It tries
-`hostnamectl` first, then falls back to `hostname` for a temporary live
-hostname change, which keeps WSL2 bootstrap runs working even when systemd
-hostname changes are unsupported there. Durable hostname persistence should
-come from the host's declarative config after registration and rebuild. Then
+Use `sudo ./bootstrap.sh NEW_HOSTNAME` from a temporary NixOS install to
+generate the host registration JSON and ensure `/etc/nix/secrets/age.key`
+exists. `bootstrap.sh` now requires an explicit hostname argument and requires
+being launched through `sudo`. It tries `hostnamectl` first, then falls back to
+`hostname` for a temporary live hostname change, which keeps WSL2 bootstrap
+runs working even when systemd hostname changes are unsupported there. Durable
+hostname persistence should come from the host's declarative config after
+registration and rebuild. It emits the registration JSON on stdout and prints
+the matching `nixos-rebuild` command for that hostname on stderr. Then
 register the host, add it to `flake.nix`, commit the new host files, and apply
 the configuration with `nixos-rebuild`.
 

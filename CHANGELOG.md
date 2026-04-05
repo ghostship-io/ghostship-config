@@ -11,7 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bootstrap WSL hostname handling**: `bootstrap.sh` is now tracked as an
   executable script and falls back from `hostnamectl` to `hostname`, avoiding
   the unsupported WSL2 systemd-hostname failure while still changing the live
-  hostname during bootstrap. Durable hostname persistence remains declarative.
+  hostname during bootstrap. It now also requires an explicit hostname argument
+  and requires being run through `sudo`. It emits the matching
+  `nixos-rebuild switch --flake .#<hostname>` command alongside the bootstrap
+  JSON. Durable hostname persistence remains declarative.
 - **Develop agent maintenance**: Replaced the launch-time `npx` preflight flow
   for `codex`, `gemini`, and `opencode` with installed user-local agent CLIs
   under `/home/nixos/.local/share/ghostship-agent-tools/npm`, added a
