@@ -1,39 +1,43 @@
 # opencode-programming-free-model-refresh Specification
 
 ## Purpose
-Define how the OpenCode launcher refreshes and caches OpenRouter programming free models at launch time.
+Define how the develop-host agent maintenance service refreshes OpenRouter programming free models for OpenCode.
 
 ## Requirements
 
-### Requirement: OpenCode SHALL derive programming free models from OpenRouter's ranked frontend endpoint
-The OpenCode launcher SHALL fetch the OpenRouter frontend models endpoint for the programming category and SHALL derive its configured OpenRouter model list from the free-priced models returned by that response.
+### Requirement: Agent maintenance SHALL derive programming free models from OpenRouter's ranked frontend endpoint
+The develop-host agent maintenance service SHALL fetch the OpenRouter frontend models endpoint for the programming category and SHALL derive OpenCode's configured OpenRouter model list from the free-priced models returned by that response.
 
-#### Scenario: Launcher requests the ranked programming free endpoint
-- **WHEN** the OpenCode launcher refreshes its model list
+#### Scenario: Maintenance requests the ranked programming free endpoint
+- **WHEN** the agent maintenance service refreshes the OpenCode model list
 - **THEN** it SHALL request `https://openrouter.ai/api/frontend/models/find?categories=programming&fmt=cards&max_price=0&order=top-weekly`
 
-#### Scenario: Launcher filters models by returned free pricing
+#### Scenario: Maintenance filters models by returned free pricing
 - **WHEN** the frontend endpoint returns programming-category model data
-- **THEN** the launcher SHALL only include models whose returned endpoint pricing indicates free prompt and completion cost in the generated OpenCode model map
+- **THEN** the service SHALL only include models whose returned endpoint pricing indicates free prompt and completion cost in the generated OpenCode model map
 
-### Requirement: OpenCode SHALL refresh the generated model config no more than once per day
-The OpenCode launcher SHALL cache the generated programming free model config and SHALL refresh it at most once per day.
+### Requirement: Agent maintenance SHALL run on boot and every four hours with persistent catch-up
+The develop-host agent maintenance timer SHALL trigger the OpenCode model refresh at boot and every four hours afterward, and SHALL use `Persistent = true` so missed runs fire after resume or downtime.
 
-#### Scenario: Stale cache triggers refresh
-- **WHEN** the generated model config is missing or older than the current daily refresh window
-- **THEN** the launcher SHALL fetch the endpoint again and rewrite the generated config
+#### Scenario: Boot-triggered maintenance runs after startup
+- **WHEN** the generated timer is inspected
+- **THEN** it SHALL trigger the maintenance service on boot
 
-#### Scenario: Fresh cache skips network refresh
-- **WHEN** the generated model config was already refreshed during the current daily refresh window
-- **THEN** the launcher SHALL reuse the cached generated config without issuing another endpoint request
+#### Scenario: Periodic maintenance repeats every four hours
+- **WHEN** the generated timer is inspected
+- **THEN** it SHALL schedule the maintenance service every four hours
 
-### Requirement: OpenCode SHALL continue using the last good generated config when refresh fails
-The OpenCode launcher SHALL treat model refresh as a warning-only preflight step and SHALL continue with the last good generated config if refresh fails after a successful prior refresh.
+#### Scenario: Persistent timer catches up after WSL resume
+- **WHEN** the host misses one or more scheduled maintenance runs while suspended or offline
+- **THEN** the timer SHALL run the maintenance service after the host resumes because `Persistent` is enabled
+
+### Requirement: Agent maintenance SHALL continue using the last good generated config when refresh fails
+The develop-host agent maintenance service SHALL treat model refresh as a warning-only maintenance step and SHALL continue using the last good generated config if refresh fails after a successful prior refresh.
 
 #### Scenario: Refresh failure reuses previous generated config
 - **WHEN** endpoint fetch, response parsing, or generated config writing fails and a previous generated config exists
-- **THEN** the launcher SHALL emit a warning and continue launching OpenCode with the previously generated config
+- **THEN** the service SHALL emit a warning and leave the previously generated config in place
 
 #### Scenario: First refresh failure does not leave a partial config
 - **WHEN** endpoint fetch, response parsing, or generated config writing fails before any valid generated config exists
-- **THEN** the launcher SHALL not leave a partial generated config file behind
+- **THEN** the service SHALL not leave a partial generated config file behind

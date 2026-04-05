@@ -42,43 +42,38 @@ for secrets.
 
 - Develop hosts expose `codex`, `gemini`, `opencode`, `agent-browser`, and
   `openspec` through Nix-managed wrapper scripts.
-- `codex`, `gemini`, `opencode`, and `openspec` all execute through `npx -y`
-  so they resolve the latest upstream CLI at launch time instead of relying on
-  a pinned npm install in the Nix store.
+- `codex`, `gemini`, and `opencode` now delegate to installed user-local
+  CLIs under `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`, while
+  `openspec` still executes through its Nix-managed `npx` wrapper.
 - The `openspec` wrapper defaults `openspec init` to
   `--tools codex,gemini,opencode --profile core` unless you pass explicit
   `--tools` or `--profile` values.
-- Before `codex`, `gemini`, or `opencode` launches, the shared wrapper
-  attempts a best-effort global `skills` refresh and, when started anywhere
-  inside an OpenSpec repo, runs `openspec update` from the repo root so the
-  latest slash-command scaffolding stays active.
 - The wrapper also reapplies personal OpenSpec overrides after both
   `openspec init` and `openspec update`, but those overrides are append-only:
   the wrapper keeps the upstream generated workflow files and adds only three
   built-in Ghostship propose/apply/archive snippets on top.
 - The Ghostship propose override points change work at
   `.worktrees/<change-name>/`, not `.worktree/<change-name>/`.
-- Before `opencode` launches, the wrapper also refreshes a generated OpenCode
-  config under `XDG_STATE_HOME/opencode/programming-free-models.json` (or
-  `~/.local/state/opencode/programming-free-models.json`) once per UTC day
-  from OpenRouter's ranked programming free-model frontend endpoint and points
-  `OPENCODE_CONFIG` at that generated file. The generated model list comes
-  directly from the endpoint-derived programming free models and preserves the
-  endpoint names with `(free)` rewritten to `(ghostship-free)`.
-- Develop-host launcher configs now default to explicit YOLO or allow-all
-  execution: Codex sets `approval_policy = "never"` with
-  `sandbox_mode = "danger-full-access"`, Gemini injects `--yolo` from its
-  wrapper by default, and OpenCode's static Nix-managed config now only sets
-  `permission = "allow"` while the wrapper-managed generated config owns the
-  OpenRouter model list.
+- `ghostship-agent-maintenance.service` owns automatic agent upkeep. Its
+  timer runs on boot and every `4h`, with `Persistent=true` so missed runs
+  fire after WSL resumes, and it installs or upgrades the user-local agent
+  CLIs, refreshes shared global skills, refreshes managed Gemini extensions,
+  bootstraps `agent-browser` only when `~/.agent-browser` is missing, and
+  rewrites `~/.config/opencode/opencode.json` from OpenRouter's ranked
+  programming free-model frontend endpoint with `(free)` rewritten to
+  `(ghostship-free)`.
+- Develop-host launchers now keep only the approval defaults: Codex prepends
+  `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit
+  approval or sandbox flags, Gemini prepends `--yolo` unless you pass an
+  explicit approval mode, and OpenCode keeps `permission = "allow"` in config.
 - Develop hosts keep `ssh-agent` on the fixed socket
   `/run/user/1000/ssh-agent` with a `12h` key lifetime, and they cache
   `sudo` credentials globally for `12h` so fresh agent PTYs do not prompt on
   every new shell.
 - Those launcher defaults only take effect after the relevant develop-host
   NixOS rebuild or Home Manager switch applies the generated config files.
-- Gemini also refreshes any managed Gemini extensions on launch. Wrapper-side
-  update failures warn and continue instead of blocking the agent start.
+- OpenSpec scaffold refresh is manual again. Run `openspec update .` inside an
+  OpenSpec-enabled repo when you want to refresh slash-command assets.
 
 ## Shared Skills
 

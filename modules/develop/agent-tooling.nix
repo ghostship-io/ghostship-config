@@ -8,6 +8,11 @@ let
   openspecPackage = "@fission-ai/openspec@latest";
   defaultOpenspecTools = "codex,gemini,opencode";
   defaultOpenspecProfile = "core";
+  userHome = "/home/nixos";
+  agentToolsRoot = "${userHome}/.local/share/ghostship-agent-tools";
+  agentNpmPrefix = "${agentToolsRoot}/npm";
+  agentBinDir = "${agentNpmPrefix}/bin";
+  opencodeUserConfigPath = "${userHome}/.config/opencode/opencode.json";
 
   browserRuntimeLibs = [
     pkgs."alsa-lib"
@@ -34,7 +39,7 @@ let
     pkgs.libxcb
   ];
 
-  browserRuntimeLdLibraryPath = pkgs.lib.makeLibraryPath browserRuntimeLibs;
+  browserRuntimeLdLibraryPath = lib.makeLibraryPath browserRuntimeLibs;
 
   baseRuntimeInputs = [
     pkgs.coreutils
@@ -50,7 +55,7 @@ let
     pkgs.xdg-utils
   ];
 
-  baseRuntimeBinPath = pkgs.lib.makeBinPath baseRuntimeInputs;
+  baseRuntimeBinPath = lib.makeBinPath baseRuntimeInputs;
 
   agentBrowser = pkgs.writeShellScriptBin "agent-browser" ''
     set -euo pipefail
@@ -354,9 +359,27 @@ EOF
     openspecCli
   ];
 
-  runtimeBinPath = pkgs.lib.makeBinPath runtimeInputs;
+  runtimeBinPath = lib.makeBinPath runtimeInputs;
 
-  sharedPreflight = pkgs.writeText "agent-launcher-preflight.sh" ''
+  geminiExtensions = [
+    {
+      name = "gemini-cli-security";
+      repo = "https://github.com/gemini-cli-extensions/security";
+    }
+  ];
+
+  agentMaintenance = pkgs.writeShellScriptBin "ghostship-agent-maintenance" ''
+    set -euo pipefail
+
+    PATH=${runtimeBinPath}:$PATH
+    export NODE_NO_WARNINGS=1
+    export HOME=${userHome}
+    export XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}"
+    export XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}"
+    export NPM_CONFIG_PREFIX="${agentNpmPrefix}"
+    export npm_config_prefix="$NPM_CONFIG_PREFIX"
+    export PATH="${agentBinDir}:$PATH"
+
     log_info() {
       printf 'info: %s\n' "$1" >&2
     }
@@ -365,19 +388,23 @@ EOF
       printf 'warn: %s\n' "$1" >&2
     }
 
-    find_openspec_root() {
-      search_dir="$PWD"
+    install_agent_cli() {
+      package="$1"
+      label="$2"
 
-      while [ "$search_dir" != "/" ]; do
-        if [ -f "$search_dir/openspec/config.yaml" ]; then
-          printf '%s\n' "$search_dir"
-          return 0
+      log_info "installing or upgrading $label"
+
+      if ! install_output="$(${pkgs.nodejs}/bin/npm install -g --no-fund --no-audit "$package@latest" 2>&1)"; then
+        log_warn "$label install failed, continuing"
+        if [ -n "$install_output" ]; then
+          printf '%s\n' "$install_output" >&2
         fi
+        return 0
+      fi
 
-        search_dir="$(dirname "$search_dir")"
-      done
-
-      return 1
+      if [ -n "$install_output" ]; then
+        printf '%s\n' "$install_output" >&2
+      fi
     }
 
     refresh_global_skills() {
@@ -408,60 +435,82 @@ EOF
       fi
     }
 
-    refresh_openspec_if_present() {
-      if ! openspec_root="$(find_openspec_root)"; then
+    ensure_agent_browser_runtime() {
+      if [ -d "$HOME/.agent-browser" ]; then
         return 0
       fi
 
-      log_info "refreshing openspec instructions"
+      log_info "installing agent-browser runtime"
 
-      if ! openspec_output="$(
-        cd "$openspec_root" &&
-        ${openspecCli}/bin/openspec update . 2>&1
-      )"; then
-        log_warn "openspec refresh failed, continuing"
-        if [ -n "$openspec_output" ]; then
-          printf '%s\n' "$openspec_output" >&2
+      if ! browser_output="$(${agentBrowser}/bin/agent-browser install --with-deps 2>&1)"; then
+        log_warn "agent-browser runtime install failed, continuing"
+        if [ -n "$browser_output" ]; then
+          printf '%s\n' "$browser_output" >&2
         fi
         return 0
       fi
 
-      if [ -n "$openspec_output" ]; then
-        printf '%s\n' "$openspec_output" >&2
+      if [ -n "$browser_output" ]; then
+        printf '%s\n' "$browser_output" >&2
       fi
     }
-  '';
 
-  mkOpencodeProgrammingFreeModelsHook = ''
-    refresh_opencode_programming_free_models() {
-      opencode_models_url='https://openrouter.ai/api/frontend/models/find?categories=programming&fmt=cards&max_price=0&order=top-weekly'
-      opencode_state_dir="''${XDG_STATE_HOME:-$HOME/.local/state}/opencode"
-      opencode_generated_config="$opencode_state_dir/programming-free-models.json"
-      opencode_refresh_stamp="$opencode_state_dir/programming-free-models.date"
-      opencode_today="$(date -u +%F)"
+    refresh_gemini_extension() {
+      name="$1"
+      repo="$2"
+      dir="$HOME/.gemini/extensions/$name"
 
-      mkdir -p "$opencode_state_dir"
-
-      if [ -f "$opencode_generated_config" ] &&
-         [ -f "$opencode_refresh_stamp" ] &&
-         [ "$(${pkgs.coreutils}/bin/cat "$opencode_refresh_stamp")" = "$opencode_today" ]; then
-        export OPENCODE_CONFIG="$opencode_generated_config"
+      if [ ! -x "${agentBinDir}/gemini" ]; then
+        log_warn "gemini is not installed yet, skipping extension refresh"
         return 0
       fi
+
+      if [ -d "$dir" ] && [ ! -d "$dir/.git" ]; then
+        return 0
+      fi
+
+      if [ -d "$dir/.git" ]; then
+        log_info "refreshing $name"
+        if ! extension_output="$(${agentBinDir}/gemini extensions update "$name" 2>&1)"; then
+          log_warn "$name refresh failed, continuing"
+          if [ -n "$extension_output" ]; then
+            printf '%s\n' "$extension_output" >&2
+          fi
+          return 0
+        fi
+      else
+        log_info "installing $name"
+        if ! extension_output="$(${agentBinDir}/gemini extensions install "$repo" --auto-update --consent 2>&1)"; then
+          log_warn "$name install failed, continuing"
+          if [ -n "$extension_output" ]; then
+            printf '%s\n' "$extension_output" >&2
+          fi
+          return 0
+        fi
+      fi
+
+      if [ -n "$extension_output" ]; then
+        printf '%s\n' "$extension_output" >&2
+      fi
+    }
+
+    refresh_opencode_programming_free_models() {
+      opencode_models_url='https://openrouter.ai/api/frontend/models/find?categories=programming&fmt=cards&max_price=0&order=top-weekly'
+      opencode_state_dir="$XDG_STATE_HOME/opencode"
+      opencode_config_dir="$XDG_CONFIG_HOME/opencode"
+      opencode_generated_config="${opencodeUserConfigPath}"
+
+      mkdir -p "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib" "$opencode_state_dir" "$opencode_config_dir"
 
       log_info "refreshing opencode programming free models"
 
       response_file="$(mktemp "$opencode_state_dir/openrouter-models.XXXXXX.json")"
       config_file="$(mktemp "$opencode_state_dir/opencode-config.XXXXXX.json")"
-      stamp_file="$(mktemp "$opencode_state_dir/opencode-refresh.XXXXXX")"
 
       if ! ${pkgs.curl}/bin/curl --fail --silent --show-error --location \
         "$opencode_models_url" > "$response_file"; then
         log_warn "opencode model refresh fetch failed, continuing"
-        rm -f "$response_file" "$config_file" "$stamp_file"
-        if [ -f "$opencode_generated_config" ]; then
-          export OPENCODE_CONFIG="$opencode_generated_config"
-        fi
+        rm -f "$response_file" "$config_file"
         return 0
       fi
 
@@ -504,63 +553,57 @@ EOF
           }
       ' "$response_file" > "$config_file"; then
         log_warn "opencode model refresh parse failed, continuing"
-        rm -f "$response_file" "$config_file" "$stamp_file"
-        if [ -f "$opencode_generated_config" ]; then
-          export OPENCODE_CONFIG="$opencode_generated_config"
-        fi
+        rm -f "$response_file" "$config_file"
         return 0
       fi
 
-      printf '%s\n' "$opencode_today" > "$stamp_file"
       mv "$config_file" "$opencode_generated_config"
-      mv "$stamp_file" "$opencode_refresh_stamp"
       rm -f "$response_file"
-
-      export OPENCODE_CONFIG="$opencode_generated_config"
     }
 
+    mkdir -p "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
+
+    install_agent_cli "@openai/codex" "codex"
+    install_agent_cli "@google/gemini-cli" "gemini"
+    install_agent_cli "opencode-ai" "opencode"
+    refresh_global_skills
+    ensure_agent_browser_runtime
+    ${lib.concatMapStrings (extension: ''
+      refresh_gemini_extension "${extension.name}" "${extension.repo}"
+    '') geminiExtensions}
     refresh_opencode_programming_free_models
   '';
 
-  mkNpxAgentWrapper =
+  mkInstalledAgentWrapper =
     {
       name,
-      npmPackage,
+      binaryName,
       extraEnvironment ? "",
-      preLaunchHook ? "",
+      preExecHook ? "",
     }:
     pkgs.writeShellScriptBin name ''
       set -euo pipefail
 
-      PATH=${runtimeBinPath}:$PATH
-      export NODE_NO_WARNINGS=1
       ${extraEnvironment}
 
-      . ${sharedPreflight}
+      if [ ! -x "${agentBinDir}/${binaryName}" ]; then
+        printf 'error: %s is not installed yet; run `systemctl start ghostship-agent-maintenance.service` or wait for the boot timer\n' "${name}" >&2
+        exit 1
+      fi
 
-      refresh_global_skills
-      refresh_openspec_if_present
+      ${preExecHook}
 
-      ${preLaunchHook}
-
-      exec ${pkgs.nodejs}/bin/npx -y ${npmPackage} "$@"
+      exec "${agentBinDir}/${binaryName}" "$@"
     '';
-
-  geminiExtensions = [
-    {
-      name = "gemini-cli-security";
-      repo = "https://github.com/gemini-cli-extensions/security";
-    }
-  ];
 in
 {
-  inherit
-    agentBrowser
-    browserRuntimeLdLibraryPath
-    mkOpencodeProgrammingFreeModelsHook
-    mkNpxAgentWrapper
-    openspecCli
-    ;
-  inherit runtimeInputs geminiExtensions;
+  inherit agentBinDir;
+  inherit agentBrowser;
+  inherit agentMaintenance;
+  inherit browserRuntimeLdLibraryPath;
+  inherit geminiExtensions;
+  inherit mkInstalledAgentWrapper;
+  inherit openspecCli;
   inherit runtimeBinPath;
+  inherit runtimeInputs;
 }

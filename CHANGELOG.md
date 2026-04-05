@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Develop agent maintenance**: Replaced the launch-time `npx` preflight flow
+  for `codex`, `gemini`, and `opencode` with installed user-local agent CLIs
+  under `/home/nixos/.local/share/ghostship-agent-tools/npm`, added a
+  boot-triggered plus 4-hour persistent `ghostship-agent-maintenance` systemd
+  timer to upgrade those CLIs and refresh shared skills, Gemini extensions,
+  `agent-browser`, and OpenCode's free OpenRouter config, and simplified the
+  launchers down to approval-default injection plus direct exec of the
+  installed binaries.
 - **WSL Nix build fanout**: WSL hosts now cap `nix.settings.cores` at `4` so
   each daemon-dispatched build job cannot claim all reported CPU threads and
   recreate the same memory-pressure stalls inside an `8`-job queue.

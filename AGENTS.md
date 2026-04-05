@@ -35,15 +35,22 @@ changelog.
   files in the working tree. Stage or track new files before relying on flake
   evaluation.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
-  YOLO or allow-all; Gemini's default comes from wrapper-injected `--yolo`,
-  and changes to those defaults are only live after the relevant NixOS rebuild
-  or Home Manager switch.
-- The develop-host `opencode` wrapper owns the OpenRouter model list at
-  runtime. It refreshes `programming-free-models.json` under
-  `XDG_STATE_HOME/opencode` once per UTC day from OpenRouter's ranked
-  programming free-model frontend endpoint and rewrites generated free-model
-  display labels to `(ghostship-free)`; do not reintroduce static OpenRouter
-  model maps into the Nix-managed OpenCode config files.
+  YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
+  sandbox flags are already present, Gemini injects `--yolo`, and OpenCode
+  keeps `permission = "allow"` in config. Those defaults are only live after
+  the relevant NixOS rebuild or Home Manager switch.
+- Develop hosts install `codex`, `gemini`, and `opencode` into the user-local
+  npm prefix under `/home/nixos/.local/share/ghostship-agent-tools/npm`, and
+  `ghostship-agent-maintenance.service` plus its timer own installing and
+  upgrading those CLIs.
+- `ghostship-agent-maintenance.timer` runs on boot and every `4h` with
+  `Persistent=true` so missed runs fire after WSL resumes. It also refreshes
+  global skills, refreshes managed Gemini extensions, bootstraps
+  `~/.agent-browser` only when missing, and rewrites
+  `~/.config/opencode/opencode.json` from OpenRouter's ranked programming free
+  frontend endpoint while preserving the `(ghostship-free)` label rewrite; do
+  not reintroduce static OpenRouter model maps into the Nix-managed OpenCode
+  config files.
 - Develop hosts should keep `ssh-agent` on the fixed
   `/run/user/1000/ssh-agent` socket directly; do not parse the `ssh-agent`
   command line in a post-start hook to rediscover the socket.

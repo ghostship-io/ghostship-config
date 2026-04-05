@@ -8,10 +8,12 @@ in
 {
   environment.systemPackages = [
     agentTooling.agentBrowser
+    agentTooling.agentMaintenance
     agentTooling.openspecCli
   ];
 
   imports = [
+    ./agent-maintenance.nix
     ./secrets.nix
     ./gemini-wrapper.nix
     ./gemini.nix

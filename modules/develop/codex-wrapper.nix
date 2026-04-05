@@ -54,8 +54,6 @@ let
 
   codexConfig = builtins.concatStringsSep "\n" [
     "check_for_update_on_startup = false"
-    "approval_policy = \"never\""
-    "sandbox_mode = \"danger-full-access\""
     "project_doc_fallback_filenames = ${toTomlArray [ ".agents.md" ]}"
     "skills.config = ["
     (lib.concatStringsSep "\n" (
@@ -65,11 +63,36 @@ let
     notifyConfig
   ];
 
-  codex-cli = agentTooling.mkNpxAgentWrapper {
+  codex-cli = agentTooling.mkInstalledAgentWrapper {
     name = "codex";
-    npmPackage = "@openai/codex";
+    binaryName = "codex";
     extraEnvironment = ''
       export SSH_AUTH_SOCK="/run/user/1000/ssh-agent"
+    '';
+    preExecHook = ''
+      codex_default_yolo=1
+      codex_waiting_for_value=0
+      for arg in "$@"; do
+        if [ "$codex_waiting_for_value" -eq 1 ]; then
+          codex_default_yolo=0
+          codex_waiting_for_value=0
+          continue
+        fi
+
+        case "$arg" in
+          -a|--ask-for-approval|-s|--sandbox)
+            codex_default_yolo=0
+            codex_waiting_for_value=1
+            ;;
+          -a=*|--ask-for-approval=*|-s=*|--sandbox=*|--full-auto|--dangerously-bypass-approvals-and-sandbox)
+            codex_default_yolo=0
+            ;;
+        esac
+      done
+
+      if [ "$codex_default_yolo" -eq 1 ]; then
+        set -- --dangerously-bypass-approvals-and-sandbox "$@"
+      fi
     '';
   };
 in

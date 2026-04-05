@@ -10,13 +10,12 @@ let
     permission = "allow";
   };
 
-  opencode-cli = agentTooling.mkNpxAgentWrapper {
+  opencode-cli = agentTooling.mkInstalledAgentWrapper {
     name = "opencode";
-    npmPackage = "opencode-ai";
+    binaryName = "opencode";
     extraEnvironment = ''
       export SSH_AUTH_SOCK="/run/user/1000/ssh-agent"
     '';
-    preLaunchHook = agentTooling.mkOpencodeProgrammingFreeModelsHook;
   };
 in
 {
