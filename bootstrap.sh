@@ -35,12 +35,17 @@ if [ "$hostname_set" = false ] && command -v hostname >/dev/null 2>&1; then
 fi
 
 if [ "$hostname_set" = false ] && [ -w /proc/sys/kernel/hostname ]; then
-  printf '%s\n' "$hostname_value" > /proc/sys/kernel/hostname
-  hostname_set=true
+  if { printf '%s\n' "$hostname_value" > /proc/sys/kernel/hostname; } 2>/dev/null; then
+    hostname_set=true
+  fi
 fi
 
-if [ "$hostname_set" = false ] && [ -n "$hostnamectl_error" ]; then
-  printf 'Warning: could not update the live hostname: %s\n' "$hostnamectl_error" >&2
+if [ "$hostname_set" = false ]; then
+  if [ -n "$hostnamectl_error" ]; then
+    printf 'Warning: could not update the live hostname: %s\n' "$hostnamectl_error" >&2
+  else
+    printf 'Warning: could not update the live hostname; continuing with requested hostname in bootstrap JSON.\n' >&2
+  fi
 fi
 
 if [ -f /etc/nixos/hardware-configuration.nix ]; then
