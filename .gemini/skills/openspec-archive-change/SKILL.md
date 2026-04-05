@@ -113,17 +113,6 @@ All artifacts complete. All tasks complete.
 - If sync is requested, use openspec-sync-specs approach (agent-driven)
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting
 
-
-
-
-
-
-
-
-
-
-
-
 <!-- ghostship:.gemini-openspec-archive-change:begin -->
 ## Ghostship Override
 

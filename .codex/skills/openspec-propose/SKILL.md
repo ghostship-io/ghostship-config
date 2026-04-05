@@ -109,17 +109,6 @@ After completing all artifacts, summarize:
 - If a change with that name already exists, ask if user wants to continue it or create a new one
 - Verify each artifact file exists after writing before proceeding to next
 
-
-
-
-
-
-
-
-
-
-
-
 <!-- ghostship:.codex-openspec-propose:begin -->
 ## Ghostship Override
 
