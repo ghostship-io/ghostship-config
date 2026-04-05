@@ -38,6 +38,10 @@ changelog.
 - `nix eval .#...` reads the tracked flake source, not arbitrary untracked
   files in the working tree. Stage or track new files before relying on flake
   evaluation.
+- On switched NixOS and NixOS-WSL systems, `/etc/hostname` and `/etc/wsl.conf`
+  can be Nix-generated symlinks into the store. Do not rely on direct writes to
+  those paths for persistence; keep durable hostname changes in declarative
+  config and use runtime hostname changes only as best-effort bootstrap help.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode

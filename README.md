@@ -204,8 +204,12 @@ the host registration JSON and ensure `/etc/nix/secrets/age.key` exists.
 `bootstrap.sh` is tracked as executable so it can be run directly. It tries
 `hostnamectl` first, then falls back to `hostname` and `/etc/hostname`, which
 keeps WSL2 bootstrap runs working even when systemd hostname changes are
-unsupported there. Then register the host, add it to `flake.nix`, commit the
-new host files, and apply the configuration with `nixos-rebuild`.
+unsupported there. On switched NixOS and NixOS-WSL systems, `/etc/hostname`
+may be a generated read-only path, so the script treats that persistence step
+as best-effort and expects the durable hostname to come from the host's
+declarative config after registration and rebuild. Then register the host, add
+it to `flake.nix`, commit the new host files, and apply the configuration with
+`nixos-rebuild`.
 
 ## Notes
 

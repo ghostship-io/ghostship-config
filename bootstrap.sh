@@ -21,6 +21,8 @@ age_public_key="$(age-keygen -y /etc/nix/secrets/age.key)"
 
 hostname_set=false
 hostnamectl_error=""
+hostname_persisted=false
+hostname_persist_error=""
 
 if command -v hostnamectl >/dev/null 2>&1; then
   if hostnamectl_error="$(hostnamectl set-hostname "$hostname_value" 2>&1)"; then
@@ -43,7 +45,17 @@ if [ "$hostname_set" = false ] && [ -n "$hostnamectl_error" ]; then
   printf 'Warning: could not update the live hostname: %s\n' "$hostnamectl_error" >&2
 fi
 
-printf '%s\n' "$hostname_value" > /etc/hostname
+if [ -e /etc/hostname ] || [ -w /etc ]; then
+  if { printf '%s\n' "$hostname_value" > /etc/hostname; } 2>/dev/null; then
+    hostname_persisted=true
+  else
+    hostname_persist_error="could not write /etc/hostname"
+  fi
+fi
+
+if [ "$hostname_persisted" = false ] && [ -n "$hostname_persist_error" ]; then
+  printf 'Note: %s; keep hostname persistence in declarative config on NixOS/WSL.\n' "$hostname_persist_error" >&2
+fi
 
 if [ -f /etc/nixos/hardware-configuration.nix ]; then
   hardware_config="$(cat /etc/nixos/hardware-configuration.nix)"
