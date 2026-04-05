@@ -207,9 +207,9 @@ being launched through `sudo`. It tries `hostnamectl` first, then falls back to
 runs working even when systemd hostname changes are unsupported there. Durable
 hostname persistence should come from the host's declarative config after
 registration and rebuild. It emits the registration JSON on stdout and prints
-the matching `nixos-rebuild` command for that hostname on stderr. Then
-register the host, add it to `flake.nix`, commit the new host files, and apply
-the configuration with `nixos-rebuild`.
+the matching `nixos-rebuild` command plus a `nix-shell -p git` command on
+stderr. Then register the host, add it to `flake.nix`, commit the new host
+files, and apply the configuration with `nixos-rebuild`.
 
 ## Notes
 

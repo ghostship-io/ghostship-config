@@ -11,6 +11,7 @@ fi
 hostname_value="$1"
 json_path="${2:-}"
 apply_command="sudo nixos-rebuild switch --flake .#${hostname_value}"
+git_shell_command="nix-shell -p git"
 
 if [ "$(id -u)" -ne 0 ] || [ -z "${SUDO_USER:-}" ]; then
   echo "Error: run bootstrap with sudo so it can manage /etc/nix/secrets/age.key." >&2
@@ -76,3 +77,4 @@ else
 fi
 
 printf 'Apply command: %s\n' "$apply_command" >&2
+printf 'Git shell command: %s\n' "$git_shell_command" >&2
