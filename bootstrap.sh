@@ -19,8 +19,28 @@ fi
 
 age_public_key="$(age-keygen -y /etc/nix/secrets/age.key)"
 
+hostname_set=false
+hostnamectl_error=""
+
 if command -v hostnamectl >/dev/null 2>&1; then
-  hostnamectl set-hostname "$hostname_value" || true
+  if hostnamectl_error="$(hostnamectl set-hostname "$hostname_value" 2>&1)"; then
+    hostname_set=true
+  fi
+fi
+
+if [ "$hostname_set" = false ] && command -v hostname >/dev/null 2>&1; then
+  if hostname "$hostname_value"; then
+    hostname_set=true
+  fi
+fi
+
+if [ "$hostname_set" = false ] && [ -w /proc/sys/kernel/hostname ]; then
+  printf '%s\n' "$hostname_value" > /proc/sys/kernel/hostname
+  hostname_set=true
+fi
+
+if [ "$hostname_set" = false ] && [ -n "$hostnamectl_error" ]; then
+  printf 'Warning: could not update the live hostname: %s\n' "$hostnamectl_error" >&2
 fi
 
 printf '%s\n' "$hostname_value" > /etc/hostname
