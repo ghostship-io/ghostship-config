@@ -193,6 +193,7 @@ EOF
           ${pkgs.coreutils}/bin/cat > "$tmp" <<'EOF'
 ## Ghostship Override
 
+- If the user does not specify a change, assume `archive` applies to the change currently being worked on.
 - Before archiving, check whether the change has a matching worktree.
 - If it does, explicitly use `$using-git-worktrees` to work from that isolated checkout while reconciling and cleaning up the change.
 - If it does, commit all pending work in the worktree.
