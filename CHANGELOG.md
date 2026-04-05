@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Develop GitHub CLI baseline**: Added `gh` to the shared develop Home
+  Manager package set so every develop-profile host gets the GitHub CLI by
+  default.
 - **Bootstrap WSL hostname handling**: `bootstrap.sh` is now tracked as an
   executable script and falls back from `hostnamectl` to `hostname`, avoiding
   the unsupported WSL2 systemd-hostname failure while still changing the live

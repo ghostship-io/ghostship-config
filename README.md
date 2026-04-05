@@ -37,6 +37,8 @@ for secrets.
 - System packages are reserved for host/admin essentials, service/runtime
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.
+- Develop-role Home Manager packages include shared interactive CLI tools such
+  as `gh` so GitHub workflows are available on every develop host.
 
 ## Agent Launchers
 

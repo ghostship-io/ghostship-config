@@ -54,6 +54,7 @@ in
     p7zip
     ripgrep-all
     git-ignore
+    gh
     starship
     zoxide
     fd
