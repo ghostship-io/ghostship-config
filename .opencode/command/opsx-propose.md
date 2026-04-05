@@ -112,6 +112,7 @@ After completing all artifacts, summarize:
 
 
 
+
 <!-- ghostship:opencode-opsx-propose:begin -->
 ## Ghostship Override
 

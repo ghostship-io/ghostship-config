@@ -165,6 +165,7 @@ This skill supports the "actions on a change" model:
 
 
 
+
 <!-- ghostship:.codex-openspec-apply-change:begin -->
 ## Ghostship Override
 
