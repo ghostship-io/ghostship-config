@@ -114,6 +114,14 @@ All artifacts complete. All tasks complete.
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting
 
 
+
+
+
+
+
+
+
+
 <!-- ghostship:.opencode-openspec-archive-change:begin -->
 ## Ghostship Override
 

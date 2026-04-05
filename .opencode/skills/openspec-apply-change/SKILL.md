@@ -156,6 +156,14 @@ This skill supports the "actions on a change" model:
 - **Allows artifact updates**: If implementation reveals design issues, suggest updating artifacts - not phase-locked, work fluidly
 
 
+
+
+
+
+
+
+
+
 <!-- ghostship:.opencode-openspec-apply-change:begin -->
 ## Ghostship Override
 

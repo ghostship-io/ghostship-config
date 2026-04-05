@@ -110,6 +110,15 @@ After completing all artifacts, summarize:
 - Verify each artifact file exists after writing before proceeding to next
 
 
+
+
+
+
+
+
+
+
+
 <!-- ghostship:.gemini-openspec-propose:begin -->
 ## Ghostship Override
 

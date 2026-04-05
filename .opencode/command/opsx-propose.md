@@ -103,6 +103,14 @@ After completing all artifacts, summarize:
 - Verify each artifact file exists after writing before proceeding to next
 
 
+
+
+
+
+
+
+
+
 <!-- ghostship:opencode-opsx-propose:begin -->
 ## Ghostship Override
 
