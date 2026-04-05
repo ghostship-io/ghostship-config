@@ -51,6 +51,8 @@ changelog.
   frontend endpoint while preserving the `(ghostship-free)` label rewrite; do
   not reintroduce static OpenRouter model maps into the Nix-managed OpenCode
   config files.
+- For an immediate user-triggered refresh, run `ghostship-agent-maintenance`
+  directly instead of trying to start the system unit as an unprivileged user.
 - Develop hosts should keep `ssh-agent` on the fixed
   `/run/user/1000/ssh-agent` socket directly; do not parse the `ssh-agent`
   command line in a post-start hook to rediscover the socket.

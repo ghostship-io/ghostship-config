@@ -587,7 +587,7 @@ EOF
       ${extraEnvironment}
 
       if [ ! -x "${agentBinDir}/${binaryName}" ]; then
-        printf 'error: %s is not installed yet; run `systemctl start ghostship-agent-maintenance.service` or wait for the boot timer\n' "${name}" >&2
+        printf 'error: %s is not installed yet; run `ghostship-agent-maintenance` or wait for the boot timer\n' "${name}" >&2
         exit 1
       fi
 

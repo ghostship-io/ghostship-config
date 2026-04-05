@@ -62,6 +62,9 @@ for secrets.
   rewrites `~/.config/opencode/opencode.json` from OpenRouter's ranked
   programming free-model frontend endpoint with `(free)` rewritten to
   `(ghostship-free)`.
+- For immediate bootstrap as the logged-in user, run
+  `ghostship-agent-maintenance`. The system service is still what runs on boot
+  and every `4h`.
 - Develop-host launchers now keep only the approval defaults: Codex prepends
   `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit
   approval or sandbox flags, Gemini prepends `--yolo` unless you pass an
