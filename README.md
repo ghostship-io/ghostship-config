@@ -52,8 +52,11 @@ for secrets.
   `openspec init` and `openspec update`, but those overrides are append-only:
   the wrapper keeps the upstream generated workflow files and adds only three
   built-in Ghostship propose/apply/archive snippets on top.
-- The Ghostship propose override points change work at
-  `.worktrees/<change-name>/`, not `.worktree/<change-name>/`.
+- The Ghostship OpenSpec flow now keeps proposal/design/tasks work on `main`,
+  creates or reuses `.worktrees/<change-name>/` during `apply` after those
+  planning artifacts are committed on `main`, and uses `archive` to reconcile
+  any matching worktree back into `main`, commit the archive move there, and
+  remove the worktree.
 - `ghostship-agent-maintenance.service` owns automatic agent upkeep. Its
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent

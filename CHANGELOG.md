@@ -25,9 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Global `rg` availability**: Added `ripgrep` to the shared
   `environment.systemPackages` baseline so server-role hosts such as
   `chill-penguin` have `rg` available out of the box.
-- **OpenSpec worktree path**: Corrected the develop-host `openspec` wrapper's
-  Ghostship propose override to point at `.worktrees/<name>/` and updated the
-  checked-in OpenSpec propose assets to match.
+- **OpenSpec worktree handoff**: The develop-host `openspec` wrapper now keeps
+  proposal/design/tasks work on `main`, moves worktree creation or reuse to
+  `apply` with the `.worktrees/<name>/` path, and treats `archive` as the step
+  that reconciles any matching change worktree back into `main`, commits the
+  archive move, and removes the worktree.
 - **WSL Nix daemon concurrency**: WSL hosts now cap `nix.settings.max-jobs`
   at `8` instead of inheriting `auto`, which was resolving to `22` on
   `launch-octopus` and letting concurrent flake shells, agent sessions, and
@@ -35,8 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stalls.
 - **Personal OpenSpec workflow**: Develop hosts now reapply append-only
   Ghostship propose/apply/archive snippets after both `openspec init` and
-  `openspec update` so upstream workflow files stay intact while worktree-first
-  planning, root-cause-first debugging, and merge-before-archive guidance
+  `openspec update` so upstream workflow files stay intact while
+  main-first planning, root-cause-first debugging, and
+  worktree-reconcile-before-archive guidance
   survive refreshes without extra OpenSpec config files.
 - **RomM proxy base-path fix**: Muximux's same-origin `/romm/` proxy now
   injects a real document `<base href="/romm/">` for RomM before the app

@@ -174,15 +174,18 @@ let
           ${pkgs.coreutils}/bin/cat > "$tmp" <<'EOF'
 ## Ghostship Override
 
-- Before `openspec new change`, use `using-git-worktrees` if it is available.
-- Create or reuse `.worktrees/<name>/`.
-- Run the change creation and artifact generation flow from that worktree, not from `main`.
+- Create and refine the proposal, design, and tasks on `main`.
+- Do not create a worktree during `propose`; the worktree handoff belongs to `apply`.
 EOF
           ;;
         apply)
           ${pkgs.coreutils}/bin/cat > "$tmp" <<'EOF'
 ## Ghostship Override
 
+- Before implementation, commit the proposal, design, and tasks changes for the change on `main`.
+- Then use `using-git-worktrees` if it is available.
+- Create or reuse `.worktrees/<name>/` from that committed `main` state.
+- Start implementation from the change worktree itself, not from `main`.
 - If implementation gets stuck on a bug, failing test, or unexpected behavior, use `systematic-debugging` if it is available.
 - Do root-cause-first debugging before proposing or applying fixes.
 EOF
@@ -191,9 +194,10 @@ EOF
           ${pkgs.coreutils}/bin/cat > "$tmp" <<'EOF'
 ## Ghostship Override
 
-- Before archive, commit the change branch and fast-forward merge it back into `main`.
-- Run the archive flow from the main worktree after that merge.
-- After archive succeeds, delete the change worktree with `git worktree remove <worktree-path>`.
+- Run the archive flow on `main` and commit the resulting archive move there.
+- Before archiving, check whether the change has a matching worktree.
+- If it does, commit all pending work in the worktree, merge `main` into the worktree and resolve any issues there, merge the worktree back into `main`, and only then run the archive flow.
+- After the archive commit succeeds, delete the change worktree with `git worktree remove <worktree-path>`.
 EOF
           ;;
         *)

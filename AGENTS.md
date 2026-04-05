@@ -27,8 +27,12 @@ changelog.
 - The develop-host `openspec` wrapper reapplies append-only Ghostship
   propose/apply/archive snippets after both `openspec init` and
   `openspec update` without a separate OpenSpec config directory.
-- The Ghostship OpenSpec propose override should direct change work to
-  `.worktrees/<name>/`, not `.worktree/<name>/`.
+- The Ghostship OpenSpec flow should keep proposal, design, and task work on
+  `main`; `apply` should commit those planning artifacts on `main`, create or
+  reuse `.worktrees/<name>/`, and start implementation from that worktree.
+- The Ghostship OpenSpec archive flow should reconcile any matching change
+  worktree back into `main`, commit the archive move on `main`, and then
+  remove the worktree.
 - `.envrc` uses `use flake`, so the root `flake.nix` must expose either
   `devShells.<system>.default` or `packages.<system>.default`.
 - `nix eval .#...` reads the tracked flake source, not arbitrary untracked

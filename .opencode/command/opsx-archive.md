@@ -165,7 +165,8 @@ Target archive directory already exists.
 <!-- ghostship:opencode-opsx-archive:begin -->
 ## Ghostship Override
 
-- Before archive, commit the change branch and fast-forward merge it back into `main`.
-- Run the archive flow from the main worktree after that merge.
-- After archive succeeds, delete the change worktree with `git worktree remove <worktree-path>`.
+- Run the archive flow on `main` and commit the resulting archive move there.
+- Before archiving, check whether the change has a matching worktree.
+- If it does, commit all pending work in the worktree, merge `main` into the worktree and resolve any issues there, merge the worktree back into `main`, and only then run the archive flow.
+- After the archive commit succeeds, delete the change worktree with `git worktree remove <worktree-path>`.
 <!-- ghostship:opencode-opsx-archive:end -->

@@ -167,6 +167,10 @@ This skill supports the "actions on a change" model:
 <!-- ghostship:.codex-openspec-apply-change:begin -->
 ## Ghostship Override
 
+- Before implementation, commit the proposal, design, and tasks changes for the change on `main`.
+- Then use `using-git-worktrees` if it is available.
+- Create or reuse `.worktrees/<name>/` from that committed `main` state.
+- Start implementation from the change worktree itself, not from `main`.
 - If implementation gets stuck on a bug, failing test, or unexpected behavior, use `systematic-debugging` if it is available.
 - Do root-cause-first debugging before proposing or applying fixes.
 <!-- ghostship:.codex-openspec-apply-change:end -->

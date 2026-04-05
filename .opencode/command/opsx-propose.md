@@ -114,7 +114,6 @@ After completing all artifacts, summarize:
 <!-- ghostship:opencode-opsx-propose:begin -->
 ## Ghostship Override
 
-- Before `openspec new change`, use `using-git-worktrees` if it is available.
-- Create or reuse `.worktrees/<name>/`.
-- Run the change creation and artifact generation flow from that worktree, not from `main`.
+- Create and refine the proposal, design, and tasks on `main`.
+- Do not create a worktree during `propose`; the worktree handoff belongs to `apply`.
 <!-- ghostship:opencode-opsx-propose:end -->
