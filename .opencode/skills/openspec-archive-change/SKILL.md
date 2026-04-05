@@ -126,6 +126,7 @@ All artifacts complete. All tasks complete.
 ## Ghostship Override
 
 - Before archiving, check whether the change has a matching worktree.
+- If it does, explicitly use `$using-git-worktrees` to work from that isolated checkout while reconciling and cleaning up the change.
 - If it does, commit all pending work in the worktree.
 - Merge `main` into the worktree and resolve any issues there.
 - Merge the worktree back into `main`.

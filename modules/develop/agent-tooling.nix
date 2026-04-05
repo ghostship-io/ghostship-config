@@ -176,6 +176,7 @@ let
 
 - Create and refine the proposal, design, and tasks on `main`.
 - Do not create a worktree during `propose`; the worktree handoff belongs to `apply`.
+- When implementation begins, explicitly use `$using-git-worktrees` during `apply` to create or reuse the change worktree.
 EOF
           ;;
         apply)
@@ -195,6 +196,7 @@ EOF
 ## Ghostship Override
 
 - Before archiving, check whether the change has a matching worktree.
+- If it does, explicitly use `$using-git-worktrees` to work from that isolated checkout while reconciling and cleaning up the change.
 - If it does, commit all pending work in the worktree.
 - Merge `main` into the worktree and resolve any issues there.
 - Merge the worktree back into `main`.
