@@ -125,8 +125,10 @@ All artifacts complete. All tasks complete.
 <!-- ghostship:.codex-openspec-archive-change:begin -->
 ## Ghostship Override
 
-- Run the archive flow on `main` and commit the resulting archive move there.
 - Before archiving, check whether the change has a matching worktree.
-- If it does, commit all pending work in the worktree, merge `main` into the worktree and resolve any issues there, merge the worktree back into `main`, and only then run the archive flow.
+- If it does, commit all pending work in the worktree.
+- Merge `main` into the worktree and resolve any issues there.
+- Merge the worktree back into `main`.
+- Run the archive flow on `main` and commit the resulting archive move there.
 - After the archive commit succeeds, delete the change worktree with `git worktree remove <worktree-path>`.
 <!-- ghostship:.codex-openspec-archive-change:end -->
