@@ -122,6 +122,4 @@ After completing all artifacts, summarize:
 ## Ghostship Override
 
 - Create and refine the proposal, design, and tasks on `main`.
-- Do not create a worktree during `propose`; the worktree handoff belongs to `apply`.
-- When implementation begins, explicitly use `$using-git-worktrees` during `apply` to create or reuse the change worktree.
 <!-- ghostship:.codex-openspec-propose:end -->
