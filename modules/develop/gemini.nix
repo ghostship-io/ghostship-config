@@ -8,7 +8,6 @@
         maxAge = "30d";
         warningAcknowledged = true;
       };
-      defaultApprovalMode = "yolo";
       enablePromptCompletion = true;
     };
     experimental = {

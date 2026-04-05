@@ -35,8 +35,9 @@ changelog.
   files in the working tree. Stage or track new files before relying on flake
   evaluation.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
-  YOLO or allow-all; changes to those defaults are only live after the
-  relevant NixOS rebuild or Home Manager switch.
+  YOLO or allow-all; Gemini's default comes from wrapper-injected `--yolo`,
+  and changes to those defaults are only live after the relevant NixOS rebuild
+  or Home Manager switch.
 - The develop-host `opencode` wrapper owns the OpenRouter model list at
   runtime. It refreshes `programming-free-models.json` under
   `XDG_STATE_HOME/opencode` once per UTC day from OpenRouter's ranked

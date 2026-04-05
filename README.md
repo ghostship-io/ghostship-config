@@ -67,10 +67,10 @@ for secrets.
   endpoint names with `(free)` rewritten to `(ghostship-free)`.
 - Develop-host launcher configs now default to explicit YOLO or allow-all
   execution: Codex sets `approval_policy = "never"` with
-  `sandbox_mode = "danger-full-access"`, Gemini sets
-  `general.defaultApprovalMode = "yolo"`, and OpenCode's static Nix-managed
-  config now only sets `permission = "allow"` while the wrapper-managed
-  generated config owns the OpenRouter model list.
+  `sandbox_mode = "danger-full-access"`, Gemini injects `--yolo` from its
+  wrapper by default, and OpenCode's static Nix-managed config now only sets
+  `permission = "allow"` while the wrapper-managed generated config owns the
+  OpenRouter model list.
 - Develop hosts keep `ssh-agent` on the fixed socket
   `/run/user/1000/ssh-agent` with a `12h` key lifetime, and they cache
   `sudo` credentials globally for `12h` so fresh agent PTYs do not prompt on

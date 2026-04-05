@@ -12,9 +12,10 @@ The repo SHALL configure the active develop-host CLI launchers with explicit app
 - **WHEN** the generated `codex/config.toml` is inspected
 - **THEN** it SHALL set `approval_policy = "never"` and `sandbox_mode = "danger-full-access"`
 
-#### Scenario: Gemini config declares YOLO approval mode
-- **WHEN** the generated `gemini-cli/settings.json` is inspected
-- **THEN** it SHALL set `general.defaultApprovalMode` to `"yolo"`
+#### Scenario: Gemini launcher injects YOLO approval mode by default
+- **WHEN** the `gemini` launcher implementation is inspected
+- **THEN** it SHALL prepend `--yolo` when the caller did not pass an explicit
+  approval-mode flag
 
 #### Scenario: OpenCode system config declares allow-all permissions
 - **WHEN** the generated system `opencode/opencode.json` is inspected
@@ -24,12 +25,13 @@ The repo SHALL configure the active develop-host CLI launchers with explicit app
 - **WHEN** the generated Home Manager `.config/opencode/opencode.json` file is inspected
 - **THEN** it SHALL set `permission` to `"allow"`
 
-### Requirement: Launcher defaults remain configurable through native config surfaces
-The repo SHALL express the default execution behavior through each CLI's supported config format so explicit caller-supplied CLI flags can still override the defaults.
+### Requirement: Gemini launcher default remains overridable by explicit caller flags
+The repo SHALL apply Gemini's default YOLO behavior in the launcher script so the generated `settings.json` remains schema-valid while explicit caller-supplied approval flags still override the default.
 
-#### Scenario: Implementation avoids hidden wrapper argument injection
-- **WHEN** the develop launcher implementation is inspected
-- **THEN** the YOLO defaults SHALL be set in generated TOML or JSON config files rather than by prepending hidden CLI arguments in the wrapper script
+#### Scenario: Explicit Gemini approval flags override the default wrapper flag
+- **WHEN** the `gemini` launcher receives `--yolo`, `-y`, `--approval-mode=yolo`,
+  `--approval-mode default`, `--approval-mode auto_edit`, or `--approval-mode plan`
+- **THEN** it SHALL not prepend an additional `--yolo` argument
 
 ### Requirement: OpenCode SHALL load its OpenRouter model list from a wrapper-managed generated config
 The repo SHALL stop embedding static OpenRouter models in the Nix-managed OpenCode config files and SHALL load the OpenRouter model list for OpenCode from a wrapper-managed generated config selected at launch time.
