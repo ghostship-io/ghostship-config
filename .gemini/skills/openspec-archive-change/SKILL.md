@@ -122,6 +122,7 @@ All artifacts complete. All tasks complete.
 
 
 
+
 <!-- ghostship:.gemini-openspec-archive-change:begin -->
 ## Ghostship Override
 

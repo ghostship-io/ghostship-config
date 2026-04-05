@@ -157,6 +157,7 @@ This skill supports the "actions on a change" model:
 
 
 
+
 <!-- ghostship:opencode-opsx-apply:begin -->
 ## Ghostship Override
 
