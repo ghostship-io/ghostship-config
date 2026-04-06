@@ -8,7 +8,6 @@ from pathlib import Path
 
 APP_DIR = Path("/app")
 MAIN_PATH = APP_DIR / "backend" / "main.py"
-LEGACY_PROFILE_NAMES = ("Direct", "VPN")
 MANAGED_PROFILES = (
     "assistant",
     "operations",
@@ -92,18 +91,6 @@ def init_profiles():
     try:
         from backend import database as db
         db.init_db()
-
-        profiles = db.list_profiles()
-        profiles_by_name = {p["name"]: p for p in profiles}
-
-        for legacy_name in LEGACY_PROFILE_NAMES:
-            legacy_profile = profiles_by_name.get(legacy_name)
-            if legacy_profile is None:
-                continue
-
-            print(f"Removing legacy {legacy_name} profile...")
-            db.delete_profile(legacy_profile["id"])
-            print(f"Legacy {legacy_name} profile removed.")
 
         profiles_by_name = {p["name"]: p for p in db.list_profiles()}
 
