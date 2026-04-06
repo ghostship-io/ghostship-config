@@ -27,10 +27,12 @@ dedicated persistent profile for `changedetection`, and the
 `changedetection` service SHALL derive its Playwright CDP endpoint from that
 profile instead of from a shared generic browser profile.
 
-#### Scenario: Dedicated profile is present after bootstrap
+#### Scenario: Managed profile set is present after bootstrap
 - **WHEN** the CloakBrowser startup bootstrap runs against its persistent data
-- **THEN** a `Changedetection` profile exists in the manager profile store
-- **AND** the existing `Direct` and `VPN` profiles remain intact
+- **THEN** `assistant`, `operations`, `supervisor`, and `Changedetection`
+  profiles exist in the manager profile store
+- **AND** the legacy `Direct` and `VPN` profiles are not part of the managed
+  default profile set anymore
 
 #### Scenario: changedetection receives a profile-backed CDP URL
 - **WHEN** the `changedetection` runtime artifacts are generated
@@ -45,6 +47,13 @@ profile instead of from a shared generic browser profile.
 - **THEN** the dedicated `Changedetection` CloakBrowser profile is launched as
   part of the managed runtime flow
 - **AND** operators do not need to manually start that profile after activation
+
+#### Scenario: Dedicated profile is kept running while the manager is healthy
+- **WHEN** the CloakBrowser manager remains healthy after startup
+- **THEN** Ghostship periodically rechecks the dedicated `Changedetection`
+  profile state
+- **AND** Ghostship relaunches that profile if it is stopped while the manager
+  itself is still available
 
 ### Requirement: changedetection SHALL be visible in Homepage services
 

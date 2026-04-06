@@ -36,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Global `rg` availability**: Added `ripgrep` to the shared
   `environment.systemPackages` baseline so server-role hosts such as
   `chill-penguin` have `rg` available out of the box.
+- **CloakBrowser managed profile set**: Replaced the old default `Direct`
+  and `VPN` manager profiles with repo-managed `assistant`, `operations`,
+  `supervisor`, and `Changedetection` profiles, and added a host-managed
+  keepalive so the `Changedetection` profile is relaunched automatically when
+  the manager stays healthy but that profile stops.
 - **OpenSpec worktree handoff**: The develop-host `openspec` wrapper now keeps
   proposal/design/tasks work on `main`, moves worktree creation or reuse to
   `apply` with the `.worktrees/<name>/` path, and treats `archive` as the step

@@ -106,6 +106,13 @@ Key services include Plex, Homepage, Muximux, the `arr` stack,
 qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes,
 PyLoad, RSS-Bridge, and PriceBuddy.
 
+CloakBrowser now seeds one default browser profile per Hermes profile
+(`assistant`, `operations`, and `supervisor`) while keeping a dedicated
+`Changedetection` profile for browser-backed watch checks. Ghostship also
+periodically rechecks that `Changedetection` profile and relaunches it if the
+manager stays healthy but the profile stops, because changedetection.io is not
+profile-start-aware on its own.
+
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions
 against a live unpatched container before reintroducing any frontend patch.

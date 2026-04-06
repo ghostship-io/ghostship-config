@@ -235,6 +235,7 @@ changelog.
 - Muximux does not tolerate `user = "3000:3000"` in the current image; keep it
   on `0:3000`.
 - Bazarr's authoritative config is `/srv/apps/bazarr/config/config.yaml`.
+- CloakBrowser on `chill-penguin` should seed the managed default profile set as `assistant`, `operations`, `supervisor`, and `Changedetection`; do not reintroduce legacy `Direct` or `VPN` defaults. Keep the dedicated `Changedetection` profile automatically relaunched when the manager is healthy because changedetection.io is not profile-start-aware.
 
 ## Secrets and Bootstrap
 
