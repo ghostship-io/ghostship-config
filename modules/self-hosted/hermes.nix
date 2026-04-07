@@ -23,6 +23,7 @@ in
     };
     extraOptions = [
       "--network=ghostship_net"
+      "--privileged"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:7681/ || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
@@ -94,7 +95,7 @@ in
       exit 1
     fi
 
-    if [ ! -d "${hermes-nix}/store" ] || ! find "${hermes-nix}/store" -mindepth 1 -maxdepth 1 | read -r _; then
+    if [ ! -d "${hermes-nix}/store" ] || [ -z "$(${pkgs.findutils}/bin/find "${hermes-nix}/store" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
       echo "Seeding Hermes /nix from ghcr.io/ghostship-io/ghostship-hermes:latest"
       seed_container=""
 
