@@ -147,7 +147,7 @@ regressions.
 
 Hermes now follows the upstream whole-home image contract by mounting `/srv/apps/hermes/home` at `/home/hermes`, `/srv/apps/hermes/workspace` at `/workspace`, and a seeded host path `/srv/apps/hermes/nix` at `/nix`. The service still relies on the image's native entrypoint instead of a repo-side startup shim. Honcho is retired from
 the Ghostship stack, so Hermes no longer exports `HONCHO_*` integration
-settings and both Homepage and Muximux omit Honcho entirely. Hermes also mounts `/srv/apps/hermes/workspace` directly at `/workspace`, which is now the canonical in-container work-products path. Seed `/srv/apps/hermes/nix` from the image before the first mounted start so the image's bundled Nix store is not hidden behind an empty bind mount. Muximux keeps PriceBuddy in the dropdown
+settings and both Homepage and Muximux omit Honcho entirely. Hermes also mounts `/srv/apps/hermes/workspace` directly at `/workspace`, which is now the canonical in-container work-products path. Seed `/srv/apps/hermes/nix` from the image before the first mounted start, and refresh it whenever the mounted store no longer contains the image's current Hermes system closure, so the image's bundled Nix store is not hidden behind an empty or stale bind mount. Muximux keeps PriceBuddy in the dropdown
 immediately after Bazarr.
 
 ## Usage

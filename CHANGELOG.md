@@ -66,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/ws/socket.io/` root websocket path instead of returning a Muximux-side
   `404`.
 - **Hermes whole-home runtime**: Updated Hermes to follow the upstream whole-home image contract by mounting `/srv/apps/hermes/home` at `/home/hermes`, `/srv/apps/hermes/workspace` at `/workspace`, and a seeded host path `/srv/apps/hermes/nix` at `/nix` so the bundled Nix store survives container replacement without being hidden behind an empty mount.
+- **Hermes `/nix` reseed guard**: Hermes startup now compares the persisted `/srv/apps/hermes/nix` store with the current `ghostship-hermes:latest` system closure and refreshes the mount when that closure is missing, preventing stale `/nix` data from masking the image's bootable store after upstream image updates.
 - **Muximux service placement**: Removed Honcho from the generated Muximux tile
   list, moved PriceBuddy back into the Muximux dropdown directly after Bazarr,
   and keep the generated dashboard layout aligned with the retired Honcho

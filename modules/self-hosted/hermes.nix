@@ -95,24 +95,33 @@ in
       exit 1
     fi
 
-    if [ ! -d "${hermes-nix}/store" ] || [ -z "$(${pkgs.findutils}/bin/find "${hermes-nix}/store" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
-      echo "Seeding Hermes /nix from ghcr.io/ghostship-io/ghostship-hermes:latest"
-      seed_container=""
+    seed_container=""
+    seed_rootfs=""
 
-      cleanup() {
-        if [ -n "$seed_container" ]; then
-          ${pkgs.podman}/bin/podman rm -f "$seed_container" >/dev/null 2>&1 || true
-        fi
-      }
+    cleanup() {
+      if [ -n "$seed_rootfs" ]; then
+        ${pkgs.podman}/bin/podman unmount "$seed_container" >/dev/null 2>&1 || true
+      fi
+      if [ -n "$seed_container" ]; then
+        ${pkgs.podman}/bin/podman rm -f "$seed_container" >/dev/null 2>&1 || true
+      fi
+    }
 
-      trap cleanup EXIT
-      ${pkgs.podman}/bin/podman pull ghcr.io/ghostship-io/ghostship-hermes:latest >/dev/null
-      seed_container="$(${pkgs.podman}/bin/podman create ghcr.io/ghostship-io/ghostship-hermes:latest)"
-      find "${hermes-nix}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-      ${pkgs.podman}/bin/podman cp "$seed_container:/nix/." "${hermes-nix}/"
-      cleanup
-      trap - EXIT
+    trap cleanup EXIT
+    ${pkgs.podman}/bin/podman pull ghcr.io/ghostship-io/ghostship-hermes:latest >/dev/null
+    seed_container="$(${pkgs.podman}/bin/podman create ghcr.io/ghostship-io/ghostship-hermes:latest)"
+    seed_rootfs="$(${pkgs.podman}/bin/podman mount "$seed_container")"
+
+    seed_system="$(${pkgs.findutils}/bin/find "$seed_rootfs/nix/store" -maxdepth 1 -mindepth 1 -name '*-nixos-system-ghostship-hermes-*' -printf '%f\n' -quit)"
+    current_store_entry="$(${pkgs.findutils}/bin/find "${hermes-nix}/store" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)"
+
+    if [ -z "$current_store_entry" ] || [ -z "$seed_system" ] || [ ! -e "${hermes-nix}/store/$seed_system" ]; then
+      echo "Refreshing Hermes /nix from ghcr.io/ghostship-io/ghostship-hermes:latest"
+      ${pkgs.rsync}/bin/rsync -aH --numeric-ids "$seed_rootfs/nix/" "${hermes-nix}/"
     fi
+
+    cleanup
+    trap - EXIT
   '';
 
   systemd.services.podman-hermes.postStart = ''
