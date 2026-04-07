@@ -115,6 +115,26 @@ in
     fi
   '';
 
+  systemd.services.podman-hermes.postStart = ''
+    for _ in $(seq 1 30); do
+      if ${pkgs.podman}/bin/podman exec hermes /run/current-system/sw/bin/systemctl --system list-unit-files >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+
+    ${pkgs.podman}/bin/podman exec hermes sh -lc '
+      /run/current-system/sw/bin/systemctl --system start \
+        ghostship-storage.service \
+        ghostship-hermes-bootstrap.service \
+        ghostship-hermes-router.service \
+        ghostship-dashboard-controller.service \
+        ghostship-hermes-profile-assistant.service \
+        ghostship-hermes-profile-operations.service \
+        ghostship-hermes-profile-supervisor.service
+    '
+  '';
+
   systemd.tmpfiles.rules = [
     "d /srv/apps/hermes 0755 apps apps -"
     "d /srv/apps/hermes/home 0755 apps apps -"
