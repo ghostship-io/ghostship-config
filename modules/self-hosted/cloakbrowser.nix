@@ -214,6 +214,13 @@ if __name__ == "__main__":
           return False
 
 
+      def profile_status(profile_id: str) -> str:
+          result = podman_exec(PROFILE_STATUS_CODE, profile_id)
+          if result.returncode != 0:
+              return ""
+          return result.stdout.strip()
+
+
       def main() -> int:
           profile_id = wait_for_profile()
           if profile_id is None:
@@ -224,12 +231,14 @@ if __name__ == "__main__":
               print("CloakBrowser manager is not ready; skipping keepalive.")
               return 0
 
-          status = podman_exec(PROFILE_STATUS_CODE, profile_id)
-          if status.returncode == 0 and status.stdout.strip() == "running":
+          if profile_status(profile_id) == "running":
               return 0
 
           launch = podman_exec(PROFILE_LAUNCH_CODE, profile_id)
           if launch.returncode != 0:
+              time.sleep(2)
+              if profile_status(profile_id) == "running":
+                  return 0
               stderr = launch.stderr.strip() or launch.stdout.strip()
               if stderr:
                   print(stderr)
