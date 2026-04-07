@@ -24,7 +24,7 @@ in
     extraOptions = [
       "--network=ghostship_net"
       "--privileged"
-      "--health-cmd=sh -lc 'PATH=/home/hermes/.local/bin:/home/hermes/.nix-profile/bin:/nix/var/nix/profiles/default/bin:; curl -fsS http://127.0.0.1:7681/ >/dev/null' || exit 1"
+      "--health-cmd=sh -lc '. /etc/profile >/dev/null 2>&1; curl -fsS http://127.0.0.1:7681/ >/dev/null' || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
