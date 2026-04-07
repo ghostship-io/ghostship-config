@@ -24,7 +24,7 @@ in
     extraOptions = [
       "--network=ghostship_net"
       "--privileged"
-      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:7681/ || exit 1"
+      "--health-cmd=curl -fsS http://127.0.0.1:7681/ >/dev/null || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
