@@ -65,11 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `BASE_URL` literal. The proxy also now handles RomM's leaked
   `/ws/socket.io/` root websocket path instead of returning a Muximux-side
   `404`.
-- **Hermes workstation layout**: Updated Hermes to follow the new workstation
-  image contract by mounting `/srv/apps/hermes/home` at `/opt/data`,
-  `/srv/apps/hermes/workspace` at `/workspace`, and restoring a persistent
-  named Podman volume for `/nix` so workstation-managed Nix installs and build
-  outputs survive container replacement.
+- **Hermes whole-home runtime**: Updated Hermes to follow the upstream whole-home image contract by mounting `/srv/apps/hermes/home` at `/home/hermes`, `/srv/apps/hermes/workspace` at `/workspace`, and a seeded host path `/srv/apps/hermes/nix` at `/nix` so the bundled Nix store survives container replacement without being hidden behind an empty mount.
 - **Muximux service placement**: Removed Honcho from the generated Muximux tile
   list, moved PriceBuddy back into the Muximux dropdown directly after Bazarr,
   and keep the generated dashboard layout aligned with the retired Honcho
