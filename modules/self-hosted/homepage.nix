@@ -231,6 +231,11 @@ in
             "[Services].[PriceBuddy].description=literal:Price Tracker"
             "[Services].[PriceBuddy].server=literal:chill-penguin"
             "[Services].[PriceBuddy].container=literal:pricebuddy"
+
+            "[Services].[n8n].icon=literal:mdi-graph-outline-#ef6c00"
+            "[Services].[n8n].description=literal:Workflow Orchestrator"
+            "[Services].[n8n].server=literal:chill-penguin"
+            "[Services].[n8n].container=literal:n8n"
             
             # Management group
             "[Management].[Homepage].icon=literal:homepage.png"

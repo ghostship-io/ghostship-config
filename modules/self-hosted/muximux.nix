@@ -358,6 +358,13 @@ in
           Bazarr.color=literal:"#9c36b5"
           Bazarr.enabled=literal:"true"
           Bazarr.dd=literal:"true"
+          N8N.name=literal:"n8n"
+          N8N.url=literal:"https://n8n.ghostship.io"
+          N8N.scale=literal:1
+          N8N.icon=literal:"fa-random"
+          N8N.color=literal:"#ef6c00"
+          N8N.enabled=literal:"true"
+          N8N.dd=literal:"true"
           CloakBrowser.name=literal:"CloakBrowser"
           CloakBrowser.url=literal:"https://cloakbrowser.ghostship.io"
           CloakBrowser.scale=literal:1
@@ -488,7 +495,7 @@ in
 
             for (i = 1; i <= section_count; i++) {
               name = section_order[i]
-              if (name == "Honcho" || name == "PriceBuddy" || name == "Changedetection") {
+              if (name == "Honcho" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection") {
                 continue
               }
 
@@ -496,16 +503,26 @@ in
               if (name == "RSS-Bridge" && ("Changedetection" in section_data)) {
                 printf "%s", section_data["Changedetection"]
               }
-              if (name == "Bazarr" && ("PriceBuddy" in section_data)) {
-                printf "%s", section_data["PriceBuddy"]
+              if (name == "Bazarr") {
+                if ("N8N" in section_data) {
+                  printf "%s", section_data["N8N"]
+                }
+                if ("PriceBuddy" in section_data) {
+                  printf "%s", section_data["PriceBuddy"]
+                }
               }
             }
 
             if (!("RSS-Bridge" in section_data) && ("Changedetection" in section_data)) {
               printf "%s", section_data["Changedetection"]
             }
-            if (!("Bazarr" in section_data) && ("PriceBuddy" in section_data)) {
-              printf "%s", section_data["PriceBuddy"]
+            if (!("Bazarr" in section_data)) {
+              if ("N8N" in section_data) {
+                printf "%s", section_data["N8N"]
+              }
+              if ("PriceBuddy" in section_data) {
+                printf "%s", section_data["PriceBuddy"]
+              }
             }
           }
         ' "$CONFIG_FILE" > "$temp_file"

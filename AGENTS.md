@@ -236,6 +236,7 @@ changelog.
   on `0:3000`.
 - Bazarr's authoritative config is `/srv/apps/bazarr/config/config.yaml`.
 - CloakBrowser on `chill-penguin` should seed the managed default profile set as `assistant`, `operations`, `supervisor`, and `Changedetection`; do not reintroduce legacy `Direct` or `VPN` defaults. Keep the dedicated `Changedetection` profile automatically relaunched when the manager is healthy because changedetection.io is not profile-start-aware.
+- n8n on `chill-penguin` should stay as a single SQLite-backed service with state persisted under `/srv/apps/n8n`; keep browser access behind Cloudflare, keep Hermes on the internal `http://n8n:5678` path with its dedicated `N8N_API_KEY` carried in `hermes-secrets`, and expect a one-time manual Muximux reorder after deployment so the live tile sits directly under Bazarr.
 
 ## Secrets and Bootstrap
 

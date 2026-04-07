@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `supervisor`, and `Changedetection` profiles, and added a host-managed
   keepalive so the `Changedetection` profile is relaunched automatically when
   the manager stays healthy but that profile stops.
+- **n8n orchestration stack**: Added a single SQLite-backed `n8n` service for `chill-penguin`, exposed it to Hermes over `ghostship_net`, documented the dedicated `N8N_API_KEY` handoff through `hermes-secrets`, added Homepage visibility, and declared the Muximux dropdown placement immediately after Bazarr with a documented one-time live reorder step on the host.
 - **OpenSpec worktree handoff**: The develop-host `openspec` wrapper now keeps
   proposal/design/tasks work on `main`, moves worktree creation or reuse to
   `apply` with the `.worktrees/<name>/` path, and treats `archive` as the step

@@ -47,6 +47,8 @@ in
       FLARESOLVERR_URL = "http://flaresolverr:8191";
       PYLOAD_URL = "http://pyload:8000";
       CLOAKBROWSER_URL = "http://cloakbrowser:8080";
+      N8N_URL = "http://n8n:5678";
+      N8N_PUBLIC_URL = "https://n8n.ghostship.io";
       SYNOLOGY_VERIFY_SSL = "false";
     };
     environmentFiles = [
