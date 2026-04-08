@@ -23,6 +23,7 @@
     ./flaresolverr.nix
     ./recyclarr.nix
     ./bazarr.nix
+    ./chaptarr.nix
     ./plex-auto-languages.nix
     ./searxng.nix
     ./searxng-valkey.nix

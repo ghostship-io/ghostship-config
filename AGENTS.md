@@ -236,6 +236,7 @@ changelog.
 - Bazarr's authoritative config is `/srv/apps/bazarr/config/config.yaml`.
 - CloakBrowser on `chill-penguin` should seed the managed default profile set as `assistant`, `operations`, `supervisor`, and `Changedetection`; do not reintroduce legacy `Direct` or `VPN` defaults. Keep the dedicated `Changedetection` profile automatically relaunched when the manager is healthy because changedetection.io is not profile-start-aware.
 - n8n on `chill-penguin` should stay as a single SQLite-backed service with state persisted under `/srv/apps/n8n`; keep browser access behind Cloudflare, keep Hermes on the internal `http://n8n:5678` path with its dedicated `N8N_API_KEY` carried in `hermes-secrets`, and expect a one-time manual Muximux reorder after deployment so the live tile sits directly under Bazarr.
+- Chaptarr on `chill-penguin` should follow the standard arr service pattern: keep its config under `/srv/apps/chaptarr`, mount the shared downloads root at `/downloads`, mount `/mnt/share/Library/Books` plus `/mnt/share/Library/Audiobooks` as separate library roots, and source its API key from a service-local `chaptarr-secrets` bundle. Grimmory should keep both library roots mounted because it is the primary consumption UI, and the live Muximux dropdown order should place Chaptarr after Bazarr and before `n8n` even if the host still needs a one-time manual reorder after deployment.
 
 ## Secrets and Bootstrap
 

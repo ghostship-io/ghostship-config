@@ -32,6 +32,7 @@ in
     volumes = [
       "/srv/apps/grimmory/data:/app/data:rw"
       "/mnt/share/Library/Books:/app/books:rw"
+      "/mnt/share/Library/Audiobooks:/app/audiobooks:rw"
       "/mnt/share/Library/Books/.bookdrop:/app/bookdrop:rw"
     ];
   };

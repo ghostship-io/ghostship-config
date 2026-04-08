@@ -103,10 +103,12 @@ Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, the `arr` stack,
-qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, CloakBrowser, Hermes,
+qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr, CloakBrowser, Hermes,
 PyLoad, RSS-Bridge, PriceBuddy, and n8n.
 
 n8n runs as a single SQLite-backed workflow orchestrator in this repo and is intended to stay behind Cloudflare for browser access while Hermes talks to it over `ghostship_net`. Hermes should read its dedicated `N8N_API_KEY` from `hermes-secrets` rather than using a browser session. The live Muximux entry still needs a manual reorder on `chill-penguin` after deployment so it sits directly under Bazarr.
+
+Chaptarr now extends the arr stack to books and audiobooks. It should mount the shared downloads root at `/downloads`, manage `/mnt/share/Library/Books` and `/mnt/share/Library/Audiobooks` as separate library roots, and stay visible in Homepage plus the Muximux dropdown immediately after Bazarr and before n8n. Grimmory is still the primary reading and listening surface, so it also mounts both library roots. Public `chaptarr.ghostship.io` exposure remains part of the external Cloudflare/tunnel workflow rather than repo-managed ingress.
 
 CloakBrowser now seeds one default browser profile per Hermes profile
 (`assistant`, `operations`, and `supervisor`) while keeping a dedicated
