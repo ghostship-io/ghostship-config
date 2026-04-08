@@ -6,6 +6,21 @@ let
   gluetun-state-dir = "/srv/apps/gluetun";
   gluetun-selection-cache = "${gluetun-state-dir}/pia-wireguard-selection.json";
   pia-ca-cert = ./gluetun/ca.rsa.4096.crt;
+  # Seeded from live chill-penguin PIA WireGuard PF benchmarks on 2026-04-08.
+  gluetun-seed-regions = [
+    "ca_vancouver"
+    "santiago"
+    "panama"
+    "ec_ecuador-pf"
+    "uy_uruguay-pf"
+  ];
+  gluetun-seed-servers = {
+    ca_vancouver = [ "vancouver430" "vancouver439" ];
+    santiago = [ "chile402" "chile403" ];
+    panama = [ "panama411" "panama410" ];
+    ec_ecuador-pf = [ "ecuador402" "ecuador401" ];
+    uy_uruguay-pf = [ "uruguay402" "uruguay401" ];
+  };
   gluetun-selection-script = pkgs.writeShellApplication {
     name = "gluetun-pia-selector";
     runtimeInputs = with pkgs; [
@@ -63,19 +78,58 @@ let
         exit 1
       fi
 
-      jq -r '
-        .regions[]
-        | select(.port_forward == true)
-        | select((.servers.wg | length) > 0)
-        | [
-            .id,
-            .name,
-            .country,
-            .servers.meta[0].ip,
-            .servers.wg[0].ip,
-            .servers.wg[0].cn
-          ] | @tsv
-      ' "$serverlist" > "$tmp_dir/candidates.tsv"
+      seed_regions_json='${builtins.toJSON gluetun-seed-regions}'
+      seed_servers_json='${builtins.toJSON gluetun-seed-servers}'
+
+      build_candidates() {
+        local mode="$1"
+        jq -r \
+          --arg mode "$mode" \
+          --argjson seedRegions "$seed_regions_json" \
+          --argjson seedServers "$seed_servers_json" '
+            def wanted_region: ($seedRegions | index(.id));
+            def region_ok: (.port_forward == true) and ((.servers.meta | length) > 0) and ((.servers.wg | length) > 0);
+            def seed_region_ok: (($seedRegions | length) == 0) or (.id as $id | $seedRegions | index($id));
+            .regions[]
+            | select(region_ok)
+            | select(($mode == "global") or seed_region_ok)
+            | . as $region
+            | (($region.servers.meta // [])[] | { cn: .cn, meta_ip: .ip }) as $meta
+            | (($region.servers.wg // [])[] | select(.cn == $meta.cn) | { wg_ip: .ip, wg_host: .cn })
+            | select(
+                ($mode != "seeded-top")
+                or (($seedServers[$region.id] // []) | index(.wg_host))
+              )
+            | [
+                $region.id,
+                $region.name,
+                $region.country,
+                $meta.meta_ip,
+                .wg_ip,
+                .wg_host
+              ]
+            | @tsv
+          ' "$serverlist"
+      }
+
+      build_candidates seeded-top > "$tmp_dir/candidates.tsv"
+      if [ ! -s "$tmp_dir/candidates.tsv" ]; then
+        build_candidates seeded-regions > "$tmp_dir/candidates.tsv"
+      fi
+      if [ ! -s "$tmp_dir/candidates.tsv" ]; then
+        build_candidates global > "$tmp_dir/candidates.tsv"
+      fi
+
+      region_bias() {
+        case "$1" in
+          ca_vancouver) echo "0.000000" ;;
+          santiago) echo "0.050000" ;;
+          panama) echo "0.100000" ;;
+          ec_ecuador-pf) echo "0.150000" ;;
+          uy_uruguay-pf) echo "0.200000" ;;
+          *) echo "0.250000" ;;
+        esac
+      }
 
       : > "$tmp_dir/latency.tsv"
       while IFS=$'\t' read -r region_id region_name country meta_ip wg_ip wg_host; do
@@ -95,11 +149,11 @@ let
       done < "$tmp_dir/candidates.tsv"
 
       if [ ! -s "$tmp_dir/latency.tsv" ]; then
-        echo "No PF-capable PIA WireGuard regions responded during latency probing" >&2
+        echo "No PF-capable PIA WireGuard endpoints responded during latency probing" >&2
         exit 1
       fi
 
-      sort -n "$tmp_dir/latency.tsv" | head -n 5 > "$tmp_dir/top.tsv"
+      sort -n "$tmp_dir/latency.tsv" > "$tmp_dir/top.tsv"
 
       : > "$tmp_dir/bench.jsonl"
       while IFS=$'\t' read -r connect_time region_id region_name country meta_ip wg_ip wg_host; do
@@ -107,7 +161,7 @@ let
         public_key="$(printf '%s' "$private_key" | ${pkgs.wireguard-tools}/bin/wg pubkey)"
 
         addkey_metrics="$(
-          curl -4 -sS -o "$tmp_dir/addkey-$region_id.json" \
+          curl -4 -sS -o "$tmp_dir/addkey-$wg_host.json" \
             --connect-to "$wg_host::$wg_ip:" \
             --cacert "$ca_cert" \
             --get \
@@ -118,15 +172,15 @@ let
             "https://$wg_host:1337/addKey" 2>/dev/null || true
         )"
 
-        status="$(jq -r '.status // empty' "$tmp_dir/addkey-$region_id.json" 2>/dev/null || true)"
+        status="$(jq -r '.status // empty' "$tmp_dir/addkey-$wg_host.json" 2>/dev/null || true)"
         if [ "$status" != "OK" ]; then
           continue
         fi
 
-
         addkey_total="$(printf '%s' "$addkey_metrics" | awk -F'\t' '{print $3}')"
         addkey_size="$(printf '%s' "$addkey_metrics" | awk -F'\t' '{print $4}')"
-        score="$(awk "BEGIN { printf \"%.6f\", ($connect_time * 0.7) + ($addkey_total * 0.3) }")"
+        bias="$(region_bias "$region_id")"
+        score="$(awk "BEGIN { printf \"%.6f\", $bias + ($connect_time * 0.5) + ($addkey_total * 0.5) }")"
 
         jq -n \
           --arg region_id "$region_id" \
@@ -138,6 +192,7 @@ let
           --argjson connect_time "$connect_time" \
           --argjson addkey_total "$addkey_total" \
           --argjson addkey_size "''${addkey_size:-0}" \
+          --argjson region_bias "$bias" \
           --argjson score "$score" \
           '{
             region_id: $region_id,
@@ -149,6 +204,7 @@ let
             connect_time: $connect_time,
             addkey_total: $addkey_total,
             addkey_size: $addkey_size,
+            region_bias: $region_bias,
             score: $score
           }' >> "$tmp_dir/bench.jsonl"
       done < "$tmp_dir/top.tsv"
