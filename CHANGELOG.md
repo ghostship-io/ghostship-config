@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Hermes shared skill seeds**: Added a repo-managed Hermes shared
+  `skill-creator` seed under
+  `modules/self-hosted/hermes-seeds/shared/skills/skill-creator/`, imported the
+  upstream `vercel-labs/agent-browser` `v0.9.3` package as the baseline, and
+  adapted the Hermes copy with minimal `SKILL.md` changes plus Hermes-aware
+  init/validation scripts. `podman-hermes` now seeds that shared skill into
+  `/srv/apps/hermes/home/seeds/shared/skills/skill-creator/` only when the
+  runtime-owned directory is missing.
 - **Gluetun PIA WireGuard selector**: Migrated `chill-penguin` Gluetun from native PIA OpenVPN to Gluetun's custom-provider WireGuard path, added a daily PF-capable PIA server selector that caches the preferred winner under `/srv/apps/gluetun/pia-wireguard-selection.json`, regenerated the runtime env at Gluetun startup, kept PIA VPN-side port forwarding on the persisted `/srv/apps/gluetun` state mount, and updated the monitor to use Gluetun's generic `/v1/portforward` control route while still reconciling qBittorrent/VueTorrent after startup and reconnects.
 - **Hermes profile SOUL seeds**: Added tracked Hermes persona source files for
   the `assistant`, `operations`, and `supervisor` gateways under
