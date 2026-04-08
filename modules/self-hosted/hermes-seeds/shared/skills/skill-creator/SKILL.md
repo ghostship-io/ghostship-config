@@ -1,6 +1,6 @@
 ---
 name: skill-creator
-description: Guide for creating effective Hermes skills. Use when Hermes needs to create a new skill or update an existing skill with reusable workflows, bundled scripts, references, or templates.
+description: Create or update workflow skills. Use when Hermes is creating a new workflow skill, updating an existing skill, or adding or maintaining helper scripts, references, or templates that support a workflow.
 version: 0.9.3-hermes.1
 license: Complete terms in LICENSE.txt
 metadata:
