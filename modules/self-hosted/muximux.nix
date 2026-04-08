@@ -273,6 +273,13 @@ in
           Homepage.color=literal:"#109f61"
           Homepage.enabled=literal:"true"
           Homepage.default=literal:"true"
+          Synology.name=literal:"Synology"
+          Synology.url=literal:"https://synology.ghostship.io"
+          Synology.scale=literal:1
+          Synology.icon=literal:"muximux-database"
+          Synology.color=literal:"#3799ef"
+          Synology.enabled=literal:"true"
+          Synology.dd=literal:"true"
           Plex.name=literal:"Plex"
           Plex.url=literal:"https://plex.ghostship.io"
           Plex.scale=literal:1
@@ -337,13 +344,6 @@ in
           RomM.color=literal:"#553f99"
           RomM.enabled=literal:"true"
           RomM.dd=literal:"false"
-          Synology.name=literal:"Synology"
-          Synology.url=literal:"https://synology.ghostship.io"
-          Synology.scale=literal:1
-          Synology.icon=literal:"muximux-database"
-          Synology.color=literal:"#3799ef"
-          Synology.enabled=literal:"true"
-          Synology.dd=literal:"true"
           Tautulli.name=literal:"Tautulli"
           Tautulli.url=literal:"https://tautulli.ghostship.io"
           Tautulli.scale=literal:1
