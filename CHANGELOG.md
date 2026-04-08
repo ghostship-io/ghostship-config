@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **agent-browser bootstrap**: Stopped passing `--with-deps` during develop-host `agent-browser` runtime bootstrap; the Nix wrapper already supplies the needed shared libraries, so maintenance now treats those system dependencies as already packaged instead of attempting unsupported distro package-manager bootstrapping.
 - **Codex skill-creator override**: Renamed the shared vendored
   `skills-creator` entry back to `skill-creator`, refreshed the repo-managed
   copy from `vercel-labs/agent-browser` `v0.9.3`, and now reassert the Codex

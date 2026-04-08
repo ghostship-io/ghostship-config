@@ -462,9 +462,11 @@ EOF
         return 0
       fi
 
-      log_info "installing agent-browser runtime"
+      log_info "installing agent-browser runtime (system deps already packaged)"
 
-      if ! browser_output="$(${agentBrowser}/bin/agent-browser install --with-deps 2>&1)"; then
+      # Nix supplies the shared libraries through the wrapper, so maintenance
+      # only needs the browser runtime download on these hosts.
+      if ! browser_output="$(${agentBrowser}/bin/agent-browser install 2>&1)"; then
         log_warn "agent-browser runtime install failed, continuing"
         if [ -n "$browser_output" ]; then
           printf '%s\n' "$browser_output" >&2

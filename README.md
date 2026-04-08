@@ -63,8 +63,7 @@ for secrets.
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent
   CLIs, refreshes shared global skills, refreshes managed Gemini extensions,
-  bootstraps `agent-browser` only when `~/.agent-browser` is missing, and
-  rewrites `~/.config/opencode/opencode.json` from OpenRouter's ranked
+  bootstraps `agent-browser` only when `~/.agent-browser` is missing. On Nix develop hosts that bootstrap intentionally treats system dependencies as already packaged and uses `agent-browser install` without `--with-deps` because the wrapper already supplies the required shared libraries. It also rewrites `~/.config/opencode/opencode.json` from OpenRouter's ranked
   programming free-model frontend endpoint with `(free)` rewritten to
   `(ghostship-free)`.
 - For immediate bootstrap as the logged-in user, run
