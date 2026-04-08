@@ -79,45 +79,78 @@ let
       fi
 
       seed_regions_json='${builtins.toJSON gluetun-seed-regions}'
-      seed_servers_json='${builtins.toJSON gluetun-seed-servers}'
 
-      build_candidates() {
-        local mode="$1"
+      : > "$tmp_dir/candidates.tsv"
+      while IFS=$'\t' read -r region_id seed_host; do
         jq -r \
-          --arg mode "$mode" \
-          --argjson seedRegions "$seed_regions_json" \
-          --argjson seedServers "$seed_servers_json" '
-            def wanted_region: ($seedRegions | index(.id));
-            def region_ok: (.port_forward == true) and ((.servers.meta | length) > 0) and ((.servers.wg | length) > 0);
-            def seed_region_ok: (($seedRegions | length) == 0) or (.id as $id | $seedRegions | index($id));
+          --arg regionId "$region_id" \
+          --arg seedHost "$seed_host" '
             .regions[]
-            | select(region_ok)
-            | select(($mode == "global") or seed_region_ok)
+            | select(.id == $regionId)
             | . as $region
-            | (($region.servers.meta // [])[] | { cn: .cn, meta_ip: .ip }) as $meta
-            | (($region.servers.wg // [])[] | select(.cn == $meta.cn) | { wg_ip: .ip, wg_host: .cn })
-            | select(
-                ($mode != "seeded-top")
-                or (($seedServers[$region.id] // []) | index(.wg_host))
-              )
+            | (($region.servers.meta // [])[] | select(.cn == $seedHost) | { meta_ip: .ip }) as $meta
+            | (($region.servers.wg // [])[] | select(.cn == $seedHost))
             | [
                 $region.id,
                 $region.name,
                 $region.country,
                 $meta.meta_ip,
-                .wg_ip,
-                .wg_host
+                .ip,
+                .cn
               ]
             | @tsv
-          ' "$serverlist"
-      }
+          ' "$serverlist" >> "$tmp_dir/candidates.tsv"
+      done <<'EOF'
+ca_vancouver	vancouver430
+ca_vancouver	vancouver439
+santiago	chile402
+santiago	chile403
+panama	panama411
+panama	panama410
+ec_ecuador-pf	ecuador402
+ec_ecuador-pf	ecuador401
+uy_uruguay-pf	uruguay402
+uy_uruguay-pf	uruguay401
+EOF
 
-      build_candidates seeded-top > "$tmp_dir/candidates.tsv"
       if [ ! -s "$tmp_dir/candidates.tsv" ]; then
-        build_candidates seeded-regions > "$tmp_dir/candidates.tsv"
+        jq -r \
+          --argjson seedRegions "$seed_regions_json" '
+            .regions[]
+            | select(.port_forward == true)
+            | select((.id as $id | $seedRegions | index($id)) != null)
+            | . as $region
+            | (($region.servers.meta // [])[] | { cn: .cn, meta_ip: .ip }) as $meta
+            | (($region.servers.wg // [])[] | select(.cn == $meta.cn))
+            | [
+                $region.id,
+                $region.name,
+                $region.country,
+                $meta.meta_ip,
+                .ip,
+                .cn
+              ]
+            | @tsv
+          ' "$serverlist" > "$tmp_dir/candidates.tsv"
       fi
+
       if [ ! -s "$tmp_dir/candidates.tsv" ]; then
-        build_candidates global > "$tmp_dir/candidates.tsv"
+        jq -r '
+            .regions[]
+            | select(.port_forward == true)
+            | . as $region
+            | (($region.servers.meta // [])[] | { cn: .cn, meta_ip: .ip }) as $meta
+            | (($region.servers.wg // [])[] | select(.cn == $meta.cn))
+            | [
+                $region.id,
+                $region.name,
+                $region.country,
+                $meta.meta_ip,
+                .ip,
+                .cn
+              ]
+            | @tsv
+          ' "$serverlist" > "$tmp_dir/candidates.tsv"
       fi
 
       region_bias() {
