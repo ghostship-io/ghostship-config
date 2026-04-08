@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Hermes profile SOUL seeds**: Added tracked Hermes persona source files for
+  the `assistant`, `operations`, and `supervisor` gateways under
+  `modules/self-hosted/hermes-seeds/`, and `podman-hermes` now seeds each
+  profile `SOUL.md` into `/srv/apps/hermes/home/seeds/profiles/<profile>/`
+  only when that file is missing so existing runtime variants are preserved.
 - **Chaptarr book stack**: Added a repo-managed Chaptarr service to the `chill-penguin` arr stack with persisted config, shared `/downloads` access for both torrent and usenet flows, Homepage visibility, and declarative Muximux placement after Bazarr and before `n8n`. Grimmory now mounts both `/mnt/share/Library/Books` and `/mnt/share/Library/Audiobooks` so it remains the first-class consumption surface for the shared library roots, while the public `chaptarr.ghostship.io` route stays part of the external Cloudflare/tunnel workflow.
 - **Develop GitHub CLI baseline**: Added `gh` to the shared develop Home
   Manager package set so every develop-profile host gets the GitHub CLI by
