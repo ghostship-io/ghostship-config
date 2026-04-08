@@ -14,7 +14,7 @@
 ## 3. Verification and rollout readiness
 
 - [x] 3.1 Run `nix-instantiate --parse modules/self-hosted/chaptarr.nix` and any touched module files to catch syntax errors before a host build.
-- [ ] 3.2 Run `nixos-rebuild build --flake .#chill-penguin -L` to verify the host configuration evaluates and builds with the new Chaptarr and Grimmory mount changes.
+- [x] 3.2 Run `nixos-rebuild build --flake .#chill-penguin -L` to verify the host configuration evaluates and builds with the new Chaptarr and Grimmory mount changes.
 - [x] 3.3 Verify the generated dashboard and service config outputs reflect the intended Chaptarr placement, shared library mounts, and secret references.
 - [x] 3.4 Document any required external Cloudflare/tunnel route setup for `chaptarr.ghostship.io` and any manual post-deploy Muximux ordering cleanup.
 
