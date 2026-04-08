@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Develop Agent Deck rollback**: Pinned the repo-managed `agent-deck`
+  package back to upstream `v1.3.4`.
+
 - fix(self-hosted): pin Gluetun to the live-benchmarked best PIA region, dynamically enumerate that region's current WireGuard servers at selector time, and only fall back to the global PF pool if the primary region disappears
 
 - fix(self-hosted): use Gluetun's native container healthcheck, make Gluetun namespace dependents follow service restarts with `PartOf`/`Requires`, and switch VueTorrent to a local WebUI health probe instead of external `google.com`
