@@ -123,27 +123,10 @@ let
           continue
         fi
 
-        getsig_metrics="$(
-          curl -4 -sS -o "$tmp_dir/getsig-$region_id.json" \
-            --connect-to "$wg_host::$wg_ip:" \
-            --cacert "$ca_cert" \
-            --get \
-            --data-urlencode "token=$token" \
-            --write-out '%{time_connect}\t%{time_starttransfer}\t%{time_total}\t%{size_download}' \
-            --max-time 6 \
-            "https://$wg_host:19999/getSignature" 2>/dev/null || true
-        )"
-
-        pf_status="$(jq -r '.status // empty' "$tmp_dir/getsig-$region_id.json" 2>/dev/null || true)"
-        if [ "$pf_status" != "OK" ]; then
-          continue
-        fi
 
         addkey_total="$(printf '%s' "$addkey_metrics" | awk -F'\t' '{print $3}')"
-        getsig_total="$(printf '%s' "$getsig_metrics" | awk -F'\t' '{print $3}')"
         addkey_size="$(printf '%s' "$addkey_metrics" | awk -F'\t' '{print $4}')"
-        getsig_size="$(printf '%s' "$getsig_metrics" | awk -F'\t' '{print $4}')"
-        score="$(awk "BEGIN { printf \"%.6f\", ($connect_time * 0.5) + ($addkey_total * 0.3) + ($getsig_total * 0.2) }")"
+        score="$(awk "BEGIN { printf \"%.6f\", ($connect_time * 0.7) + ($addkey_total * 0.3) }")"
 
         jq -n \
           --arg region_id "$region_id" \
@@ -154,9 +137,7 @@ let
           --arg wg_host "$wg_host" \
           --argjson connect_time "$connect_time" \
           --argjson addkey_total "$addkey_total" \
-          --argjson getsig_total "$getsig_total" \
           --argjson addkey_size "''${addkey_size:-0}" \
-          --argjson getsig_size "''${getsig_size:-0}" \
           --argjson score "$score" \
           '{
             region_id: $region_id,
@@ -167,15 +148,13 @@ let
             wg_host: $wg_host,
             connect_time: $connect_time,
             addkey_total: $addkey_total,
-            getsig_total: $getsig_total,
             addkey_size: $addkey_size,
-            getsig_size: $getsig_size,
             score: $score
           }' >> "$tmp_dir/bench.jsonl"
       done < "$tmp_dir/top.tsv"
 
       if [ ! -s "$tmp_dir/bench.jsonl" ]; then
-        echo "No PIA WireGuard PF candidates survived the authenticated probe" >&2
+        echo "No PIA WireGuard PF candidates survived the addKey probe" >&2
         exit 1
       fi
 
