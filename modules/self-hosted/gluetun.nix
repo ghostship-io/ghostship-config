@@ -48,7 +48,7 @@ let
       trap 'rm -rf "$tmp_dir"' EXIT
 
       serverlist="$tmp_dir/serverlist.json"
-      curl -fsSL https://serverlist.piaservers.net/vpninfo/servers/v6 | head -n 1 > "$serverlist"
+      curl -fsSL https://serverlist.piaservers.net/vpninfo/servers/v6 | sed -n '1p' > "$serverlist"
 
       token="$(
         curl -fsSL --request POST \
