@@ -23,6 +23,10 @@ Use this skill when Hermes needs to create or update a skill package, tighten a
 `assets/`. Keep the upstream guidance below as the default authoring reference,
 and prefer small, reusable changes over large prompt-heavy rewrites.
 
+Keep skills current as workflows evolve. When a workflow changes, update the
+skill. When a small helper script would simplify or stabilize the workflow,
+create or maintain that script as part of the skill.
+
 ## About Skills
 
 Skills are modular, self-contained packages that extend Claude's capabilities by providing
@@ -225,7 +229,7 @@ Skill creation involves these steps:
 5. Package the skill (run package_skill.py)
 6. Iterate based on real usage
 
-Follow these steps in order, skipping only if there is a clear reason why they are not applicable.
+Follow these steps in order, skipping only if there is a clear reason why they are not applicable. Revisit the skill whenever the workflow changes, and add or maintain small helper scripts whenever they simplify the workflow.
 
 ### Step 1: Understanding the Skill with Concrete Examples
 
@@ -377,7 +381,7 @@ If validation fails, the script will report the errors and exit without creating
 
 ### Step 6: Iterate
 
-After testing the skill, users may request improvements. Often this happens right after using the skill, with fresh context of how the skill performed.
+After testing the skill, users may request improvements. Often this happens right after using the skill, with fresh context of how the skill performed. Skills should also be updated as workflows evolve, and helper scripts should be created or maintained whenever they simplify the workflow.
 
 **Iteration workflow:**
 

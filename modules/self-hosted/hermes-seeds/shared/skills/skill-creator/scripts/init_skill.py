@@ -45,6 +45,9 @@ Suggested patterns:
 
 Prefer the smallest structure that reliably guides Hermes.]
 
+[TODO: Update this skill as the workflow evolves. Add or maintain small helper
+scripts whenever they simplify or stabilize the workflow.]
+
 ## Pitfalls
 
 [TODO: List the common failure modes, edge cases, or things Hermes should avoid.] 
