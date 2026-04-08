@@ -22,6 +22,9 @@ changelog.
   `.codex/`, `.gemini/`, and `.opencode/`.
 - The shared local skill is named `skill-creator` and is vendored from the
   upstream `skill-creator` package in `vercel-labs/agent-browser` `v0.9.3`.
+- The `apply_patch` tool is currently broken in worktrees on this host. Use
+  Python-based file edits instead of the `apply_patch` tool when editing from a
+  worktree, and verify the diff immediately after each edit.
 - Develop hosts replace Codex's built-in
   `~/.codex/skills/.system/skill-creator` path with a symlink to the managed
   shared `~/.agents/skills/skill-creator`, and

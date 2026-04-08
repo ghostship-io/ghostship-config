@@ -220,7 +220,7 @@ let
       fi
 
       set -a
-      . "$secrets_file"
+      eval "$(grep -Ev "^(#|$)" "$secrets_file")"
       set +a
 
       pia_user="''${PIA_USER:-''${OPENVPN_USER:-''${USER:-}}}"
