@@ -358,6 +358,13 @@ in
           Bazarr.color=literal:"#9c36b5"
           Bazarr.enabled=literal:"true"
           Bazarr.dd=literal:"true"
+          Chaptarr.name=literal:"Chaptarr"
+          Chaptarr.url=literal:"https://chaptarr.ghostship.io"
+          Chaptarr.scale=literal:1
+          Chaptarr.icon=literal:"fa-book"
+          Chaptarr.color=literal:"#4f8ef7"
+          Chaptarr.enabled=literal:"true"
+          Chaptarr.dd=literal:"true"
           N8N.name=literal:"n8n"
           N8N.url=literal:"https://n8n.ghostship.io"
           N8N.scale=literal:1
