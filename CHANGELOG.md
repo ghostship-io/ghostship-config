@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **PyLoad health checks**: Switched the `pyload-ng` container health probe
+  from `GET /api` to `GET /favicon.ico` because the current upstream image now
+  returns `401 UNAUTHORIZED` on `/api`, which left Podman health checks
+  permanently failing and blocked clean NixOS activation.
 - **agent-browser bootstrap**: Stopped passing `--with-deps` during develop-host `agent-browser` runtime bootstrap; the Nix wrapper already supplies the needed shared libraries, so maintenance now treats those system dependencies as already packaged instead of attempting unsupported distro package-manager bootstrapping.
 - **Codex skill-creator override**: Renamed the shared vendored
   `skills-creator` entry back to `skill-creator`, refreshed the repo-managed

@@ -209,6 +209,10 @@ changelog.
   `<base href="/romm/">` into the proxied HTML so Vue Router detects the
   correct base at runtime, and treat the old `BASE_URL:"/"` rewrite as a
   compatibility fallback for older builds.
+- Current `lscr.io/linuxserver/pyload-ng:latest` returns `401 UNAUTHORIZED` on
+  `/api` even when healthy. Keep the Podman health check on the public
+  `http://127.0.0.1:8000/favicon.ico` endpoint instead of the auth-protected
+  API path.
 - Repo edits to `modules/self-hosted/romm.nix` are not live until the host is
   rebuilt. Inspect the live container files before treating a repo change as
   tested.
