@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Hermes shared skill seeds**: Added a repo-managed Hermes shared
+  `skill-creator` seed under
+  `modules/self-hosted/hermes-seeds/shared/skills/skill-creator/`, imported the
+  upstream `vercel-labs/agent-browser` `v0.9.3` package as the baseline, and
+  adapted the Hermes copy with minimal `SKILL.md` changes plus Hermes-aware
+  init/validation scripts. `podman-hermes` now seeds that shared skill into
+  `/srv/apps/hermes/home/seeds/shared/skills/skill-creator/` only when the
+  runtime-owned directory is missing.
 - **Hermes profile SOUL seeds**: Added tracked Hermes persona source files for
   the `assistant`, `operations`, and `supervisor` gateways under
   `modules/self-hosted/hermes-seeds/`, and `podman-hermes` now seeds each

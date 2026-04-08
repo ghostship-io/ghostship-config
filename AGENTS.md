@@ -216,6 +216,11 @@ changelog.
 ## Service-Specific Notes
 
 - Hermes on `chill-penguin` should use the upstream whole-home image contract: mount `/srv/apps/hermes/home` at `/home/hermes`, mount operator workspace data from `/srv/apps/hermes/workspace` directly at `/workspace`, and bind a seeded host path `/srv/apps/hermes/nix` at `/nix`. Seed `/srv/apps/hermes/nix` from the image before the first mounted start so the bundled store is not hidden behind an empty bind mount, and do not reintroduce repo-side startup shims or separate Honcho compatibility-state mounts.
+- Hermes shared skill seed sources live in tracked repo files under
+  `modules/self-hosted/hermes-seeds/shared/skills/<skill>/`. Seed them into
+  `/srv/apps/hermes/home/seeds/shared/skills/<skill>/` only when the target
+  directory is missing; once seeded, treat the host copy as operator-owned
+  runtime state instead of forcing repo updates into the live container home.
 - Hermes profile persona sources live in tracked repo files under
   `modules/self-hosted/hermes-seeds/profiles/<profile>/SOUL.md`. Seed them
   into `/srv/apps/hermes/home/seeds/profiles/<profile>/SOUL.md` only when the

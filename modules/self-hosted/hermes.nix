@@ -13,6 +13,9 @@ let
   hermes-home = "/srv/apps/hermes/home";
   hermes-workspace = "/srv/apps/hermes/workspace";
   hermes-nix = "/srv/apps/hermes/nix";
+  hermes-shared-skill-seeds = {
+    skill-creator = ./hermes-seeds/shared/skills/skill-creator;
+  };
   hermes-seed-profiles = {
     assistant = ./hermes-seeds/profiles/assistant/SOUL.md;
     operations = ./hermes-seeds/profiles/operations/SOUL.md;
@@ -93,10 +96,17 @@ in
     install -d -m0755 "${hermes-nix}"
     install -d -m0755 -o apps -g apps \
       "${hermes-home}/seeds" \
+      "${hermes-home}/seeds/shared" \
+      "${hermes-home}/seeds/shared/skills" \
       "${hermes-home}/seeds/profiles" \
       "${hermes-home}/seeds/profiles/assistant" \
       "${hermes-home}/seeds/profiles/operations" \
       "${hermes-home}/seeds/profiles/supervisor"
+
+    if [ ! -e "${hermes-home}/seeds/shared/skills/skill-creator" ]; then
+      ${pkgs.coreutils}/bin/cp -a "${hermes-shared-skill-seeds.skill-creator}" "${hermes-home}/seeds/shared/skills/skill-creator"
+      ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/seeds/shared/skills/skill-creator"
+    fi
 
     if [ ! -e "${hermes-home}/seeds/profiles/assistant/SOUL.md" ]; then
       install -m0644 -o apps -g apps "${hermes-seed-profiles.assistant}" "${hermes-home}/seeds/profiles/assistant/SOUL.md"
