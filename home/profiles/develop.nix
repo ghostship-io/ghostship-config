@@ -65,6 +65,7 @@ in
     ripgrep-all
     git-ignore
     gh
+    agent-deck
     starship
     zoxide
     fd

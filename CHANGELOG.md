@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Develop GitHub CLI baseline**: Added `gh` to the shared develop Home
   Manager package set so every develop-profile host gets the GitHub CLI by
   default.
+- **Develop Agent Deck packaging**: Added a repo-managed `agent-deck`
+  package to the shared develop Home Manager profile through the local Nix
+  overlay so develop hosts get declarative multi-agent orchestration tooling
+  without using the upstream installer.
 - **Bootstrap WSL hostname handling**: `bootstrap.sh` is now tracked as an
   executable script and falls back from `hostnamectl` to `hostname`, avoiding
   the unsupported WSL2 systemd-hostname failure while still changing the live

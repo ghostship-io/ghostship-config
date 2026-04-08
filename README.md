@@ -38,12 +38,15 @@ for secrets.
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.
 - Develop-role Home Manager packages include shared interactive CLI tools such
-  as `gh` so GitHub workflows are available on every develop host.
+  as `gh` and `agent-deck` so GitHub workflows and multi-agent orchestration are
+  available on every develop host after the relevant Home Manager or NixOS
+  switch.
 
 ## Agent Launchers
 
 - Develop hosts expose `codex`, `gemini`, `opencode`, `agent-browser`, and
-  `openspec` through Nix-managed wrapper scripts.
+  `openspec` through Nix-managed wrapper scripts, and they install
+  `agent-deck` as a Home Manager package for interactive agent orchestration.
 - `codex`, `gemini`, and `opencode` now delegate to installed user-local
   CLIs under `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`, while
   `openspec` still executes through its Nix-managed `npx` wrapper.

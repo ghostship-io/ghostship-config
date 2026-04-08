@@ -27,12 +27,12 @@ The shared develop profile SHALL expose `agent-deck` through Home Manager so the
 - **WHEN** the shared server-safe system package baseline is inspected
 - **THEN** it SHALL not add `agent-deck` as a generic host-wide package solely for this change
 
-### Requirement: The develop profile includes required runtime dependencies for agent-deck
-The develop profile SHALL include the runtime dependencies needed for normal `agent-deck` operation, including `tmux`, so the packaged workflow works without separate manual prerequisite installation.
+### Requirement: Develop hosts provide required runtime dependencies for agent-deck
+Develop-host configuration SHALL provide the runtime dependencies needed for normal `agent-deck` operation, including `tmux`, so the packaged workflow works without separate manual prerequisite installation.
 
-#### Scenario: tmux is present with agent-deck
-- **WHEN** the shared develop Home Manager package list is inspected after the change
-- **THEN** it SHALL include `tmux` alongside `agent-deck`
+#### Scenario: tmux is provided declaratively
+- **WHEN** the evaluated develop-host package configuration is inspected after the change
+- **THEN** it SHALL include `tmux` in the declarative host configuration used with `agent-deck`
 
 #### Scenario: Activation requirements are documented
 - **WHEN** active documentation for the develop agent workflow is inspected

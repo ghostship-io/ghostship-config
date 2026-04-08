@@ -37,13 +37,14 @@ Alternatives considered:
 - Add it to `environment.systemPackages` for all develop hosts: possible, but broader than necessary for a user-facing TUI.
 - Add it to the common system package baseline: rejected because server-role hosts do not need it.
 
-### Install `tmux` alongside `agent-deck` in the develop profile
+### Reuse the existing repo-managed `tmux` baseline
 
-Upstream documents `tmux` as a required runtime dependency. The packaged workflow should therefore ensure `tmux` is present anywhere `agent-deck` is installed, rather than assuming the user has installed it out of band.
+Upstream documents `tmux` as a required runtime dependency. This repo already includes `tmux` in the shared system package baseline, so the packaged workflow can rely on that existing declarative dependency instead of duplicating it in the develop Home Manager package list.
 
 Alternatives considered:
+- Duplicate `tmux` in `home.packages`: rejected because the runtime is already provided through the shared host baseline.
 - Document `tmux` as a manual prerequisite: rejected because it weakens the declarative contract.
-- Wrap `agent-deck` to fail with a custom message if `tmux` is missing: less useful than simply declaring the dependency in the profile.
+- Wrap `agent-deck` to fail with a custom message if `tmux` is missing: less useful than keeping the dependency declarative in host config.
 
 ### Keep documentation and changelog in the same change
 
@@ -60,7 +61,7 @@ This packaging change affects the user-visible develop workflow, so the implemen
 
 1. Add a local derivation for the upstream `agent-deck` tagged source.
 2. Wire the derivation into the shared develop Home Manager package set.
-3. Add `tmux` to the same develop profile if it is not already present.
+3. Reuse the existing shared `tmux` system package baseline rather than adding a duplicate Home Manager entry.
 4. Update active docs and changelog to describe the packaged workflow and activation path.
 5. Validate via Nix evaluation/build and by confirming the binary resolves from the develop profile output.
 

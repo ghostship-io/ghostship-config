@@ -22,6 +22,10 @@ changelog.
   `.codex/`, `.gemini/`, and `.opencode/`.
 - The shared local skill is named `skill-creator` and is vendored from the
   upstream `skill-creator` package in `vercel-labs/agent-browser` `v0.9.3`.
+- `agent-deck` is repo-managed interactive develop-host tooling. Keep it in the
+  Home Manager develop profile, package it through the local Nix overlay, and
+  expect it to appear only after the relevant Home Manager or NixOS
+  rebuild/switch.
 - The `apply_patch` tool is currently broken in worktrees on this host. Use
   Python-based file edits instead of the `apply_patch` tool when editing from a
   worktree, and verify the diff immediately after each edit.
