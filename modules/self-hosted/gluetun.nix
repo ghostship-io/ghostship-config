@@ -11,7 +11,7 @@ let
   # region instead of pinning a static server list in the repo.
   gluetun-primary-region = "ca_vancouver";
   gluetun-selection-script = pkgs.writeShellApplication {
-    name = "gluetun-pia-selector";
+    name = "gluetun-pia-selector-vancouver";
     runtimeInputs = with pkgs; [
       bash
       coreutils
