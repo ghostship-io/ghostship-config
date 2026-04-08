@@ -20,8 +20,12 @@ changelog.
 - Shared skills live under `home/config/skills/*` and are linked into
   `~/.agents/skills`. Repo-local OpenSpec assets live separately under
   `.codex/`, `.gemini/`, and `.opencode/`.
-- The shared local skill is named `skills-creator`, but it is vendored from the
+- The shared local skill is named `skill-creator` and is vendored from the
   upstream `skill-creator` package in `vercel-labs/agent-browser` `v0.9.3`.
+- Develop hosts replace Codex's built-in
+  `~/.codex/skills/.system/skill-creator` path with a symlink to the managed
+  shared `~/.agents/skills/skill-creator`, and
+  `ghostship-agent-maintenance` reasserts that override after Codex updates.
 - OpenSpec slash commands and agent assets are project-local. Refresh them by
   running `openspec update` in an OpenSpec-enabled repo.
 - The develop-host `openspec` wrapper reapplies append-only Ghostship

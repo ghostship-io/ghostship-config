@@ -88,9 +88,13 @@ for secrets.
 - Shared repo-managed skills live under `home/config/skills/` and are linked
   into `~/.agents/skills/` on develop hosts.
 - The curated shared set is `nix`, `python`, `ssh`, `wsl2`, and a vendored
-  `skills-creator` package pinned to the upstream `skill-creator`
+  `skill-creator` package pinned to the upstream `skill-creator`
   source at
   `vercel-labs/agent-browser` `v0.9.3`.
+- Develop hosts also replace Codex's built-in
+  `~/.codex/skills/.system/skill-creator` path with a managed symlink to
+  `~/.agents/skills/skill-creator`, and `ghostship-agent-maintenance`
+  reasserts that override after Codex CLI refreshes.
 - Repo-local OpenSpec assets under `.codex/`, `.gemini/`, and `.opencode/`
   are a separate layer from the shared `~/.agents/skills` inventory.
 

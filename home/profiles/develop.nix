@@ -27,6 +27,16 @@ in
     fi
   '';
 
+  home.activation.overrideCodexSkillCreator = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    codex_system_skills_dir="$HOME/.codex/skills/.system"
+    codex_skill_creator_path="$codex_system_skills_dir/skill-creator"
+    shared_skill_creator_path="$HOME/.agents/skills/skill-creator"
+
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$codex_system_skills_dir"
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf "$codex_skill_creator_path"
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/ln -sfn "$shared_skill_creator_path" "$codex_skill_creator_path"
+  '';
+
   home.file = {
     ".agents/skills/nix" = {
       source = ../config/skills/nix;
@@ -44,8 +54,8 @@ in
       source = ../config/skills/ssh;
       force = true;
     };
-    ".agents/skills/skills-creator" = {
-      source = ../config/skills/skills-creator;
+    ".agents/skills/skill-creator" = {
+      source = ../config/skills/skill-creator;
       force = true;
     };
   };

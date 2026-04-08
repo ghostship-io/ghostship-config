@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Codex skill-creator override**: Renamed the shared vendored
+  `skills-creator` entry back to `skill-creator`, refreshed the repo-managed
+  copy from `vercel-labs/agent-browser` `v0.9.3`, and now reassert the Codex
+  built-in `~/.codex/skills/.system/skill-creator` path as a managed symlink to
+  `~/.agents/skills/skill-creator` during develop-profile activation and
+  `ghostship-agent-maintenance`.
 - **Hermes shared skill seeds**: Added a repo-managed Hermes shared
   `skill-creator` seed under
   `modules/self-hosted/hermes-seeds/shared/skills/skill-creator/`, imported the
