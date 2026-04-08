@@ -59,6 +59,11 @@
     mode = "0440";
   };
 
+  sops.secrets."chaptarr-secrets" = {
+    sopsFile = ../../secrets.yaml;
+    mode = "0400";
+  };
+
   sops.secrets."tautulli-secrets" = {
     sopsFile = ../../secrets.yaml;
     mode = "0400";

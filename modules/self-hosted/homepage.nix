@@ -8,6 +8,7 @@ let
   radarr-secrets = config.sops.secrets."radarr-secrets".path;
   prowlarr-secrets = config.sops.secrets."prowlarr-secrets".path;
   bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
+  chaptarr-secrets = config.sops.secrets."chaptarr-secrets".path;
   cloudflared-secrets = config.sops.secrets."cloudflared-secrets".path;
   grimmory-secrets = config.sops.secrets."grimmory-secrets".path;
 in
@@ -49,6 +50,7 @@ in
       radarr-secrets
       prowlarr-secrets
       bazarr-secrets
+      chaptarr-secrets
       cloudflared-secrets
       grimmory-secrets
     ];
@@ -88,6 +90,7 @@ in
             --secrets-file "${radarr-secrets}"
             --secrets-file "${prowlarr-secrets}"
             --secrets-file "${bazarr-secrets}"
+            --secrets-file "${chaptarr-secrets}"
             --secrets-file "${cloudflared-secrets}"
             --secrets-file "${grimmory-secrets}"
             
@@ -163,6 +166,14 @@ in
             "[Automation].[Bazarr].widget.type=literal:bazarr"
             "[Automation].[Bazarr].widget.url=literal:http://bazarr:6767"
             "[Automation].[Bazarr].widget.key=env:BAZARR_API_KEY"
+
+            "[Automation].[Chaptarr].icon=literal:readarr.png"
+            "[Automation].[Chaptarr].description=literal:Book Manager"
+            "[Automation].[Chaptarr].server=literal:chill-penguin"
+            "[Automation].[Chaptarr].container=literal:chaptarr"
+            "[Automation].[Chaptarr].widget.type=literal:readarr"
+            "[Automation].[Chaptarr].widget.url=literal:http://chaptarr:8789"
+            "[Automation].[Chaptarr].widget.key=env:CHAPTARR_API_KEY"
             
             # Downloads group
             "[Downloads].[Cloudflared].icon=literal:cloudflare.png"
