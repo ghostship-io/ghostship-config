@@ -13,6 +13,11 @@ let
   hermes-home = "/srv/apps/hermes/home";
   hermes-workspace = "/srv/apps/hermes/workspace";
   hermes-nix = "/srv/apps/hermes/nix";
+  hermes-seed-profiles = {
+    assistant = ./hermes-seeds/profiles/assistant/SOUL.md;
+    operations = ./hermes-seeds/profiles/operations/SOUL.md;
+    supervisor = ./hermes-seeds/profiles/supervisor/SOUL.md;
+  };
 in
 {
   virtualisation.oci-containers.containers."hermes" = {
@@ -86,6 +91,24 @@ in
   systemd.services.podman-hermes.preStart = ''
     install -d -m0755 -o apps -g apps "${hermes-home}" "${hermes-workspace}"
     install -d -m0755 "${hermes-nix}"
+    install -d -m0755 -o apps -g apps \
+      "${hermes-home}/seeds" \
+      "${hermes-home}/seeds/profiles" \
+      "${hermes-home}/seeds/profiles/assistant" \
+      "${hermes-home}/seeds/profiles/operations" \
+      "${hermes-home}/seeds/profiles/supervisor"
+
+    if [ ! -e "${hermes-home}/seeds/profiles/assistant/SOUL.md" ]; then
+      install -m0644 -o apps -g apps "${hermes-seed-profiles.assistant}" "${hermes-home}/seeds/profiles/assistant/SOUL.md"
+    fi
+
+    if [ ! -e "${hermes-home}/seeds/profiles/operations/SOUL.md" ]; then
+      install -m0644 -o apps -g apps "${hermes-seed-profiles.operations}" "${hermes-home}/seeds/profiles/operations/SOUL.md"
+    fi
+
+    if [ ! -e "${hermes-home}/seeds/profiles/supervisor/SOUL.md" ]; then
+      install -m0644 -o apps -g apps "${hermes-seed-profiles.supervisor}" "${hermes-home}/seeds/profiles/supervisor/SOUL.md"
+    fi
 
     if [ ! -f "${hermes-secrets}" ]; then
       echo "Waiting for Hermes secrets at ${hermes-secrets}..."

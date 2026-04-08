@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Hermes profile SOUL seeds**: Added tracked Hermes persona source files for
+  the `assistant`, `operations`, and `supervisor` gateways under
+  `modules/self-hosted/hermes-seeds/`, and `podman-hermes` now seeds each
+  profile `SOUL.md` into `/srv/apps/hermes/home/seeds/profiles/<profile>/`
+  only when that file is missing so existing runtime variants are preserved.
 - **Develop GitHub CLI baseline**: Added `gh` to the shared develop Home
   Manager package set so every develop-profile host gets the GitHub CLI by
   default.
