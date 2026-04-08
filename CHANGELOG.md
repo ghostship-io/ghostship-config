@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- fix(self-hosted): seed Gluetun PIA WireGuard selection from live chill-penguin benchmarks, rank matched endpoint pairs instead of `meta[0]`/`wg[0]`, and keep boot-time selection constrained to the benchmarked regions and servers with safe fallbacks
+- fix(self-hosted): pin Gluetun to the live-benchmarked best PIA region, dynamically enumerate that region's current WireGuard servers at selector time, and only fall back to the global PF pool if the primary region disappears
 
 - fix(self-hosted): use Gluetun's native container healthcheck, make Gluetun namespace dependents follow service restarts with `PartOf`/`Requires`, and switch VueTorrent to a local WebUI health probe instead of external `google.com`
 

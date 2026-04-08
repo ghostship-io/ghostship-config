@@ -6,21 +6,10 @@ let
   gluetun-state-dir = "/srv/apps/gluetun";
   gluetun-selection-cache = "${gluetun-state-dir}/pia-wireguard-selection.json";
   pia-ca-cert = ./gluetun/ca.rsa.4096.crt;
-  # Seeded from live chill-penguin PIA WireGuard PF benchmarks on 2026-04-08.
-  gluetun-seed-regions = [
-    "ca_vancouver"
-    "santiago"
-    "panama"
-    "ec_ecuador-pf"
-    "uy_uruguay-pf"
-  ];
-  gluetun-seed-servers = {
-    ca_vancouver = [ "vancouver430" "vancouver439" ];
-    santiago = [ "chile402" "chile403" ];
-    panama = [ "panama411" "panama410" ];
-    ec_ecuador-pf = [ "ecuador402" "ecuador401" ];
-    uy_uruguay-pf = [ "uruguay402" "uruguay401" ];
-  };
+  # Live benchmark winner on chill-penguin as of 2026-04-08.
+  # At selector time we dynamically enumerate the current endpoints for this
+  # region instead of pinning a static server list in the repo.
+  gluetun-primary-region = "ca_vancouver";
   gluetun-selection-script = pkgs.writeShellApplication {
     name = "gluetun-pia-selector";
     runtimeInputs = with pkgs; [
@@ -78,61 +67,23 @@ let
         exit 1
       fi
 
-      seed_regions_json='${builtins.toJSON gluetun-seed-regions}'
-
-      : > "$tmp_dir/candidates.tsv"
-      while IFS=$'\t' read -r region_id seed_host; do
-        jq -r \
-          --arg regionId "$region_id" \
-          --arg seedHost "$seed_host" '
-            .regions[]
-            | select(.id == $regionId)
-            | . as $region
-            | (($region.servers.meta // [])[] | select(.cn == $seedHost) | { meta_ip: .ip }) as $meta
-            | (($region.servers.wg // [])[] | select(.cn == $seedHost))
-            | [
-                $region.id,
-                $region.name,
-                $region.country,
-                $meta.meta_ip,
-                .ip,
-                .cn
-              ]
-            | @tsv
-          ' "$serverlist" >> "$tmp_dir/candidates.tsv"
-      done <<'EOF'
-ca_vancouver	vancouver430
-ca_vancouver	vancouver439
-santiago	chile402
-santiago	chile403
-panama	panama411
-panama	panama410
-ec_ecuador-pf	ecuador402
-ec_ecuador-pf	ecuador401
-uy_uruguay-pf	uruguay402
-uy_uruguay-pf	uruguay401
-EOF
-
-      if [ ! -s "$tmp_dir/candidates.tsv" ]; then
-        jq -r \
-          --argjson seedRegions "$seed_regions_json" '
-            .regions[]
-            | select(.port_forward == true)
-            | select((.id as $id | $seedRegions | index($id)) != null)
-            | . as $region
-            | (($region.servers.meta // [])[] | { cn: .cn, meta_ip: .ip }) as $meta
-            | (($region.servers.wg // [])[] | select(.cn == $meta.cn))
-            | [
-                $region.id,
-                $region.name,
-                $region.country,
-                $meta.meta_ip,
-                .ip,
-                .cn
-              ]
-            | @tsv
-          ' "$serverlist" > "$tmp_dir/candidates.tsv"
-      fi
+      jq -r         --arg primaryRegion '${gluetun-primary-region}' '
+          .regions[]
+          | select(.id == $primaryRegion)
+          | select(.port_forward == true)
+          | . as $region
+          | (($region.servers.meta // [])[] | { cn: .cn, meta_ip: .ip }) as $meta
+          | (($region.servers.wg // [])[] | select(.cn == $meta.cn))
+          | [
+              $region.id,
+              $region.name,
+              $region.country,
+              $meta.meta_ip,
+              .ip,
+              .cn
+            ]
+          | @tsv
+        ' "$serverlist" > "$tmp_dir/candidates.tsv"
 
       if [ ! -s "$tmp_dir/candidates.tsv" ]; then
         jq -r '
@@ -152,17 +103,6 @@ EOF
             | @tsv
           ' "$serverlist" > "$tmp_dir/candidates.tsv"
       fi
-
-      region_bias() {
-        case "$1" in
-          ca_vancouver) echo "0.000000" ;;
-          santiago) echo "0.050000" ;;
-          panama) echo "0.100000" ;;
-          ec_ecuador-pf) echo "0.150000" ;;
-          uy_uruguay-pf) echo "0.200000" ;;
-          *) echo "0.250000" ;;
-        esac
-      }
 
       : > "$tmp_dir/latency.tsv"
       while IFS=$'\t' read -r region_id region_name country meta_ip wg_ip wg_host; do
@@ -212,8 +152,7 @@ EOF
 
         addkey_total="$(printf '%s' "$addkey_metrics" | awk -F'\t' '{print $3}')"
         addkey_size="$(printf '%s' "$addkey_metrics" | awk -F'\t' '{print $4}')"
-        bias="$(region_bias "$region_id")"
-        score="$(awk "BEGIN { printf \"%.6f\", $bias + ($connect_time * 0.5) + ($addkey_total * 0.5) }")"
+        score="$(awk "BEGIN { printf \"%.6f\", ($connect_time * 0.5) + ($addkey_total * 0.5) }")"
 
         jq -n \
           --arg region_id "$region_id" \
@@ -225,7 +164,6 @@ EOF
           --argjson connect_time "$connect_time" \
           --argjson addkey_total "$addkey_total" \
           --argjson addkey_size "''${addkey_size:-0}" \
-          --argjson region_bias "$bias" \
           --argjson score "$score" \
           '{
             region_id: $region_id,
@@ -237,7 +175,6 @@ EOF
             connect_time: $connect_time,
             addkey_total: $addkey_total,
             addkey_size: $addkey_size,
-            region_bias: $region_bias,
             score: $score
           }' >> "$tmp_dir/bench.jsonl"
       done < "$tmp_dir/top.tsv"
