@@ -58,7 +58,7 @@ in
     };
     extraOptions = [
       "--network=container:gluetun"
-      "--health-cmd=wget -q --spider --tries=1 --timeout=5 https://google.com || exit 1"
+      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:5000/ || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
@@ -81,6 +81,8 @@ in
   systemd.services.podman-vuetorrent = {
     after = [ "mnt-share.mount" "podman-gluetun.service" ];
     bindsTo = [ "podman-gluetun.service" ];
+    partOf = [ "podman-gluetun.service" ];
+    requires = [ "podman-gluetun.service" ];
     wants = [ "mnt-share.mount" ];
   };
 

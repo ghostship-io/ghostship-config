@@ -300,6 +300,12 @@ in
       "--cap-add=NET_ADMIN"
       "--device=/dev/net/tun:/dev/net/tun"
       "--network=ghostship_net"
+      "--health-cmd=/gluetun-entrypoint healthcheck"
+      "--health-interval=30s"
+      "--health-timeout=10s"
+      "--health-retries=5"
+      "--health-start-period=1m"
+      "--health-on-failure=kill"
     ];
     environment = {
       VPN_SERVICE_PROVIDER = "custom";

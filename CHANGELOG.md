@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- fix(self-hosted): use Gluetun's native container healthcheck, make Gluetun namespace dependents follow service restarts with `PartOf`/`Requires`, and switch VueTorrent to a local WebUI health probe instead of external `google.com`
+
 ### Changed
 - **PyLoad health checks**: Switched the `pyload-ng` container health probe
   from `GET /api` to `GET /favicon.ico` because the current upstream image now

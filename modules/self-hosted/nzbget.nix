@@ -32,6 +32,8 @@
   systemd.services.podman-nzbget = {
     after = [ "mnt-share.mount" "podman-gluetun.service" ];
     bindsTo = [ "podman-gluetun.service" ];
+    partOf = [ "podman-gluetun.service" ];
+    requires = [ "podman-gluetun.service" ];
     wants = [ "mnt-share.mount" ];
   };
 
