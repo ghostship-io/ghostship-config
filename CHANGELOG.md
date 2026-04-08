@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - fix(self-hosted): use Gluetun's native container healthcheck, make Gluetun namespace dependents follow service restarts with `PartOf`/`Requires`, and switch VueTorrent to a local WebUI health probe instead of external `google.com`
 
 ### Changed
+- **Hermes runtime contract**: Aligned the `chill-penguin` Hermes host module with the current `ghostship-hermes` contract by letting the image-owned startup service and mutable-tooling timer drive internal boot ordering, removing the old terminal cwd override so browser sessions start in `/home/hermes`, and documenting the per-profile `~/.hermes/profiles/<profile>/.env` contract.
 - **PyLoad health checks**: Switched the `pyload-ng` container health probe
   from `GET /api` to `GET /favicon.ico` because the current upstream image now
   returns `401 UNAUTHORIZED` on `/api`, which left Podman health checks

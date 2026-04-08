@@ -42,8 +42,6 @@ in
     environment = {
       HOME = "/home/hermes";
       HERMES_HOME = "/home/hermes/.hermes";
-      TERMINAL_CWD = "/workspace";
-      GHOSTSHIP_TERMINAL_CWD = "/workspace";
       GHOSTSHIP_WORKSPACE_ROOT = "/workspace";
       TTYD_PORT = "7681";
       TTYD_TITLE = "Ghostship Hermes";
@@ -174,13 +172,8 @@ in
 
     ${pkgs.podman}/bin/podman exec hermes sh -lc '
       /run/current-system/sw/bin/systemctl --system start \
-        ghostship-storage.service \
-        ghostship-hermes-bootstrap.service \
-        ghostship-hermes-router.service \
-        ghostship-dashboard-controller.service \
-        ghostship-hermes-profile-assistant.service \
-        ghostship-hermes-profile-operations.service \
-        ghostship-hermes-profile-supervisor.service
+        ghostship-hermes-user-tooling-refresh.timer \
+        ghostship-hermes-startup.service
     '
   '';
 

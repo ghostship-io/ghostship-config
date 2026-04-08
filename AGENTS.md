@@ -226,7 +226,9 @@ changelog.
 
 ## Service-Specific Notes
 
-- Hermes on `chill-penguin` should use the upstream whole-home image contract: mount `/srv/apps/hermes/home` at `/home/hermes`, mount operator workspace data from `/srv/apps/hermes/workspace` directly at `/workspace`, and bind a seeded host path `/srv/apps/hermes/nix` at `/nix`. Seed `/srv/apps/hermes/nix` from the image before the first mounted start so the bundled store is not hidden behind an empty bind mount, and do not reintroduce repo-side startup shims or separate Honcho compatibility-state mounts.
+- Hermes on `chill-penguin` should use the current upstream `ghostship-hermes` whole-home contract: mount `/srv/apps/hermes/home` at `/home/hermes`, mount operator workspace data from `/srv/apps/hermes/workspace` directly at `/workspace`, and bind a seeded host path `/srv/apps/hermes/nix` at `/nix`. Seed `/srv/apps/hermes/nix` from the image before the first mounted start so the bundled store is not hidden behind an empty bind mount, start the image-owned `ghostship-hermes-startup.service` plus `ghostship-hermes-user-tooling-refresh.timer` instead of recreating the lower-level startup graph from the host, and do not reintroduce repo-side startup shims or separate Honcho compatibility-state mounts.
+- Hermes browser terminals should default to `/home/hermes` while `/workspace` remains the canonical persisted work-products path, and profile-facing runtime env belongs in `~/.hermes/profiles/<profile>/.env` rather than a repo-managed root env shim.
+- `hermes-secrets` should carry the shared Hermes runtime provider env that Ghostship actively uses today; keep `N8N_API_KEY` there as the dedicated internal n8n credential and treat GitHub or Home Assistant env as optional future wiring unless a change explicitly adds them.
 - Hermes shared skill seed sources live in tracked repo files under
   `modules/self-hosted/hermes-seeds/shared/skills/<skill>/`. Seed them into
   `/srv/apps/hermes/home/seeds/shared/skills/<skill>/` only when the target
