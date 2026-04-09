@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 - **Develop Agent Deck WSL startup**: Bumped the repo-managed `agent-deck`
-  package to upstream `v1.4.1` and added a tmux-backed `agent-deck web` user
+  package to upstream `v1.4.2` and added a tmux-backed `agent-deck web` user
   service on WSL develop hosts at `127.0.0.1:8420`.
 - **Develop Workmux removal**: Removed the repo-managed `workmux` package and
   its known user-home artifacts from the supported develop-host workflow.
