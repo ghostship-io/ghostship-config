@@ -50,7 +50,9 @@ for secrets.
   Manager packages for interactive agent orchestration.
 - `agent-deck-launch [tool]` launches the current directory into Agent Deck,
   creates the matching basename group when missing, defaults to `codex`, and
-  generates `YYYY-MM-DD-N` titles from current Agent Deck JSON-visible sessions.
+  generates `YYYY-MM-DD-N` titles from current Agent Deck JSON-visible
+  sessions, including the empty-profile case where Agent Deck reports no
+  sessions yet.
 - `codex`, `gemini`, and `opencode` now delegate to installed user-local
   CLIs under `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`, while
   `openspec` still executes through its Nix-managed `npx` wrapper.

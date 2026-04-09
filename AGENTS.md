@@ -29,8 +29,10 @@ changelog.
   service; keep support scoped to the managed CLI and `agent-deck-launch`.
 - Keep `agent-deck-launch` as Home Manager develop-profile tooling, derive its
   group and title from Agent Deck CLI JSON with `jq` instead of reading
-  internal Agent Deck state files, and keep `gemini-cli` available as a real
-  managed wrapper command rather than a shell-only alias.
+  internal Agent Deck state files, normalize the current `No sessions found in
+  profile ...` empty-state output to `[]` before piping into `jq`, and keep
+  `gemini-cli` available as a real managed wrapper command rather than a
+  shell-only alias.
 - The `apply_patch` tool is currently broken in worktrees on this host. Use
   Python-based file edits instead of the `apply_patch` tool when editing from a
   worktree, and verify the diff immediately after each edit.

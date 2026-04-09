@@ -29,7 +29,19 @@ let
       ${lib.getExe pkgs.agent-deck} group create "$group_name" --default-path "$project_dir" >/dev/null
     fi
 
-    next_suffix="$(${lib.getExe pkgs.agent-deck} list --json | ${pkgs.jq}/bin/jq -r --arg path "$project_dir" --arg group "$group_name" --arg prefix "$title_prefix" '
+    sessions_json="$(${lib.getExe pkgs.agent-deck} list --json)"
+    case "$sessions_json" in
+      "No sessions found in profile '"*"'.")
+        sessions_json='[]'
+        ;;
+    esac
+
+    if ! printf '%s\n' "$sessions_json" | ${pkgs.jq}/bin/jq -e 'type == "array"' >/dev/null; then
+      printf 'agent-deck-launch: expected `agent-deck list --json` to return a JSON array\n' >&2
+      exit 1
+    fi
+
+    next_suffix="$(printf '%s\n' "$sessions_json" | ${pkgs.jq}/bin/jq -r --arg path "$project_dir" --arg group "$group_name" --arg prefix "$title_prefix" '
       [ .[]
         | select(.path == $path and .group == $group)
         | .title
