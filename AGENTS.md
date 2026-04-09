@@ -26,6 +26,9 @@ changelog.
   Home Manager develop profile, package it through the local Nix overlay, and
   expect it to appear only after the relevant Home Manager or NixOS
   rebuild/switch.
+- `workmux` is repo-managed interactive develop-host tooling. Keep it in the
+  Home Manager develop profile, package it through the local Nix overlay, and
+  treat the repo-supported path as `tmux`-first unless a later change standardizes other backends or shared `.workmux.yaml` defaults.
 - The `apply_patch` tool is currently broken in worktrees on this host. Use
   Python-based file edits instead of the `apply_patch` tool when editing from a
   worktree, and verify the diff immediately after each edit.
