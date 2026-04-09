@@ -38,17 +38,15 @@ for secrets.
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.
 - Develop-role Home Manager packages include shared interactive CLI tools such
-  as `gh`, `agent-deck`, and `workmux` so GitHub workflows, multi-agent
-  orchestration, and terminal-first worktree automation are
-  available on every develop host after the relevant Home Manager or NixOS
-  switch.
+  as `gh` and `agent-deck` so GitHub workflows and multi-agent
+  orchestration are available on every develop host after the relevant Home
+  Manager or NixOS switch.
 
 ## Agent Launchers
 
 - Develop hosts expose `codex`, `gemini`, `opencode`, `agent-browser`, and
   `openspec` through Nix-managed wrapper scripts, and they install
-  `agent-deck` and `workmux` as Home Manager packages for interactive agent
-  orchestration and tmux-first worktree management.
+  `agent-deck` as a Home Manager package for interactive agent orchestration.
 - `codex`, `gemini`, and `opencode` now delegate to installed user-local
   CLIs under `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`, while
   `openspec` still executes through its Nix-managed `npx` wrapper.
@@ -59,11 +57,16 @@ for secrets.
   `openspec init` and `openspec update`, but those overrides are append-only:
   the wrapper keeps the upstream generated workflow files and adds only three
   built-in Ghostship propose/apply/archive snippets on top.
-- The Ghostship OpenSpec flow now keeps proposal/design/tasks work on `main`,
-  creates or reuses `.worktrees/<change-name>/` during `apply` after those
-  planning artifacts are committed on `main`, and uses `archive` to reconcile
-  any matching worktree back into `main`, commit the archive move there, and
-  remove the worktree.
+- The Ghostship `propose` override ends with a full proposed-plan summary for
+  review and tells agents to use Python-based file edits instead of
+  `apply_patch` when they are working in a worktree.
+- The Ghostship `apply` override commits planning artifacts on `main`, creates
+  or reuses the change worktree at the start, and if the user changes the work
+  mid-apply it updates the current proposal instead of creating a new proposal
+  or worktree.
+- The Ghostship `archive` override reconciles the change worktree back into
+  `main`, commits the archive move there, removes the worktree, and then tries
+  to leave `main` clean by reconciling or removing remaining related artifacts.
 - `ghostship-agent-maintenance.service` owns automatic agent upkeep. Its
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent
@@ -74,10 +77,10 @@ for secrets.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
-- `workmux` is provided through the shared develop Home Manager profile via the
-  local Nix overlay and the repo-supported path currently targets the existing
-  `tmux` workflow. Other upstream backends remain possible upstream but are not
-  standardized by this repo yet.
+- Supported WSL develop hosts also start `agent-deck web` by default through a
+  tmux-backed user service that listens on `127.0.0.1:8420`; verify it with
+  `systemctl --user status agent-deck-web.service` and
+  `curl http://127.0.0.1:8420/healthz`.
 - Develop-host launchers now keep only the approval defaults: Codex prepends
   `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit
   approval or sandbox flags, Gemini prepends `--yolo` unless you pass an

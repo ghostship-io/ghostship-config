@@ -37,6 +37,12 @@ in
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/ln -sfn "$shared_skill_creator_path" "$codex_skill_creator_path"
   '';
 
+  home.activation.removeWorkmuxArtifacts = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf       "$HOME/.cache/workmux"       "$HOME/.config/workmux"       "$HOME/.local/state/workmux"       "$HOME/.config/opencode/plugin/workmux-status.ts"       "$HOME/.config/opencode/skills/workmux"
+  '';
+
+
+
   home.file = {
     ".agents/skills/nix" = {
       source = ../config/skills/nix;
@@ -66,7 +72,6 @@ in
     git-ignore
     gh
     agent-deck
-    workmux
     starship
     zoxide
     fd

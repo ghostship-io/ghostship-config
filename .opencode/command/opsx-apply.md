@@ -152,9 +152,9 @@ This skill supports the "actions on a change" model:
 ## Ghostship Override
 
 - Before implementation, commit the proposal, design, and tasks changes for the change on `main`.
-- Then use `using-git-worktrees` if it is available.
-- Create or reuse `.worktrees/<name>/` from that committed `main` state.
-- Start implementation from the change worktree itself, not from `main`.
+- Create the change worktree at the start of apply, or reuse it if it already exists.
+- Implement from the active change worktree, not from `main`.
+- During apply, if the user changes the work, do not create a new proposal or a new worktree; update the current proposal instead.
 - If implementation gets stuck on a bug, failing test, or unexpected behavior, use `systematic-debugging` if it is available.
 - Do root-cause-first debugging before proposing or applying fixes.
 <!-- ghostship:opencode-opsx-apply:end -->

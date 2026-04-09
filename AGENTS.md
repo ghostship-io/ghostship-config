@@ -25,10 +25,9 @@ changelog.
 - `agent-deck` is repo-managed interactive develop-host tooling. Keep it in the
   Home Manager develop profile, package it through the local Nix overlay, and
   expect it to appear only after the relevant Home Manager or NixOS
-  rebuild/switch.
-- `workmux` is repo-managed interactive develop-host tooling. Keep it in the
-  Home Manager develop profile, package it through the local Nix overlay, and
-  treat the repo-supported path as `tmux`-first unless a later change standardizes other backends or shared `.workmux.yaml` defaults.
+  rebuild/switch. On WSL develop hosts, keep the supported `agent-deck web`
+  path as the tmux-backed `agent-deck-web.service` user service on
+  `127.0.0.1:8420`.
 - The `apply_patch` tool is currently broken in worktrees on this host. Use
   Python-based file edits instead of the `apply_patch` tool when editing from a
   worktree, and verify the diff immediately after each edit.
@@ -41,12 +40,17 @@ changelog.
 - The develop-host `openspec` wrapper reapplies append-only Ghostship
   propose/apply/archive snippets after both `openspec init` and
   `openspec update` without a separate OpenSpec config directory.
-- The Ghostship OpenSpec flow should keep proposal, design, and task work on
-  `main`; `apply` should commit those planning artifacts on `main`, create or
-  reuse `.worktrees/<name>/`, and start implementation from that worktree.
-- The Ghostship OpenSpec archive flow should reconcile any matching change
-  worktree back into `main`, commit the archive move on `main`, and then
-  remove the worktree.
+- The Ghostship `propose` override should end with a full proposed-plan
+  summary for review and tell agents to use Python-based file edits instead of
+  `apply_patch` when they work in a worktree.
+- The Ghostship `apply` override should commit planning artifacts on `main`,
+  create or reuse the change worktree at the start, and update the current
+  proposal instead of creating a new proposal or worktree when the user
+  changes the work mid-apply.
+- The Ghostship `archive` override should reconcile any matching change
+  worktree back into `main`, commit the archive move on `main`, remove the
+  worktree, and then try to leave `main` clean by reconciling or removing
+  remaining related artifacts.
 - `.envrc` uses `use flake`, so the root `flake.nix` must expose either
   `devShells.<system>.default` or `packages.<system>.default`.
 - `nix eval .#...` reads the tracked flake source, not arbitrary untracked

@@ -178,6 +178,9 @@ let
 ## Ghostship Override
 
 - Create and refine the proposal, design, and tasks on `main`.
+- When propose finishes, give the user a full summary of the proposed plan for review before moving on.
+- When working in a worktree, use Python-based file edits instead of `apply_patch`.
+- Verify the diff after each worktree file edit.
 EOF
           ;;
         apply)
@@ -185,9 +188,9 @@ EOF
 ## Ghostship Override
 
 - Before implementation, commit the proposal, design, and tasks changes for the change on `main`.
-- Then use `using-git-worktrees` if it is available.
-- Create or reuse `.worktrees/<name>/` from that committed `main` state.
-- Start implementation from the change worktree itself, not from `main`.
+- Create the change worktree at the start of apply, or reuse it if it already exists.
+- Implement from the active change worktree, not from `main`.
+- During apply, if the user changes the work, do not create a new proposal or a new worktree; update the current proposal instead.
 - If implementation gets stuck on a bug, failing test, or unexpected behavior, use `systematic-debugging` if it is available.
 - Do root-cause-first debugging before proposing or applying fixes.
 EOF
@@ -204,6 +207,9 @@ EOF
 - Merge the worktree back into `main`.
 - Run the archive flow on `main` and commit the resulting archive move there.
 - After the archive commit succeeds, delete the change worktree with `git worktree remove <worktree-path>`.
+- After archive completes, return `main` to a clean working state if possible.
+- Reconcile or remove remaining related artifacts.
+- Clearly report anything that still requires manual cleanup.
 EOF
           ;;
         *)

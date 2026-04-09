@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **Develop Agent Deck rollback**: Pinned the repo-managed `agent-deck`
-  package back to upstream `v1.3.4`.
+- **Develop Agent Deck WSL startup**: Bumped the repo-managed `agent-deck`
+  package to upstream `v1.4.1` and added a tmux-backed `agent-deck web` user
+  service on WSL develop hosts at `127.0.0.1:8420`.
+- **Develop Workmux removal**: Removed the repo-managed `workmux` package and
+  its known user-home artifacts from the supported develop-host workflow.
+- **OpenSpec Ghostship overrides**: `propose` now ends with a full plan
+  summary and worktree edit guidance, `apply` reuses the current proposal and
+  worktree for mid-apply changes, and `archive` now attempts to leave `main`
+  clean after cleanup.
 
 - fix(self-hosted): pin Gluetun to the live-benchmarked best PIA region, dynamically enumerate that region's current WireGuard servers at selector time, and only fall back to the global PF pool if the primary region disappears
 
