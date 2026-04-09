@@ -44,9 +44,13 @@ for secrets.
 
 ## Agent Launchers
 
-- Develop hosts expose `codex`, `gemini`, `opencode`, `agent-browser`, and
-  `openspec` through Nix-managed wrapper scripts, and they install
-  `agent-deck` as a Home Manager package for interactive agent orchestration.
+- Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`,
+  `agent-browser`, and `openspec` through Nix-managed wrapper scripts, and
+  they install `agent-deck` plus the `agent-deck-launch` helper as Home
+  Manager packages for interactive agent orchestration.
+- `agent-deck-launch [tool]` launches the current directory into Agent Deck,
+  creates the matching basename group when missing, defaults to `codex`, and
+  generates `YYYY-MM-DD-N` titles from current Agent Deck JSON-visible sessions.
 - `codex`, `gemini`, and `opencode` now delegate to installed user-local
   CLIs under `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`, while
   `openspec` still executes through its Nix-managed `npx` wrapper.

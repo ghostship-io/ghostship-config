@@ -28,6 +28,10 @@ changelog.
   rebuild/switch. On WSL develop hosts, keep the supported `agent-deck web`
   path as the tmux-backed `agent-deck-web.service` user service on
   `127.0.0.1:8420`.
+- Keep `agent-deck-launch` as Home Manager develop-profile tooling, derive its
+  group and title from Agent Deck CLI JSON with `jq` instead of reading
+  internal Agent Deck state files, and keep `gemini-cli` available as a real
+  managed wrapper command rather than a shell-only alias.
 - The `apply_patch` tool is currently broken in worktrees on this host. Use
   Python-based file edits instead of the `apply_patch` tool when editing from a
   worktree, and verify the diff immediately after each edit.

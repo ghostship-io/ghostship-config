@@ -2,6 +2,50 @@
 
 let
   sshAgentSock = "/run/user/1000/ssh-agent";
+  agentDeckLaunch = pkgs.writeShellScriptBin "agent-deck-launch" ''
+    set -euo pipefail
+
+    if [ "$#" -gt 1 ]; then
+      printf 'usage: agent-deck-launch [tool]\n' >&2
+      exit 2
+    fi
+
+    case "''${1:-}" in
+      -h|--help)
+        printf 'usage: agent-deck-launch [tool]\n\n'
+        printf 'Launch the current directory in Agent Deck.\n'
+        printf 'Defaults to tool: codex\n'
+        exit 0
+        ;;
+    esac
+
+    project_dir="$(${pkgs.coreutils}/bin/pwd -P)"
+    group_name="$(${pkgs.coreutils}/bin/basename "$project_dir")"
+    tool_name="''${1:-codex}"
+    title_date="$(${pkgs.coreutils}/bin/date -I)"
+    title_prefix="$title_date-"
+
+    if ! ${lib.getExe pkgs.agent-deck} group list --json | ${pkgs.jq}/bin/jq -e --arg group "$group_name" '.groups | any(.path == $group)' >/dev/null; then
+      ${lib.getExe pkgs.agent-deck} group create "$group_name" --default-path "$project_dir" >/dev/null
+    fi
+
+    next_suffix="$(${lib.getExe pkgs.agent-deck} list --json | ${pkgs.jq}/bin/jq -r --arg path "$project_dir" --arg group "$group_name" --arg prefix "$title_prefix" '
+      [ .[]
+        | select(.path == $path and .group == $group)
+        | .title
+        | select(type == "string" and startswith($prefix))
+        | (rindex("-")) as $idx
+        | select($idx != null)
+        | .[$idx + 1:]
+        | select(test("^[0-9]+$"))
+        | tonumber
+      ]
+      | max // 0
+      | . + 1
+    ')"
+
+    exec ${lib.getExe pkgs.agent-deck} launch . -t "''${title_prefix}''${next_suffix}" -c "$tool_name" -g "$group_name"
+  '';
 in
 {
   imports = [
@@ -72,6 +116,7 @@ in
     git-ignore
     gh
     agent-deck
+    agentDeckLaunch
     starship
     zoxide
     fd
