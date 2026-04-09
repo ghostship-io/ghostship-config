@@ -66,6 +66,7 @@ in
     git-ignore
     gh
     agent-deck
+    workmux
     starship
     zoxide
     fd

@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - fix(self-hosted): use Gluetun's native container healthcheck, make Gluetun namespace dependents follow service restarts with `PartOf`/`Requires`, and switch VueTorrent to a local WebUI health probe instead of external `google.com`
 
 ### Changed
+- **Develop Workmux packaging**: Added a repo-managed `workmux`
+  package to the shared develop Home Manager profile through the local Nix
+  overlay so develop hosts get declarative tmux-first worktree orchestration
+  without relying on the upstream installer or `cargo install`.
 - **Hermes runtime contract**: Aligned the `chill-penguin` Hermes host module with the current `ghostship-hermes` contract by letting the image-owned startup service and mutable-tooling timer drive internal boot ordering, removing the old terminal cwd override so browser sessions start in `/home/hermes`, and documenting the per-profile `~/.hermes/profiles/<profile>/.env` contract.
 - **PyLoad health checks**: Switched the `pyload-ng` container health probe
   from `GET /api` to `GET /favicon.ico` because the current upstream image now

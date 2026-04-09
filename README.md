@@ -38,7 +38,8 @@ for secrets.
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.
 - Develop-role Home Manager packages include shared interactive CLI tools such
-  as `gh` and `agent-deck` so GitHub workflows and multi-agent orchestration are
+  as `gh`, `agent-deck`, and `workmux` so GitHub workflows, multi-agent
+  orchestration, and terminal-first worktree automation are
   available on every develop host after the relevant Home Manager or NixOS
   switch.
 
@@ -46,7 +47,8 @@ for secrets.
 
 - Develop hosts expose `codex`, `gemini`, `opencode`, `agent-browser`, and
   `openspec` through Nix-managed wrapper scripts, and they install
-  `agent-deck` as a Home Manager package for interactive agent orchestration.
+  `agent-deck` and `workmux` as Home Manager packages for interactive agent
+  orchestration and tmux-first worktree management.
 - `codex`, `gemini`, and `opencode` now delegate to installed user-local
   CLIs under `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`, while
   `openspec` still executes through its Nix-managed `npx` wrapper.
@@ -72,6 +74,10 @@ for secrets.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
+- `workmux` is provided through the shared develop Home Manager profile via the
+  local Nix overlay and the repo-supported path currently targets the existing
+  `tmux` workflow. Other upstream backends remain possible upstream but are not
+  standardized by this repo yet.
 - Develop-host launchers now keep only the approval defaults: Codex prepends
   `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit
   approval or sandbox flags, Gemini prepends `--yolo` unless you pass an
