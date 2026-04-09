@@ -81,10 +81,7 @@ for secrets.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
-- Supported WSL develop hosts also start `agent-deck web` by default through a
-  tmux-backed user service that listens on `127.0.0.1:8420`; verify it with
-  `systemctl --user status agent-deck-web.service` and
-  `curl http://127.0.0.1:8420/healthz`.
+- The repo no longer starts `agent-deck web` automatically on WSL develop hosts. After you apply this change, manually clean up any leftover `agent-deck-web.service`, `~/.config/systemd/user/default.target.wants/agent-deck-web.service`, `agent-deck-web` tmux session, and `~/.agent-deck/web-service.log`.
 - Develop-host launchers now keep only the approval defaults: Codex prepends
   `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit
   approval or sandbox flags, Gemini prepends `--yolo` unless you pass an

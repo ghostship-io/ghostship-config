@@ -25,9 +25,8 @@ changelog.
 - `agent-deck` is repo-managed interactive develop-host tooling. Keep it in the
   Home Manager develop profile, package it through the local Nix overlay, and
   expect it to appear only after the relevant Home Manager or NixOS
-  rebuild/switch. On WSL develop hosts, keep the supported `agent-deck web`
-  path as the tmux-backed `agent-deck-web.service` user service on
-  `127.0.0.1:8420`.
+  rebuild/switch. Do not reintroduce the old WSL `agent-deck web` user
+  service; keep support scoped to the managed CLI and `agent-deck-launch`.
 - Keep `agent-deck-launch` as Home Manager develop-profile tooling, derive its
   group and title from Agent Deck CLI JSON with `jq` instead of reading
   internal Agent Deck state files, and keep `gemini-cli` available as a real

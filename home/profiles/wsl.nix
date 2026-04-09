@@ -1,34 +1,5 @@
 { lib, pkgs, ... }:
 
-let
-  agentDeckWebListen = "127.0.0.1:8420";
-  agentDeckWebSession = "agent-deck-web";
-  agentDeckWebRunner = pkgs.writeShellScript "agent-deck-web-runner" ''
-    set -eu
-
-    session=${lib.escapeShellArg agentDeckWebSession}
-    listen=${lib.escapeShellArg agentDeckWebListen}
-    log_file="$HOME/.agent-deck/web-service.log"
-    cmd="${lib.getExe pkgs.agent-deck} web --listen $listen >>\"$log_file\" 2>&1"
-
-    cleanup() {
-      ${pkgs.tmux}/bin/tmux has-session -t "$session" 2>/dev/null && \
-        ${pkgs.tmux}/bin/tmux kill-session -t "$session" || true
-    }
-
-    trap 'cleanup; exit 0' TERM INT
-
-    ${pkgs.coreutils}/bin/mkdir -p "$HOME/.agent-deck"
-    cleanup
-    ${pkgs.tmux}/bin/tmux new-session -d -s "$session" "$cmd"
-
-    while ${pkgs.tmux}/bin/tmux has-session -t "$session" 2>/dev/null; do
-      ${pkgs.coreutils}/bin/sleep 5
-    done
-
-    exit 1
-  '';
-in
 {
   home.packages = [
     pkgs.wsl-open
@@ -115,20 +86,6 @@ in
     };
   };
 
-  systemd.user.services.agent-deck-web = {
-    Unit = {
-      Description = "Agent Deck web UI (tmux-backed)";
-      After = [ "default.target" ];
-    };
-    Service = {
-      ExecStart = agentDeckWebRunner;
-      ExecStop = "-${pkgs.tmux}/bin/tmux kill-session -t ${agentDeckWebSession}";
-      Restart = "on-failure";
-      RestartSec = 5;
-      Type = "simple";
-    };
-    Install.WantedBy = [ "default.target" ];
-  };
 
   home.activation.wslHomeSymlink = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     WSL_USER="nixos"
