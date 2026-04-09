@@ -7,9 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- fix(develop): make `agent-deck-launch` handle Agent Deck's non-JSON empty-session output so first launch in a fresh profile starts cleanly
-
-- **Develop Agent Deck launcher**: Added a repo-managed `agent-deck-launch` helper for develop hosts that creates the current directory's Agent Deck group when needed, defaults launches to `codex`, generates `YYYY-MM-DD-N` titles from current CLI JSON output, and now exposes `gemini-cli` as a shell-wide managed wrapper command alongside `gemini`.
+- **Develop Agent Deck launcher**: Added a repo-managed `agent-deck-launch` helper for develop hosts that creates the current directory's Agent Deck group when needed, defaults launches to `codex`, uses Agent Deck's supported `add -Q` plus `session start` flow for quick titles, and now exposes `gemini-cli` as a shell-wide managed wrapper command alongside `gemini`.
 
 - **Develop Agent Deck WSL startup**: Kept the repo-managed `agent-deck`
   package at upstream `v1.4.2`, but removed the tmux-backed `agent-deck web`

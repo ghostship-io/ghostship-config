@@ -1,7 +1,7 @@
 # agent-deck-project-launcher Specification
 
 ## Purpose
-Define the managed develop-host workflow for launching the current project into Agent Deck with automatic group preparation, tool selection, and date-based titles.
+Define the managed develop-host workflow for launching the current project into Agent Deck with automatic group preparation, tool selection, and quick-generated titles.
 ## Requirements
 ### Requirement: Develop hosts expose a managed Agent Deck project launcher
 Develop hosts SHALL expose an `agent-deck-launch` command as repo-managed interactive tooling so users can launch the current project into Agent Deck without manually preparing the group, title, and default tool arguments each time.
@@ -26,7 +26,7 @@ Develop hosts SHALL expose an `agent-deck-launch` command as repo-managed intera
 - **THEN** it SHALL reuse that existing group instead of failing or creating a duplicate
 
 ### Requirement: The launcher selects the requested tool and defaults to codex
-`agent-deck-launch` SHALL accept an optional positional tool parameter and SHALL pass the selected tool through to Agent Deck's launch command. If the caller omits the tool parameter, it SHALL default to `codex`.
+`agent-deck-launch` SHALL accept an optional positional tool parameter and SHALL pass the selected tool through to Agent Deck's session creation flow. If the caller omits the tool parameter, it SHALL default to `codex`.
 
 #### Scenario: Default tool is codex
 - **WHEN** `agent-deck-launch` is invoked with no positional tool argument
@@ -36,16 +36,16 @@ Develop hosts SHALL expose an `agent-deck-launch` command as repo-managed intera
 - **WHEN** `agent-deck-launch gemini-cli` is invoked from the current project directory
 - **THEN** it SHALL launch the session with `-c gemini-cli`
 
-### Requirement: The launcher generates date-based incrementing titles
-`agent-deck-launch` SHALL generate Agent Deck session titles in `YYYY-MM-DD-N` format, where the date uses ISO format for the launch day and `N` is the next positive integer for launches associated with the current project on that date.
+### Requirement: The launcher uses Agent Deck quick-title session creation
+`agent-deck-launch` SHALL create the session through Agent Deck's supported `add -Q` flow and SHALL start that created session through the corresponding `session start` command instead of relying on an unsupported single-step `launch -Q` path.
 
-#### Scenario: First launch of the day starts at one
-- **WHEN** `agent-deck-launch` is invoked for a project with no recorded launches for the current date
-- **THEN** it SHALL use the title `YYYY-MM-DD-1` for that date
+#### Scenario: Quick title creation is delegated to Agent Deck
+- **WHEN** `agent-deck-launch` is invoked for a project directory
+- **THEN** it SHALL let Agent Deck choose the session title through `add -Q`
 
-#### Scenario: Later launches increment the suffix
-- **WHEN** `agent-deck-launch` is invoked for a project that already has recorded launches titled `YYYY-MM-DD-1` and `YYYY-MM-DD-2` for the current date
-- **THEN** it SHALL use the title `YYYY-MM-DD-3`
+#### Scenario: Created quick-title session is started explicitly
+- **WHEN** `agent-deck-launch` creates a new session through `add -Q`
+- **THEN** it SHALL start that created session through `session start`
 
 ### Requirement: Active documentation describes the launcher workflow
 The repo SHALL document `agent-deck-launch` as a managed develop-host workflow helper and SHALL describe the activation requirement for the new command in active docs and changelog entries.

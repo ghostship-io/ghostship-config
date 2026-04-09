@@ -22,41 +22,13 @@ let
     project_dir="$(${pkgs.coreutils}/bin/pwd -P)"
     group_name="$(${pkgs.coreutils}/bin/basename "$project_dir")"
     tool_name="''${1:-codex}"
-    title_date="$(${pkgs.coreutils}/bin/date -I)"
-    title_prefix="$title_date-"
-
     if ! ${lib.getExe pkgs.agent-deck} group list --json | ${pkgs.jq}/bin/jq -e --arg group "$group_name" '.groups | any(.path == $group)' >/dev/null; then
       ${lib.getExe pkgs.agent-deck} group create "$group_name" --default-path "$project_dir" >/dev/null
     fi
 
-    sessions_json="$(${lib.getExe pkgs.agent-deck} list --json)"
-    case "$sessions_json" in
-      "No sessions found in profile '"*"'.")
-        sessions_json='[]'
-        ;;
-    esac
+    session_id="$(${lib.getExe pkgs.agent-deck} add . -Q -c "$tool_name" -g "$group_name" --json | ${pkgs.jq}/bin/jq -er '.id')"
 
-    if ! printf '%s\n' "$sessions_json" | ${pkgs.jq}/bin/jq -e 'type == "array"' >/dev/null; then
-      printf 'agent-deck-launch: expected `agent-deck list --json` to return a JSON array\n' >&2
-      exit 1
-    fi
-
-    next_suffix="$(printf '%s\n' "$sessions_json" | ${pkgs.jq}/bin/jq -r --arg path "$project_dir" --arg group "$group_name" --arg prefix "$title_prefix" '
-      [ .[]
-        | select(.path == $path and .group == $group)
-        | .title
-        | select(type == "string" and startswith($prefix))
-        | (rindex("-")) as $idx
-        | select($idx != null)
-        | .[$idx + 1:]
-        | select(test("^[0-9]+$"))
-        | tonumber
-      ]
-      | max // 0
-      | . + 1
-    ')"
-
-    exec ${lib.getExe pkgs.agent-deck} launch . -t "''${title_prefix}''${next_suffix}" -c "$tool_name" -g "$group_name"
+    exec ${lib.getExe pkgs.agent-deck} session start "$session_id"
   '';
 in
 {
