@@ -23,35 +23,35 @@
 
 ## 2. Move The Repo To The Container-Wide Contract
 
-- [ ] 2.1 Update `modules/self-hosted/hermes.nix` so `hermes-profile-env-sync` only writes `/srv/apps/hermes/runtime.env` and no longer resolves profile IDs or patches `~/.hermes/profiles/{assistant,operations,supervisor}/.env`.
-- [ ] 2.2 Keep the Hermes container env surface aligned to the upstream contract:
+- [x] 2.1 Update `modules/self-hosted/hermes.nix` so `hermes-profile-env-sync` only writes `/srv/apps/hermes/runtime.env` and no longer resolves profile IDs or patches `~/.hermes/profiles/{assistant,operations,supervisor}/.env`.
+- [x] 2.2 Keep the Hermes container env surface aligned to the upstream contract:
   unchanged pass-through inputs, `DISCORD_GENERAL_CHANNEL_ID`,
   `DISCORD_*`, `WEBHOOK_*`, `BROWSER_ASSISTANT_CDP_URL`,
   `BROWSER_OPERATIONS_CDP_URL`, `BROWSER_SUPERVISOR_CDP_URL`, and the
   explicit container-only runtime vars that upstream must exclude from profile
   `.env`.
-- [ ] 2.3 Ensure the repo exposes the exact upstream browser/profile source vars
+- [x] 2.3 Ensure the repo exposes the exact upstream browser/profile source vars
   `CLOAKBROWSER_URL`, `CLOAKBROWSER_TOKEN`, `BROWSER_ASSISTANT_CDP_URL`,
   `BROWSER_OPERATIONS_CDP_URL`, and `BROWSER_SUPERVISOR_CDP_URL` while
   removing repo-managed `BROWSER_CDP_URL` synthesis.
-- [ ] 2.4 Remove or simplify `MANAGED_KEYS`, `resolve_profile_cdp_urls`, `patch_profile_env`, `patch_profiles`, and any path trigger that only existed to support host-side profile `.env` post-processing.
+- [x] 2.4 Remove or simplify `MANAGED_KEYS`, `resolve_profile_cdp_urls`, `patch_profile_env`, `patch_profiles`, and any path trigger that only existed to support host-side profile `.env` post-processing.
 
 ## 3. Validate The New Single-Writer Boundary
 
-- [ ] 3.1 Build or evaluate the affected host config with a concrete verification command such as `nix eval .#nixosConfigurations.chill-penguin.config.virtualisation.oci-containers.containers.hermes.environmentFiles`.
-- [ ] 3.2 Validate live on `chill-penguin` that the repo only supplies the
+- [x] 3.1 Build or evaluate the affected host config with a concrete verification command such as `nix eval .#nixosConfigurations.chill-penguin.config.virtualisation.oci-containers.containers.hermes.environmentFiles`.
+- [x] 3.2 Validate live on `chill-penguin` that the repo only supplies the
   upstream-supported source vars and does not write any final profile outputs
   such as `BROWSER_CDP_URL`, `DISCORD_BOT_TOKEN`, `WEBHOOK_SECRET`,
   `DISCORD_FREE_RESPONSE_CHANNELS`, `DISCORD_HOME_CHANNEL`, or `WEBHOOK_PORT`.
-- [ ] 3.3 Validate live on `chill-penguin` that upstream `ghostship-hermes`
+- [x] 3.3 Validate live on `chill-penguin` that upstream `ghostship-hermes`
   writes `~/.hermes/profiles/{assistant,operations,supervisor}/.env` with the
   expected unchanged values, shared translations, per-profile translations,
   generated `WEBHOOK_ENABLED=true`, generated `WEBHOOK_PORT`, and
   `BROWSER_CDP_URL` from `BROWSER_*_CDP_URL`, without repo-managed patching.
-- [ ] 3.4 Verify Hermes-side browser tooling against the managed assistant CloakBrowser profile by using the Hermes-bundled `ghostship-cloakbrowser` helper plus `agent-browser` on the live host.
+- [x] 3.4 Verify Hermes-side browser tooling against the managed assistant CloakBrowser profile by using the Hermes-bundled `ghostship-cloakbrowser` helper plus `agent-browser` on the live host.
 
 ## 4. Update Shared Documentation
 
-- [ ] 4.1 Update `README.md` to describe the new Hermes env contract and the upstream ownership of managed profile `.env` files.
-- [ ] 4.2 Update `CHANGELOG.md` with the Hermes env contract change.
-- [ ] 4.3 Update `AGENTS.md` with the durable repo memory that the host owns container-wide Hermes env inputs while upstream owns managed profile `.env` rendering.
+- [x] 4.1 Update `README.md` to describe the new Hermes env contract and the upstream ownership of managed profile `.env` files.
+- [x] 4.2 Update `CHANGELOG.md` with the Hermes env contract change.
+- [x] 4.3 Update `AGENTS.md` with the durable repo memory that the host owns container-wide Hermes env inputs while upstream owns managed profile `.env` rendering.
