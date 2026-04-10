@@ -85,7 +85,16 @@ changelog.
 - `ghostship-agent-maintenance.timer` runs on boot and every `4h` with
   `Persistent=true` so missed runs fire after WSL resumes. It also refreshes
   global skills, refreshes managed Gemini extensions, bootstraps
-  `~/.agent-browser` only when missing. On Nix develop hosts it must treat the system dependencies as already packaged and call `agent-browser install` without `--with-deps`, because distro package-manager bootstrapping is unsupported there and the wrapper already supplies the required shared libraries. It also rewrites `~/.config/opencode/opencode.json`
+  `~/.agent-browser` only when missing, and keeps an explicit shell-capable
+  runtime path in the generated maintenance script so npm and npx subprocesses
+  can spawn `sh` under systemd. Gemini's generated system settings on develop
+  hosts should omit the deprecated `experimental.plan` key so the managed
+  launchers do not warn about stale read-only system config after the relevant
+  rebuild or switch. On Nix develop hosts it must treat the system
+  dependencies as already packaged and call `agent-browser install` without
+  `--with-deps`, because distro package-manager bootstrapping is unsupported
+  there and the wrapper already supplies the required shared libraries. It
+  also rewrites `~/.config/opencode/opencode.json`
   from OpenRouter's ranked programming free frontend endpoint while preserving
   the `(ghostship-free)` label rewrite; do not reintroduce static OpenRouter
   model maps into the Nix-managed OpenCode

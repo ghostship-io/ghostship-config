@@ -54,6 +54,17 @@ The repo SHALL apply Gemini's default YOLO behavior in the launcher script so th
   `--approval-mode default`, `--approval-mode auto_edit`, or `--approval-mode plan`
 - **THEN** it SHALL not prepend an additional `--yolo` argument
 
+### Requirement: Gemini system settings remain free of deprecated config keys
+The repo SHALL generate a Gemini system settings file for develop hosts that remains valid for the current supported Gemini CLI release and SHALL not emit deprecated settings keys that trigger startup warnings.
+
+#### Scenario: Generated Gemini system settings omit deprecated experimental plan mode
+- **WHEN** the generated develop-host `gemini-cli/settings.json` file is inspected
+- **THEN** it SHALL not contain the `experimental.plan` setting
+
+#### Scenario: Gemini starts without the deprecated system-settings warning
+- **WHEN** a develop host launches the managed `gemini` wrapper after switching to the updated configuration
+- **THEN** Gemini SHALL not warn that the read-only system configuration still contains deprecated `experimental.plan` settings
+
 ### Requirement: OpenCode config keeps explicit allow-all permissions without embedding static OpenRouter models
 The repo SHALL stop embedding static OpenRouter models in the Nix-managed OpenCode config files and SHALL keep OpenCode's allow-all default explicit in the generated config paths.
 
@@ -87,4 +98,3 @@ The repo SHALL document that the develop-host `codex`, `gemini`, and `opencode` 
 #### Scenario: Launcher docs describe activation requirements
 - **WHEN** active workflow documentation is inspected
 - **THEN** it SHALL describe that the change takes effect after the relevant NixOS rebuild or Home Manager switch
-

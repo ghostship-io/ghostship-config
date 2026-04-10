@@ -45,6 +45,7 @@ let
   browserRuntimeLdLibraryPath = lib.makeLibraryPath browserRuntimeLibs;
 
   baseRuntimeInputs = [
+    pkgs.bash
     pkgs.coreutils
     pkgs.curl
     pkgs.gawk
