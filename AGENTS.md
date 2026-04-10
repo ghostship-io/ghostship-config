@@ -262,11 +262,12 @@ changelog.
 - Hermes browser terminals should default to `/home/hermes` while `/workspace` remains the canonical persisted work-products path, and profile-facing runtime env belongs in `~/.hermes/profiles/<profile>/.env` rather than a repo-managed root env shim.
 - `hermes-secrets` should carry the shared Hermes runtime provider env that Ghostship actively uses today; keep `N8N_API_KEY` there as the dedicated internal n8n credential and treat GitHub or Home Assistant env as optional future wiring unless a change explicitly adds them.
 - Hermes utility env projection on `chill-penguin` should read only the required utility-facing values from service-local secret bundles or generated runtime env files, write the selected auth subset to `/srv/apps/hermes/runtime.env`, and then reconcile the managed `assistant`, `operations`, and `supervisor` profile `.env` files with utility URLs plus per-profile `BROWSER_CDP_URL` values derived from the matching managed CloakBrowser profile ids. Keep Synology on `http://192.168.200.106:5000/`, and keep qBittorrent plus NZBGet URL-only while their control auth remains disabled in this stack.
-- Hermes shared skill seed sources live in tracked repo files under
-  `modules/self-hosted/hermes-seeds/shared/skills/<skill>/`. Seed them into
-  `/srv/apps/hermes/home/seeds/shared/skills/<skill>/` only when the target
-  directory is missing; once seeded, treat the host copy as operator-owned
-  runtime state instead of forcing repo updates into the live container home.
+- Hermes profile-local skill seed sources live in tracked repo files under
+  `modules/self-hosted/hermes-seeds/profiles/<profile>/skills/<category>/<skill>/`. Seed
+  them into `/srv/apps/hermes/home/seeds/profiles/<profile>/skills/<category>/<skill>/`
+  only when the target directory is missing; once seeded, treat the host copy
+  as operator-owned runtime state instead of forcing repo updates into the live
+  container home. Keep custom skills aligned to the upstream category folders `autonomous-ai-agents`, `creative`, `data-science`, `devops`, `email`, `gaming`, `github`, `leisure`, `mcp`, `media`, `mlops`, `note-taking`, `productivity`, `red-teaming`, `research`, `smart-home`, `social-media`, and `software-development`; `skill-creator` currently belongs under `software-development`. After this contract change is applied, manually remove stale artifacts under `/srv/apps/hermes/home/seeds/shared/skills/` and bad copies under `/srv/apps/hermes/home/.hermes/skills/` that only exist for the retired shared seed path.
 - Hermes profile persona sources live in tracked repo files under
   `modules/self-hosted/hermes-seeds/profiles/<profile>/SOUL.md`. Seed them
   into `/srv/apps/hermes/home/seeds/profiles/<profile>/SOUL.md` only when the

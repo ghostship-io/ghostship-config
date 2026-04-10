@@ -7,7 +7,7 @@ into the wrong place, so Hermes cannot rely on that path as the authoritative
 source of profile skills.
 
 The requested fix is to copy the old shared skill seed content directly into
-each profile's seed tree under `/home/hermes/seeds/profiles/<profile>/skills/`
+each profile's seed tree under `/home/hermes/seeds/profiles/<profile>/skills/<category>/`
 and to retire the old shared-seed contract. Because stale shared-path artifacts
 may already exist on the host, the change also needs an explicit manual cleanup
 step as part of rollout.
@@ -18,12 +18,13 @@ step as part of rollout.
   on `/home/hermes/seeds/shared/skills/`.
 - Copy the repo-managed `skill-creator` seed content into each managed Hermes
   profile seed tree under
-  `modules/self-hosted/hermes-seeds/profiles/<profile>/skills/skill-creator/`.
+  `modules/self-hosted/hermes-seeds/profiles/<profile>/skills/software-development/skill-creator/`.
 - Seed `skill-creator` into each profile-local runtime path
-  `/home/hermes/seeds/profiles/<profile>/skills/skill-creator/` only when that
+  `/home/hermes/seeds/profiles/<profile>/skills/software-development/skill-creator/` only when that
   profile-owned seed directory is missing.
 - Keep profile `SOUL.md` seeding separate from profile skill seeding while
-  documenting that both now live under the same profile-local seed root.
+  documenting that custom skills live under upstream category folders such as
+  `software-development` inside the same profile-local seed root.
 - Document the manual host cleanup required to remove stale shared skill seed
   artifacts after the updated config is applied.
 
@@ -31,11 +32,11 @@ step as part of rollout.
 
 ### New Capabilities
 - `hermes-profile-skill-seeds`: Define repo-managed Hermes skill seed content
-  copied into each profile-local `skills/` seed directory.
+  copied into each profile-local `skills/<category>/` seed directory.
 
 ### Modified Capabilities
 - `hermes-profile-souls`: Clarify that profile `SOUL.md` seed behavior now
-  coexists with profile-local `skills/` seed directories instead of a separate
+  coexists with profile-local `skills/<category>/` seed directories instead of a separate
   shared skill seed root.
 
 ### Removed Capabilities

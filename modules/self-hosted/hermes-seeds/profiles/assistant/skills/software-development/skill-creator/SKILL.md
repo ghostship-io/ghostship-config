@@ -27,6 +27,14 @@ Keep skills current as workflows evolve. When a workflow changes, update the
 skill. When a small helper script would simplify or stabilize the workflow,
 create or maintain that script as part of the skill.
 
+Hermes profile-local custom skills must also follow the upstream category folder
+layout. Place each skill under `skills/<category>/<skill-name>/`, where
+`<category>` is one of: `autonomous-ai-agents`, `creative`, `data-science`,
+`devops`, `email`, `gaming`, `github`, `leisure`, `mcp`, `media`, `mlops`,
+`note-taking`, `productivity`, `red-teaming`, `research`, `smart-home`,
+`social-media`, or `software-development`. Put `skill-creator` itself under
+`skills/software-development/skill-creator/`.
+
 ## About Skills
 
 Skills are modular, self-contained packages that extend Claude's capabilities by providing
@@ -65,10 +73,10 @@ Think of Claude as exploring a path: a narrow bridge with cliffs needs specific 
 
 ### Anatomy of a Skill
 
-Every skill consists of a required SKILL.md file and optional bundled resources:
+Every skill consists of a required SKILL.md file and optional bundled resources, and Hermes profile-local skills should sit under an upstream category folder:
 
 ```
-skill-name/
+<category>/skill-name/
 ├── SKILL.md (required)
 │   ├── YAML frontmatter metadata (required)
 │   │   ├── name: (required)

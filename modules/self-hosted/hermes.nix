@@ -43,13 +43,19 @@ let
     SYNOLOGY_URL = "http://192.168.200.106:5000/";
     SYNOLOGY_VERIFY_SSL = "false";
   };
-  hermes-shared-skill-seeds = {
-    skill-creator = ./hermes-seeds/shared/skills/skill-creator;
-  };
   hermes-seed-profiles = {
-    assistant = ./hermes-seeds/profiles/assistant/SOUL.md;
-    operations = ./hermes-seeds/profiles/operations/SOUL.md;
-    supervisor = ./hermes-seeds/profiles/supervisor/SOUL.md;
+    assistant = {
+      soul = ./hermes-seeds/profiles/assistant/SOUL.md;
+      skill-creator = ./hermes-seeds/profiles/assistant/skills/software-development/skill-creator;
+    };
+    operations = {
+      soul = ./hermes-seeds/profiles/operations/SOUL.md;
+      skill-creator = ./hermes-seeds/profiles/operations/skills/software-development/skill-creator;
+    };
+    supervisor = {
+      soul = ./hermes-seeds/profiles/supervisor/SOUL.md;
+      skill-creator = ./hermes-seeds/profiles/supervisor/skills/software-development/skill-creator;
+    };
   };
   hermes-profile-env-sync = pkgs.writeTextFile {
     name = "hermes-profile-env-sync.py";
@@ -345,28 +351,42 @@ in
       install -d -m0755 "${hermes-nix}"
       install -d -m0755 -o apps -g apps \
         "${hermes-home}/seeds" \
-        "${hermes-home}/seeds/shared" \
-        "${hermes-home}/seeds/shared/skills" \
         "${hermes-home}/seeds/profiles" \
         "${hermes-home}/seeds/profiles/assistant" \
+        "${hermes-home}/seeds/profiles/assistant/skills" \
+        "${hermes-home}/seeds/profiles/assistant/skills/software-development" \
         "${hermes-home}/seeds/profiles/operations" \
-        "${hermes-home}/seeds/profiles/supervisor"
+        "${hermes-home}/seeds/profiles/operations/skills" \
+        "${hermes-home}/seeds/profiles/operations/skills/software-development" \
+        "${hermes-home}/seeds/profiles/supervisor" \
+        "${hermes-home}/seeds/profiles/supervisor/skills" \
+        "${hermes-home}/seeds/profiles/supervisor/skills/software-development"
 
-      if [ ! -e "${hermes-home}/seeds/shared/skills/skill-creator" ]; then
-        ${pkgs.coreutils}/bin/cp -a "${hermes-shared-skill-seeds.skill-creator}" "${hermes-home}/seeds/shared/skills/skill-creator"
-        ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/seeds/shared/skills/skill-creator"
+      if [ ! -e "${hermes-home}/seeds/profiles/assistant/skills/software-development/skill-creator" ]; then
+        ${pkgs.coreutils}/bin/cp -a "${hermes-seed-profiles.assistant.skill-creator}" "${hermes-home}/seeds/profiles/assistant/skills/software-development/skill-creator"
+        ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/seeds/profiles/assistant/skills/software-development/skill-creator"
+      fi
+
+      if [ ! -e "${hermes-home}/seeds/profiles/operations/skills/software-development/skill-creator" ]; then
+        ${pkgs.coreutils}/bin/cp -a "${hermes-seed-profiles.operations.skill-creator}" "${hermes-home}/seeds/profiles/operations/skills/software-development/skill-creator"
+        ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/seeds/profiles/operations/skills/software-development/skill-creator"
+      fi
+
+      if [ ! -e "${hermes-home}/seeds/profiles/supervisor/skills/software-development/skill-creator" ]; then
+        ${pkgs.coreutils}/bin/cp -a "${hermes-seed-profiles.supervisor.skill-creator}" "${hermes-home}/seeds/profiles/supervisor/skills/software-development/skill-creator"
+        ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/seeds/profiles/supervisor/skills/software-development/skill-creator"
       fi
 
       if [ ! -e "${hermes-home}/seeds/profiles/assistant/SOUL.md" ]; then
-        install -m0644 -o apps -g apps "${hermes-seed-profiles.assistant}" "${hermes-home}/seeds/profiles/assistant/SOUL.md"
+        install -m0644 -o apps -g apps "${hermes-seed-profiles.assistant.soul}" "${hermes-home}/seeds/profiles/assistant/SOUL.md"
       fi
 
       if [ ! -e "${hermes-home}/seeds/profiles/operations/SOUL.md" ]; then
-        install -m0644 -o apps -g apps "${hermes-seed-profiles.operations}" "${hermes-home}/seeds/profiles/operations/SOUL.md"
+        install -m0644 -o apps -g apps "${hermes-seed-profiles.operations.soul}" "${hermes-home}/seeds/profiles/operations/SOUL.md"
       fi
 
       if [ ! -e "${hermes-home}/seeds/profiles/supervisor/SOUL.md" ]; then
-        install -m0644 -o apps -g apps "${hermes-seed-profiles.supervisor}" "${hermes-home}/seeds/profiles/supervisor/SOUL.md"
+        install -m0644 -o apps -g apps "${hermes-seed-profiles.supervisor.soul}" "${hermes-home}/seeds/profiles/supervisor/SOUL.md"
       fi
 
       if [ ! -f "${hermes-secrets}" ]; then

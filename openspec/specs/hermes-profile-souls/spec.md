@@ -19,8 +19,8 @@ content for the `assistant`, `operations`, and `supervisor` profile gateways.
 ### Requirement: Hermes SHALL seed missing profile SOUL files without overwriting existing ones
 The self-hosted Hermes runtime SHALL copy each managed profile `SOUL.md` file
 into `/home/hermes/seeds/profiles/<profile>/SOUL.md` only when that file is
-missing, and SHALL keep that profile seed behavior separate from shared skill
-seed behavior under `/home/hermes/seeds/shared/skills/`.
+missing, and SHALL keep that profile seed behavior aligned with profile-local
+skill seed behavior under `/home/hermes/seeds/profiles/<profile>/skills/`.
 
 #### Scenario: Missing profile SOUL files are seeded
 - **WHEN** Hermes runtime preparation runs and a profile `SOUL.md` file does
@@ -35,10 +35,11 @@ seed behavior under `/home/hermes/seeds/shared/skills/`.
 - **THEN** the runtime preparation SHALL leave the existing file unchanged
 - **AND** it SHALL not overwrite that file with the repo-managed version
 
-#### Scenario: Existing profile SOUL files are preserved alongside shared skill seeds
+#### Scenario: Existing profile SOUL files are preserved alongside profile-local skill seeds
 - **WHEN** Hermes runtime preparation runs and a profile `SOUL.md` file already
   exists under `/home/hermes/seeds/profiles/<profile>/`
 - **THEN** the runtime preparation SHALL leave the existing file unchanged
 - **AND** it SHALL not overwrite that file with the repo-managed version
-- **AND** shared skill seed preparation under `/home/hermes/seeds/shared/skills/`
-  SHALL remain a separate copy-once path
+- **AND** profile-local skill seed preparation under
+  `/home/hermes/seeds/profiles/<profile>/skills/` SHALL remain a separate
+  copy-once path
