@@ -4,9 +4,10 @@ The current `chill-penguin` Hermes module already mounts the native
 `ghostship-hermes` image layout, passes through a subset of service URLs, and
 loads a limited set of service secret bundles into the container. The upstream
 image bootstrap already owns the managed profile `.env` files and rewrites them
-atomically for `assistant`, `operations`, and `supervisor`, but it currently
-projects `BROWSER_CDP_URL` as a shared env key instead of as a per-profile
-default.
+atomically for `assistant`, `operations`, and `supervisor`. This repo now needs
+a host-managed reconciliation step after that bootstrap so profile-specific
+utility env and `BROWSER_CDP_URL` values can be projected without forking the
+image itself.
 
 The local stack already contains the service credentials and browser topology
 needed for a broader Hermes runtime:
@@ -49,21 +50,26 @@ bootstrap how to project per-profile browser defaults into each profile's
 
 ## Decisions
 
-### 1. Selective cross-bundle imports remain the secret strategy
+### 1. Hermes will selectively project needed values instead of loading full service bundles
 
-The Hermes container will continue to load existing service-local bundles and
-consume the utility-facing variable names they already expose, instead of
-copying those secrets into a new Hermes-owned projection file.
+The Hermes runtime will stop loading whole service-local secret bundles into the
+container. Instead, repo-managed host-side wiring will read only the required
+values from the existing service-local bundles and generated runtime env files,
+then project the Hermes-facing utility vars into the managed profile `.env`
+files.
 
 Why:
 
 - it avoids creating a second source of truth for service credentials
 - it keeps service-local ownership intact
-- it matches the current repo pattern where Hermes already imports a subset of
-  service bundles directly
+- it matches the desired ownership model where service-local bundles stay the
+  source of truth while Hermes receives only the vars it actually needs
 
 Alternatives considered:
 
+- Continue loading whole service-local bundles directly into Hermes: rejected
+  because it exposes unrelated service secrets to Hermes and conflicts with the
+  desired selective-wiring model.
 - Mirror all utility-facing secrets into `hermes-secrets`: rejected because it
   duplicates credential ownership and adds ongoing drift risk.
 
@@ -109,25 +115,27 @@ Alternatives considered:
 The desired Hermes-facing shape is still `BROWSER_CDP_URL` inside each profile
 `.env`, but the source container env will become profile-specific, for example
 `ASSISTANT_BROWSER_CDP_URL`, `OPERATIONS_BROWSER_CDP_URL`, and
-`SUPERVISOR_BROWSER_CDP_URL`. Upstream managed bootstrap must then write the
-matching `BROWSER_CDP_URL` line into each profile's
-`~/.hermes/profiles/<profile>/.env`.
+`SUPERVISOR_BROWSER_CDP_URL`. A repo-managed host reconciliation step must then write the matching
+`BROWSER_CDP_URL` line into each profile's
+`~/.hermes/profiles/<profile>/.env` after the image bootstrap generates the
+base files.
 
 Why:
 
 - Hermes expects one persistent default CDP target per profile
-- the existing upstream bootstrap already owns rewriting those profile `.env`
-  files atomically
-- using profile-specific source vars avoids stamping one shared CDP target into
-  all profiles
+- the image bootstrap already creates the profile `.env` files that the repo
+  can reconcile on the mounted host path
+- host-side reconciliation avoids forking the upstream image while still
+  preventing one shared CDP target from being stamped into all profiles
 
 Alternatives considered:
 
 - Keep one shared `BROWSER_CDP_URL`: rejected because it cannot represent
   different profile defaults.
-- Post-process the profile `.env` files only from this repo after container
-  boot: possible as a workaround, but rejected as the primary design because
-  the upstream image explicitly owns the managed profile `.env` contract.
+- Fork or patch the upstream image bootstrap directly: rejected for this repo
+  change because the mounted host profile `.env` files are already a stable
+  reconciliation surface and the local host can own the additional utility
+  projection without waiting on a separate image rollout.
 
 ### 5. CloakBrowser profile ids should be derived, not hard-coded
 
@@ -166,16 +174,18 @@ Alternatives considered:
 
 ## Risks / Trade-offs
 
-- [Risk] The upstream image bootstrap currently treats `BROWSER_CDP_URL` as a
-  shared projected env key. → Mitigation: implement the per-profile projection
-  in upstream `ghostship-hermes` and consume that updated image contract here.
+- [Risk] The image bootstrap can still rewrite the base profile `.env` files
+  before the repo-owned reconciliation runs. → Mitigation: keep the local sync
+  idempotent, rerun it after Hermes startup, and watch the CloakBrowser profile
+  database plus the PriceBuddy token file for later refreshes.
 - [Risk] A CloakBrowser profile may exist but not expose a usable CDP endpoint
   until launched. → Mitigation: document that this change provides the default
   profile-target URL, not guaranteed always-on browser sessions for those three
   profiles.
-- [Risk] Selective cross-bundle imports can obscure which utility env comes
-  from which service bundle. → Mitigation: document the mapping explicitly in
-  the repo and keep Hermes imports limited to only the required bundles.
+- [Risk] Selective projection can obscure which utility env comes from which
+  service bundle or generated runtime file. → Mitigation: document the mapping
+  explicitly in the repo and keep the projection code limited to the required
+  vars only.
 - [Risk] Some bundled utilities may still rely on optional auth modes that are
   not enabled in this stack. → Mitigation: validate the intended no-auth
   assumptions for qBittorrent and NZBGet and document any residual unsupported
@@ -186,15 +196,13 @@ Alternatives considered:
 1. Update the local Hermes module to expose the missing utility-facing URLs and
    selected service-local bundles needed by the shipped utilities.
 2. Add the local source env names for profile-specific CloakBrowser defaults.
-3. Update upstream `ghostship-hermes` bootstrap so it maps profile-specific
-   source env into `BROWSER_CDP_URL` within each managed profile `.env`.
-4. Rebuild or roll forward the consumed Hermes image, then activate the local
-   NixOS config on `chill-penguin`.
-5. Verify the managed profile `.env` files contain the expected utility env and
+3. Rebuild or activate the local NixOS config on `chill-penguin` so the host
+   owns both the generated `runtime.env` projection and the post-bootstrap
+   profile `.env` reconciliation.
+4. Verify the managed profile `.env` files contain the expected utility env and
    per-profile `BROWSER_CDP_URL` values.
-6. Roll back by restoring the previous Hermes module wiring and previous image
-   reference if the new env projection breaks managed bootstrap or gateway
-   startup.
+5. Roll back by restoring the previous Hermes module wiring if the new env
+   projection or reconciliation breaks managed bootstrap or gateway startup.
 
 ## Open Questions
 
