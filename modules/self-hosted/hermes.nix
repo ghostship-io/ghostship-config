@@ -59,6 +59,7 @@ let
   };
   hermes-profile-env-sync = pkgs.writeTextFile {
     name = "hermes-profile-env-sync.py";
+    destination = "/bin/hermes-profile-env-sync.py";
     executable = true;
     text = ''
       #!${pkgs.python3}/bin/python3
