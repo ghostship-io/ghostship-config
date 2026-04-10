@@ -6,8 +6,8 @@ Usage:
     init_skill.py <skill-name> --path <path>
 
 Examples:
-    init_skill.py my-new-skill --path skills/public
-    init_skill.py my-api-helper --path skills/private
+    init_skill.py my-new-skill --path skills/software-development
+    init_skill.py my-agent-helper --path skills/autonomous-ai-agents
     init_skill.py custom-skill --path /custom/location
 """
 
@@ -21,7 +21,7 @@ description: [TODO: Complete and informative explanation of what the skill does 
 version: 1.0.0
 metadata:
   hermes:
-    category: [TODO: Add the Hermes category for this skill.]
+    category: [TODO: Add the Hermes metadata category for this skill.]
     tags:
       - [TODO: Add a short tag.]
 ---
@@ -31,6 +31,8 @@ metadata:
 ## When to Use
 
 [TODO: Describe the user requests, workflows, or file types that should trigger this skill.]
+
+[TODO: Confirm the skill lives under `skills/<category>/<skill-name>/` using one of the upstream category folders: `autonomous-ai-agents`, `creative`, `data-science`, `devops`, `email`, `gaming`, `github`, `leisure`, `mcp`, `media`, `mlops`, `note-taking`, `productivity`, `red-teaming`, `research`, `smart-home`, `social-media`, or `software-development`.]
 
 ## Procedure
 
@@ -236,7 +238,7 @@ def init_skill(skill_name, path):
     # Print next steps
     print(f"\n[OK] Skill '{skill_name}' initialized successfully at {skill_dir}")
     print("\nNext steps:")
-    print("1. Edit SKILL.md to complete the TODO items and update the Hermes metadata")
+    print("1. Edit SKILL.md to complete the TODO items, confirm the upstream category folder, and update the Hermes metadata")
     print("2. Customize or delete the example files in scripts/, references/, and assets/")
     print("3. Run the validator when ready to check the skill structure")
 
@@ -252,8 +254,8 @@ def main():
         print("  - Max 40 characters")
         print("  - Must match directory name exactly")
         print("\nExamples:")
-        print("  init_skill.py my-new-skill --path skills/public")
-        print("  init_skill.py my-api-helper --path skills/private")
+        print("  init_skill.py my-new-skill --path skills/software-development")
+        print("  init_skill.py my-agent-helper --path skills/autonomous-ai-agents")
         print("  init_skill.py custom-skill --path /custom/location")
         sys.exit(1)
 

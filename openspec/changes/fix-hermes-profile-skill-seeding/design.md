@@ -10,7 +10,8 @@ The user has clarified that this assumption is wrong for the current Hermes
 runtime: the old shared skill content should instead be copied into each
 profile's local seed tree. In practice, that means the repo should stop
 authoring or seeding a shared skill path and should duplicate the current
-shared `skill-creator` seed into each managed profile's `skills/` directory.
+shared `skill-creator` seed into each managed profile's categorized
+`skills/software-development/` directory.
 
 This is a server-host and documentation change. It affects:
 
@@ -29,7 +30,7 @@ shared path need a manual cleanup step after rollout.
 - Retire the obsolete shared runtime skill-seed path
   `/home/hermes/seeds/shared/skills/`.
 - Copy the old shared `skill-creator` seed content into each managed profile's
-  repo source tree and runtime seed tree.
+  categorized repo source tree and runtime seed tree.
 - Keep profile-local seeding copy-once so runtime-owned profile state is not
   overwritten on later starts.
 - Make the stale shared-path cleanup explicit in the rollout plan.
@@ -48,17 +49,17 @@ shared path need a manual cleanup step after rollout.
 
 The repo should remove the dedicated shared Hermes skill-seed source tree and
 instead copy the old shared `skill-creator` seed content into each managed
-profile source tree:
+profile source tree under the upstream category structure:
 
-- `modules/self-hosted/hermes-seeds/profiles/assistant/skills/skill-creator/`
-- `modules/self-hosted/hermes-seeds/profiles/operations/skills/skill-creator/`
-- `modules/self-hosted/hermes-seeds/profiles/supervisor/skills/skill-creator/`
+- `modules/self-hosted/hermes-seeds/profiles/assistant/skills/software-development/skill-creator/`
+- `modules/self-hosted/hermes-seeds/profiles/operations/skills/software-development/skill-creator/`
+- `modules/self-hosted/hermes-seeds/profiles/supervisor/skills/software-development/skill-creator/`
 
 At runtime, Hermes should seed those directories into:
 
-- `/home/hermes/seeds/profiles/assistant/skills/skill-creator/`
-- `/home/hermes/seeds/profiles/operations/skills/skill-creator/`
-- `/home/hermes/seeds/profiles/supervisor/skills/skill-creator/`
+- `/home/hermes/seeds/profiles/assistant/skills/software-development/skill-creator/`
+- `/home/hermes/seeds/profiles/operations/skills/software-development/skill-creator/`
+- `/home/hermes/seeds/profiles/supervisor/skills/software-development/skill-creator/`
 
 Why:
 - It matches the user's clarified runtime model.
@@ -74,7 +75,7 @@ Alternatives considered:
 
 ### Decision: Keep profile skill seeding copy-once per profile
 
-Each profile-local `skills/<skill>/` directory should be seeded only when the
+Each profile-local `skills/<category>/<skill>/` directory should be seeded only when the
  target directory is missing under `/home/hermes/seeds/profiles/<profile>/`.
 
 Why:
@@ -120,10 +121,10 @@ Alternatives considered:
 
 1. Remove the old shared Hermes skill-seed source tree and replace it with
    per-profile copies of `skill-creator` under
-   `modules/self-hosted/hermes-seeds/profiles/<profile>/skills/`.
+   `modules/self-hosted/hermes-seeds/profiles/<profile>/skills/software-development/`.
 2. Update `modules/self-hosted/hermes.nix` so Hermes runtime preparation creates
-   each profile `skills/` seed directory and seeds `skill-creator` there only
-   when missing.
+   each profile `skills/software-development/` seed directory and seeds
+   `skill-creator` there only when missing.
 3. Remove the declarative shared runtime seed path creation and old shared
    `skill-creator` seeding logic from the Hermes module.
 4. Update the active OpenSpec requirements and docs to remove the shared-seed
@@ -138,9 +139,9 @@ Alternatives considered:
      `/srv/apps/hermes/home/seeds/shared/` that exist only for the retired
      shared skill path
 8. Verify that each managed profile now has a profile-local seed tree at:
-   - `/srv/apps/hermes/home/seeds/profiles/assistant/skills/skill-creator`
-   - `/srv/apps/hermes/home/seeds/profiles/operations/skills/skill-creator`
-   - `/srv/apps/hermes/home/seeds/profiles/supervisor/skills/skill-creator`
+   - `/srv/apps/hermes/home/seeds/profiles/assistant/skills/software-development/skill-creator`
+   - `/srv/apps/hermes/home/seeds/profiles/operations/skills/software-development/skill-creator`
+   - `/srv/apps/hermes/home/seeds/profiles/supervisor/skills/software-development/skill-creator`
 
 Rollback would restore the previous shared-seed source tree, revert the Hermes
 module and docs/specs, rebuild the host, and if needed recreate the shared
@@ -149,4 +150,5 @@ runtime seed path from Git-managed sources.
 ## Open Questions
 
 - None. The requested direction is explicit: the old shared skill content
-  should now be copied into each profile's `skills/` folder.
+  should now be copied into each profile's categorized `skills/<category>/` folder,
+  and `skill-creator` belongs under `software-development`.

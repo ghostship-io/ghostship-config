@@ -53,14 +53,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   built-in `~/.codex/skills/.system/skill-creator` path as a managed symlink to
   `~/.agents/skills/skill-creator` during develop-profile activation and
   `ghostship-agent-maintenance`.
-- **Hermes shared skill seeds**: Added a repo-managed Hermes shared
-  `skill-creator` seed under
-  `modules/self-hosted/hermes-seeds/shared/skills/skill-creator/`, imported the
-  upstream `vercel-labs/agent-browser` `v0.9.3` package as the baseline, and
-  adapted the Hermes copy with minimal `SKILL.md` changes plus Hermes-aware
-  init/validation scripts. `podman-hermes` now seeds that shared skill into
-  `/srv/apps/hermes/home/seeds/shared/skills/skill-creator/` only when the
-  runtime-owned directory is missing.
+- **Hermes profile skill seeds**: Replaced the old shared Hermes
+  `skill-creator` seed path with profile-local copies under
+  `modules/self-hosted/hermes-seeds/profiles/{assistant,operations,supervisor}/skills/software-development/skill-creator/`,
+  and `podman-hermes` now seeds each profile-local `skill-creator` directory
+  into `/srv/apps/hermes/home/seeds/profiles/<profile>/skills/software-development/skill-creator/`
+  only when that runtime-owned directory is missing. The old shared runtime
+  path under `/srv/apps/hermes/home/seeds/shared/skills/` is now retired and
+  should be cleaned up manually on hosts after the updated config is applied.
 - **Gluetun PIA WireGuard selector**: Migrated `chill-penguin` Gluetun from native PIA OpenVPN to Gluetun's custom-provider WireGuard path, added a daily PF-capable PIA server selector that caches the preferred winner under `/srv/apps/gluetun/pia-wireguard-selection.json`, regenerated the runtime env at Gluetun startup, kept PIA VPN-side port forwarding on the persisted `/srv/apps/gluetun` state mount, and updated the monitor to use Gluetun's generic `/v1/portforward` control route while still reconciling qBittorrent/VueTorrent after startup and reconnects.
 - **Hermes profile SOUL seeds**: Added tracked Hermes persona source files for
   the `assistant`, `operations`, and `supervisor` gateways under

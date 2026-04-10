@@ -16,6 +16,27 @@ REQUIRED_SECTIONS = (
     "## Verification",
 )
 
+ALLOWED_CATEGORIES = {
+    "autonomous-ai-agents",
+    "creative",
+    "data-science",
+    "devops",
+    "email",
+    "gaming",
+    "github",
+    "leisure",
+    "mcp",
+    "media",
+    "mlops",
+    "note-taking",
+    "productivity",
+    "red-teaming",
+    "research",
+    "smart-home",
+    "social-media",
+    "software-development",
+}
+
 
 def validate_skill(skill_path):
     """Basic validation of a skill"""
@@ -148,6 +169,20 @@ def validate_skill(skill_path):
 
     if skill_path.name != name:
         return False, f"Skill directory name '{skill_path.name}' must match frontmatter name '{name}'"
+
+    if skill_path.parent.name == 'skills':
+        return False, (
+            "Skill directory must live under a category folder like "
+            "skills/<category>/<skill-name>, not directly under skills/"
+        )
+
+    if skill_path.parent.parent.name == 'skills':
+        category = skill_path.parent.name
+        if category not in ALLOWED_CATEGORIES:
+            return False, (
+                f"Skill category '{category}' is not one of the supported upstream categories: "
+                + ', '.join(sorted(ALLOWED_CATEGORIES))
+            )
 
     body = content[match.end():]
     missing_sections = [section for section in REQUIRED_SECTIONS if section not in body]
