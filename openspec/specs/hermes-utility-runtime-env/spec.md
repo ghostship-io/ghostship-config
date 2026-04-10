@@ -76,9 +76,7 @@ repo-managed host wiring.
   `PYLOAD_USER`, `PYLOAD_PASS`, `CLOAKBROWSER_URL`,
   `CLOAKBROWSER_TOKEN`, `PRICEBUDDY_URL`, `PRICEBUDDY_TOKEN`,
   `RSS_BRIDGE_URL`, `CHANGEDETECTION_URL`, `CHANGEDETECTION_API_KEY`,
-  `CHAPTARR_URL`, `CHAPTARR_API_KEY`, `CHAPTARR_API_PATH`,
-  `CHAPTARR_API_VERSION`, `N8N_URL`, `N8N_API_KEY`,
-  `N8N_PUBLIC_API_ENDPOINT`, and `N8N_PUBLIC_API_VERSION`
+  `CHAPTARR_URL`, `CHAPTARR_API_KEY`, `N8N_URL`, and `N8N_API_KEY`
 
 #### Scenario: Container-only runtime env stays out of managed profile env files
 - **WHEN** the Hermes container starts with runtime-only process env
@@ -157,4 +155,3 @@ source inputs and never the final profile `.env` values directly.
 - **WHEN** `OPENCODE_API_KEY` is unset and `OPENCODE_GO_API_KEY` is set
 - **THEN** upstream SHALL also write `OPENCODE_API_KEY` with the
   `OPENCODE_GO_API_KEY` value into managed profile `.env`
-

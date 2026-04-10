@@ -40,12 +40,8 @@ let
     PYLOAD_URL = "http://pyload:8000";
     CLOAKBROWSER_URL = "http://cloakbrowser:8080";
     N8N_URL = "http://n8n:5678";
-    N8N_PUBLIC_API_ENDPOINT = "https://n8n.ghostship.io/api/v1";
-    N8N_PUBLIC_API_VERSION = "v1";
     CHANGEDETECTION_URL = "http://changedetection:5000";
     CHAPTARR_URL = "http://chaptarr:8789";
-    CHAPTARR_API_PATH = "/api/v1";
-    CHAPTARR_API_VERSION = "v1";
     PRICEBUDDY_URL = "http://pricebuddy";
     RSS_BRIDGE_URL = "http://rss-bridge";
     SYNOLOGY_URL = "http://192.168.200.106:5000/";
