@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Synology NFS hard mounts**: Switched the managed Synology NFS mounts on
+  `chill-penguin` and WSL hosts from `soft` to `hard` so transient server or
+  network stalls stop surfacing as client-side I/O errors during file copies.
+
 - **VueTorrent tunnel binding**: Reconciled qBittorrent's bound interface
   address to Gluetun's live `tun0` IPv4 in the Gluetun monitor, so qBittorrent
   stops getting stuck in a disconnected state after VPN restarts or namespace

@@ -73,6 +73,9 @@ changelog.
   `launch-octopus`: keep real root/swap/kernel/platform facts, but drop
   generated WSL pseudo-filesystems such as `/mnt/wsl*`, `/usr/lib/wsl/*`,
   `/mnt/c`, and `/tmp/.X11-unix`.
+- Managed Synology NFS mounts should use `hard`, not `soft`, on both WSL and
+  NixOS clients so transient NAS stalls do not surface as client-side I/O
+  errors or integrity failures during copies.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode

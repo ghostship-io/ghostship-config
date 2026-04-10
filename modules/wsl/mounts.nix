@@ -13,7 +13,7 @@ lib.mkIf (config.wsl.enable or false) {
       "x-systemd.automount"
       "noatime"
       "nodiratime"
-      "soft"
+      "hard"
       "intr"
       "timeo=30"
       "retrans=2"

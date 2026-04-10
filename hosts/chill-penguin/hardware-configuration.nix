@@ -45,7 +45,7 @@
   fileSystems."/mnt/share" =
     { device = "192.168.200.106:/volume1/share";
       fsType = "nfs";
-      options = [ "nofail" "x-systemd.automount" "noatime" "nodiratime" "soft" "intr" "timeo=30" "retrans=2" "rsize=1048576" "wsize=1048576" "nfsvers=4.1" "async" "tcp" "actimeo=120" ];
+      options = [ "nofail" "x-systemd.automount" "noatime" "nodiratime" "hard" "intr" "timeo=30" "retrans=2" "rsize=1048576" "wsize=1048576" "nfsvers=4.1" "async" "tcp" "actimeo=120" ];
     };
 
   swapDevices = [ ];
