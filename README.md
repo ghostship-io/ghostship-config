@@ -83,6 +83,7 @@ for secrets.
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
 - The repo no longer starts `agent-deck web` automatically on WSL develop hosts. After you apply this change, manually clean up any leftover `agent-deck-web.service`, `~/.config/systemd/user/default.target.wants/agent-deck-web.service`, `agent-deck-web` tmux session, and `~/.agent-deck/web-service.log`.
+- Develop-host convergence also cleans the known stale `workmux set-window-status ...` entries from `~/.codex/hooks.json` so removed repo-managed tooling does not keep breaking Codex hooks. The cleanup preserves unrelated valid hooks, warns instead of rewriting malformed JSON, and takes effect after the relevant Home Manager or NixOS switch. Restart any already-running Codex or Agent Deck sessions after the switch if they were holding the stale hook state open.
 - Develop-host launchers now keep only the approval defaults: Codex prepends
   `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit
   approval or sandbox flags, Gemini prepends `--yolo` unless you pass an

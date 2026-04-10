@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   user-state artifacts to the post-apply step.
 - **Develop Workmux removal**: Removed the repo-managed `workmux` package and
   its known user-home artifacts from the supported develop-host workflow.
+- **Develop Codex hook cleanup**: Extend the develop-host workmux cleanup to remove the stale `workmux set-window-status ...` commands from `~/.codex/hooks.json`, preserve unrelated valid hooks, warn on malformed hook JSON, and require a Codex or Agent Deck session restart after the relevant rebuild or switch if an old session was still holding the stale state.
 - **OpenSpec Ghostship overrides**: `propose` now ends with a full plan
   summary and worktree edit guidance, `apply` reuses the current proposal and
   worktree for mid-apply changes, and `archive` now attempts to leave `main`

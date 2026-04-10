@@ -31,6 +31,12 @@ changelog.
   group from Agent Deck CLI JSON with `jq`, use the supported `add -Q` plus
   `session start` flow to launch quick-titled sessions, and keep `gemini-cli`
   available as a real managed wrapper command rather than a shell-only alias.
+- Develop-host convergence should scrub the known stale `workmux
+  set-window-status ...` commands from `~/.codex/hooks.json` so removed
+  repo-managed tooling does not keep breaking Codex hooks, while preserving
+  unrelated valid hook entries and warning instead of rewriting malformed JSON.
+  Restart already-running Codex or Agent Deck sessions after the relevant
+  rebuild or switch if they were holding the stale hook state open.
 - The `apply_patch` tool is currently broken in worktrees on this host. Use
   Python-based file edits instead of the `apply_patch` tool when editing from a
   worktree, and verify the diff immediately after each edit.

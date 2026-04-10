@@ -66,7 +66,73 @@ in
   '';
 
   home.activation.removeWorkmuxArtifacts = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf       "$HOME/.cache/workmux"       "$HOME/.config/workmux"       "$HOME/.local/state/workmux"       "$HOME/.config/opencode/plugin/workmux-status.ts"       "$HOME/.config/opencode/skills/workmux"
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf \
+      "$HOME/.cache/workmux" \
+      "$HOME/.config/workmux" \
+      "$HOME/.local/state/workmux" \
+      "$HOME/.config/opencode/plugin/workmux-status.ts" \
+      "$HOME/.config/opencode/skills/workmux"
+
+    codex_hooks_file="$HOME/.codex/hooks.json"
+    if test -f "$codex_hooks_file"; then
+      $DRY_RUN_CMD ${pkgs.python3}/bin/python - "$codex_hooks_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+stale_commands = {
+    "workmux set-window-status working",
+    "workmux set-window-status done",
+}
+
+try:
+    data = json.loads(path.read_text())
+except (OSError, json.JSONDecodeError) as exc:
+    print(f"warning: unable to clean stale Codex workmux hooks in {path}: {exc}", file=sys.stderr)
+    raise SystemExit(0)
+
+hooks = data.get("hooks")
+if not isinstance(hooks, dict):
+    raise SystemExit(0)
+
+changed = False
+for event_name, event_groups in list(hooks.items()):
+    if not isinstance(event_groups, list):
+        continue
+
+    cleaned_groups = []
+    for group in event_groups:
+        if not isinstance(group, dict):
+            cleaned_groups.append(group)
+            continue
+
+        nested_hooks = group.get("hooks")
+        if not isinstance(nested_hooks, list):
+            cleaned_groups.append(group)
+            continue
+
+        filtered_hooks = []
+        for hook in nested_hooks:
+            if (
+                isinstance(hook, dict)
+                and hook.get("type") == "command"
+                and hook.get("command") in stale_commands
+            ):
+                changed = True
+                continue
+            filtered_hooks.append(hook)
+
+        updated_group = dict(group)
+        updated_group["hooks"] = filtered_hooks
+        cleaned_groups.append(updated_group)
+
+    hooks[event_name] = cleaned_groups
+
+if changed:
+    path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+    fi
   '';
 
 
