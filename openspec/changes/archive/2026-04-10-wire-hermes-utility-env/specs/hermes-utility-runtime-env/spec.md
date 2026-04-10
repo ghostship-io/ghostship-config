@@ -12,10 +12,13 @@ service URLs and selected secret-backed utility env expected by the bundled
   `PRICEBUDDY_URL`, `RSS_BRIDGE_URL`, and `SYNOLOGY_URL`
 - **AND** `SYNOLOGY_URL` SHALL point at `http://192.168.200.106:5000/`
 
-#### Scenario: Selected service-local secret bundles remain the source of truth
-- **WHEN** the Hermes container runtime env is generated
-- **THEN** Hermes SHALL import only the existing service-local secret bundles
-  needed for the bundled utility auth surface
+#### Scenario: Selected service-local secret sources remain the source of truth
+- **WHEN** the Hermes runtime env is generated
+- **THEN** repo-managed wiring SHALL read only the required Hermes-facing
+  utility values from the existing service-local secret bundles and generated
+  runtime env files
+- **AND** Hermes SHALL not load whole unrelated service bundles only to reach a
+  small subset of values
 - **AND** the repo SHALL not require a second Hermes-only projection bundle
   that duplicates those same credentials
 

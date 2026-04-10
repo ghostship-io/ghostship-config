@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Hermes utility env projection**: Reduced the Hermes container secret surface to `hermes-secrets` plus a generated `/srv/apps/hermes/runtime.env`, projected only the required utility-facing auth values from service-local secret or runtime files, added the missing internal utility URLs including Changedetection, Chaptarr, PriceBuddy, RSS-Bridge, and Synology, and now reconcile the managed `assistant`, `operations`, and `supervisor` profile `.env` files with those utility vars plus per-profile `BROWSER_CDP_URL` values derived from the matching managed CloakBrowser profiles.
+
 - **Synology NFS hard mounts**: Switched the managed Synology NFS mounts on
   `chill-penguin` and WSL hosts from `soft` to `hard` so transient server or
   network stalls stop surfacing as client-side I/O errors during file copies.

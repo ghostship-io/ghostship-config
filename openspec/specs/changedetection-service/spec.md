@@ -55,6 +55,14 @@ profile instead of from a shared generic browser profile.
 - **AND** Ghostship relaunches that profile if it is stopped while the manager
   itself is still available
 
+#### Scenario: Hermes reuses the managed profile inventory for browser defaults
+- **WHEN** the managed Hermes runtime derives default `BROWSER_CDP_URL` values
+  for `assistant`, `operations`, and `supervisor`
+- **THEN** it MAY resolve those CDP URLs from the same managed CloakBrowser
+  profile inventory
+- **AND** that reuse SHALL not change the dedicated launch-and-keepalive
+  contract that remains specific to `Changedetection`
+
 ### Requirement: changedetection SHALL be visible in Homepage services
 
 Homepage SHALL include `Changedetection` in the `Services` group so the new

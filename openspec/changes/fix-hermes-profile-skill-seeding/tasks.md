@@ -20,5 +20,5 @@
 
 - [x] 4.1 Run concrete verification for the affected host config, such as `nix build .#nixosConfigurations.chill-penguin.config.system.build.toplevel -L`.
 - [x] 4.2 Inspect the generated Hermes preStart logic or a narrower evaluation output to confirm it now prepares and seeds `profiles/<profile>/skills/software-development/skill-creator` instead of `shared/skills/skill-creator`.
-- [ ] 4.3 After applying the config on the host, manually remove stale shared seed artifacts under `/srv/apps/hermes/home/seeds/shared/skills/`, including the retired `skill-creator` tree and any now-empty parent directories that exist only for the old shared path.
+- [x] 4.3 After applying the config on the host, manually remove stale shared seed artifacts under `/srv/apps/hermes/home/seeds/shared/skills/`, including the retired `skill-creator` tree, any now-empty parent directories that exist only for the old shared path, and the bad runtime copies under `/srv/apps/hermes/home/.hermes/skills/`.
 - [x] 4.4 Run `openspec status --change fix-hermes-profile-skill-seeding` and confirm the proposal remains apply-ready.

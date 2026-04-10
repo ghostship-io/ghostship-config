@@ -9,8 +9,9 @@ topology already exist in the stack.
 ## What Changes
 
 - Expand the Hermes container runtime env contract so bundled `ghostship-*`
-  utilities receive the service URLs and credentials they need from selected
-  existing secret bundles instead of from a new projection bundle.
+  utilities receive the service URLs and credentials they need from
+  explicit local env wiring that selectively reads the required values from
+  existing service-local secret bundles and generated runtime env files.
 - Add a managed Hermes utility/runtime env capability that defines which
   service URLs, service credentials, and profile-facing browser defaults SHALL
   be available to the three managed Hermes profiles.
@@ -40,12 +41,11 @@ topology already exist in the stack.
 ## Impact
 
 - Affected systems: server hosts, especially `chill-penguin`; self-hosted
-  Hermes runtime; CloakBrowser profile integration; selected secret-bundle
-  imports; bundled `ghostship-*` utility ergonomics.
+  Hermes runtime; CloakBrowser profile integration; selected secret extraction and projection; bundled `ghostship-*`
+  utility ergonomics.
 - Affected code: [hermes.nix](/home/nixos/nixos-config/modules/self-hosted/hermes.nix),
   related self-hosted service modules and secret references, and repo
   documentation in `README.md`, `CHANGELOG.md`, and `AGENTS.md`.
-- Deployment implications: requires host activation on `chill-penguin`; may
-  also require a coordinated upstream `ghostship-hermes` image update so
-  managed bootstrap can write per-profile `BROWSER_CDP_URL` values into
-  `~/.hermes/profiles/<profile>/.env`.
+- Deployment implications: requires host activation on `chill-penguin`; uses a host-managed profile env reconciliation step after the image bootstrap so
+  managed profile `.env` files receive per-profile `BROWSER_CDP_URL` values
+  without requiring a separate upstream image rollout first.
