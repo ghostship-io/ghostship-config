@@ -12,7 +12,6 @@
     };
     experimental = {
       modelSteering = true;
-      plan = true;
     };
     security = {
       auth = {
