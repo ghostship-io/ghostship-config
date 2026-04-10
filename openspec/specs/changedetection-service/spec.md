@@ -56,7 +56,7 @@ profile instead of from a shared generic browser profile.
   itself is still available
 
 #### Scenario: Hermes reuses the managed profile inventory for browser defaults
-- **WHEN** the managed Hermes runtime derives default `BROWSER_CDP_URL` values
+- **WHEN** the managed Hermes runtime derives default browser connection values
   for `assistant`, `operations`, and `supervisor`
 - **THEN** it MAY resolve those CDP URLs from the same managed CloakBrowser
   profile inventory

@@ -119,8 +119,8 @@ source inputs and never the final profile `.env` values directly.
   `DISCORD_FREE_RESPONSE_CHANNELS`
 - **AND** it SHALL translate `WEBHOOK_ASSISTANT_SECRET` to
   `WEBHOOK_SECRET`
-- **AND** it SHALL translate `BROWSER_ASSISTANT_CDP_URL` to
-  `BROWSER_CDP_URL`
+- **AND** it SHALL apply the browser connection setting from
+  `BROWSER_ASSISTANT_CDP_URL`
 - **AND** it SHALL generate `WEBHOOK_PORT=8644`
 
 #### Scenario: Operations profile receives operations-specific translations
@@ -133,8 +133,8 @@ source inputs and never the final profile `.env` values directly.
   `DISCORD_FREE_RESPONSE_CHANNELS`
 - **AND** it SHALL translate `WEBHOOK_OPERATIONS_SECRET` to
   `WEBHOOK_SECRET`
-- **AND** it SHALL translate `BROWSER_OPERATIONS_CDP_URL` to
-  `BROWSER_CDP_URL`
+- **AND** it SHALL apply the browser connection setting from
+  `BROWSER_OPERATIONS_CDP_URL`
 - **AND** it SHALL generate `WEBHOOK_PORT=8645`
 
 #### Scenario: Supervisor profile receives supervisor-specific translations
@@ -147,8 +147,8 @@ source inputs and never the final profile `.env` values directly.
   `DISCORD_FREE_RESPONSE_CHANNELS`
 - **AND** it SHALL translate `WEBHOOK_SUPERVISOR_SECRET` to
   `WEBHOOK_SECRET`
-- **AND** it SHALL translate `BROWSER_SUPERVISOR_CDP_URL` to
-  `BROWSER_CDP_URL`
+- **AND** it SHALL apply the browser connection setting from
+  `BROWSER_SUPERVISOR_CDP_URL`
 - **AND** it SHALL generate `WEBHOOK_PORT=8646`
 
 #### Scenario: OpenCode compatibility normalization remains available
