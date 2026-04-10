@@ -434,6 +434,7 @@ in
         . "${gluetun-secrets}"
         set +a
         API_KEY="$HTTP_CONTROL_SERVER_API_KEY"
+        TUN_INTERFACE="tun0"
 
         while true; do
           if ! ${pkgs.podman}/bin/podman ps --filter "name=gluetun" --filter "status=running" | grep -q gluetun; then
@@ -456,24 +457,43 @@ in
 
             VPN_STATUS=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- --header "X-API-Key: $API_KEY" http://127.0.0.1:8000/v1/vpn/status 2>/dev/null | ${pkgs.jq}/bin/jq -r .status 2>/dev/null || true)
             FORWARDED_PORT=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- --header "X-API-Key: $API_KEY" http://127.0.0.1:8000/v1/portforward 2>/dev/null | ${pkgs.jq}/bin/jq -r .port 2>/dev/null || true)
+            TUN_IP=$(${pkgs.podman}/bin/podman exec gluetun sh -c "ip -4 -o addr show dev $TUN_INTERFACE 2>/dev/null | tr -s ' ' | cut -d' ' -f4 | cut -d/ -f1 | head -n1" 2>/dev/null || true)
 
-            if [ -n "$FORWARDED_PORT" ] && [ "$FORWARDED_PORT" != "null" ] && [ "$FORWARDED_PORT" != "0" ]; then
-              PF_FAILURES=0
-              if ${pkgs.podman}/bin/podman exec gluetun wget -qO- http://127.0.0.1:5000/api/v2/app/version >/dev/null 2>&1; then
-                CURRENT_VT_PORT=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- http://127.0.0.1:5000/api/v2/app/preferences 2>/dev/null | ${pkgs.jq}/bin/jq -r .listen_port 2>/dev/null || true)
+            if ${pkgs.podman}/bin/podman exec gluetun wget -qO- http://127.0.0.1:5000/api/v2/app/version >/dev/null 2>&1; then
+              CURRENT_VT_PREFS=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- http://127.0.0.1:5000/api/v2/app/preferences 2>/dev/null || true)
+              CURRENT_VT_PORT=$(printf '%s' "$CURRENT_VT_PREFS" | ${pkgs.jq}/bin/jq -r '.listen_port // empty' 2>/dev/null || true)
+              CURRENT_VT_INTERFACE=$(printf '%s' "$CURRENT_VT_PREFS" | ${pkgs.jq}/bin/jq -r '.current_network_interface // empty' 2>/dev/null || true)
+              CURRENT_VT_ADDR=$(printf '%s' "$CURRENT_VT_PREFS" | ${pkgs.jq}/bin/jq -r '.current_interface_address // empty' 2>/dev/null || true)
+              CURRENT_VT_EXTERNAL_IP=$(printf '%s' "$CURRENT_VT_PREFS" | ${pkgs.jq}/bin/jq -r '.status_bar_external_ip // false' 2>/dev/null || true)
 
-                if [ "$CURRENT_VT_PORT" != "$FORWARDED_PORT" ]; then
-                  echo "VueTorrent port mismatch (Current: $CURRENT_VT_PORT, Forwarded: $FORWARDED_PORT). Updating..."
-                  ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "json={\"listen_port\":$FORWARDED_PORT,\"random_port\":false,\"upnp\":false}" http://127.0.0.1:5000/api/v2/app/setPreferences >/dev/null 2>&1 || true
-                fi
+              if [ -n "$TUN_IP" ] && { [ "$CURRENT_VT_INTERFACE" != "$TUN_INTERFACE" ] || [ "$CURRENT_VT_ADDR" != "$TUN_IP" ] || [ "$CURRENT_VT_EXTERNAL_IP" != "true" ]; }; then
+                echo "VueTorrent interface binding drift detected (Interface: $CURRENT_VT_INTERFACE, Address: $CURRENT_VT_ADDR, External IP enabled: $CURRENT_VT_EXTERNAL_IP). Reconciling to $TUN_INTERFACE/$TUN_IP."
+                VT_BIND_JSON=$(${pkgs.jq}/bin/jq -cn \
+                  --arg interface "$TUN_INTERFACE" \
+                  --arg address "$TUN_IP" \
+                  '{"current_network_interface": $interface, "current_interface_address": $address, "status_bar_external_ip": true}')
+                ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "json=$VT_BIND_JSON" http://127.0.0.1:5000/api/v2/app/setPreferences >/dev/null 2>&1 || true
               fi
-            elif [ "$VPN_STATUS" = "running" ]; then
-              PF_FAILURES=$((PF_FAILURES + 1))
-              echo "Gluetun port forwarding is degraded (failure $PF_FAILURES)."
-              if [ "$PF_FAILURES" -ge 5 ]; then
-                echo "Restarting podman-gluetun after repeated port forwarding failures."
-                systemctl restart podman-gluetun.service
+
+              if [ -n "$FORWARDED_PORT" ] && [ "$FORWARDED_PORT" != "null" ] && [ "$FORWARDED_PORT" != "0" ]; then
                 PF_FAILURES=0
+                if [ "$CURRENT_VT_PORT" != "$FORWARDED_PORT" ] || [ "$CURRENT_VT_INTERFACE" != "$TUN_INTERFACE" ] || [ "$CURRENT_VT_ADDR" != "$TUN_IP" ]; then
+                  echo "VueTorrent port or tunnel binding mismatch (Port: $CURRENT_VT_PORT, Interface: $CURRENT_VT_INTERFACE, Address: $CURRENT_VT_ADDR). Updating to $FORWARDED_PORT on $TUN_INTERFACE/$TUN_IP."
+                  VT_PORT_JSON=$(${pkgs.jq}/bin/jq -cn \
+                    --arg interface "$TUN_INTERFACE" \
+                    --arg address "$TUN_IP" \
+                    --arg port "$FORWARDED_PORT" \
+                    '{"listen_port": ($port | tonumber), "current_network_interface": $interface, "current_interface_address": $address, "random_port": false, "upnp": false, "status_bar_external_ip": true}')
+                  ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "json=$VT_PORT_JSON" http://127.0.0.1:5000/api/v2/app/setPreferences >/dev/null 2>&1 || true
+                fi
+              elif [ "$VPN_STATUS" = "running" ]; then
+                PF_FAILURES=$((PF_FAILURES + 1))
+                echo "Gluetun port forwarding is degraded (failure $PF_FAILURES)."
+                if [ "$PF_FAILURES" -ge 5 ]; then
+                  echo "Restarting podman-gluetun after repeated port forwarding failures."
+                  systemctl restart podman-gluetun.service
+                  PF_FAILURES=0
+                fi
               fi
             fi
           fi

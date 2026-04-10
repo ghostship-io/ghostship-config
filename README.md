@@ -141,6 +141,9 @@ that cached winner at startup to regenerate `/run/secrets/gluetun-runtime.env`.
 The persisted `/srv/apps/gluetun` mount remains the owner of Gluetun state and
 PIA's forwarded-port lease, while the qBittorrent/VueTorrent up/down hooks plus
 the Gluetun monitor keep the listen port reconciled after startup and reconnects.
+The monitor also reconciles qBittorrent's bound interface address to the live
+WireGuard `tun0` address, because qBittorrent 5.1.4 can stay disconnected if it
+only binds by interface name after the VPN namespace changes.
 The Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
 legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`.
 

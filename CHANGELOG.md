@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **VueTorrent tunnel binding**: Reconciled qBittorrent's bound interface
+  address to Gluetun's live `tun0` IPv4 in the Gluetun monitor, so qBittorrent
+  stops getting stuck in a disconnected state after VPN restarts or namespace
+  changes when binding by interface name alone is insufficient.
+
 - **Develop Gemini maintenance**: Removed the deprecated `experimental.plan` key from the generated develop-host Gemini system settings so managed Gemini launches stop warning about read-only stale config, and added `bash` to the maintenance runtime inputs so npm and npx subprocesses can spawn `sh` reliably during `ghostship-agent-maintenance`.
 
 - **Develop Agent Deck launcher**: Added a repo-managed `agent-deck-launch` helper for develop hosts that creates the current directory's Agent Deck group when needed, defaults launches to `codex`, uses Agent Deck's supported `add -Q` plus `session start` flow for quick titles, and now exposes `gemini-cli` as a shell-wide managed wrapper command alongside `gemini`.
