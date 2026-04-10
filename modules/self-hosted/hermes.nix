@@ -449,7 +449,7 @@ in
           ghostship-hermes-startup.service
       '
 
-      ${pkgs.systemd}/bin/systemctl start hermes-profile-env-sync.service || true
+      ${pkgs.systemd}/bin/systemctl start --no-block hermes-profile-env-sync.service || true
     '';
   };
 
