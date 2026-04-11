@@ -260,7 +260,7 @@ in
     extraOptions = [
       "--network=ghostship_net"
       "--privileged"
-      "--health-cmd=/run/current-system/sw/bin/curl -fsS http://127.0.0.1:7681/ >/dev/null || exit 1"
+      "--health-cmd=[\"/bin/sh\",\"-lc\",\"${pkgs.curl}/bin/curl -fsS http://127.0.0.1:7681/ >/dev/null || exit 1\"]"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
