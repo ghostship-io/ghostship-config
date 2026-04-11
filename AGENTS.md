@@ -217,6 +217,10 @@ changelog.
 
 - `agent-browser` on the WSL develop hosts needs the wrapped Nix library path
   to launch Puppeteer's downloaded Chrome successfully.
+- The managed `agent-browser` wrapper should default
+  `AGENT_BROWSER_ENGINE=chrome` unless the caller overrides it, because recent
+  upstream auto-launch behavior can drift onto Lightpanda and break the
+  profile-based Chrome workflow used on develop hosts.
 - Rebuilt Nix wrappers are not live until the new generation is activated. For
   immediate testing, run the evaluated store path directly.
 - SearXNG config changes must be generated in `podman-searxng.preStart` so the

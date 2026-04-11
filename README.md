@@ -48,6 +48,9 @@ for secrets.
   `agent-browser`, and `openspec` through Nix-managed wrapper scripts, and
   they install `agent-deck` plus the `launch-agent` helper as Home
   Manager packages for interactive agent orchestration.
+- The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
+  unless you override it explicitly, so local automation stays on the
+  profile-capable Chrome engine even if upstream auto-selection changes.
 - `launch-agent [tool]` launches the current directory into Agent Deck,
   creates the matching basename group when missing, defaults to `codex`, and
   uses Agent Deck's supported `add -Q` plus `session start` flow for quick

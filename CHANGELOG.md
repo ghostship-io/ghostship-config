@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Develop agent-browser engine pin**: The managed `agent-browser` wrapper
+  now defaults `AGENT_BROWSER_ENGINE=chrome` unless callers override it so
+  local browser automation keeps using the profile-capable Chrome engine even
+  when upstream auto-launch heuristics drift toward Lightpanda.
+
 - **NZBGet UsenetPrime retirement**: Removed the unused `eu.usenetprime.com` backup server from the managed NZBGet config, dropped the retired `NZBGET_SERVER2_*` entries from the local plaintext secret mirror, and reconciled `chill-penguin` so live NZBGet state stops referencing the dead provider.
 
 - **Develop OpenSpec telemetry opt-out**: The managed `openspec` wrapper now
