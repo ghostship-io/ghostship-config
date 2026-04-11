@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **NZBGet UsenetPrime retirement**: Removed the unused `eu.usenetprime.com` backup server from the managed NZBGet config, dropped the retired `NZBGET_SERVER2_*` entries from the local plaintext secret mirror, and reconciled `chill-penguin` so live NZBGet state stops referencing the dead provider.
+
 - **Develop OpenSpec telemetry opt-out**: The managed `openspec` wrapper now
   exports `DO_NOT_TRACK=1` and `OPENSPEC_TELEMETRY=0` by default so successful
   `openspec` commands stop printing harmless PostHog flush stack traces on

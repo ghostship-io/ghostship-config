@@ -66,17 +66,6 @@
           Server1.Password=env:NZBGET_SERVER1_PASS
           Server1.Cipher=literal:TLS_AES_256_GCM_SHA384
           Server1.Connections=literal:30
-          Server2.Active=literal:yes
-          Server2.Name=literal:eu.usenetprime.com
-          Server2.Host=literal:eu.usenetprime.com
-          Server2.Encryption=literal:yes
-          Server2.Port=literal:443
-          Server2.Username=env:NZBGET_SERVER2_USER
-          Server2.Password=env:NZBGET_SERVER2_PASS
-          Server2.Cipher=literal:TLS_AES_256_GCM_SHA384
-          Server2.Connections=literal:10
-          Server2.Level=literal:99
-          Server2.Optional=literal:yes
           ArticleCache=literal:500
           DirectWrite=literal:no
           WriteBuffer=literal:4096

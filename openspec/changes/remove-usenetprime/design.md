@@ -1,6 +1,6 @@
 ## Context
 
-`modules/self-hosted/nzbget.nix` currently patches `/srv/apps/nzbget/nzbget.conf` with both the active Eweka server and a retired optional `Server2` pointing at `eu.usenetprime.com`. `secrets.dec.yaml` still carries `NZBGET_SERVER2_USER` and `NZBGET_SERVER2_PASS`, which flow into `/run/secrets/nzbget-secrets` on `chill-penguin`. The live host state confirms that persisted config and secrets still exist and that NZBGet has logged repeated `Access Denied` failures against UsenetPrime.
+`modules/self-hosted/nzbget.nix` currently patches `/srv/apps/nzbget/nzbget.conf` with both the active Eweka server and a retired optional `Server2` pointing at `eu.usenetprime.com`. The local `secrets.dec.yaml` plaintext mirror still carries `NZBGET_SERVER2_USER` and `NZBGET_SERVER2_PASS`, and the live host state confirms that persisted NZBGet config still exists and has logged repeated `Access Denied` failures against UsenetPrime.
 
 This change touches both declarative desired state and mutable live host state. The design needs to remove the retired provider cleanly without disturbing the remaining Eweka configuration or the rest of the self-hosted stack.
 
@@ -8,7 +8,7 @@ This change touches both declarative desired state and mutable live host state. 
 
 **Goals:**
 - Remove the retired UsenetPrime server from repo-managed NZBGet configuration.
-- Remove the retired provider credentials from the decrypted secret source.
+- Remove the retired provider credentials from the local plaintext secret mirror so the later re-encryption step has the correct source content.
 - Clean the current `chill-penguin` NZBGet config so the running service stops referencing UsenetPrime immediately.
 - Leave the active Eweka provider configuration intact.
 
@@ -47,15 +47,16 @@ Alternatives considered:
 
 - [Manual host edits diverge from the repo change] -> Apply the repo change in the same session and verify both the worktree diff and the host state after restart.
 - [Removing the wrong NZBGet lines corrupts the config] -> Target only the `Server2.*` block and confirm `Server1.*` remains present afterward.
-- [Future activation still expects `NZBGET_SERVER2_*`] -> Remove every repo reference to those env vars before validating the change.
+- [The encrypted secret source still contains the retired credentials until re-encryption] -> Remove the keys from `secrets.dec.yaml` now and record the user-owned `secrets.yaml` re-encryption as follow-up work.
 
 ## Migration Plan
 
 1. Delete the retired `Server2.*` wiring from `modules/self-hosted/nzbget.nix`.
-2. Remove `NZBGET_SERVER2_USER` and `NZBGET_SERVER2_PASS` from `secrets.dec.yaml`.
+2. Remove `NZBGET_SERVER2_USER` and `NZBGET_SERVER2_PASS` from the local `secrets.dec.yaml` mirror.
 3. Update the changelog entry for the retirement.
 4. Validate the `chill-penguin` config still evaluates from the worktree.
-5. Manually remove `Server2.*` from `/srv/apps/nzbget/nzbget.conf` on `chill-penguin`, restart `podman-nzbget.service`, and verify no remaining live references to `usenetprime` or `NZBGET_SERVER2` remain.
+5. Manually remove `Server2.*` from `/srv/apps/nzbget/nzbget.conf` on `chill-penguin`, restart `podman-nzbget.service`, and verify no remaining live `usenetprime` references remain in the active NZBGet config.
+6. Leave re-encryption of `secrets.yaml` to the user-owned follow-up step.
 
 Rollback would restore the deleted repo lines and re-add the live `Server2.*` block if the backup provider is needed again.
 
