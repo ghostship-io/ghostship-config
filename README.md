@@ -138,18 +138,25 @@ qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr, CloakBrowser, Hermes,
 PyLoad, RSS-Bridge, PriceBuddy, and n8n.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
-WireGuard path instead of the native PIA OpenVPN mode. A daily selector service
-benchmarks only PF-capable PIA WireGuard regions, caches the preferred winner in
-`/srv/apps/gluetun/pia-wireguard-selection.json`, and `podman-gluetun` consumes
-that cached winner at startup to regenerate `/run/secrets/gluetun-runtime.env`.
-The persisted `/srv/apps/gluetun` mount remains the owner of Gluetun state and
-PIA's forwarded-port lease, while the qBittorrent/VueTorrent up/down hooks plus
-the Gluetun monitor keep the listen port reconciled after startup and reconnects.
-The monitor also reconciles qBittorrent's bound interface address to the live
-WireGuard `tun0` address, because qBittorrent 5.1.4 can stay disconnected if it
-only binds by interface name after the VPN namespace changes.
-The Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
-legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`.
+WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts
+from the cached winner in `/srv/apps/gluetun/pia-wireguard-selection.json`, and
+falls back to only a cheap provisional pick if no cache exists, before
+regenerating `/run/secrets/gluetun-runtime.env`. A background
+`gluetun-pia-selector` run starts 5 minutes after boot and reruns every 8 hours:
+it screens all PF-capable PIA WireGuard regions, keeps the best endpoint per
+region, benchmarks the top 5 regions with a bounded Eweka NNTP transfer test,
+and only restarts Gluetun when the new winner is materially faster than the
+current cached server. The persisted `/srv/apps/gluetun` mount remains the
+owner of Gluetun state and PIA's forwarded-port lease, while the
+qBittorrent/VueTorrent up/down hooks plus the Gluetun monitor keep the listen
+port reconciled after startup and reconnects. The monitor also reconciles
+qBittorrent's bound interface address to the live WireGuard `tun0` address,
+because qBittorrent 5.1.4 can stay disconnected if it only binds by interface
+name after the VPN namespace changes. The Gluetun secret bundle must provide
+PIA credentials (`PIA_USER`/`PIA_PASS` or legacy `OPENVPN_*` names) and
+`HTTP_CONTROL_SERVER_API_KEY`, and the `nzbget-secrets` bundle must continue to
+provide the active Eweka `NZBGET_SERVER1_*` credentials used by the Usenet
+benchmark.
 
 n8n runs as a single SQLite-backed workflow orchestrator in this repo and is intended to stay behind Cloudflare for browser access while Hermes talks to it over `ghostship_net`. Hermes should read its dedicated `N8N_API_KEY` from `n8n-secrets` rather than using a browser session. The live Muximux entry still needs a manual reorder on `chill-penguin` after deployment so it sits directly under Bazarr.
 

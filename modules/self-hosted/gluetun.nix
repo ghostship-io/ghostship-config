@@ -2,49 +2,256 @@
 
 let
   gluetun-secrets = config.sops.secrets."gluetun-secrets".path;
+  nzbget-secrets = config.sops.secrets."nzbget-secrets".path;
   gluetun-runtime-env = "/run/secrets/gluetun-runtime.env";
   gluetun-state-dir = "/srv/apps/gluetun";
   gluetun-selection-cache = "${gluetun-state-dir}/pia-wireguard-selection.json";
   pia-ca-cert = ./gluetun/ca.rsa.4096.crt;
-  # Live benchmark winner on chill-penguin as of 2026-04-08.
-  # At selector time we dynamically enumerate the current endpoints for this
-  # region instead of pinning a static server list in the repo.
-  gluetun-primary-region = "ca_vancouver";
+  gluetun-usenet-benchmark-script = ./gluetun/usenet-benchmark.py;
+  gluetun-usenet-host = "news.eweka.nl";
+  gluetun-usenet-port = 443;
+  gluetun-top-region-count = 5;
+  gluetun-switch-improvement-threshold = 0.20;
   gluetun-selection-script = pkgs.writeShellApplication {
-    name = "gluetun-pia-selector-vancouver";
+    name = "gluetun-pia-selector";
     runtimeInputs = with pkgs; [
       bash
       coreutils
       curl
-      findutils
       gawk
-      gnused
       jq
+      podman
+      python3
+      util-linux
       wireguard-tools
     ];
     text = ''
       set -euo pipefail
 
-      secrets_file="$1"
-      state_dir="$2"
-      cache_file="$3"
-      ca_cert="$4"
+      if [ "$#" -ne 7 ]; then
+        echo "Usage: gluetun-pia-selector <provisional|benchmark> <gluetun-secrets> <nzbget-secrets> <state-dir> <cache-file> <ca-cert> <benchmark-script>" >&2
+        exit 1
+      fi
+
+      mode="$1"
+      secrets_file="$2"
+      usenet_secrets_file="$3"
+      state_dir="$4"
+      cache_file="$5"
+      ca_cert="$6"
+      benchmark_script="$7"
+
+      top_region_count='${toString gluetun-top-region-count}'
+      material_threshold='${toString gluetun-switch-improvement-threshold}'
+      usenet_host='${gluetun-usenet-host}'
+      usenet_port='${toString gluetun-usenet-port}'
+      gluetun_image='docker.io/qmcgaw/gluetun:latest'
+
+      timestamp_utc() {
+        date -u +%Y-%m-%dT%H:%M:%SZ
+      }
+
+      have_cache() {
+        [ -s "$cache_file" ]
+      }
+
+      fail_or_keep_cache() {
+        echo "$1" >&2
+        if have_cache; then
+          exit 0
+        fi
+        exit 1
+      }
+
+      load_env_file() {
+        set -a
+        . "$1"
+        set +a
+      }
+
+      tsv_to_json() {
+        jq -Rnc '[inputs | select(length > 0) | split("\t") | {
+          latency_seconds: (.[0] | tonumber),
+          region_id: .[1],
+          region_name: .[2],
+          country: .[3],
+          meta_ip: .[4],
+          wg_ip: .[5],
+          wg_host: .[6]
+        }]'
+      }
+
+      benchmark_candidate() {
+        local latency_seconds="$1"
+        local region_id="$2"
+        local region_name="$3"
+        local country="$4"
+        local meta_ip="$5"
+        local wg_ip="$6"
+        local wg_host="$7"
+        local private_key
+        local public_key
+        local addkey_json
+        local peer_ip
+        local server_key
+        local server_port
+        local env_file
+        local container_name
+        local status
+        local pid
+        local measurement_json
+
+        private_key="$(${pkgs.wireguard-tools}/bin/wg genkey)"
+        public_key="$(printf '%s' "$private_key" | ${pkgs.wireguard-tools}/bin/wg pubkey)"
+
+        addkey_json="$(
+          curl -4 -fsS \
+            --connect-to "$wg_host::$wg_ip:" \
+            --cacert "$ca_cert" \
+            --get \
+            --data-urlencode "pt=$token" \
+            --data-urlencode "pubkey=$public_key" \
+            --max-time 10 \
+            "https://$wg_host:1337/addKey" 2>/dev/null
+        )" || return 1
+
+        if [ "$(printf '%s' "$addkey_json" | jq -r '.status // empty')" != "OK" ]; then
+          return 1
+        fi
+
+        peer_ip="$(printf '%s' "$addkey_json" | jq -r '.peer_ip // empty')"
+        server_key="$(printf '%s' "$addkey_json" | jq -r '.server_key // empty')"
+        server_port="$(printf '%s' "$addkey_json" | jq -r '.server_port // empty')"
+        if [ -z "$peer_ip" ] || [ -z "$server_key" ] || [ -z "$server_port" ]; then
+          return 1
+        fi
+
+        env_file="$tmp_dir/''${region_id}-candidate.env"
+        cat > "$env_file" <<INNER_EOF
+VPN_SERVICE_PROVIDER=custom
+VPN_TYPE=wireguard
+WIREGUARD_ENDPOINT_IP=$wg_ip
+WIREGUARD_ENDPOINT_PORT=$server_port
+WIREGUARD_PUBLIC_KEY=$server_key
+WIREGUARD_PRIVATE_KEY=$private_key
+WIREGUARD_ADDRESSES=$peer_ip
+SERVER_NAMES=$wg_host
+VPN_PORT_FORWARDING=off
+HTTPPROXY=off
+DOT=off
+TZ=UTC
+INNER_EOF
+
+        container_name="gluetun-bench-''${region_id//_/-}-$$-''${RANDOM}"
+        ${pkgs.podman}/bin/podman rm -f "$container_name" >/dev/null 2>&1 || true
+        if ! ${pkgs.podman}/bin/podman run -d \
+          --pull=never \
+          --name "$container_name" \
+          --cap-add=NET_ADMIN \
+          --device=/dev/net/tun:/dev/net/tun \
+          --network=ghostship_net \
+          --health-cmd=/gluetun-entrypoint healthcheck \
+          --health-interval=10s \
+          --health-timeout=5s \
+          --health-retries=12 \
+          --health-start-period=20s \
+          --env-file "$env_file" \
+          "$gluetun_image" >/dev/null; then
+          ${pkgs.podman}/bin/podman rm -f "$container_name" >/dev/null 2>&1 || true
+          return 1
+        fi
+
+        status=""
+        for _ in $(seq 1 45); do
+          status="$(${pkgs.podman}/bin/podman inspect --format '{{if .State.Healthcheck}}{{.State.Healthcheck.Status}}{{else}}{{.State.Status}}{{end}}' "$container_name" 2>/dev/null || true)"
+          if [ "$status" = "healthy" ]; then
+            break
+          fi
+          if [ "$status" = "unhealthy" ] || [ "$status" = "exited" ]; then
+            break
+          fi
+          sleep 2
+        done
+
+        if [ "$status" != "healthy" ]; then
+          ${pkgs.podman}/bin/podman rm -f "$container_name" >/dev/null 2>&1 || true
+          return 1
+        fi
+
+        pid="$(${pkgs.podman}/bin/podman inspect --format '{{.State.Pid}}' "$container_name")"
+        measurement_json="$(
+          ${pkgs.util-linux}/bin/nsenter -t "$pid" -n \
+            ${pkgs.python3}/bin/python3 "$benchmark_script" measure \
+              --host "$usenet_host" \
+              --port "$usenet_port" \
+              --username "$usenet_user" \
+              --password "$usenet_pass" \
+              --corpus-file "$tmp_dir/usenet-corpus.json" \
+              --bytes-target 12582912 \
+              --time-limit 15 2>/dev/null
+        )" || {
+          ${pkgs.podman}/bin/podman rm -f "$container_name" >/dev/null 2>&1 || true
+          return 1
+        }
+
+        ${pkgs.podman}/bin/podman rm -f "$container_name" >/dev/null 2>&1 || true
+
+        jq -cn \
+          --argjson latency_seconds "$latency_seconds" \
+          --arg region_id "$region_id" \
+          --arg region_name "$region_name" \
+          --arg country "$country" \
+          --arg meta_ip "$meta_ip" \
+          --arg wg_ip "$wg_ip" \
+          --arg wg_host "$wg_host" \
+          --argjson measurement "$measurement_json" \
+          '{
+            source: "benchmark",
+            latency_seconds: $latency_seconds,
+            region_id: $region_id,
+            region_name: $region_name,
+            country: $country,
+            meta_ip: $meta_ip,
+            wg_ip: $wg_ip,
+            wg_host: $wg_host,
+            usenet_bytes_per_second: $measurement.bytes_per_second,
+            bytes_transferred: $measurement.bytes_transferred,
+            elapsed_seconds: $measurement.elapsed_seconds,
+            articles_attempted: $measurement.articles_attempted,
+            articles_completed: $measurement.articles_completed,
+            corpus_group: $measurement.corpus_group
+          }'
+      }
+
+      if [ "$mode" != "provisional" ] && [ "$mode" != "benchmark" ]; then
+        echo "Unknown selector mode: $mode" >&2
+        exit 1
+      fi
 
       if [ ! -f "$secrets_file" ]; then
         echo "Missing Gluetun secrets file at $secrets_file" >&2
         exit 1
       fi
 
-      set -a
-      eval "$(grep -Ev "^(#|$)" "$secrets_file")"
-      set +a
+      if [ "$mode" = "benchmark" ] && [ ! -f "$usenet_secrets_file" ]; then
+        fail_or_keep_cache "Missing NZBGet secrets file at $usenet_secrets_file"
+      fi
 
+      load_env_file "$secrets_file"
       pia_user="''${PIA_USER:-''${OPENVPN_USER:-''${USER:-}}}"
       pia_pass="''${PIA_PASS:-''${OPENVPN_PASSWORD:-''${OPENVPN_PASS:-''${PASSWORD:-}}}}"
-
       if [ -z "$pia_user" ] || [ -z "$pia_pass" ]; then
         echo "Missing PIA credentials in $secrets_file" >&2
         exit 1
+      fi
+
+      if [ "$mode" = "benchmark" ]; then
+        load_env_file "$usenet_secrets_file"
+        usenet_user="''${NZBGET_SERVER1_USER:-}"
+        usenet_pass="''${NZBGET_SERVER1_PASS:-}"
+        if [ -z "$usenet_user" ] || [ -z "$usenet_pass" ]; then
+          fail_or_keep_cache "Missing NZBGet Server1 credentials in $usenet_secrets_file"
+        fi
       fi
 
       mkdir -p "$state_dir"
@@ -52,56 +259,39 @@ let
       trap 'rm -rf "$tmp_dir"' EXIT
 
       serverlist="$tmp_dir/serverlist.json"
-      curl -fsSL https://serverlist.piaservers.net/vpninfo/servers/v6 | sed -n '1p' > "$serverlist"
+      if ! curl -fsSL https://serverlist.piaservers.net/vpninfo/servers/v6 | head -n 1 > "$serverlist"; then
+        fail_or_keep_cache "Failed to fetch the current PIA server inventory"
+      fi
 
       token="$(
         curl -fsSL --request POST \
           https://www.privateinternetaccess.com/api/client/v2/token \
           --form "username=$pia_user" \
           --form "password=$pia_pass" \
-        | jq -r '.token // empty'
+          | jq -r '.token // empty'
       )"
-
       if [ -z "$token" ]; then
-        echo "Failed to obtain PIA token for server selection" >&2
-        exit 1
+        fail_or_keep_cache "Failed to obtain a PIA token for server selection"
       fi
 
-      jq -r         --arg primaryRegion '${gluetun-primary-region}' '
-          .regions[]
-          | select(.id == $primaryRegion)
-          | select(.port_forward == true)
-          | . as $region
-          | (($region.servers.meta // [])[] | { cn: .cn, meta_ip: .ip }) as $meta
-          | (($region.servers.wg // [])[] | select(.cn == $meta.cn))
-          | [
-              $region.id,
-              $region.name,
-              $region.country,
-              $meta.meta_ip,
-              .ip,
-              .cn
-            ]
-          | @tsv
-        ' "$serverlist" > "$tmp_dir/candidates.tsv"
-
+      jq -r '
+        .regions[]
+        | select(.port_forward == true)
+        | . as $region
+        | (($region.servers.meta // [])[] | { cn: .cn, meta_ip: .ip }) as $meta
+        | (($region.servers.wg // [])[] | select(.cn == $meta.cn))
+        | [
+            $region.id,
+            $region.name,
+            $region.country,
+            $meta.meta_ip,
+            .ip,
+            .cn
+          ]
+        | @tsv
+      ' "$serverlist" > "$tmp_dir/candidates.tsv"
       if [ ! -s "$tmp_dir/candidates.tsv" ]; then
-        jq -r '
-            .regions[]
-            | select(.port_forward == true)
-            | . as $region
-            | (($region.servers.meta // [])[] | { cn: .cn, meta_ip: .ip }) as $meta
-            | (($region.servers.wg // [])[] | select(.cn == $meta.cn))
-            | [
-                $region.id,
-                $region.name,
-                $region.country,
-                $meta.meta_ip,
-                .ip,
-                .cn
-              ]
-            | @tsv
-          ' "$serverlist" > "$tmp_dir/candidates.tsv"
+        fail_or_keep_cache "No PF-capable PIA WireGuard regions were available in the server inventory"
       fi
 
       : > "$tmp_dir/latency.tsv"
@@ -120,80 +310,164 @@ let
             >> "$tmp_dir/latency.tsv"
         fi
       done < "$tmp_dir/candidates.tsv"
-
       if [ ! -s "$tmp_dir/latency.tsv" ]; then
-        echo "No PF-capable PIA WireGuard endpoints responded during latency probing" >&2
-        exit 1
+        fail_or_keep_cache "No PF-capable PIA WireGuard endpoints responded to the latency screen"
       fi
 
-      sort -n "$tmp_dir/latency.tsv" > "$tmp_dir/top.tsv"
+      sort -n "$tmp_dir/latency.tsv" > "$tmp_dir/latency-sorted.tsv"
+      awk -F'\t' '!seen[$2]++' "$tmp_dir/latency-sorted.tsv" > "$tmp_dir/region-best.tsv"
+      head -n "$top_region_count" "$tmp_dir/region-best.tsv" > "$tmp_dir/top-regions.tsv"
+      if [ ! -s "$tmp_dir/top-regions.tsv" ]; then
+        fail_or_keep_cache "Unable to retain any top PIA WireGuard regions after latency screening"
+      fi
+
+      top_regions_json="$(tsv_to_json < "$tmp_dir/top-regions.tsv")"
+
+      if [ "$mode" = "provisional" ]; then
+        winner_json="$(printf '%s' "$top_regions_json" | jq -c '.[0] + {
+          source: "latency",
+          usenet_bytes_per_second: null,
+          bytes_transferred: null,
+          elapsed_seconds: null,
+          articles_attempted: null,
+          articles_completed: null,
+          corpus_group: null
+        }')"
+        fallbacks_json="$(printf '%s' "$top_regions_json" | jq -c '.[1:5] | map(. + {
+          source: "latency",
+          usenet_bytes_per_second: null,
+          bytes_transferred: null,
+          elapsed_seconds: null,
+          articles_attempted: null,
+          articles_completed: null,
+          corpus_group: null
+        })')"
+        jq -n \
+          --arg selected_at "$(timestamp_utc)" \
+          --arg selection_mode "provisional" \
+          --argjson winner "$winner_json" \
+          --argjson fallbacks "$fallbacks_json" \
+          --argjson top_regions "$top_regions_json" \
+          '{
+            selected_at: $selected_at,
+            last_benchmark_at: null,
+            selection_mode: $selection_mode,
+            winner: $winner,
+            fallbacks: $fallbacks,
+            top_regions: $top_regions,
+            benchmark: null
+          }' > "$cache_file.tmp"
+        mv "$cache_file.tmp" "$cache_file"
+        chmod 600 "$cache_file"
+        exit 0
+      fi
+
+      corpus_json="$(
+        ${pkgs.python3}/bin/python3 "$benchmark_script" discover \
+          --host "$usenet_host" \
+          --port "$usenet_port" \
+          --username "$usenet_user" \
+          --password "$usenet_pass" 2>/dev/null
+      )" || fail_or_keep_cache "Failed to discover a usable Usenet benchmark corpus"
+      printf '%s' "$corpus_json" > "$tmp_dir/usenet-corpus.json"
 
       : > "$tmp_dir/bench.jsonl"
-      while IFS=$'\t' read -r connect_time region_id region_name country meta_ip wg_ip wg_host; do
-        private_key="$(${pkgs.wireguard-tools}/bin/wg genkey)"
-        public_key="$(printf '%s' "$private_key" | ${pkgs.wireguard-tools}/bin/wg pubkey)"
-
-        addkey_metrics="$(
-          curl -4 -sS -o "$tmp_dir/addkey-$wg_host.json" \
-            --connect-to "$wg_host::$wg_ip:" \
-            --cacert "$ca_cert" \
-            --get \
-            --data-urlencode "pt=$token" \
-            --data-urlencode "pubkey=$public_key" \
-            --write-out '%{time_connect}\t%{time_starttransfer}\t%{time_total}\t%{size_download}' \
-            --max-time 6 \
-            "https://$wg_host:1337/addKey" 2>/dev/null || true
-        )"
-
-        status="$(jq -r '.status // empty' "$tmp_dir/addkey-$wg_host.json" 2>/dev/null || true)"
-        if [ "$status" != "OK" ]; then
-          continue
+      while IFS=$'\t' read -r latency_seconds region_id region_name country meta_ip wg_ip wg_host; do
+        result_json="$(benchmark_candidate "$latency_seconds" "$region_id" "$region_name" "$country" "$meta_ip" "$wg_ip" "$wg_host" 2>/dev/null || true)"
+        if [ -n "$result_json" ]; then
+          printf '%s\n' "$result_json" >> "$tmp_dir/bench.jsonl"
         fi
-
-        addkey_total="$(printf '%s' "$addkey_metrics" | awk -F'\t' '{print $3}')"
-        addkey_size="$(printf '%s' "$addkey_metrics" | awk -F'\t' '{print $4}')"
-        score="$(awk "BEGIN { printf \"%.6f\", ($connect_time * 0.5) + ($addkey_total * 0.5) }")"
-
-        jq -n \
-          --arg region_id "$region_id" \
-          --arg region_name "$region_name" \
-          --arg country "$country" \
-          --arg meta_ip "$meta_ip" \
-          --arg wg_ip "$wg_ip" \
-          --arg wg_host "$wg_host" \
-          --argjson connect_time "$connect_time" \
-          --argjson addkey_total "$addkey_total" \
-          --argjson addkey_size "''${addkey_size:-0}" \
-          --argjson score "$score" \
-          '{
-            region_id: $region_id,
-            region_name: $region_name,
-            country: $country,
-            meta_ip: $meta_ip,
-            wg_ip: $wg_ip,
-            wg_host: $wg_host,
-            connect_time: $connect_time,
-            addkey_total: $addkey_total,
-            addkey_size: $addkey_size,
-            score: $score
-          }' >> "$tmp_dir/bench.jsonl"
-      done < "$tmp_dir/top.tsv"
-
+      done < "$tmp_dir/top-regions.tsv"
       if [ ! -s "$tmp_dir/bench.jsonl" ]; then
-        echo "No PIA WireGuard PF candidates survived the addKey probe" >&2
-        exit 1
+        fail_or_keep_cache "All top-region Usenet throughput probes failed"
       fi
 
-      jq -s '
-        sort_by(.score)
-        | {
-            selected_at: (now | todateiso8601),
-            winner: .[0],
-            fallbacks: (.[1:4] // [])
-          }
-      ' "$tmp_dir/bench.jsonl" > "$cache_file.tmp"
+      results_json="$(jq -sc 'sort_by(-.usenet_bytes_per_second, .latency_seconds)' "$tmp_dir/bench.jsonl")"
+      challenger_json="$(printf '%s' "$results_json" | jq -c '.[0]')"
+      challenger_host="$(printf '%s' "$challenger_json" | jq -r '.wg_host')"
+      challenger_speed="$(printf '%s' "$challenger_json" | jq -r '.usenet_bytes_per_second')"
+      now="$(timestamp_utc)"
+
+      current_host=""
+      current_speed="0"
+      current_mode=""
+      current_selected_at=""
+      current_winner_json='null'
+      if have_cache; then
+        current_host="$(jq -r '.winner.wg_host // empty' "$cache_file" 2>/dev/null || true)"
+        current_speed="$(jq -r '.winner.usenet_bytes_per_second // 0' "$cache_file" 2>/dev/null || printf '0')"
+        current_mode="$(jq -r '.selection_mode // empty' "$cache_file" 2>/dev/null || true)"
+        current_selected_at="$(jq -r '.selected_at // empty' "$cache_file" 2>/dev/null || true)"
+        current_winner_json="$(jq -c '.winner // null' "$cache_file" 2>/dev/null || printf 'null')"
+      fi
+
+      switch_required=0
+      if [ -z "$current_host" ]; then
+        switch_required=1
+      elif [ "$challenger_host" = "$current_host" ]; then
+        switch_required=0
+      elif [ "$current_mode" = "provisional" ]; then
+        switch_required=1
+      elif awk "BEGIN { exit !($challenger_speed >= ($current_speed * (1 + $material_threshold))) }"; then
+        switch_required=1
+      fi
+
+      if [ "$switch_required" -eq 1 ] || [ "$challenger_host" = "$current_host" ] || [ -z "$current_host" ]; then
+        active_winner_json="$challenger_json"
+        selected_at="$now"
+        selection_mode="benchmark"
+      else
+        active_winner_json="$current_winner_json"
+        selected_at="''${current_selected_at:-$now}"
+        selection_mode="''${current_mode:-benchmark}"
+      fi
+
+      active_host="$(printf '%s' "$active_winner_json" | jq -r '.wg_host // empty')"
+      fallbacks_json="$(jq -cn --arg active_host "$active_host" --argjson results "$results_json" '[$results[] | select(.wg_host != $active_host)][0:4]')"
+      if [ "$switch_required" -eq 1 ]; then
+        switched_json=true
+      else
+        switched_json=false
+      fi
+      benchmark_json="$(jq -cn \
+        --arg last_run_at "$now" \
+        --argjson corpus "$corpus_json" \
+        --argjson results "$results_json" \
+        --argjson challenger "$challenger_json" \
+        --argjson switched "$switched_json" \
+        --argjson material_threshold "$material_threshold" \
+        '{
+          last_run_at: $last_run_at,
+          corpus: $corpus,
+          results: $results,
+          challenger: $challenger,
+          switched: $switched,
+          material_improvement_threshold: $material_threshold
+        }')"
+
+      jq -n \
+        --arg selected_at "$selected_at" \
+        --arg last_benchmark_at "$now" \
+        --arg selection_mode "$selection_mode" \
+        --argjson winner "$active_winner_json" \
+        --argjson fallbacks "$fallbacks_json" \
+        --argjson top_regions "$top_regions_json" \
+        --argjson benchmark "$benchmark_json" \
+        '{
+          selected_at: $selected_at,
+          last_benchmark_at: $last_benchmark_at,
+          selection_mode: $selection_mode,
+          winner: $winner,
+          fallbacks: $fallbacks,
+          top_regions: $top_regions,
+          benchmark: $benchmark
+        }' > "$cache_file.tmp"
       mv "$cache_file.tmp" "$cache_file"
       chmod 600 "$cache_file"
+
+      if [ "$switch_required" -eq 1 ] && systemctl is-active --quiet podman-gluetun.service; then
+        systemctl restart podman-gluetun.service
+      fi
     '';
   };
   gluetun-bootstrap-script = pkgs.writeShellApplication {
@@ -225,7 +499,7 @@ let
       fi
 
       set -a
-      eval "$(grep -Ev "^(#|$)" "$secrets_file")"
+      . "$secrets_file"
       set +a
 
       pia_user="''${PIA_USER:-''${OPENVPN_USER:-''${USER:-}}}"
@@ -355,19 +629,21 @@ in
   systemd.services.podman-gluetun.serviceConfig.Restart = lib.mkForce "always";
 
   systemd.services.gluetun-pia-selector = {
-    description = "Select the preferred PIA WireGuard server for Gluetun";
+    description = "Benchmark and refresh the preferred PIA WireGuard server for Gluetun";
+    after = [ "network-online.target" "podman-gluetun.service" ];
+    wants = [ "network-online.target" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${gluetun-selection-script}/bin/gluetun-pia-selector ${gluetun-secrets} ${gluetun-state-dir} ${gluetun-selection-cache} ${pia-ca-cert}";
+      ExecStart = "${gluetun-selection-script}/bin/gluetun-pia-selector benchmark ${gluetun-secrets} ${nzbget-secrets} ${gluetun-state-dir} ${gluetun-selection-cache} ${pia-ca-cert} ${gluetun-usenet-benchmark-script}";
     };
   };
 
   systemd.timers.gluetun-pia-selector = {
-    description = "Refresh the preferred PIA WireGuard server daily";
+    description = "Run the Gluetun PIA selector shortly after boot and every 8 hours";
     wantedBy = [ "timers.target" ];
     timerConfig = {
-      OnBootSec = "10m";
-      OnUnitActiveSec = "1d";
+      OnBootSec = "5m";
+      OnUnitActiveSec = "8h";
       Persistent = true;
     };
   };
@@ -390,15 +666,8 @@ in
 
     install -d -m0755 -o apps -g apps "${gluetun-state-dir}"
 
-    cache_missing=0
     if [ ! -s "${gluetun-selection-cache}" ]; then
-      cache_missing=1
-    elif [ "$(${pkgs.findutils}/bin/find "${gluetun-selection-cache}" -mtime +1 -print -quit 2>/dev/null)" = "${gluetun-selection-cache}" ]; then
-      cache_missing=1
-    fi
-
-    if [ "$cache_missing" -eq 1 ]; then
-      ${gluetun-selection-script}/bin/gluetun-pia-selector "${gluetun-secrets}" "${gluetun-state-dir}" "${gluetun-selection-cache}" "${pia-ca-cert}"
+      ${gluetun-selection-script}/bin/gluetun-pia-selector provisional "${gluetun-secrets}" "${nzbget-secrets}" "${gluetun-state-dir}" "${gluetun-selection-cache}" "${pia-ca-cert}" "${gluetun-usenet-benchmark-script}"
     fi
 
     ${gluetun-bootstrap-script}/bin/gluetun-pia-bootstrap "${gluetun-secrets}" "${gluetun-state-dir}" "${gluetun-selection-cache}" "${gluetun-runtime-env}" "${pia-ca-cert}"
