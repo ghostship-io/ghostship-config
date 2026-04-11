@@ -12,6 +12,7 @@ let
   grimmory-secrets = config.sops.secrets."grimmory-secrets".path;
   chaptarr-secrets = config.sops.secrets."chaptarr-secrets".path;
   pyload-secrets = config.sops.secrets."pyload-secrets".path;
+  n8n-secrets = config.sops.secrets."n8n-secrets".path;
   hermes-home = "/srv/apps/hermes/home";
   hermes-workspace = "/srv/apps/hermes/workspace";
   hermes-nix = "/srv/apps/hermes/nix";
@@ -84,9 +85,14 @@ let
               "path": ${builtins.toJSON hermes-secrets},
               "map": {
                   "CHANGEDETECTION_API_KEY": "CHANGEDETECTION_API_KEY",
-                  "N8N_API_KEY": "N8N_API_KEY",
                   "SYNOLOGY_USER": "SYNOLOGY_USER",
                   "SYNOLOGY_PASS": "SYNOLOGY_PASS",
+              },
+          },
+          {
+              "path": ${builtins.toJSON n8n-secrets},
+              "map": {
+                  "N8N_API_KEY": "N8N_API_KEY",
               },
           },
           {
@@ -331,20 +337,26 @@ in
         install -m0644 -o apps -g apps "${hermes-seed-profiles.supervisor.soul}" "${hermes-home}/seeds/profiles/supervisor/SOUL.md"
       fi
 
-      if [ ! -f "${hermes-secrets}" ]; then
-        echo "Waiting for Hermes secrets at ${hermes-secrets}..."
-        for _ in $(seq 1 30); do
-          if [ -f "${hermes-secrets}" ]; then
-            break
-          fi
-          sleep 1
-        done
-      fi
+      for secret_file in \
+        "${hermes-secrets}" \
+        "${pyload-secrets}" \
+        "${n8n-secrets}"
+      do
+        if [ ! -f "$secret_file" ]; then
+          echo "Waiting for Hermes runtime secret source at $secret_file..."
+          for _ in $(seq 1 30); do
+            if [ -f "$secret_file" ]; then
+              break
+            fi
+            sleep 1
+          done
+        fi
 
-      if [ ! -f "${hermes-secrets}" ]; then
-        echo "Missing Hermes secrets file at ${hermes-secrets}" >&2
-        exit 1
-      fi
+        if [ ! -f "$secret_file" ]; then
+          echo "Missing Hermes runtime secret source at $secret_file" >&2
+          exit 1
+        fi
+      done
 
       ${hermes-profile-env-sync}/bin/hermes-profile-env-sync.py runtime-only
 
@@ -417,6 +429,8 @@ in
       PathChanged = [
         cloakbrowser-profiles-db
         pricebuddy-agent-env
+        pyload-secrets
+        n8n-secrets
       ];
       Unit = "hermes-profile-env-sync.service";
     };

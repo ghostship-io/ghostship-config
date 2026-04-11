@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Hermes pyLoad and n8n secret readiness**: Make Hermes wait for
+  `pyload-secrets` and `n8n-secrets` before generating
+  `/srv/apps/hermes/runtime.env`, and rerun the runtime env sync when either
+  secret file changes so bundled utilities keep receiving the current pyLoad
+  and n8n credentials.
+
 - **Hermes utility env projection**: Reduced the Hermes container secret surface to `hermes-secrets` plus a generated `/srv/apps/hermes/runtime.env`, projected only the required utility-facing auth values from service-local secret or runtime files, added the missing internal utility URLs including Changedetection, Chaptarr, PriceBuddy, RSS-Bridge, Synology, the explicit Chaptarr API path/version, and the n8n public API endpoint/version, and now supply upstream with the container-wide `DISCORD_*`, `WEBHOOK_*`, and per-profile `BROWSER_*_CDP_URL` inputs it expects instead of reconciling managed profile `.env` files on the host.
 
 - **Synology NFS hard mounts**: Switched the managed Synology NFS mounts on
