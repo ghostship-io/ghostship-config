@@ -218,7 +218,7 @@ let
 
             jq -r --arg preferred_region_name "$preferred_region_name" '
               .regions[]
-              | select(.port_forward == true and .name == $preferred_region_name)
+              | select(.port_forward == true and (.name | contains($preferred_region_name)))
               | . as $region
               | (($region.servers.meta // [])[] | { cn: .cn, meta_ip: .ip }) as $meta
               | (($region.servers.wg // [])[] | select(.cn == $meta.cn))
@@ -589,7 +589,7 @@ in
 
     install -d -m0755 -o apps -g apps "${gluetun-state-dir}"
 
-    if [ ! -s "${gluetun-selection-cache}" ] || ! ${pkgs.jq}/bin/jq -e --arg preferred_region_name "${gluetun-preferred-region-name}" '.winner.region_name == $preferred_region_name' "${gluetun-selection-cache}" >/dev/null 2>&1; then
+    if [ ! -s "${gluetun-selection-cache}" ] || ! ${pkgs.jq}/bin/jq -e --arg preferred_region_name "${gluetun-preferred-region-name}" '(.winner.region_name // "") | contains($preferred_region_name)' "${gluetun-selection-cache}" >/dev/null 2>&1; then
       ${gluetun-selection-script}/bin/gluetun-pia-selector provisional "${gluetun-secrets}" "${gluetun-state-dir}" "${gluetun-selection-cache}" "${pia-ca-cert}" "${gluetun-web-benchmark-script}"
     fi
 
