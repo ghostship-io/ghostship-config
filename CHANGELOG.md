@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stops getting stuck in a disconnected state after VPN restarts or namespace
   changes when binding by interface name alone is insufficient.
 
+- **VueTorrent startup binding**: Prime `qBittorrent.conf` with Gluetun's live
+  `tun0` IPv4 in `podman-vuetorrent` pre-start so qBittorrent no longer boots
+  with the previous tunnel address and spends its first restart window unable
+  to bind after Gluetun server changes.
+
+
 - **Develop Gemini maintenance**: Removed the deprecated `experimental.plan` key from the generated develop-host Gemini system settings so managed Gemini launches stop warning about read-only stale config, and added `bash` to the maintenance runtime inputs so npm and npx subprocesses can spawn `sh` reliably during `ghostship-agent-maintenance`.
 
 - **Develop Agent Deck launcher**: Renamed the repo-managed Agent Deck launcher helper to `launch-agent`, keeping the current-directory group bootstrap, default `codex` selection, and Agent Deck `add -Q` plus `session start` workflow, while continuing to expose `gemini-cli` as a shell-wide managed wrapper command alongside `gemini`.

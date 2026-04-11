@@ -146,8 +146,11 @@ regenerating `/run/secrets/gluetun-runtime.env`. A background
 it pins selection to the PF-capable Vancouver PIA WireGuard servers, latency-screens those endpoints, benchmarks the top 10 Vancouver servers with a bounded generic HTTPS download test, and only restarts Gluetun when the new Vancouver winner is materially faster than the current cached server. The persisted `/srv/apps/gluetun` mount remains the
 owner of Gluetun state and PIA's forwarded-port lease, while the
 qBittorrent/VueTorrent up/down hooks plus the Gluetun monitor keep the listen
-port reconciled after startup and reconnects. The monitor also reconciles
-qBittorrent's bound interface address to the live WireGuard `tun0` address,
+port reconciled after startup and reconnects. `podman-vuetorrent` also primes
+`qBittorrent.conf` with Gluetun's current `tun0` IPv4 during service startup,
+so qBittorrent does not spend its first boot window bound to the previous VPN
+address after a Gluetun restart. The monitor still reconciles qBittorrent's
+bound interface address to the live WireGuard `tun0` address after startup,
 because qBittorrent 5.1.4 can stay disconnected if it only binds by interface
 name after the VPN namespace changes. The Gluetun secret bundle must provide
 PIA credentials (`PIA_USER`/`PIA_PASS` or legacy `OPENVPN_*` names) and
