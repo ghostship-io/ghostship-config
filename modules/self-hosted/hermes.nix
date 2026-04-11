@@ -18,13 +18,15 @@ let
   hermes-nix = "/srv/apps/hermes/nix";
   hermes-runtime-env = "/srv/apps/hermes/runtime.env";
   pricebuddy-agent-env = "/srv/apps/pricebuddy/pricebuddy-agent.env";
-  cloakbrowser-profiles-db = "/srv/apps/cloakbrowser/data/profiles.db";
-  profile-names = [ "assistant" "operations" "supervisor" ];
-  profile-cdp-env-map = {
-    assistant = "BROWSER_ASSISTANT_CDP_URL";
-    operations = "BROWSER_OPERATIONS_CDP_URL";
-    supervisor = "BROWSER_SUPERVISOR_CDP_URL";
-  };
+  hermes-seed-skill-creator = ./hermes-seeds/skills/skill-creator;
+  hermes-seed-soul = ./hermes-seeds/SOUL.md;
+  discord-home-channel = "1488255112169394309";
+  discord-allowed-users = "126942974826381312";
+  discord-free-response-channels = builtins.concatStringsSep "," [
+    "1491229269127598281"
+    "1491229248856260799"
+    "1491229299452412044"
+  ];
   utility-service-env = {
     SEARXNG_URL = "http://searxng:8080";
     SONARR_URL = "http://sonarr:8989";
@@ -48,38 +50,18 @@ let
     SYNOLOGY_URL = "http://192.168.200.106:5000/";
     SYNOLOGY_VERIFY_SSL = "false";
   };
-  hermes-seed-profiles = {
-    assistant = {
-      soul = ./hermes-seeds/profiles/assistant/SOUL.md;
-      skill-creator = ./hermes-seeds/profiles/assistant/skills/software-development/skill-creator;
-    };
-    operations = {
-      soul = ./hermes-seeds/profiles/operations/SOUL.md;
-      skill-creator = ./hermes-seeds/profiles/operations/skills/software-development/skill-creator;
-    };
-    supervisor = {
-      soul = ./hermes-seeds/profiles/supervisor/SOUL.md;
-      skill-creator = ./hermes-seeds/profiles/supervisor/skills/software-development/skill-creator;
-    };
-  };
-  hermes-profile-env-sync = pkgs.writeTextFile {
-    name = "hermes-profile-env-sync.py";
-    destination = "/bin/hermes-profile-env-sync.py";
+  hermes-runtime-env-sync = pkgs.writeTextFile {
+    name = "hermes-runtime-env-sync.py";
+    destination = "/bin/hermes-runtime-env-sync.py";
     executable = true;
     text = ''
       #!${pkgs.python3}/bin/python3
       import os
-      import sqlite3
-      import sys
       import tempfile
-      import time
       from pathlib import Path
 
       RUNTIME_ENV_PATH = Path(${builtins.toJSON hermes-runtime-env})
       PRICEBUDDY_AGENT_ENV = Path(${builtins.toJSON pricebuddy-agent-env})
-      CLOAKBROWSER_PROFILES_DB = Path(${builtins.toJSON cloakbrowser-profiles-db})
-      PROFILE_NAMES = ${builtins.toJSON profile-names}
-      PROFILE_CDP_ENV_MAP = ${builtins.toJSON profile-cdp-env-map}
       SECRET_SOURCES = [
           {
               "path": ${builtins.toJSON hermes-secrets},
@@ -159,6 +141,7 @@ let
               },
           },
       ]
+
       def parse_env_file(path: Path) -> dict[str, str]:
           values: dict[str, str] = {}
           if not path.is_file():
@@ -179,30 +162,6 @@ let
               values[key] = value
           return values
 
-      def resolve_profile_cdp_urls(timeout_seconds: int = 60) -> dict[str, str]:
-          deadline = time.time() + timeout_seconds
-          expected = set(PROFILE_NAMES)
-          while time.time() < deadline:
-              if CLOAKBROWSER_PROFILES_DB.is_file():
-                  try:
-                      with sqlite3.connect(CLOAKBROWSER_PROFILES_DB) as connection:
-                          rows = connection.execute(
-                              "SELECT id, name FROM profiles WHERE name IN (?, ?, ?)",
-                              PROFILE_NAMES,
-                          ).fetchall()
-                  except sqlite3.Error:
-                      rows = []
-                  if rows:
-                      resolved = {
-                          name: f"http://cloakbrowser:8080/api/profiles/{profile_id}/cdp"
-                          for profile_id, name in rows
-                          if name in expected
-                      }
-                      if resolved.keys() >= expected:
-                          return resolved
-              time.sleep(1)
-          return {}
-
       def build_projected_env() -> dict[str, str]:
           projected: dict[str, str] = {}
           for source in SECRET_SOURCES:
@@ -216,11 +175,6 @@ let
           pricebuddy_token = pricebuddy_values.get("PRICEBUDDY_API_TOKEN")
           if pricebuddy_token:
               projected["PRICEBUDDY_TOKEN"] = pricebuddy_token
-
-          for profile_name, cdp_url in resolve_profile_cdp_urls().items():
-              env_key = PROFILE_CDP_ENV_MAP.get(profile_name)
-              if env_key and cdp_url:
-                  projected[env_key] = cdp_url
 
           return projected
 
@@ -274,13 +228,9 @@ in
       TTYD_PORT = "7681";
       TTYD_TITLE = "Ghostship Hermes";
       TTYD_SESSION_NAME = "hermes";
-      DISCORD_GENERAL_CHANNEL_ID = "1488255112169394309";
-      DISCORD_ASSISTANT_ALLOWED_USERS = "126942974826381312";
-      DISCORD_ASSISTANT_CHANNEL_ID = "1491229269127598281";
-      DISCORD_OPERATIONS_ALLOWED_USERS = "126942974826381312";
-      DISCORD_OPERATIONS_CHANNEL_ID = "1491229248856260799";
-      DISCORD_SUPERVISOR_ALLOWED_USERS = "126942974826381312";
-      DISCORD_SUPERVISOR_CHANNEL_ID = "1491229299452412044";
+      DISCORD_ALLOWED_USERS = discord-allowed-users;
+      DISCORD_FREE_RESPONSE_CHANNELS = discord-free-response-channels;
+      DISCORD_HOME_CHANNEL = discord-home-channel;
     };
     environmentFiles = [
       hermes-secrets
@@ -299,42 +249,16 @@ in
       install -d -m0755 "${hermes-nix}"
       install -d -m0755 -o apps -g apps \
         "${hermes-home}/seeds" \
-        "${hermes-home}/seeds/profiles" \
-        "${hermes-home}/seeds/profiles/assistant" \
-        "${hermes-home}/seeds/profiles/assistant/skills" \
-        "${hermes-home}/seeds/profiles/assistant/skills/software-development" \
-        "${hermes-home}/seeds/profiles/operations" \
-        "${hermes-home}/seeds/profiles/operations/skills" \
-        "${hermes-home}/seeds/profiles/operations/skills/software-development" \
-        "${hermes-home}/seeds/profiles/supervisor" \
-        "${hermes-home}/seeds/profiles/supervisor/skills" \
-        "${hermes-home}/seeds/profiles/supervisor/skills/software-development"
+        "${hermes-home}/seeds/skills"
 
-      if [ ! -e "${hermes-home}/seeds/profiles/assistant/skills/software-development/skill-creator" ]; then
-        ${pkgs.coreutils}/bin/cp -a "${hermes-seed-profiles.assistant.skill-creator}" "${hermes-home}/seeds/profiles/assistant/skills/software-development/skill-creator"
-        ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/seeds/profiles/assistant/skills/software-development/skill-creator"
+      if [ ! -e "${hermes-home}/seeds/skills/skill-creator" ]; then
+        ${pkgs.coreutils}/bin/cp -a "${hermes-seed-skill-creator}" "${hermes-home}/seeds/skills/skill-creator"
+        ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/seeds/skills/skill-creator"
+        ${pkgs.coreutils}/bin/chmod -R u+rwX "${hermes-home}/seeds/skills/skill-creator"
       fi
 
-      if [ ! -e "${hermes-home}/seeds/profiles/operations/skills/software-development/skill-creator" ]; then
-        ${pkgs.coreutils}/bin/cp -a "${hermes-seed-profiles.operations.skill-creator}" "${hermes-home}/seeds/profiles/operations/skills/software-development/skill-creator"
-        ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/seeds/profiles/operations/skills/software-development/skill-creator"
-      fi
-
-      if [ ! -e "${hermes-home}/seeds/profiles/supervisor/skills/software-development/skill-creator" ]; then
-        ${pkgs.coreutils}/bin/cp -a "${hermes-seed-profiles.supervisor.skill-creator}" "${hermes-home}/seeds/profiles/supervisor/skills/software-development/skill-creator"
-        ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/seeds/profiles/supervisor/skills/software-development/skill-creator"
-      fi
-
-      if [ ! -e "${hermes-home}/seeds/profiles/assistant/SOUL.md" ]; then
-        install -m0644 -o apps -g apps "${hermes-seed-profiles.assistant.soul}" "${hermes-home}/seeds/profiles/assistant/SOUL.md"
-      fi
-
-      if [ ! -e "${hermes-home}/seeds/profiles/operations/SOUL.md" ]; then
-        install -m0644 -o apps -g apps "${hermes-seed-profiles.operations.soul}" "${hermes-home}/seeds/profiles/operations/SOUL.md"
-      fi
-
-      if [ ! -e "${hermes-home}/seeds/profiles/supervisor/SOUL.md" ]; then
-        install -m0644 -o apps -g apps "${hermes-seed-profiles.supervisor.soul}" "${hermes-home}/seeds/profiles/supervisor/SOUL.md"
+      if [ ! -e "${hermes-home}/seeds/SOUL.md" ]; then
+        install -m0644 -o apps -g apps "${hermes-seed-soul}" "${hermes-home}/seeds/SOUL.md"
       fi
 
       for secret_file in \
@@ -358,7 +282,7 @@ in
         fi
       done
 
-      ${hermes-profile-env-sync}/bin/hermes-profile-env-sync.py runtime-only
+      ${hermes-runtime-env-sync}/bin/hermes-runtime-env-sync.py
 
       seed_container=""
       seed_rootfs=""
@@ -402,37 +326,44 @@ in
           ghostship-hermes-startup.service
       '
 
-      ${pkgs.systemd}/bin/systemctl start --no-block hermes-profile-env-sync.service || true
+      ${pkgs.systemd}/bin/systemctl start --no-block hermes-runtime-env-sync.service || true
     '';
   };
 
-  systemd.services.hermes-profile-env-sync = {
+  systemd.services.hermes-runtime-env-sync = {
     description = "Project Ghostship utility env into the Hermes runtime env file";
     after = [
       "podman-hermes.service"
-      "podman-cloakbrowser.service"
       "podman-pricebuddy.service"
     ];
     wants = [
-      "podman-cloakbrowser.service"
       "podman-pricebuddy.service"
     ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${hermes-profile-env-sync}/bin/hermes-profile-env-sync.py";
+      ExecStart = "${hermes-runtime-env-sync}/bin/hermes-runtime-env-sync.py";
     };
   };
 
-  systemd.paths.hermes-profile-env-sync = {
+  systemd.paths.hermes-runtime-env-sync = {
     wantedBy = [ "multi-user.target" ];
     pathConfig = {
       PathChanged = [
-        cloakbrowser-profiles-db
-        pricebuddy-agent-env
+        hermes-secrets
+        sonarr-secrets
+        radarr-secrets
+        prowlarr-secrets
+        plex-secrets
+        tautulli-secrets
+        bazarr-secrets
+        grimmory-secrets
+        chaptarr-secrets
         pyload-secrets
         n8n-secrets
+        romm-secrets
+        pricebuddy-agent-env
       ];
-      Unit = "hermes-profile-env-sync.service";
+      Unit = "hermes-runtime-env-sync.service";
     };
   };
 

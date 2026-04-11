@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Hermes single-agent cutover**: Replaced the old `assistant`/`operations`/`supervisor` runtime contract on `chill-penguin` with the upstream single-agent layout rooted at `/home/hermes/.hermes`, switched host wiring to the generic Discord and webhook env contract, stopped emitting any repo-managed browser CDP default, collapsed Hermes seeds to one root `skill-creator` tree plus one Crush Crawfish `SOUL.md`, limited managed CloakBrowser defaults to `Changedetection`, and documented the required destructive reset of `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix` before first deployment.
+
 - **NZBGet UsenetPrime retirement**: Removed the unused `eu.usenetprime.com` backup server from the managed NZBGet config, dropped the retired `NZBGET_SERVER2_*` entries from the local plaintext secret mirror, and reconciled `chill-penguin` so live NZBGet state stops referencing the dead provider.
 
 - **Develop OpenSpec telemetry opt-out**: The managed `openspec` wrapper now

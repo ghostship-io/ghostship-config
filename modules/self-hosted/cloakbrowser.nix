@@ -9,9 +9,6 @@ from pathlib import Path
 APP_DIR = Path("/app")
 MAIN_PATH = APP_DIR / "backend" / "main.py"
 MANAGED_PROFILES = (
-    "assistant",
-    "operations",
-    "supervisor",
     "Changedetection",
 )
 

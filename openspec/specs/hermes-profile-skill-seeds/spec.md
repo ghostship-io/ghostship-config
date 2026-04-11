@@ -1,74 +1,49 @@
-# hermes-profile-skill-seeds Specification
+## REMOVED Requirements
 
-## Purpose
-Define repo-managed Hermes skill seed content and copy-once runtime seeding
-behavior for profile-local skills under
-`/home/hermes/seeds/profiles/<profile>/skills/<category>/`.
-
-## Requirements
 ### Requirement: Hermes SHALL provide repo-managed profile-local skill seed content
-
-The self-hosted Hermes runtime SHALL provide repo-managed skill seed content
-under each managed profile source tree that maps to
-`/home/hermes/seeds/profiles/<profile>/skills/<category>/` for the `chill-penguin`
-deployment.
-
-#### Scenario: Managed profile-local skill seeds are defined for each profile
-
-- **WHEN** the Hermes runtime assets are prepared from this repo
-- **THEN** the repo SHALL define managed `skill-creator` seed content for
-  `assistant`, `operations`, and `supervisor` under their respective
-  `modules/self-hosted/hermes-seeds/profiles/<profile>/skills/software-development/` paths
-- **AND** each copied seed tree SHALL preserve the expected `SKILL.md`,
-  `LICENSE.txt`, `references/`, and `scripts/` content
+**Reason**: The upstream single-agent runtime seeds one root skill tree instead of profile-local skill trees.
+**Migration**: Move repo-managed Hermes skill seeds to the root source path and stage them under `/home/hermes/seeds/skills/<skill>/`.
 
 ### Requirement: Hermes SHALL seed missing profile-local skill directories without overwriting existing ones
+**Reason**: The runtime no longer owns profile-local seed directories.
+**Migration**: Apply the same copy-if-missing behavior to the root single-agent seed path under `/home/hermes/seeds/skills/`.
 
-The self-hosted Hermes runtime SHALL copy each managed profile-local skill
-directory into `/home/hermes/seeds/profiles/<profile>/skills/<category>/<skill>/` only
-when that directory is missing.
+### Requirement: Hermes profile-local skills SHALL align to the upstream category layout
+**Reason**: The upstream single-agent seed layout uses direct `/home/hermes/seeds/skills/<skill>/` directories instead of category/profile trees.
+**Migration**: Place `skill-creator` directly under the root single-agent seed path rather than under `skills/<category>/`.
 
-#### Scenario: Missing profile-local skill directory is seeded
+### Requirement: Hermes-specific skill adaptation SHALL remain consistent across profile-local copies
+**Reason**: The runtime will keep only one root `skill-creator` copy instead of multiple profile-local copies.
+**Migration**: Preserve the reviewed Hermes-specific `skill-creator` content in the one root seed source and runtime destination.
 
-- **WHEN** Hermes runtime preparation runs and
-  `/home/hermes/seeds/profiles/<profile>/skills/software-development/skill-creator/` does not yet
-  exist
-- **THEN** the runtime preparation SHALL create the parent profile-local
-  `skills/<category>/` seed path if needed
-- **AND** it SHALL copy the managed `skill-creator` seed directory into that
-  path
+## ADDED Requirements
 
-#### Scenario: Existing profile-local skill directory is preserved
+### Requirement: Hermes SHALL provide repo-managed root skill seed content
+The self-hosted Hermes runtime SHALL provide repo-managed skill seed content for the single-agent runtime under a root source tree that maps to `/home/hermes/seeds/skills/<skill>/` for the `chill-penguin` deployment.
 
-- **WHEN** Hermes runtime preparation runs and
-  `/home/hermes/seeds/profiles/<profile>/skills/software-development/skill-creator/` already exists
+#### Scenario: Root `skill-creator` seed is defined
+- **WHEN** the Hermes runtime assets are prepared from this repo
+- **THEN** the repo SHALL define managed `skill-creator` seed content under `modules/self-hosted/hermes-seeds/skills/skill-creator/`
+- **AND** the copied seed tree SHALL preserve the expected `SKILL.md`, `LICENSE.txt`, `references/`, and `scripts/` content
+
+### Requirement: Hermes SHALL seed missing root skill directories without overwriting existing ones
+The self-hosted Hermes runtime SHALL copy each managed root skill directory into `/home/hermes/seeds/skills/<skill>/` only when that directory is missing.
+
+#### Scenario: Missing root skill directory is seeded
+- **WHEN** Hermes runtime preparation runs and `/home/hermes/seeds/skills/skill-creator/` does not yet exist
+- **THEN** the runtime preparation SHALL create the parent root `skills/` seed path if needed
+- **AND** it SHALL copy the managed `skill-creator` seed directory into that path
+
+#### Scenario: Existing root skill directory is preserved
+- **WHEN** Hermes runtime preparation runs and `/home/hermes/seeds/skills/skill-creator/` already exists
 - **THEN** the runtime preparation SHALL leave the existing directory unchanged
 - **AND** it SHALL not overwrite that directory with the repo-managed version
 
-### Requirement: Hermes profile-local skills SHALL align to the upstream category layout
+### Requirement: Hermes SHALL normalize copied root skill permissions for runtime ownership
+The self-hosted Hermes runtime SHALL normalize copied root skill seed content to writable runtime-owned permissions when it seeds a missing root skill directory.
 
-The repo-managed Hermes profile-local skill tree SHALL place custom skills under
-the upstream category directories `autonomous-ai-agents`, `creative`,
-`data-science`, `devops`, `email`, `gaming`, `github`, `leisure`, `mcp`,
-`media`, `mlops`, `note-taking`, `productivity`, `red-teaming`, `research`,
-`smart-home`, `social-media`, and `software-development`.
-
-#### Scenario: skill-creator is categorized under software-development
-
-- **WHEN** the managed profile-local `skill-creator` trees are inspected
-- **THEN** each profile copy SHALL live under
-  `skills/software-development/skill-creator/` rather than directly under
-  `skills/`
-
-### Requirement: Hermes-specific skill adaptation SHALL remain consistent across profile-local copies
-
-The repo-managed Hermes `skill-creator` seed copied into each profile-local
-tree SHALL keep markdown changes narrow and SHALL preserve the same reviewed
-Hermes-specific adaptation across all managed profiles.
-
-#### Scenario: Profile-local copies stay aligned
-
-- **WHEN** the managed profile-local `skill-creator` trees are inspected
-- **THEN** each profile copy SHALL expose the same Hermes-reviewed
-  `skill-creator` content rather than drifting by profile unless a later change
-  explicitly introduces profile-specific divergence
+#### Scenario: Seeded root skill tree becomes writable in the managed runtime
+- **WHEN** Hermes runtime preparation copies `skill-creator` into the root runtime-managed skill destination for the first time
+- **THEN** the copied skill directory SHALL remain writable to the Hermes runtime user
+- **AND** the copied files under that skill directory SHALL remain writable to the Hermes runtime user
+- **AND** read-only permissions on the repo-managed seed source SHALL not make the managed destination immutable
