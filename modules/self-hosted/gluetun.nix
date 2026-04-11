@@ -65,7 +65,7 @@ let
 
       load_env_file() {
         set -a
-        # shellcheck source=/dev/null
+        # shellcheck disable=SC1090
         . "$1"
         set +a
       }
@@ -500,7 +500,7 @@ INNER_EOF
       fi
 
       set -a
-      # shellcheck source=/dev/null
+      # shellcheck disable=SC1090
       . "$secrets_file"
       set +a
 
