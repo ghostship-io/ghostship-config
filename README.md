@@ -58,6 +58,9 @@ for secrets.
 - The `openspec` wrapper defaults `openspec init` to
   `--tools codex,gemini,opencode --profile core` unless you pass explicit
   `--tools` or `--profile` values.
+- The managed `openspec` wrapper also defaults `DO_NOT_TRACK=1` and
+  `OPENSPEC_TELEMETRY=0` so upstream OpenSpec `1.2.0` does not print noisy
+  PostHog flush stack traces on hosts where telemetry egress is blocked.
 - The wrapper also reapplies personal OpenSpec overrides after both
   `openspec init` and `openspec update`, but those overrides are append-only:
   the wrapper keeps the upstream generated workflow files and adds only three

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Develop OpenSpec telemetry opt-out**: The managed `openspec` wrapper now
+  exports `DO_NOT_TRACK=1` and `OPENSPEC_TELEMETRY=0` by default so successful
+  `openspec` commands stop printing harmless PostHog flush stack traces on
+  hosts where telemetry egress is blocked.
+
 - **Hermes pyLoad and n8n secret readiness**: Make Hermes wait for
   `pyload-secrets` and `n8n-secrets` before generating
   `/srv/apps/hermes/runtime.env`, and rerun the runtime env sync when either

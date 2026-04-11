@@ -77,6 +77,8 @@ let
 
     PATH=${baseRuntimeBinPath}:$PATH
     export NODE_NO_WARNINGS=1
+    export DO_NOT_TRACK="''${DO_NOT_TRACK:-1}"
+    export OPENSPEC_TELEMETRY="''${OPENSPEC_TELEMETRY:-0}"
 
     strip_marked_block() {
       file="$1"

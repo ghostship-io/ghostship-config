@@ -49,6 +49,9 @@ changelog.
 - The develop-host `openspec` wrapper reapplies append-only Ghostship
   propose/apply/archive snippets after both `openspec init` and
   `openspec update` without a separate OpenSpec config directory.
+- The managed `openspec` wrapper should keep upstream telemetry opted out by
+  default with `DO_NOT_TRACK=1` and `OPENSPEC_TELEMETRY=0` so blocked egress
+  does not spam harmless PostHog flush stack traces after successful commands.
 - The Ghostship `propose` override should create or reuse the change
   worktree at the start, create proposal/design/tasks from that worktree, and
   end with a detailed overview of the full proposed change.
