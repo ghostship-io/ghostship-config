@@ -15,7 +15,8 @@ let
   gluetun-web-benchmark-url = "https://speed.cloudflare.com/__down?bytes=8388608";
   gluetun-web-benchmark-total-bytes = 67108864;
   gluetun-web-benchmark-time-limit = 15;
-  gluetun-top-region-count = 5;
+  gluetun-preferred-region-name = "Vancouver";
+  gluetun-top-server-count = 10;
   gluetun-switch-improvement-threshold = 0.20;
   gluetun-selection-script = pkgs.writeShellApplication {
     name = "gluetun-pia-selector";
@@ -45,7 +46,8 @@ let
             ca_cert="$5"
             benchmark_script="$6"
 
-            top_region_count='${toString gluetun-top-region-count}'
+            preferred_region_name='${gluetun-preferred-region-name}'
+            top_server_count='${toString gluetun-top-server-count}'
             material_threshold='${toString gluetun-switch-improvement-threshold}'
             benchmark_url='${gluetun-web-benchmark-url}'
             benchmark_total_bytes='${toString gluetun-web-benchmark-total-bytes}'
@@ -214,9 +216,9 @@ let
               fail_or_keep_cache "Failed to obtain a PIA token for server selection"
             fi
 
-            jq -r '
+            jq -r --arg preferred_region_name "$preferred_region_name" '
               .regions[]
-              | select(.port_forward == true)
+              | select(.port_forward == true and .name == $preferred_region_name)
               | . as $region
               | (($region.servers.meta // [])[] | { cn: .cn, meta_ip: .ip }) as $meta
               | (($region.servers.wg // [])[] | select(.cn == $meta.cn))
@@ -231,7 +233,7 @@ let
               | @tsv
             ' "$serverlist" > "$tmp_dir/candidates.tsv"
             if [ ! -s "$tmp_dir/candidates.tsv" ]; then
-              fail_or_keep_cache "No PF-capable PIA WireGuard regions were available in the server inventory"
+              fail_or_keep_cache "No port-forward-capable PIA WireGuard servers were available for $preferred_region_name"
             fi
 
             : > "$tmp_dir/latency.tsv"
@@ -250,16 +252,15 @@ let
             fi
 
             sort -n "$tmp_dir/latency.tsv" > "$tmp_dir/latency-sorted.tsv"
-            awk -F'	' '!seen[$2]++' "$tmp_dir/latency-sorted.tsv" > "$tmp_dir/region-best.tsv"
-            head -n "$top_region_count" "$tmp_dir/region-best.tsv" > "$tmp_dir/top-regions.tsv"
-            if [ ! -s "$tmp_dir/top-regions.tsv" ]; then
-              fail_or_keep_cache "Unable to retain any top PIA WireGuard regions after latency screening"
+            head -n "$top_server_count" "$tmp_dir/latency-sorted.tsv" > "$tmp_dir/top-servers.tsv"
+            if [ ! -s "$tmp_dir/top-servers.tsv" ]; then
+              fail_or_keep_cache "Unable to retain any top Vancouver PIA WireGuard servers after latency screening"
             fi
 
-            top_regions_json="$(tsv_to_json < "$tmp_dir/top-regions.tsv")"
+            top_servers_json="$(tsv_to_json < "$tmp_dir/top-servers.tsv")"
 
             if [ "$mode" = "provisional" ]; then
-              winner_json="$(printf '%s' "$top_regions_json" | jq -c '.[0] + {
+              winner_json="$(printf '%s' "$top_servers_json" | jq -c '.[0] + {
                 source: "latency",
                 download_bytes_per_second: null,
                 bytes_transferred: null,
@@ -268,7 +269,7 @@ let
                 requests_completed: null,
                 benchmark_url: null
               }')"
-              fallbacks_json="$(printf '%s' "$top_regions_json" | jq -c '.[1:5] | map(. + {
+              fallbacks_json="$(printf '%s' "$top_servers_json" | jq -c --argjson limit "$top_server_count" '.[1:$limit] | map(. + {
                 source: "latency",
                 download_bytes_per_second: null,
                 bytes_transferred: null,
@@ -277,13 +278,15 @@ let
                 requests_completed: null,
                 benchmark_url: null
               })')"
-              jq -n           --arg selected_at "$(timestamp_utc)"           --arg selection_mode "provisional"           --argjson winner "$winner_json"           --argjson fallbacks "$fallbacks_json"           --argjson top_regions "$top_regions_json"           '{
+              jq -n           --arg selected_at "$(timestamp_utc)"           --arg selection_mode "provisional"           --arg selection_scope "vancouver"           --arg preferred_region_name "$preferred_region_name"           --argjson winner "$winner_json"           --argjson fallbacks "$fallbacks_json"           --argjson top_servers "$top_servers_json"           '{
                   selected_at: $selected_at,
                   last_benchmark_at: null,
                   selection_mode: $selection_mode,
+                  selection_scope: $selection_scope,
+                  preferred_region_name: $preferred_region_name,
                   winner: $winner,
                   fallbacks: $fallbacks,
-                  top_regions: $top_regions,
+                  top_servers: $top_servers,
                   benchmark: null
                 }' > "$cache_file.tmp"
               mv "$cache_file.tmp" "$cache_file"
@@ -298,9 +301,9 @@ let
                 printf '%s
       ' "$result_json" >> "$tmp_dir/bench.jsonl"
               fi
-            done < "$tmp_dir/top-regions.tsv"
+            done < "$tmp_dir/top-servers.tsv"
             if [ ! -s "$tmp_dir/bench.jsonl" ]; then
-              fail_or_keep_cache "All top-region generic web throughput probes failed"
+              fail_or_keep_cache "All top Vancouver generic web throughput probes failed"
             fi
 
             results_json="$(jq -sc 'sort_by(-.download_bytes_per_second, .latency_seconds)' "$tmp_dir/bench.jsonl")"
@@ -313,17 +316,21 @@ let
             current_speed="0"
             current_mode=""
             current_selected_at=""
+            current_region_name=""
             current_winner_json='null'
             if have_cache; then
               current_host="$(jq -r '.winner.wg_host // empty' "$cache_file" 2>/dev/null || true)"
               current_speed="$(jq -r '.winner.download_bytes_per_second // .winner.usenet_bytes_per_second // 0' "$cache_file" 2>/dev/null || printf '0')"
               current_mode="$(jq -r '.selection_mode // empty' "$cache_file" 2>/dev/null || true)"
               current_selected_at="$(jq -r '.selected_at // empty' "$cache_file" 2>/dev/null || true)"
+              current_region_name="$(jq -r '.winner.region_name // empty' "$cache_file" 2>/dev/null || true)"
               current_winner_json="$(jq -c '.winner // null' "$cache_file" 2>/dev/null || printf 'null')"
             fi
 
             switch_required=0
             if [ -z "$current_host" ]; then
+              switch_required=1
+            elif [ "$current_region_name" != "$preferred_region_name" ]; then
               switch_required=1
             elif [ "$challenger_host" = "$current_host" ]; then
               switch_required=0
@@ -344,15 +351,17 @@ let
             fi
 
             active_host="$(printf '%s' "$active_winner_json" | jq -r '.wg_host // empty')"
-            fallbacks_json="$(jq -cn --arg active_host "$active_host" --argjson results "$results_json" '[$results[] | select(.wg_host != $active_host)][0:4]')"
+            fallbacks_json="$(jq -cn --arg active_host "$active_host" --argjson limit "$top_server_count" --argjson results "$results_json" '[$results[] | select(.wg_host != $active_host)][0:($limit - 1)]')"
             if [ "$switch_required" -eq 1 ]; then
               switched_json=true
             else
               switched_json=false
             fi
-            benchmark_json="$(jq -cn         --arg last_run_at "$now"         --arg benchmark_url "$benchmark_url"         --argjson benchmark_total_bytes "$benchmark_total_bytes"         --argjson benchmark_time_limit "$benchmark_time_limit"         --argjson results "$results_json"         --argjson challenger "$challenger_json"         --argjson switched "$switched_json"         --argjson material_threshold "$material_threshold"         '{
+            benchmark_json="$(jq -cn         --arg last_run_at "$now"         --arg preferred_region_name "$preferred_region_name"         --arg benchmark_url "$benchmark_url"         --argjson benchmark_server_count "$top_server_count"         --argjson benchmark_total_bytes "$benchmark_total_bytes"         --argjson benchmark_time_limit "$benchmark_time_limit"         --argjson results "$results_json"         --argjson challenger "$challenger_json"         --argjson switched "$switched_json"         --argjson material_threshold "$material_threshold"         '{
                 last_run_at: $last_run_at,
+                preferred_region_name: $preferred_region_name,
                 benchmark_url: $benchmark_url,
+                benchmark_server_count: $benchmark_server_count,
                 benchmark_total_bytes: $benchmark_total_bytes,
                 benchmark_time_limit_seconds: $benchmark_time_limit,
                 results: $results,
@@ -361,13 +370,15 @@ let
                 material_improvement_threshold: $material_threshold
               }')"
 
-            jq -n         --arg selected_at "$selected_at"         --arg last_benchmark_at "$now"         --arg selection_mode "$selection_mode"         --argjson winner "$active_winner_json"         --argjson fallbacks "$fallbacks_json"         --argjson top_regions "$top_regions_json"         --argjson benchmark "$benchmark_json"         '{
+            jq -n         --arg selected_at "$selected_at"         --arg last_benchmark_at "$now"         --arg selection_mode "$selection_mode"         --arg selection_scope "vancouver"         --arg preferred_region_name "$preferred_region_name"         --argjson winner "$active_winner_json"         --argjson fallbacks "$fallbacks_json"         --argjson top_servers "$top_servers_json"         --argjson benchmark "$benchmark_json"         '{
                 selected_at: $selected_at,
                 last_benchmark_at: $last_benchmark_at,
                 selection_mode: $selection_mode,
+                selection_scope: $selection_scope,
+                preferred_region_name: $preferred_region_name,
                 winner: $winner,
                 fallbacks: $fallbacks,
-                top_regions: $top_regions,
+                top_servers: $top_servers,
                 benchmark: $benchmark
               }' > "$cache_file.tmp"
             mv "$cache_file.tmp" "$cache_file"
@@ -578,7 +589,7 @@ in
 
     install -d -m0755 -o apps -g apps "${gluetun-state-dir}"
 
-    if [ ! -s "${gluetun-selection-cache}" ]; then
+    if [ ! -s "${gluetun-selection-cache}" ] || ! ${pkgs.jq}/bin/jq -e --arg preferred_region_name "${gluetun-preferred-region-name}" '.winner.region_name == $preferred_region_name' "${gluetun-selection-cache}" >/dev/null 2>&1; then
       ${gluetun-selection-script}/bin/gluetun-pia-selector provisional "${gluetun-secrets}" "${gluetun-state-dir}" "${gluetun-selection-cache}" "${pia-ca-cert}" "${gluetun-web-benchmark-script}"
     fi
 
