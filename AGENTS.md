@@ -114,6 +114,9 @@ changelog.
 
 - Prefer `/mnt/c/...` for Windows files. Treat `/mnt/z` as a lazy mount that
   may need verification before use.
+- WSL activation should stop `mnt-z.automount` and unmount any live `/mnt/z`
+  NFS mount before reloading generated mount units so switches do not fail on
+  stale `/mnt/z` mount state.
 - `powershell.exe -File` does not accept WSL `/mnt/c/...` paths on this host.
   Use a Windows path such as `C:\...`.
 - When launched from a WSL path, `powershell.exe` sees the working directory as

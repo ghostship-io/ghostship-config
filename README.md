@@ -263,7 +263,9 @@ files, and apply the configuration with `nixos-rebuild`.
   repo is native `nix` and `nixos-rebuild`.
 - WSL hosts expose `wsl-open`, a Windows notification bridge for `notify-send`,
   and a `hard`-mounted NFS automount at `/mnt/z`. Prefer `/mnt/c/...` for
-  Windows files.
+  Windows files. WSL activation now stops the `/mnt/z` automount and unmounts
+  any live NFS mount before reloading the generated mount units so host
+  switches do not fail on stale `/mnt/z` mount state.
 - WSL hosts cap `nix.settings.max-jobs` at `8` so concurrent flake shells,
   agent sessions, and host builds do not wedge `nix-daemon` under `auto`
   parallelism.
