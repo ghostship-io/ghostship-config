@@ -321,9 +321,13 @@ in
       done
 
       ${pkgs.podman}/bin/podman exec hermes sh -lc '
-        /run/current-system/sw/bin/systemctl --system start \
-          ghostship-hermes-user-tooling-refresh.timer \
-          ghostship-hermes-startup.service
+        if /run/current-system/sw/bin/systemctl --system list-unit-files ghostship-hermes-startup.service >/dev/null 2>&1; then
+          /run/current-system/sw/bin/systemctl --system start \
+            ghostship-hermes-user-tooling-refresh.timer \
+            ghostship-hermes-startup.service
+        else
+          /run/current-system/sw/bin/systemctl --system start hermes-agent.service
+        fi
       '
 
       ${pkgs.systemd}/bin/systemctl start --no-block hermes-runtime-env-sync.service || true
