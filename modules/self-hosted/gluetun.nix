@@ -151,7 +151,7 @@ INNER_EOF
           --cap-add=NET_ADMIN \
           --device=/dev/net/tun:/dev/net/tun \
           --network=ghostship_net \
-          --health-cmd=/gluetun-entrypoint healthcheck \
+          --health-cmd '/gluetun-entrypoint healthcheck' \
           --health-interval=10s \
           --health-timeout=5s \
           --health-retries=12 \
