@@ -2,17 +2,17 @@
 
 let
   sshAgentSock = "/run/user/1000/ssh-agent";
-  agentDeckLaunch = pkgs.writeShellScriptBin "agent-deck-launch" ''
+  launchAgent = pkgs.writeShellScriptBin "launch-agent" ''
     set -euo pipefail
 
     if [ "$#" -gt 1 ]; then
-      printf 'usage: agent-deck-launch [tool]\n' >&2
+      printf 'usage: launch-agent [tool]\n' >&2
       exit 2
     fi
 
     case "''${1:-}" in
       -h|--help)
-        printf 'usage: agent-deck-launch [tool]\n\n'
+        printf 'usage: launch-agent [tool]\n\n'
         printf 'Launch the current directory in Agent Deck.\n'
         printf 'Defaults to tool: codex\n'
         exit 0
@@ -166,7 +166,7 @@ PY
     git-ignore
     gh
     agent-deck
-    agentDeckLaunch
+    launchAgent
     starship
     zoxide
     fd

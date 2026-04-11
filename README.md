@@ -46,9 +46,9 @@ for secrets.
 
 - Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`,
   `agent-browser`, and `openspec` through Nix-managed wrapper scripts, and
-  they install `agent-deck` plus the `agent-deck-launch` helper as Home
+  they install `agent-deck` plus the `launch-agent` helper as Home
   Manager packages for interactive agent orchestration.
-- `agent-deck-launch [tool]` launches the current directory into Agent Deck,
+- `launch-agent [tool]` launches the current directory into Agent Deck,
   creates the matching basename group when missing, defaults to `codex`, and
   uses Agent Deck's supported `add -Q` plus `session start` flow for quick
   titles.
@@ -62,16 +62,17 @@ for secrets.
   `openspec init` and `openspec update`, but those overrides are append-only:
   the wrapper keeps the upstream generated workflow files and adds only three
   built-in Ghostship propose/apply/archive snippets on top.
-- The Ghostship `propose` override ends with a full proposed-plan summary for
-  review and tells agents to use Python-based file edits instead of
-  `apply_patch` when they are working in a worktree.
-- The Ghostship `apply` override commits planning artifacts on `main`, creates
-  or reuses the change worktree at the start, and if the user changes the work
-  mid-apply it updates the current proposal instead of creating a new proposal
-  or worktree.
+- The Ghostship `propose` override creates or reuses the change
+  worktree before planning, writes proposal/design/tasks from that worktree,
+  and ends with a detailed overview of the full proposed change.
+- The Ghostship `apply` override commits planning artifacts in the active
+  worktree, continues implementation from that worktree, tracks issues found
+  during apply, and ends with a detailed overview of the completed work and any
+  proposal updates.
 - The Ghostship `archive` override reconciles the change worktree back into
-  `main`, commits the archive move there, removes the worktree, and then tries
-  to leave `main` clean by reconciling or removing remaining related artifacts.
+  `main`, commits the archive move there, removes the worktree, tries to leave
+  `main` clean, and ends with a list of issues or follow-up work to consider
+  next.
 - `ghostship-agent-maintenance.service` owns automatic agent upkeep. Its
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent

@@ -178,22 +178,24 @@ let
           ${pkgs.coreutils}/bin/cat > "$tmp" <<'EOF'
 ## Ghostship Override
 
-- Create and refine the proposal, design, and tasks on `main`.
-- When propose finishes, give the user a full summary of the proposed plan for review before moving on.
+- Create or reuse the change worktree at the start of propose.
+- Create and refine the proposal, design, and tasks from the active change worktree, not from `main`.
 - When working in a worktree, use Python-based file edits instead of `apply_patch`.
 - Verify the diff after each worktree file edit.
+- When propose finishes, give the user a detailed overview of the full proposed change and everything it plans to do before moving on.
 EOF
           ;;
         apply)
           ${pkgs.coreutils}/bin/cat > "$tmp" <<'EOF'
 ## Ghostship Override
 
-- Before implementation, commit the proposal, design, and tasks changes for the change on `main`.
-- Create the change worktree at the start of apply, or reuse it if it already exists.
+- Before implementation, commit the proposal, design, and tasks changes for the change in the active worktree.
 - Implement from the active change worktree, not from `main`.
 - During apply, if the user changes the work, do not create a new proposal or a new worktree; update the current proposal instead.
+- Keep track of issues, follow-up work, and notable problems found during apply.
 - If implementation gets stuck on a bug, failing test, or unexpected behavior, use `systematic-debugging` if it is available.
 - Do root-cause-first debugging before proposing or applying fixes.
+- When apply finishes, give the user a detailed overview of the completed work, the changes made, any proposal updates made during apply, and any issues found during apply before moving on.
 EOF
           ;;
         archive)
@@ -211,6 +213,7 @@ EOF
 - After archive completes, return `main` to a clean working state if possible.
 - Reconcile or remove remaining related artifacts.
 - Clearly report anything that still requires manual cleanup.
+- After archive finishes, give the user a list of issues or follow-up work that should be considered next.
 EOF
           ;;
         *)

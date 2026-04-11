@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Develop Gemini maintenance**: Removed the deprecated `experimental.plan` key from the generated develop-host Gemini system settings so managed Gemini launches stop warning about read-only stale config, and added `bash` to the maintenance runtime inputs so npm and npx subprocesses can spawn `sh` reliably during `ghostship-agent-maintenance`.
 
-- **Develop Agent Deck launcher**: Added a repo-managed `agent-deck-launch` helper for develop hosts that creates the current directory's Agent Deck group when needed, defaults launches to `codex`, uses Agent Deck's supported `add -Q` plus `session start` flow for quick titles, and now exposes `gemini-cli` as a shell-wide managed wrapper command alongside `gemini`.
+- **Develop Agent Deck launcher**: Renamed the repo-managed Agent Deck launcher helper to `launch-agent`, keeping the current-directory group bootstrap, default `codex` selection, and Agent Deck `add -Q` plus `session start` workflow, while continuing to expose `gemini-cli` as a shell-wide managed wrapper command alongside `gemini`.
 
 - **Develop Agent Deck WSL startup**: Kept the repo-managed `agent-deck`
   package at upstream `v1.4.2`, but removed the tmux-backed `agent-deck web`
@@ -35,10 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Develop Workmux removal**: Removed the repo-managed `workmux` package and
   its known user-home artifacts from the supported develop-host workflow.
 - **Develop Codex hook cleanup**: Extend the develop-host workmux cleanup to remove the stale `workmux set-window-status ...` commands from `~/.codex/hooks.json`, preserve unrelated valid hooks, warn on malformed hook JSON, and require a Codex or Agent Deck session restart after the relevant rebuild or switch if an old session was still holding the stale state.
-- **OpenSpec Ghostship overrides**: `propose` now ends with a full plan
-  summary and worktree edit guidance, `apply` reuses the current proposal and
-  worktree for mid-apply changes, and `archive` now attempts to leave `main`
-  clean after cleanup.
+- **OpenSpec Ghostship overrides**: `propose` now creates or reuses the change worktree before planning and ends
+  with a detailed overview of the proposed change, `apply` now reports completed
+  work, proposal updates, and issues found during apply, and `archive` now ends
+  with suggested next issues or follow-up work after cleanup.
 
 - fix(self-hosted): pin Gluetun to the live-benchmarked best PIA region, dynamically enumerate that region's current WireGuard servers at selector time, and only fall back to the global PF pool if the primary region disappears
 

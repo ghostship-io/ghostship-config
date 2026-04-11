@@ -151,11 +151,12 @@ This skill supports the "actions on a change" model:
 <!-- ghostship:gemini-opsx-apply:begin -->
 ## Ghostship Override
 
-- Before implementation, commit the proposal, design, and tasks changes for the change on `main`.
-- Create the change worktree at the start of apply, or reuse it if it already exists.
+- Before implementation, commit the proposal, design, and tasks changes for the change in the active worktree.
 - Implement from the active change worktree, not from `main`.
 - During apply, if the user changes the work, do not create a new proposal or a new worktree; update the current proposal instead.
+- Keep track of issues, follow-up work, and notable problems found during apply.
 - If implementation gets stuck on a bug, failing test, or unexpected behavior, use `systematic-debugging` if it is available.
 - Do root-cause-first debugging before proposing or applying fixes.
+- When apply finishes, give the user a detailed overview of the completed work, the changes made, any proposal updates made during apply, and any issues found during apply before moving on.
 <!-- ghostship:gemini-opsx-apply:end -->
 """

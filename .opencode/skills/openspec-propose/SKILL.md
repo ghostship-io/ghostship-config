@@ -113,8 +113,9 @@ After completing all artifacts, summarize:
 <!-- ghostship:.opencode-openspec-propose:begin -->
 ## Ghostship Override
 
-- Create and refine the proposal, design, and tasks on `main`.
-- When propose finishes, give the user a full summary of the proposed plan for review before moving on.
+- Create or reuse the change worktree at the start of propose.
+- Create and refine the proposal, design, and tasks from the active change worktree, not from `main`.
 - When working in a worktree, use Python-based file edits instead of `apply_patch`.
 - Verify the diff after each worktree file edit.
+- When propose finishes, give the user a detailed overview of the full proposed change and everything it plans to do before moving on.
 <!-- ghostship:.opencode-openspec-propose:end -->

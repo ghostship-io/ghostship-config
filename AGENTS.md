@@ -26,8 +26,8 @@ changelog.
   Home Manager develop profile, package it through the local Nix overlay, and
   expect it to appear only after the relevant Home Manager or NixOS
   rebuild/switch. Do not reintroduce the old WSL `agent-deck web` user
-  service; keep support scoped to the managed CLI and `agent-deck-launch`.
-- Keep `agent-deck-launch` as Home Manager develop-profile tooling, derive its
+  service; keep support scoped to the managed CLI and `launch-agent`.
+- Keep `launch-agent` as Home Manager develop-profile tooling, derive its
   group from Agent Deck CLI JSON with `jq`, use the supported `add -Q` plus
   `session start` flow to launch quick-titled sessions, and keep `gemini-cli`
   available as a real managed wrapper command rather than a shell-only alias.
@@ -49,17 +49,17 @@ changelog.
 - The develop-host `openspec` wrapper reapplies append-only Ghostship
   propose/apply/archive snippets after both `openspec init` and
   `openspec update` without a separate OpenSpec config directory.
-- The Ghostship `propose` override should end with a full proposed-plan
-  summary for review and tell agents to use Python-based file edits instead of
-  `apply_patch` when they work in a worktree.
-- The Ghostship `apply` override should commit planning artifacts on `main`,
-  create or reuse the change worktree at the start, and update the current
-  proposal instead of creating a new proposal or worktree when the user
-  changes the work mid-apply.
+- The Ghostship `propose` override should create or reuse the change
+  worktree at the start, create proposal/design/tasks from that worktree, and
+  end with a detailed overview of the full proposed change.
+- The Ghostship `apply` override should commit planning artifacts in the
+  active worktree, continue from that worktree, track issues found during
+  apply, and update the current proposal instead of creating a new proposal or
+  worktree when the user changes the work mid-apply.
 - The Ghostship `archive` override should reconcile any matching change
   worktree back into `main`, commit the archive move on `main`, remove the
-  worktree, and then try to leave `main` clean by reconciling or removing
-  remaining related artifacts.
+  worktree, try to leave `main` clean, and finish with a list of issues or
+  follow-up work to consider next.
 - `.envrc` uses `use flake`, so the root `flake.nix` must expose either
   `devShells.<system>.default` or `packages.<system>.default`.
 - `nix eval .#...` reads the tracked flake source, not arbitrary untracked

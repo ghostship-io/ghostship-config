@@ -128,4 +128,5 @@ All artifacts complete. All tasks complete.
 - After archive completes, return `main` to a clean working state if possible.
 - Reconcile or remove remaining related artifacts.
 - Clearly report anything that still requires manual cleanup.
+- After archive finishes, give the user a list of issues or follow-up work that should be considered next.
 <!-- ghostship:.gemini-openspec-archive-change:end -->
