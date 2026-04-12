@@ -22,3 +22,11 @@ The repo SHALL store encrypted secrets by logical unit, usually one file per ser
 - **WHEN** an operator needs to change several related secret values for one service
 - **THEN** the repo SHALL allow those values to live in the same logical-unit encrypted file
 - **AND** the repo SHALL not require editing a separate encrypted file for each scalar value unless a concrete split is needed
+
+### Requirement: Operator edit access uses a dedicated passwordless non-default SSH key
+The repo SHALL require human edit access for encrypted secret files to use a dedicated passwordless operator SSH key that is separate from the user's default SSH key. Recipient groups intended for human editing SHALL include that dedicated operator key rather than relying on host private keys or the user's default SSH identity.
+
+#### Scenario: Operator prepares edit access
+- **WHEN** an operator sets up local edit access for repo secrets
+- **THEN** the workflow SHALL require creation and registration of a dedicated passwordless SSH key that is not the operator's default SSH key
+- **AND** recipient groups used for editing SHALL reference that dedicated operator key

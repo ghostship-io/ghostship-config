@@ -2,8 +2,9 @@
 
 - [ ] 1.1 Add `ragenix` to `flake.nix`, remove the global `sops-nix` module wiring, and expose any required `ragenix` CLI/package support in the repo shell or host tooling.
 - [ ] 1.2 Create the new `secrets/` layout with `recipients.nix`, `catalog.nix`, and the initial logical-unit encrypted file tree.
-- [ ] 1.3 Define reusable recipient groups in `secrets/recipients.nix` using SSH host `ed25519` public keys plus any declared operator keys.
-- [ ] 1.4 Replace the old `modules/common/secrets.nix` runtime wiring so the repo's base secret support reads from the new catalog-driven `ragenix` model instead of `sops.*`.
+- [ ] 1.3 Define reusable recipient groups in `secrets/recipients.nix` using SSH host `ed25519` public keys plus the dedicated passwordless non-default operator edit key.
+- [ ] 1.4 Define and document the standard location and setup flow for the dedicated passwordless operator edit key, keeping it separate from the user's default SSH key.
+- [ ] 1.5 Replace the old `modules/common/secrets.nix` runtime wiring so the repo's base secret support reads from the new catalog-driven `ragenix` model instead of `sops.*`.
 
 ## 2. Secret Catalog And Projection Layer
 
@@ -16,9 +17,10 @@
 ## 3. Host Intake Redesign
 
 - [ ] 3.1 Replace `bootstrap.sh` with a capture workflow that writes a temporary host intake bundle containing metadata, standalone `hardware-configuration.nix`, and the host SSH `ed25519` public key.
-- [ ] 3.2 Add the repo-side temporary intake staging workflow under `references/host-intake/<hostname>/` for Codex-assisted host integration.
-- [ ] 3.3 Implement or document the Codex-assisted integration flow that consumes staged intake artifacts to update `hosts/<hostname>/`, `flake.nix`, and `secrets/recipients.nix`.
-- [ ] 3.4 Ensure the documented workflow removes temporary intake directories after Codex finishes integrating the host.
+- [ ] 3.2 Ensure the capture workflow generates or validates the SSH host `ed25519` key on WSL2 hosts before writing the intake bundle.
+- [ ] 3.3 Add the repo-side temporary intake staging workflow under `references/host-intake/<hostname>/` for Codex-assisted host integration.
+- [ ] 3.4 Implement or document the Codex-assisted integration flow that consumes staged intake artifacts to update `hosts/<hostname>/`, `flake.nix`, and `secrets/recipients.nix`.
+- [ ] 3.5 Ensure the documented workflow removes temporary intake directories after Codex finishes integrating the host.
 
 ## 4. Verification
 

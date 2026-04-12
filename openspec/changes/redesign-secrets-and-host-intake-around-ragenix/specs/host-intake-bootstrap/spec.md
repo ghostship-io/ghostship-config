@@ -22,3 +22,11 @@ The repo SHALL treat `references/host-intake/<hostname>/` as temporary working s
 - **WHEN** Codex finishes integrating a staged host intake bundle
 - **THEN** the workflow SHALL remove the temporary `references/host-intake/<hostname>/` directory
 - **AND** the repo SHALL not require keeping that intake directory as permanent tracked state
+
+### Requirement: WSL2 bootstrap ensures the SSH host ed25519 key exists
+The bootstrap capture workflow SHALL ensure that WSL2 hosts have an SSH host `ed25519` key before writing the intake bundle because those hosts may not generate that key by default.
+
+#### Scenario: WSL2 host is missing its host ed25519 key
+- **WHEN** bootstrap capture runs on a WSL2 host without `ssh_host_ed25519_key.pub`
+- **THEN** the workflow SHALL generate the SSH host keys before continuing
+- **AND** it SHALL fail loudly if the `ssh_host_ed25519_key.pub` file still does not exist after that generation step

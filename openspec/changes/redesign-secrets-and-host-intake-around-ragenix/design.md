@@ -2,7 +2,7 @@
 
 This repo currently wires secrets through `sops-nix`, a single encrypted `secrets.yaml`, and module-local references such as `config.sops.secrets."...".path`. Multiple services consume shared secret data by sourcing whole env bundles and selecting the fields they need in ad hoc shell hooks or `environmentFiles` lists. Host onboarding is similarly coupled: `bootstrap.sh` creates a JSON payload that mixes host identity, an age public key, and an embedded `hardware-configuration.nix`, while `sops-register-host` mutates repo state around that payload.
 
-The requested redesign changes both data shape and workflow. Secret storage moves from one monolithic encrypted YAML to logical-unit `.age` files managed through `ragenix`. Recipient policy moves to a centralized model based on SSH host `ed25519` public keys. Shared secret consumption needs a cleaner pattern than repeated raw-file sourcing, so the new design needs a catalog that declares both storage metadata and exported fields, plus a projection layer that builds the minimal env/config surfaces each consumer needs. Host intake also needs to become file-based and temporary so Codex can integrate a new host from concrete repo-local artifacts instead of pasted JSON.
+The requested redesign changes both data shape and workflow. Secret storage moves from one monolithic encrypted YAML to logical-unit `.age` files managed through `ragenix`. Recipient policy moves to a centralized model based on SSH host `ed25519` public keys for machine access plus a dedicated passwordless operator edit key that is separate from the user's default SSH key for human edit access. Shared secret consumption needs a cleaner pattern than repeated raw-file sourcing, so the new design needs a catalog that declares both storage metadata and exported fields, plus a projection layer that builds the minimal env/config surfaces each consumer needs. Host intake also needs to become file-based and temporary so Codex can integrate a new host from concrete repo-local artifacts instead of pasted JSON.
 
 ## Goals / Non-Goals
 
@@ -11,7 +11,7 @@ The requested redesign changes both data shape and workflow. Secret storage move
 - Store secrets as logical-unit encrypted files that remain practical to edit, review, and rekey.
 - Centralize recipient policy in `secrets/recipients.nix` and secret definitions in `secrets/catalog.nix`.
 - Let multiple services consume shared secret fields through declarative projections instead of repeated raw path lookups and whole-bundle sourcing.
-- Redesign bootstrap so host capture produces a temporary intake bundle with a standalone `hardware-configuration.nix` and the host SSH `ed25519` public key.
+- Redesign bootstrap so host capture produces a temporary intake bundle with a standalone `hardware-configuration.nix` and the host SSH `ed25519` public key, and ensure WSL2 hosts generate that host key before capture.
 - Make the supported host onboarding flow: copy the intake artifact into `references/host-intake/<hostname>/`, ask Codex to integrate it, then remove the temporary intake directory.
 - Update repo docs and operator commands so the documented workflow matches the implemented one.
 
@@ -23,12 +23,13 @@ The requested redesign changes both data shape and workflow. Secret storage move
 
 ## Decisions
 
-### Use `ragenix` with SSH host `ed25519` recipients
-The repo will replace `sops-nix` with `ragenix` and use SSH host `ed25519` public keys as the canonical machine recipients. This removes the current dedicated age-key bootstrap path and aligns host onboarding with keys that already exist once `sshd` is present.
+### Use `ragenix` with SSH host `ed25519` recipients plus a dedicated operator edit key
+The repo will replace `sops-nix` with `ragenix` and use SSH host `ed25519` public keys as the canonical machine recipients. Human edit access will come from a dedicated passwordless operator key that is separate from the user's default SSH key. This keeps runtime decryption tied to host identity while making `ragenix -e` practical without requiring users to read host private keys or overload their normal login key with repo-secret-edit duties.
 
 Alternatives considered:
 - Keep `sops-nix`: rejected because the redesign wants to move away from the monolithic encrypted YAML and the current helper workflow anyway.
 - Use dedicated age keys per host: rejected because it adds another identity lifecycle and complicates bootstrap when the host already has an SSH host key.
+- Reuse the user's default SSH key for editing: rejected because the repo wants a purpose-specific edit key with no passphrase and clearer operational separation from default SSH login identity.
 
 ### Store secrets by logical unit and declare them in a catalog
 The repo will store encrypted files by logical unit, usually one env-shaped file per service or subsystem. `secrets/catalog.nix` will declare each unit's backing file, recipient group, file ownership/mode, format, and exported fields. This keeps editing ergonomic while still shrinking the rekey and review scope compared to one repo-wide secret file.
@@ -51,7 +52,7 @@ Alternatives considered:
 - Duplicate shared fields into many secret files: rejected because it increases drift and rekey overhead.
 
 ### Split bootstrap into capture and Codex-assisted integration
-`bootstrap.sh` will become a capture tool that writes a temporary intake bundle containing host metadata, hardware config, and the SSH host public key. The repo-side integration step will be explicit and Codex-assisted: the operator copies the bundle into `references/host-intake/<hostname>/`, asks Codex to integrate it into `hosts/<hostname>/`, `flake.nix`, and the secret recipient model, then removes the intake directory.
+`bootstrap.sh` will become a capture tool that writes a temporary intake bundle containing host metadata, hardware config, and the SSH host public key. On WSL2 hosts, the capture flow must first ensure the host `ssh_host_ed25519` key exists because those systems may not generate it by default. The repo-side integration step will be explicit and Codex-assisted: the operator copies the bundle into `references/host-intake/<hostname>/`, asks Codex to integrate it into `hosts/<hostname>/`, `flake.nix`, and the secret recipient model, then removes the intake directory.
 
 Alternatives considered:
 - Preserve a paste/register workflow: rejected because it embeds large artifacts in JSON and hides the real files Codex needs.
@@ -62,7 +63,7 @@ Alternatives considered:
 - [Logical-unit files can still become too broad] → Keep the default at service/subsystem granularity, then split units only when recipient sets, ownership, reuse, or churn justify it.
 - [Projection helpers add abstraction over simple file paths] → Keep the catalog schema small and focus it on file metadata plus exported fields; do not turn it into a custom secret DSL.
 - [Migrating every service consumer at once is cross-cutting] → Migrate catalog entries and consumer projections systematically, and verify with host-level evaluation before switching hosts.
-- [SSH host keys are generated on-host and must be captured correctly] → Make bootstrap capture validate the expected `ssh_host_ed25519_key.pub` presence and fail loudly if it is missing.
+- [WSL2 hosts may not have an SSH host `ed25519` key yet] → Make bootstrap capture generate or validate `ssh_host_ed25519_key.pub` before writing the intake bundle and fail loudly if generation does not succeed.
 - [Temporary intake bundles could be left behind] → Treat intake directory removal as part of the documented Codex integration workflow and task list.
 
 ## Migration Plan
@@ -77,6 +78,6 @@ Alternatives considered:
 
 ## Open Questions
 
-- Which operator keys, if any, should be declared alongside host SSH keys in `recipients.nix` for local editing and recovery?
+- What exact file path and naming convention should the repo standardize for the dedicated passwordless operator edit key so wrapper commands and docs stay aligned?
 - Which current secret bundles should stay combined at the subsystem level versus split further during the first migration pass?
 - Whether the repo should expose a small helper command for editing catalog entries by logical secret id in addition to raw `ragenix -e <file>`.
