@@ -79,8 +79,8 @@ changelog.
 - Managed Synology NFS mounts should use `hard`, not `soft`, on both WSL and
   NixOS clients so transient NAS stalls do not surface as client-side I/O
   errors or integrity failures during copies.
-- Shared NixOS hosts enable `services.envfs` so external tooling that assumes
-  FHS paths like `/usr/bin/bash` keeps working without host-local hacks.
+- WSL hosts enable `services.envfs` so Windows-side tooling that assumes FHS
+  paths like `/usr/bin/bash` keeps working without host-local hacks.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode

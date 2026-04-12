@@ -31,11 +31,12 @@ for secrets.
 - Server-role hosts use a minimal Home Manager profile and default to `bash`.
 - All Bash shells, including root, get the same global completion and history
   defaults from the NixOS layer.
-- Common hosts also enable `services.envfs` so hardcoded FHS paths such as
-  `/usr/bin/bash` keep working for desktop and third-party tooling on NixOS.
 - Develop-role hosts use the richer interactive profile and default to `fish`.
 - WSL-role hosts layer WSL-specific mounts, Windows interop, and notification
   helpers on top of the develop profile.
+- WSL-role hosts also enable `services.envfs` so Windows-side tools that
+  connect into the guest can rely on hardcoded FHS paths such as
+  `/usr/bin/bash`.
 - System packages are reserved for host/admin essentials, service/runtime
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.

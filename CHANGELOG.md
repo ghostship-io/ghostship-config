@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **FHS shell compatibility**: Enabled `services.envfs` in the shared NixOS
-  base module so hardcoded paths like `/usr/bin/bash` exist for external tools
-  such as Codex Desktop when they target these hosts.
+- **WSL FHS shell compatibility**: Enabled `services.envfs` on WSL hosts so
+  hardcoded paths like `/usr/bin/bash` exist for Windows-side tools such as
+  Codex Desktop when they target the NixOS guest.
 
 - **Hermes Discord allowed users contract**: Switched the Hermes container env wiring from the retired per-profile `DISCORD_*_ALLOWED_USERS` inputs to the single upstream `DISCORD_ALLOWED_USERS` key so the exported Discord auth scope matches the current image contract.
 

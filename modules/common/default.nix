@@ -44,10 +44,6 @@
     NIXPKGS_ALLOW_ALIASES = "0";
   };
 
-  # Desktop and third-party tools sometimes hardcode FHS shell paths such as
-  # /usr/bin/bash. Provide those compatibility shims declaratively on NixOS.
-  services.envfs.enable = true;
-
   systemd.tmpfiles.rules = [
     "L+ /usr/bin/bwrap - - - - ${pkgs.bubblewrap}/bin/bwrap"
   ];
