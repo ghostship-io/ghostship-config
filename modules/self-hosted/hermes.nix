@@ -249,6 +249,7 @@ in
       "${hermes-home}:/home/hermes:rw"
       "${hermes-workspace}:/workspace:rw"
       "${hermes-nix}:/nix:rw"
+      "/mnt/share:/mnt/share:rw"
     ];
   };
 
