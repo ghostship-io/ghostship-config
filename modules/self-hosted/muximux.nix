@@ -334,7 +334,7 @@ in
           Hermes.url=literal:"https://hermes.ghostship.io"
           Hermes.scale=literal:1
           Hermes.icon=literal:"fa-terminal"
-          Hermes.color=literal:"#06b6d4"
+          Hermes.color=literal:"#00d4ff"
           Hermes.enabled=literal:"true"
           Hermes.dd=literal:"false"
           RomM.name=literal:"RomM"
