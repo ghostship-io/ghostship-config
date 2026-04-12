@@ -19,5 +19,5 @@
 ## 4. Verify And Deploy The Cutover
 
 - [x] 4.1 Run `nix flake check --no-build` in the change worktree and an evaluation-only check such as `nix eval .#nixosConfigurations.chill-penguin.config.system.build.toplevel.drvPath` to confirm the updated host config still evaluates locally.
-- [ ] 4.2 From `ssh chill-penguin-root`, pull the updated repo revision, remove `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`, then build and switch `chill-penguin` with the preferred remote deploy flow.
-- [ ] 4.3 Verify live that Hermes bootstraps only the root managed runtime (`/home/hermes/.hermes`), omits a repo-managed `BROWSER_CDP_URL` default, preserves the expected root `.env` defaults/exclusions, reseeds `/srv/apps/hermes/nix`, and copies `skill-creator` from the root seed path into a writable managed skill tree while Changedetection keeps its dedicated CloakBrowser profile.
+- [x] 4.2 From `ssh chill-penguin-root`, pull the updated repo revision, remove `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`, then build and switch `chill-penguin` with the preferred remote deploy flow.
+- [x] 4.3 Verify live that Hermes bootstraps only the root managed runtime (`/home/hermes/.hermes`), omits a repo-managed `BROWSER_CDP_URL` default, preserves the expected root `.env` defaults/exclusions, reseeds `/srv/apps/hermes/nix`, and copies `skill-creator` from the root seed path into a writable managed skill tree while Changedetection keeps its dedicated CloakBrowser profile.
