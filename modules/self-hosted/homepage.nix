@@ -260,7 +260,7 @@ in
             "[Management].[Homepage].server=literal:chill-penguin"
             "[Management].[Homepage].container=literal:homepage"
             
-            "[Management].[Muximux].icon=literal:dashboard-icons"
+            "[Management].[Muximux].icon=literal:mdi-view-dashboard-#00c853"
             "[Management].[Muximux].description=literal:Lightweight Portal"
             "[Management].[Muximux].server=literal:chill-penguin"
             "[Management].[Muximux].container=literal:muximux"
