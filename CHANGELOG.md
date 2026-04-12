@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **WSL FHS GitHub CLI compatibility**: Extended the WSL `services.envfs`
+  fallback path so Windows-side tools such as Codex Desktop can resolve
+  `/usr/bin/gh` even when the calling environment does not carry the develop
+  profile PATH.
+
 - **WSL FHS shell compatibility**: Enabled `services.envfs` on WSL hosts so
   hardcoded paths like `/usr/bin/bash` exist for Windows-side tools such as
   Codex Desktop when they target the NixOS guest.

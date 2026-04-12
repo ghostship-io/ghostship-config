@@ -36,7 +36,7 @@ for secrets.
   helpers on top of the develop profile.
 - WSL-role hosts also enable `services.envfs` so Windows-side tools that
   connect into the guest can rely on hardcoded FHS paths such as
-  `/usr/bin/bash`.
+  `/usr/bin/bash` and `/usr/bin/gh`.
 - System packages are reserved for host/admin essentials, service/runtime
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.

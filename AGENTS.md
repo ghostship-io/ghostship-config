@@ -80,7 +80,8 @@ changelog.
   NixOS clients so transient NAS stalls do not surface as client-side I/O
   errors or integrity failures during copies.
 - WSL hosts enable `services.envfs` so Windows-side tooling that assumes FHS
-  paths like `/usr/bin/bash` keeps working without host-local hacks.
+  paths like `/usr/bin/bash` and `/usr/bin/gh` keeps working without
+  host-local hacks.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode
