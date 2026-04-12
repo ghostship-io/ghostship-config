@@ -40,10 +40,11 @@ for secrets.
 - System packages are reserved for host/admin essentials, service/runtime
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.
-- Develop-role Home Manager packages include shared interactive CLI tools such
-  as `gh` and `agent-deck` so GitHub workflows and multi-agent
-  orchestration are available on every develop host after the relevant Home
-  Manager or NixOS switch.
+- The shared system baseline now includes `gh` so GitHub CLI access is
+  available to agents and other callers outside the user profile as well.
+- Develop-role Home Manager packages still include interactive tooling such as
+  `agent-deck` so multi-agent orchestration is available on every develop host
+  after the relevant Home Manager or NixOS switch.
 
 ## Agent Launchers
 

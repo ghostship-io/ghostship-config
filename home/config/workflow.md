@@ -42,7 +42,8 @@ nixos-rebuild build --flake .#<host>
 ## Package Ownership
 
 - `environment.systemPackages`: admin tools, diagnostics, runtime dependencies,
-  and a small system-wide baseline.
+  and a small system-wide baseline. Put shared cross-shell tooling here when
+  agents or external callers must find a standard executable path.
 - `home.packages`: interactive user tooling and shell UX.
 
 ## Shell Policy

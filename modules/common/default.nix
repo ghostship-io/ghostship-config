@@ -60,6 +60,7 @@
     # Essential CLI tools
     coreutils
     git
+    gh
     neovim
     curl
     wget

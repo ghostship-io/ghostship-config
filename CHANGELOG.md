@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **System-wide GitHub CLI baseline**: Moved `gh` from the develop Home
+  Manager package list into the shared system package baseline so standard-path
+  callers and non-user-profile contexts can rely on the GitHub CLI being
+  present.
+
 - **WSL FHS GitHub CLI compatibility**: Extended the WSL `services.envfs`
   fallback path so Windows-side tools such as Codex Desktop can resolve
   `/usr/bin/gh` even when the calling environment does not carry the develop
