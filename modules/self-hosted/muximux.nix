@@ -319,7 +319,7 @@ in
           BookStack.name=literal:"BookStack"
           BookStack.url=literal:"https://bookstack.ghostship.io"
           BookStack.scale=literal:1
-          BookStack.icon=literal:"fa-book"
+          BookStack.icon=literal:"muximux-menu_book"
           BookStack.color=literal:"#206ea7"
           BookStack.enabled=literal:"true"
           BookStack.dd=literal:"false"
@@ -333,7 +333,7 @@ in
           Hermes.name=literal:"Hermes"
           Hermes.url=literal:"https://hermes.ghostship.io"
           Hermes.scale=literal:1
-          Hermes.icon=literal:"fa-terminal"
+          Hermes.icon=literal:"muximux-terminal3"
           Hermes.color=literal:"#00d4ff"
           Hermes.enabled=literal:"true"
           Hermes.dd=literal:"false"
@@ -375,7 +375,7 @@ in
           PriceBuddy.name=literal:"PriceBuddy"
           PriceBuddy.url=literal:"https://pricebuddy.ghostship.io"
           PriceBuddy.scale=literal:1
-          PriceBuddy.icon=literal:"fa-money"
+          PriceBuddy.icon=literal:"muximux-attach_money"
           PriceBuddy.color=literal:"#22c55e"
           PriceBuddy.enabled=literal:"true"
           PriceBuddy.dd=literal:"true"
