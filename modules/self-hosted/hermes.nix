@@ -47,7 +47,7 @@ let
     N8N_URL = "http://n8n:5678";
     CHANGEDETECTION_URL = "http://changedetection:5000";
     CHAPTARR_URL = "http://chaptarr:8789";
-    BOOKSTACK_URL = "https://bookstack.ghostship.io";
+    BOOKSTACK_URL = "http://bookstack";
     PRICEBUDDY_URL = "http://pricebuddy";
     RSS_BRIDGE_URL = "http://rss-bridge";
     SYNOLOGY_URL = "http://192.168.200.106:5000/";
