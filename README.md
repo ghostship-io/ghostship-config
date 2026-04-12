@@ -34,6 +34,9 @@ for secrets.
 - Develop-role hosts use the richer interactive profile and default to `fish`.
 - WSL-role hosts layer WSL-specific mounts, Windows interop, and notification
   helpers on top of the develop profile.
+- WSL-role hosts also enable `services.envfs` so Windows-side tools that
+  connect into the guest can rely on hardcoded FHS paths such as
+  `/usr/bin/bash`.
 - System packages are reserved for host/admin essentials, service/runtime
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.
@@ -48,6 +51,9 @@ for secrets.
   `agent-browser`, and `openspec` through Nix-managed wrapper scripts, and
   they install `agent-deck` plus the `launch-agent` helper as Home
   Manager packages for interactive agent orchestration.
+- The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
+  unless you override it explicitly, so local automation stays on the
+  profile-capable Chrome engine even if upstream auto-selection changes.
 - `launch-agent [tool]` launches the current directory into Agent Deck,
   creates the matching basename group when missing, defaults to `codex`, and
   uses Agent Deck's supported `add -Q` plus `session start` flow for quick
@@ -143,14 +149,14 @@ from the cached winner in `/srv/apps/gluetun/pia-wireguard-selection.json`, and
 falls back to only a cheap provisional pick if no cache exists, before
 regenerating `/run/secrets/gluetun-runtime.env`. A background
 `gluetun-pia-selector` run starts 5 minutes after boot and reruns every 8 hours:
-it screens all PF-capable PIA WireGuard regions, keeps the best endpoint per
-region, benchmarks the top 5 regions with a bounded generic HTTPS download test,
-and only restarts Gluetun when the new winner is materially faster than the
-current cached server. The persisted `/srv/apps/gluetun` mount remains the
+it pins selection to the PF-capable Vancouver PIA WireGuard servers, latency-screens those endpoints, benchmarks the top 10 Vancouver servers with a bounded generic HTTPS download test, and only restarts Gluetun when the new Vancouver winner is materially faster than the current cached server. The persisted `/srv/apps/gluetun` mount remains the
 owner of Gluetun state and PIA's forwarded-port lease, while the
 qBittorrent/VueTorrent up/down hooks plus the Gluetun monitor keep the listen
-port reconciled after startup and reconnects. The monitor also reconciles
-qBittorrent's bound interface address to the live WireGuard `tun0` address,
+port reconciled after startup and reconnects. `podman-vuetorrent` also primes
+`qBittorrent.conf` with Gluetun's current `tun0` IPv4 during service startup,
+so qBittorrent does not spend its first boot window bound to the previous VPN
+address after a Gluetun restart. The monitor still reconciles qBittorrent's
+bound interface address to the live WireGuard `tun0` address after startup,
 because qBittorrent 5.1.4 can stay disconnected if it only binds by interface
 name after the VPN namespace changes. The Gluetun secret bundle must provide
 PIA credentials (`PIA_USER`/`PIA_PASS` or legacy `OPENVPN_*` names) and
@@ -197,7 +203,7 @@ files, scraper reachability, and final bearer-token shape without treating
 upstream auth-route bugs or third-party Cloudflare challenges as Ghostship env
 regressions.
 
-Hermes now follows the upstream single-agent `ghostship-hermes` contract on `chill-penguin`: `/srv/apps/hermes/home` mounts at `/home/hermes`, `/srv/apps/hermes/workspace` mounts at `/workspace`, and a seeded host path `/srv/apps/hermes/nix` mounts at `/nix`. The managed runtime lives at `/home/hermes/.hermes`, and the generated managed `.env` is `/home/hermes/.hermes/.env` with `TERMINAL_CWD=/workspace`, `WEBHOOK_ENABLED=true`, and `WEBHOOK_PORT=8644`. The host post-start hook now prefers the newer `ghostship-hermes-startup.service` plus `ghostship-hermes-user-tooling-refresh.timer` when the published image exposes them, but falls back to the current published image's `hermes-agent.service` gateway unit because `ghcr.io/ghostship-io/ghostship-hermes:latest` on April 11, 2026 still ships that older unit set. Ghostship supplies the generic single-agent Discord inputs `DISCORD_ALLOWED_USERS`, `DISCORD_FREE_RESPONSE_CHANNELS`, and `DISCORD_HOME_CHANNEL` directly, carries `DISCORD_BOT_TOKEN` and `WEBHOOK_SECRET` through `hermes-secrets`, and intentionally does not set a repo-managed `BROWSER_CDP_URL` default; local `agent-browser` remains the default unless an operator manually adds that upstream-supported override. The managed `.env` keeps the unchanged provider and utility pass-through vars, excludes `CHAPTARR_API_PATH`, `CHAPTARR_API_VERSION`, `N8N_PUBLIC_API_ENDPOINT`, `N8N_PUBLIC_API_VERSION`, `GHOSTSHIP_ROUTER_API_KEY`, `API_SERVER_HOST`, `API_SERVER_PORT`, and `API_SERVER_KEY`, and still projects only the selected utility-facing auth subset into `/srv/apps/hermes/runtime.env`. The repo now tracks one root `skill-creator` seed under `modules/self-hosted/hermes-seeds/skills/skill-creator/` and one root Crush Crawfish persona seed at `modules/self-hosted/hermes-seeds/SOUL.md`; `podman-hermes` copies them into `/srv/apps/hermes/home/seeds/skills/skill-creator/` and `/srv/apps/hermes/home/seeds/SOUL.md` only when missing so runtime edits stay operator-owned after first seed. Before the first deployment of this contract, treat the cutover as destructive: remove `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`, then let the updated image reseed `/nix`, the root seed layout, and the managed single-agent runtime from scratch. Muximux keeps PriceBuddy in the dropdown immediately after Bazarr.
+Hermes now follows the upstream single-agent `ghostship-hermes` contract on `chill-penguin`: `/srv/apps/hermes/home` mounts at `/home/hermes`, `/srv/apps/hermes/workspace` mounts at `/workspace`, and a seeded host path `/srv/apps/hermes/nix` mounts at `/nix`. The managed runtime lives at `/home/hermes/.hermes`, the generated managed `.env` is `/home/hermes/.hermes/.env`, and `podman-hermes` should kick the image-owned `ghostship-hermes-startup.service` plus `ghostship-hermes-user-tooling-refresh.timer` instead of reproducing lower-level startup steps on the host. Browser terminals should use the upstream-generated `TERMINAL_CWD=/workspace` contract, not a repo-managed profile cwd shim. Ghostship supplies the generic single-agent Discord inputs `DISCORD_ALLOWED_USERS`, `DISCORD_FREE_RESPONSE_CHANNELS`, and `DISCORD_HOME_CHANNEL` directly, carries `DISCORD_BOT_TOKEN` and `WEBHOOK_SECRET` through `hermes-secrets`, and intentionally does not set a repo-managed `BROWSER_CDP_URL` default; local `agent-browser` remains the default unless an operator manually adds that upstream-supported override. The managed `.env` keeps the unchanged provider and utility pass-through vars, excludes `CHAPTARR_API_PATH`, `CHAPTARR_API_VERSION`, `N8N_PUBLIC_API_ENDPOINT`, `N8N_PUBLIC_API_VERSION`, `GHOSTSHIP_ROUTER_API_KEY`, `API_SERVER_HOST`, `API_SERVER_PORT`, and `API_SERVER_KEY`, and still projects only the selected utility-facing auth subset into `/srv/apps/hermes/runtime.env`. The repo now tracks one root `skill-creator` seed under `modules/self-hosted/hermes-seeds/skills/skill-creator/` and one root Crush Crawfish persona seed at `modules/self-hosted/hermes-seeds/SOUL.md`; `podman-hermes` copies them into `/srv/apps/hermes/home/seeds/skills/skill-creator/` and `/srv/apps/hermes/home/seeds/SOUL.md` only when missing so runtime edits stay operator-owned after first seed. Before the first deployment of this contract, treat the cutover as destructive: remove `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`, then let the updated image reseed `/nix`, the root seed layout, and the managed single-agent runtime from scratch. Muximux keeps PriceBuddy in the dropdown immediately after Bazarr.
 
 ## Usage
 

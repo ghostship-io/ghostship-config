@@ -48,6 +48,41 @@ let
       echo "VueTorrent config updated"
     fi
   '';
+
+  vuetorrent-prestart-script = pkgs.writeShellScriptBin "vuetorrent-prestart.sh" ''
+    #!/bin/sh
+    set -eu
+
+    CONFIG_FILE="/srv/apps/vuetorrent/qBittorrent/qBittorrent.conf"
+    TUN_INTERFACE="tun0"
+    TUN_IP=""
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+      exit 0
+    fi
+
+    for _ in $(seq 1 30); do
+      TUN_IP=$(${pkgs.podman}/bin/podman exec gluetun sh -c "ip -4 -o addr show dev $TUN_INTERFACE 2>/dev/null | tr -s ' ' | cut -d' ' -f4 | cut -d/ -f1 | head -n1" 2>/dev/null || true)
+      if [ -n "$TUN_IP" ]; then
+        break
+      fi
+      sleep 1
+    done
+
+    if [ -z "$TUN_IP" ]; then
+      echo "VueTorrent pre-start could not determine Gluetun $TUN_INTERFACE address; leaving qBittorrent binding unchanged." >&2
+      exit 0
+    fi
+
+    vt_bind_args=(
+      BitTorrent.Session\\Interface=literal:$TUN_INTERFACE
+      BitTorrent.Session\\InterfaceName=literal:$TUN_INTERFACE
+      BitTorrent.Session\\InterfaceAddress=literal:$TUN_IP
+    )
+
+    ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_bind_args[@]}"
+    echo "Primed VueTorrent binding for $TUN_INTERFACE/$TUN_IP before startup."
+  '';
 in
 {
   virtualisation.oci-containers.containers."vuetorrent" = {
@@ -84,6 +119,9 @@ in
     partOf = [ "podman-gluetun.service" ];
     requires = [ "podman-gluetun.service" ];
     wants = [ "mnt-share.mount" ];
+    preStart = lib.mkAfter ''
+      ${vuetorrent-prestart-script}/bin/vuetorrent-prestart.sh
+    '';
   };
 
   systemd.tmpfiles.rules = [

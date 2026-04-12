@@ -20,7 +20,7 @@ let
   pricebuddy-agent-env = "/srv/apps/pricebuddy/pricebuddy-agent.env";
   hermes-seed-skill-creator = ./hermes-seeds/skills/skill-creator;
   hermes-seed-soul = ./hermes-seeds/SOUL.md;
-  discord-home-channel = "1488255112169394309";
+  discord-home-channel = "1491229269127598281";
   discord-allowed-users = "126942974826381312";
   discord-free-response-channels = builtins.concatStringsSep "," [
     "1491229269127598281"
@@ -214,7 +214,7 @@ in
     extraOptions = [
       "--network=ghostship_net"
       "--privileged"
-      "--health-cmd=/run/current-system/sw/bin/curl -fsS http://127.0.0.1:7681/ >/dev/null || exit 1"
+      "--health-cmd=[\"/bin/sh\",\"-lc\",\"curl -fsS http://127.0.0.1:7681/ >/dev/null || exit 1\"]"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
@@ -321,13 +321,9 @@ in
       done
 
       ${pkgs.podman}/bin/podman exec hermes sh -lc '
-        if /run/current-system/sw/bin/systemctl --system list-unit-files ghostship-hermes-startup.service >/dev/null 2>&1; then
-          /run/current-system/sw/bin/systemctl --system start \
-            ghostship-hermes-user-tooling-refresh.timer \
-            ghostship-hermes-startup.service
-        else
-          /run/current-system/sw/bin/systemctl --system start hermes-agent.service
-        fi
+        /run/current-system/sw/bin/systemctl --system start \
+          ghostship-hermes-user-tooling-refresh.timer \
+          ghostship-hermes-startup.service
       '
 
       ${pkgs.systemd}/bin/systemctl start --no-block hermes-runtime-env-sync.service || true

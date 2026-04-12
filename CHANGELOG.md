@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **Hermes single-agent cutover**: Replaced the old `assistant`/`operations`/`supervisor` runtime contract on `chill-penguin` with the upstream single-agent layout rooted at `/home/hermes/.hermes`, switched host wiring to the generic Discord and webhook env contract, stopped emitting any repo-managed browser CDP default, collapsed Hermes seeds to one root `skill-creator` tree plus one Crush Crawfish `SOUL.md`, limited managed CloakBrowser defaults to `Changedetection`, documented the required destructive reset of `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix` before first deployment, and taught the host post-start hook to fall back to the currently published image's `hermes-agent.service` unit because the newer `ghostship-hermes-*` service set is not in `ghcr.io/ghostship-io/ghostship-hermes:latest` yet.
+- **WSL FHS shell compatibility**: Enabled `services.envfs` on WSL hosts so
+  hardcoded paths like `/usr/bin/bash` exist for Windows-side tools such as
+  Codex Desktop when they target the NixOS guest.
+
+- **Hermes single-agent cutover**: Replaced the old `assistant`/`operations`/`supervisor` runtime contract on `chill-penguin` with the upstream single-agent layout rooted at `/home/hermes/.hermes`, switched host wiring to the generic Discord and webhook env contract, stopped emitting any repo-managed browser CDP default, collapsed Hermes seeds to one root `skill-creator` tree plus one Crush Crawfish `SOUL.md`, limited managed CloakBrowser defaults to `Changedetection`, documented the required destructive reset of `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix` before first deployment, and aligned startup with the image-owned `ghostship-hermes-startup.service` plus `ghostship-hermes-user-tooling-refresh.timer` path.
+
+- **Hermes Discord allowed users contract**: Switched the Hermes container env wiring from the retired per-profile `DISCORD_*_ALLOWED_USERS` inputs to the single upstream `DISCORD_ALLOWED_USERS` key so the exported Discord auth scope matches the current image contract.
+
+- **Hermes HUD healthcheck**: Switched the Hermes container health probe to use in-container `curl` against `http://127.0.0.1:7681/` so the check follows the upstream HUD endpoint without embedding host-only Nix store paths that do not exist in the image-seeded `/nix`.
+
+- **Develop agent-browser engine pin**: The managed `agent-browser` wrapper
+  now defaults `AGENT_BROWSER_ENGINE=chrome` unless callers override it so
+  local browser automation keeps using the profile-capable Chrome engine even
+  when upstream auto-launch heuristics drift toward Lightpanda.
 
 - **NZBGet UsenetPrime retirement**: Removed the unused `eu.usenetprime.com` backup server from the managed NZBGet config, dropped the retired `NZBGET_SERVER2_*` entries from the local plaintext secret mirror, and reconciled `chill-penguin` so live NZBGet state stops referencing the dead provider.
 
@@ -22,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secret file changes so bundled utilities keep receiving the current pyLoad
   and n8n credentials.
 
-- **Hermes utility env projection**: Reduced the Hermes container secret surface to `hermes-secrets` plus a generated `/srv/apps/hermes/runtime.env`, projected only the required utility-facing auth values from service-local secret or runtime files, added the missing internal utility URLs including Changedetection, Chaptarr, PriceBuddy, RSS-Bridge, Synology, the explicit Chaptarr API path/version, and the n8n public API endpoint/version, and now supply upstream with the container-wide `DISCORD_*`, `WEBHOOK_*`, and per-profile `BROWSER_*_CDP_URL` inputs it expects instead of reconciling managed profile `.env` files on the host.
+- **Hermes utility env projection**: Reduced the Hermes container secret surface to `hermes-secrets` plus a generated `/srv/apps/hermes/runtime.env`, projected only the required utility-facing auth values from service-local secret or runtime files, added the missing internal utility URLs including Changedetection, Chaptarr, PriceBuddy, RSS-Bridge, and Synology, and now supply upstream with the generic single-agent Discord and webhook inputs it expects while leaving browser defaults unset so no repo-managed `BROWSER_CDP_URL` or `BROWSER_*_CDP_URL` values are emitted.
 
 - **Synology NFS hard mounts**: Switched the managed Synology NFS mounts on
   `chill-penguin` and WSL hosts from `soft` to `hard` so transient server or
@@ -32,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   address to Gluetun's live `tun0` IPv4 in the Gluetun monitor, so qBittorrent
   stops getting stuck in a disconnected state after VPN restarts or namespace
   changes when binding by interface name alone is insufficient.
+
+- **VueTorrent startup binding**: Prime `qBittorrent.conf` with Gluetun's live
+  `tun0` IPv4 in `podman-vuetorrent` pre-start so qBittorrent no longer boots
+  with the previous tunnel address and spends its first restart window unable
+  to bind after Gluetun server changes.
+
 
 - **Develop Gemini maintenance**: Removed the deprecated `experimental.plan` key from the generated develop-host Gemini system settings so managed Gemini launches stop warning about read-only stale config, and added `bash` to the maintenance runtime inputs so npm and npx subprocesses can spawn `sh` reliably during `ghostship-agent-maintenance`.
 
@@ -58,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   package to the shared develop Home Manager profile through the local Nix
   overlay so develop hosts get declarative tmux-first worktree orchestration
   without relying on the upstream installer or `cargo install`.
-- **Hermes runtime contract**: Aligned the `chill-penguin` Hermes host module with the current `ghostship-hermes` contract by letting the image-owned startup service and mutable-tooling timer drive internal boot ordering, removing the old terminal cwd override so browser sessions start in `/home/hermes`, and documenting the per-profile `~/.hermes/profiles/<profile>/.env` contract.
+- **Hermes runtime contract**: Aligned the `chill-penguin` Hermes host module with the current single-agent `ghostship-hermes` contract by letting the image-owned startup service and mutable-tooling timer drive internal boot ordering, treating `/home/hermes/.hermes` as the authoritative managed runtime surface, and following the upstream-generated `TERMINAL_CWD=/workspace` root env contract.
 - **PyLoad health checks**: Switched the `pyload-ng` container health probe
   from `GET /api` to `GET /favicon.ico` because the current upstream image now
   returns `401 UNAUTHORIZED` on `/api`, which left Podman health checks
@@ -70,21 +89,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   built-in `~/.codex/skills/.system/skill-creator` path as a managed symlink to
   `~/.agents/skills/skill-creator` during develop-profile activation and
   `ghostship-agent-maintenance`.
-- **Hermes profile skill seeds**: Replaced the old shared Hermes
-  `skill-creator` seed path with profile-local copies under
-  `modules/self-hosted/hermes-seeds/profiles/{assistant,operations,supervisor}/skills/software-development/skill-creator/`,
-  and `podman-hermes` now seeds each profile-local `skill-creator` directory
-  into `/srv/apps/hermes/home/seeds/profiles/<profile>/skills/software-development/skill-creator/`
-  only when that runtime-owned directory is missing. The old shared runtime
-  path under `/srv/apps/hermes/home/seeds/shared/skills/` is now retired and
-  should be cleaned up manually on hosts after the updated config is applied.
+- **Hermes root skill seeds**: Replaced the retired profile-local Hermes `skill-creator` seed copies with one root seed source under `modules/self-hosted/hermes-seeds/skills/skill-creator/`, and `podman-hermes` now seeds `/srv/apps/hermes/home/seeds/skills/skill-creator/` only when that runtime-owned directory is missing while normalizing the copied tree to writable `apps:apps` ownership and permissions.
 - **Gluetun PIA WireGuard selector**: Migrated `chill-penguin` Gluetun from native PIA OpenVPN to Gluetun's custom-provider WireGuard path, added a daily PF-capable PIA server selector that caches the preferred winner under `/srv/apps/gluetun/pia-wireguard-selection.json`, regenerated the runtime env at Gluetun startup, kept PIA VPN-side port forwarding on the persisted `/srv/apps/gluetun` state mount, and updated the monitor to use Gluetun's generic `/v1/portforward` control route while still reconciling qBittorrent/VueTorrent after startup and reconnects.
-- **Gluetun selector fast-start benchmark flow**: Renamed the helper to a stable `gluetun-pia-selector` binary, changed `podman-gluetun` startup to trust the cached winner or do only a provisional latency pick, added a post-boot plus 8-hour background selector cycle, benchmarked the top 5 PF-capable regions with bounded generic HTTPS pulls through temporary Gluetun tunnels, and only restart Gluetun when a challenger is materially faster than the current cached winner.
-- **Hermes profile SOUL seeds**: Added tracked Hermes persona source files for
-  the `assistant`, `operations`, and `supervisor` gateways under
-  `modules/self-hosted/hermes-seeds/`, and `podman-hermes` now seeds each
-  profile `SOUL.md` into `/srv/apps/hermes/home/seeds/profiles/<profile>/`
-  only when that file is missing so existing runtime variants are preserved.
+- **Gluetun selector fast-start benchmark flow**: Renamed the helper to a stable `gluetun-pia-selector` binary, changed `podman-gluetun` startup to trust the cached winner or do only a provisional latency pick, pinned selection to Vancouver, added a post-boot plus 8-hour background selector cycle, benchmarked the top 10 Vancouver port-forward-capable servers with bounded generic HTTPS pulls through temporary Gluetun tunnels, and only restart Gluetun when a challenger is materially faster than the current cached winner.
+- **Hermes root SOUL seed**: Replaced the retired profile-local persona files with one root `modules/self-hosted/hermes-seeds/SOUL.md` source, and `podman-hermes` now seeds `/srv/apps/hermes/home/seeds/SOUL.md` only when that runtime-owned file is missing so existing operator edits remain preserved after first seed.
 - **Chaptarr book stack**: Added a repo-managed Chaptarr service to the `chill-penguin` arr stack with persisted config, shared `/downloads` access for both torrent and usenet flows, Homepage visibility, and declarative Muximux placement after Bazarr and before `n8n`. Grimmory now mounts both `/mnt/share/Library/Books` and `/mnt/share/Library/Audiobooks` so it remains the first-class consumption surface for the shared library roots, while the public `chaptarr.ghostship.io` route stays part of the external Cloudflare/tunnel workflow.
 - **Develop GitHub CLI baseline**: Added `gh` to the shared develop Home
   Manager package set so every develop-profile host gets the GitHub CLI by

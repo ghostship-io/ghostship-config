@@ -65,6 +65,7 @@ let
     set -euo pipefail
 
     PATH=${baseRuntimeBinPath}:$PATH
+    export AGENT_BROWSER_ENGINE="''${AGENT_BROWSER_ENGINE:-chrome}"
     export LD_LIBRARY_PATH="${browserRuntimeLdLibraryPath}${
       if browserRuntimeLdLibraryPath != "" then ":" else ""
     }''${LD_LIBRARY_PATH:-}"
