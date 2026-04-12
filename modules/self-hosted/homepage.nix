@@ -208,7 +208,7 @@ in
             "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000"
             
             # Services group
-            "[Services].[Hermes].icon=literal:mdi-robot-happy-outline-#00d4ff"
+            "[Services].[Hermes].icon=literal:sh-android-robot"
             "[Services].[Hermes].description=literal:Agent Terminal"
             "[Services].[Hermes].server=literal:chill-penguin"
             "[Services].[Hermes].container=literal:hermes"
@@ -244,7 +244,7 @@ in
             "[Services].[BookStack].container=literal:bookstack"
             "[Services].[BookStack].href=literal:https://bookstack.ghostship.io"
 
-            "[Services].[PriceBuddy].icon=literal:mdi-tag-multiple-#22c55e"
+            "[Services].[PriceBuddy].icon=literal:sh-priceghost"
             "[Services].[PriceBuddy].description=literal:Price Tracker"
             "[Services].[PriceBuddy].server=literal:chill-penguin"
             "[Services].[PriceBuddy].container=literal:pricebuddy"
@@ -296,7 +296,7 @@ in
             "[Utilities].[MeTube].server=literal:chill-penguin"
             "[Utilities].[MeTube].container=literal:metube"
 
-            "[Utilities].[OmniTools].icon=literal:mdi-tools-#8b5cf6"
+            "[Utilities].[OmniTools].icon=literal:sh-omnitools"
             "[Utilities].[OmniTools].description=literal:Omni Toolkit"
             "[Utilities].[OmniTools].server=literal:chill-penguin"
             "[Utilities].[OmniTools].container=literal:omni-tools"
@@ -307,12 +307,12 @@ in
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
 
-            "[Infrastructure].[PriceBuddy Scraper].icon=literal:mdi-spider-thread-#206ea7"
+            "[Infrastructure].[PriceBuddy Scraper].icon=literal:sh-uptimerobot"
             "[Infrastructure].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
             "[Infrastructure].[PriceBuddy Scraper].server=literal:chill-penguin"
             "[Infrastructure].[PriceBuddy Scraper].container=literal:pricebuddy-scraper"
 
-            "[Infrastructure].[PriceBuddy DB].icon=literal:mdi-database-#8b5cf6"
+            "[Infrastructure].[PriceBuddy DB].icon=literal:mariadb.png"
             "[Infrastructure].[PriceBuddy DB].description=literal:PriceBuddy Database"
             "[Infrastructure].[PriceBuddy DB].server=literal:chill-penguin"
             "[Infrastructure].[PriceBuddy DB].container=literal:pricebuddy-db"
