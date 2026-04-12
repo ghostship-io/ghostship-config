@@ -11,6 +11,7 @@ let
   bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
   grimmory-secrets = config.sops.secrets."grimmory-secrets".path;
   chaptarr-secrets = config.sops.secrets."chaptarr-secrets".path;
+  bookstack-secrets = config.sops.secrets."bookstack-secrets".path;
   pyload-secrets = config.sops.secrets."pyload-secrets".path;
   n8n-secrets = config.sops.secrets."n8n-secrets".path;
   hermes-home = "/srv/apps/hermes/home";
@@ -45,6 +46,7 @@ let
     N8N_URL = "http://n8n:5678";
     CHANGEDETECTION_URL = "http://changedetection:5000";
     CHAPTARR_URL = "http://chaptarr:8789";
+    BOOKSTACK_URL = "https://bookstack.ghostship.io";
     PRICEBUDDY_URL = "http://pricebuddy";
     RSS_BRIDGE_URL = "http://rss-bridge";
     SYNOLOGY_URL = "http://192.168.200.106:5000/";
@@ -117,6 +119,13 @@ let
               "path": ${builtins.toJSON chaptarr-secrets},
               "map": {
                   "CHAPTARR_API_KEY": "CHAPTARR_API_KEY",
+              },
+          },
+          {
+              "path": ${builtins.toJSON bookstack-secrets},
+              "map": {
+                  "BOOKSTACK_TOKEN_ID": "BOOKSTACK_TOKEN_ID",
+                  "BOOKSTACK_TOKEN_SECRET": "BOOKSTACK_TOKEN_SECRET",
               },
           },
           {
@@ -264,7 +273,8 @@ in
       for secret_file in \
         "${hermes-secrets}" \
         "${pyload-secrets}" \
-        "${n8n-secrets}"
+        "${n8n-secrets}" \
+        "${bookstack-secrets}"
       do
         if [ ! -f "$secret_file" ]; then
           echo "Waiting for Hermes runtime secret source at $secret_file..."
@@ -358,6 +368,7 @@ in
         bazarr-secrets
         grimmory-secrets
         chaptarr-secrets
+        bookstack-secrets
         pyload-secrets
         n8n-secrets
         romm-secrets

@@ -2,7 +2,7 @@
 
 Ghostship's self-hosted services are declared as flat NixOS modules under `modules/self-hosted/` and run as repo-managed Podman containers on `chill-penguin`. User-facing services commonly include durable state under `/srv/apps/<name>`, repo-managed secret projection via `sops.secrets`, container healthchecks, and Homepage visibility generated in `modules/self-hosted/homepage.nix`.
 
-BookStack adds a new documentation/wiki service that does not currently exist in the stack. Unlike the agent-facing utility env work in `modules/self-hosted/hermes.nix`, this change is scoped only to the server-host service inventory and Homepage placement under `Services`. The operator has decided that BookStack API keys and the initial application setup will be managed manually, so the repo should stop at wiring the service and its required env surface rather than trying to automate first-run state.
+BookStack adds a new documentation/wiki service that does not currently exist in the stack. The operator has decided that BookStack API tokens and the initial application setup will be managed manually, but Hermes should still receive the final BookStack endpoint and token pair through the existing utility-runtime env projection once those values are present in the service-local secret bundle.
 
 ## Goals / Non-Goals
 
@@ -11,11 +11,11 @@ BookStack adds a new documentation/wiki service that does not currently exist in
 - Add the backing database, persistent state paths, and secret-driven runtime configuration BookStack needs to start cleanly after activation.
 - Keep the service env surface aligned to the agreed names: `BOOKSTACK_APP_KEY`, `BOOKSTACK_APP_URL`, `BOOKSTACK_DB_DATABASE`, `BOOKSTACK_DB_USER`, `BOOKSTACK_DB_PASS`, and `BOOKSTACK_DB_ROOT_PASS`.
 - Surface BookStack in Homepage under the existing `Services` group.
-- Capture deployment and documentation implications for the new service, including the required manual bootstrap and API-key setup.
+- Project `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, and `BOOKSTACK_TOKEN_SECRET` into Hermes through the existing repo-managed utility env sync path.
+- Capture deployment and documentation implications for the new service, including the required manual bootstrap and API-token setup.
 
 **Non-Goals:**
-- Add Hermes utility-env wiring or any repo-managed Hermes integration.
-- Automate BookStack admin bootstrap, API key provisioning, or other first-run application setup.
+- Automate BookStack admin bootstrap, API token provisioning, or other first-run application setup.
 - Rework Muximux ordering or portal layout unless a follow-up change explicitly requests it.
 - Rework Cloudflare tunnel ownership or guarantee that public ingress is fully repo-managed if that routing still lives elsewhere.
 
@@ -37,9 +37,17 @@ Alternatives considered:
 - Hard-code bootstrap credentials or generate them only inside the container. Rejected because this would break declarative recovery and make rebuild outcomes depend on mutable in-container setup.
 - Reuse an existing shared secret bundle. Rejected because this service has a distinct credential surface and should not widen unrelated secret scopes.
 
-### Leave initial app bootstrap and API-key setup manual
+### Reuse the existing Hermes runtime-env projection path for BookStack
 
-The service module should stop at bringing up BookStack and its database with the required secret/env wiring. Initial application setup and the creation of `BOOKSTACK_API_KEY` remain manual operator steps so the repo does not need to encode BookStack-specific first-run automation or opinionated API-token lifecycle management.
+Hermes already receives selected service URLs as container env and selected secret-backed values through `/srv/apps/hermes/runtime.env`. BookStack should reuse that path by adding `BOOKSTACK_URL` to the static utility env set and projecting `BOOKSTACK_TOKEN_ID` plus `BOOKSTACK_TOKEN_SECRET` from `bookstack-secrets` alongside the rest of the selected utility auth values.
+
+Alternatives considered:
+- Delay Hermes integration to a later change. Rejected because the user wants Hermes wired now.
+- Create a second Hermes-only BookStack secret file. Rejected because the existing runtime-env sync path already exists to avoid duplicated secret bundles.
+
+### Leave initial app bootstrap and API-token setup manual
+
+The service module should stop at bringing up BookStack and its database with the required secret/env wiring. Initial application setup and the creation of `BOOKSTACK_TOKEN_ID` plus `BOOKSTACK_TOKEN_SECRET` remain manual operator steps so the repo does not need to encode BookStack-specific first-run automation or opinionated API-token lifecycle management.
 
 Alternatives considered:
 - Seed an admin user and API token declaratively. Rejected because the operator explicitly wants to handle those pieces manually.
@@ -64,20 +72,21 @@ Alternatives considered:
 ## Risks / Trade-offs
 
 - [BookStack image expectations differ from the repo's usual service patterns] → Mitigation: model the module after the existing app-plus-database services, keep healthchecks explicit, and verify the resulting env/volume contract during implementation.
-- [Manual bootstrap is forgotten after activation] → Mitigation: make the manual setup and API-key creation steps explicit in docs and apply notes.
+- [Manual bootstrap is forgotten after activation] → Mitigation: make the manual setup and API token creation steps explicit in docs and apply notes.
+- [Hermes starts before BookStack secrets exist] → Mitigation: extend the Hermes secret wait and path-watch lists to include `bookstack-secrets` so runtime env sync stays consistent.
 - [Homepage placement succeeds while external access is still missing] → Mitigation: document ingress as a deployment checkpoint and avoid treating the dashboard entry alone as proof of full rollout.
-- [Future Hermes integration wants different auth or URL contracts] → Mitigation: keep Hermes out of this change so later upstream utility work can define that contract cleanly.
 
 ## Migration Plan
 
 1. Add `bookstack-secrets` and new `bookstack` / `bookstack-db` modules to the self-hosted module inventory.
 2. Generate the BookStack application and database runtime env files with durable state directories under `/srv/apps`, using the agreed env names.
 3. Add the Homepage `Services` entry for BookStack.
-4. Update docs and rollout notes, including the manual BookStack bootstrap and API-key setup steps, then evaluate and build the affected host configuration.
-5. Apply the host configuration on `chill-penguin` and verify the containers, persistent state, Homepage entry, and any required ingress follow-up.
+4. Extend Hermes runtime env projection to include `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, and `BOOKSTACK_TOKEN_SECRET` from the BookStack secret bundle.
+5. Update docs and rollout notes, including the manual BookStack bootstrap and API-token setup steps, then evaluate and build the affected host configuration.
+6. Apply the host configuration on `chill-penguin` and verify the containers, persistent state, Homepage entry, Hermes runtime env projection, and any required ingress follow-up.
 
 Rollback:
-- Remove the BookStack modules, secret declaration, and Homepage entry, then rebuild and switch the host back.
+- Remove the BookStack modules, secret declaration, Homepage entry, and Hermes env projection, then rebuild and switch the host back.
 - Retain or manually clean up `/srv/apps/bookstack*` state depending on whether rollback is temporary or permanent.
 
 ## Open Questions

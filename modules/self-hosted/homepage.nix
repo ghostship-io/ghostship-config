@@ -238,6 +238,12 @@ in
             "[Services].[Changedetection].server=literal:chill-penguin"
             "[Services].[Changedetection].container=literal:changedetection"
 
+            "[Services].[BookStack].icon=literal:mdi-bookshelf-#8b5cf6"
+            "[Services].[BookStack].description=literal:Documentation Wiki"
+            "[Services].[BookStack].server=literal:chill-penguin"
+            "[Services].[BookStack].container=literal:bookstack"
+            "[Services].[BookStack].href=literal:https://bookstack.ghostship.io"
+
             "[Services].[PriceBuddy].icon=literal:mdi-currency-usd-#22c55e"
             "[Services].[PriceBuddy].description=literal:Price Tracker"
             "[Services].[PriceBuddy].server=literal:chill-penguin"

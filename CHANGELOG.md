@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **BookStack documentation wiki**: Added a repo-managed BookStack service plus MariaDB sidecar to the `chill-penguin` self-hosted stack, wired the BookStack secret/env surface through the new `bookstack-secrets` bundle, exposed the service in Homepage's `Services` group, and projected `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, plus `BOOKSTACK_TOKEN_SECRET` into Hermes through the managed runtime env path. The public `bookstack.ghostship.io` route and the initial in-app setup plus API token creation remain manual follow-up outside the repo-managed bootstrap path.
+
 - **Develop GitHub CLI ownership rollback**: Moved `gh` back to the shared
   develop Home Manager package set and removed the repo-managed WSL `envfs`
   fallback for `/usr/bin/gh` so the repo only promises GitHub CLI as

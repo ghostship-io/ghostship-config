@@ -140,7 +140,7 @@ Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, the `arr` stack,
-qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr, CloakBrowser, Hermes,
+qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr, BookStack, CloakBrowser, Hermes,
 PyLoad, RSS-Bridge, PriceBuddy, and n8n.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
@@ -165,6 +165,8 @@ PIA credentials (`PIA_USER`/`PIA_PASS` or legacy `OPENVPN_*` names) and
 n8n runs as a single SQLite-backed workflow orchestrator in this repo and is intended to stay behind Cloudflare for browser access while Hermes talks to it over `ghostship_net`. Hermes should read its dedicated `N8N_API_KEY` from `n8n-secrets` rather than using a browser session. The live Muximux entry still needs a manual reorder on `chill-penguin` after deployment so it sits directly under Bazarr.
 
 Chaptarr now extends the arr stack to books and audiobooks. It should mount the shared downloads root at `/downloads`, manage `/mnt/share/Library/Books` and `/mnt/share/Library/Audiobooks` as separate library roots, and stay visible in Homepage plus the Muximux dropdown immediately after Bazarr and before n8n. Grimmory is still the primary reading and listening surface, so it also mounts both library roots. Public `chaptarr.ghostship.io` exposure remains part of the external Cloudflare/tunnel workflow rather than repo-managed ingress.
+
+BookStack now adds a repo-managed wiki service on `chill-penguin` with app state under `/srv/apps/bookstack`, MariaDB state under `/srv/apps/bookstack-db`, and Homepage visibility in the `Services` group. Keep `BOOKSTACK_APP_URL` pointed at the external `https://bookstack.ghostship.io` origin, and treat the initial in-app setup plus API token creation (`Authorization: Token <token_id>:<token_secret>`) as manual post-deploy operator steps instead of repo-managed bootstrap. Hermes now receives `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, and `BOOKSTACK_TOKEN_SECRET` through the managed runtime env projection so the future utility contract is already wired once the secret bundle is populated. Public `bookstack.ghostship.io` exposure remains part of the external Cloudflare/tunnel workflow rather than repo-managed ingress.
 
 CloakBrowser now seeds one default browser profile per Hermes profile
 (`assistant`, `operations`, and `supervisor`) while keeping a dedicated

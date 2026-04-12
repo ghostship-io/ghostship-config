@@ -26,13 +26,26 @@ The repo SHALL provide declarative secret wiring and runtime configuration for B
 - **THEN** `BOOKSTACK_APP_URL` points at the intended external deployment endpoint
 - **AND** the database configuration points at the managed internal database dependency
 
+### Requirement: Hermes SHALL receive the BookStack endpoint and token pair
+The repo-managed Hermes runtime contract SHALL expose `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, and `BOOKSTACK_TOKEN_SECRET` so Hermes can talk to the BookStack API using the native `Authorization: Token <token_id>:<token_secret>` scheme.
+
+#### Scenario: Hermes static service env includes the BookStack URL
+- **WHEN** the Hermes container definition is evaluated after this change
+- **THEN** it includes `BOOKSTACK_URL`
+- **AND** `BOOKSTACK_URL` points at `https://bookstack.ghostship.io`
+
+#### Scenario: Hermes runtime env includes the BookStack token pair
+- **WHEN** the Hermes runtime env projection runs with the BookStack secret bundle available
+- **THEN** it projects `BOOKSTACK_TOKEN_ID` and `BOOKSTACK_TOKEN_SECRET` into the Hermes runtime env
+- **AND** it does not require a duplicate Hermes-only BookStack secret bundle
+
 ### Requirement: Ghostship SHALL preserve manual BookStack bootstrap steps
-The repo-managed BookStack deployment SHALL stop short of automating first-run application setup and API-key creation, leaving those steps to the operator after the service comes up.
+The repo-managed BookStack deployment SHALL stop short of automating first-run application setup and API token creation, leaving those steps to the operator after the service comes up.
 
 #### Scenario: Apply notes describe the required manual steps
 - **WHEN** the BookStack change is prepared for deployment
-- **THEN** the rollout guidance includes manual initial BookStack setup and API-key creation
-- **AND** the repo-managed service contract does not require automatic API-key provisioning
+- **THEN** the rollout guidance includes manual initial BookStack setup and API token creation
+- **AND** the repo-managed service contract does not require automatic API token provisioning
 
 ### Requirement: Homepage SHALL list BookStack under Services
 Homepage SHALL surface BookStack in the `Services` group so operators can reach it alongside the rest of the self-hosted utilities.
