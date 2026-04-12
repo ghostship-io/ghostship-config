@@ -7,7 +7,7 @@
 
 ## 2. Wire Hermes and surface BookStack
 
-- [x] 2.1 Update `modules/self-hosted/homepage.nix` so Homepage emits a BookStack entry under the `Services` group.
+- [x] 2.1 Update `modules/self-hosted/homepage.nix` so Homepage emits a BookStack entry under the `Services` group, and update `modules/self-hosted/muximux.nix` so BookStack appears after Prowlarr while Chaptarr moves into the dropdown before Bazarr.
 - [x] 2.2 Update `modules/self-hosted/hermes.nix` so Hermes receives `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, and `BOOKSTACK_TOKEN_SECRET` through the managed utility env projection.
 - [x] 2.3 Update `README.md`, `CHANGELOG.md`, and any affected repo guidance to describe the new BookStack service, its external URL, the Hermes env contract, and the required manual BookStack bootstrap/API-token setup.
 - [x] 2.4 Update `AGENTS.md` only if the final implementation adds durable repo-specific operator guidance worth reloading later.
@@ -16,4 +16,4 @@
 
 - [x] 3.1 Run `nix eval .#nixosConfigurations.chill-penguin.config.system.build.toplevel` to confirm the host configuration evaluates with the new BookStack modules and Hermes env projection.
 - [ ] 3.2 Run `nixos-rebuild build -L --flake .#chill-penguin` or an equivalently scoped build to verify the BookStack stack composes successfully before deployment.
-- [x] 3.3 Confirm the apply notes cover activation, persistent state paths, Homepage visibility, Hermes runtime env projection, manual BookStack setup, and any required external ingress follow-up.
+- [x] 3.3 Confirm the apply notes cover activation, persistent state paths, Homepage visibility, Muximux placement, Hermes runtime env projection, manual BookStack setup, and any required external ingress follow-up.

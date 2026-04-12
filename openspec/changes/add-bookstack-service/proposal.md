@@ -7,7 +7,8 @@ Ghostship does not currently provide a repo-managed wiki or documentation servic
 - Add a declarative BookStack service to the self-hosted Podman stack for server hosts, including persistent application state and the required database backing service.
 - Add the repo-managed secret wiring and runtime configuration needed to start BookStack with the agreed env surface: `BOOKSTACK_APP_KEY`, `BOOKSTACK_APP_URL`, `BOOKSTACK_DB_DATABASE`, `BOOKSTACK_DB_USER`, `BOOKSTACK_DB_PASS`, and `BOOKSTACK_DB_ROOT_PASS`.
 - Preserve manual operator-owned setup for initial BookStack application bootstrap and API token creation rather than trying to fully automate those steps in this repo.
-- Surface BookStack in Homepage under the existing `Services` group.
+- Surface BookStack in Homepage under the existing `Services` group and add a Muximux tile immediately after Prowlarr.
+- Move Chaptarr into the Muximux dropdown before Bazarr.
 - Extend the Hermes utility runtime env contract so Hermes receives `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, and `BOOKSTACK_TOKEN_SECRET` from the existing repo-managed secret projection path.
 - Update repo documentation and rollout notes for the new service, including any external hostname or ingress follow-up needed after host activation.
 
@@ -18,6 +19,7 @@ Ghostship does not currently provide a repo-managed wiki or documentation servic
 
 ### Modified Capabilities
 - `hermes-utility-runtime-env`: Add the BookStack service URL and token pair to the repo-managed Hermes utility env projection.
+- `muximux-service-placement`: Add BookStack after Prowlarr and move Chaptarr into the dropdown before Bazarr.
 
 ## Impact
 
