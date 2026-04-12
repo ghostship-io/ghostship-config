@@ -208,7 +208,7 @@ in
             "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000"
             
             # Services group
-            "[Services].[Hermes].icon=literal:sh-android-robot"
+            "[Services].[Hermes].icon=literal:sh-agent-zero"
             "[Services].[Hermes].description=literal:Agent Terminal"
             "[Services].[Hermes].server=literal:chill-penguin"
             "[Services].[Hermes].container=literal:hermes"
@@ -307,7 +307,7 @@ in
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
 
-            "[Infrastructure].[PriceBuddy Scraper].icon=literal:sh-uptimerobot"
+            "[Infrastructure].[PriceBuddy Scraper].icon=literal:sh-uptime-monitor"
             "[Infrastructure].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
             "[Infrastructure].[PriceBuddy Scraper].server=literal:chill-penguin"
             "[Infrastructure].[PriceBuddy Scraper].container=literal:pricebuddy-scraper"
@@ -339,6 +339,10 @@ in
           ${pkgs.yq-go}/bin/yq -i '
             (.[] | select(has("Services")) | .Services) |= map(select(has("Honcho") | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("Honcho Redis") or has("Honcho DB")) | not))
+            | (.[] | select(has("Infrastructure")) | .Infrastructure) |= (
+                map(select(has("PriceBuddy Scraper") | not))
+                + map(select(has("PriceBuddy Scraper")))
+              )
           ' "$SERVICES_FILE"
         fi
 
