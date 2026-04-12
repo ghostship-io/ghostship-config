@@ -307,7 +307,7 @@ in
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
 
-            "[Infrastructure].[PriceBuddy Scraper].icon=literal:sh-uptime-monitor"
+            "[Infrastructure].[PriceBuddy Scraper].icon=literal:sh-web-check"
             "[Infrastructure].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
             "[Infrastructure].[PriceBuddy Scraper].server=literal:chill-penguin"
             "[Infrastructure].[PriceBuddy Scraper].container=literal:pricebuddy-scraper"
