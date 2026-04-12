@@ -164,6 +164,7 @@ PY
     p7zip
     ripgrep-all
     git-ignore
+    gh
     agent-deck
     launchAgent
     starship

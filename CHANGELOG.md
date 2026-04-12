@@ -7,10 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **System-wide GitHub CLI baseline**: Moved `gh` from the develop Home
-  Manager package list into the shared system package baseline so standard-path
-  callers and non-user-profile contexts can rely on the GitHub CLI being
-  present.
+- **Develop GitHub CLI ownership rollback**: Moved `gh` back to the shared
+  develop Home Manager package set and removed the repo-managed WSL `envfs`
+  fallback for `/usr/bin/gh` so the repo only promises GitHub CLI as
+  develop-profile user tooling.
 
 - **WSL FHS GitHub CLI compatibility**: Extended the WSL `services.envfs`
   fallback path so Windows-side tools such as Codex Desktop can resolve
