@@ -208,7 +208,7 @@ in
             "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000"
             
             # Services group
-            "[Services].[Hermes].icon=literal:fa-robot-#06b6d4"
+            "[Services].[Hermes].icon=literal:mdi-robot-happy-outline-#00d4ff"
             "[Services].[Hermes].description=literal:Agent Terminal"
             "[Services].[Hermes].server=literal:chill-penguin"
             "[Services].[Hermes].container=literal:hermes"
@@ -244,7 +244,7 @@ in
             "[Services].[BookStack].container=literal:bookstack"
             "[Services].[BookStack].href=literal:https://bookstack.ghostship.io"
 
-            "[Services].[PriceBuddy].icon=literal:fa-tags-#22c55e"
+            "[Services].[PriceBuddy].icon=literal:mdi-tag-multiple-#22c55e"
             "[Services].[PriceBuddy].description=literal:Price Tracker"
             "[Services].[PriceBuddy].server=literal:chill-penguin"
             "[Services].[PriceBuddy].container=literal:pricebuddy"
@@ -296,7 +296,7 @@ in
             "[Utilities].[MeTube].server=literal:chill-penguin"
             "[Utilities].[MeTube].container=literal:metube"
 
-            "[Utilities].[OmniTools].icon=literal:fa-toolbox-#f97316"
+            "[Utilities].[OmniTools].icon=literal:mdi-tools-#8b5cf6"
             "[Utilities].[OmniTools].description=literal:Omni Toolkit"
             "[Utilities].[OmniTools].server=literal:chill-penguin"
             "[Utilities].[OmniTools].container=literal:omni-tools"
@@ -307,7 +307,7 @@ in
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
 
-            "[Infrastructure].[PriceBuddy Scraper].icon=literal:mdi-robot-outline-#0ea5e9"
+            "[Infrastructure].[PriceBuddy Scraper].icon=literal:mdi-spider-thread-#206ea7"
             "[Infrastructure].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
             "[Infrastructure].[PriceBuddy Scraper].server=literal:chill-penguin"
             "[Infrastructure].[PriceBuddy Scraper].container=literal:pricebuddy-scraper"

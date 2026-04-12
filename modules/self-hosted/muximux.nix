@@ -320,7 +320,7 @@ in
           BookStack.url=literal:"https://bookstack.ghostship.io"
           BookStack.scale=literal:1
           BookStack.icon=literal:"fa-book"
-          BookStack.color=literal:"#8b5cf6"
+          BookStack.color=literal:"#206ea7"
           BookStack.enabled=literal:"true"
           BookStack.dd=literal:"false"
           Grimmory.name=literal:"Grimmory"
