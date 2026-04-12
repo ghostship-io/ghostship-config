@@ -520,10 +520,10 @@ in
               if (name == "RSS-Bridge" && ("Changedetection" in section_data)) {
                 printf "%s", section_data["Changedetection"]
               }
+              if (name == "Tautulli" && ("Chaptarr" in section_data)) {
+                printf "%s", section_data["Chaptarr"]
+              }
               if (name == "Bazarr") {
-                if ("Chaptarr" in section_data) {
-                  printf "%s", section_data["Chaptarr"]
-                }
                 if ("N8N" in section_data) {
                   printf "%s", section_data["N8N"]
                 }
@@ -539,10 +539,10 @@ in
             if (!("Prowlarr" in section_data) && ("BookStack" in section_data)) {
               printf "%s", section_data["BookStack"]
             }
+            if (!("Tautulli" in section_data) && ("Chaptarr" in section_data)) {
+              printf "%s", section_data["Chaptarr"]
+            }
             if (!("Bazarr" in section_data)) {
-              if ("Chaptarr" in section_data) {
-                printf "%s", section_data["Chaptarr"]
-              }
               if ("N8N" in section_data) {
                 printf "%s", section_data["N8N"]
               }

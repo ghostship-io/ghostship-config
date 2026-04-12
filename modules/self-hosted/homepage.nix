@@ -208,7 +208,7 @@ in
             "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000"
             
             # Services group
-            "[Services].[Hermes].icon=literal:mdi-robot-excited-outline-#06b6d4"
+            "[Services].[Hermes].icon=literal:fa-robot-#06b6d4"
             "[Services].[Hermes].description=literal:Agent Terminal"
             "[Services].[Hermes].server=literal:chill-penguin"
             "[Services].[Hermes].container=literal:hermes"
@@ -244,7 +244,7 @@ in
             "[Services].[BookStack].container=literal:bookstack"
             "[Services].[BookStack].href=literal:https://bookstack.ghostship.io"
 
-            "[Services].[PriceBuddy].icon=literal:mdi-currency-usd-#22c55e"
+            "[Services].[PriceBuddy].icon=literal:fa-tags-#22c55e"
             "[Services].[PriceBuddy].description=literal:Price Tracker"
             "[Services].[PriceBuddy].server=literal:chill-penguin"
             "[Services].[PriceBuddy].container=literal:pricebuddy"
@@ -296,7 +296,7 @@ in
             "[Utilities].[MeTube].server=literal:chill-penguin"
             "[Utilities].[MeTube].container=literal:metube"
 
-            "[Utilities].[OmniTools].icon=literal:sh-it-tools"
+            "[Utilities].[OmniTools].icon=literal:fa-toolbox-#f97316"
             "[Utilities].[OmniTools].description=literal:Omni Toolkit"
             "[Utilities].[OmniTools].server=literal:chill-penguin"
             "[Utilities].[OmniTools].container=literal:omni-tools"
@@ -316,6 +316,11 @@ in
             "[Infrastructure].[PriceBuddy DB].description=literal:PriceBuddy Database"
             "[Infrastructure].[PriceBuddy DB].server=literal:chill-penguin"
             "[Infrastructure].[PriceBuddy DB].container=literal:pricebuddy-db"
+
+            "[Infrastructure].[BookStack DB].icon=literal:mariadb.png"
+            "[Infrastructure].[BookStack DB].description=literal:BookStack Database"
+            "[Infrastructure].[BookStack DB].server=literal:chill-penguin"
+            "[Infrastructure].[BookStack DB].container=literal:bookstack-db"
 
             "[Infrastructure].[RomM DB].icon=literal:mariadb.png"
             "[Infrastructure].[RomM DB].description=literal:RomM Database"
