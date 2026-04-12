@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Hermes Discord allowed users contract**: Switched the Hermes container env wiring from the retired per-profile `DISCORD_*_ALLOWED_USERS` inputs to the single upstream `DISCORD_ALLOWED_USERS` key so the exported Discord auth scope matches the current image contract.
+
 - **Hermes HUD healthcheck**: Switched the Hermes container health probe to use in-container `curl` against `http://127.0.0.1:7681/` so the check follows the upstream HUD endpoint without embedding host-only Nix store paths that do not exist in the image-seeded `/nix`.
 
 - **Develop agent-browser engine pin**: The managed `agent-browser` wrapper
