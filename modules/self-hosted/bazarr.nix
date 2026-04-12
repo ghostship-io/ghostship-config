@@ -1,9 +1,8 @@
 { config, lib, pkgs, ... }:
 
 let
-  bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
-  sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
-  radarr-secrets = config.sops.secrets."radarr-secrets".path;
+  bazarr-secrets = config.ghostship.selfHostedSecrets.projections.bazarr.path;
+  render-bazarr-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project bazarr";
 in
 {
   virtualisation.oci-containers.containers."bazarr" = {
@@ -55,18 +54,15 @@ in
         cp "$LEGACY_CONFIG_FILE" "$CONFIG_FILE"
       fi
 
-      if [ -f "$CONFIG_FILE" ] && [ -f "${bazarr-secrets}" ] && [ -f "${sonarr-secrets}" ] && [ -f "${radarr-secrets}" ]; then
+      ${render-bazarr-secrets}
+      if [ -f "$CONFIG_FILE" ] && [ -f "${bazarr-secrets}" ]; then
         echo "Surgically updating Bazarr config..."
         set -a
         . "${bazarr-secrets}"
-        . "${sonarr-secrets}"
-        . "${radarr-secrets}"
         set +a
 
         bazarr_args=(
           --secrets-file "${bazarr-secrets}"
-          --secrets-file "${sonarr-secrets}"
-          --secrets-file "${radarr-secrets}"
           auth.apikey=env:BAZARR_API_KEY
           general.flask_secret_key=env:BAZARR_FLASK_SECRET_KEY
           opensubtitlescom.password=env:BAZARR_OPENSUBTITLES_PASS

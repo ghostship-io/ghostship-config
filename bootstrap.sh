@@ -1,30 +1,20 @@
 #!/usr/bin/env nix-shell
-#!nix-shell -i bash -p age jq nixos-install-tools
+#!nix-shell -i bash -p jq nixos-install-tools openssh
 
 set -euo pipefail
 
 if [ "$#" -lt 1 ] || [ -z "${1:-}" ]; then
-  echo "Usage: sudo ./bootstrap.sh <hostname> [json-path]" >&2
+  echo "Usage: sudo ./bootstrap.sh <hostname> [output-dir]" >&2
   exit 1
 fi
 
 hostname_value="$1"
-json_path="${2:-}"
-apply_command="sudo nixos-rebuild switch --flake .#${hostname_value}"
-git_shell_command="nix-shell -p git"
+output_dir="${2:-./${hostname_value}-host-intake}"
 
 if [ "$(id -u)" -ne 0 ] || [ -z "${SUDO_USER:-}" ]; then
-  echo "Error: run bootstrap with sudo so it can manage /etc/nix/secrets/age.key." >&2
+  echo "Error: run bootstrap with sudo so it can read or generate SSH host keys." >&2
   exit 1
 fi
-
-install -d -m 700 /etc/nix/secrets
-
-if [ ! -f /etc/nix/secrets/age.key ]; then
-  age-keygen -o /etc/nix/secrets/age.key
-fi
-
-age_public_key="$(age-keygen -y /etc/nix/secrets/age.key)"
 
 hostname_set=false
 hostnamectl_error=""
@@ -51,8 +41,23 @@ if [ "$hostname_set" = false ]; then
   if [ -n "$hostnamectl_error" ]; then
     printf 'Warning: could not update the live hostname: %s\n' "$hostnamectl_error" >&2
   else
-    printf 'Warning: could not update the live hostname; continuing with requested hostname in bootstrap JSON.\n' >&2
+    printf 'Warning: could not update the live hostname; continuing with requested hostname in capture bundle.\n' >&2
   fi
+fi
+
+is_wsl=false
+if grep -qiE '(microsoft|wsl)' /proc/sys/kernel/osrelease 2>/dev/null; then
+  is_wsl=true
+fi
+
+if [ ! -f /etc/ssh/ssh_host_ed25519_key.pub ]; then
+  echo "Generating SSH host keys..." >&2
+  ssh-keygen -A >/dev/null
+fi
+
+if [ ! -f /etc/ssh/ssh_host_ed25519_key.pub ]; then
+  echo "Error: missing /etc/ssh/ssh_host_ed25519_key.pub after host-key generation." >&2
+  exit 1
 fi
 
 if [ -f /etc/nixos/hardware-configuration.nix ]; then
@@ -61,20 +66,42 @@ else
   hardware_config="$(nixos-generate-config --show-hardware-config)"
 fi
 
-json="$(
-  jq -n \
-    --arg hostname "$hostname_value" \
-    --arg public_key "$age_public_key" \
-    --arg hw_config "$hardware_config" \
-    '{hostname: $hostname, public_key: $public_key, hardware_config: $hw_config}'
-)"
+hardware_platform="$(uname -m)"
+kernel_release="$(uname -r)"
+generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-if [ -n "$json_path" ]; then
-  install -d -m 755 "$(dirname "$json_path")"
-  printf '%s\n' "$json" > "$json_path"
-else
-  printf '%s\n' "$json"
-fi
+install -d -m 755 "$output_dir" "$output_dir/public"
+printf '%s\n' "$hardware_config" > "$output_dir/hardware-configuration.nix"
+cp /etc/ssh/ssh_host_ed25519_key.pub "$output_dir/public/ssh_host_ed25519_key.pub"
+chmod 644 "$output_dir/public/ssh_host_ed25519_key.pub"
 
-printf 'Apply command: %s\n' "$apply_command" >&2
-printf 'Git shell command: %s\n' "$git_shell_command" >&2
+jq -n \
+  --arg hostname "$hostname_value" \
+  --arg generated_at "$generated_at" \
+  --arg hardware_config "hardware-configuration.nix" \
+  --arg ssh_host_public_key "public/ssh_host_ed25519_key.pub" \
+  --argjson is_wsl "$is_wsl" \
+  '{hostname: $hostname, generated_at: $generated_at, hardware_config: $hardware_config, ssh_host_public_key: $ssh_host_public_key, is_wsl: $is_wsl}' \
+  > "$output_dir/manifest.json"
+
+jq -n \
+  --arg hostname "$hostname_value" \
+  --arg system "$hardware_platform" \
+  --arg kernel_release "$kernel_release" \
+  --argjson is_wsl "$is_wsl" \
+  '{hostname: $hostname, system: $system, kernel_release: $kernel_release, is_wsl: $is_wsl}' \
+  > "$output_dir/facts.json"
+
+cat > "$output_dir/bootstrap-notes.md" <<EOF
+# Host Intake Bundle
+
+Copy this directory into the repo at `references/host-intake/${hostname_value}/`,
+then ask Codex to integrate the host into the repo. Remove the temporary
+intake directory after Codex finishes the integration.
+EOF
+
+printf 'Created host intake bundle at %s\n' "$output_dir"
+printf 'Next steps:\n' >&2
+printf '1. Copy %s into the repo at references/host-intake/%s/\n' "$output_dir" "$hostname_value" >&2
+printf '2. Ask Codex to integrate the staged intake bundle.\n' >&2
+printf '3. Review and commit the resulting repo changes, then remove the temporary intake directory.\n' >&2

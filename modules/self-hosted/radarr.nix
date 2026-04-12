@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  radarr-secrets = config.sops.secrets."radarr-secrets".path;
+  radarr-secrets = config.ghostship.selfHostedSecrets.units."radarr-secrets".path;
 in
 {
   virtualisation.oci-containers.containers."radarr" = {

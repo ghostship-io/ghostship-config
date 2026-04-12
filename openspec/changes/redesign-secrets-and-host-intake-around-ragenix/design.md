@@ -7,7 +7,7 @@ The requested redesign changes both data shape and workflow. Secret storage move
 ## Goals / Non-Goals
 
 **Goals:**
-- Replace `sops-nix` with `ragenix` without preserving the repo-wide `secrets.yaml` monolith.
+- Replace `sops-nix` with `ragenix` while keeping an ignored plaintext mirror for operator edits instead of preserving the repo-wide `secrets.yaml` monolith.
 - Store secrets as logical-unit encrypted files that remain practical to edit, review, and rekey.
 - Centralize recipient policy in `secrets/recipients.nix` and secret definitions in `secrets/catalog.nix`.
 - Let multiple services consume shared secret fields through declarative projections instead of repeated raw path lookups and whole-bundle sourcing.
@@ -32,7 +32,7 @@ Alternatives considered:
 - Reuse the user's default SSH key for editing: rejected because the repo wants a purpose-specific edit key with no passphrase and clearer operational separation from default SSH login identity.
 
 ### Store secrets by logical unit and declare them in a catalog
-The repo will store encrypted files by logical unit, usually one env-shaped file per service or subsystem. `secrets/catalog.nix` will declare each unit's backing file, recipient group, file ownership/mode, format, and exported fields. This keeps editing ergonomic while still shrinking the rekey and review scope compared to one repo-wide secret file.
+The repo will store encrypted files by logical unit, usually one env-shaped file per service or subsystem, while keeping `secrets.dec.yaml` as the ignored plaintext mirror for human edits. `secrets/catalog.nix` will declare each unit's backing file, recipient group, file ownership/mode, format, and exported fields. This keeps editing ergonomic while still shrinking the rekey and review scope compared to one repo-wide secret file.
 
 Alternatives considered:
 - One encrypted file for the entire fleet: rejected because it preserves the current review and rekey blast radius.
@@ -71,7 +71,7 @@ Alternatives considered:
 1. Add `ragenix` to the flake and remove the global `sops-nix` module wiring.
 2. Introduce `secrets/recipients.nix`, `secrets/catalog.nix`, and the initial logical-unit `.age` file layout.
 3. Build a shared Nix/helper layer that can declare the secret units and render service-specific projections from exported fields.
-4. Migrate existing secret data out of `secrets.yaml` into logical-unit encrypted files and update service modules to use catalog-backed projected outputs.
+4. Migrate existing secret data out of `secrets.yaml` into logical-unit encrypted files, keep `secrets.dec.yaml` as the mirror edit surface, and update service modules to use catalog-backed projected outputs.
 5. Replace `bootstrap.sh` and the old registration workflow with temporary intake bundle capture and Codex-assisted integration.
 6. Update `README.md`, `CHANGELOG.md`, `AGENTS.md`, and any related workflow docs to match the new secret and host-intake workflow.
 7. Verify flake evaluation for affected hosts before switching, then rebuild the relevant hosts so the new secret runtime surfaces exist.
@@ -80,4 +80,4 @@ Alternatives considered:
 
 - What exact file path and naming convention should the repo standardize for the dedicated passwordless operator edit key so wrapper commands and docs stay aligned?
 - Which current secret bundles should stay combined at the subsystem level versus split further during the first migration pass?
-- Whether the repo should expose a small helper command for editing catalog entries by logical secret id in addition to raw `ragenix -e <file>`.
+- Whether the repo should expose any additional mirror-sync or validation helpers beyond `secrets-edit`, `secrets-reencrypt`, and raw `ragenix -e <file>`.

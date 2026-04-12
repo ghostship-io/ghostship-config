@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Ragenix secret catalog and host intake redesign**: Replaced `sops-nix` with `ragenix`, moved tracked secret storage to logical-unit `.age` files declared through `secrets/catalog.nix` and `secrets/recipients.nix`, added catalog-driven secret projections for shared consumers, restored the ignored `secrets.dec.yaml` plaintext mirror as the normal operator edit surface via `secrets-edit` plus `secrets-reencrypt`, and redesigned `bootstrap.sh` to capture temporary host-intake bundles with `hardware-configuration.nix` and SSH host `ed25519` keys for Codex-assisted integration.
+
 - **Develop GitHub CLI ownership rollback**: Moved `gh` back to the shared
   develop Home Manager package set and removed the repo-managed WSL `envfs`
   fallback for `/usr/bin/gh` so the repo only promises GitHub CLI as

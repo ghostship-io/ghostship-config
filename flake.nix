@@ -11,8 +11,9 @@
 
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
 
-    sops-nix = {
-      url = "github:Mic92/sops-nix";
+    ragenix = {
+      url = "github:yaxitech/ragenix";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     nixos-wsl = {
@@ -39,6 +40,7 @@
       nixos-wsl,
       nix-index-database,
       apple-silicon,
+      ragenix,
       ...
     }@inputs:
     let
@@ -54,7 +56,7 @@
         nixpkgs.lib.nixosSystem {
           specialArgs = { inherit inputs self; };
           modules = modules ++ [
-            inputs.sops-nix.nixosModules.sops
+            inputs.ragenix.nixosModules.default
             home-manager.nixosModules.home-manager
             {
               home-manager.useGlobalPkgs = true;
@@ -83,7 +85,7 @@
               gnused
               jq
               nixfmt
-              sops
+              ragenix.packages.${system}.default
               ssh-to-age
             ];
           };

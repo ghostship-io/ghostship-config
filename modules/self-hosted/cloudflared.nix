@@ -1,8 +1,9 @@
 { config, lib, pkgs, ... }:
 
 let
-  cloudflared-secrets = config.sops.secrets."cloudflared-secrets".path;
-  cloudflared-runtime-env = "/run/secrets/cloudflared-runtime.env";
+  cloudflared-secrets = config.ghostship.selfHostedSecrets.units."cloudflared-secrets".path;
+  cloudflared-runtime-env = config.ghostship.selfHostedSecrets.projections."cloudflared-runtime".path;
+  render-cloudflared-runtime = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project cloudflared-runtime";
 in
 
 {
@@ -42,14 +43,6 @@ in
       exit 1
     fi
 
-    set -a
-    . "${cloudflared-secrets}"
-    set +a
-
-    mkdir -p /run/secrets
-    cat > ${cloudflared-runtime-env} <<EOF
-TUNNEL_TOKEN=$CLOUDFLARED_TUNNEL_TOKEN
-EOF
-    chmod 600 ${cloudflared-runtime-env}
+    ${render-cloudflared-runtime}
   '';
 }

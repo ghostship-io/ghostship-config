@@ -1,8 +1,8 @@
 { config, lib, pkgs, ... }:
 
 let
-  tautulli-secrets = config.sops.secrets."tautulli-secrets".path;
-  plex-secrets = config.sops.secrets."plex-secrets".path;
+  tautulli-secrets = config.ghostship.selfHostedSecrets.projections.tautulli.path;
+  render-tautulli-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project tautulli";
 in
 {
   virtualisation.oci-containers.containers."tautulli" = {
@@ -43,9 +43,10 @@ in
       if [ -f "$CONFIG_FILE" ]; then
         echo "Surgically updating Tautulli config.ini..."
         
+        ${render-tautulli-secrets}
+
         tautulli_args=(
           --secrets-file "${tautulli-secrets}"
-          --secrets-file "${plex-secrets}"
           General.first_run_complete=literal:1
           General.http_proxy=literal:1
           General.show_advanced_settings=literal:1

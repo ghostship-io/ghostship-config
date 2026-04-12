@@ -30,3 +30,11 @@ The repo SHALL require human edit access for encrypted secret files to use a ded
 - **WHEN** an operator sets up local edit access for repo secrets
 - **THEN** the workflow SHALL require creation and registration of a dedicated passwordless SSH key that is not the operator's default SSH key
 - **AND** recipient groups used for editing SHALL reference that dedicated operator key
+
+### Requirement: Plaintext mirror remains the normal human edit surface
+The repo SHALL retain an ignored plaintext mirror for human secret edits and SHALL provide a supported workflow to sync that mirror into the logical-unit encrypted `.age` files declared in the catalog.
+
+#### Scenario: Operator edits secrets through the plaintext mirror
+- **WHEN** an operator needs to update one or more logical-unit secret values
+- **THEN** the repo SHALL allow those edits to happen in the ignored plaintext mirror
+- **AND** the repo SHALL provide a supported sync step that re-encrypts the catalog-defined logical-unit `.age` files from that mirror

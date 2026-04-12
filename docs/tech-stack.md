@@ -16,8 +16,8 @@
 - **nixos-rebuild**: The primary tool for local system management and initial bootstrapping.
 
 ## Security & Secrets
-- **sops-nix**: Integration of Mozilla SOPS with NixOS for secure, encrypted secret management (using `age` or `gpg`).
-- **Custom Secret Scripts**: `secrets-get-public-key`, `secrets-add-key`, `secrets-remove-key`, and `secrets-reencrypt` for per-host key management.
+- **ragenix**: NixOS secret management built on age-compatible encrypted files, with runtime decryption via SSH host `ed25519` keys.
+- **Plaintext Mirror Workflow**: `secrets.dec.yaml` stays ignored for human edits, while `secrets-reencrypt` syncs logical-unit `.age` files from the mirror through the catalog and recipient model.
 
 ## Development & Utility Tools
 - **Native Nix CLI**: `nix`, `nixos-rebuild`, and `switch-to-configuration` are the primary system management tools.

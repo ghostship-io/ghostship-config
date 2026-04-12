@@ -3,7 +3,7 @@
 ## Core Mandates
 - **Modular Design**: Maintain strict separation between hardware-specific logic in `hosts/`, shared system modules in `modules/`, and user-level configurations in `home/`.
 - **Absolute Reproducibility**: Every system must be rebuildable from scratch to an identical state using the declarative Nix configuration.
-- **Security First**: No secrets in plain text. All sensitive data (API keys, passwords, credentials) must be managed through `sops-nix`.
+- **Security First**: No secrets in plain text. All sensitive data (API keys, passwords, credentials) must be managed through the repo's `ragenix` plus plaintext-mirror workflow.
 - **Literate Documentation**: Provide clear inline rationale for non-trivial Nix expressions and maintain up-to-date documentation in the `docs/` directory.
 
 ## Documentation Standards

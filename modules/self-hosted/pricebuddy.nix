@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  pricebuddy-secrets = config.sops.secrets."pricebuddy-secrets".path;
+  pricebuddy-secrets = config.ghostship.selfHostedSecrets.units."pricebuddy-secrets".path;
   pricebuddy-env = "/srv/apps/pricebuddy/pricebuddy.env";
   pricebuddy-db-env = "/srv/apps/pricebuddy/pricebuddy-db.env";
   pricebuddy-agent-env = "/srv/apps/pricebuddy/pricebuddy-agent.env";

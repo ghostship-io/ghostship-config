@@ -299,10 +299,23 @@ changelog.
 
 ## Secrets and Bootstrap
 
-- `secrets.dec.yaml` is the ignored plaintext mirror. Do not commit it.
-- Keep secret bundles in `secrets.dec.yaml` formatted with `|-` block scalars.
-- Use service-local `*-secrets` bundles and service-local env names instead of
-  shared `HOMEPAGE_*` bundles.
-- `bootstrap.sh` is the installer-time host bootstrap entrypoint.
+- `secrets.dec.yaml` is the ignored plaintext mirror for human edits. Do not
+  commit it. Prefer `|-` block scalars for multi-line service bundles.
+- The tracked secret model lives under `secrets/`: `recipients.nix` composes
+  SSH recipients and groups, `catalog.nix` declares logical-unit secret files
+  plus exported fields, and `rules.nix` feeds `ragenix`.
+- Runtime decryption uses SSH host `ed25519` keys. Human edit access uses the
+  dedicated passwordless non-default key `~/.ssh/id_ed25519_ragenix`.
+- Normal operator flow is `secrets-edit` on the plaintext mirror, then
+  `secrets-reencrypt` to sync logical-unit `.age` files. Keep `secret-edit` for
+  direct per-file emergency edits only.
+- Use service-local `*-secrets` bundles and catalog-driven projections instead
+  of shared catch-all `HOMEPAGE_*` bundles or repeated raw secret path wiring.
+- `bootstrap.sh` is the installer-time host bootstrap entrypoint. It captures a
+  temporary intake bundle with `hardware-configuration.nix`, metadata, and the
+  host SSH `ed25519` public key. WSL2 bootstrap must generate that host key if
+  it is missing.
+- `references/host-intake/<hostname>/` is temporary staging for Codex-assisted
+  host integration. Remove it after Codex finishes integrating the host.
 - Active spec, proposal, and task artifacts live under the repo-root
   `openspec/` tree.
