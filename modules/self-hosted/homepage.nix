@@ -228,7 +228,7 @@ in
             "[Services].[SearXNG].server=literal:chill-penguin"
             "[Services].[SearXNG].container=literal:searxng"
 
-            "[Services].[RSS-Bridge].icon=literal:sh-rss-bridge"
+            "[Services].[RSS-Bridge].icon=literal:rss-bridge"
             "[Services].[RSS-Bridge].description=literal:Feed Bridge"
             "[Services].[RSS-Bridge].server=literal:chill-penguin"
             "[Services].[RSS-Bridge].container=literal:rss-bridge"
@@ -260,7 +260,7 @@ in
             "[Management].[Homepage].server=literal:chill-penguin"
             "[Management].[Homepage].container=literal:homepage"
             
-            "[Management].[Muximux].icon=literal:sh-luna-dashboard"
+            "[Management].[Muximux].icon=literal:dashboard-icons"
             "[Management].[Muximux].description=literal:Lightweight Portal"
             "[Management].[Muximux].server=literal:chill-penguin"
             "[Management].[Muximux].container=literal:muximux"
@@ -307,7 +307,7 @@ in
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
 
-            "[Infrastructure].[PriceBuddy Scraper].icon=literal:sh-web-check"
+            "[Infrastructure].[PriceBuddy Scraper].icon=literal:web-check"
             "[Infrastructure].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
             "[Infrastructure].[PriceBuddy Scraper].server=literal:chill-penguin"
             "[Infrastructure].[PriceBuddy Scraper].container=literal:pricebuddy-scraper"
