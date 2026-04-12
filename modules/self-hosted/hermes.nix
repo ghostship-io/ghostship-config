@@ -22,6 +22,7 @@ let
   hermes-seed-skill-creator = ./hermes-seeds/skills/skill-creator;
   hermes-seed-soul = ./hermes-seeds/SOUL.md;
   discord-home-channel = "1491229269127598281";
+  ghostship-router-channel = "1492841053642817606";
   discord-allowed-users = "126942974826381312";
   discord-free-response-channels = builtins.concatStringsSep "," [
     "1491229269127598281"
@@ -239,6 +240,7 @@ in
       TTYD_SESSION_NAME = "hermes";
       DISCORD_ALLOWED_USERS = discord-allowed-users;
       DISCORD_FREE_RESPONSE_CHANNELS = discord-free-response-channels;
+      GHOSTSHIP_ROUTER_CHANNEL = ghostship-router-channel;
       DISCORD_HOME_CHANNEL = discord-home-channel;
     };
     environmentFiles = [
