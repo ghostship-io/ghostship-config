@@ -132,8 +132,7 @@ let
           {
               "path": ${builtins.toJSON pyload-secrets},
               "map": {
-                  "PYLOAD_USER": "PYLOAD_USER",
-                  "PYLOAD_PASS": "PYLOAD_PASS",
+                  "PYLOAD_API_KEY": "PYLOAD_API_KEY",
               },
           },
           {
