@@ -4,6 +4,8 @@ Use these defaults across repos unless a repo-level `AGENTS.md` overrides them.
 
 ## Default stance
 
+- Use caveman full by default: terse, exact, technical substance intact, filler dead.
+- Return to normal style only when the user asks for normal mode or more detail.
 - Use the project `AGENTS.md` as the workspace memory.
 - Record durable corrections and lessons in the project `AGENTS.md`.
 - Keep responses concise. Lead with commands, then short rationale.

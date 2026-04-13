@@ -5,7 +5,7 @@
 }:
 
 let
-  openspecPackage = "@fission-ai/openspec@latest";
+  openspecPackage = "@fission-ai/openspec";
   defaultOpenspecTools = "codex,gemini,opencode";
   defaultOpenspecProfile = "core";
   userHome = "/home/nixos";
@@ -320,7 +320,11 @@ EOF
     }
 
     run_upstream_openspec() {
-      ${pkgs.nodejs}/bin/npx -y ${openspecPackage} "$@"
+      if [ -x "${agentBinDir}/openspec" ]; then
+        "${agentBinDir}/openspec" "$@"
+      else
+        ${pkgs.nodejs}/bin/npx -y ${openspecPackage}@latest "$@"
+      fi
     }
 
     if [ "$#" -gt 0 ] && [ "$1" = "init" ]; then
@@ -374,7 +378,7 @@ EOF
       exit "$?"
     fi
 
-    exec ${pkgs.nodejs}/bin/npx -y ${openspecPackage} "$@"
+    run_upstream_openspec "$@"
   '';
 
   runtimeInputs = baseRuntimeInputs ++ [
@@ -388,6 +392,17 @@ EOF
     {
       name = "gemini-cli-security";
       repo = "https://github.com/gemini-cli-extensions/security";
+    }
+    {
+      name = "caveman";
+      repo = "https://github.com/JuliusBrussee/caveman";
+    }
+  ];
+
+  managedGlobalSkills = [
+    {
+      name = "caveman";
+      source = "JuliusBrussee/caveman";
     }
   ];
 
@@ -439,6 +454,33 @@ EOF
 
       if [ -n "$install_output" ]; then
         printf '%s\n' "$install_output" >&2
+      fi
+    }
+
+    ensure_managed_global_skill() {
+      name="$1"
+      source="$2"
+
+      if skills_json="$(${pkgs.nodejs}/bin/npx -y skills list -g --json 2>/dev/null)"; then
+        if printf '%s\n' "$skills_json" | ${pkgs.jq}/bin/jq -e --arg name "$name" 'map(select(.scope == "global" and .name == $name)) | length > 0' >/dev/null; then
+          return 0
+        fi
+      else
+        log_warn "global skills discovery failed before managed install, continuing"
+      fi
+
+      log_info "installing managed skill $name"
+
+      if ! skills_output="$(${pkgs.nodejs}/bin/npx -y skills add "$source" --global --yes 2>&1)"; then
+        log_warn "managed skill $name install failed, continuing"
+        if [ -n "$skills_output" ]; then
+          printf '%s\n' "$skills_output" >&2
+        fi
+        return 0
+      fi
+
+      if [ -n "$skills_output" ]; then
+        printf '%s\n' "$skills_output" >&2
       fi
     }
 
@@ -603,7 +645,11 @@ EOF
     install_agent_cli "@openai/codex" "codex"
     install_agent_cli "@google/gemini-cli" "gemini"
     install_agent_cli "opencode-ai" "opencode"
+    install_agent_cli "${openspecPackage}" "openspec"
     reassert_codex_skill_creator_override
+    ${lib.concatMapStrings (skill: ''
+      ensure_managed_global_skill "${skill.name}" "${skill.source}"
+    '') managedGlobalSkills}
     refresh_global_skills
     ensure_agent_browser_runtime
     ${lib.concatMapStrings (extension: ''

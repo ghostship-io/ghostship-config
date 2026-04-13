@@ -22,21 +22,21 @@ changelog.
   `.codex/`, `.gemini/`, and `.opencode/`.
 - The shared local skill is named `skill-creator` and is vendored from the
   upstream `skill-creator` package in `vercel-labs/agent-browser` `v0.9.3`.
-- `agent-deck` is repo-managed interactive develop-host tooling. Keep it in the
-  Home Manager develop profile, package it through the local Nix overlay, and
-  expect it to appear only after the relevant Home Manager or NixOS
-  rebuild/switch. Do not reintroduce the old WSL `agent-deck web` user
-  service; keep support scoped to the managed CLI and `launch-agent`.
-- Keep `launch-agent` as Home Manager develop-profile tooling, derive its
-  group from Agent Deck CLI JSON with `jq`, use the supported `add -Q` plus
-  `session start` flow to launch quick-titled sessions, and keep `gemini-cli`
-  available as a real managed wrapper command rather than a shell-only alias.
+- Develop hosts keep Caveman full enabled across the managed agent surfaces:
+  Codex uses a managed `~/.codex/hooks.json` SessionStart hook, Gemini reads the
+  shared `~/.gemini/GEMINI.md` prompt plus the managed Caveman extension, and
+  OpenCode reads the shared `~/.config/opencode/AGENTS.md` prompt.
+- Managed `skills.sh` installs are separate from the repo-managed
+  `home/config/skills/*` inventory. Keep repo-owned shared skills curated under
+  `home/config/skills/`, and let `ghostship-agent-maintenance` install or
+  refresh the configured external `skills.sh` repos such as `caveman` on each
+  WSL develop host.
 - Develop-host convergence should scrub the known stale `workmux
   set-window-status ...` commands from `~/.codex/hooks.json` so removed
   repo-managed tooling does not keep breaking Codex hooks, while preserving
   unrelated valid hook entries and warning instead of rewriting malformed JSON.
-  Restart already-running Codex or Agent Deck sessions after the relevant
-  rebuild or switch if they were holding the stale hook state open.
+  Restart already-running Codex sessions after the relevant rebuild or switch
+  if they were holding the stale hook state open.
 - The `apply_patch` tool is currently broken in worktrees on this host. Use
   Python-based file edits instead of the `apply_patch` tool when editing from a
   worktree, and verify the diff immediately after each edit.
@@ -86,26 +86,27 @@ changelog.
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode
   keeps `permission = "allow"` in config. Those defaults are only live after
   the relevant NixOS rebuild or Home Manager switch.
-- Develop hosts install `codex`, `gemini`, and `opencode` into the user-local
-  npm prefix under `/home/nixos/.local/share/ghostship-agent-tools/npm`, and
+- Develop hosts install `codex`, `gemini`, `opencode`, and `openspec` into the
+  user-local npm prefix under
+  `/home/nixos/.local/share/ghostship-agent-tools/npm`, and
   `ghostship-agent-maintenance.service` plus its timer own installing and
   upgrading those CLIs.
 - `ghostship-agent-maintenance.timer` runs on boot and every `4h` with
-  `Persistent=true` so missed runs fire after WSL resumes. It also refreshes
-  global skills, refreshes managed Gemini extensions, bootstraps
-  `~/.agent-browser` only when missing, and keeps an explicit shell-capable
-  runtime path in the generated maintenance script so npm and npx subprocesses
-  can spawn `sh` under systemd. Gemini's generated system settings on develop
-  hosts should omit the deprecated `experimental.plan` key so the managed
-  launchers do not warn about stale read-only system config after the relevant
-  rebuild or switch. On Nix develop hosts it must treat the system
-  dependencies as already packaged and call `agent-browser install` without
-  `--with-deps`, because distro package-manager bootstrapping is unsupported
-  there and the wrapper already supplies the required shared libraries. It
-  also rewrites `~/.config/opencode/opencode.json`
-  from OpenRouter's ranked programming free frontend endpoint while preserving
-  the `(ghostship-free)` label rewrite; do not reintroduce static OpenRouter
-  model maps into the Nix-managed OpenCode
+  `Persistent=true` so missed runs fire after WSL resumes. It also ensures the
+  managed `skills.sh` repos are installed globally, refreshes global skills,
+  refreshes managed Gemini extensions, bootstraps `~/.agent-browser` only when
+  missing, and keeps an explicit shell-capable runtime path in the generated
+  maintenance script so npm and npx subprocesses can spawn `sh` under systemd.
+  Gemini's generated system settings on develop hosts should omit the
+  deprecated `experimental.plan` key so the managed launchers do not warn about
+  stale read-only system config after the relevant rebuild or switch. On Nix
+  develop hosts it must treat the system dependencies as already packaged and
+  call `agent-browser install` without `--with-deps`, because distro
+  package-manager bootstrapping is unsupported there and the wrapper already
+  supplies the required shared libraries. It also rewrites
+  `~/.config/opencode/opencode.json` from OpenRouter's ranked programming free
+  frontend endpoint while preserving the `(ghostship-free)` label rewrite; do
+  not reintroduce static OpenRouter model maps into the Nix-managed OpenCode
   config files.
 - For an immediate user-triggered refresh, run `ghostship-agent-maintenance`
   directly instead of trying to start the system unit as an unprivileged user.

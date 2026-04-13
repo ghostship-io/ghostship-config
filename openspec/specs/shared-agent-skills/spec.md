@@ -1,7 +1,8 @@
 # shared-agent-skills Specification
 
 ## Purpose
-TBD - created by archiving change rewrite-shared-skills. Update Purpose after archive.
+Define the repo-managed shared skill inventory and how it differs from externally managed `skills.sh` installs.
+
 ## Requirements
 ### Requirement: Curated shared skill inventory
 The repo SHALL expose exactly five shared repo-managed skills under `home/config/skills/`: `nix`, `python`, `ssh`, `wsl2`, and `skill-creator`.
@@ -47,13 +48,13 @@ The Home Manager shared skill links and Codex shared skill wiring SHALL referenc
 - **WHEN** the generated Codex config is inspected
 - **THEN** its shared skill configuration SHALL not reference `build123d`
 
-### Requirement: Active documentation matches the final skill set
-Active documentation for the shared skill inventory SHALL describe the curated shared skill set and SHALL distinguish it from repo-local OpenSpec-generated agent assets.
+### Requirement: Externally managed skills stay outside the repo-owned skill tree
+The repo SHALL keep external `skills.sh` installs distinct from the curated `home/config/skills/` inventory even when both surfaces land under `~/.agents/skills/` on a host.
 
-#### Scenario: Removed skills are no longer advertised
-- **WHEN** active shared-skill inventory documentation is inspected
-- **THEN** it SHALL not advertise `agent-browser`, `build123d`, or `dispatching-cli-subagents` as shared repo-managed skills
+#### Scenario: Managed external skill installs do not expand home/config/skills
+- **WHEN** a configured external `skills.sh` repo such as `caveman` is installed on a host
+- **THEN** it SHALL not require adding a matching directory under `home/config/skills/`
 
-#### Scenario: Shared and repo-local skill layers are distinguished
+#### Scenario: Active docs distinguish repo-owned and external skill layers
 - **WHEN** active documentation describes the repo’s agent skill surfaces
-- **THEN** it SHALL distinguish the shared `~/.agents/skills` layer from the repo-local OpenSpec-generated files under `.codex/`, `.gemini/`, and `.opencode/`
+- **THEN** it SHALL distinguish the curated repo-owned `home/config/skills/` layer, the external `skills.sh` installs under `~/.agents/skills/`, and the repo-local OpenSpec-generated files under `.codex/`, `.gemini/`, and `.opencode/`

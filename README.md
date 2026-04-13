@@ -41,26 +41,25 @@ logical-unit secret files.
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.
 - Develop-role Home Manager packages include shared interactive CLI tools such
-  as `gh` and `agent-deck` so GitHub workflows and multi-agent
-  orchestration are available on every develop host after the relevant Home
-  Manager or NixOS switch.
+  as `gh` so GitHub workflows are available on every develop host after the
+  relevant Home Manager or NixOS switch.
 
 ## Agent Launchers
 
 - Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`,
-  `agent-browser`, and `openspec` through Nix-managed wrapper scripts, and
-  they install `agent-deck` plus the `launch-agent` helper as Home
-  Manager packages for interactive agent orchestration.
+  `agent-browser`, and `openspec` through Nix-managed wrapper scripts.
+- Caveman full is enabled across the managed agent surfaces. Codex gets a
+  managed SessionStart hook in `~/.codex/hooks.json`, Gemini reads the shared
+  `~/.gemini/GEMINI.md` prompt and the managed Caveman extension, and OpenCode
+  reads the shared `~/.config/opencode/AGENTS.md` prompt.
 - The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
   unless you override it explicitly, so local automation stays on the
   profile-capable Chrome engine even if upstream auto-selection changes.
-- `launch-agent [tool]` launches the current directory into Agent Deck,
-  creates the matching basename group when missing, defaults to `codex`, and
-  uses Agent Deck's supported `add -Q` plus `session start` flow for quick
-  titles.
-- `codex`, `gemini`, and `opencode` now delegate to installed user-local
-  CLIs under `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`, while
-  `openspec` still executes through its Nix-managed `npx` wrapper.
+- `codex`, `gemini`, `gemini-cli`, `opencode`, and `openspec` delegate to
+  installed user-local CLIs under
+  `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`. The `openspec`
+  wrapper falls back to `npx` only until maintenance bootstraps the managed
+  binary.
 - The `openspec` wrapper defaults `openspec init` to
   `--tools codex,gemini,opencode --profile core` unless you pass explicit
   `--tools` or `--profile` values.
@@ -85,24 +84,24 @@ logical-unit secret files.
 - `ghostship-agent-maintenance.service` owns automatic agent upkeep. Its
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent
-  CLIs, refreshes shared global skills, refreshes managed Gemini extensions,
-  bootstraps `agent-browser` only when `~/.agent-browser` is missing, and now
-  carries an explicit shell-capable runtime path so npm and npx child
-  processes can still spawn `sh` under systemd. Gemini's generated system
-  settings also no longer declare the deprecated `experimental.plan` key, so
-  the managed `gemini` and `gemini-cli` launchers stop warning about stale
-  read-only system config after the relevant rebuild or switch. On Nix
-  develop hosts that bootstrap intentionally treats system dependencies as
-  already packaged and uses `agent-browser install` without `--with-deps`
-  because the wrapper already supplies the required shared libraries. It also
-  rewrites `~/.config/opencode/opencode.json` from OpenRouter's ranked
-  programming free-model frontend endpoint with `(free)` rewritten to
-  `(ghostship-free)`.
+  CLIs, ensures the configured `skills.sh` repos such as `caveman` are
+  installed globally on each develop host, refreshes shared global skills,
+  refreshes managed Gemini extensions, bootstraps `agent-browser` only when
+  `~/.agent-browser` is missing, and carries an explicit shell-capable runtime
+  path so npm and npx child processes can still spawn `sh` under systemd.
+  Gemini's generated system settings also no longer declare the deprecated
+  `experimental.plan` key, so the managed `gemini` and `gemini-cli` launchers
+  stop warning about stale read-only system config after the relevant rebuild
+  or switch. On Nix develop hosts that bootstrap intentionally treats system
+  dependencies as already packaged and uses `agent-browser install` without
+  `--with-deps` because the wrapper already supplies the required shared
+  libraries. It also rewrites `~/.config/opencode/opencode.json` from
+  OpenRouter's ranked programming free-model frontend endpoint with `(free)`
+  rewritten to `(ghostship-free)`.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
-- The repo no longer starts `agent-deck web` automatically on WSL develop hosts. After you apply this change, manually clean up any leftover `agent-deck-web.service`, `~/.config/systemd/user/default.target.wants/agent-deck-web.service`, `agent-deck-web` tmux session, and `~/.agent-deck/web-service.log`.
-- Develop-host convergence also cleans the known stale `workmux set-window-status ...` entries from `~/.codex/hooks.json` so removed repo-managed tooling does not keep breaking Codex hooks. The cleanup preserves unrelated valid hooks, warns instead of rewriting malformed JSON, and takes effect after the relevant Home Manager or NixOS switch. Restart any already-running Codex or Agent Deck sessions after the switch if they were holding the stale hook state open.
+- Develop-host convergence also cleans the known stale `workmux set-window-status ...` entries from `~/.codex/hooks.json` so removed repo-managed tooling does not keep breaking Codex hooks. The cleanup preserves unrelated valid hooks, warns instead of rewriting malformed JSON, and takes effect after the relevant Home Manager or NixOS switch. Restart any already-running Codex sessions after the switch if they were holding the stale hook state open.
 - Develop-host launchers now keep only the approval defaults: Codex prepends
   `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit
   approval or sandbox flags, Gemini prepends `--yolo` unless you pass an
@@ -113,13 +112,16 @@ logical-unit secret files.
   every new shell.
 - Those launcher defaults only take effect after the relevant develop-host
   NixOS rebuild or Home Manager switch applies the generated config files.
-- OpenSpec scaffold refresh is manual again. Run `openspec update .` inside an
-  OpenSpec-enabled repo when you want to refresh slash-command assets.
+- OpenSpec CLI updates are automatic through maintenance, but scaffold refresh
+  is still manual. Run `openspec update .` inside an OpenSpec-enabled repo when
+  you want to refresh slash-command assets.
 
 ## Shared Skills
 
 - Shared repo-managed skills live under `home/config/skills/` and are linked
-  into `~/.agents/skills/` on develop hosts.
+  into `~/.agents/skills/` on develop hosts. Managed `skills.sh` installs such
+  as `caveman` also land under `~/.agents/skills/`, but they are maintained by
+  `ghostship-agent-maintenance` instead of the repo-owned skill tree.
 - The curated shared set is `nix`, `python`, `ssh`, `wsl2`, and a vendored
   `skill-creator` package pinned to the upstream `skill-creator`
   source at

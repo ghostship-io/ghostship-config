@@ -1,35 +1,7 @@
-{ lib, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   sshAgentSock = "/run/user/1000/ssh-agent";
-  launchAgent = pkgs.writeShellScriptBin "launch-agent" ''
-    set -euo pipefail
-
-    if [ "$#" -gt 1 ]; then
-      printf 'usage: launch-agent [tool]\n' >&2
-      exit 2
-    fi
-
-    case "''${1:-}" in
-      -h|--help)
-        printf 'usage: launch-agent [tool]\n\n'
-        printf 'Launch the current directory in Agent Deck.\n'
-        printf 'Defaults to tool: codex\n'
-        exit 0
-        ;;
-    esac
-
-    project_dir="$(${pkgs.coreutils}/bin/pwd -P)"
-    group_name="$(${pkgs.coreutils}/bin/basename "$project_dir")"
-    tool_name="''${1:-codex}"
-    if ! ${lib.getExe pkgs.agent-deck} group list --json | ${pkgs.jq}/bin/jq -e --arg group "$group_name" '.groups | any(.path == $group)' >/dev/null; then
-      ${lib.getExe pkgs.agent-deck} group create "$group_name" --default-path "$project_dir" >/dev/null
-    fi
-
-    session_id="$(${lib.getExe pkgs.agent-deck} add . -Q -c "$tool_name" -g "$group_name" --json | ${pkgs.jq}/bin/jq -er '.id')"
-
-    exec ${lib.getExe pkgs.agent-deck} session start "$session_id"
-  '';
 in
 {
   imports = [
@@ -63,6 +35,53 @@ in
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$codex_system_skills_dir"
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf "$codex_skill_creator_path"
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/ln -sfn "$shared_skill_creator_path" "$codex_skill_creator_path"
+  '';
+
+  home.activation.ensureCodexCavemanHook = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    codex_hooks_dir="$HOME/.codex"
+    codex_hooks_file="$codex_hooks_dir/hooks.json"
+
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$codex_hooks_dir"
+    $DRY_RUN_CMD ${pkgs.python3}/bin/python - "$codex_hooks_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+command = (
+    "echo 'CAVEMAN MODE ACTIVE. Rules: Drop articles/filler/pleasantries/hedging. "
+    "Fragments OK. Short synonyms. Pattern: [thing] [action] [reason]. [next step]. "
+    "Not: Sure! I would be happy to help you with that. Yes: Bug in auth middleware. "
+    "Fix: Code/commits/security: write normal. User says stop caveman or normal mode to deactivate.'"
+)
+entry = {"type": "command", "command": command}
+
+if path.exists():
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"warning: unable to merge Codex caveman hook in {path}: {exc}", file=sys.stderr)
+        raise SystemExit(0)
+else:
+    data = {}
+
+hooks = data.setdefault("hooks", {})
+if not isinstance(hooks, dict):
+    print(f"warning: unable to merge Codex caveman hook in {path}: hooks root is not an object", file=sys.stderr)
+    raise SystemExit(0)
+
+session_start = hooks.setdefault("SessionStart", [])
+if not isinstance(session_start, list):
+    print(f"warning: unable to merge Codex caveman hook in {path}: SessionStart is not a list", file=sys.stderr)
+    raise SystemExit(0)
+
+for existing in session_start:
+    if isinstance(existing, dict) and existing.get("type") == "command" and existing.get("command") == command:
+        raise SystemExit(0)
+
+session_start.append(entry)
+path.write_text(json.dumps(data, indent=2) + "\n")
+PY
   '';
 
   home.activation.removeWorkmuxArtifacts = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -158,6 +177,14 @@ PY
       source = ../config/skills/skill-creator;
       force = true;
     };
+    ".gemini/GEMINI.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/AGENTS.md";
+      force = true;
+    };
+    ".config/opencode/AGENTS.md" = {
+      source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/AGENTS.md";
+      force = true;
+    };
   };
 
   home.packages = with pkgs; [
@@ -165,8 +192,6 @@ PY
     ripgrep-all
     git-ignore
     gh
-    agent-deck
-    launchAgent
     starship
     zoxide
     fd

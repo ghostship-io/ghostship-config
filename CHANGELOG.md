@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Develop agent stack refresh**: Removed the repo-managed `agent-deck` package and `launch-agent` helper, moved `openspec` onto the same managed auto-update path as `codex`, `gemini`, and `opencode`, made Caveman full the default agent style across Codex, Gemini, and OpenCode, and taught `ghostship-agent-maintenance` to ensure the configured `skills.sh` repos such as `JuliusBrussee/caveman` are installed and updated on each develop host.
+
 - **Direct ragenix edit workflow**: Removed the repo-managed plaintext mirror
   helpers so operator secret changes now happen directly through
   `secret-edit <logical-id>`, with `secret-rekey` reserved for recipient
