@@ -45,7 +45,7 @@ The self-hosted Hermes host wiring SHALL provide generic single-agent Discord an
 - **THEN** it SHALL provide `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_USERS`, `DISCORD_FREE_RESPONSE_CHANNELS`, `DISCORD_HOME_CHANNEL`, and `WEBHOOK_SECRET` through the supported container env and env-file contract
 - **AND** `DISCORD_BOT_TOKEN` and `DISCORD_ALLOWED_USERS` SHALL come from the current `supervisor` identity inputs
 - **AND** `DISCORD_FREE_RESPONSE_CHANNELS` SHALL combine the current assistant, operations, and supervisor channel inputs
-- **AND** `DISCORD_HOME_CHANNEL` SHALL continue to use the current general channel input
+- **AND** `DISCORD_HOME_CHANNEL` SHALL use the current assistant channel input
 - **AND** it SHALL not require profile-scoped translation inputs for Discord or webhook settings
 
 ### Requirement: Hermes SHALL omit repo-managed remote browser defaults
