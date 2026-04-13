@@ -1,16 +1,8 @@
 { config, lib, pkgs, ... }:
 
 let
-  gluetun-secrets = config.sops.secrets."gluetun-secrets".path;
-  plex-secrets = config.sops.secrets."plex-secrets".path;
-  tautulli-secrets = config.sops.secrets."tautulli-secrets".path;
-  sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
-  radarr-secrets = config.sops.secrets."radarr-secrets".path;
-  prowlarr-secrets = config.sops.secrets."prowlarr-secrets".path;
-  bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
-  chaptarr-secrets = config.sops.secrets."chaptarr-secrets".path;
-  cloudflared-secrets = config.sops.secrets."cloudflared-secrets".path;
-  grimmory-secrets = config.sops.secrets."grimmory-secrets".path;
+  homepage-secrets = config.ghostship.selfHostedSecrets.projections.homepage.path;
+  render-homepage-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project homepage";
 in
 
 {
@@ -42,18 +34,7 @@ in
       "/sys/class/net:/sys/class/net:ro"
       "/sys/devices/platform:/sys/devices/platform:ro"
     ];
-    environmentFiles = [
-      gluetun-secrets
-      plex-secrets
-      tautulli-secrets
-      sonarr-secrets
-      radarr-secrets
-      prowlarr-secrets
-      bazarr-secrets
-      chaptarr-secrets
-      cloudflared-secrets
-      grimmory-secrets
-    ];
+    environmentFiles = [ homepage-secrets ];
   };
 
   systemd.tmpfiles.rules = [
@@ -82,17 +63,10 @@ in
         if [ -f "$SERVICES_FILE" ]; then
           echo "Surgically updating Homepage services..."
           
+          ${render-homepage-secrets}
+
           service_args=(
-            --secrets-file "${gluetun-secrets}"
-            --secrets-file "${plex-secrets}"
-            --secrets-file "${tautulli-secrets}"
-            --secrets-file "${sonarr-secrets}"
-            --secrets-file "${radarr-secrets}"
-            --secrets-file "${prowlarr-secrets}"
-            --secrets-file "${bazarr-secrets}"
-            --secrets-file "${chaptarr-secrets}"
-            --secrets-file "${cloudflared-secrets}"
-            --secrets-file "${grimmory-secrets}"
+            --secrets-file "${homepage-secrets}"
             
             # Calendar group
             "[Calendar].[Calendar].icon=literal:sh-fluidcalendar"

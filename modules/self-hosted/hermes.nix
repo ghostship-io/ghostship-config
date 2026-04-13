@@ -1,19 +1,12 @@
 { config, pkgs, ... }:
 
 let
-  hermes-secrets = config.sops.secrets."hermes-secrets".path;
-  romm-secrets = config.sops.secrets."romm-secrets".path;
-  sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
-  radarr-secrets = config.sops.secrets."radarr-secrets".path;
-  prowlarr-secrets = config.sops.secrets."prowlarr-secrets".path;
-  plex-secrets = config.sops.secrets."plex-secrets".path;
-  tautulli-secrets = config.sops.secrets."tautulli-secrets".path;
-  bazarr-secrets = config.sops.secrets."bazarr-secrets".path;
-  grimmory-secrets = config.sops.secrets."grimmory-secrets".path;
-  chaptarr-secrets = config.sops.secrets."chaptarr-secrets".path;
-  bookstack-secrets = config.sops.secrets."bookstack-secrets".path;
-  pyload-secrets = config.sops.secrets."pyload-secrets".path;
-  n8n-secrets = config.sops.secrets."n8n-secrets".path;
+  hermes-secrets = config.ghostship.selfHostedSecrets.units."hermes-secrets".path;
+  pyload-secrets = config.ghostship.selfHostedSecrets.units."pyload-secrets".path;
+  n8n-secrets = config.ghostship.selfHostedSecrets.units."n8n-secrets".path;
+  bookstack-secrets = config.ghostship.selfHostedSecrets.units."bookstack-secrets".path;
+  hermes-shared-secrets = config.ghostship.selfHostedSecrets.projections.hermes.path;
+  render-hermes-shared-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project hermes";
   hermes-home = "/srv/apps/hermes/home";
   hermes-workspace = "/srv/apps/hermes/workspace";
   hermes-nix = "/srv/apps/hermes/nix";
@@ -65,91 +58,7 @@ let
 
       RUNTIME_ENV_PATH = Path(${builtins.toJSON hermes-runtime-env})
       PRICEBUDDY_AGENT_ENV = Path(${builtins.toJSON pricebuddy-agent-env})
-      SECRET_SOURCES = [
-          {
-              "path": ${builtins.toJSON hermes-secrets},
-              "map": {
-                  "CHANGEDETECTION_API_KEY": "CHANGEDETECTION_API_KEY",
-                  "SYNOLOGY_USER": "SYNOLOGY_USER",
-                  "SYNOLOGY_PASS": "SYNOLOGY_PASS",
-              },
-          },
-          {
-              "path": ${builtins.toJSON n8n-secrets},
-              "map": {
-                  "N8N_API_KEY": "N8N_API_KEY",
-              },
-          },
-          {
-              "path": ${builtins.toJSON sonarr-secrets},
-              "map": {
-                  "SONARR_API_KEY": "SONARR_API_KEY",
-              },
-          },
-          {
-              "path": ${builtins.toJSON radarr-secrets},
-              "map": {
-                  "RADARR_API_KEY": "RADARR_API_KEY",
-              },
-          },
-          {
-              "path": ${builtins.toJSON prowlarr-secrets},
-              "map": {
-                  "PROWLARR_API_KEY": "PROWLARR_API_KEY",
-              },
-          },
-          {
-              "path": ${builtins.toJSON plex-secrets},
-              "map": {
-                  "PLEX_TOKEN": "PLEX_TOKEN",
-              },
-          },
-          {
-              "path": ${builtins.toJSON tautulli-secrets},
-              "map": {
-                  "TAUTULLI_API_KEY": "TAUTULLI_API_KEY",
-              },
-          },
-          {
-              "path": ${builtins.toJSON bazarr-secrets},
-              "map": {
-                  "BAZARR_API_KEY": "BAZARR_API_KEY",
-              },
-          },
-          {
-              "path": ${builtins.toJSON chaptarr-secrets},
-              "map": {
-                  "CHAPTARR_API_KEY": "CHAPTARR_API_KEY",
-              },
-          },
-          {
-              "path": ${builtins.toJSON bookstack-secrets},
-              "map": {
-                  "BOOKSTACK_TOKEN_ID": "BOOKSTACK_TOKEN_ID",
-                  "BOOKSTACK_TOKEN_SECRET": "BOOKSTACK_TOKEN_SECRET",
-              },
-          },
-          {
-              "path": ${builtins.toJSON pyload-secrets},
-              "map": {
-                  "PYLOAD_API_KEY": "PYLOAD_API_KEY",
-              },
-          },
-          {
-              "path": ${builtins.toJSON romm-secrets},
-              "map": {
-                  "ROMM_USER": "ROMM_USERNAME",
-                  "ROMM_PASS": "ROMM_PASSWORD",
-              },
-          },
-          {
-              "path": ${builtins.toJSON grimmory-secrets},
-              "map": {
-                  "GRIMMORY_USER": "GRIMMORY_USERNAME",
-                  "GRIMMORY_PASS": "GRIMMORY_PASSWORD",
-              },
-          },
-      ]
+      SHARED_SECRET_SOURCE = Path(${builtins.toJSON hermes-shared-secrets})
 
       def parse_env_file(path: Path) -> dict[str, str]:
           values: dict[str, str] = {}
@@ -173,12 +82,7 @@ let
 
       def build_projected_env() -> dict[str, str]:
           projected: dict[str, str] = {}
-          for source in SECRET_SOURCES:
-              source_values = parse_env_file(Path(source["path"]))
-              for source_key, target_key in source["map"].items():
-                  value = source_values.get(source_key)
-                  if value:
-                      projected[target_key] = value
+          projected.update(parse_env_file(SHARED_SECRET_SOURCE))
 
           pricebuddy_values = parse_env_file(PRICEBUDDY_AGENT_ENV)
           pricebuddy_token = pricebuddy_values.get("PRICEBUDDY_API_TOKEN")
@@ -294,6 +198,7 @@ in
         fi
       done
 
+      ${render-hermes-shared-secrets}
       ${hermes-runtime-env-sync}/bin/hermes-runtime-env-sync.py
 
       seed_container=""
@@ -362,19 +267,9 @@ in
     pathConfig = {
       PathChanged = [
         hermes-secrets
-        sonarr-secrets
-        radarr-secrets
-        prowlarr-secrets
-        plex-secrets
-        tautulli-secrets
-        bazarr-secrets
-        grimmory-secrets
-        chaptarr-secrets
-        bookstack-secrets
-        pyload-secrets
-        n8n-secrets
-        romm-secrets
+        hermes-shared-secrets
         pricebuddy-agent-env
+        bookstack-secrets
       ];
       Unit = "hermes-runtime-env-sync.service";
     };

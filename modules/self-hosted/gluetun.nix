@@ -6,7 +6,7 @@
 }:
 
 let
-  gluetun-secrets = config.sops.secrets."gluetun-secrets".path;
+  gluetun-secrets = config.ghostship.selfHostedSecrets.units."gluetun-secrets".path;
   gluetun-runtime-env = "/run/secrets/gluetun-runtime.env";
   gluetun-state-dir = "/srv/apps/gluetun";
   gluetun-selection-cache = "${gluetun-state-dir}/pia-wireguard-selection.json";

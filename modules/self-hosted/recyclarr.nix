@@ -1,8 +1,8 @@
 { config, lib, pkgs, ... }:
 
 let
-  sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
-  radarr-secrets = config.sops.secrets."radarr-secrets".path;
+  recyclarr-secrets = config.ghostship.selfHostedSecrets.projections.recyclarr.path;
+  render-recyclarr-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project recyclarr";
 in
 {
   virtualisation.oci-containers.containers."recyclarr" = {
@@ -32,16 +32,15 @@ in
     text = ''
       CONFIG_FILE="/srv/apps/recyclarr/recyclarr.yml"
       
-      if [ -f "$CONFIG_FILE" ] && [ -f "${sonarr-secrets}" ] && [ -f "${radarr-secrets}" ]; then
+      ${render-recyclarr-secrets}
+      if [ -f "$CONFIG_FILE" ] && [ -f "${recyclarr-secrets}" ]; then
         echo "Surgically updating Recyclarr config..."
         set -a
-        . "${sonarr-secrets}"
-        . "${radarr-secrets}"
+        . "${recyclarr-secrets}"
         set +a
 
         recyclarr_args=(
-          --secrets-file "${sonarr-secrets}"
-          --secrets-file "${radarr-secrets}"
+          --secrets-file "${recyclarr-secrets}"
           sonarr.sonarr.base_url=literal:http://sonarr:8989
           sonarr.sonarr.api_key=env:SONARR_API_KEY
           sonarr.sonarr.quality_definition.type=literal:series

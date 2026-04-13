@@ -2,8 +2,7 @@
 
 This repository manages a small mixed NixOS fleet with one Apple Silicon
 server, one AMD desktop, and two WSL2 development hosts. The repo is flake
-based, uses Home Manager for the `nixos` user profile, and uses `sops-nix`
-for secrets.
+based, uses Home Manager for the `nixos` user profile, and uses `ragenix` plus a plaintext mirror workflow for secrets.
 
 ## Hosts
 
@@ -242,36 +241,56 @@ nixos-rebuild build --flake .#chill-penguin
 
 ## Secrets
 
-- `secrets.yaml` is the encrypted source of truth.
-- `secrets.dec.yaml` is the ignored plaintext mirror used for inspection and
-  edits before re-encryption.
-- Service bundles use `*-secrets` names and are consumed directly by the
-  relevant modules.
+- `secrets.dec.yaml` is the ignored plaintext mirror used for human edits. Keep
+  entries keyed by logical unit such as `hermes-secrets` or `plex-secrets`.
+- `secrets/catalog.nix` is the source of truth for the encrypted file layout,
+  recipient groups, file metadata, and exported fields.
+- `secrets/recipients.nix` defines operator and host SSH recipients. Runtime
+  decryption uses SSH host `ed25519` keys; human edit access uses the dedicated
+  passwordless non-default key `~/.ssh/id_ed25519_ragenix`.
+- `secrets/files/**/*.age` stores the logical-unit encrypted env files consumed
+  by NixOS through `ragenix`.
 
 Helper commands:
 
 ```bash
-secrets-edit secrets.yaml
-secrets-list-keys
-secrets-add-key <age1...> [system-name]
-secrets-reencrypt
-generate-age-key
-secrets-get-public-key
+secret-edit-keygen         # create ~/.ssh/id_ed25519_ragenix if missing
+secrets-edit               # open the plaintext mirror in $EDITOR
+secrets-list-keys          # list logical-unit mirror/catalog keys
+secrets-reencrypt          # sync secrets.dec.yaml into secrets/files/**/*.age
+secret-list                # inspect catalog entries and recipient groups
+secret-edit <logical-id>   # emergency direct edit of one .age file
+secret-rekey               # rekey all .age files after recipient changes
 ```
+
+`secrets-edit` and `secrets-reencrypt` are the normal operator flow. The repo
+keeps the plaintext mirror ignored, while tracked encrypted files stay split by
+logical unit so review, rekeying, and service projections remain manageable.
 
 ## Bootstrap
 
-Use `sudo ./bootstrap.sh NEW_HOSTNAME` from a temporary NixOS install to
-generate the host registration JSON and ensure `/etc/nix/secrets/age.key`
-exists. `bootstrap.sh` now requires an explicit hostname argument and requires
-being launched through `sudo`. It tries `hostnamectl` first, then falls back to
-`hostname` for a temporary live hostname change, which keeps WSL2 bootstrap
-runs working even when systemd hostname changes are unsupported there. Durable
-hostname persistence should come from the host's declarative config after
-registration and rebuild. It emits the registration JSON on stdout and prints
-the matching `nixos-rebuild` command plus a `nix-shell -p git` command on
-stderr. Then register the host, add it to `flake.nix`, commit the new host
-files, and apply the configuration with `nixos-rebuild`.
+Use `sudo ./bootstrap.sh NEW_HOSTNAME [output-dir]` from a temporary NixOS or
+WSL2 install to capture a temporary host-intake bundle. `bootstrap.sh` requires
+`sudo`, tries `hostnamectl`, then falls back to `hostname` or
+`/proc/sys/kernel/hostname` for a best-effort live hostname update. On WSL2 it
+also ensures `/etc/ssh/ssh_host_ed25519_key.pub` exists, because those hosts
+may not generate the SSH host key by default.
+
+The bundle contains:
+
+- `manifest.json`
+- `facts.json`
+- `hardware-configuration.nix`
+- `public/ssh_host_ed25519_key.pub`
+- `bootstrap-notes.md`
+
+Supported onboarding flow:
+
+1. Run `sudo ./bootstrap.sh NEW_HOSTNAME`.
+2. Copy the output directory into `references/host-intake/NEW_HOSTNAME/` in the repo.
+3. Ask Codex to integrate that staged intake bundle into `hosts/`, `flake.nix`, and `secrets/recipients.nix`.
+4. Review and commit the repo changes.
+5. Remove the temporary `references/host-intake/NEW_HOSTNAME/` directory.
 
 ## Notes
 

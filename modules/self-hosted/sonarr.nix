@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  sonarr-secrets = config.sops.secrets."sonarr-secrets".path;
+  sonarr-secrets = config.ghostship.selfHostedSecrets.units."sonarr-secrets".path;
 in
 {
   virtualisation.oci-containers.containers."sonarr" = {

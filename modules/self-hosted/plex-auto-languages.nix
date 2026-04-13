@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  plex-secrets = config.sops.secrets."plex-secrets".path;
+  plex-secrets = config.ghostship.selfHostedSecrets.units."plex-secrets".path;
 in
 {
   virtualisation.oci-containers.containers."plex-auto-languages" = {

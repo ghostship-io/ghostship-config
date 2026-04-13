@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  grimmory-secrets = config.sops.secrets."grimmory-secrets".path;
+  grimmory-secrets = config.ghostship.selfHostedSecrets.units."grimmory-secrets".path;
 in
 {
   virtualisation.oci-containers.containers."grimmory" = {

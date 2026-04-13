@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of `PYLOAD_USER` and `PYLOAD_PASS` from `pyload-secrets`.
 
 - **BookStack documentation wiki**: Added a repo-managed BookStack service plus MariaDB sidecar to the `chill-penguin` self-hosted stack, wired the BookStack secret/env surface through the new `bookstack-secrets` bundle, exposed the service in Homepage's `Services` group, added a Muximux tile after Prowlarr, moved Chaptarr into the dropdown before Bazarr, and projected `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, plus `BOOKSTACK_TOKEN_SECRET` into Hermes through the managed runtime env path. The public `bookstack.ghostship.io` route and the initial in-app setup plus API token creation remain manual follow-up outside the repo-managed bootstrap path.
+- **Ragenix secret catalog and host intake redesign**: Replaced `sops-nix` with `ragenix`, moved tracked secret storage to logical-unit `.age` files declared through `secrets/catalog.nix` and `secrets/recipients.nix`, added catalog-driven secret projections for shared consumers, restored the ignored `secrets.dec.yaml` plaintext mirror as the normal operator edit surface via `secrets-edit` plus `secrets-reencrypt`, and redesigned `bootstrap.sh` to capture temporary host-intake bundles with `hardware-configuration.nix` and SSH host `ed25519` keys for Codex-assisted integration.
 
 - **Develop GitHub CLI ownership rollback**: Moved `gh` back to the shared
   develop Home Manager package set and removed the repo-managed WSL `envfs`

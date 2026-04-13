@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  searxng-secrets = config.sops.secrets."searxng-secrets".path;
+  searxng-secrets = config.ghostship.selfHostedSecrets.units."searxng-secrets".path;
   searxng-pypi-engine = pkgs.writeText "searxng-pypi_exact.py" ''
     # SPDX-License-Identifier: AGPL-3.0-or-later
     """PyPI exact-match package lookup via the JSON API."""

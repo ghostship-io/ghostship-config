@@ -45,7 +45,7 @@
   system.activationScripts.nzbget-config = {
     text = ''
       CONFIG_FILE="/srv/apps/nzbget/nzbget.conf"
-      SECRETS_FILE="${config.sops.secrets."nzbget-secrets".path}"
+      SECRETS_FILE="${config.ghostship.selfHostedSecrets.units."nzbget-secrets".path}"
 
       if [ -f "$CONFIG_FILE" ] && [ -f "$SECRETS_FILE" ]; then
         echo "Surgically updating NZBGet config..."

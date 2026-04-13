@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  chaptarr-secrets = config.sops.secrets."chaptarr-secrets".path;
+  chaptarr-secrets = config.ghostship.selfHostedSecrets.units."chaptarr-secrets".path;
 in
 {
   virtualisation.oci-containers.containers."chaptarr" = {
