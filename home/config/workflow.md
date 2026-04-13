@@ -35,11 +35,11 @@ nixos-rebuild build --flake .#<host>
 
 ## Secrets
 
-- Edit the plaintext mirror in `secrets.dec.yaml` with `secrets-edit`.
-- Re-encrypt logical-unit `.age` files with `secrets-reencrypt` before
-  committing encrypted secret changes.
+- Edit logical-unit `.age` files directly with `secret-edit <logical-id>`.
+- Use `secrets-list-keys` or `secret-list` to find the logical secret you need.
+- Run `secret-rekey` before committing only when recipient membership changes.
 - Keep service-local bundles in `*-secrets` blocks keyed by logical unit so the
-  mirror matches `secrets/catalog.nix`.
+  tracked files stay aligned with `secrets/catalog.nix`.
 
 ## Package Ownership
 

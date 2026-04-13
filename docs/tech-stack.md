@@ -17,7 +17,9 @@
 
 ## Security & Secrets
 - **ragenix**: NixOS secret management built on age-compatible encrypted files, with runtime decryption via SSH host `ed25519` keys.
-- **Plaintext Mirror Workflow**: `secrets.dec.yaml` stays ignored for human edits, while `secrets-reencrypt` syncs logical-unit `.age` files from the mirror through the catalog and recipient model.
+- **Direct Logical-Unit Editing**: Operators edit tracked logical-unit `.age`
+  files with `secret-edit`, while `secret-rekey` updates them only when
+  recipient membership changes.
 
 ## Development & Utility Tools
 - **Native Nix CLI**: `nix`, `nixos-rebuild`, and `switch-to-configuration` are the primary system management tools.

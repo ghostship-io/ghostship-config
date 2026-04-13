@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Direct ragenix edit workflow**: Removed the repo-managed plaintext mirror
+  helpers so operator secret changes now happen directly through
+  `secret-edit <logical-id>`, with `secret-rekey` reserved for recipient
+  changes.
+
 - **Hermes pyLoad API contract**: Switched the Hermes utility env projection
   to follow the new upstream pyLoad contract by sourcing `PYLOAD_API_KEY`
   instead of `PYLOAD_USER` and `PYLOAD_PASS` from `pyload-secrets`.

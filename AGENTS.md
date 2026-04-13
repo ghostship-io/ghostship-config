@@ -300,16 +300,14 @@ changelog.
 
 ## Secrets and Bootstrap
 
-- `secrets.dec.yaml` is the ignored plaintext mirror for human edits. Do not
-  commit it. Prefer `|-` block scalars for multi-line service bundles.
 - The tracked secret model lives under `secrets/`: `recipients.nix` composes
   SSH recipients and groups, `catalog.nix` declares logical-unit secret files
   plus exported fields, and `rules.nix` feeds `ragenix`.
 - Runtime decryption uses SSH host `ed25519` keys. Human edit access uses the
   dedicated passwordless non-default key `~/.ssh/id_ed25519_ragenix`.
-- Normal operator flow is `secrets-edit` on the plaintext mirror, then
-  `secrets-reencrypt` to sync logical-unit `.age` files. Keep `secret-edit` for
-  direct per-file emergency edits only.
+- Normal operator flow is direct `secret-edit <logical-secret-name>` against
+  the tracked `.age` files. Use `secrets-list-keys` or `secret-list` to find
+  names, and reserve `secret-rekey` for recipient changes.
 - Use service-local `*-secrets` bundles and catalog-driven projections instead
   of shared catch-all `HOMEPAGE_*` bundles or repeated raw secret path wiring.
 - `bootstrap.sh` is the installer-time host bootstrap entrypoint. It captures a

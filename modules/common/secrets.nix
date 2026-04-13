@@ -3,9 +3,7 @@
 let
   recipients = import ../../secrets/recipients.nix;
   catalog = import ../../secrets/catalog.nix { inherit recipients; };
-  rulesFile = ../../secrets/rules.nix;
   editKeyPath = "$HOME/.ssh/id_ed25519_ragenix";
-  editKeyPubPath = "$HOME/.ssh/id_ed25519_ragenix.pub";
   ragenixPackage = inputs.ragenix.packages.${pkgs.stdenv.hostPlatform.system}.default;
   catalogJson = builtins.toJSON (
     lib.mapAttrs
@@ -84,26 +82,6 @@ EOF
     '';
   };
 
-  secrets-edit = pkgs.writeShellApplication {
-    name = "secrets-edit";
-    text = ''
-      set -euo pipefail
-      repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-      common_root=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || printf '%s/.git\n' "$repo_root")")
-      mirror_path="''${GHOSTSHIP_SECRETS_MIRROR:-$repo_root/secrets.dec.yaml}"
-      if [ ! -e "$mirror_path" ] && [ -e "$common_root/secrets.dec.yaml" ]; then
-        mirror_path="$common_root/secrets.dec.yaml"
-      fi
-      mkdir -p "$(dirname "$mirror_path")"
-      if [ ! -e "$mirror_path" ]; then
-        : > "$mirror_path"
-        chmod 600 "$mirror_path"
-      fi
-      editor="''${EDITOR:-vi}"
-      exec "$editor" "$mirror_path"
-    '';
-  };
-
   secrets-list-keys = pkgs.writeShellApplication {
     name = "secrets-list-keys";
     runtimeInputs = [ pkgs.jq ];
@@ -111,51 +89,6 @@ EOF
       jq -r 'keys[]' <<'EOF'
 ${catalogJson}
 EOF
-    '';
-  };
-
-  secrets-reencrypt = pkgs.writeShellApplication {
-    name = "secrets-reencrypt";
-    runtimeInputs = [ pkgs.age pkgs.jq pkgs.yq-go ];
-    text = ''
-      set -euo pipefail
-      repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-      common_root=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || printf '%s/.git\n' "$repo_root")")
-      mirror_path="''${GHOSTSHIP_SECRETS_MIRROR:-$repo_root/secrets.dec.yaml}"
-      if [ ! -e "$mirror_path" ] && [ -e "$common_root/secrets.dec.yaml" ]; then
-        mirror_path="$common_root/secrets.dec.yaml"
-      fi
-      if [ ! -f "$mirror_path" ]; then
-        echo "Missing plaintext mirror: $mirror_path" >&2
-        exit 1
-      fi
-
-      catalog_json=$(cat <<'EOF'
-${catalogJson}
-EOF
-)
-
-      while IFS= read -r name; do
-        rel_file=$(jq -r --arg name "$name" '.[$name].relativeFile' <<<"$catalog_json")
-        plaintext=$(yq -r ".[\"$name\"] // \"\"" "$mirror_path")
-        if [ -z "$plaintext" ]; then
-          echo "Missing or empty plaintext entry for $name in $mirror_path" >&2
-          exit 1
-        fi
-        tmp_plain=$(mktemp)
-        trap 'rm -f "$tmp_plain"' EXIT
-        printf '%s\n' "$plaintext" > "$tmp_plain"
-        mapfile -t recipients < <(jq -r --arg name "$name" '.[$name].recipients[]' <<<"$catalog_json")
-        age_args=()
-        for recipient in "''${recipients[@]}"; do
-          age_args+=("-r" "$recipient")
-        done
-        mkdir -p "$repo_root/$(dirname "$rel_file")"
-        age -e "''${age_args[@]}" -o "$repo_root/$rel_file" "$tmp_plain"
-        rm -f "$tmp_plain"
-        trap - EXIT
-        echo "Encrypted $name -> $rel_file"
-      done < <(jq -r 'keys[]' <<<"$catalog_json")
     '';
   };
 in
@@ -180,9 +113,7 @@ in
       secret-edit
       secret-list
       secret-rekey
-      secrets-edit
       secrets-list-keys
-      secrets-reencrypt
     ];
 
     system.activationScripts.ghostship-ssh-host-public-key = {

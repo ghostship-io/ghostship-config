@@ -2,7 +2,8 @@
 
 This repository manages a small mixed NixOS fleet with one Apple Silicon
 server, one AMD desktop, and two WSL2 development hosts. The repo is flake
-based, uses Home Manager for the `nixos` user profile, and uses `ragenix` plus a plaintext mirror workflow for secrets.
+based, uses Home Manager for the `nixos` user profile, and uses `ragenix`
+logical-unit secret files.
 
 ## Hosts
 
@@ -241,8 +242,6 @@ nixos-rebuild build --flake .#chill-penguin
 
 ## Secrets
 
-- `secrets.dec.yaml` is the ignored plaintext mirror used for human edits. Keep
-  entries keyed by logical unit such as `hermes-secrets` or `plex-secrets`.
 - `secrets/catalog.nix` is the source of truth for the encrypted file layout,
   recipient groups, file metadata, and exported fields.
 - `secrets/recipients.nix` defines operator and host SSH recipients. Runtime
@@ -255,17 +254,15 @@ Helper commands:
 
 ```bash
 secret-edit-keygen         # create ~/.ssh/id_ed25519_ragenix if missing
-secrets-edit               # open the plaintext mirror in $EDITOR
-secrets-list-keys          # list logical-unit mirror/catalog keys
-secrets-reencrypt          # sync secrets.dec.yaml into secrets/files/**/*.age
+secrets-list-keys          # list logical-unit catalog keys
 secret-list                # inspect catalog entries and recipient groups
-secret-edit <logical-id>   # emergency direct edit of one .age file
+secret-edit <logical-id>   # edit one logical-unit .age file directly
 secret-rekey               # rekey all .age files after recipient changes
 ```
 
-`secrets-edit` and `secrets-reencrypt` are the normal operator flow. The repo
-keeps the plaintext mirror ignored, while tracked encrypted files stay split by
-logical unit so review, rekeying, and service projections remain manageable.
+Normal operator flow is direct per-file editing with `secret-edit
+<logical-id>`. Use `secrets-list-keys` or `secret-list` to find the logical
+unit you need, then run `secret-rekey` only when recipient membership changes.
 
 ## Bootstrap
 
