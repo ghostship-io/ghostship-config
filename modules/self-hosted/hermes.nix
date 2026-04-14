@@ -14,10 +14,12 @@ let
   pricebuddy-agent-env = "/srv/apps/pricebuddy/pricebuddy-agent.env";
   hermes-seed-skill-creator = ./hermes-seeds/skills/skill-creator;
   hermes-seed-soul = ./hermes-seeds/SOUL.md;
-  discord-home-channel = "1491229269127598281";
   ghostship-router-channel = "1492841053642817606";
+  ghostship-codex-channel = "1493462179725180959";
   discord-allowed-users = "126942974826381312";
   discord-free-response-channels = builtins.concatStringsSep "," [
+    ghostship-router-channel
+    ghostship-codex-channel
     "1491229269127598281"
     "1491229248856260799"
     "1491229299452412044"
@@ -127,7 +129,7 @@ in
     extraOptions = [
       "--network=ghostship_net"
       "--privileged"
-      "--health-cmd=[\"/bin/sh\",\"-lc\",\"curl -fsS http://127.0.0.1:7681/ >/dev/null || exit 1\"]"
+      "--health-cmd=[\"/bin/sh\",\"-lc\",\"curl -fsS http://127.0.0.1:7681/api/status >/dev/null || exit 1\"]"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
@@ -135,16 +137,10 @@ in
       "--health-on-failure=kill"
     ];
     environment = utility-service-env // {
-      HOME = "/home/hermes";
-      HERMES_HOME = "/home/hermes/.hermes";
-      GHOSTSHIP_WORKSPACE_ROOT = "/workspace";
-      TTYD_PORT = "7681";
-      TTYD_TITLE = "Ghostship Hermes";
-      TTYD_SESSION_NAME = "hermes";
       DISCORD_ALLOWED_USERS = discord-allowed-users;
       DISCORD_FREE_RESPONSE_CHANNELS = discord-free-response-channels;
       GHOSTSHIP_ROUTER_CHANNEL = ghostship-router-channel;
-      DISCORD_HOME_CHANNEL = discord-home-channel;
+      GHOSTSHIP_CODEX_CHANNEL = ghostship-codex-channel;
     };
     environmentFiles = [
       hermes-secrets
@@ -160,20 +156,21 @@ in
 
   systemd.services.podman-hermes = {
     preStart = ''
-      install -d -m0755 -o apps -g apps "${hermes-home}" "${hermes-workspace}"
-      install -d -m0755 "${hermes-nix}"
       install -d -m0755 -o apps -g apps \
-        "${hermes-home}/seeds" \
-        "${hermes-home}/seeds/skills"
+        "${hermes-home}" \
+        "${hermes-home}/.hermes" \
+        "${hermes-home}/.hermes/skills" \
+        "${hermes-workspace}"
+      install -d -m0755 "${hermes-nix}"
 
-      if [ ! -e "${hermes-home}/seeds/skills/skill-creator" ]; then
-        ${pkgs.coreutils}/bin/cp -a "${hermes-seed-skill-creator}" "${hermes-home}/seeds/skills/skill-creator"
-        ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/seeds/skills/skill-creator"
-        ${pkgs.coreutils}/bin/chmod -R u+rwX "${hermes-home}/seeds/skills/skill-creator"
+      if [ ! -e "${hermes-home}/.hermes/skills/skill-creator" ]; then
+        ${pkgs.coreutils}/bin/cp -a "${hermes-seed-skill-creator}" "${hermes-home}/.hermes/skills/skill-creator"
+        ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/.hermes/skills/skill-creator"
+        ${pkgs.coreutils}/bin/chmod -R u+rwX "${hermes-home}/.hermes/skills/skill-creator"
       fi
 
-      if [ ! -e "${hermes-home}/seeds/SOUL.md" ]; then
-        install -m0644 -o apps -g apps "${hermes-seed-soul}" "${hermes-home}/seeds/SOUL.md"
+      if [ ! -e "${hermes-home}/.hermes/SOUL.md" ]; then
+        install -m0644 -o apps -g apps "${hermes-seed-soul}" "${hermes-home}/.hermes/SOUL.md"
       fi
 
       for secret_file in \
@@ -200,49 +197,8 @@ in
 
       ${render-hermes-shared-secrets}
       ${hermes-runtime-env-sync}/bin/hermes-runtime-env-sync.py
-
-      seed_container=""
-      seed_rootfs=""
-
-      cleanup() {
-        if [ -n "$seed_rootfs" ]; then
-          ${pkgs.podman}/bin/podman unmount "$seed_container" >/dev/null 2>&1 || true
-        fi
-        if [ -n "$seed_container" ]; then
-          ${pkgs.podman}/bin/podman rm -f "$seed_container" >/dev/null 2>&1 || true
-        fi
-      }
-
-      trap cleanup EXIT
-      ${pkgs.podman}/bin/podman pull ghcr.io/ghostship-io/ghostship-hermes:latest >/dev/null
-      seed_container="$(${pkgs.podman}/bin/podman create ghcr.io/ghostship-io/ghostship-hermes:latest)"
-      seed_rootfs="$(${pkgs.podman}/bin/podman mount "$seed_container")"
-
-      seed_system="$(${pkgs.findutils}/bin/find "$seed_rootfs/nix/store" -maxdepth 1 -mindepth 1 -name '*-nixos-system-ghostship-hermes-*' -printf '%f\n' -quit)"
-      current_store_entry="$(${pkgs.findutils}/bin/find "${hermes-nix}/store" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)"
-
-      if [ -z "$current_store_entry" ] || [ -z "$seed_system" ] || [ ! -e "${hermes-nix}/store/$seed_system" ]; then
-        echo "Refreshing Hermes /nix from ghcr.io/ghostship-io/ghostship-hermes:latest"
-        ${pkgs.rsync}/bin/rsync -aH --numeric-ids "$seed_rootfs/nix/" "${hermes-nix}/"
-      fi
-
-      cleanup
-      trap - EXIT
     '';
     postStart = ''
-      for _ in $(seq 1 30); do
-        if ${pkgs.podman}/bin/podman exec hermes /run/current-system/sw/bin/systemctl --system list-unit-files >/dev/null 2>&1; then
-          break
-        fi
-        sleep 1
-      done
-
-      ${pkgs.podman}/bin/podman exec hermes sh -lc '
-        /run/current-system/sw/bin/systemctl --system start \
-          ghostship-hermes-user-tooling-refresh.timer \
-          ghostship-hermes-startup.service
-      '
-
       ${pkgs.systemd}/bin/systemctl start --no-block hermes-runtime-env-sync.service || true
     '';
   };
