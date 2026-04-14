@@ -14,6 +14,7 @@ let
   pricebuddy-agent-env = "/srv/apps/pricebuddy/pricebuddy-agent.env";
   hermes-seed-skill-creator = ./hermes-seeds/skills/skill-creator;
   hermes-seed-soul = ./hermes-seeds/SOUL.md;
+  discord-home-channel = "1491229269127598281";
   ghostship-router-channel = "1492841053642817606";
   ghostship-codex-channel = "1493462179725180959";
   discord-allowed-users = "126942974826381312";
@@ -141,6 +142,7 @@ in
     ];
     environment = utility-service-env // {
       DISCORD_ALLOWED_USERS = discord-allowed-users;
+      DISCORD_HOME_CHANNEL = discord-home-channel;
       DISCORD_FREE_RESPONSE_CHANNELS = discord-free-response-channels;
       GHOSTSHIP_ROUTER_CHANNEL = ghostship-router-channel;
       GHOSTSHIP_CODEX_CHANNEL = ghostship-codex-channel;
