@@ -129,6 +129,9 @@ in
     extraOptions = [
       "--network=ghostship_net"
       "--privileged"
+      "--no-hostname"
+      "--stop-signal=SIGRTMIN+3"
+      "--stop-timeout=45"
       "--health-cmd=[\"/bin/sh\",\"-lc\",\"curl -fsS http://127.0.0.1:7681/api/status >/dev/null || exit 1\"]"
       "--health-interval=30s"
       "--health-timeout=10s"
@@ -155,6 +158,9 @@ in
   };
 
   systemd.services.podman-hermes = {
+    serviceConfig = {
+      SuccessExitStatus = "130";
+    };
     preStart = ''
       install -d -m0755 -o apps -g apps \
         "${hermes-home}" \
