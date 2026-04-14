@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Hermes workstation `main` contract realignment**: Reworked `chill-penguin` Hermes host wiring around the current `ghostship-hermes` `main` image by dropping in-container `systemd` startup, removing host-side `/nix` bootstrap, moving the repo-managed `SOUL.md` and `skill-creator` defaults directly into `/srv/apps/hermes/home/.hermes/`, switching the Discord lane contract to `GHOSTSHIP_ROUTER_CHANNEL` plus `GHOSTSHIP_CODEX_CHANNEL`, rendering `DISCORD_FREE_RESPONSE_CHANNELS` with both pinned lanes and the current three Ghostship free-response channels, and documenting the required destructive stop-reset-start rollout for `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`.
+
 - **Develop agent stack refresh**: Removed the repo-managed `agent-deck` package and `launch-agent` helper, moved `openspec` onto the same managed auto-update path as `codex`, `gemini`, and `opencode`, made Caveman full the default agent style across Codex, Gemini, and OpenCode, and taught `ghostship-agent-maintenance` to ensure the configured `skills.sh` repos such as `JuliusBrussee/caveman` are installed and updated on each develop host.
 
 - **Direct ragenix edit workflow**: Removed the repo-managed plaintext mirror
