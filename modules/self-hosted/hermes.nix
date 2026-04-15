@@ -12,7 +12,6 @@ let
   hermes-nix = "/srv/apps/hermes/nix";
   hermes-runtime-env = "/srv/apps/hermes/runtime.env";
   pricebuddy-agent-env = "/srv/apps/pricebuddy/pricebuddy-agent.env";
-  hermes-seed-skill-creator = ./hermes-seeds/skills/skill-creator;
   hermes-seed-soul = ./hermes-seeds/SOUL.md;
   discord-home-channel = "1491229269127598281";
   ghostship-router-channel = "1492841053642817606";
@@ -167,15 +166,8 @@ in
       install -d -m0755 -o apps -g apps \
         "${hermes-home}" \
         "${hermes-home}/.hermes" \
-        "${hermes-home}/.hermes/skills" \
         "${hermes-workspace}"
       install -d -m0755 "${hermes-nix}"
-
-      if [ ! -e "${hermes-home}/.hermes/skills/skill-creator" ]; then
-        ${pkgs.coreutils}/bin/cp -a "${hermes-seed-skill-creator}" "${hermes-home}/.hermes/skills/skill-creator"
-        ${pkgs.coreutils}/bin/chown -R apps:apps "${hermes-home}/.hermes/skills/skill-creator"
-        ${pkgs.coreutils}/bin/chmod -R u+rwX "${hermes-home}/.hermes/skills/skill-creator"
-      fi
 
       if [ ! -e "${hermes-home}/.hermes/SOUL.md" ]; then
         install -m0644 -o apps -g apps "${hermes-seed-soul}" "${hermes-home}/.hermes/SOUL.md"
