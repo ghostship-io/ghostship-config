@@ -1,7 +1,20 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
 
 let
   sshAgentSock = "/run/user/1000/ssh-agent";
+  agentTooling = import ../../modules/develop/agent-tooling.nix {
+    inherit pkgs inputs;
+  };
+  agentDeckCli = agentTooling.mkInstalledAgentWrapper {
+    name = "agent-deck";
+    binaryName = "agent-deck";
+  };
 in
 {
    imports = [
@@ -208,7 +221,7 @@ PY
     ripgrep-all
     git-ignore
     gh
-    agent-deck
+    agentDeckCli
     starship
     zoxide
     fd

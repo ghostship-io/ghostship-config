@@ -50,7 +50,9 @@ let
     pkgs.curl
     pkgs.gawk
     pkgs.git
+    pkgs.gnutar
     pkgs.gnugrep
+    pkgs.gzip
     pkgs.jq
     pkgs.nodejs
     pkgs.openssh
@@ -457,6 +459,110 @@ EOF
       fi
     }
 
+    install_agent_deck_latest() {
+      detect_agent_deck_os() {
+        case "$(${pkgs.coreutils}/bin/uname -s)" in
+          Linux) printf 'linux\n' ;;
+          Darwin) printf 'darwin\n' ;;
+          *)
+            log_warn "unsupported OS for agent-deck auto-install"
+            return 1
+            ;;
+        esac
+      }
+
+      detect_agent_deck_arch() {
+        case "$(${pkgs.coreutils}/bin/uname -m)" in
+          x86_64|amd64) printf 'amd64\n' ;;
+          arm64|aarch64) printf 'arm64\n' ;;
+          *)
+            log_warn "unsupported architecture for agent-deck auto-install"
+            return 1
+            ;;
+        esac
+      }
+
+      os="$(detect_agent_deck_os)" || return 0
+      arch="$(detect_agent_deck_arch)" || return 0
+
+      release_meta="$(mktemp)"
+      checksums_file="$(mktemp)"
+      tarball="$(mktemp)"
+      extract_dir="$(mktemp -d)"
+      verify_dir="$(mktemp -d)"
+      trap 'rm -f "$release_meta" "$checksums_file" "$tarball"; rm -rf "$extract_dir" "$verify_dir"' RETURN
+
+      if ! ${pkgs.curl}/bin/curl -fsSL "https://api.github.com/repos/asheshgoplani/agent-deck/releases/latest" > "$release_meta"; then
+        log_warn "agent-deck release metadata fetch failed, continuing"
+        return 0
+      fi
+
+      version="$(${pkgs.jq}/bin/jq -r '.tag_name // empty' "$release_meta")"
+      if [ -z "$version" ] || [ "$version" = "null" ]; then
+        log_warn "agent-deck release metadata missing tag name, continuing"
+        return 0
+      fi
+
+      desired_version="''${version#v}"
+      current_version=""
+      if [ -x "${agentBinDir}/agent-deck" ]; then
+        current_version="$(${agentBinDir}/agent-deck --version 2>/dev/null | ${pkgs.gnugrep}/bin/grep -Eo 'v?[0-9]+\.[0-9]+\.[0-9]+' | tail -n1 | sed 's/^v//')"
+      fi
+
+      if [ -n "$current_version" ] && [ "$current_version" = "$desired_version" ]; then
+        log_info "agent-deck ''${version} already installed"
+        return 0
+      fi
+
+      asset="agent-deck_''${desired_version}_''${os}_''${arch}.tar.gz"
+      asset_url="$(${pkgs.jq}/bin/jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .browser_download_url' "$release_meta")"
+      checksums_url="$(${pkgs.jq}/bin/jq -r '.assets[] | select(.name == "checksums.txt") | .browser_download_url' "$release_meta")"
+
+      if [ -z "$asset_url" ] || [ "$asset_url" = "null" ] || [ -z "$checksums_url" ] || [ "$checksums_url" = "null" ]; then
+        log_warn "agent-deck release assets missing for ''${version}, continuing"
+        return 0
+      fi
+
+      log_info "installing agent-deck ''${version}"
+      if ! ${pkgs.curl}/bin/curl -fsSL "$asset_url" > "$tarball"; then
+        log_warn "agent-deck download failed, continuing"
+        return 0
+      fi
+
+      if ! ${pkgs.curl}/bin/curl -fsSL "$checksums_url" > "$checksums_file"; then
+        log_warn "agent-deck checksums download failed, continuing"
+        return 0
+      fi
+
+      cp "$tarball" "$verify_dir/$asset"
+      checksum_line="$(${pkgs.gnugrep}/bin/grep "  $asset\$" "$checksums_file" || true)"
+      if [ -z "$checksum_line" ]; then
+        log_warn "agent-deck checksum entry missing, continuing"
+        return 0
+      fi
+
+      printf '%s\n' "$checksum_line" > "$verify_dir/checksum.verify"
+      if ! (
+        cd "$verify_dir"
+        ${pkgs.coreutils}/bin/sha256sum --check checksum.verify >/dev/null 2>&1
+      ); then
+        log_warn "agent-deck checksum verification failed, continuing"
+        return 0
+      fi
+
+      if ! ${pkgs.gnutar}/bin/tar -xzf "$tarball" -C "$extract_dir"; then
+        log_warn "agent-deck extraction failed, continuing"
+        return 0
+      fi
+
+      if [ ! -x "$extract_dir/agent-deck" ]; then
+        log_warn "agent-deck binary missing from extracted release, continuing"
+        return 0
+      fi
+
+      install -m755 "$extract_dir/agent-deck" "${agentBinDir}/agent-deck"
+    }
+
     ensure_managed_global_skill() {
       name="$1"
       source="$2"
@@ -642,6 +748,7 @@ EOF
 
     mkdir -p "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
+    install_agent_deck_latest
     install_agent_cli "@openai/codex" "codex"
     install_agent_cli "@google/gemini-cli" "gemini"
     install_agent_cli "opencode-ai" "opencode"

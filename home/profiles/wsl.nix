@@ -1,7 +1,47 @@
-{ lib, pkgs, ... }:
+{
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
 
 let
+  agentTooling = import ../../modules/develop/agent-tooling.nix {
+    inherit pkgs inputs;
+  };
   windowsPowerShell = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
+  agentDeckWebListen = "127.0.0.1:8420";
+  agentDeckWebSession = "agent-deck-web";
+  agentDeckWebRunner = pkgs.writeShellScript "agent-deck-web-runner" ''
+    set -eu
+
+    session=${lib.escapeShellArg agentDeckWebSession}
+    listen=${lib.escapeShellArg agentDeckWebListen}
+    log_file="$HOME/.agent-deck/web-service.log"
+    if [ ! -x "${agentTooling.agentBinDir}/agent-deck" ]; then
+      printf 'error: agent-deck is not installed yet; run `ghostship-agent-maintenance`\n' >&2
+      exit 1
+    fi
+
+    cmd="AGENT_DECK_ALLOW_OUTER_TMUX=1 ${agentTooling.agentBinDir}/agent-deck web --listen $listen >>\"$log_file\" 2>&1"
+
+    cleanup() {
+      ${pkgs.tmux}/bin/tmux has-session -t "$session" 2>/dev/null && \
+        ${pkgs.tmux}/bin/tmux kill-session -t "$session" || true
+    }
+
+    trap 'cleanup; exit 0' TERM INT
+
+    ${pkgs.coreutils}/bin/mkdir -p "$HOME/.agent-deck"
+    cleanup
+    ${pkgs.tmux}/bin/tmux new-session -d -s "$session" "$cmd"
+
+    while ${pkgs.tmux}/bin/tmux has-session -t "$session" 2>/dev/null; do
+      ${pkgs.coreutils}/bin/sleep 5
+    done
+
+    exit 1
+  '';
   wslOpenWrapped = pkgs.writeShellScriptBin "wsl-open" ''
     export PowershellExe="${windowsPowerShell}"
     export WslOpenExe="${windowsPowerShell} Start"
@@ -116,7 +156,8 @@ in
       After = [ "default.target" ];
     };
     Service = {
-      ExecStart = "${lib.getExe pkgs.agent-deck} web --listen 127.0.0.1:8420";
+      ExecStart = agentDeckWebRunner;
+      ExecStop = "-${pkgs.tmux}/bin/tmux kill-session -t ${agentDeckWebSession}";
       Restart = "on-failure";
       RestartSec = "5s";
       Type = "simple";

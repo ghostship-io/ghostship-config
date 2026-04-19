@@ -91,8 +91,8 @@ changelog.
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode
   keeps `permission = "allow"` in config. Those defaults are only live after
   the relevant NixOS rebuild or Home Manager switch.
-- Develop hosts expose `agent-deck` declaratively through the shared
-  develop Home Manager profile, and WSL develop hosts enable a user
+- Develop hosts expose `agent-deck` through the same repo-managed wrapper
+  pattern as the other agent CLIs, and WSL develop hosts enable a user
   `agent-deck-web` service on `127.0.0.1:8420`.
 - Develop hosts install `codex`, `gemini`, `opencode`, and `openspec` into the
   user-local npm prefix under
@@ -113,9 +113,10 @@ changelog.
   package-manager bootstrapping is unsupported there and the wrapper already
   supplies the required shared libraries. It also rewrites
   `~/.config/opencode/opencode.json` from OpenRouter's ranked programming free
-  frontend endpoint while preserving the `(ghostship-free)` label rewrite; do
-  not reintroduce static OpenRouter model maps into the Nix-managed OpenCode
-  config files.
+  frontend endpoint while preserving the `(ghostship-free)` label rewrite, and
+  refreshes `agent-deck` from the latest upstream GitHub release; do not
+  reintroduce static OpenRouter model maps into the Nix-managed OpenCode
+  config files or pin `agent-deck` back into the flake.
 - For an immediate user-triggered refresh, run `ghostship-agent-maintenance`
   directly instead of trying to start the system unit as an unprivileged user.
 - Develop hosts should keep `ssh-agent` on the fixed

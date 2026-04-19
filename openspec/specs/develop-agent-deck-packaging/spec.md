@@ -1,24 +1,24 @@
 # develop-agent-deck-packaging Specification
 
 ## Purpose
-Define how this repo packages and exposes `agent-deck` as declarative interactive tooling for develop-profile users.
+Define how this repo exposes `agent-deck` as managed interactive tooling for develop-profile users.
 
 ## Requirements
 
-### Requirement: The repo packages agent-deck as a Nix-managed develop tool
-The repo SHALL define `agent-deck` as a Nix-managed package sourced from an upstream tagged release instead of requiring users to install it with the upstream shell installer or `go install`.
+### Requirement: The repo exposes agent-deck through the managed wrapper flow
+The repo SHALL define `agent-deck` through the same managed wrapper pattern as the other agent CLIs instead of requiring users to run the upstream installer or `go install` manually.
 
-#### Scenario: Package source is declarative
-- **WHEN** the repo packaging for `agent-deck` is inspected
-- **THEN** it SHALL fetch the upstream source from a pinned tagged release and build the `agent-deck` CLI through Nix
+#### Scenario: Wrapper path is declarative
+- **WHEN** the repo-managed `agent-deck` command is inspected
+- **THEN** it SHALL resolve through a Nix-managed wrapper script that delegates to the maintained user-local install location
 
-#### Scenario: Package pin matches the supported release
-- **WHEN** the repo packaging for `agent-deck` is inspected after this change
-- **THEN** it SHALL pin `agent-deck` to the current supported upstream release selected by this repo, `v1.7.21`
+#### Scenario: Maintenance tracks the latest release
+- **WHEN** `ghostship-agent-maintenance` refreshes `agent-deck`
+- **THEN** it SHALL install the latest upstream GitHub release selected by the release feed instead of a flake-pinned version
 
-#### Scenario: Package does not depend on imperative bootstrap
+#### Scenario: Manual imperative install is not required
 - **WHEN** the managed `agent-deck` installation path is reviewed
-- **THEN** it SHALL not require the upstream `install.sh` script or a user-run `go install` command
+- **THEN** users SHALL not need to run the upstream `install.sh` script or `go install` themselves
 
 ### Requirement: Develop-profile users receive agent-deck through Home Manager
 The shared develop profile SHALL expose `agent-deck` through Home Manager so the CLI is available as interactive user tooling on develop hosts without extending the server-host baseline package set.

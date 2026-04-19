@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **Agent Deck return**: Restored repo-managed `agent-deck` packaging at upstream `v1.7.21`, added it back to the shared develop Home Manager profile, and enabled the WSL-only `agent-deck-web` user service on `127.0.0.1:8420` for the `nixos` user after the relevant switch.
+- **Agent Deck maintenance alignment**: Moved `agent-deck` off the flake-pinned package path onto the same wrapper-plus-maintenance flow used by the other agent CLIs, so `ghostship-agent-maintenance` now installs the latest upstream GitHub release automatically while the WSL-only `agent-deck-web` service stays enabled on `127.0.0.1:8420`.
 - **OpenCode Web UI service fix**: Switched the managed `opencode-web`
   user service to the Nix-provided Node binary instead of the nonexistent
   `/usr/bin/node`, restored an explicit `BROWSER` no-op target, and added
@@ -95,7 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Develop Gemini maintenance**: Removed the deprecated `experimental.plan` key from the generated develop-host Gemini system settings so managed Gemini launches stop warning about read-only stale config, and added `bash` to the maintenance runtime inputs so npm and npx subprocesses can spawn `sh` reliably during `ghostship-agent-maintenance`.
 
-- **Develop Agent Deck packaging and WSL web service**: Restored repo-managed `agent-deck` packaging at upstream `v1.7.21`, added it back to the shared develop Home Manager profile, and enabled a WSL-only `agent-deck-web` user service that runs `agent-deck web --listen 127.0.0.1:8420` after the relevant switch.
+- **Develop Agent Deck maintenance and WSL web service**: Expose `agent-deck` through the repo-managed wrapper path, let `ghostship-agent-maintenance` refresh it from the latest upstream release, and keep the WSL-only `agent-deck-web` user service on `127.0.0.1:8420`.
 - **Develop Workmux removal**: Removed the repo-managed `workmux` package and
   its known user-home artifacts from the supported develop-host workflow.
 - **Develop Codex hook cleanup**: Extend the develop-host workmux cleanup to remove the stale `workmux set-window-status ...` commands from `~/.codex/hooks.json`, preserve unrelated valid hooks, warn on malformed hook JSON, and require a Codex or Agent Deck session restart after the relevant rebuild or switch if an old session was still holding the stale state.

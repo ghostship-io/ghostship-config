@@ -47,7 +47,8 @@ logical-unit secret files.
 ## Agent Launchers
 
 - Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`,
-  `agent-deck`, `agent-browser`, and `openspec` through Nix-managed tooling.
+  `agent-deck`, `agent-browser`, and `openspec` through Nix-managed wrapper
+  scripts.
 - Caveman full is enabled across the managed agent surfaces. Codex gets a
   managed SessionStart hook in `~/.codex/hooks.json`, Gemini reads the shared
   `~/.gemini/GEMINI.md` prompt and the managed Caveman extension, and OpenCode
@@ -55,7 +56,8 @@ logical-unit secret files.
 - The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
   unless you override it explicitly, so local automation stays on the
   profile-capable Chrome engine even if upstream auto-selection changes.
-- `codex`, `gemini`, `gemini-cli`, `opencode`, and `openspec` delegate to
+- `codex`, `gemini`, `gemini-cli`, `opencode`, `agent-deck`, and `openspec`
+  delegate to
   installed user-local CLIs under
   `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`. The `openspec`
   wrapper falls back to `npx` only until maintenance bootstraps the managed
@@ -97,7 +99,8 @@ logical-unit secret files.
   `--with-deps` because the wrapper already supplies the required shared
   libraries. It also rewrites `~/.config/opencode/opencode.json` from
   OpenRouter's ranked programming free-model frontend endpoint with `(free)`
-  rewritten to `(ghostship-free)`.
+  rewritten to `(ghostship-free)` and refreshes `agent-deck` from the latest
+  upstream GitHub release instead of pinning it in the flake.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
