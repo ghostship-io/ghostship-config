@@ -155,6 +155,9 @@ changelog.
   `C:\Users\the owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
 - WSL registry `BasePath` values may be missing or use `\??\` / `\\?\` NT
   prefixes. Guard for that before using them as normal paths.
+- WSL `wsl.extraBin` changes can require a full WSL distro restart after a
+  `nixos-rebuild switch` before refreshed `/usr/bin/...` entries appear in the
+  live instance.
 
 ## Remote Access and Deployment
 

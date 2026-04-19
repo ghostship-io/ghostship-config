@@ -14,4 +14,4 @@
 
 - [x] 3.1 Update `README.md`, `CHANGELOG.md`, and `AGENTS.md` to document the managed Paseo workflow, Windows desktop attachment path, version-lockstep caveat, and wrapper-backed `npm` / `npx` contract.
 - [x] 3.2 Run `nixos-rebuild build --flake .#launch-octopus -L` and `nixos-rebuild build --flake .#armored-armadillo -L` to verify the shared WSL changes evaluate and build cleanly.
-- [ ] 3.3 After activation on a target WSL host, verify `ghostship-agent-maintenance` installs Paseo, the managed daemon service starts successfully, and the supported desktop-connection target is documented accurately.
+- [x] 3.3 After activation on a target WSL host, verify `ghostship-agent-maintenance` installs Paseo, the managed daemon service starts successfully, and the supported desktop-connection target is documented accurately.

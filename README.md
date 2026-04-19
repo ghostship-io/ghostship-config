@@ -329,5 +329,8 @@ Supported onboarding flow:
 - WSL hosts also cap `nix.settings.cores` at `4` so each build job cannot
   fan out across all reported host threads and recreate the same memory-pressure
   stalls from inside a smaller job queue.
+- When a WSL change alters `wsl.extraBin`-owned `/usr/bin/...` entries, a
+  full WSL distro restart may be needed after `nixos-rebuild switch` before
+  those refreshed paths appear in the live instance.
 - Login sessions raise the soft `nofile` limit to `65536` to keep busy shells,
   editors, and agent workflows from running into a low default descriptor cap.
