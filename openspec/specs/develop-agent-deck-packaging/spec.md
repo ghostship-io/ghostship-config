@@ -14,7 +14,8 @@ The repo SHALL define `agent-deck` through the same managed wrapper pattern as t
 
 #### Scenario: Maintenance tracks the latest release
 - **WHEN** `ghostship-agent-maintenance` refreshes `agent-deck`
-- **THEN** it SHALL install the latest upstream GitHub release selected by the release feed instead of a flake-pinned version
+- **THEN** it SHALL build from the latest upstream source release selected by the release feed instead of a flake-pinned version
+- **AND** it SHALL keep the repo-managed web-mutations patch applied to the built binary
 
 #### Scenario: Manual imperative install is not required
 - **WHEN** the managed `agent-deck` installation path is reviewed
@@ -47,7 +48,8 @@ The repo SHALL document that `agent-deck` is provided as a repo-managed develop 
 
 #### Scenario: Workflow docs mention declarative availability
 - **WHEN** active develop workflow documentation is inspected
-- **THEN** it SHALL describe `agent-deck` as a Nix-managed develop-profile tool rather than an imperatively installed binary
+- **THEN** it SHALL describe `agent-deck` as a repo-managed develop-profile tool rather than an imperatively installed binary
+- **AND** it SHALL note that the managed latest-release build carries the web-mutations patch
 
 #### Scenario: Changelog records the packaging change
 - **WHEN** `CHANGELOG.md` is inspected after the change

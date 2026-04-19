@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **Agent Deck maintenance alignment**: Moved `agent-deck` off the flake-pinned package path onto the same wrapper-plus-maintenance flow used by the other agent CLIs, so `ghostship-agent-maintenance` now installs the latest upstream GitHub release automatically while the WSL-only `agent-deck-web` service stays enabled on `127.0.0.1:8420`.
+- **Agent Deck maintenance alignment**: Moved `agent-deck` off the flake-pinned package path onto the same wrapper-plus-maintenance flow used by the other agent CLIs, so `ghostship-agent-maintenance` now rebuilds the latest upstream source release with the Ghostship web-mutations patch while the WSL-only `agent-deck-web` service stays enabled on `127.0.0.1:8420`.
 - **OpenCode Web UI service fix**: Switched the managed `opencode-web`
   user service to the Nix-provided Node binary instead of the nonexistent
   `/usr/bin/node`, restored an explicit `BROWSER` no-op target, and added

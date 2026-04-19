@@ -99,8 +99,9 @@ logical-unit secret files.
   `--with-deps` because the wrapper already supplies the required shared
   libraries. It also rewrites `~/.config/opencode/opencode.json` from
   OpenRouter's ranked programming free-model frontend endpoint with `(free)`
-  rewritten to `(ghostship-free)` and refreshes `agent-deck` from the latest
-  upstream GitHub release instead of pinning it in the flake.
+  rewritten to `(ghostship-free)` and rebuilds `agent-deck` from the latest
+  upstream source release with the Ghostship web-mutations patch instead of
+  pinning it in the flake.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
@@ -115,7 +116,9 @@ logical-unit secret files.
   launch a local browser. The managed unit binds only to `127.0.0.1:8421`.
 - WSL develop hosts also enable a user `agent-deck-web` service that runs
   `agent-deck web --listen 127.0.0.1:8420`, so the web UI is available on the
-  local host after the relevant Home Manager or NixOS switch.
+  local host after the relevant Home Manager or NixOS switch. The maintained
+  build carries a small local patch so browser-side session mutations stay
+  enabled on current upstream releases.
 - Develop hosts keep `ssh-agent` on the fixed socket
   `/run/user/1000/ssh-agent` with a `12h` key lifetime, and they cache
   `sudo` credentials globally for `12h` so fresh agent PTYs do not prompt on

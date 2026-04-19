@@ -49,7 +49,9 @@ let
     pkgs.coreutils
     pkgs.curl
     pkgs.gawk
+    pkgs.gcc
     pkgs.git
+    pkgs.go
     pkgs.gnutar
     pkgs.gnugrep
     pkgs.gzip
@@ -486,11 +488,8 @@ EOF
       arch="$(detect_agent_deck_arch)" || return 0
 
       release_meta="$(mktemp)"
-      checksums_file="$(mktemp)"
-      tarball="$(mktemp)"
-      extract_dir="$(mktemp -d)"
-      verify_dir="$(mktemp -d)"
-      trap 'rm -f "$release_meta" "$checksums_file" "$tarball"; rm -rf "$extract_dir" "$verify_dir"' RETURN
+      source_dir="$(mktemp -d)"
+      trap 'rm -f "$release_meta"; rm -rf "$source_dir"' RETURN
 
       if ! ${pkgs.curl}/bin/curl -fsSL "https://api.github.com/repos/asheshgoplani/agent-deck/releases/latest" > "$release_meta"; then
         log_warn "agent-deck release metadata fetch failed, continuing"
@@ -514,53 +513,52 @@ EOF
         return 0
       fi
 
-      asset="agent-deck_''${desired_version}_''${os}_''${arch}.tar.gz"
-      asset_url="$(${pkgs.jq}/bin/jq -r --arg asset "$asset" '.assets[] | select(.name == $asset) | .browser_download_url' "$release_meta")"
-      checksums_url="$(${pkgs.jq}/bin/jq -r '.assets[] | select(.name == "checksums.txt") | .browser_download_url' "$release_meta")"
-
-      if [ -z "$asset_url" ] || [ "$asset_url" = "null" ] || [ -z "$checksums_url" ] || [ "$checksums_url" = "null" ]; then
-        log_warn "agent-deck release assets missing for ''${version}, continuing"
+      log_info "building patched agent-deck ''${version}"
+      if ! ${pkgs.git}/bin/git clone --depth 1 --branch "$version" https://github.com/asheshgoplani/agent-deck "$source_dir/repo" >/dev/null 2>&1; then
+        log_warn "agent-deck source checkout failed, continuing"
         return 0
       fi
 
-      log_info "installing agent-deck ''${version}"
-      if ! ${pkgs.curl}/bin/curl -fsSL "$asset_url" > "$tarball"; then
-        log_warn "agent-deck download failed, continuing"
-        return 0
-      fi
+      ${pkgs.python3}/bin/python - "$source_dir/repo/cmd/agent-deck/web_cmd.go" "$source_dir/repo/cmd/agent-deck/main.go" <<'PY'
+import pathlib
+import sys
 
-      if ! ${pkgs.curl}/bin/curl -fsSL "$checksums_url" > "$checksums_file"; then
-        log_warn "agent-deck checksums download failed, continuing"
-        return 0
-      fi
+web_cmd = pathlib.Path(sys.argv[1])
+main_go = pathlib.Path(sys.argv[2])
 
-      cp "$tarball" "$verify_dir/$asset"
-      checksum_line="$(${pkgs.gnugrep}/bin/grep "  $asset\$" "$checksums_file" || true)"
-      if [ -z "$checksum_line" ]; then
-        log_warn "agent-deck checksum entry missing, continuing"
-        return 0
-      fi
+web_text = web_cmd.read_text()
+old_web = """\tserver := web.NewServer(web.Config{\n\t\tListenAddr:          *listenAddr,\n\t\tProfile:             effectiveProfile,\n\t\tReadOnly:            *readOnly,\n\t\tToken:               *token,\n"""
+new_web = """\tserver := web.NewServer(web.Config{\n\t\tListenAddr:          *listenAddr,\n\t\tProfile:             effectiveProfile,\n\t\tReadOnly:            *readOnly,\n\t\tWebMutations:        !*readOnly,\n\t\tToken:               *token,\n"""
+if old_web not in web_text:
+    raise SystemExit("expected web server config block not found")
+web_cmd.write_text(web_text.replace(old_web, new_web, 1))
 
-      printf '%s\n' "$checksum_line" > "$verify_dir/checksum.verify"
+main_text = main_go.read_text()
+old_main = """\t\tif costStore != nil {\n\t\t\tserver.SetCostStore(costStore)\n\t\t}\n"""
+new_main = """\t\tif costStore != nil {\n\t\t\tserver.SetCostStore(costStore)\n\t\t}\n\t\tserver.SetMutator(ui.NewWebMutator(homeModel))\n"""
+if old_main not in main_text:
+    raise SystemExit("expected main web server setup block not found")
+main_go.write_text(main_text.replace(old_main, new_main, 1))
+PY
+
       if ! (
-        cd "$verify_dir"
-        ${pkgs.coreutils}/bin/sha256sum --check checksum.verify >/dev/null 2>&1
+        cd "$source_dir/repo"
+        PATH=${lib.makeBinPath [ pkgs.go pkgs.git pkgs.coreutils ]}:$PATH
+        GOCACHE="$(mktemp -d)"
+        GOPATH="$(mktemp -d)"
+        trap 'rm -rf "$GOCACHE" "$GOPATH"' EXIT
+        ${pkgs.go}/bin/go build -ldflags "-s -w -X main.Version=$desired_version" -o agent-deck ./cmd/agent-deck
       ); then
-        log_warn "agent-deck checksum verification failed, continuing"
+        log_warn "agent-deck patched build failed, continuing"
         return 0
       fi
 
-      if ! ${pkgs.gnutar}/bin/tar -xzf "$tarball" -C "$extract_dir"; then
-        log_warn "agent-deck extraction failed, continuing"
+      if [ ! -x "$source_dir/repo/agent-deck" ]; then
+        log_warn "agent-deck built binary missing, continuing"
         return 0
       fi
 
-      if [ ! -x "$extract_dir/agent-deck" ]; then
-        log_warn "agent-deck binary missing from extracted release, continuing"
-        return 0
-      fi
-
-      install -m755 "$extract_dir/agent-deck" "${agentBinDir}/agent-deck"
+      install -m755 "$source_dir/repo/agent-deck" "${agentBinDir}/agent-deck"
     }
 
     ensure_managed_global_skill() {

@@ -94,6 +94,10 @@ changelog.
 - Develop hosts expose `agent-deck` through the same repo-managed wrapper
   pattern as the other agent CLIs, and WSL develop hosts enable a user
   `agent-deck-web` service on `127.0.0.1:8420`.
+- Current upstream `agent-deck web` releases can ship with
+  `webMutations=false` in the normal TUI+web startup path. Keep the managed
+  latest-release maintenance flow patching that startup path so the hosted web
+  UI retains browser-side session and group mutations.
 - Develop hosts install `codex`, `gemini`, `opencode`, and `openspec` into the
   user-local npm prefix under
   `/home/nixos/.local/share/ghostship-agent-tools/npm`, and
@@ -114,9 +118,10 @@ changelog.
   supplies the required shared libraries. It also rewrites
   `~/.config/opencode/opencode.json` from OpenRouter's ranked programming free
   frontend endpoint while preserving the `(ghostship-free)` label rewrite, and
-  refreshes `agent-deck` from the latest upstream GitHub release; do not
-  reintroduce static OpenRouter model maps into the Nix-managed OpenCode
-  config files or pin `agent-deck` back into the flake.
+  refreshes `agent-deck` from the latest upstream source release with the
+  Ghostship web-mutations patch; do not reintroduce static OpenRouter model
+  maps into the Nix-managed OpenCode config files or pin `agent-deck` back
+  into the flake.
 - For an immediate user-triggered refresh, run `ghostship-agent-maintenance`
   directly instead of trying to start the system unit as an unprivileged user.
 - Develop hosts should keep `ssh-agent` on the fixed
