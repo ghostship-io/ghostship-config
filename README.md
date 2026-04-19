@@ -110,15 +110,6 @@ logical-unit secret files.
   `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit
   approval or sandbox flags, Gemini prepends `--yolo` unless you pass an
   explicit approval mode, and OpenCode keeps `permission = "allow"` in config.
-- The user `opencode-web` service runs `opencode serve` through the Nix-managed
-  Node binary and keeps `xdg-open` and `xdg-debug` intercepted with no-op
-  shims under `~/.local/bin` so the headless systemd service does not try to
-  launch a local browser. The managed unit binds only to `127.0.0.1:8421`.
-- WSL develop hosts also enable a user `agent-deck-web` service that runs
-  `agent-deck web --listen 127.0.0.1:8420`, so the web UI is available on the
-  local host after the relevant Home Manager or NixOS switch. The maintained
-  build carries a small local patch so browser-side session mutations stay
-  enabled on current upstream releases.
 - Develop hosts keep `ssh-agent` on the fixed socket
   `/run/user/1000/ssh-agent` with a `12h` key lifetime, and they cache
   `sudo` credentials globally for `12h` so fresh agent PTYs do not prompt on

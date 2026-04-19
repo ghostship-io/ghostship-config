@@ -92,12 +92,7 @@ changelog.
   keeps `permission = "allow"` in config. Those defaults are only live after
   the relevant NixOS rebuild or Home Manager switch.
 - Develop hosts expose `agent-deck` through the same repo-managed wrapper
-  pattern as the other agent CLIs, and WSL develop hosts enable a user
-  `agent-deck-web` service on `127.0.0.1:8420`.
-- Current upstream `agent-deck web` releases can ship with
-  `webMutations=false` in the normal TUI+web startup path. Keep the managed
-  latest-release maintenance flow patching that startup path so the hosted web
-  UI retains browser-side session and group mutations.
+  pattern as the other agent CLIs.
 - Develop hosts install `codex`, `gemini`, `opencode`, and `openspec` into the
   user-local npm prefix under
   `/home/nixos/.local/share/ghostship-agent-tools/npm`, and

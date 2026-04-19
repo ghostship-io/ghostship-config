@@ -1,35 +1,31 @@
 # develop-agent-deck-web-startup Specification
 
 ## Purpose
-Define the supported background startup behavior for `agent-deck web` on WSL develop hosts.
+Define the supported WSL behavior for `agent-deck web` on develop hosts.
 
 ## Requirements
 
-### Requirement: WSL develop hosts define background startup for agent-deck web
-The repo SHALL define the supported background startup behavior for `agent-deck web` on WSL develop hosts through a user-scoped service for the `nixos` user.
+### Requirement: WSL develop hosts do not define background startup for agent-deck web
+The repo SHALL NOT define a managed background startup path for `agent-deck web` on WSL develop hosts.
 
-#### Scenario: Startup behavior is encoded declaratively
-- **WHEN** the WSL develop-host configuration is inspected after the change
-- **THEN** it SHALL define the supported `agent-deck web` user-service startup behavior declaratively
+#### Scenario: Startup behavior is not encoded declaratively
+- **WHEN** the WSL develop-host configuration is inspected
+- **THEN** it SHALL NOT define an `agent-deck web` user service
 
-#### Scenario: Startup stays user-scoped
-- **WHEN** the generated systemd unit for `agent-deck web` is inspected
-- **THEN** it SHALL be a `systemd --user` service rather than a system service
+#### Scenario: No generated user service exists
+- **WHEN** the generated user units are inspected
+- **THEN** they SHALL NOT include `agent-deck-web.service`
 
-### Requirement: The supported web endpoint is localhost-only by default
-The repo SHALL run `agent-deck web` on WSL develop hosts with the upstream localhost listen address unless a later change explicitly broadens the exposure.
+### Requirement: No managed web endpoint is documented
+The repo SHALL NOT document a repo-managed WSL web endpoint for `agent-deck web`.
 
-#### Scenario: Listen address matches the supported default
-- **WHEN** the configured WSL develop-host `agent-deck web` service is inspected
-- **THEN** it SHALL run `agent-deck web --listen 127.0.0.1:8420`
-
-#### Scenario: Endpoint is documented
-- **WHEN** active develop workflow documentation is inspected after the change
-- **THEN** it SHALL describe the supported WSL `agent-deck web` endpoint as `http://127.0.0.1:8420`
+#### Scenario: Endpoint is not documented
+- **WHEN** active develop workflow documentation is inspected
+- **THEN** it SHALL NOT describe a supported WSL `agent-deck web` endpoint
 
 ### Requirement: Startup scope is documented
-The repo SHALL document that automatic `agent-deck web` startup is supported on WSL develop hosts only.
+The repo SHALL document that automatic `agent-deck web` startup is not provided on WSL develop hosts.
 
 #### Scenario: Documentation narrows startup scope
-- **WHEN** active develop workflow documentation is inspected after the change
-- **THEN** it SHALL state that automatic `agent-deck web` startup applies to WSL develop hosts, not all develop hosts
+- **WHEN** active develop workflow documentation is inspected
+- **THEN** it SHALL state that automatic `agent-deck web` startup is not supported declaratively
