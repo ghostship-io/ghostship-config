@@ -1,5 +1,13 @@
 { lib, pkgs, ... }:
 
+let
+  wrappedNpm = pkgs.writeShellScriptBin "npm" ''
+    exec ${pkgs.nodejs}/bin/npm "$@"
+  '';
+  wrappedNpx = pkgs.writeShellScriptBin "npx" ''
+    exec ${pkgs.nodejs}/bin/npx "$@"
+  '';
+in
 {
   # WSL develop hosts run multiple flake-aware shells and agent sessions at
   # once. Letting the daemon use every reported core makes it easy to saturate
@@ -23,6 +31,8 @@
     docker-desktop.enable = true;
     extraBin = [
       { src = "${pkgs.coreutils}/bin/whoami"; }
+      { src = "${wrappedNpm}/bin/npm"; }
+      { src = "${wrappedNpx}/bin/npx"; }
     ];
   };
 
