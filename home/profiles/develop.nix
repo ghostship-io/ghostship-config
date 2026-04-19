@@ -4,10 +4,11 @@ let
   sshAgentSock = "/run/user/1000/ssh-agent";
 in
 {
-  imports = [
-    ../../modules/develop/opencode.nix
-    ../../modules/develop/codex.nix
-  ];
+   imports = [
+     ../../modules/develop/opencode.nix
+     ../../modules/develop/codex.nix
+     ../../modules/develop/opencode-web.nix
+   ];
 
   home.sessionVariables = {
     SSH_AUTH_SOCK = sshAgentSock;
