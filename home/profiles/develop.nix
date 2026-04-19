@@ -323,7 +323,7 @@ PY
     Environment = [
       "BROWSER=${config.home.homeDirectory}/.local/bin/xdg-open"
     ];
-    ExecStart = "${pkgs.bash}/bin/bash -c 'export PATH=\"${config.home.homeDirectory}/.local/bin:${lib.makeBinPath [ pkgs.coreutils pkgs.xdg-utils ]}\" && exec ${pkgs.nodejs}/bin/node ${config.home.homeDirectory}/.local/share/ghostship-agent-tools/npm/lib/node_modules/opencode-ai/bin/opencode web --hostname 127.0.0.1 --port 8421'";
+    ExecStart = "${pkgs.bash}/bin/bash -c 'export PATH=\"${config.home.homeDirectory}/.local/bin:${lib.makeBinPath [ pkgs.coreutils pkgs.xdg-utils ]}\" && exec ${pkgs.nodejs}/bin/node ${config.home.homeDirectory}/.local/share/ghostship-agent-tools/npm/lib/node_modules/opencode-ai/bin/opencode serve --hostname 127.0.0.1 --port 8421'";
     Restart = "on-failure";
     RestartSec = "5s";
   };
