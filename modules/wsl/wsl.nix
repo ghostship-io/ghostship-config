@@ -17,6 +17,8 @@
     wslConf = {
       automount.enabled = true;
       interop.enabled = true;
+      # Keep envfs focused on Linux/FHS paths like /usr/bin/bash.
+      interop.appendWindowsPath = false;
     };
     docker-desktop.enable = true;
     extraBin = [

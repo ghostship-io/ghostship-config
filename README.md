@@ -295,11 +295,14 @@ Supported onboarding flow:
 
 - `nh` is installed as a convenience tool, but the documented workflow in this
   repo is native `nix` and `nixos-rebuild`.
-- WSL hosts expose `wsl-open`, a Windows notification bridge for `notify-send`,
-  and a `hard`-mounted NFS automount at `/mnt/z`. Prefer `/mnt/c/...` for
-  Windows files. WSL activation now stops the `/mnt/z` automount and unmounts
-  any live NFS mount before reloading the generated mount units so host
-  switches do not fail on stale `/mnt/z` mount state.
+- WSL hosts expose wrapped `wsl-open`, `win-powershell`, a Windows
+  notification bridge for `notify-send`, and a `hard`-mounted NFS automount at
+  `/mnt/z`. They keep `envfs` for Linux/FHS paths such as `/usr/bin/bash`, but
+  do not import the Windows PATH into the Linux shell, so use explicit
+  `/mnt/c/...` paths or repo-managed wrappers for Windows tools. WSL activation
+  now stops the `/mnt/z` automount and unmounts any live NFS mount before
+  reloading the generated mount units so host switches do not fail on stale
+  `/mnt/z` mount state.
 - WSL hosts cap `nix.settings.max-jobs` at `8` so concurrent flake shells,
   agent sessions, and host builds do not wedge `nix-daemon` under `auto`
   parallelism.

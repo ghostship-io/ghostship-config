@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **WSL explicit Windows interop contract**: Kept `services.envfs` on WSL hosts for Linux/FHS paths such as `/usr/bin/bash`, disabled automatic Windows PATH import so `envfs` stops synthesizing accidental Windows executables under `/usr/bin`, wrapped `wsl-open` around the real Windows PowerShell path, added a repo-managed `win-powershell` entrypoint, and updated WSL docs to require explicit wrappers or `/mnt/c/...` paths for Windows tools.
+
 - **Hermes default skill seed removal**: Stopped repo-managed default skill seeding for `chill-penguin` Hermes by removing the `skill-creator` copy-if-missing path from `podman-hermes` pre-start so the host now seeds only `SOUL.md` and leaves `/home/hermes/.hermes/skills/` entirely operator-managed by default.
 
 - **Hermes Discord home export**: Added `DISCORD_HOME_CHANNEL=1491229269127598281` back to the `chill-penguin` Hermes container env as an explicit compatibility export while keeping the router/Codex lane contract and five-channel free-response list unchanged.

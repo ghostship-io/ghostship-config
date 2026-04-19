@@ -80,7 +80,9 @@ changelog.
   NixOS clients so transient NAS stalls do not surface as client-side I/O
   errors or integrity failures during copies.
 - WSL hosts enable `services.envfs` so Windows-side tooling that assumes FHS
-  paths like `/usr/bin/bash` keeps working without host-local hacks.
+  paths like `/usr/bin/bash` keeps working without host-local hacks, but keep
+  `wsl.wslConf.interop.appendWindowsPath = false` so `envfs` does not synthesize
+  accidental Windows executables under `/usr/bin`.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode
@@ -120,6 +122,9 @@ changelog.
 
 - Prefer `/mnt/c/...` for Windows files. Treat `/mnt/z` as a lazy mount that
   may need verification before use.
+- Use explicit `/mnt/c/...` paths or repo-managed wrappers such as `wsl-open`
+  and `win-powershell` for Windows executables on WSL hosts; do not rely on
+  bare `powershell.exe` or other imported Windows PATH commands.
 - WSL activation should stop `mnt-z.automount` and unmount any live `/mnt/z`
   NFS mount before reloading generated mount units so switches do not fail on
   stale `/mnt/z` mount state.
