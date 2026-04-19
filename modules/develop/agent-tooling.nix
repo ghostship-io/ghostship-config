@@ -6,6 +6,7 @@
 
 let
   openspecPackage = "@fission-ai/openspec";
+  paseoPackage = "@getpaseo/cli";
   defaultOpenspecTools = "codex,gemini,opencode";
   defaultOpenspecProfile = "core";
   userHome = "/home/nixos";
@@ -750,6 +751,7 @@ PY
     install_agent_cli "@openai/codex" "codex"
     install_agent_cli "@google/gemini-cli" "gemini"
     install_agent_cli "opencode-ai" "opencode"
+    install_agent_cli "${paseoPackage}" "paseo"
     install_agent_cli "${openspecPackage}" "openspec"
     reassert_codex_skill_creator_override
     ${lib.concatMapStrings (skill: ''

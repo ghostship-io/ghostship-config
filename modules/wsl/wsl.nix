@@ -1,5 +1,13 @@
 { lib, pkgs, ... }:
 
+let
+  wrappedNpm = pkgs.writeShellScriptBin "npm" ''
+    exec ${pkgs.nodejs}/bin/npm "$@"
+  '';
+  wrappedNpx = pkgs.writeShellScriptBin "npx" ''
+    exec ${pkgs.nodejs}/bin/npx "$@"
+  '';
+in
 {
   # WSL develop hosts run multiple flake-aware shells and agent sessions at
   # once. Letting the daemon use every reported core makes it easy to saturate
@@ -8,6 +16,11 @@
   nix.settings.cores = lib.mkDefault 4;
 
   services.resolved.enable = false;
+
+  services.envfs.extraFallbackPathCommands = lib.mkAfter ''
+    ln -sf ${wrappedNpm}/bin/npm $out/npm
+    ln -sf ${wrappedNpx}/bin/npx $out/npx
+  '';
   networking.useNetworkd = false;
   systemd.network.enable = false;
 

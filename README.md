@@ -47,8 +47,8 @@ logical-unit secret files.
 ## Agent Launchers
 
 - Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`,
-  `agent-deck`, `agent-browser`, and `openspec` through Nix-managed wrapper
-  scripts.
+  `paseo`, `agent-deck`, `agent-browser`, and `openspec` through Nix-managed
+  wrapper scripts.
 - Caveman full is enabled across the managed agent surfaces. Codex gets a
   managed SessionStart hook in `~/.codex/hooks.json`, Gemini reads the shared
   `~/.gemini/GEMINI.md` prompt and the managed Caveman extension, and OpenCode
@@ -56,8 +56,8 @@ logical-unit secret files.
 - The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
   unless you override it explicitly, so local automation stays on the
   profile-capable Chrome engine even if upstream auto-selection changes.
-- `codex`, `gemini`, `gemini-cli`, `opencode`, `agent-deck`, and `openspec`
-  delegate to
+- `codex`, `gemini`, `gemini-cli`, `opencode`, `paseo`, `agent-deck`, and
+  `openspec` delegate to
   installed user-local CLIs under
   `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`. The `openspec`
   wrapper falls back to `npx` only until maintenance bootstraps the managed
@@ -86,7 +86,8 @@ logical-unit secret files.
 - `ghostship-agent-maintenance.service` owns automatic agent upkeep. Its
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent
-  CLIs, ensures the configured `skills.sh` repos such as `caveman` are
+  CLIs including `paseo`, ensures the configured `skills.sh` repos such as
+  `caveman` are
   installed globally on each develop host, refreshes shared global skills,
   refreshes managed Gemini extensions, bootstraps `agent-browser` only when
   `~/.agent-browser` is missing, and carries an explicit shell-capable runtime
@@ -105,6 +106,13 @@ logical-unit secret files.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
+- WSL hosts also run `ghostship-paseo.service` as the `nixos` user. The
+  unit keeps Paseo state under `/home/nixos/.paseo`, ensures the managed
+  `paseo` CLI exists on first start, and binds the daemon to `127.0.0.1:6767`
+  with `localhost` hostnames so the Windows desktop app can connect over WSL
+  localhost forwarding. Upstream currently expects the Paseo daemon and app
+  versions to stay in lockstep, so update the Windows desktop app when the
+  managed CLI/daemon refreshes.
 - Develop-host convergence also cleans the known stale `workmux set-window-status ...` entries from `~/.codex/hooks.json` so removed repo-managed tooling does not keep breaking Codex hooks. The cleanup preserves unrelated valid hooks, warns instead of rewriting malformed JSON, and takes effect after the relevant Home Manager or NixOS switch. Restart any already-running Codex sessions after the switch if they were holding the stale hook state open.
 - Develop-host launchers now keep only the approval defaults: Codex prepends
   `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit
@@ -306,12 +314,15 @@ Supported onboarding flow:
   repo is native `nix` and `nixos-rebuild`.
 - WSL hosts expose wrapped `wsl-open`, `win-powershell`, a Windows
   notification bridge for `notify-send`, and a `hard`-mounted NFS automount at
-  `/mnt/z`. They keep `envfs` for Linux/FHS paths such as `/usr/bin/bash`, but
-  do not import the Windows PATH into the Linux shell, so use explicit
-  `/mnt/c/...` paths or repo-managed wrappers for Windows tools. WSL activation
-  now stops the `/mnt/z` automount and unmounts any live NFS mount before
-  reloading the generated mount units so host switches do not fail on stale
-  `/mnt/z` mount state.
+  `/mnt/z`. They keep `envfs` for Linux/FHS paths such as `/usr/bin/bash`, and
+  the repo now backs `/usr/bin/npm` plus `/usr/bin/npx` with explicit wrapper
+  fallbacks that exec the real Nix store binaries instead of broken raw Node
+  shims. WSL still does not import the Windows PATH into the Linux shell, so
+  use explicit `/mnt/c/...` paths or repo-managed wrappers for Windows tools.
+  The managed Paseo desktop-attachment path is `localhost:6767` from Windows to
+  the WSL daemon. WSL activation now stops the `/mnt/z` automount and unmounts
+  any live NFS mount before reloading the generated mount units so host
+  switches do not fail on stale `/mnt/z` mount state.
 - WSL hosts cap `nix.settings.max-jobs` at `8` so concurrent flake shells,
   agent sessions, and host builds do not wedge `nix-daemon` under `auto`
   parallelism.
