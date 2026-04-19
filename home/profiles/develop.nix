@@ -304,8 +304,8 @@ PY
   };
 
   systemd.user.services.opencode-web.Service = {
-    ExecStart = "${config.home.homeDirectory}/.local/share/ghostship-agent-tools/npm/bin/opencode web --hostname 0.0.0.0 --port 4096";
-    Environment = [ "BROWSER=/bin/false" "PATH=/usr/bin:/bin:/home/nixos/.local/share/ghostship-agent-tools/npm/bin" ];
+    ExecStart = "/usr/bin/node ${config.home.homeDirectory}/.local/share/ghostship-agent-tools/npm/lib/node_modules/opencode-ai/bin/opencode web --hostname 0.0.0.0 --port 4096";
+    Environment = [ "BROWSER=/bin/false" ];
     Restart = "on-failure";
     RestartSec = "5s";
   };
