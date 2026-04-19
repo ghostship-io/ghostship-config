@@ -7,12 +7,11 @@ in
    imports = [
      ../../modules/develop/opencode.nix
      ../../modules/develop/codex.nix
-     ../../modules/develop/opencode-web.nix
    ];
 
-  home.sessionVariables = {
-    SSH_AUTH_SOCK = sshAgentSock;
-  };
+    home.sessionVariables = {
+      SSH_AUTH_SOCK = sshAgentSock;
+    };
 
   home.activation.removeLegacySuperpowers = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf \
@@ -293,11 +292,7 @@ PY
         name = "autopair";
         src = pkgs.fishPlugins.autopair.src;
       }
-      {
-        name = "sponge";
-        src = pkgs.fishPlugins.sponge.src;
-      }
-      {
+{
         name = "puffer";
         src = pkgs.fishPlugins.puffer.src;
       }
@@ -306,5 +301,12 @@ PY
         src = pkgs.fishPlugins.colored-man-pages.src;
       }
     ];
+  };
+
+  systemd.user.services.opencode-web.Service = {
+    ExecStart = "${config.home.homeDirectory}/.local/share/ghostship-agent-tools/npm/bin/opencode web --hostname 0.0.0.0 --port 4096";
+    Environment = [ "BROWSER=/bin/false" "PATH=/usr/bin:/bin:/home/nixos/.local/share/ghostship-agent-tools/npm/bin" ];
+    Restart = "on-failure";
+    RestartSec = "5s";
   };
 }
