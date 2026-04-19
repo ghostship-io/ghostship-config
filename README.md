@@ -109,7 +109,7 @@ logical-unit secret files.
 - The user `opencode-web` service runs `opencode web` through the Nix-managed
   Node binary and keeps `xdg-open` and `xdg-debug` intercepted with no-op
   shims under `~/.local/bin` so the headless systemd service does not try to
-  launch a local browser.
+  launch a local browser. The managed unit binds only to `127.0.0.1:8421`.
 - Develop hosts keep `ssh-agent` on the fixed socket
   `/run/user/1000/ssh-agent` with a `12h` key lifetime, and they cache
   `sudo` credentials globally for `12h` so fresh agent PTYs do not prompt on
