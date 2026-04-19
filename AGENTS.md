@@ -86,7 +86,7 @@ changelog.
   paths like `/usr/bin/bash` keeps working without host-local hacks, keep
   `wsl.wslConf.interop.appendWindowsPath = false` so `envfs` does not synthesize
   accidental Windows executables under `/usr/bin`, and back `/usr/bin/npm` plus
-  `/usr/bin/npx` with explicit wrapper fallbacks that exec the real Nix store
+  `/usr/bin/npx` with explicit WSL wrapper entries that exec the real Nix store
   binaries instead of the broken raw Node shims.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or

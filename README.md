@@ -315,9 +315,9 @@ Supported onboarding flow:
 - WSL hosts expose wrapped `wsl-open`, `win-powershell`, a Windows
   notification bridge for `notify-send`, and a `hard`-mounted NFS automount at
   `/mnt/z`. They keep `envfs` for Linux/FHS paths such as `/usr/bin/bash`, and
-  the repo now backs `/usr/bin/npm` plus `/usr/bin/npx` with explicit wrapper
-  fallbacks that exec the real Nix store binaries instead of broken raw Node
-  shims. WSL still does not import the Windows PATH into the Linux shell, so
+  the repo now backs `/usr/bin/npm` plus `/usr/bin/npx` with explicit WSL
+  wrapper entries that exec the real Nix store binaries instead of broken raw
+  Node shims. WSL still does not import the Windows PATH into the Linux shell, so
   use explicit `/mnt/c/...` paths or repo-managed wrappers for Windows tools.
   The managed Paseo desktop-attachment path is `localhost:6767` from Windows to
   the WSL daemon. WSL activation now stops the `/mnt/z` automount and unmounts

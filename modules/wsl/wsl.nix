@@ -16,11 +16,6 @@ in
   nix.settings.cores = lib.mkDefault 4;
 
   services.resolved.enable = false;
-
-  services.envfs.extraFallbackPathCommands = lib.mkAfter ''
-    ln -sf ${wrappedNpm}/bin/npm $out/npm
-    ln -sf ${wrappedNpx}/bin/npx $out/npx
-  '';
   networking.useNetworkd = false;
   systemd.network.enable = false;
 
@@ -36,6 +31,8 @@ in
     docker-desktop.enable = true;
     extraBin = [
       { src = "${pkgs.coreutils}/bin/whoami"; }
+      { src = "${wrappedNpm}/bin/npm"; }
+      { src = "${wrappedNpx}/bin/npx"; }
     ];
   };
 
