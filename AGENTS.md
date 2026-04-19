@@ -97,7 +97,7 @@ changelog.
   pattern as the other agent CLIs.
 - WSL develop hosts run `ghostship-paseo.service` as user `nixos`, keep
   managed Paseo state under `/home/nixos/.paseo`, and bind the repo-managed
-  desktop-attachment daemon to `127.0.0.1:6767` with `localhost` hostnames.
+  desktop-attachment daemon to `127.0.0.1:6768` with `localhost` hostnames.
   Treat upstream Paseo daemon and desktop-app versions as lockstep.
 - Develop hosts install `codex`, `gemini`, `opencode`, `paseo`, and `openspec` into the
   user-local npm prefix under
@@ -138,7 +138,7 @@ changelog.
 - Use explicit `/mnt/c/...` paths or repo-managed wrappers such as `wsl-open`
   and `win-powershell` for Windows executables on WSL hosts; do not rely on
   bare `powershell.exe` or other imported Windows PATH commands.
-- Use the repo-managed Paseo WSL daemon from Windows at `localhost:6767`;
+- Use the repo-managed Paseo WSL daemon from Windows at `localhost:6768`;
   broader network exposure stays opt-in and is not the default repo contract.
 - WSL activation should stop `mnt-z.automount` and unmount any live `/mnt/z`
   NFS mount before reloading generated mount units so switches do not fail on

@@ -108,7 +108,7 @@ logical-unit secret files.
   and every `4h`.
 - WSL hosts also run `ghostship-paseo.service` as the `nixos` user. The
   unit keeps Paseo state under `/home/nixos/.paseo`, ensures the managed
-  `paseo` CLI exists on first start, and binds the daemon to `127.0.0.1:6767`
+  `paseo` CLI exists on first start, and binds the daemon to `127.0.0.1:6768`
   with `localhost` hostnames so the Windows desktop app can connect over WSL
   localhost forwarding. Upstream currently expects the Paseo daemon and app
   versions to stay in lockstep, so update the Windows desktop app when the
@@ -319,7 +319,7 @@ Supported onboarding flow:
   wrapper entries that exec the real Nix store binaries instead of broken raw
   Node shims. WSL still does not import the Windows PATH into the Linux shell, so
   use explicit `/mnt/c/...` paths or repo-managed wrappers for Windows tools.
-  The managed Paseo desktop-attachment path is `localhost:6767` from Windows to
+  The managed Paseo desktop-attachment path is `localhost:6768` from Windows to
   the WSL daemon. WSL activation now stops the `/mnt/z` automount and unmounts
   any live NFS mount before reloading the generated mount units so host
   switches do not fail on stale `/mnt/z` mount state.

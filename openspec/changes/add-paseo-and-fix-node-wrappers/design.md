@@ -101,4 +101,4 @@ Rollback would remove the Paseo wrapper and service wiring, drop the new compati
 
 ## Open Questions
 
-- Whether the final supported Windows desktop attachment target should be documented as `localhost:6767` specifically or as a repo-managed host/port value surfaced by the service implementation.
+- Whether the final supported Windows desktop attachment target should be documented as `localhost:6768` specifically or as a repo-managed host/port value surfaced by the service implementation.

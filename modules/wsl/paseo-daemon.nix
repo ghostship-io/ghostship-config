@@ -9,7 +9,7 @@ let
     inherit pkgs inputs;
   };
   paseoHome = "/home/nixos/.paseo";
-  paseoListen = "127.0.0.1:6767";
+  paseoListen = "127.0.0.1:6768";
   paseoHostnames = "localhost,.localhost";
   ensurePaseoInstalled = pkgs.writeShellScript "ghostship-ensure-paseo-installed" ''
     set -euo pipefail
