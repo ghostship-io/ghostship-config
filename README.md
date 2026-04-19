@@ -228,7 +228,12 @@ nix develop
 ```
 
 The flake exposes a default Linux dev shell so `use flake` works on the WSL
-development hosts and on Apple Silicon Linux systems.
+development hosts and on Apple Silicon Linux systems. On this host's current Nix
+`2.31.3` stack the shell export path is order-sensitive: keep `git` before
+`age` in the default shell package list or `nix print-dev-env` and `direnv` can
+fail with `get-env.sh failed to produce an environment`. After changing the
+default shell, run `direnv reload` or start a fresh shell to pick up the updated
+environment.
 
 Apply the built generation:
 

@@ -65,6 +65,9 @@ changelog.
   follow-up work to consider next.
 - `.envrc` uses `use flake`, so the root `flake.nix` must expose either
   `devShells.<system>.default` or `packages.<system>.default`.
+- Default dev-shell package order currently matters on this host: keep `git`
+  before `age` in `flake.nix` or Nix `2.31.3` can fail `nix print-dev-env` and
+  `direnv` with `get-env.sh failed to produce an environment`.
 - `nix eval .#...` reads the tracked flake source, not arbitrary untracked
   files in the working tree. Stage or track new files before relying on flake
   evaluation.

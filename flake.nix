@@ -79,8 +79,8 @@
         {
           default = pkgs.mkShellNoCC {
             packages = with pkgs; [
-              age
               git
+              age
               gnugrep
               gnused
               jq

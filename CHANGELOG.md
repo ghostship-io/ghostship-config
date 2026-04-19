@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Dev shell export fix**: Reordered the default flake dev-shell packages to keep `git` before `age`, which avoids the current Nix `2.31.3` order-sensitive `get-env.sh failed to produce an environment` failure while preserving the existing tool set. Refresh `direnv` or start a new shell after pulling the change so the repaired environment export path is used.
+
 - **Hermes default skill seed removal**: Stopped repo-managed default skill seeding for `chill-penguin` Hermes by removing the `skill-creator` copy-if-missing path from `podman-hermes` pre-start so the host now seeds only `SOUL.md` and leaves `/home/hermes/.hermes/skills/` entirely operator-managed by default.
 
 - **Hermes Discord home export**: Added `DISCORD_HOME_CHANNEL=1491229269127598281` back to the `chill-penguin` Hermes container env as an explicit compatibility export while keeping the router/Codex lane contract and five-channel free-response list unchanged.
