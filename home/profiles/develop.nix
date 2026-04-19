@@ -185,6 +185,22 @@ PY
       source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/AGENTS.md";
       force = true;
     };
+    ".local/bin/xdg-open" = {
+      text = ''
+        #!/bin/sh
+        exit 0
+      '';
+      executable = true;
+      force = true;
+    };
+    ".local/bin/xdg-debug" = {
+      text = ''
+        #!/bin/sh
+        exit 0
+      '';
+      executable = true;
+      force = true;
+    };
   };
 
   home.packages = with pkgs; [
@@ -304,8 +320,10 @@ PY
   };
 
   systemd.user.services.opencode-web.Service = {
-    ExecStart = "/usr/bin/node ${config.home.homeDirectory}/.local/share/ghostship-agent-tools/npm/lib/node_modules/opencode-ai/bin/opencode web --hostname 0.0.0.0 --port 4096";
-    Environment = [ "BROWSER=/bin/false" ];
+    Environment = [
+      "BROWSER=${config.home.homeDirectory}/.local/bin/xdg-open"
+    ];
+    ExecStart = "${pkgs.bash}/bin/bash -c 'export PATH=\"${config.home.homeDirectory}/.local/bin:${lib.makeBinPath [ pkgs.coreutils pkgs.xdg-utils ]}\" && exec ${pkgs.nodejs}/bin/node ${config.home.homeDirectory}/.local/share/ghostship-agent-tools/npm/lib/node_modules/opencode-ai/bin/opencode web --hostname 0.0.0.0 --port 4096'";
     Restart = "on-failure";
     RestartSec = "5s";
   };
