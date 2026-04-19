@@ -110,6 +110,20 @@ in
     };
   };
 
+  systemd.user.services.agent-deck-web = {
+    Unit = {
+      Description = "Agent Deck web UI";
+      After = [ "default.target" ];
+    };
+    Service = {
+      ExecStart = "${lib.getExe pkgs.agent-deck} web --listen 127.0.0.1:8420";
+      Restart = "on-failure";
+      RestartSec = "5s";
+      Type = "simple";
+    };
+    Install.WantedBy = [ "default.target" ];
+  };
+
   home.activation.wslHomeSymlink = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     WSL_USER="nixos"
     USER_HOME="/home/$WSL_USER"

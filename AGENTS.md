@@ -91,6 +91,9 @@ changelog.
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode
   keeps `permission = "allow"` in config. Those defaults are only live after
   the relevant NixOS rebuild or Home Manager switch.
+- Develop hosts expose `agent-deck` declaratively through the shared
+  develop Home Manager profile, and WSL develop hosts enable a user
+  `agent-deck-web` service on `127.0.0.1:8420`.
 - Develop hosts install `codex`, `gemini`, `opencode`, and `openspec` into the
   user-local npm prefix under
   `/home/nixos/.local/share/ghostship-agent-tools/npm`, and

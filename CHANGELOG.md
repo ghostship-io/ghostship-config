@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Agent Deck return**: Restored repo-managed `agent-deck` packaging at upstream `v1.7.21`, added it back to the shared develop Home Manager profile, and enabled the WSL-only `agent-deck-web` user service on `127.0.0.1:8420` for the `nixos` user after the relevant switch.
 - **OpenCode Web UI service fix**: Switched the managed `opencode-web`
   user service to the Nix-provided Node binary instead of the nonexistent
   `/usr/bin/node`, restored an explicit `BROWSER` no-op target, and added
@@ -23,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Hermes workstation `main` contract realignment**: Reworked `chill-penguin` Hermes host wiring around the current `ghostship-hermes` `main` image by dropping in-container `systemd` startup, removing host-side `/nix` bootstrap, moving the repo-managed `SOUL.md` and `skill-creator` defaults directly into `/srv/apps/hermes/home/.hermes/`, switching the Discord lane contract to `GHOSTSHIP_ROUTER_CHANNEL` plus `GHOSTSHIP_CODEX_CHANNEL`, rendering `DISCORD_FREE_RESPONSE_CHANNELS` with both pinned lanes and the current three Ghostship free-response channels, and documenting the required destructive stop-reset-start rollout for `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`.
 
-- **Develop agent stack refresh**: Removed the repo-managed `agent-deck` package and `launch-agent` helper, moved `openspec` onto the same managed auto-update path as `codex`, `gemini`, and `opencode`, made Caveman full the default agent style across Codex, Gemini, and OpenCode, and taught `ghostship-agent-maintenance` to ensure the configured `skills.sh` repos such as `JuliusBrussee/caveman` are installed and updated on each develop host.
+- **Develop agent stack refresh**: Removed the repo-managed `launch-agent` helper, moved `openspec` onto the same managed auto-update path as `codex`, `gemini`, and `opencode`, made Caveman full the default agent style across Codex, Gemini, and OpenCode, and taught `ghostship-agent-maintenance` to ensure the configured `skills.sh` repos such as `JuliusBrussee/caveman` are installed and updated on each develop host.
 
 - **Direct ragenix edit workflow**: Removed the repo-managed plaintext mirror
   helpers so operator secret changes now happen directly through
@@ -94,12 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Develop Gemini maintenance**: Removed the deprecated `experimental.plan` key from the generated develop-host Gemini system settings so managed Gemini launches stop warning about read-only stale config, and added `bash` to the maintenance runtime inputs so npm and npx subprocesses can spawn `sh` reliably during `ghostship-agent-maintenance`.
 
-- **Develop Agent Deck launcher**: Renamed the repo-managed Agent Deck launcher helper to `launch-agent`, keeping the current-directory group bootstrap, default `codex` selection, and Agent Deck `add -Q` plus `session start` workflow, while continuing to expose `gemini-cli` as a shell-wide managed wrapper command alongside `gemini`.
-
-- **Develop Agent Deck WSL startup**: Kept the repo-managed `agent-deck`
-  package at upstream `v1.4.2`, but removed the tmux-backed `agent-deck web`
-  user service from WSL develop hosts while leaving manual cleanup of leftover
-  user-state artifacts to the post-apply step.
+- **Develop Agent Deck packaging and WSL web service**: Restored repo-managed `agent-deck` packaging at upstream `v1.7.21`, added it back to the shared develop Home Manager profile, and enabled a WSL-only `agent-deck-web` user service that runs `agent-deck web --listen 127.0.0.1:8420` after the relevant switch.
 - **Develop Workmux removal**: Removed the repo-managed `workmux` package and
   its known user-home artifacts from the supported develop-host workflow.
 - **Develop Codex hook cleanup**: Extend the develop-host workmux cleanup to remove the stale `workmux set-window-status ...` commands from `~/.codex/hooks.json`, preserve unrelated valid hooks, warn on malformed hook JSON, and require a Codex or Agent Deck session restart after the relevant rebuild or switch if an old session was still holding the stale state.

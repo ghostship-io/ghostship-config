@@ -47,7 +47,7 @@ logical-unit secret files.
 ## Agent Launchers
 
 - Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`,
-  `agent-browser`, and `openspec` through Nix-managed wrapper scripts.
+  `agent-deck`, `agent-browser`, and `openspec` through Nix-managed tooling.
 - Caveman full is enabled across the managed agent surfaces. Codex gets a
   managed SessionStart hook in `~/.codex/hooks.json`, Gemini reads the shared
   `~/.gemini/GEMINI.md` prompt and the managed Caveman extension, and OpenCode
@@ -110,6 +110,9 @@ logical-unit secret files.
   Node binary and keeps `xdg-open` and `xdg-debug` intercepted with no-op
   shims under `~/.local/bin` so the headless systemd service does not try to
   launch a local browser. The managed unit binds only to `127.0.0.1:8421`.
+- WSL develop hosts also enable a user `agent-deck-web` service that runs
+  `agent-deck web --listen 127.0.0.1:8420`, so the web UI is available on the
+  local host after the relevant Home Manager or NixOS switch.
 - Develop hosts keep `ssh-agent` on the fixed socket
   `/run/user/1000/ssh-agent` with a `12h` key lifetime, and they cache
   `sudo` credentials globally for `12h` so fresh agent PTYs do not prompt on
