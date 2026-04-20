@@ -21,7 +21,7 @@ default bundled skills instead.
   repo-owned forced Discord lane.
 - **BREAKING** Treat Codex as the normal primary model path for the managed
   runtime, with direct `opencode-go/minimax-m2.7` as the configured fallback
-  lane and the local router exposed as custom provider `coding`.
+  lane and the local router exposed as custom provider `agentic`.
 - **BREAKING** Make the rollout contract explicitly destructive again: stop
   Hermes, remove `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and
   `/srv/apps/hermes/nix`, then let the latest published image reseed fresh
@@ -29,6 +29,9 @@ default bundled skills instead.
 - Update the runtime env contract to match the current upstream image:
   downstream only owns operator env, fixed workstation env stay image-owned,
   and the image no longer rewrites `/home/hermes/.hermes/.env` for the host.
+- Remove the stale downstream `CLOAKBROWSER_URL` expectation so Hermes follows
+  the image-owned native CloakBrowser path through `google-chrome` and the
+  persistent `AGENT_BROWSER_PROFILE`.
 - Update the `/nix` contract to describe both safe first-boot seeding for an
   empty mount and boot-time reconciliation of the image-managed default profile
   for reused non-empty `/nix`.

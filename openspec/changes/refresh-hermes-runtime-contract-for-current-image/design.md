@@ -29,12 +29,14 @@ must describe a fresh boot path rather than a drift-preserving migration.
 - Remove the retired Codex Discord lane from the documented downstream
   contract.
 - Capture Codex as the normal primary model path after re-auth, with OpenCode
-  fallback and router `coding` custom-provider support.
+  fallback and router `agentic` custom-provider support.
 - Clarify the exact semantics of a destructive reset and what state is lost.
 - Clarify that a fresh reset relies on bundled upstream default skill seeding,
   not repo-seeded `skill-creator`.
 - Describe the current `/nix` persistence contract accurately enough to support
   both clean resets and later reused mounts.
+- Remove the stale downstream `CLOAKBROWSER_URL` contract so the host follows
+  the image-owned native CloakBrowser browser path.
 
 **Non-Goals**
 - Implement the host-side Nix changes in this explore turn.
@@ -75,7 +77,7 @@ Alternatives considered:
 
 The refreshed contract will capture `openai-codex/gpt-5.4` as the primary
 managed model lane, `opencode-go/minimax-m2.7` as the configured fallback, the
-router custom provider pinned to alias `coding`, and `agent.reasoning_effort`
+router custom provider pinned to alias `agentic`, and `agent.reasoning_effort`
 defaulting to `medium`.
 
 Rationale:
@@ -165,6 +167,19 @@ Rationale:
 - Upstream explicitly documents these as image-owned internals.
 - The local host contract should not pretend to own them.
 
+### 9. Native CloakBrowser stays image-owned
+
+The refreshed contract will treat the stock local browser path as image-owned
+native CloakBrowser launched through `google-chrome` with persistent profile
+state under `/home/hermes/.local/state/cloakbrowser`. The host must not export
+`CLOAKBROWSER_URL` or `CLOAKBROWSER_TOKEN` to Hermes as part of the supported
+downstream contract.
+
+Rationale:
+- Upstream removed the manager/service-based browser contract on April 20.
+- The live host still exported `CLOAKBROWSER_URL`, which no longer matches the
+  supported runtime shape.
+
 ## Risks / Trade-offs
 
 - [Risk] The new contract makes the next rollout more obviously destructive than
@@ -183,13 +198,15 @@ Rationale:
 1. Update the host wiring and docs to remove `GHOSTSHIP_CODEX_CHANNEL` from the
    supported contract and keep only the router-pinned forced channel.
 2. Update the documented runtime defaults so Codex is the normal primary lane,
-   OpenCode is fallback, and router `coding` remains the custom provider path.
-3. Update the persistence contract to describe both empty `/nix` seeding and
+   OpenCode is fallback, and router `agentic` remains the custom provider path.
+3. Remove the stale downstream `CLOAKBROWSER_URL` export and document the
+   image-owned native CloakBrowser path.
+4. Update the persistence contract to describe both empty `/nix` seeding and
    reused non-empty `/nix` reconciliation.
-4. During rollout, stop Hermes, remove `/srv/apps/hermes/home`,
+5. During rollout, stop Hermes, remove `/srv/apps/hermes/home`,
    `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`, then let the
    image boot fresh.
-5. Verify the fresh runtime has no repo-seeded `skill-creator`, does have the
+6. Verify the fresh runtime has no repo-seeded `skill-creator`, does have the
    bundled upstream default skill set, and requires a fresh Codex auth before
    the normal primary lane is usable.
 

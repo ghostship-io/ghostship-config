@@ -29,10 +29,8 @@ image-owned internals rather than supported downstream operator inputs.
   `GHOSTSHIP_DASHBOARD_HOST`, `GHOSTSHIP_DASHBOARD_PORT`,
   `GHOSTSHIP_ROUTER_HOST`, `GHOSTSHIP_ROUTER_PORT`, `GHOSTSHIP_ROUTER_URL`,
   `GHOSTSHIP_NIX_DEFAULT_PROFILE`, `GHOSTSHIP_TTYD_SOCKET`,
-  `GHOSTSHIP_TTYD_BASE_PATH`, `GHOSTSHIP_TERMINAL_CWD`, `CAMOFOX_URL`,
-  `CAMOFOX_PORT`, `GHOSTSHIP_CAMOFOX_VNC_PORT`,
-  `GHOSTSHIP_CAMOFOX_WEB_PORT`, `CAMOUFOX_CACHE_DIR`, or
-  `PLAYWRIGHT_BROWSERS_PATH`
+  `GHOSTSHIP_TTYD_BASE_PATH`, `GHOSTSHIP_TERMINAL_CWD`,
+  `PLAYWRIGHT_BROWSERS_PATH`, or `AGENT_BROWSER_PROFILE`
 - **AND** operators SHALL treat those values as unsupported downstream
   overrides
 
@@ -63,3 +61,14 @@ intentionally operator-managed persisted `/home/hermes/.hermes/.env`.
   under `/home/hermes/.hermes/auth.json`
 - **AND** the contract SHALL not replace that auth with a new downstream env
   key
+
+### Requirement: Hermes SHALL treat native CloakBrowser launch as image-owned
+The self-hosted Hermes host wiring SHALL not treat native CloakBrowser launch
+details as part of the supported downstream operator env contract.
+
+#### Scenario: Host wiring omits retired browser-service env
+- **WHEN** the Hermes container definition is evaluated for `chill-penguin`
+- **THEN** it SHALL not set `CLOAKBROWSER_URL` or `CLOAKBROWSER_TOKEN`
+- **AND** operators SHALL rely on the image-owned `google-chrome` plus
+  `AGENT_BROWSER_PROFILE=/home/hermes/.local/state/cloakbrowser` path for the
+  supported stock local browser workflow

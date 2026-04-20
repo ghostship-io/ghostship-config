@@ -11,7 +11,7 @@ upstream Codex-primary model contract as the supported default.
 - **AND** the supported managed fallback model lane SHALL be
   `opencode-go/minimax-m2.7`
 - **AND** the local router SHALL remain available as a managed custom provider
-  pinned to alias `coding`
+  pinned to alias `agentic`
 - **AND** the supported managed default `agent.reasoning_effort` SHALL be
   `medium`
 

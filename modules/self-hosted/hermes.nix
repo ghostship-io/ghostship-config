@@ -38,7 +38,6 @@ let
     BAZARR_URL = "http://bazarr:6767";
     FLARESOLVERR_URL = "http://flaresolverr:8191";
     PYLOAD_URL = "http://pyload:8000";
-    CLOAKBROWSER_URL = "http://cloakbrowser:8080";
     N8N_URL = "http://n8n:5678";
     CHANGEDETECTION_URL = "http://changedetection:5000";
     CHAPTARR_URL = "http://chaptarr:8789";
