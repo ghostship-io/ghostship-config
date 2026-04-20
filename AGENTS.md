@@ -332,6 +332,9 @@ changelog.
 - Normal operator flow is direct `secret-edit <logical-secret-name>` against
   the tracked `.age` files. Use `secrets-list-keys` or `secret-list` to find
   names, and reserve `secret-rekey` for recipient changes.
+- `secrets/rules.nix` paths are resolved relative to that file's own
+  directory by `ragenix`; keep rule keys relative to `secrets/`, not repo
+  root paths prefixed with `secrets/`.
 - Use service-local `*-secrets` bundles and catalog-driven projections instead
   of shared catch-all `HOMEPAGE_*` bundles or repeated raw secret path wiring.
 - `bootstrap.sh` is the installer-time host bootstrap entrypoint. It captures a

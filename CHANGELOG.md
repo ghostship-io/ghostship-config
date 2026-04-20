@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Ragenix helper path fix**: Fixed `secrets/rules.nix` to emit rule keys relative to the rules file directory so `secret-edit <logical-id>` and other `ragenix` operations match the tracked `secrets/files/**/*.age` paths again.
 - **Managed Paseo daemon and Node FHS wrappers**: Added `paseo` to the same wrapper-plus-maintenance flow used by the other agent CLIs, added a WSL-only `ghostship-paseo` system service that keeps a local daemon on `127.0.0.1:6768` for the Windows desktop app, documented Paseo's current daemon/app version-lockstep expectation, and replaced the broken raw WSL `/usr/bin/npm` plus `/usr/bin/npx` paths with explicit wrapper-backed WSL entries that exec the real Nix store binaries.
 - **Develop web service removal**: Removed the managed `opencode-web` and
   `agent-deck-web` user services from the develop/WSL Home Manager profiles, so
