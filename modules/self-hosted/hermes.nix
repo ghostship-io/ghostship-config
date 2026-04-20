@@ -15,11 +15,11 @@ let
   hermes-seed-soul = ./hermes-seeds/SOUL.md;
   discord-home-channel = "1491229269127598281";
   ghostship-router-channel = "1492841053642817606";
-  ghostship-codex-channel = "1493462179725180959";
+  ghostship-codex-free-response-channel = "1493462179725180959";
   discord-allowed-users = "126942974826381312";
   discord-free-response-channels = builtins.concatStringsSep "," [
     ghostship-router-channel
-    ghostship-codex-channel
+    ghostship-codex-free-response-channel
     "1491229269127598281"
     "1491229248856260799"
     "1491229299452412044"
@@ -144,7 +144,6 @@ in
       DISCORD_HOME_CHANNEL = discord-home-channel;
       DISCORD_FREE_RESPONSE_CHANNELS = discord-free-response-channels;
       GHOSTSHIP_ROUTER_CHANNEL = ghostship-router-channel;
-      GHOSTSHIP_CODEX_CHANNEL = ghostship-codex-channel;
     };
     environmentFiles = [
       hermes-secrets
