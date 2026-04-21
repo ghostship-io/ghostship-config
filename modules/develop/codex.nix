@@ -2,7 +2,7 @@
 
 {
   home.file.".codex/AGENTS.md" = {
-    source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/AGENTS.md";
+    source = ../../home/config/AGENTS.md;
     force = true;
   };
 }

@@ -1,44 +1,73 @@
 # Agent Preferences
 
-Use these defaults across repos unless a repo-level `AGENTS.md` overrides them.
+- Be concise.
+- Use the project `AGENTS.md` as workspace memory.
+- Record only short durable lessons in the project `AGENTS.md`.
 
-## Default stance
+## 1. Think Before Coding
 
-- Use caveman full by default: terse, exact, technical substance intact, filler dead.
-- Return to normal style only when the user asks for normal mode or more detail.
-- Use the project `AGENTS.md` as the workspace memory.
-- Record durable corrections and lessons in the project `AGENTS.md`.
-- Keep responses concise. Lead with commands, then short rationale.
-- Ask focused questions when requirements are unclear or risky.
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
 
-## Research and planning
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
 
-- Research the current state before changing code or config.
-- Use the `brainstorming` skill for research when it is available.
-- Use `openspec-explore` when researching a repo to understand how it works.
-- If the work needs a plan, implement it in a git worktree.
-- If `using-git-worktrees` is available, activate it for planned work.
+## 2. Simplicity First
 
-## Completion standard
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+## Finish
 
 - Verify your own changes whenever possible.
-- Update the README and any affected supporting documentation before finishing.
-- Keep the changelog current.
-- Bump the project version when the change warrants it.
+- Update `README.md` and affected docs when behavior or workflow changes.
+- Keep `CHANGELOG.md` current.
 - Commit finished work after verification.
-- Use commit messages in the form `<type>(<scope>): <description>`.
+- Bump the version when warranted.
 
 ## Execution
 
 - Use only non-interactive commands and flags.
-- Write shell examples for the user in Fish syntax.
-- Do not use `sudo`.
-- When elevation is required, use a root shell or direct root SSH host.
-
-## Skill routing
-
-- Use the most relevant available skill instead of repeating detailed platform
-  or language rules here.
-- Use the `nix` skill for Nix-platform work when it is available.
-- Use the `python` skill for Python code or Python project structure when it is
-  available.

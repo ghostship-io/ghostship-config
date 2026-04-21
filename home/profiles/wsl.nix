@@ -132,4 +132,21 @@ in
       fi
     fi
   '';
+
+  home.activation.wslWindowsCodexAgents = lib.hm.dag.entryAfter [ "wslHomeSymlink" ] ''
+    CANONICAL_AGENTS="${../config/AGENTS.md}"
+    WIN_USER=$(${windowsPowerShell} -NoProfile -ExecutionPolicy Bypass -Command '$env:UserName' 2>/dev/null | tr -d '\r')
+
+    if [ -n "$WIN_USER" ]; then
+      WIN_CODEX_DIR="/mnt/c/Users/$WIN_USER/.codex"
+      WIN_CODEX_AGENTS="$WIN_CODEX_DIR/AGENTS.md"
+
+      if [ -d "/mnt/c/Users/$WIN_USER" ]; then
+        mkdir -p "$WIN_CODEX_DIR"
+        if [ ! -f "$WIN_CODEX_AGENTS" ] || ! cmp -s "$CANONICAL_AGENTS" "$WIN_CODEX_AGENTS"; then
+          install -m 0644 "$CANONICAL_AGENTS" "$WIN_CODEX_AGENTS"
+        fi
+      fi
+    fi
+  '';
 }

@@ -191,11 +191,11 @@ PY
       force = true;
     };
     ".gemini/GEMINI.md" = {
-      source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/AGENTS.md";
+      source = ../config/AGENTS.md;
       force = true;
     };
     ".config/opencode/AGENTS.md" = {
-      source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.agents/AGENTS.md";
+      source = ../config/AGENTS.md;
       force = true;
     };
     ".local/bin/xdg-open" = {

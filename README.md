@@ -49,10 +49,17 @@ logical-unit secret files.
 - Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`,
   `paseo`, `agent-deck`, `agent-browser`, and `openspec` through Nix-managed
   wrapper scripts.
+- The shared agent instructions live at `home/config/AGENTS.md` in the repo and
+  are published to each agent's native path. Codex reads `~/.codex/AGENTS.md`,
+  Gemini reads `~/.gemini/GEMINI.md`, and OpenCode reads
+  `~/.config/opencode/AGENTS.md`.
+- WSL hosts also publish the same agent instructions to the Windows-side Codex
+  Desktop path `%USERPROFILE%\.codex\AGENTS.md` so Codex Desktop sessions that
+  run against the WSL guest keep the same shared instructions.
 - Caveman full is enabled across the managed agent surfaces. Codex gets a
-  managed SessionStart hook in `~/.codex/hooks.json`, Gemini reads the shared
-  `~/.gemini/GEMINI.md` prompt and the managed Caveman extension, and OpenCode
-  reads the shared `~/.config/opencode/AGENTS.md` prompt.
+  managed SessionStart hook in `~/.codex/hooks.json`, Gemini reads its native
+  `~/.gemini/GEMINI.md` prompt plus the managed Caveman extension, and
+  OpenCode reads its native `~/.config/opencode/AGENTS.md` prompt.
 - The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
   unless you override it explicitly, so local automation stays on the
   profile-capable Chrome engine even if upstream auto-selection changes.
