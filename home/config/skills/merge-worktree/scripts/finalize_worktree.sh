@@ -37,6 +37,36 @@ status_porcelain() {
   git -C "$1" status --porcelain --untracked-files=normal
 }
 
+dirty_paths() {
+  git -C "$1" status --porcelain --untracked-files=normal | while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    line=${line#?? }
+    case "$line" in
+      *" -> "*)
+        printf '%s\n' "${line##* -> }"
+        ;;
+      *)
+        printf '%s\n' "$line"
+        ;;
+    esac
+  done
+}
+
+incoming_paths() {
+  git -C "$1" diff --name-only "$2..HEAD"
+}
+
+overlapping_paths() {
+  local left_file="$1"
+  local right_file="$2"
+
+  if [ ! -s "$left_file" ] || [ ! -s "$right_file" ]; then
+    return 0
+  fi
+
+  comm -12 "$left_file" "$right_file"
+}
+
 main_worktree_for_branch() {
   local target_ref="refs/heads/$1"
   local worktree=""
@@ -145,10 +175,6 @@ if [ -n "$(conflict_paths "$main_worktree")" ]; then
   die "target '$target_branch' worktree has unresolved merge conflicts"
 fi
 
-if [ -n "$(status_porcelain "$main_worktree")" ]; then
-  die "target '$target_branch' worktree is dirty"
-fi
-
 temp_branch=""
 integration_branch="$source_branch"
 if [ -z "$integration_branch" ]; then
@@ -171,8 +197,21 @@ if [ -n "$(conflict_paths "$source_worktree")" ]; then
   die "source worktree has unresolved merge conflicts after merging '$target_branch'"
 fi
 
-if [ -n "$(status_porcelain "$main_worktree")" ]; then
-  die "target '$target_branch' worktree became dirty during finish"
+target_dirty_paths_file=$(mktemp)
+incoming_paths_file=$(mktemp)
+overlap_paths_file=$(mktemp)
+cleanup_paths() {
+  rm -f "$target_dirty_paths_file" "$incoming_paths_file" "$overlap_paths_file"
+}
+trap cleanup_paths EXIT
+
+dirty_paths "$main_worktree" | sort -u > "$target_dirty_paths_file"
+incoming_paths "$source_worktree" "$target_ref" | sort -u > "$incoming_paths_file"
+overlapping_paths "$target_dirty_paths_file" "$incoming_paths_file" > "$overlap_paths_file"
+
+if [ -s "$overlap_paths_file" ]; then
+  overlap_csv=$(paste -sd, "$overlap_paths_file")
+  die "target '$target_branch' worktree has dirty files that conflict with incoming changes: $overlap_csv"
 fi
 
 if ! git -C "$main_worktree" merge --ff-only "$integration_branch"; then

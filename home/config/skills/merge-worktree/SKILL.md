@@ -35,6 +35,8 @@ Use this skill to finish a non-`main` worktree and fold it back into local
   worktree is detached.
 - `finish` merges local `main` into the source worktree only when the source
   worktree does not already contain the current local `main` tip.
+- If that merge conflicts, resolve the conflicts in the source worktree,
+  commit the result there, and rerun `finish`.
 - `finish` updates local `main` with a fast-forward-only merge.
 - `finish` removes the source worktree only after the fast-forward into local
   `main` succeeds.
@@ -42,9 +44,13 @@ Use this skill to finish a non-`main` worktree and fold it back into local
 
 ## Failure behavior
 
-- If the target `main` worktree is dirty, stop and report it.
+- If the target `main` worktree is dirty but its dirty paths do not overlap the
+  incoming source-worktree changes, continue.
+- If the target `main` worktree has dirty paths that overlap the incoming
+  source-worktree changes, stop and report the conflicting paths.
 - If merging local `main` into the source worktree conflicts, stop and leave
-  the source worktree in place for manual resolution.
+  the source worktree in place for conflict resolution before rerunning
+  `finish`.
 - If fast-forwarding local `main` fails, stop and leave the source worktree in
   place.
 - Do not fetch, push, or reconcile against `origin/main`.
