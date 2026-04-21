@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Shared merge-worktree skill**: Added a repo-managed `merge-worktree`
+  shared skill plus helper script for Codex Desktop and other detached
+  worktrees so agents can review remaining changes, best-effort update
+  `README.md` / `CHANGELOG.md` / `VERSION`, reconcile local `main` into the
+  finished worktree when needed, fast-forward local `main`, and remove the
+  source worktree only after the local merge succeeds.
+
 - **Caveman and workflow retirement**: Removed the managed Caveman default
   behavior from develop hosts, replaced the old Codex Caveman injection with
   declarative cleanup of managed Caveman state, stopped maintenance from
