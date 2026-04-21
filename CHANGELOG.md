@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   worktrees so agents can review remaining changes, best-effort update
   `README.md` / `CHANGELOG.md` / `VERSION`, reconcile local `main` into the
   finished worktree when needed, fast-forward local `main`, tolerate
-  non-conflicting dirty files already present in the `main` worktree, and
+  non-conflicting dirty files already present in the `main` worktree, resolve
+  `main` merge conflicts inside the source worktree before retrying finish, and
   remove the source worktree only after the local merge succeeds.
 
 - **Caveman and workflow retirement**: Removed the managed Caveman default

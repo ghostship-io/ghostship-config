@@ -26,6 +26,9 @@ Use this skill to finish a non-`main` worktree and fold it back into local
   - major only for intentional breaking contract changes
 - Commit all non-ignored remaining artifacts in the source worktree before the
   final merge step.
+- If merging local `main` into the source worktree conflicts, resolve the
+  conflicts in the source worktree immediately, commit the resolution there,
+  and continue the finish flow instead of stopping for user intervention.
 - Run `scripts/finalize_worktree.sh finish --target-branch main` only after the
   source worktree is clean and committed.
 
@@ -48,9 +51,9 @@ Use this skill to finish a non-`main` worktree and fold it back into local
   incoming source-worktree changes, continue.
 - If the target `main` worktree has dirty paths that overlap the incoming
   source-worktree changes, stop and report the conflicting paths.
-- If merging local `main` into the source worktree conflicts, stop and leave
-  the source worktree in place for conflict resolution before rerunning
-  `finish`.
+- If merging local `main` into the source worktree conflicts, leave the source
+  worktree in place, resolve the conflicts there, commit the resolution, and
+  rerun `finish`.
 - If fast-forwarding local `main` fails, stop and leave the source worktree in
   place.
 - Do not fetch, push, or reconcile against `origin/main`.

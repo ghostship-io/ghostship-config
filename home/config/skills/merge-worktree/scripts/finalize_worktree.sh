@@ -164,7 +164,7 @@ if [ -n "$source_branch" ] && [ "$source_branch" = "$target_branch" ]; then
 fi
 
 if [ -n "$(conflict_paths "$source_worktree")" ]; then
-  die "source worktree has unresolved merge conflicts"
+  die "source worktree has unresolved merge conflicts; resolve them in the source worktree, commit, and rerun finish"
 fi
 
 if [ -n "$(status_porcelain "$source_worktree")" ]; then
@@ -189,12 +189,12 @@ merge_base=$(git -C "$source_worktree" merge-base HEAD "$target_ref")
 
 if [ "$merge_base" != "$target_head" ]; then
   if ! git -C "$source_worktree" merge --no-edit "$target_ref"; then
-    die "merging local '$target_branch' into the source worktree conflicted"
+    die "merging local '$target_branch' into the source worktree conflicted; resolve the conflicts in the source worktree, commit, and rerun finish"
   fi
 fi
 
 if [ -n "$(conflict_paths "$source_worktree")" ]; then
-  die "source worktree has unresolved merge conflicts after merging '$target_branch'"
+  die "source worktree still has unresolved merge conflicts after merging '$target_branch'; resolve them in the source worktree, commit, and rerun finish"
 fi
 
 target_dirty_paths_file=$(mktemp)
