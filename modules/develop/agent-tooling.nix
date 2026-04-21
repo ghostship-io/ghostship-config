@@ -398,18 +398,9 @@ EOF
       name = "gemini-cli-security";
       repo = "https://github.com/gemini-cli-extensions/security";
     }
-    {
-      name = "caveman";
-      repo = "https://github.com/JuliusBrussee/caveman";
-    }
   ];
 
-  managedGlobalSkills = [
-    {
-      name = "caveman";
-      source = "JuliusBrussee/caveman";
-    }
-  ];
+  managedGlobalSkills = [ ];
 
   agentMaintenance = pkgs.writeShellScriptBin "ghostship-agent-maintenance" ''
     set -euo pipefail

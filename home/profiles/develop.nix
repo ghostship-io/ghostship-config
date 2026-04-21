@@ -50,51 +50,77 @@ in
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/ln -sfn "$shared_skill_creator_path" "$codex_skill_creator_path"
   '';
 
-  home.activation.ensureCodexCavemanHook = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    codex_hooks_dir="$HOME/.codex"
-    codex_hooks_file="$codex_hooks_dir/hooks.json"
+  home.activation.removeManagedCavemanState = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf \
+      "$HOME/.agents/skills/caveman" \
+      "$HOME/.gemini/extensions/caveman"
 
-    $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$codex_hooks_dir"
-    $DRY_RUN_CMD ${pkgs.python3}/bin/python - "$codex_hooks_file" <<'PY'
+    enablement_file="$HOME/.gemini/extensions/extension-enablement.json"
+    if test -f "$enablement_file"; then
+      tmp_file="$(${pkgs.coreutils}/bin/mktemp)"
+      ${pkgs.jq}/bin/jq 'del(.caveman)' "$enablement_file" > "$tmp_file"
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/mv "$tmp_file" "$enablement_file"
+    fi
+
+    codex_hooks_file="$HOME/.codex/hooks.json"
+    if test -f "$codex_hooks_file"; then
+      $DRY_RUN_CMD ${pkgs.python3}/bin/python - "$codex_hooks_file" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-command = (
-    "echo 'CAVEMAN MODE ACTIVE. Rules: Drop articles/filler/pleasantries/hedging. "
-    "Fragments OK. Short synonyms. Pattern: [thing] [action] [reason]. [next step]. "
-    "Not: Sure! I would be happy to help you with that. Yes: Bug in auth middleware. "
-    "Fix: Code/commits/security: write normal. User says stop caveman or normal mode to deactivate.'"
-)
-entry = {"type": "command", "command": command}
+stale_commands = {
+    "echo 'CAVEMAN MODE ACTIVE. Rules: Drop articles/filler/pleasantries/hedging. Fragments OK. Short synonyms. Pattern: [thing] [action] [reason]. [next step]. Not: Sure! I would be happy to help you with that. Yes: Bug in auth middleware. Fix: Code/commits/security: write normal. User says stop caveman or normal mode to deactivate.'"
+}
 
-if path.exists():
-    try:
-        data = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"warning: unable to merge Codex caveman hook in {path}: {exc}", file=sys.stderr)
-        raise SystemExit(0)
-else:
-    data = {}
+try:
+    data = json.loads(path.read_text())
+except (OSError, json.JSONDecodeError) as exc:
+    print(f"warning: unable to clean managed Caveman state in {path}: {exc}", file=sys.stderr)
+    raise SystemExit(0)
 
-hooks = data.setdefault("hooks", {})
+hooks = data.get("hooks")
 if not isinstance(hooks, dict):
-    print(f"warning: unable to merge Codex caveman hook in {path}: hooks root is not an object", file=sys.stderr)
     raise SystemExit(0)
 
-session_start = hooks.setdefault("SessionStart", [])
-if not isinstance(session_start, list):
-    print(f"warning: unable to merge Codex caveman hook in {path}: SessionStart is not a list", file=sys.stderr)
-    raise SystemExit(0)
+changed = False
+for event_name, event_groups in list(hooks.items()):
+    if not isinstance(event_groups, list):
+        continue
 
-for existing in session_start:
-    if isinstance(existing, dict) and existing.get("type") == "command" and existing.get("command") == command:
-        raise SystemExit(0)
+    cleaned_groups = []
+    for group in event_groups:
+        if not isinstance(group, dict):
+            cleaned_groups.append(group)
+            continue
 
-session_start.append(entry)
-path.write_text(json.dumps(data, indent=2) + "\n")
+        nested_hooks = group.get("hooks")
+        if not isinstance(nested_hooks, list):
+            cleaned_groups.append(group)
+            continue
+
+        filtered_hooks = []
+        for hook in nested_hooks:
+            if (
+                isinstance(hook, dict)
+                and hook.get("type") == "command"
+                and hook.get("command") in stale_commands
+            ):
+                changed = True
+                continue
+            filtered_hooks.append(hook)
+
+        updated_group = dict(group)
+        updated_group["hooks"] = filtered_hooks
+        cleaned_groups.append(updated_group)
+
+    hooks[event_name] = cleaned_groups
+
+if changed:
+    path.write_text(json.dumps(data, indent=2) + "\n")
 PY
+    fi
   '';
 
   home.activation.removeWorkmuxArtifacts = lib.hm.dag.entryAfter [ "writeBoundary" ] ''

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Caveman and workflow retirement**: Removed the managed Caveman default
+  behavior from develop hosts, replaced the old Codex Caveman injection with
+  declarative cleanup of managed Caveman state, stopped maintenance from
+  installing the Caveman Gemini extension or external `skills.sh` Caveman
+  skill, and removed the obsolete shared `home/config/workflow.md` /
+  `~/.agents/workflow.md` surface.
+
 - **Shared agent instructions rewrite**: Replaced the old global agent prompt
   with the new concise Karpathy-style workflow guidance, removed the unused
   managed `~/.agents/AGENTS.md` target, rewired Codex, Gemini, and OpenCode to

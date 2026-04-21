@@ -8,10 +8,6 @@
     ".nix-profile" = {
       source = config.lib.file.mkOutOfStoreSymlink "/etc/profiles/per-user/${config.home.username}";
     };
-    ".agents/workflow.md" = {
-      source = ../config/workflow.md;
-      force = true;
-    };
   };
 
   home.sessionVariables = {

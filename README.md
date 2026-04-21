@@ -56,10 +56,6 @@ logical-unit secret files.
 - WSL hosts also publish the same agent instructions to the Windows-side Codex
   Desktop path `%USERPROFILE%\.codex\AGENTS.md` so Codex Desktop sessions that
   run against the WSL guest keep the same shared instructions.
-- Caveman full is enabled across the managed agent surfaces. Codex gets a
-  managed SessionStart hook in `~/.codex/hooks.json`, Gemini reads its native
-  `~/.gemini/GEMINI.md` prompt plus the managed Caveman extension, and
-  OpenCode reads its native `~/.config/opencode/AGENTS.md` prompt.
 - The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
   unless you override it explicitly, so local automation stays on the
   profile-capable Chrome engine even if upstream auto-selection changes.
@@ -93,8 +89,7 @@ logical-unit secret files.
 - `ghostship-agent-maintenance.service` owns automatic agent upkeep. Its
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent
-  CLIs including `paseo`, ensures the configured `skills.sh` repos such as
-  `caveman` are
+  CLIs including `paseo`, ensures the configured external `skills.sh` repos are
   installed globally on each develop host, refreshes shared global skills,
   refreshes managed Gemini extensions, bootstraps `agent-browser` only when
   `~/.agent-browser` is missing, and carries an explicit shell-capable runtime
@@ -138,8 +133,8 @@ logical-unit secret files.
 ## Shared Skills
 
 - Shared repo-managed skills live under `home/config/skills/` and are linked
-  into `~/.agents/skills/` on develop hosts. Managed `skills.sh` installs such
-  as `caveman` also land under `~/.agents/skills/`, but they are maintained by
+  into `~/.agents/skills/` on develop hosts. Managed external `skills.sh`
+  installs also land under `~/.agents/skills/`, but they are maintained by
   `ghostship-agent-maintenance` instead of the repo-owned skill tree.
 - The curated shared set is `nix`, `python`, `ssh`, `wsl2`, and a vendored
   `skill-creator` package pinned to the upstream `skill-creator`

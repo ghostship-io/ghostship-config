@@ -22,15 +22,10 @@ changelog.
   `.codex/`, `.gemini/`, and `.opencode/`.
 - The shared local skill is named `skill-creator` and is vendored from the
   upstream `skill-creator` package in `vercel-labs/agent-browser` `v0.9.3`.
-- Develop hosts keep Caveman full enabled across the managed agent surfaces:
-  Codex uses a managed `~/.codex/hooks.json` SessionStart hook, Gemini reads the
-  shared `~/.gemini/GEMINI.md` prompt plus the managed Caveman extension, and
-  OpenCode reads the shared `~/.config/opencode/AGENTS.md` prompt.
 - Managed `skills.sh` installs are separate from the repo-managed
   `home/config/skills/*` inventory. Keep repo-owned shared skills curated under
   `home/config/skills/`, and let `ghostship-agent-maintenance` install or
-  refresh the configured external `skills.sh` repos such as `caveman` on each
-  WSL develop host.
+  refresh any configured external `skills.sh` repos on each WSL develop host.
 - Develop-host convergence should scrub the known stale `workmux
   set-window-status ...` commands from `~/.codex/hooks.json` so removed
   repo-managed tooling does not keep breaking Codex hooks, while preserving

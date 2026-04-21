@@ -52,7 +52,7 @@ The Home Manager shared skill links and Codex shared skill wiring SHALL referenc
 The repo SHALL keep external `skills.sh` installs distinct from the curated `home/config/skills/` inventory even when both surfaces land under `~/.agents/skills/` on a host.
 
 #### Scenario: Managed external skill installs do not expand home/config/skills
-- **WHEN** a configured external `skills.sh` repo such as `caveman` is installed on a host
+- **WHEN** a configured external `skills.sh` repo is installed on a host
 - **THEN** it SHALL not require adding a matching directory under `home/config/skills/`
 
 #### Scenario: Active docs distinguish repo-owned and external skill layers
