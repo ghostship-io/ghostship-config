@@ -297,16 +297,14 @@ changelog.
   re-persisting `pricebuddy-agent.env`, and post-start verification should only
   gate Ghostship-managed wiring such as env generation, scraper reachability,
   and final bearer-token shape.
-- On `chill-penguin` arm64, `pricebuddy-scraper` can report healthy while real
-  `/api/article` fetches still fail on Selenium driver acquisition; validate the
-  scraper with an actual article request, not only the health endpoint.
+- On `chill-penguin`, `pricebuddy-scraper` now runs as a local CloakBrowser+Playwright sidecar; keep its health check pointed at `/health`, which must validate a real browser launch rather than only process liveness.
 - On `chill-penguin`, Muximux intentionally omits Honcho while keeping
   PriceBuddy in the dropdown immediately after Bazarr; Homepage remains the
   place where Honcho stays visible.
 - Muximux does not tolerate `user = "3000:3000"` in the current image; keep it
   on `0:3000`.
 - Bazarr's authoritative config is `/srv/apps/bazarr/config/config.yaml`.
-- CloakBrowser consumer images live under `containers/` and are built locally into content-addressed `localhost/...` tags from Nix-managed contexts; `pricebuddy-scraper` uses the embedded binary plus stealth args, and `changedetection` uses an embedded local CloakBrowser Playwright session with `humanize=True` instead of the manager/CDP path.
+- CloakBrowser consumer images live under `containers/` and are built locally into content-addressed `localhost/...` tags from Nix-managed contexts; `pricebuddy-scraper` and `changedetection` both run embedded local CloakBrowser Playwright sessions with `humanize=True` instead of the manager/CDP path.
 - n8n on `chill-penguin` should stay as a single SQLite-backed service with state persisted under `/srv/apps/n8n`; keep browser access behind Cloudflare, keep Hermes on the internal `http://n8n:5678` path with its dedicated `N8N_API_KEY` carried in `n8n-secrets`, and expect a one-time manual Muximux reorder after deployment so the live tile sits directly under Bazarr.
 - Chaptarr on `chill-penguin` should follow the standard arr service pattern: keep its config under `/srv/apps/chaptarr`, mount the shared downloads root at `/downloads`, mount `/mnt/share/Library/Books` plus `/mnt/share/Library/Audiobooks` as separate library roots, and source its API key from a service-local `chaptarr-secrets` bundle. Grimmory should keep both library roots mounted because it is the primary consumption UI, and the generated Muximux dropdown order should place Chaptarr before Bazarr.
 - BookStack on `chill-penguin` should keep app state under `/srv/apps/bookstack`, MariaDB state under `/srv/apps/bookstack-db`, and `BOOKSTACK_APP_URL` pinned to the external `https://bookstack.ghostship.io` origin. Keep the initial in-app setup plus API token creation manual for now, keep the Hermes env projection wired to `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, and `BOOKSTACK_TOKEN_SECRET`, and keep the generated Muximux tile immediately after Prowlarr.
