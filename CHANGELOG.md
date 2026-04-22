@@ -13,20 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   forwarding, and removed the repo-managed `ghostship-paseo` daemon startup
   path.
 
-- **Shared merge-worktree skill**: Added a repo-managed `merge-worktree`
-  shared skill plus helper script for Codex Desktop and other detached
-  worktrees so agents can review remaining changes, best-effort update
-  `README.md` / `CHANGELOG.md` / `VERSION`, reconcile local `main` into the
-  finished worktree when needed, fast-forward local `main`, tolerate
-  non-conflicting dirty files already present in the `main` worktree, resolve
-  `main` merge conflicts inside the source worktree before retrying finish, and
-  remove the source worktree only after the local merge succeeds.
-- **Shared merge-worktree preflight**: Expanded
-  `scripts/finalize_worktree.sh inspect --target-branch main` into the
-  canonical machine-friendly preflight report for `merge-worktree`, including
-  the unmerged commit list, ahead/behind counts, source and target dirty paths,
-  overlap detection against dirty `main`, and explicit `can_finish_now`
-  blocker reporting before the final local merge flow runs.
+- **Shared merge-worktree skill removal**: Removed the repo-managed
+  `merge-worktree` shared skill, its develop-profile link, and the remaining
+  stale `using-git-worktrees` reference from the OpenSpec archive override and
+  shared docs.
 
 - **Caveman and workflow retirement**: Removed the managed Caveman default
   behavior from develop hosts, replaced the old Codex Caveman injection with
