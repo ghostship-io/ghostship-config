@@ -140,9 +140,14 @@ logical-unit secret files.
   `ghostship-agent-maintenance` instead of the repo-owned skill tree; that
   external layer now includes the standalone `obra/superpowers/brainstorming`
   skill.
-- The curated shared set is `nix`, `python`, `ssh`, `wsl2`, and a vendored
-  `skill-creator` package pinned to the upstream `skill-creator` source at
-  `vercel-labs/agent-browser` `v0.9.3`.
+- The curated shared set is `merge-worktree`, `nix`, `python`, `ssh`,
+  `wsl2`, and a vendored `skill-creator` package pinned to the upstream
+  `skill-creator` source at `vercel-labs/agent-browser` `v0.9.3`.
+- `merge-worktree` is the shared Codex Desktop cleanup skill for finishing a
+  detached or branch-backed worktree, using
+  `scripts/finalize_worktree.sh inspect --target-branch main` as the canonical
+  local preflight report, reconciling it back into local `main`, and removing
+  the worktree after the local fast-forward succeeds.
 - Develop hosts also replace Codex's built-in
   `~/.codex/skills/.system/skill-creator` path with a managed symlink to
   `~/.agents/skills/skill-creator`, and `ghostship-agent-maintenance`

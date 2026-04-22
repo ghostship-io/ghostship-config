@@ -18,10 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   maintenance flow so `ghostship-agent-maintenance` keeps it installed and
   refreshed without expanding the repo-managed shared skill inventory.
 
-- **Shared merge-worktree skill removal**: Removed the repo-managed
-  `merge-worktree` shared skill, its develop-profile link, and the remaining
-  stale `using-git-worktrees` reference from the OpenSpec archive override and
-  shared docs.
+- **using-git-worktrees cleanup**: Removed the stale
+  `using-git-worktrees` reference from the OpenSpec archive override and repo
+  guidance while keeping the repo-managed `merge-worktree` skill in place.
 
 - **Caveman and workflow retirement**: Removed the managed Caveman default
   behavior from develop hosts, replaced the old Codex Caveman injection with

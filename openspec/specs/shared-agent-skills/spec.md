@@ -5,7 +5,7 @@ Define the repo-managed shared skill inventory and how it differs from externall
 
 ## Requirements
 ### Requirement: Curated shared skill inventory
-The repo SHALL expose exactly five shared repo-managed skills under `home/config/skills/`: `nix`, `python`, `ssh`, `wsl2`, and `skill-creator`.
+The repo SHALL expose exactly six shared repo-managed skills under `home/config/skills/`: `merge-worktree`, `nix`, `python`, `ssh`, `wsl2`, and `skill-creator`.
 
 #### Scenario: Removed shared skills are no longer present
 - **WHEN** the shared skill tree is inspected after the change
@@ -13,7 +13,7 @@ The repo SHALL expose exactly five shared repo-managed skills under `home/config
 
 #### Scenario: Retained shared skills remain available
 - **WHEN** the shared skill tree is inspected after the change
-- **THEN** `nix`, `python`, `ssh`, `wsl2`, and `skill-creator` SHALL exist as shared repo-managed skills
+- **THEN** `merge-worktree`, `nix`, `python`, `ssh`, `wsl2`, and `skill-creator` SHALL exist as shared repo-managed skills
 
 ### Requirement: Rewritten local skills use a minimal modular format
 The local shared skills `nix`, `python`, `ssh`, and `wsl2` SHALL use frontmatter containing only `name` and `description`, and SHALL keep detailed optional flows in one-level-deep modules instead of large SKILL bodies.
