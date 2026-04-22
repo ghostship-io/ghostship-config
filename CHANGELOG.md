@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-conflicting dirty files already present in the `main` worktree, resolve
   `main` merge conflicts inside the source worktree before retrying finish, and
   remove the source worktree only after the local merge succeeds.
+- **Shared merge-worktree preflight**: Expanded
+  `scripts/finalize_worktree.sh inspect --target-branch main` into the
+  canonical machine-friendly preflight report for `merge-worktree`, including
+  the unmerged commit list, ahead/behind counts, source and target dirty paths,
+  overlap detection against dirty `main`, and explicit `can_finish_now`
+  blocker reporting before the final local merge flow runs.
 
 - **Caveman and workflow retirement**: Removed the managed Caveman default
   behavior from develop hosts, replaced the old Codex Caveman injection with

@@ -12,8 +12,19 @@ Use this skill to finish a non-`main` worktree and fold it back into local
 
 - Run `scripts/finalize_worktree.sh inspect --target-branch main` from the
   active worktree first.
-- Refuse to continue if the active worktree is the `main` worktree or if the
-  repo has unresolved merge conflicts.
+- Treat the `inspect` output as the canonical local preflight report for the
+  merge-back flow. Do not do extra ad hoc git inspection unless `inspect`
+  itself looks wrong.
+- Use `inspect` to review:
+  - `incoming_commit=` lines for what is not yet on local `main`
+  - `source_dirty_path=` / `source_conflict_path=` lines for source-worktree
+    cleanup
+  - `main_dirty_path=` / `target_conflict_path=` / `overlap_path=` lines for
+    target-worktree risk
+  - `needs_main_merge=`, `can_fast_forward_main=`, and `can_finish_now=` for
+    the finish decision
+- If `can_finish_now=no`, fix the reported blockers and rerun `inspect` until
+  it reports `can_finish_now=yes`.
 - Review the remaining diff before committing anything.
 - If `README.md` exists and the diff changes behavior, workflow, or
   user-facing expectations, update it before finishing.
@@ -29,8 +40,9 @@ Use this skill to finish a non-`main` worktree and fold it back into local
 - If merging local `main` into the source worktree conflicts, resolve the
   conflicts in the source worktree immediately, commit the resolution there,
   and continue the finish flow instead of stopping for user intervention.
-- Run `scripts/finalize_worktree.sh finish --target-branch main` only after the
-  source worktree is clean and committed.
+- Run `scripts/finalize_worktree.sh finish --target-branch main` only after
+  `inspect` reports `can_finish_now=yes` and the source worktree is clean and
+  committed.
 
 ## Finish contract
 
