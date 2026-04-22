@@ -193,12 +193,12 @@ Chaptarr now extends the arr stack to books and audiobooks. It should mount the 
 BookStack now adds a repo-managed wiki service on `chill-penguin` with app state under `/srv/apps/bookstack`, MariaDB state under `/srv/apps/bookstack-db`, and Homepage visibility in the `Services` group and a Muximux tile after Prowlarr. Keep `BOOKSTACK_APP_URL` pointed at the external `https://bookstack.ghostship.io` origin, and treat the initial in-app setup plus API token creation (`Authorization: Token <token_id>:<token_secret>`) as manual post-deploy operator steps instead of repo-managed bootstrap. Hermes now receives `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, and `BOOKSTACK_TOKEN_SECRET` through the managed runtime env projection so the future utility contract is already wired once the secret bundle is populated. Public `bookstack.ghostship.io` exposure remains part of the external Cloudflare/tunnel workflow rather than repo-managed ingress.
 
 CloakBrowser now ships as a shared embedded browser contract for repo-managed
-scraping images. `pricebuddy-scraper` launches the embedded CloakBrowser
-binary directly with the default stealth args, while `changedetection`
-launches a local CloakBrowser Playwright session inside its own image with
-`humanize=True`. The standalone CloakBrowser manager remains available for
-operator-driven profiles, but changedetection no longer depends on a managed
-CDP/profile path.
+scraping images. `pricebuddy-scraper` is now a repo-owned Playwright service
+that launches CloakBrowser with `humanize=True` behind the existing
+`/api/article` sidecar contract, while `changedetection` launches a local
+CloakBrowser Playwright session inside its own image with `humanize=True`. The
+standalone CloakBrowser manager remains available for operator-driven profiles,
+but neither service depends on a managed CDP/profile path.
 
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions

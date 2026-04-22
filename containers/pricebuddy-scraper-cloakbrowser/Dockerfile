@@ -1,31 +1,17 @@
-FROM docker.io/jez500/seleniumbase-scrapper:latest
+FROM python:3.11-slim-bookworm
 
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 ENV CLOAKBROWSER_BINARY_PATH=/opt/cloakbrowser/chrome
+ENV PORT=3000
+
+WORKDIR /app
 
 COPY cloakbrowser/common/install_cloakbrowser.py /tmp/install_cloakbrowser.py
-COPY pricebuddy-scraper-cloakbrowser/patch_pricebuddy.py /tmp/patch_pricebuddy.py
+COPY pricebuddy-scraper-cloakbrowser/app.py /app/app.py
 
-RUN pip install --no-cache-dir cloakbrowser         && python3 /tmp/install_cloakbrowser.py         && python3 /tmp/patch_pricebuddy.py         && browser_major="$(${CLOAKBROWSER_BINARY_PATH} --version | sed -E 's/[^0-9]*([0-9]+).*//')"         && seleniumbase get chromedriver "$browser_major" --path         && python3 - <<'PY'
-import os
-import re
-import subprocess
+RUN pip install --no-cache-dir beautifulsoup4 cloakbrowser flask gunicorn     && python -m playwright install-deps chromium     && python /tmp/install_cloakbrowser.py     && python -m py_compile /app/app.py
 
-browser_version = subprocess.check_output(
-    [os.environ['CLOAKBROWSER_BINARY_PATH'], '--version'],
-    text=True,
-).strip()
-driver_version = subprocess.check_output(
-    ['chromedriver', '--version'],
-    text=True,
-).strip()
+EXPOSE 3000
 
-browser_major = re.search(r'(\d+)', browser_version)
-driver_major = re.search(r'(\d+)', driver_version)
-if not browser_major or not driver_major:
-    raise SystemExit(f'Unable to parse versions: browser={browser_version!r} driver={driver_version!r}')
-if browser_major.group(1) != driver_major.group(1):
-    raise SystemExit(
-        f'Chromedriver mismatch: browser={browser_version} driver={driver_version}'
-    )
-print(f'Validated browser/driver compatibility: {browser_version} / {driver_version}')
-PY
+CMD ["gunicorn", "--bind", "0.0.0.0:3000", "--workers", "1", "--threads", "4", "--timeout", "120", "app:app"]
