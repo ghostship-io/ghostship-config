@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 from cloakbrowser import launch_async
 from loguru import logger
 
-from changedetectionio.browser_steps.browser_steps import steppable_browser_interface
 from changedetectionio.content_fetchers import (
     FAVICON_FETCHER_JS,
     INSTOCK_DATA_JS,
@@ -157,6 +156,8 @@ class fetcher(Fetcher):
                     f'Playwright console: Watch URL: {url} {msg.type}: {msg.text} {msg.args}'
                 ),
             )
+
+            from changedetectionio.browser_steps.browser_steps import steppable_browser_interface
 
             browsersteps_interface = steppable_browser_interface(start_url=url)
             browsersteps_interface.page = self.page
