@@ -13,6 +13,8 @@
   `preStart`, not in `system.activationScripts`.
 - Do not expose container ports on the host except where the repo already does
   so intentionally.
+- WSL desktop-facing OpenCode support uses the `opencode-server` user service
+  on `127.0.0.1:8421`; do not add a repo-managed Paseo daemon.
 - Preferred `chill-penguin` deploy flow is local `git push origin main`, then
   remote `git -C /home/nixos/nixos-config pull --ff-only origin main`, remote
   `nixos-rebuild build --flake .#chill-penguin`, and remote
