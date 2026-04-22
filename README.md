@@ -214,11 +214,7 @@ The proxy also injects a real `<base href="/romm/">` into RomM's HTML so newer
 bundles that ship an empty Vite `BASE_URL` still boot the router under `/romm/`
 instead of briefly landing on the in-app not-found route.
 
-SearXNG is intended to run as an internal-only search hub on `ghostship_net`
-with a Nix-managed max-open engine allowlist, and internal consumers such as
-Hermes should use the container-network address `http://searxng:8080`. The
-engine inventory is regenerated in `podman-searxng` `preStart` so curated
-engine changes and container restarts stay coupled during `nixos-rebuild`.
+SearXNG is intended to run as an internal-only search hub on `ghostship_net`, and internal consumers such as Hermes should use the container-network address `http://searxng:8080`. The managed `podman-searxng` `preStart` path now renders the full `settings.yml` plus `limiter.toml`, requires the existing `SEARXNG_SECRET_KEY` from the `searxng-secrets` bundle instead of generating one on the fly, and keeps a persistent cache at `/srv/apps/searxng-cache` mounted to `/var/cache/searxng` so cache-backed engines like Startpage retain useful state across restarts. The active Hermes-facing engine surface is now performance-first: the promoted web pool is `startpage`, `qwant`, `mojeek`, `presearch`, `wikipedia`, and `wikidata`; the technical pool is `arch linux wiki`, `nixos wiki`, `askubuntu`, `stackoverflow`, `superuser`, `mankier`, `mdn`, `github`, `gitlab`, `gitea.com`, `sourcehut`, `huggingface`, `repology`, `pypi`, `npm`, `crates.io`, `pkg.go.dev`, `packagist`, `pub.dev`, `rubygems`, `hex`, and `lib.rs`; the research pool is `openalex`, `semantic scholar`, `pubmed`, `arxiv`, and `crossref`; and the news pool is `reuters`, `tagesschau`, and `wikinews`. Hermes should use explicit `/search?q=...&format=json&engines=...` pools instead of relying on the full active engine list. The latest lightweight direct probes promoted `presearch`, while `brave` and `karmasearch` stayed out of the default web pool after immediate `429` and `403` responses respectively.
 
 PriceBuddy seeds a `pricebuddy@ghostship.io` / `pricebuddy` login and reads a
 persistent agent API token from the `pricebuddy-secrets` bundle. The live
