@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Embedded CloakBrowser rollout**: Added repo-owned local image build contexts that embed CloakBrowser into `pricebuddy-scraper` and `changedetection`, switched PriceBuddy's scraper sidecar to a local CloakBrowser binary with the default stealth args, replaced changedetection's manager/CDP dependency with an in-image CloakBrowser Playwright path using `humanize=True`, and added a Firecrawl handoff document for the same binary contract.
+
 - **Hermes SOUL persona refresh**: Replaced the default Hermes `SOUL.md` seed with the new Argo persona in the repo and on the live `chill-penguin` runtime so fresh seeds and the current host align on the same assistance and supervision contract.
 
 - **WSL OpenCode desktop service**: Restored a repo-managed
