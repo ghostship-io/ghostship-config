@@ -1,147 +1,78 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 
 let
   changedetection-state-dir = "/srv/apps/changedetection";
-  changedetection-env = "${changedetection-state-dir}/changedetection.env";
-  changedetection-profile-bootstrap = pkgs.writeTextFile {
-    name = "changedetection-profile-bootstrap.py";
+  containers-root = ../../containers;
+  containers-root-str = toString containers-root;
+  containers-hash = builtins.substring 11 12 containers-root-str;
+  changedetection-image = "localhost/ghostship-changedetection-cloakbrowser:${containers-hash}";
+  changedetection-build = pkgs.writeShellScriptBin "ghostship-build-changedetection-image" ''
+    set -eu
+
+    image="${changedetection-image}"
+    dockerfile="${containers-root}/changedetection-cloakbrowser/Dockerfile"
+    context_dir="${containers-root}"
+
+    if ${pkgs.podman}/bin/podman image exists "$image"; then
+      exit 0
+    fi
+
+    ${pkgs.podman}/bin/podman build \
+      --pull=always \
+      --tag "$image" \
+      --file "$dockerfile" \
+      "$context_dir"
+  '';
+  changedetection-pre-start = pkgs.writeTextFile {
+    name = "changedetection-pre-start.py";
     executable = true;
     text = ''
       #!${pkgs.python3}/bin/python3
       import json
-      import sqlite3
-      import subprocess
-      import time
       from pathlib import Path
 
-      PROFILE_NAME = "Changedetection"
-      DB_PATH = Path("/srv/apps/cloakbrowser/data/profiles.db")
-      ENV_PATH = Path("${changedetection-env}")
-      PODMAN = "${pkgs.podman}/bin/podman"
-      CONTAINER = "cloakbrowser"
-      CONTAINER_PYTHON = "/usr/local/bin/python3"
+      datastore = Path("${changedetection-state-dir}")
+      settings = datastore / "changedetection.json"
+      legacy_env = datastore / "changedetection.env"
 
-      STATUS_CODE = """
-      import sys
-      import urllib.request
+      def rewrite_json(path: Path) -> None:
+          data = json.loads(path.read_text())
+          changed = False
 
-      try:
-          with urllib.request.urlopen("http://127.0.0.1:8080/api/status", timeout=5) as response:
-              sys.exit(0 if response.status == 200 else 1)
-      except Exception:
-          sys.exit(1)
-      """
+          if path == settings:
+              app = data.get("settings", {}).get("application", {})
+              if app.get("fetch_backend") == "html_cloakbrowser":
+                  app["fetch_backend"] = "html_webdriver"
+                  changed = True
+          else:
+              if data.get("fetch_backend") == "html_cloakbrowser":
+                  data["fetch_backend"] = "html_webdriver"
+                  changed = True
 
-      PROFILE_STATUS_CODE = """
-      import json
-      import sys
-      import urllib.request
+          if changed:
+              path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 
-      profile_id = sys.argv[1]
-      with urllib.request.urlopen(
-          f"http://127.0.0.1:8080/api/profiles/{profile_id}/status",
-          timeout=5,
-      ) as response:
-          data = json.load(response)
-      print(data.get("status", ""), end="")
-      """
+      if settings.exists():
+          rewrite_json(settings)
 
-      PROFILE_LAUNCH_CODE = """
-      import sys
-      import urllib.error
-      import urllib.request
+      for watch_json in datastore.glob("*/watch.json"):
+          rewrite_json(watch_json)
 
-      profile_id = sys.argv[1]
-      request = urllib.request.Request(
-          f"http://127.0.0.1:8080/api/profiles/{profile_id}/launch",
-          method="POST",
-      )
-
-      try:
-          with urllib.request.urlopen(request, timeout=30) as response:
-              sys.exit(0 if 200 <= response.status < 300 else 1)
-      except urllib.error.HTTPError as exc:
-          if exc.code == 409:
-              sys.exit(0)
-          raise
-      """
-
-
-      def podman_exec(code: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-          result = subprocess.run(
-              [PODMAN, "exec", "-i", CONTAINER, CONTAINER_PYTHON, "-c", code, *args],
-              check=False,
-              capture_output=True,
-              text=True,
-          )
-          if check and result.returncode != 0:
-              raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "podman exec failed")
-          return result
-
-
-      def wait_for_profile() -> str:
-          for _ in range(120):
-              if DB_PATH.exists():
-                  with sqlite3.connect(DB_PATH) as connection:
-                      row = connection.execute(
-                          "SELECT id FROM profiles WHERE name = ?",
-                          (PROFILE_NAME,),
-                      ).fetchone()
-                  if row and row[0]:
-                      return row[0]
-              time.sleep(1)
-          raise RuntimeError(
-              f"CloakBrowser profile '{PROFILE_NAME}' was not found in {DB_PATH}"
-          )
-
-
-      def wait_for_manager() -> None:
-          for _ in range(120):
-              result = podman_exec(STATUS_CODE, check=False)
-              if result.returncode == 0:
-                  return
-              time.sleep(1)
-          raise RuntimeError("CloakBrowser manager never became ready")
-
-
-      def ensure_profile_running(profile_id: str) -> None:
-          status = podman_exec(PROFILE_STATUS_CODE, profile_id, check=False)
-          if status.returncode == 0 and status.stdout.strip() == "running":
-              return
-          podman_exec(PROFILE_LAUNCH_CODE, profile_id)
-
-
-      def write_env(profile_id: str) -> None:
-          ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
-          ENV_PATH.write_text(
-              "PLAYWRIGHT_DRIVER_URL="
-              f"http://cloakbrowser:8080/api/profiles/{profile_id}/cdp\n"
-          )
-          ENV_PATH.chmod(0o600)
-
-
-      def main() -> None:
-          profile_id = wait_for_profile()
-          wait_for_manager()
-          ensure_profile_running(profile_id)
-          write_env(profile_id)
-
-
-      if __name__ == "__main__":
-          main()
+      if legacy_env.exists():
+          legacy_env.unlink()
     '';
   };
 in
 {
   virtualisation.oci-containers.containers."changedetection" = {
-    image = "ghcr.io/dgtlmoon/changedetection.io:latest";
-    pull = "always";
+    image = changedetection-image;
+    pull = "never";
     labels = {
-      "io.containers.autoupdate" = "registry";
+      "io.containers.autoupdate" = "disabled";
     };
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:5000/\", timeout=5).read(1)' || exit 1"
+      ''--health-cmd=python3 -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:5000/", timeout=5).read(1)' || exit 1''
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
@@ -149,23 +80,22 @@ in
       "--health-on-failure=kill"
     ];
     environment = {
+      CLOAKBROWSER_WRAPPER = "true";
       DISABLE_VERSION_CHECK = "true";
       HIDE_REFERER = "true";
       PORT = "5000";
       TZ = "UTC";
     };
-    environmentFiles = [
-      changedetection-env
-    ];
     volumes = [
       "${changedetection-state-dir}:/datastore:rw"
     ];
   };
 
   systemd.services.podman-changedetection = {
-    after = [ "podman-cloakbrowser.service" ];
-    requires = [ "podman-cloakbrowser.service" ];
-    preStart = "${changedetection-profile-bootstrap}";
+    preStart = lib.mkBefore ''
+      ${changedetection-build}/bin/ghostship-build-changedetection-image
+      ${changedetection-pre-start}
+    '';
   };
 
   systemd.tmpfiles.rules = [

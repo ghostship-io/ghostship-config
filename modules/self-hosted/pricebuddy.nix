@@ -1,6 +1,23 @@
 { config, lib, pkgs, ... }:
 
 let
+  containers-root = ../../containers;
+  containers-root-str = toString containers-root;
+  containers-hash = builtins.substring 11 12 containers-root-str;
+  pricebuddy-scraper-image = "localhost/ghostship-pricebuddy-scraper-cloakbrowser:${containers-hash}";
+  pricebuddy-scraper-build = pkgs.writeShellScriptBin "ghostship-build-pricebuddy-scraper-image" ''
+    set -eu
+
+    image="${pricebuddy-scraper-image}"
+    dockerfile="${containers-root}/pricebuddy-scraper-cloakbrowser/Dockerfile"
+    context_dir="${containers-root}"
+
+    if ${pkgs.podman}/bin/podman image exists "$image"; then
+      exit 0
+    fi
+
+    ${pkgs.podman}/bin/podman build           --pull=always           --tag "$image"           --file "$dockerfile"           "$context_dir"
+  '';
   pricebuddy-secrets = config.ghostship.selfHostedSecrets.units."pricebuddy-secrets".path;
   pricebuddy-env = "/srv/apps/pricebuddy/pricebuddy.env";
   pricebuddy-db-env = "/srv/apps/pricebuddy/pricebuddy-db.env";
@@ -272,10 +289,10 @@ in
   };
 
   virtualisation.oci-containers.containers."pricebuddy-scraper" = {
-    image = "docker.io/jez500/seleniumbase-scrapper:latest";
-    pull = "always";
+    image = pricebuddy-scraper-image;
+    pull = "never";
     labels = {
-      "io.containers.autoupdate" = "registry";
+      "io.containers.autoupdate" = "disabled";
     };
     extraOptions = [
       "--network=ghostship_net"
@@ -286,6 +303,13 @@ in
       "--health-start-period=1m"
       "--health-on-failure=kill"
     ];
+  };
+
+
+  systemd.services.podman-pricebuddy-scraper = {
+    preStart = lib.mkBefore ''
+    ${pricebuddy-scraper-build}/bin/ghostship-build-pricebuddy-scraper-image
+    '';
   };
 
   systemd.services.podman-pricebuddy = {
