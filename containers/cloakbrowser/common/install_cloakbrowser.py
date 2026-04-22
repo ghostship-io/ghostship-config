@@ -2,6 +2,7 @@
 import os
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 from cloakbrowser.download import ensure_binary
@@ -27,3 +28,6 @@ source.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 version = subprocess.check_output([str(target), '--version'], text=True).strip()
 print(f'Installed CloakBrowser binary at {target} -> {source}')
 print(version)
+sys.stdout.flush()
+sys.stderr.flush()
+os._exit(0)
