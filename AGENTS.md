@@ -11,8 +11,7 @@ changelog.
   repo-specific guidance. Keep it concise, imperative, and high-signal.
 - The shared workflow preferences require verified work to be committed before
   task completion.
-- If a change needs a plan, implement it in a git worktree. If
-  `using-git-worktrees` is available, activate it.
+- If a change needs a plan, implement it in a git worktree.
 - For repo research, use `brainstorming` and `openspec-explore` when those
   capabilities are available.
 - Use the `nix` skill for Nix-platform work and the `python` skill for Python

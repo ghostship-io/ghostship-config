@@ -137,14 +137,9 @@ logical-unit secret files.
   into `~/.agents/skills/` on develop hosts. Managed external `skills.sh`
   installs also land under `~/.agents/skills/`, but they are maintained by
   `ghostship-agent-maintenance` instead of the repo-owned skill tree.
-- The curated shared set is `merge-worktree`, `nix`, `python`, `ssh`, `wsl2`,
-  and a vendored `skill-creator` package pinned to the upstream
-  `skill-creator` source at `vercel-labs/agent-browser` `v0.9.3`.
-- `merge-worktree` is the shared Codex Desktop cleanup skill for finishing a
-  detached or branch-backed worktree, using
-  `scripts/finalize_worktree.sh inspect --target-branch main` as the canonical
-  local preflight report, reconciling it back into local `main`, and removing
-  the worktree after the local fast-forward succeeds.
+- The curated shared set is `nix`, `python`, `ssh`, `wsl2`, and a vendored
+  `skill-creator` package pinned to the upstream `skill-creator` source at
+  `vercel-labs/agent-browser` `v0.9.3`.
 - Develop hosts also replace Codex's built-in
   `~/.codex/skills/.system/skill-creator` path with a managed symlink to
   `~/.agents/skills/skill-creator`, and `ghostship-agent-maintenance`
