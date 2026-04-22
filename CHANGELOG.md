@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **WSL OpenCode desktop service**: Restored a repo-managed
+  `opencode-server` Home Manager user service on WSL develop hosts so the
+  Windows OpenCode desktop app can attach to `127.0.0.1:8421` over localhost
+  forwarding, and removed the repo-managed `ghostship-paseo` daemon startup
+  path.
+
 - **Shared merge-worktree skill**: Added a repo-managed `merge-worktree`
   shared skill plus helper script for Codex Desktop and other detached
   worktrees so agents can review remaining changes, best-effort update

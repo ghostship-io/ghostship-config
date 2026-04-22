@@ -108,13 +108,14 @@ logical-unit secret files.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
-- WSL hosts also run `ghostship-paseo.service` as the `nixos` user. The
-  unit keeps Paseo state under `/home/nixos/.paseo`, ensures the managed
-  `paseo` CLI exists on first start, and binds the daemon to `127.0.0.1:6768`
-  with `localhost` hostnames so the Windows desktop app can connect over WSL
-  localhost forwarding. Upstream currently expects the Paseo daemon and app
-  versions to stay in lockstep, so update the Windows desktop app when the
-  managed CLI/daemon refreshes.
+- WSL hosts enable `opencode-server.service` as a Home Manager user service for
+  `nixos`. The unit ensures the managed `opencode` CLI exists on first start
+  and binds `opencode serve` to `127.0.0.1:8421` so the Windows desktop app can
+  attach over WSL localhost forwarding. Restart it with
+  `systemctl --user restart opencode-server` after the relevant Home Manager
+  switch if you need to pick up a config or binary refresh. `paseo` remains an
+  installed interactive CLI, but the repo no longer starts a managed WSL daemon
+  for it.
 - Develop-host convergence also cleans the known stale `workmux set-window-status ...` entries from `~/.codex/hooks.json` so removed repo-managed tooling does not keep breaking Codex hooks. The cleanup preserves unrelated valid hooks, warns instead of rewriting malformed JSON, and takes effect after the relevant Home Manager or NixOS switch. Restart any already-running Codex sessions after the switch if they were holding the stale hook state open.
 - Develop-host launchers now keep only the approval defaults: Codex prepends
   `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit

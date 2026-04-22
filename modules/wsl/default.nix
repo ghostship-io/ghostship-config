@@ -4,7 +4,6 @@
   imports = [
     ./wsl.nix
     ./mounts.nix
-    ./paseo-daemon.nix
   ];
 
   # Windows-side tooling can assume FHS shell paths such as /usr/bin/bash when
