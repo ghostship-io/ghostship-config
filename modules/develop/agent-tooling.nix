@@ -400,7 +400,12 @@ EOF
     }
   ];
 
-  managedGlobalSkills = [ ];
+  managedGlobalSkills = [
+    {
+      name = "brainstorming";
+      source = "obra/superpowers/brainstorming";
+    }
+  ];
 
   agentMaintenance = pkgs.writeShellScriptBin "ghostship-agent-maintenance" ''
     set -euo pipefail

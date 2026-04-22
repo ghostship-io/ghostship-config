@@ -90,7 +90,8 @@ logical-unit secret files.
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent
   CLIs including `paseo`, ensures the configured external `skills.sh` repos are
-  installed globally on each develop host, refreshes shared global skills,
+  installed globally on each develop host, including the managed
+  `obra/superpowers/brainstorming` skill, refreshes shared global skills,
   refreshes managed Gemini extensions, bootstraps `agent-browser` only when
   `~/.agent-browser` is missing, and carries an explicit shell-capable runtime
   path so npm and npx child processes can still spawn `sh` under systemd.
@@ -136,7 +137,9 @@ logical-unit secret files.
 - Shared repo-managed skills live under `home/config/skills/` and are linked
   into `~/.agents/skills/` on develop hosts. Managed external `skills.sh`
   installs also land under `~/.agents/skills/`, but they are maintained by
-  `ghostship-agent-maintenance` instead of the repo-owned skill tree.
+  `ghostship-agent-maintenance` instead of the repo-owned skill tree; that
+  external layer now includes the standalone `obra/superpowers/brainstorming`
+  skill.
 - The curated shared set is `nix`, `python`, `ssh`, `wsl2`, and a vendored
   `skill-creator` package pinned to the upstream `skill-creator` source at
   `vercel-labs/agent-browser` `v0.9.3`.
