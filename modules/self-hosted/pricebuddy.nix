@@ -16,7 +16,11 @@ let
       exit 0
     fi
 
-    ${pkgs.podman}/bin/podman build           --pull=always           --tag "$image"           --file "$dockerfile"           "$context_dir"
+    ${pkgs.podman}/bin/podman build \
+      --pull=always \
+      --tag "$image" \
+      --file "$dockerfile" \
+      "$context_dir"
   '';
   pricebuddy-secrets = config.ghostship.selfHostedSecrets.units."pricebuddy-secrets".path;
   pricebuddy-env = "/srv/apps/pricebuddy/pricebuddy.env";
@@ -225,9 +229,9 @@ EOF
       # Verify only Ghostship-managed wiring here, not app auth flows or third-party targets.
       if "$podman_bin" exec -i "$container" php <<'PHP'
 <?php
-$url = getenv('SCRAPER_BASE_URL') ?: 'http://pricebuddy-scraper:3000';
+$baseUrl = rtrim(getenv('SCRAPER_BASE_URL') ?: 'http://pricebuddy-scraper:3000', '/');
 $context = stream_context_create(['http' => ['timeout' => 5]]);
-$body = @file_get_contents($url, false, $context);
+$body = @file_get_contents($baseUrl.'/health', false, $context);
 exit($body === false ? 1 : 0);
 PHP
       then
@@ -254,7 +258,7 @@ in
       "--network=ghostship_net"
       "--health-cmd=php -r 'exit(@file_get_contents(\"http://127.0.0.1/\") === false ? 1 : 0);' || exit 1"
       "--health-interval=30s"
-      "--health-timeout=10s"
+      "--health-timeout=20s"
       "--health-retries=5"
       "--health-start-period=1m"
       "--health-on-failure=kill"
@@ -275,7 +279,7 @@ in
       "--network=ghostship_net"
       "--health-cmd=mysqladmin ping -h 127.0.0.1 || exit 1"
       "--health-interval=30s"
-      "--health-timeout=10s"
+      "--health-timeout=20s"
       "--health-retries=5"
       "--health-start-period=1m"
       "--health-on-failure=kill"
@@ -296,9 +300,9 @@ in
     };
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:3000/\", timeout=5).read(1)' || exit 1"
+      "--health-cmd=python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:3000/health\", timeout=15).read(1)' || exit 1"
       "--health-interval=30s"
-      "--health-timeout=10s"
+      "--health-timeout=20s"
       "--health-retries=5"
       "--health-start-period=1m"
       "--health-on-failure=kill"
