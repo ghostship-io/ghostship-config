@@ -90,10 +90,8 @@ changelog.
   the relevant NixOS rebuild or Home Manager switch.
 - Develop hosts expose `agent-deck` through the same repo-managed wrapper
   pattern as the other agent CLIs.
-- WSL develop hosts run `ghostship-paseo.service` as user `nixos`, keep
-  managed Paseo state under `/home/nixos/.paseo`, and bind the repo-managed
-  desktop-attachment daemon to `127.0.0.1:6768` with `localhost` hostnames.
-  Treat upstream Paseo daemon and desktop-app versions as lockstep.
+- WSL desktop-facing OpenCode support uses the `opencode-server` user service
+  on `127.0.0.1:8421`; do not add a repo-managed Paseo daemon.
 - Develop hosts install `codex`, `gemini`, `opencode`, `paseo`, and `openspec` into the
   user-local npm prefix under
   `/home/nixos/.local/share/ghostship-agent-tools/npm`, and
@@ -125,55 +123,6 @@ changelog.
   command line in a post-start hook to rediscover the socket.
 - Develop-host `sudo` caching is intentionally `timestamp_type=global` with a
   `12h` timeout so fresh agent PTYs share the same auth window.
-
-## WSL and Windows
-
-- Prefer `/mnt/c/...` for Windows files. Treat `/mnt/z` as a lazy mount that
-  may need verification before use.
-- Use explicit `/mnt/c/...` paths or repo-managed wrappers such as `wsl-open`
-  and `win-powershell` for Windows executables on WSL hosts; do not rely on
-  bare `powershell.exe` or other imported Windows PATH commands.
-- Use the repo-managed Paseo WSL daemon from Windows at `localhost:6768`;
-  broader network exposure stays opt-in and is not the default repo contract.
-- WSL activation should stop `mnt-z.automount` and unmount any live `/mnt/z`
-  NFS mount before reloading generated mount units so switches do not fail on
-  stale `/mnt/z` mount state.
-- `powershell.exe -File` does not accept WSL `/mnt/c/...` paths on this host.
-  Use a Windows path such as `C:\...`.
-- When launched from a WSL path, `powershell.exe` sees the working directory as
-  a `\\wsl.localhost\...` UNC path. Use `Set-Location 'C:\...'` if a drive path
-  is required.
-- `wslpath -u 'C:\path'` converts to `/mnt/c/...` as expected, but
-  `wslpath -w /home/nixos/...` returns a `\\wsl.localhost\NixOS\...` UNC path
-  for WSL-native files rather than a `C:\...` path.
-- Docker Desktop stores its WSL disk at
-  `C:\Users\the owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
-- WSL registry `BasePath` values may be missing or use `\??\` / `\\?\` NT
-  prefixes. Guard for that before using them as normal paths.
-- WSL `wsl.extraBin` changes can require a full WSL distro restart after a
-  `nixos-rebuild switch` before refreshed `/usr/bin/...` entries appear in the
-  live instance.
-
-## Remote Access and Deployment
-
-- Do not recommend or call `sudo`. It prompts for a password and blocks agent
-  execution. Use a root shell or direct root SSH host instead.
-- Use `ssh chill-penguin-root` for live work on `chill-penguin`. If that alias
-  stops working, stop and ask the user to restore it.
-- For prompt-driven remote work, start the command in detached tmux and drive it
-  with `capture-pane` plus `send-keys`. Do not use blocking top-level SSH TTY
-  sessions for agent workflows.
-- If a remote deployment reaches a built system path but activation fails,
-  apply the generation directly with
-  `/nix/store/<system>/bin/switch-to-configuration switch`.
-- This repo deploys through Git on the host. Do not ask the user to validate
-  host-side changes until the required repo edits are committed and available to
-  the host checkout.
-- Preferred `chill-penguin` deploy flow:
-  local `git push origin main`;
-  remote `git -C /home/nixos/nixos-config pull --ff-only origin main`;
-  remote `nixos-rebuild build --flake .#chill-penguin`;
-  remote `./result/bin/switch-to-configuration switch`.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on
