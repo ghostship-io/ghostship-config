@@ -297,6 +297,9 @@ changelog.
   re-persisting `pricebuddy-agent.env`, and post-start verification should only
   gate Ghostship-managed wiring such as env generation, scraper reachability,
   and final bearer-token shape.
+- On `chill-penguin` arm64, `pricebuddy-scraper` can report healthy while real
+  `/api/article` fetches still fail on Selenium driver acquisition; validate the
+  scraper with an actual article request, not only the health endpoint.
 - On `chill-penguin`, Muximux intentionally omits Honcho while keeping
   PriceBuddy in the dropdown immediately after Bazarr; Homepage remains the
   place where Honcho stays visible.
