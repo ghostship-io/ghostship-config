@@ -42,6 +42,10 @@ The develop-host `ghostship-agent-maintenance` service SHALL ensure the repo-con
 - **WHEN** `ghostship-agent-maintenance` runs after the configured managed global `skills.sh` repos are already installed
 - **THEN** it SHALL still run the global skill refresh flow instead of skipping updates
 
+#### Scenario: Managed brainstorming skill is installed through skills.sh
+- **WHEN** the configured managed external skill set is inspected
+- **THEN** it SHALL include the standalone `obra/superpowers/brainstorming` install source rather than expanding the repo-managed shared skill inventory
+
 #### Scenario: Managed Gemini extensions are installed or updated during upkeep
 - **WHEN** `ghostship-agent-maintenance` runs on a develop host
 - **THEN** it SHALL install missing configured Gemini extensions and update already-installed configured Gemini extensions

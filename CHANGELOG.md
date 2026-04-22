@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   forwarding, and removed the repo-managed `ghostship-paseo` daemon startup
   path.
 
+- **Managed brainstorming skill**: Added the standalone
+  `obra/superpowers/brainstorming` `skills.sh` install to the develop-host
+  maintenance flow so `ghostship-agent-maintenance` keeps it installed and
+  refreshed without expanding the repo-managed shared skill inventory.
+
 - **Shared merge-worktree skill removal**: Removed the repo-managed
   `merge-worktree` shared skill, its develop-profile link, and the remaining
   stale `using-git-worktrees` reference from the OpenSpec archive override and
