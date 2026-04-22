@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -11,7 +10,13 @@ from cloakbrowser.download import ensure_binary
 target = Path('/opt/cloakbrowser/chrome')
 target.parent.mkdir(parents=True, exist_ok=True)
 
-source = Path(ensure_binary()).resolve()
+original_binary_path = os.environ.pop('CLOAKBROWSER_BINARY_PATH', None)
+try:
+    source = Path(ensure_binary()).resolve()
+finally:
+    if original_binary_path is not None:
+        os.environ['CLOAKBROWSER_BINARY_PATH'] = original_binary_path
+
 if target.exists() or target.is_symlink():
     target.unlink()
 target.symlink_to(source)
