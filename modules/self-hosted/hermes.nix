@@ -40,7 +40,6 @@ let
     PYLOAD_URL = "http://pyload:8000";
     N8N_URL = "http://n8n:5678";
     CHANGEDETECTION_URL = "http://changedetection:5000";
-    FIRECRAWL_URL = "http://firecrawl-api:3002";
     FIRECRAWL_API_URL = "http://firecrawl-api:3002";
     CHAPTARR_URL = "http://chaptarr:8789";
     BOOKSTACK_URL = "http://bookstack";
