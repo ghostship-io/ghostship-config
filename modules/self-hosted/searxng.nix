@@ -2,6 +2,9 @@
 
 let
   searxng-secrets = config.ghostship.selfHostedSecrets.units."searxng-secrets".path;
+  searxng-config-dir = "/srv/apps/searxng";
+  searxng-cache-dir = "/srv/apps/searxng-cache";
+  limiter-enabled = true;
   searxng-pypi-engine = pkgs.writeText "searxng-pypi_exact.py" ''
     # SPDX-License-Identifier: AGPL-3.0-or-later
     """PyPI exact-match package lookup via the JSON API."""
@@ -125,247 +128,340 @@ let
     disabled = false;
     inactive = false;
   } // extra;
-  searxng-keep-only = [
-    # General / web / context
-    "brave"
-    "bing"
-    "google"
-    "hackernews"
+  promoted-web-pool = [
+    "startpage"
+    "qwant"
     "mojeek"
-    "reddit"
-    "wikidata"
+    "presearch"
     "wikipedia"
-
-    # News
-    "brave.news"
-    "duckduckgo news"
-    "google news"
-    "reuters"
-    "wikinews"
-
-    # Images / video / media
-    "brave.images"
-    "brave.videos"
-    "dailymotion"
-    "deviantart"
-    "duckduckgo images"
-    "duckduckgo videos"
-    "google images"
-    "google videos"
-    "mixcloud"
-    "mojeek images"
-    "openverse"
-    "radio browser"
-    "sepiasearch"
-    "soundcloud"
-    "wikicommons.audio"
-    "wikicommons.images"
-    "wikicommons.videos"
-    "youtube"
-
-    # Science / knowledge
-    "arxiv"
-    "ddg definitions"
-    "etymonline"
-    "google scholar"
-    "openairedatasets"
-    "openairepublications"
-    "pdbe"
+    "wikidata"
+  ];
+  tech-pool = [
+    "arch linux wiki"
+    "nixos wiki"
+    "askubuntu"
+    "stackoverflow"
+    "superuser"
+    "mankier"
+    "mdn"
+    "github"
+    "gitlab"
+    "gitea.com"
+    "sourcehut"
+    "huggingface"
+    "repology"
+    "pypi"
+    "npm"
+    "crates.io"
+    "pkg.go.dev"
+    "packagist"
+    "pub.dev"
+    "rubygems"
+    "hex"
+    "lib.rs"
+  ];
+  research-pool = [
+    "openalex"
+    "semantic scholar"
     "pubmed"
-    "wikibooks"
-    "wiktionary"
-    "wordnik"
-
-    # Translation / dictionaries / weather / maps / misc helpers
-    "apple maps"
+    "arxiv"
+    "crossref"
+  ];
+  news-pool = [
+    "reuters"
+    "tagesschau"
+    "wikinews"
+  ];
+  utility-pool = [
     "currency"
-    "dictzone"
     "lingva"
-    "mymemory translated"
     "wttr.in"
     "openstreetmap"
     "photon"
-
-    # IT / packages / repos / apps
-    "alpine linux packages"
-    "arch linux wiki"
-    "askubuntu"
-    "cachy os packages"
-    "crates.io"
-    "devicons"
-    "fdroid"
-    "github"
-    "gitea.com"
-    "gitlab"
-    "google play apps"
-    "hex"
-    "lib.rs"
-    "lucide"
-    "mankier"
-    "material icons"
-    "mdn"
-    "nixos wiki"
-    "npm"
-    "packagist"
-    "pkg.go.dev"
-    "pub.dev"
-    "pypi"
-    "repology"
-    "rubygems"
-    "selfhst icons"
-    "sourcehut"
-    "stackoverflow"
-    "superuser"
-    "voidlinux"
-
-    # Files / books / torrents / max-open surfaces
-    "bt4g"
-    "piratebay"
-    "wikicommons.files"
-
-    # Social / fringe
-    "erowid"
-    "lemmy comments"
-    "lemmy communities"
-    "lemmy posts"
-    "lemmy users"
-    "mastodon hashtags"
-    "mastodon users"
-
-    # Movies / shopping
-    "imdb"
-    "moviepilot"
-    "rottentomatoes"
-    "tmdb"
   ];
+  searxng-keep-only = lib.unique (
+    promoted-web-pool
+    ++ tech-pool
+    ++ research-pool
+    ++ news-pool
+    ++ utility-pool
+  );
   searxng-engine-overrides = [
-    # Helper / utility engines should stay out of general search.
-    (mkEngine "currency" { categories = [ "currency" ]; })
-    (mkEngine "ddg definitions" { categories = [ "define" "dictionaries" ]; })
-    (mkEngine "dictzone" { categories = [ "translate" "dictionaries" ]; })
-    (mkEngine "etymonline" { categories = [ "dictionaries" ]; })
-    (mkEngine "lingva" { categories = [ "translate" ]; })
-    (mkEngine "mymemory translated" { categories = [ "translate" ]; })
+    (mkEngine "startpage" {
+      startpage_categ = "web";
+      categories = [ "general" "web" ];
+      weight = 4;
+      timeout = 3.0;
+    })
+    (mkEngine "qwant" {
+      qwant_categ = "web-lite";
+      categories = [ "general" "web" ];
+      weight = 3;
+      timeout = 3.0;
+    })
+    (mkEngine "mojeek" {
+      categories = [ "general" "web" ];
+      weight = 3;
+      timeout = 3.0;
+    })
+    (mkEngine "presearch" {
+      categories = [ "general" "web" ];
+      weight = 2;
+      timeout = 3.0;
+    })
+    (mkEngine "wikipedia" {
+      categories = [ "general" "web" ];
+      weight = 6;
+      timeout = 3.0;
+    })
+    (mkEngine "wikidata" {
+      categories = [ "general" "web" ];
+      weight = 3;
+      timeout = 3.0;
+    })
+
+    (mkEngine "arch linux wiki" {
+      categories = [ "software wikis" "it" ];
+      weight = 5;
+      timeout = 4.0;
+    })
+    (mkEngine "nixos wiki" {
+      categories = [ "software wikis" "it" ];
+      weight = 5;
+      timeout = 4.0;
+    })
+    (mkEngine "askubuntu" {
+      categories = [ "q&a" "it" ];
+      weight = 4;
+      timeout = 4.0;
+    })
+    (mkEngine "stackoverflow" {
+      categories = [ "q&a" "it" ];
+      weight = 4;
+      timeout = 4.0;
+    })
+    (mkEngine "superuser" {
+      categories = [ "q&a" "it" ];
+      weight = 3;
+      timeout = 4.0;
+    })
+    (mkEngine "mankier" {
+      categories = [ "it" ];
+      weight = 4;
+      timeout = 4.0;
+    })
+    (mkEngine "mdn" {
+      categories = [ "it" ];
+      weight = 4;
+      timeout = 4.0;
+    })
+    (mkEngine "github" {
+      categories = [ "repos" "it" ];
+      weight = 4;
+      timeout = 4.0;
+    })
+    (mkEngine "gitlab" {
+      categories = [ "repos" "it" ];
+      weight = 3;
+      timeout = 4.0;
+    })
+    (mkEngine "gitea.com" {
+      categories = [ "repos" "it" ];
+      weight = 2;
+      timeout = 4.0;
+    })
+    (mkEngine "sourcehut" {
+      categories = [ "repos" "it" ];
+      weight = 2;
+      timeout = 4.0;
+    })
+    (mkEngine "huggingface" {
+      categories = [ "repos" "it" ];
+      weight = 2;
+      timeout = 4.0;
+    })
+    (mkEngine "repology" {
+      categories = [ "packages" "it" ];
+      weight = 8;
+      timeout = 5.0;
+    })
+    (mkEngine "pypi" {
+      engine = "pypi_exact";
+      categories = [ "packages" "it" ];
+      weight = 10;
+      timeout = 5.0;
+    })
+    (mkEngine "npm" {
+      categories = [ "packages" "it" ];
+      weight = 4;
+      timeout = 5.0;
+    })
+    (mkEngine "crates.io" {
+      categories = [ "packages" "it" ];
+      weight = 4;
+      timeout = 5.0;
+    })
+    (mkEngine "pkg.go.dev" {
+      categories = [ "packages" "it" ];
+      weight = 4;
+      timeout = 5.0;
+    })
+    (mkEngine "packagist" {
+      categories = [ "packages" "it" ];
+      weight = 3;
+      timeout = 5.0;
+    })
+    (mkEngine "pub.dev" {
+      categories = [ "packages" "it" ];
+      weight = 3;
+      timeout = 5.0;
+    })
+    (mkEngine "rubygems" {
+      categories = [ "packages" "it" ];
+      weight = 3;
+      timeout = 5.0;
+    })
+    (mkEngine "hex" {
+      categories = [ "packages" "it" ];
+      weight = 3;
+      timeout = 5.0;
+    })
+    (mkEngine "lib.rs" {
+      categories = [ "packages" "it" ];
+      weight = 4;
+      timeout = 5.0;
+    })
+
+    (mkEngine "openalex" {
+      categories = [ "science" "scientific publications" ];
+      weight = 6;
+      timeout = 5.0;
+      mailto = "pricebuddy@ghostship.io";
+    })
+    (mkEngine "semantic scholar" {
+      categories = [ "science" "scientific publications" ];
+      weight = 5;
+      timeout = 5.0;
+    })
+    (mkEngine "pubmed" {
+      categories = [ "science" "scientific publications" ];
+      weight = 5;
+      timeout = 5.0;
+    })
+    (mkEngine "arxiv" {
+      categories = [ "science" "scientific publications" ];
+      weight = 4;
+      timeout = 5.0;
+    })
+    (mkEngine "crossref" {
+      categories = [ "science" "scientific publications" ];
+      weight = 4;
+      timeout = 5.0;
+    })
+
+    (mkEngine "reuters" {
+      categories = [ "news" ];
+      weight = 5;
+      timeout = 4.0;
+    })
+    (mkEngine "tagesschau" {
+      categories = [ "news" ];
+      weight = 4;
+      timeout = 4.0;
+    })
+    (mkEngine "wikinews" {
+      categories = [ "news" ];
+      weight = 2;
+      timeout = 4.0;
+    })
+
+    (mkEngine "currency" {
+      categories = [ "currency" ];
+      weight = 1;
+      timeout = 3.0;
+    })
+    (mkEngine "lingva" {
+      categories = [ "translate" ];
+      weight = 1;
+      timeout = 3.0;
+    })
     (mkEngine "wttr.in" {
       engine = "wttr_exact";
       categories = [ "weather" ];
-      timeout = 8.0;
+      weight = 1;
+      timeout = 5.0;
     })
-
-    # Emphasize broader and less-filtered discovery engines.
-    (mkEngine "arxiv" { weight = 4; })
-    (mkEngine "alpine linux packages" { categories = [ "packages" ]; weight = 6; timeout = 8.0; })
-    (mkEngine "apple maps" { categories = [ "map" ]; weight = 3; timeout = 5.0; })
-    (mkEngine "arch linux wiki" { categories = [ "software wikis" "it" ]; weight = 4; timeout = 5.0; })
-    (mkEngine "bing" { categories = [ "general" "web" ]; weight = 1; timeout = 5.0; })
-    (mkEngine "bt4g" { weight = 3; categories = [ "files" ]; })
-    (mkEngine "brave" { weight = 4; timeout = 4.0; })
-    (mkEngine "brave.images" { weight = 3; timeout = 4.0; })
-    (mkEngine "brave.news" { weight = 3; categories = [ "news" ]; timeout = 4.0; })
-    (mkEngine "brave.videos" { weight = 3; timeout = 4.0; })
-    (mkEngine "devicons" { categories = [ "icons" ]; weight = 3; timeout = 8.0; })
-    (mkEngine "duckduckgo images" { weight = 3; timeout = 5.0; })
-    (mkEngine "duckduckgo news" { weight = 4; categories = [ "news" ]; timeout = 5.0; })
-    (mkEngine "duckduckgo videos" { weight = 3; timeout = 5.0; })
-    (mkEngine "erowid" { categories = [ "other" ]; weight = 5; timeout = 8.0; })
-    (mkEngine "cachy os packages" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
-    (mkEngine "crates.io" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
-    (mkEngine "fdroid" { categories = [ "apps" ]; weight = 2; timeout = 8.0; })
-    (mkEngine "github" { weight = 4; categories = [ "repos" "it" ]; })
-    (mkEngine "google" { weight = 1; categories = [ "general" "web" "it" ]; })
-    (mkEngine "google images" { weight = 1; })
-    (mkEngine "google news" { weight = 5; categories = [ "news" ]; timeout = 5.0; })
-    (mkEngine "google play apps" { categories = [ "apps" ]; weight = 4; timeout = 8.0; })
-    (mkEngine "google scholar" { weight = 2; timeout = 5.0; })
-    (mkEngine "google videos" { weight = 1; })
-    (mkEngine "hackernews" { weight = 3; categories = [ "q&a" "it" ]; })
-    (mkEngine "hex" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
-    (mkEngine "imdb" { categories = [ "movies" ]; weight = 5; timeout = 5.0; })
-    (mkEngine "lucide" { categories = [ "icons" ]; weight = 3; timeout = 8.0; })
-    (mkEngine "material icons" { categories = [ "icons" ]; weight = 4; timeout = 8.0; })
-    (mkEngine "mojeek" { weight = 3; timeout = 5.0; })
-    (mkEngine "mojeek images" { weight = 2; timeout = 5.0; })
-    (mkEngine "moviepilot" { categories = [ "movies" ]; weight = 2; timeout = 5.0; })
-    (mkEngine "nixos wiki" { categories = [ "software wikis" ]; weight = 4; timeout = 5.0; })
-    (mkEngine "lib.rs" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
-    (mkEngine "npm" { categories = [ "packages" ]; weight = 3; timeout = 8.0; })
-    (mkEngine "openairepublications" { weight = 2; })
-    (mkEngine "openverse" { weight = 3; })
-    (mkEngine "openstreetmap" { categories = [ "map" ]; weight = 4; })
-    (mkEngine "photon" { categories = [ "map" ]; weight = 2; })
-    (mkEngine "packagist" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
-    (mkEngine "pkg.go.dev" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
-    (mkEngine "pub.dev" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
-    (mkEngine "pypi" {
-      engine = "pypi_exact";
-      categories = [ "packages" ];
-      weight = 10;
-      timeout = 8.0;
+    (mkEngine "openstreetmap" {
+      categories = [ "map" ];
+      weight = 4;
+      timeout = 4.0;
     })
-    (mkEngine "reddit" { weight = 2; categories = [ "social media" "general" ]; })
-    (mkEngine "repology" { categories = [ "packages" ]; weight = 8; timeout = 8.0; })
-    (mkEngine "reuters" { weight = 6; categories = [ "news" ]; timeout = 5.0; })
-    (mkEngine "rottentomatoes" { categories = [ "movies" ]; weight = 4; timeout = 5.0; })
-    (mkEngine "rubygems" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
-    (mkEngine "sepiasearch" { weight = 3; })
-    (mkEngine "selfhst icons" { categories = [ "icons" ]; weight = 4; timeout = 8.0; })
-    (mkEngine "soundcloud" { categories = [ "music" ]; weight = 5; timeout = 8.0; })
-    (mkEngine "stackoverflow" { weight = 3; categories = [ "q&a" "it" ]; })
-    (mkEngine "tmdb" { categories = [ "movies" ]; weight = 3; timeout = 5.0; })
-    (mkEngine "voidlinux" { categories = [ "it" ]; weight = 1; timeout = 5.0; })
-    (mkEngine "wikipedia" { categories = [ "general" ]; weight = 7; timeout = 8.0; })
-    (mkEngine "wikidata" { categories = [ "general" ]; weight = 2; timeout = 5.0; })
-    (mkEngine "wikicommons.audio" { categories = [ "music" "wikimedia" ]; weight = 2; timeout = 5.0; })
-    (mkEngine "wikicommons.files" { weight = 2; categories = [ "files" "wikimedia" ]; })
-    (mkEngine "wikicommons.images" { weight = 2; categories = [ "images" "wikimedia" ]; })
-    (mkEngine "wikicommons.videos" { categories = [ "videos" "wikimedia" ]; weight = 2; timeout = 5.0; })
-    (mkEngine "youtube" { weight = 6; categories = [ "videos" "music" ]; timeout = 5.0; })
-
-    # Default-off engines that are useful for agentic search when healthy.
-    (mkEngine "gitlab" { categories = [ "repos" "it" ]; })
-    (mkEngine "gitea.com" { categories = [ "repos" "it" ]; })
-    (mkEngine "lemmy comments" { categories = [ "social media" ]; })
-    (mkEngine "lemmy communities" { categories = [ "social media" ]; })
-    (mkEngine "lemmy posts" { categories = [ "social media" ]; })
-    (mkEngine "lemmy users" { categories = [ "social media" ]; })
-    (mkEngine "mastodon hashtags" { categories = [ "social media" ]; })
-    (mkEngine "mastodon users" { categories = [ "social media" ]; })
-    (mkEngine "openstreetmap" { categories = [ "map" ]; })
-    (mkEngine "photon" { categories = [ "map" ]; })
-    (mkEngine "sourcehut" { categories = [ "repos" "it" ]; })
+    (mkEngine "photon" {
+      categories = [ "map" ];
+      weight = 2;
+      timeout = 4.0;
+    })
   ];
-  searxng-patches = [
-    "server.secret_key=env:SEARXNG_SECRET_KEY"
+  searxng-settings = {
+    general = {
+      instance_name = "Ghostship Search";
+    };
+    search = {
+      safe_search = 0;
+      autocomplete = "";
+      formats = [ "html" "json" ];
+    };
+    server = {
+      bind_address = "0.0.0.0";
+      port = 8080;
+      image_proxy = false;
+      limiter = limiter-enabled;
+    };
+    outgoing = {
+      request_timeout = 2.5;
+      max_request_timeout = 5.0;
+      pool_connections = 100;
+      pool_maxsize = 10;
+      keepalive_expiry = 5.0;
+    };
+    valkey = {
+      url = "valkey://searxng-valkey:6379/0";
+    };
+    use_default_settings = {
+      engines = {
+        keep_only = searxng-keep-only;
+      };
+    };
+    engines = searxng-engine-overrides;
+    plugins = {
+      "searx.plugins.calculator.SXNGPlugin" = { active = true; };
+      "searx.plugins.hash_plugin.SXNGPlugin" = { active = true; };
+      "searx.plugins.self_info.SXNGPlugin" = { active = true; };
+      "searx.plugins.tracker_url_remover.SXNGPlugin" = { active = true; };
+      "searx.plugins.unit_converter.SXNGPlugin" = { active = true; };
+      "searx.plugins.oa_doi_rewrite.SXNGPlugin" = { active = true; };
+    };
+  };
+  searxng-limiter-toml = ''
+    [botdetection]
+    trusted_proxies = [
+      "127.0.0.0/8",
+      "::1",
+      "10.89.0.0/24",
+    ]
 
-    "general.instance_name=yaml:${builtins.toJSON "Ghostship Search"}"
+    [botdetection.ip_limit]
+    filter_link_local = false
+    link_token = false
 
-    "search.safe_search=yaml:${builtins.toJSON 0}"
-    "search.autocomplete=yaml:${builtins.toJSON "bing"}"
-    "search.formats=yaml:${builtins.toJSON [ "html" "json" ]}"
-
-    "server.port=yaml:${builtins.toJSON 8080}"
-    "server.bind_address=yaml:${builtins.toJSON "0.0.0.0"}"
-    "server.image_proxy=yaml:${builtins.toJSON true}"
-    "server.limiter=yaml:${builtins.toJSON false}"
-
-    "outgoing.request_timeout=yaml:${builtins.toJSON 4.0}"
-    "outgoing.max_request_timeout=yaml:${builtins.toJSON 8.0}"
-    "outgoing.pool_connections=yaml:${builtins.toJSON 100}"
-    "outgoing.pool_maxsize=yaml:${builtins.toJSON 20}"
-    "outgoing.keepalive_expiry=yaml:${builtins.toJSON 10.0}"
-
-    "valkey.url=yaml:${builtins.toJSON "valkey://searxng-valkey:6379/0"}"
-
-    "use_default_settings.engines.keep_only=yaml:${builtins.toJSON searxng-keep-only}"
-    "engines=yaml:${builtins.toJSON searxng-engine-overrides}"
-
-    "plugins[searx.plugins.calculator.SXNGPlugin].active=yaml:${builtins.toJSON true}"
-    "plugins[searx.plugins.hash_plugin.SXNGPlugin].active=yaml:${builtins.toJSON true}"
-    "plugins[searx.plugins.self_info.SXNGPlugin].active=yaml:${builtins.toJSON true}"
-    "plugins[searx.plugins.tracker_url_remover.SXNGPlugin].active=yaml:${builtins.toJSON true}"
-    "plugins[searx.plugins.unit_converter.SXNGPlugin].active=yaml:${builtins.toJSON true}"
-    "plugins[searx.plugins.oa_doi_rewrite.SXNGPlugin].active=yaml:${builtins.toJSON true}"
-  ];
+    [botdetection.ip_lists]
+    pass_ip = [
+      "127.0.0.0/8",
+      "::1",
+      "10.89.0.0/24",
+    ]
+    pass_searxng_org = true
+  '';
 in
 {
   virtualisation.oci-containers.containers."searxng" = {
@@ -389,20 +485,25 @@ in
       GRANIAN_PORT = "8080";
     };
     volumes = [
-      "/srv/apps/searxng:/etc/searxng:rw"
+      "${searxng-config-dir}:/etc/searxng:rw"
+      "${searxng-cache-dir}:/var/cache/searxng:rw"
       "${searxng-pypi-engine}:/usr/local/searxng/searx/engines/pypi_exact.py:ro"
       "${searxng-wttr-engine}:/usr/local/searxng/searx/engines/wttr_exact.py:ro"
     ];
   };
 
   systemd.tmpfiles.rules = [
-    "d /srv/apps/searxng 0755 apps apps -"
+    "d ${searxng-config-dir} 0755 apps apps -"
+    "d ${searxng-cache-dir} 0755 apps apps -"
   ];
 
   systemd.services.podman-searxng.preStart = ''
-    CONFIG_DIR="/srv/apps/searxng"
+    CONFIG_DIR="${searxng-config-dir}"
     SETTINGS_FILE="$CONFIG_DIR/settings.yml"
+    LIMITER_FILE="$CONFIG_DIR/limiter.toml"
     SECRETS_FILE="${searxng-secrets}"
+
+    install -d -m0755 -o apps -g apps "$CONFIG_DIR" "${searxng-cache-dir}"
 
     if [ ! -f "$SECRETS_FILE" ]; then
       echo "Waiting for SearXNG secrets at ${searxng-secrets}..."
@@ -419,33 +520,38 @@ in
       exit 1
     fi
 
-    if [ ! -f "$SETTINGS_FILE" ]; then
-      echo "Missing SearXNG settings file at $SETTINGS_FILE" >&2
-      exit 1
-    fi
-
-    echo "Surgically updating SearXNG settings..."
     set -a
     . "$SECRETS_FILE"
     set +a
 
     if [ -z "''${SEARXNG_SECRET_KEY:-}" ]; then
-      SEARXNG_SECRET_KEY=$(${pkgs.openssl}/bin/openssl rand -hex 32)
+      echo "Missing SEARXNG_SECRET_KEY in $SECRETS_FILE" >&2
+      exit 1
     fi
-    export SEARXNG_SECRET_KEY
 
-    ${pkgs.ghostship-config}/bin/ghostship-config delete "$SETTINGS_FILE" \
-      --allow-missing \
-      use_default_settings \
-      engines
+    SETTINGS_TEMPLATE="$CONFIG_DIR/settings.template.json"
 
-    searx_args=(
-      --secrets-file "$SECRETS_FILE"
-${lib.concatStringsSep "\n" (map lib.escapeShellArg searxng-patches)}
-    )
+    cat > "$SETTINGS_TEMPLATE" <<'EOF'
+${builtins.toJSON searxng-settings}
+EOF
 
-    ${pkgs.ghostship-config}/bin/ghostship-config set "$SETTINGS_FILE" "''${searx_args[@]}"
+    export SETTINGS_FILE SETTINGS_TEMPLATE
+    ${pkgs.python3}/bin/python3 - <<'PYEOF'
+import json
+import os
+from pathlib import Path
 
-    chown 3000:3000 "$SETTINGS_FILE"
+settings = json.loads(Path(os.environ["SETTINGS_TEMPLATE"]).read_text())
+settings["server"]["secret_key"] = os.environ["SEARXNG_SECRET_KEY"]
+Path(os.environ["SETTINGS_FILE"]).write_text(json.dumps(settings, indent=2) + "\n")
+Path(os.environ["SETTINGS_TEMPLATE"]).unlink()
+PYEOF
+
+    cat > "$LIMITER_FILE" <<'EOF'
+${searxng-limiter-toml}
+EOF
+
+    chown 3000:3000 "$SETTINGS_FILE" "$LIMITER_FILE"
+    chmod 0640 "$SETTINGS_FILE" "$LIMITER_FILE"
   '';
 }
