@@ -33,6 +33,14 @@ assert_not_contains() {
   fi
 }
 
+assert_equals() {
+  local actual="$1"
+  local expected="$2"
+  if [ "$actual" != "$expected" ]; then
+    fail "expected '$expected', got '$actual'"
+  fi
+}
+
 new_repo() {
   local name="$1"
   local repo="$tmp_root/$name"
@@ -54,6 +62,23 @@ run_inspect() {
     cd "$worktree"
     "$script_path" inspect --target-branch main
   )
+}
+
+run_finish() {
+  local worktree="$1"
+  (
+    cd "$worktree"
+    "$script_path" finish --target-branch main
+  )
+}
+
+assert_worktree_registered() {
+  local repo="$1"
+  local worktree="$2"
+
+  if ! git -C "$repo" worktree list --porcelain | grep -Fx "worktree $worktree" >/dev/null; then
+    fail "expected worktree to remain registered: $worktree"
+  fi
 }
 
 scenario_detached_no_unique_commits() {
@@ -209,6 +234,87 @@ scenario_needs_main_merge() {
   assert_contains "$output" "can_finish_now=yes"
 }
 
+scenario_finish_branch_keeps_worktree() {
+  local repo
+  repo=$(new_repo finish-branch)
+  local source="$tmp_root/finish-branch-source"
+
+  git -C "$repo" worktree add -b feature "$source" >/dev/null
+  printf 'feature\n' > "$source/feature.txt"
+  git -C "$source" add feature.txt
+  git -C "$source" commit -m "feature commit" >/dev/null
+
+  local source_head
+  source_head=$(git -C "$source" rev-parse HEAD)
+
+  local output
+  output=$(run_finish "$source")
+
+  assert_contains "$output" "integration_commit=$source_head"
+  assert_contains "$output" "source_worktree_removed=no"
+  assert_contains "$output" "temporary_branch_created=no"
+  assert_contains "$output" "status=merged"
+  assert_equals "$(git -C "$repo" rev-parse main)" "$source_head"
+  assert_worktree_registered "$repo" "$source"
+}
+
+scenario_finish_detached_no_temp_branch() {
+  local repo
+  repo=$(new_repo finish-detached)
+  local source="$tmp_root/finish-detached-source"
+
+  git -C "$repo" worktree add --detach "$source" HEAD >/dev/null
+  printf 'detached\n' > "$source/detached.txt"
+  git -C "$source" add detached.txt
+  git -C "$source" commit -m "detached commit" >/dev/null
+
+  local source_head
+  source_head=$(git -C "$source" rev-parse HEAD)
+
+  local output
+  output=$(run_finish "$source")
+
+  assert_contains "$output" "integration_commit=$source_head"
+  assert_contains "$output" "temporary_branch_created=no"
+  assert_contains "$output" "source_worktree_removed=no"
+  assert_contains "$output" "status=merged"
+  assert_equals "$(git -C "$repo" rev-parse main)" "$source_head"
+  assert_worktree_registered "$repo" "$source"
+
+  if git -C "$repo" branch --format='%(refname:short)' | grep -F "codex/finalize-" >/dev/null; then
+    fail "finish created a temporary codex/finalize branch"
+  fi
+}
+
+scenario_finish_needs_main_merge() {
+  local repo
+  repo=$(new_repo finish-needs-main-merge)
+  local source="$tmp_root/finish-needs-main-merge-source"
+
+  git -C "$repo" worktree add -b feature "$source" >/dev/null
+  printf 'feature\n' > "$source/feature.txt"
+  git -C "$source" add feature.txt
+  git -C "$source" commit -m "feature commit" >/dev/null
+
+  printf 'main update\n' > "$repo/shared.txt"
+  git -C "$repo" add shared.txt
+  git -C "$repo" commit -m "main update" >/dev/null
+
+  local output
+  output=$(run_finish "$source")
+
+  local source_head
+  source_head=$(git -C "$source" rev-parse HEAD)
+
+  assert_contains "$output" "integration_commit=$source_head"
+  assert_contains "$output" "source_worktree_removed=no"
+  assert_contains "$output" "status=merged"
+  assert_equals "$(git -C "$repo" rev-parse main)" "$source_head"
+  assert_worktree_registered "$repo" "$source"
+  assert_equals "$(cat "$repo/shared.txt")" "main update"
+  assert_equals "$(cat "$repo/feature.txt")" "feature"
+}
+
 run_scenario() {
   local name="$1"
   shift
@@ -224,5 +330,8 @@ run_scenario source_conflicts scenario_source_conflicts
 run_scenario main_dirty_without_overlap scenario_main_dirty_without_overlap
 run_scenario main_dirty_with_overlap scenario_main_dirty_with_overlap
 run_scenario needs_main_merge scenario_needs_main_merge
+run_scenario finish_branch_keeps_worktree scenario_finish_branch_keeps_worktree
+run_scenario finish_detached_no_temp_branch scenario_finish_detached_no_temp_branch
+run_scenario finish_needs_main_merge scenario_finish_needs_main_merge
 
 printf 'PASS: %s scenarios\n' "$scenario_count"

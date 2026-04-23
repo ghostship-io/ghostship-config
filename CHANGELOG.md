@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Merge worktree finish contract**: Updated the shared `merge-worktree` skill
+  so its bundled finish helper fast-forwards local `main` without removing the
+  source worktree, and clarified that agents should invoke the helper from the
+  installed skill path under `$HOME/.agents/skills/merge-worktree`.
+
 - **Firecrawl CloakBrowser loader fix**: Switched the Firecrawl Playwright sidecar patch to load the ESM-only `cloakbrowser` package through a small CommonJS helper, so the embedded CloakBrowser path works under the upstream service's current Node/TypeScript build output.
 
 - **Firecrawl Postgres arm64 fix**: Replaced the broken `ghcr.io/firecrawl/nuq-postgres:latest` sidecar on `chill-penguin` with a repo-owned multi-arch `nuq-postgres` build based on `postgres:16`, preserving Firecrawl's upstream `nuq.sql` and `pg_cron` initialization so the `nuq` schema comes up correctly on arm64.

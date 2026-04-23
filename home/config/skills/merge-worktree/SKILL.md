@@ -1,6 +1,6 @@
 ---
 name: merge-worktree
-description: Finish a Codex Desktop or other git worktree and reconcile it back into local `main`, including detached HEAD worktrees. Use when Claude needs to review and commit outstanding work, best-effort update `README.md` / `CHANGELOG.md` / `VERSION`, merge local `main` into the finished worktree if needed, fast-forward local `main` to the result, and remove the worktree afterward.
+description: Finish a Codex Desktop or other git worktree and reconcile it back into local `main`, including detached HEAD worktrees. Use when Claude needs to review and commit outstanding work, best-effort update `README.md` / `CHANGELOG.md` / `VERSION`, merge local `main` into the finished worktree if needed, and fast-forward local `main` to the result while leaving worktree cleanup to Codex/Desktop.
 ---
 
 # merge-worktree
@@ -10,8 +10,9 @@ Use this skill to finish a non-`main` worktree and fold it back into local
 
 ## Core workflow
 
-- Run `scripts/finalize_worktree.sh inspect --target-branch main` from the
-  active worktree first.
+- Run `$HOME/.agents/skills/merge-worktree/scripts/finalize_worktree.sh inspect --target-branch main`
+  from the active worktree first. The helper is bundled with this skill; do
+  not look for a repo-local `scripts/finalize_worktree.sh`.
 - Treat the `inspect` output as the canonical local preflight report for the
   merge-back flow. Do not do extra ad hoc git inspection unless `inspect`
   itself looks wrong.
@@ -40,22 +41,20 @@ Use this skill to finish a non-`main` worktree and fold it back into local
 - If merging local `main` into the source worktree conflicts, resolve the
   conflicts in the source worktree immediately, commit the resolution there,
   and continue the finish flow instead of stopping for user intervention.
-- Run `scripts/finalize_worktree.sh finish --target-branch main` only after
-  `inspect` reports `can_finish_now=yes` and the source worktree is clean and
-  committed.
+- Run `$HOME/.agents/skills/merge-worktree/scripts/finalize_worktree.sh finish --target-branch main`
+  only after `inspect` reports `can_finish_now=yes` and the source worktree is
+  clean and committed.
 
 ## Finish contract
 
-- `finish` creates an ephemeral `codex/finalize-...` branch when the source
-  worktree is detached.
 - `finish` merges local `main` into the source worktree only when the source
   worktree does not already contain the current local `main` tip.
 - If that merge conflicts, resolve the conflicts in the source worktree,
   commit the result there, and rerun `finish`.
 - `finish` updates local `main` with a fast-forward-only merge.
-- `finish` removes the source worktree only after the fast-forward into local
-  `main` succeeds.
-- `finish` deletes the ephemeral branch only when it created one.
+- `finish` leaves the source worktree in place after the fast-forward into
+  local `main` succeeds.
+- Codex/Desktop owns any later worktree cleanup.
 
 ## Failure behavior
 

@@ -27,17 +27,6 @@ print_list() {
   done
 }
 
-sanitize_name() {
-  local name
-  name=$(printf '%s' "$1" | tr -cs 'A-Za-z0-9._-' '-')
-  name=${name#-}
-  name=${name%-}
-  if [ -z "$name" ]; then
-    name="worktree"
-  fi
-  printf '%s\n' "$name"
-}
-
 current_branch() {
   git -C "$1" symbolic-ref --quiet --short HEAD 2>/dev/null || true
 }
@@ -272,7 +261,6 @@ detached="no"
 needs_temp_branch="no"
 if [ -z "$source_branch" ]; then
   detached="yes"
-  needs_temp_branch="yes"
 fi
 
 collect_preflight
@@ -326,14 +314,6 @@ if [ "$main_conflicts" = "yes" ]; then
   die "target '$target_branch' worktree has unresolved merge conflicts"
 fi
 
-temp_branch=""
-integration_branch="$source_branch"
-if [ -z "$integration_branch" ]; then
-  temp_branch="codex/finalize-$(sanitize_name "$(basename "$source_worktree")")-$(date -u +%Y%m%d%H%M%S)"
-  git -C "$source_worktree" switch -c "$temp_branch" >/dev/null
-  integration_branch="$temp_branch"
-fi
-
 if [ "$needs_main_merge" = "yes" ]; then
   if ! git -C "$source_worktree" merge --no-edit "$target_ref"; then
     die "merging local '$target_branch' into the source worktree conflicted; resolve the conflicts in the source worktree, commit, and rerun finish"
@@ -353,19 +333,15 @@ if [ "${#overlap_path_list[@]}" -gt 0 ]; then
   die "target '$target_branch' worktree has dirty files that conflict with incoming changes: $overlap_csv"
 fi
 
-if ! git -C "$main_worktree" merge --ff-only "$integration_branch"; then
-  die "fast-forwarding '$target_branch' to '$integration_branch' failed"
-fi
+integration_commit=$(current_head "$source_worktree")
 
-cd "$main_worktree"
-git worktree remove "$source_worktree"
-
-if [ -n "$temp_branch" ]; then
-  git branch -D "$temp_branch" >/dev/null
+if ! git -C "$main_worktree" merge --ff-only "$integration_commit"; then
+  die "fast-forwarding '$target_branch' to '$integration_commit' failed"
 fi
 
 printf 'source_worktree=%s\n' "$source_worktree"
 printf 'main_worktree=%s\n' "$main_worktree"
-printf 'integration_branch=%s\n' "$integration_branch"
-printf 'temporary_branch_created=%s\n' "$( [ -n "$temp_branch" ] && printf yes || printf no )"
-printf 'status=finished\n'
+printf 'integration_commit=%s\n' "$integration_commit"
+printf 'source_worktree_removed=no\n'
+printf 'temporary_branch_created=no\n'
+printf 'status=merged\n'
