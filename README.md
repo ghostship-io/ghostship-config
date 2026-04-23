@@ -164,7 +164,7 @@ Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, the `arr` stack,
-qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr, BookStack, CloakBrowser, Hermes,
+qBittorrent/VueTorrent, SearXNG, Firecrawl, RomM, Grimmory, Chaptarr, BookStack, CloakBrowser, Hermes,
 PyLoad, RSS-Bridge, PriceBuddy, and n8n.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
@@ -199,6 +199,9 @@ that launches CloakBrowser with `humanize=True` behind the existing
 CloakBrowser Playwright session inside its own image with `humanize=True`. The
 standalone CloakBrowser manager remains available for operator-driven profiles,
 but neither service depends on a managed CDP/profile path.
+
+
+Firecrawl now runs as an internal five-container stack on `ghostship_net`: the upstream API image, a repo-owned CloakBrowser-patched Playwright sidecar image, RabbitMQ, Redis, and `nuq-postgres`. The public `https://firecrawl.ghostship.io` hostname remains part of the external Cloudflare/tunnel workflow, while internal consumers use `http://firecrawl-api:3002`. The API reuses the existing `http://searxng:8080` backend for `/search`, reads `OPENAI_API_KEY` from the new `firecrawl-secrets` bundle, and targets Gemini through the OpenAI-compatible `OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/` plus `MODEL_NAME=gemini-2.5-flash-lite`. The Bull queue admin path stays internal-only behind the projected `BULL_AUTH_KEY`.
 
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions

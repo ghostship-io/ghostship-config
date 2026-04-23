@@ -39,6 +39,7 @@
     ./omnitools.nix
     ./metube.nix
     ./changedetection.nix
+    ./firecrawl.nix
     ./rss-bridge.nix
     ./pricebuddy.nix
     ./bookstack-db.nix

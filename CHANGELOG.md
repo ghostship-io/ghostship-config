@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Firecrawl self-hosted stack**: Added a new internal-only Firecrawl stack on `chill-penguin` with the upstream API image, Redis, RabbitMQ, `nuq-postgres`, and a repo-owned Playwright sidecar image that patches Firecrawl in-place to launch CloakBrowser directly with `humanize=True`. Wired the new `firecrawl-secrets` bundle and `firecrawl-runtime` projection for `OPENAI_API_KEY`, `POSTGRES_PASSWORD`, and `BULL_AUTH_KEY`, reused the existing internal SearXNG instance at `http://searxng:8080`, projected `FIRECRAWL_URL` plus `FIRECRAWL_API_URL` into Hermes, and added Homepage plus Muximux visibility for `https://firecrawl.ghostship.io`.
+
 - **Embedded CloakBrowser rollout**: Added repo-owned local image build contexts that embed CloakBrowser into `pricebuddy-scraper` and `changedetection`, replaced PriceBuddy's broken arm64 SeleniumBase sidecar with a repo-owned CloakBrowser Playwright service behind the existing `/api/article` contract, replaced changedetection's manager/CDP dependency with an in-image CloakBrowser Playwright path using `humanize=True`, and added a Firecrawl handoff document for the same binary contract.
 
 - **Hermes SOUL persona refresh**: Replaced the default Hermes `SOUL.md` seed with the new Argo persona in the repo and on the live `chill-penguin` runtime so fresh seeds and the current host align on the same assistance and supervision contract.

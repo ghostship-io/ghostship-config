@@ -147,6 +147,17 @@
       exports = [ "PRICEBUDDY_APP_USER_EMAIL" "PRICEBUDDY_APP_USER_PASSWORD" "PRICEBUDDY_DB_USER" "PRICEBUDDY_DB_PASS" "PRICEBUDDY_MYSQL_ROOT_PASS" "PRICEBUDDY_APP_KEY" "PRICEBUDDY_API_TOKEN" ];
     };
 
+
+    firecrawl-secrets = {
+      relativeFile = "secrets/files/services/firecrawl-secrets.env.age";
+      path = ./files/services/firecrawl-secrets.env.age;
+      recipientGroup = "self-hosted-runtime";
+      recipients = recipients.groups.self-hosted-runtime;
+      mode = "0400";
+      format = "env";
+      exports = [ "FIRECRAWL_OPENAI_API_KEY" "FIRECRAWL_POSTGRES_PASSWORD" "FIRECRAWL_BULL_AUTH_KEY" ];
+    };
+
     searxng-secrets = {
       relativeFile = "secrets/files/services/searxng-secrets.env.age";
       path = ./files/services/searxng-secrets.env.age;
@@ -287,6 +298,19 @@
       mode = "0400";
       fields = {
         TUNNEL_TOKEN = { unit = "cloudflared-secrets"; key = "CLOUDFLARED_TUNNEL_TOKEN"; };
+      };
+    };
+
+
+    firecrawl-runtime = {
+      fileName = "firecrawl-runtime.env";
+      owner = "root";
+      group = "root";
+      mode = "0400";
+      fields = {
+        OPENAI_API_KEY = { unit = "firecrawl-secrets"; key = "FIRECRAWL_OPENAI_API_KEY"; };
+        POSTGRES_PASSWORD = { unit = "firecrawl-secrets"; key = "FIRECRAWL_POSTGRES_PASSWORD"; };
+        BULL_AUTH_KEY = { unit = "firecrawl-secrets"; key = "FIRECRAWL_BULL_AUTH_KEY"; };
       };
     };
 

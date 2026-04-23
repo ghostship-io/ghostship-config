@@ -400,6 +400,14 @@ in
           SearXNG.color=literal:"#ffffff"
           SearXNG.enabled=literal:"true"
           SearXNG.dd=literal:"true"
+
+          Firecrawl.name=literal:"Firecrawl"
+          Firecrawl.url=literal:"https://firecrawl.ghostship.io"
+          Firecrawl.scale=literal:1
+          Firecrawl.icon=literal:"fa-fire"
+          Firecrawl.color=literal:"#f97316"
+          Firecrawl.enabled=literal:"true"
+          Firecrawl.dd=literal:"true"
           RSS-Bridge.name=literal:"RSS-Bridge"
           RSS-Bridge.url=literal:"https://rss-bridge.ghostship.io"
           RSS-Bridge.scale=literal:1
