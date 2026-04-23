@@ -164,7 +164,7 @@ Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, the `arr` stack,
-qBittorrent/VueTorrent, SearXNG, Firecrawl, RomM, Grimmory, Chaptarr, BookStack, CloakBrowser, Hermes,
+qBittorrent/VueTorrent, SearXNG, Firecrawl, RomM, Grimmory, Chaptarr, BookStack, Hermes,
 PyLoad, RSS-Bridge, PriceBuddy, and n8n.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
@@ -192,14 +192,13 @@ Chaptarr now extends the arr stack to books and audiobooks. It should mount the 
 
 BookStack now adds a repo-managed wiki service on `chill-penguin` with app state under `/srv/apps/bookstack`, MariaDB state under `/srv/apps/bookstack-db`, and Homepage visibility in the `Services` group and a Muximux tile after Prowlarr. Keep `BOOKSTACK_APP_URL` pointed at the external `https://bookstack.ghostship.io` origin, and treat the initial in-app setup plus API token creation (`Authorization: Token <token_id>:<token_secret>`) as manual post-deploy operator steps instead of repo-managed bootstrap. Hermes now receives `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, and `BOOKSTACK_TOKEN_SECRET` through the managed runtime env projection so the future utility contract is already wired once the secret bundle is populated. Public `bookstack.ghostship.io` exposure remains part of the external Cloudflare/tunnel workflow rather than repo-managed ingress.
 
-CloakBrowser now ships as a shared embedded browser contract for repo-managed
+CloakBrowser now ships only as a shared embedded browser contract for repo-managed
 scraping images. `pricebuddy-scraper` is now a repo-owned Playwright service
 that launches CloakBrowser with `humanize=True` behind the existing
 `/api/article` sidecar contract, while `changedetection` launches a local
-CloakBrowser Playwright session inside its own image with `humanize=True`. The
-standalone CloakBrowser manager remains available for operator-driven profiles,
-but neither service depends on a managed CDP/profile path.
-
+CloakBrowser Playwright session inside its own image with `humanize=True`.
+Firecrawl's Playwright sidecar follows the same embedded path, so the repo no
+longer ships a standalone manager or managed CDP/profile service.
 
 Firecrawl now runs as an internal five-container stack on `ghostship_net`: the upstream API image, a repo-owned CloakBrowser-patched Playwright sidecar image, RabbitMQ, Redis, and `nuq-postgres`. The public `https://firecrawl.ghostship.io` hostname remains part of the external Cloudflare/tunnel workflow, while internal consumers use `http://firecrawl-api:3002`. The API reuses the existing `http://searxng:8080` backend for `/search`, reads `OPENAI_API_KEY` from the new `firecrawl-secrets` bundle, and targets Gemini through the OpenAI-compatible `OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/` plus `MODEL_NAME=gemini-2.5-flash-lite`. The Bull queue admin path stays internal-only behind the projected `BULL_AUTH_KEY`.
 

@@ -30,7 +30,6 @@
     ./pyload.nix
 
     # Apps and utilities
-    ./cloakbrowser.nix
     ./hermes.nix
     ./n8n.nix
     ./bentopdf.nix

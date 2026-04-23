@@ -236,11 +236,6 @@ in
             "[Management].[Changedetection].server=literal:chill-penguin"
             "[Management].[Changedetection].container=literal:changedetection"
 
-            "[Management].[CloakBrowser].icon=literal:sh-google-chrome"
-            "[Management].[CloakBrowser].description=literal:Stealth Browser Manager"
-            "[Management].[CloakBrowser].server=literal:chill-penguin"
-            "[Management].[CloakBrowser].container=literal:cloakbrowser"
-
             # Utilities group
             "[Utilities].[SearXNG].icon=literal:sh-searxng"
             "[Utilities].[SearXNG].description=literal:Metasearch Engine"

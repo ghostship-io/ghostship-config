@@ -379,13 +379,6 @@ in
           PriceBuddy.color=literal:"#22c55e"
           PriceBuddy.enabled=literal:"true"
           PriceBuddy.dd=literal:"true"
-          CloakBrowser.name=literal:"CloakBrowser"
-          CloakBrowser.url=literal:"https://cloakbrowser.ghostship.io"
-          CloakBrowser.scale=literal:1
-          CloakBrowser.icon=literal:"muximux-chrome"
-          CloakBrowser.color=literal:"#000000"
-          CloakBrowser.enabled=literal:"true"
-          CloakBrowser.dd=literal:"true"
           pyLoad.name=literal:"pyLoad"
           pyLoad.url=literal:"https://pyload.ghostship.io"
           pyLoad.scale=literal:1
