@@ -108,7 +108,7 @@ in
     };
 
     "firecrawl-postgres" = {
-      image = "ghcr.io/firecrawl/nuq-postgres:latest";
+      image = "docker.io/library/postgres:16";
       pull = "always";
       labels = {
         "io.containers.autoupdate" = "registry";
