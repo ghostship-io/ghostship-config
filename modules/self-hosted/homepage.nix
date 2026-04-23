@@ -149,75 +149,37 @@ in
             "[Automation].[Chaptarr].widget.url=literal:http://chaptarr:8789"
             "[Automation].[Chaptarr].widget.key=env:CHAPTARR_API_KEY"
             
-            # Downloads group
-            "[Downloads].[Cloudflared].icon=literal:sh-cloudflare"
-            "[Downloads].[Cloudflared].description=literal:Cloudflare Tunnel"
-            "[Downloads].[Cloudflared].server=literal:chill-penguin"
-            "[Downloads].[Cloudflared].container=literal:cloudflared"
-            "[Downloads].[Cloudflared].widget.type=literal:cloudflared"
-            "[Downloads].[Cloudflared].widget.accountid=env:CLOUDFLARED_ACCOUNT_ID"
-            "[Downloads].[Cloudflared].widget.tunnelid=env:CLOUDFLARED_TUNNEL_ID"
-            "[Downloads].[Cloudflared].widget.key=env:CLOUDFLARED_API_TOKEN"
 
-            "[Downloads].[Gluetun].icon=literal:sh-gluetun"
-            "[Downloads].[Gluetun].description=literal:VPN Client"
-            "[Downloads].[Gluetun].server=literal:chill-penguin"
-            "[Downloads].[Gluetun].container=literal:gluetun"
-            "[Downloads].[Gluetun].widget.type=literal:gluetun"
-            "[Downloads].[Gluetun].widget.url=literal:http://gluetun:8000"
-            "[Downloads].[Gluetun].widget.key=env:HTTP_CONTROL_SERVER_API_KEY"
-            
+            # Downloads group
             "[Downloads].[NZBGet].icon=literal:sh-nzbget"
             "[Downloads].[NZBGet].description=literal:NZB Downloader"
             "[Downloads].[NZBGet].server=literal:chill-penguin"
             "[Downloads].[NZBGet].container=literal:nzbget"
             "[Downloads].[NZBGet].widget.type=literal:nzbget"
             "[Downloads].[NZBGet].widget.url=literal:http://gluetun:5001"
-            
+
             "[Downloads].[VueTorrent].icon=literal:sh-vuetorrent"
             "[Downloads].[VueTorrent].description=literal:Torrent Downloader"
             "[Downloads].[VueTorrent].server=literal:chill-penguin"
             "[Downloads].[VueTorrent].container=literal:vuetorrent"
             "[Downloads].[VueTorrent].widget.type=literal:qbittorrent"
             "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000"
-            
+
+            "[Downloads].[pyLoad].icon=literal:sh-pyload"
+            "[Downloads].[pyLoad].description=literal:Download Manager"
+            "[Downloads].[pyLoad].server=literal:chill-penguin"
+            "[Downloads].[pyLoad].container=literal:pyload"
+
+            "[Downloads].[MeTube].icon=literal:sh-metube"
+            "[Downloads].[MeTube].description=literal:YouTube Downloader"
+            "[Downloads].[MeTube].server=literal:chill-penguin"
+            "[Downloads].[MeTube].container=literal:metube"
+
             # Services group
             "[Services].[Hermes].icon=literal:sh-agent-zero"
             "[Services].[Hermes].description=literal:Agent Terminal"
             "[Services].[Hermes].server=literal:chill-penguin"
             "[Services].[Hermes].container=literal:hermes"
-
-            "[Services].[CloakBrowser].icon=literal:sh-google-chrome"
-            "[Services].[CloakBrowser].description=literal:Stealth Browser Manager"
-            "[Services].[CloakBrowser].server=literal:chill-penguin"
-            "[Services].[CloakBrowser].container=literal:cloakbrowser"
-
-            "[Services].[pyLoad].icon=literal:sh-pyload"
-            "[Services].[pyLoad].description=literal:Download Manager"
-            "[Services].[pyLoad].server=literal:chill-penguin"
-            "[Services].[pyLoad].container=literal:pyload"
-
-            "[Services].[SearXNG].icon=literal:sh-searxng"
-            "[Services].[SearXNG].description=literal:Metasearch Engine"
-            "[Services].[SearXNG].server=literal:chill-penguin"
-            "[Services].[SearXNG].container=literal:searxng"
-
-
-            "[Services].[Firecrawl].icon=literal:mdi-fire-#f97316"
-            "[Services].[Firecrawl].description=literal:Web Extraction API"
-            "[Services].[Firecrawl].server=literal:chill-penguin"
-            "[Services].[Firecrawl].container=literal:firecrawl-api"
-            "[Services].[Firecrawl].href=literal:https://firecrawl.ghostship.io"
-
-            "[Services].[RSS-Bridge].icon=literal:rss-bridge"
-            "[Services].[RSS-Bridge].description=literal:Feed Bridge"
-            "[Services].[RSS-Bridge].server=literal:chill-penguin"
-            "[Services].[RSS-Bridge].container=literal:rss-bridge"
-
-            "[Services].[Changedetection].icon=literal:sh-changedetection"
-            "[Services].[Changedetection].description=literal:Website Change Monitor"
-            "[Services].[Changedetection].server=literal:chill-penguin"
-            "[Services].[Changedetection].container=literal:changedetection"
 
             "[Services].[BookStack].icon=literal:sh-bookstack"
             "[Services].[BookStack].description=literal:Documentation Wiki"
@@ -230,63 +192,126 @@ in
             "[Services].[PriceBuddy].server=literal:chill-penguin"
             "[Services].[PriceBuddy].container=literal:pricebuddy"
 
-            "[Services].[n8n].icon=literal:sh-n8n"
-            "[Services].[n8n].description=literal:Workflow Orchestrator"
-            "[Services].[n8n].server=literal:chill-penguin"
-            "[Services].[n8n].container=literal:n8n"
-            
             # Management group
             "[Management].[Homepage].icon=literal:sh-homepage"
             "[Management].[Homepage].description=literal:Dashboard"
             "[Management].[Homepage].server=literal:chill-penguin"
             "[Management].[Homepage].container=literal:homepage"
-            
+
             "[Management].[Muximux].icon=literal:mdi-view-dashboard-#00c853"
             "[Management].[Muximux].description=literal:Lightweight Portal"
             "[Management].[Muximux].server=literal:chill-penguin"
             "[Management].[Muximux].container=literal:muximux"
-            
+
+            "[Management].[n8n].icon=literal:sh-n8n"
+            "[Management].[n8n].description=literal:Workflow Orchestrator"
+            "[Management].[n8n].server=literal:chill-penguin"
+            "[Management].[n8n].container=literal:n8n"
+
+            "[Management].[Changedetection].icon=literal:sh-changedetection"
+            "[Management].[Changedetection].description=literal:Website Change Monitor"
+            "[Management].[Changedetection].server=literal:chill-penguin"
+            "[Management].[Changedetection].container=literal:changedetection"
+
+            "[Management].[CloakBrowser].icon=literal:sh-google-chrome"
+            "[Management].[CloakBrowser].description=literal:Stealth Browser Manager"
+            "[Management].[CloakBrowser].server=literal:chill-penguin"
+            "[Management].[CloakBrowser].container=literal:cloakbrowser"
+
             # Utilities group
+            "[Utilities].[SearXNG].icon=literal:sh-searxng"
+            "[Utilities].[SearXNG].description=literal:Metasearch Engine"
+            "[Utilities].[SearXNG].server=literal:chill-penguin"
+            "[Utilities].[SearXNG].container=literal:searxng"
+
+            "[Utilities].[Firecrawl].icon=literal:mdi-fire-#f97316"
+            "[Utilities].[Firecrawl].description=literal:Web Extraction API"
+            "[Utilities].[Firecrawl].server=literal:chill-penguin"
+            "[Utilities].[Firecrawl].container=literal:firecrawl-api"
+            "[Utilities].[Firecrawl].href=literal:https://firecrawl.ghostship.io"
+
+            "[Utilities].[RSS-Bridge].icon=literal:rss-bridge"
+            "[Utilities].[RSS-Bridge].description=literal:Feed Bridge"
+            "[Utilities].[RSS-Bridge].server=literal:chill-penguin"
+            "[Utilities].[RSS-Bridge].container=literal:rss-bridge"
+
             "[Utilities].[Plex Auto Languages].icon=literal:sh-plex"
             "[Utilities].[Plex Auto Languages].description=literal:Language Manager"
             "[Utilities].[Plex Auto Languages].server=literal:chill-penguin"
             "[Utilities].[Plex Auto Languages].container=literal:plex-auto-languages"
-            
+
             "[Utilities].[FlareSolverr].icon=literal:sh-flaresolverr"
             "[Utilities].[FlareSolverr].description=literal:Proxy Server"
             "[Utilities].[FlareSolverr].server=literal:chill-penguin"
             "[Utilities].[FlareSolverr].container=literal:flaresolverr"
-            
+
             "[Utilities].[BentoPDF].icon=literal:sh-bentopdf"
             "[Utilities].[BentoPDF].description=literal:PDF Toolkit"
             "[Utilities].[BentoPDF].server=literal:chill-penguin"
             "[Utilities].[BentoPDF].container=literal:bentopdf"
-            
+
             "[Utilities].[ConvertX].icon=literal:sh-convertx"
             "[Utilities].[ConvertX].description=literal:File Converter"
             "[Utilities].[ConvertX].server=literal:chill-penguin"
             "[Utilities].[ConvertX].container=literal:convertx"
-            
+
             "[Utilities].[IT-Tools].icon=literal:sh-it-tools"
             "[Utilities].[IT-Tools].description=literal:Developer Tools"
             "[Utilities].[IT-Tools].server=literal:chill-penguin"
             "[Utilities].[IT-Tools].container=literal:it-tools"
-            
-            "[Utilities].[MeTube].icon=literal:sh-metube"
-            "[Utilities].[MeTube].description=literal:YouTube Downloader"
-            "[Utilities].[MeTube].server=literal:chill-penguin"
-            "[Utilities].[MeTube].container=literal:metube"
 
             "[Utilities].[OmniTools].icon=literal:sh-omnitools"
             "[Utilities].[OmniTools].description=literal:Omni Toolkit"
             "[Utilities].[OmniTools].server=literal:chill-penguin"
             "[Utilities].[OmniTools].container=literal:omni-tools"
-            
+
             # Infrastructure group
+            "[Infrastructure].[Cloudflared].icon=literal:sh-cloudflare"
+            "[Infrastructure].[Cloudflared].description=literal:Cloudflare Tunnel"
+            "[Infrastructure].[Cloudflared].server=literal:chill-penguin"
+            "[Infrastructure].[Cloudflared].container=literal:cloudflared"
+            "[Infrastructure].[Cloudflared].widget.type=literal:cloudflared"
+            "[Infrastructure].[Cloudflared].widget.accountid=env:CLOUDFLARED_ACCOUNT_ID"
+            "[Infrastructure].[Cloudflared].widget.tunnelid=env:CLOUDFLARED_TUNNEL_ID"
+            "[Infrastructure].[Cloudflared].widget.key=env:CLOUDFLARED_API_TOKEN"
+
+            "[Infrastructure].[Gluetun].icon=literal:sh-gluetun"
+            "[Infrastructure].[Gluetun].description=literal:VPN Client"
+            "[Infrastructure].[Gluetun].server=literal:chill-penguin"
+            "[Infrastructure].[Gluetun].container=literal:gluetun"
+            "[Infrastructure].[Gluetun].widget.type=literal:gluetun"
+            "[Infrastructure].[Gluetun].widget.url=literal:http://gluetun:8000"
+            "[Infrastructure].[Gluetun].widget.key=env:HTTP_CONTROL_SERVER_API_KEY"
+
             "[Infrastructure].[SearXNG Cache].icon=literal:sh-redis"
             "[Infrastructure].[SearXNG Cache].description=literal:Search Cache"
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
+
+            "[Infrastructure].[Firecrawl API].icon=literal:mdi-fire-#f97316"
+            "[Infrastructure].[Firecrawl API].description=literal:Extraction API"
+            "[Infrastructure].[Firecrawl API].server=literal:chill-penguin"
+            "[Infrastructure].[Firecrawl API].container=literal:firecrawl-api"
+
+            "[Infrastructure].[Firecrawl Playwright].icon=literal:sh-google-chrome"
+            "[Infrastructure].[Firecrawl Playwright].description=literal:Browser Sidecar"
+            "[Infrastructure].[Firecrawl Playwright].server=literal:chill-penguin"
+            "[Infrastructure].[Firecrawl Playwright].container=literal:firecrawl-playwright"
+
+            "[Infrastructure].[Firecrawl Postgres].icon=literal:mdi-database-#336791"
+            "[Infrastructure].[Firecrawl Postgres].description=literal:Metadata Database"
+            "[Infrastructure].[Firecrawl Postgres].server=literal:chill-penguin"
+            "[Infrastructure].[Firecrawl Postgres].container=literal:firecrawl-postgres"
+
+            "[Infrastructure].[Firecrawl RabbitMQ].icon=literal:mdi-rabbit-variant-#ff6600"
+            "[Infrastructure].[Firecrawl RabbitMQ].description=literal:Job Queue Broker"
+            "[Infrastructure].[Firecrawl RabbitMQ].server=literal:chill-penguin"
+            "[Infrastructure].[Firecrawl RabbitMQ].container=literal:firecrawl-rabbitmq"
+
+            "[Infrastructure].[Firecrawl Redis].icon=literal:sh-redis"
+            "[Infrastructure].[Firecrawl Redis].description=literal:Cache and Rate Limit"
+            "[Infrastructure].[Firecrawl Redis].server=literal:chill-penguin"
+            "[Infrastructure].[Firecrawl Redis].container=literal:firecrawl-redis"
 
             "[Infrastructure].[PriceBuddy Scraper].icon=literal:web-check"
             "[Infrastructure].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
@@ -307,12 +332,11 @@ in
             "[Infrastructure].[RomM DB].description=literal:RomM Database"
             "[Infrastructure].[RomM DB].server=literal:chill-penguin"
             "[Infrastructure].[RomM DB].container=literal:romm-db"
-            
+
             "[Infrastructure].[Grimmory DB].icon=literal:sh-mariadb"
             "[Infrastructure].[Grimmory DB].description=literal:Grimmory Database"
             "[Infrastructure].[Grimmory DB].server=literal:chill-penguin"
             "[Infrastructure].[Grimmory DB].container=literal:grimmory-db"
-
           )
 
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
