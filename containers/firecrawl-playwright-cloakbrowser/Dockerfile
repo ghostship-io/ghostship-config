@@ -3,6 +3,7 @@ FROM ghcr.io/firecrawl/playwright-service:latest
 ENV CLOAKBROWSER_BINARY_PATH=/opt/cloakbrowser/chrome
 
 COPY cloakbrowser/common/install_cloakbrowser.py /tmp/install_cloakbrowser.py
+COPY firecrawl-playwright-cloakbrowser/cloakbrowser_helper.js /usr/src/app/cloakbrowser-helper.js
 COPY firecrawl-playwright-cloakbrowser/patch_playwright_service.py /tmp/patch_playwright_service.py
 
 RUN apt-get update && apt-get install -y \

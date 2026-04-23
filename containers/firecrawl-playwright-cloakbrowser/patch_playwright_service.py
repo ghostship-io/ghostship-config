@@ -18,7 +18,7 @@ patch_file(
     [
         (
             "import { chromium, Browser, BrowserContext, Route, Request as PlaywrightRequest, Page } from 'playwright';\n",
-            "import { launch as launchCloak } from 'cloakbrowser';\n"
+            "const { launchCloak } = require('../cloakbrowser-helper');\n"
             "import { chromium, Browser, BrowserContext, Route, Request as PlaywrightRequest, Page } from 'playwright';\n",
         ),
         (

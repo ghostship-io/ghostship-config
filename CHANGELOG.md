@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Firecrawl CloakBrowser loader fix**: Switched the Firecrawl Playwright sidecar patch to load the ESM-only `cloakbrowser` package through a small CommonJS helper, so the embedded CloakBrowser path works under the upstream service's current Node/TypeScript build output.
+
 - **Standalone CloakBrowser manager removal**: Retired the old `cloakhq/cloakbrowser-manager` service, removed its manager-era Changedetection keepalive unit and timer, dropped the Homepage and Muximux manager tiles, and left Changedetection, PriceBuddy scraper, Firecrawl Playwright, and Hermes on their embedded or image-owned CloakBrowser paths only.
 
 - **Homepage group rebalance**: Rebalanced only Homepage's `Services`, `Management`, `Utilities`, and `Infrastructure` columns while leaving the existing `Media`, `Automation`, and `Downloads` groups intact. `Services` now holds the day-to-day apps, `Management` holds dashboards plus control-plane tools like `n8n` and Changedetection, `Utilities` holds helper/search/conversion tools, and `Infrastructure` now focuses on backing caches, sidecars, and service databases including the Firecrawl Playwright/Postgres/RabbitMQ/Redis stack.
