@@ -9,11 +9,29 @@ let
   containers-root-str = toString containers-root;
   containers-hash = builtins.substring 11 12 containers-root-str;
   firecrawl-playwright-image = "localhost/ghostship-firecrawl-playwright-cloakbrowser:${containers-hash}";
+  firecrawl-postgres-image = "localhost/ghostship-firecrawl-nuq-postgres:${containers-hash}";
   firecrawl-playwright-build = pkgs.writeShellScriptBin "ghostship-build-firecrawl-playwright-image" ''
     set -eu
 
     image="${firecrawl-playwright-image}"
     dockerfile="${containers-root}/firecrawl-playwright-cloakbrowser/Dockerfile"
+    context_dir="${containers-root}"
+
+    if ${pkgs.podman}/bin/podman image exists "$image"; then
+      exit 0
+    fi
+
+    ${pkgs.podman}/bin/podman build \
+      --pull=always \
+      --tag "$image" \
+      --file "$dockerfile" \
+      "$context_dir"
+  '';
+  firecrawl-postgres-build = pkgs.writeShellScriptBin "ghostship-build-firecrawl-postgres-image" ''
+    set -eu
+
+    image="${firecrawl-postgres-image}"
+    dockerfile="${containers-root}/firecrawl-nuq-postgres/Dockerfile"
     context_dir="${containers-root}"
 
     if ${pkgs.podman}/bin/podman image exists "$image"; then
@@ -108,10 +126,10 @@ in
     };
 
     "firecrawl-postgres" = {
-      image = "docker.io/library/postgres:16";
-      pull = "always";
+      image = firecrawl-postgres-image;
+      pull = "never";
       labels = {
-        "io.containers.autoupdate" = "registry";
+        "io.containers.autoupdate" = "disabled";
       };
       environmentFiles = [ firecrawl-runtime-env ];
       environment = {
@@ -204,6 +222,7 @@ in
     };
 
     podman-firecrawl-postgres.preStart = lib.mkBefore ''
+      ${firecrawl-postgres-build}/bin/ghostship-build-firecrawl-postgres-image
       ${firecrawl-runtime-sync}/bin/firecrawl-runtime-sync
     '';
   };

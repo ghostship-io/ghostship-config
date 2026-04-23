@@ -288,7 +288,7 @@ in
             "[Infrastructure].[Firecrawl Playwright].server=literal:chill-penguin"
             "[Infrastructure].[Firecrawl Playwright].container=literal:firecrawl-playwright"
 
-            "[Infrastructure].[Firecrawl Postgres].icon=literal:mdi-database-#336791"
+            "[Infrastructure].[Firecrawl Postgres].icon=literal:sh-postgresql"
             "[Infrastructure].[Firecrawl Postgres].description=literal:Metadata Database"
             "[Infrastructure].[Firecrawl Postgres].server=literal:chill-penguin"
             "[Infrastructure].[Firecrawl Postgres].container=literal:firecrawl-postgres"
