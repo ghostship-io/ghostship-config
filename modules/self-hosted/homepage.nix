@@ -193,12 +193,6 @@ in
             "[Services].[pyLoad].server=literal:chill-penguin"
             "[Services].[pyLoad].container=literal:pyload"
 
-            "[Services].[Firecrawl].icon=literal:mdi-fire-#f97316"
-            "[Services].[Firecrawl].description=literal:Web Extraction API"
-            "[Services].[Firecrawl].server=literal:chill-penguin"
-            "[Services].[Firecrawl].container=literal:firecrawl-api"
-            "[Services].[Firecrawl].href=literal:https://firecrawl.ghostship.io"
-
             "[Services].[RSS-Bridge].icon=literal:rss-bridge"
             "[Services].[RSS-Bridge].description=literal:Feed Bridge"
             "[Services].[RSS-Bridge].server=literal:chill-penguin"
