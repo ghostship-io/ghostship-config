@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Firecrawl public tile removal**: Removed the Homepage and Muximux links for `https://firecrawl.ghostship.io` and documented Firecrawl as an internal-only API service with no public web surface.
 
-- **Homepage service regrouping**: Removed stale `n8n`, `Changedetection`, and other leftover manager-era entries from Homepage's `Services` column, moved `Plex Auto Languages` plus `BookStack` into `Management`, and moved `Firecrawl`, `Firecrawl Playwright`, `PriceBuddy Scraper`, and `FlareSolverr` into `Utilities` while pruning the old group placements from the generated `services.yaml`.
+- **Homepage service regrouping**: Removed stale manager-era Homepage entries from the generated `Services` column, moved `SearXNG`, `BookStack`, `n8n`, and `Changedetection` into `Services`, moved `Firecrawl`, `Firecrawl Playwright`, and `PriceBuddy Scraper` into `Management`, kept `FlareSolverr` in `Utilities`, and pruned the old group placements from the generated `services.yaml`.
 
 - **Embedded CloakBrowser rollout**: Added repo-owned local image build contexts that embed CloakBrowser into `pricebuddy-scraper` and `changedetection`, replaced PriceBuddy's broken arm64 SeleniumBase sidecar with a repo-owned CloakBrowser Playwright service behind the existing `/api/article` contract, replaced changedetection's manager/CDP dependency with an in-image CloakBrowser Playwright path using `humanize=True`, and added a Firecrawl handoff document for the same binary contract.
 

@@ -198,6 +198,27 @@ in
             "[Services].[RSS-Bridge].server=literal:chill-penguin"
             "[Services].[RSS-Bridge].container=literal:rss-bridge"
 
+            "[Services].[SearXNG].icon=literal:sh-searxng"
+            "[Services].[SearXNG].description=literal:Metasearch Engine"
+            "[Services].[SearXNG].server=literal:chill-penguin"
+            "[Services].[SearXNG].container=literal:searxng"
+
+            "[Services].[n8n].icon=literal:sh-n8n"
+            "[Services].[n8n].description=literal:Workflow Orchestrator"
+            "[Services].[n8n].server=literal:chill-penguin"
+            "[Services].[n8n].container=literal:n8n"
+
+            "[Services].[Changedetection].icon=literal:sh-changedetection"
+            "[Services].[Changedetection].description=literal:Website Change Monitor"
+            "[Services].[Changedetection].server=literal:chill-penguin"
+            "[Services].[Changedetection].container=literal:changedetection"
+
+            "[Services].[BookStack].icon=literal:sh-bookstack"
+            "[Services].[BookStack].description=literal:Documentation Wiki"
+            "[Services].[BookStack].server=literal:chill-penguin"
+            "[Services].[BookStack].container=literal:bookstack"
+            "[Services].[BookStack].href=literal:https://bookstack.ghostship.io"
+
             "[Services].[PriceBuddy].icon=literal:sh-priceghost"
             "[Services].[PriceBuddy].description=literal:Price Tracker"
             "[Services].[PriceBuddy].server=literal:chill-penguin"
@@ -214,52 +235,31 @@ in
             "[Management].[Muximux].server=literal:chill-penguin"
             "[Management].[Muximux].container=literal:muximux"
 
-            "[Management].[n8n].icon=literal:sh-n8n"
-            "[Management].[n8n].description=literal:Workflow Orchestrator"
-            "[Management].[n8n].server=literal:chill-penguin"
-            "[Management].[n8n].container=literal:n8n"
-
-            "[Management].[Changedetection].icon=literal:sh-changedetection"
-            "[Management].[Changedetection].description=literal:Website Change Monitor"
-            "[Management].[Changedetection].server=literal:chill-penguin"
-            "[Management].[Changedetection].container=literal:changedetection"
-
             "[Management].[Plex Auto Languages].icon=literal:sh-plex"
             "[Management].[Plex Auto Languages].description=literal:Language Manager"
             "[Management].[Plex Auto Languages].server=literal:chill-penguin"
             "[Management].[Plex Auto Languages].container=literal:plex-auto-languages"
 
-            "[Management].[BookStack].icon=literal:sh-bookstack"
-            "[Management].[BookStack].description=literal:Documentation Wiki"
-            "[Management].[BookStack].server=literal:chill-penguin"
-            "[Management].[BookStack].container=literal:bookstack"
-            "[Management].[BookStack].href=literal:https://bookstack.ghostship.io"
+            "[Management].[Firecrawl].icon=literal:mdi-fire-#f97316"
+            "[Management].[Firecrawl].description=literal:Web Extraction API"
+            "[Management].[Firecrawl].server=literal:chill-penguin"
+            "[Management].[Firecrawl].container=literal:firecrawl-api"
+
+            "[Management].[Firecrawl Playwright].icon=literal:sh-google-chrome"
+            "[Management].[Firecrawl Playwright].description=literal:Browser Sidecar"
+            "[Management].[Firecrawl Playwright].server=literal:chill-penguin"
+            "[Management].[Firecrawl Playwright].container=literal:firecrawl-playwright"
+
+            "[Management].[PriceBuddy Scraper].icon=literal:web-check"
+            "[Management].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
+            "[Management].[PriceBuddy Scraper].server=literal:chill-penguin"
+            "[Management].[PriceBuddy Scraper].container=literal:pricebuddy-scraper"
 
             # Utilities group
-            "[Utilities].[SearXNG].icon=literal:sh-searxng"
-            "[Utilities].[SearXNG].description=literal:Metasearch Engine"
-            "[Utilities].[SearXNG].server=literal:chill-penguin"
-            "[Utilities].[SearXNG].container=literal:searxng"
-
-            "[Utilities].[Firecrawl].icon=literal:mdi-fire-#f97316"
-            "[Utilities].[Firecrawl].description=literal:Web Extraction API"
-            "[Utilities].[Firecrawl].server=literal:chill-penguin"
-            "[Utilities].[Firecrawl].container=literal:firecrawl-api"
-
             "[Utilities].[FlareSolverr].icon=literal:sh-flaresolverr"
             "[Utilities].[FlareSolverr].description=literal:Proxy Server"
             "[Utilities].[FlareSolverr].server=literal:chill-penguin"
             "[Utilities].[FlareSolverr].container=literal:flaresolverr"
-
-            "[Utilities].[Firecrawl Playwright].icon=literal:sh-google-chrome"
-            "[Utilities].[Firecrawl Playwright].description=literal:Browser Sidecar"
-            "[Utilities].[Firecrawl Playwright].server=literal:chill-penguin"
-            "[Utilities].[Firecrawl Playwright].container=literal:firecrawl-playwright"
-
-            "[Utilities].[PriceBuddy Scraper].icon=literal:web-check"
-            "[Utilities].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
-            "[Utilities].[PriceBuddy Scraper].server=literal:chill-penguin"
-            "[Utilities].[PriceBuddy Scraper].container=literal:pricebuddy-scraper"
 
             "[Utilities].[BentoPDF].icon=literal:sh-bentopdf"
             "[Utilities].[BentoPDF].description=literal:PDF Toolkit"
@@ -321,8 +321,10 @@ in
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
 
           ${pkgs.yq-go}/bin/yq -i '
-            (.[] | select(has("Services")) | .Services) |= map(select((has("Honcho") or has("CloakBrowser") or has("SearXNG") or has("Changedetection") or has("n8n") or has("BookStack") or has("Firecrawl")) | not))
+            (.[] | select(has("Services")) | .Services) |= map(select((has("Honcho") or has("CloakBrowser") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
+            | (.[] | select(has("Management")) | .Management) |= map(select((has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG")) | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select(has("Plex Auto Languages") | not))
+            | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("SearXNG") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("Honcho Redis") or has("Honcho DB")) | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("FlareSolverr") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
           ' "$SERVICES_FILE"
