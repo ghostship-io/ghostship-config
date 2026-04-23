@@ -15,9 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Embedded CloakBrowser rollout**: Added repo-owned local image build contexts that embed CloakBrowser into `pricebuddy-scraper` and `changedetection`, replaced PriceBuddy's broken arm64 SeleniumBase sidecar with a repo-owned CloakBrowser Playwright service behind the existing `/api/article` contract, replaced changedetection's manager/CDP dependency with an in-image CloakBrowser Playwright path using `humanize=True`, and added a Firecrawl handoff document for the same binary contract.
 
-- **Hermes SOUL persona refresh**: Replaced the default Hermes `SOUL.md` seed with the new Argo persona in the repo and on the live `chill-penguin` runtime so fresh seeds and the current host align on the same assistance and supervision contract.
-
 - **SearXNG performance-first Hermes tuning**: Replaced the old broad allowlist with a much smaller Hermes-facing pool set, tightened SearXNG's global timeout budget, disabled image proxying, enabled a lightweight Hermes-safe limiter backed by the existing Valkey sidecar, added the persistent `/srv/apps/searxng-cache` bind mount for `/var/cache/searxng`, and replaced the old hand-maintained `settings.yml` mutation path with full managed rendering in `podman-searxng` `preStart` that now requires the existing `SEARXNG_SECRET_KEY` secret instead of generating a random key at startup. Live direct probes promoted `presearch` into the default web pool, while `brave` and `karmasearch` stayed out after immediate `429` and `403` responses.
+- **Hermes SOUL persona refresh**: Replaced the default Hermes `SOUL.md` seed with the new Argo persona in the repo and on the live `chill-penguin` runtime so fresh seeds and the current host align on the same assistance and supervision contract.
 
 - **WSL OpenCode desktop service**: Restored a repo-managed
   `opencode-server` Home Manager user service on WSL develop hosts so the
