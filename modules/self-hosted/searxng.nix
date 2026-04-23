@@ -131,7 +131,6 @@ let
   promoted-web-pool = [
     "startpage"
     "qwant"
-    "mojeek"
     "presearch"
     "wikipedia"
     "wikidata"
@@ -195,11 +194,6 @@ let
     })
     (mkEngine "qwant" {
       qwant_categ = "web-lite";
-      categories = [ "general" "web" ];
-      weight = 3;
-      timeout = 3.0;
-    })
-    (mkEngine "mojeek" {
       categories = [ "general" "web" ];
       weight = 3;
       timeout = 3.0;
