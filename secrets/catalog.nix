@@ -155,7 +155,7 @@
       recipients = recipients.groups.self-hosted-runtime;
       mode = "0400";
       format = "env";
-      exports = [ "FIRECRAWL_OPENAI_API_KEY" "FIRECRAWL_POSTGRES_PASSWORD" "FIRECRAWL_BULL_AUTH_KEY" ];
+      exports = [ "FIRECRAWL_OPENAI_API_KEY" "FIRECRAWL_POSTGRES_PASSWORD" "FIRECRAWL_BULL_AUTH_KEY" "FIRECRAWL_API_KEY" ];
     };
 
     searxng-secrets = {
@@ -333,6 +333,7 @@
         CHAPTARR_API_KEY = { unit = "chaptarr-secrets"; key = "CHAPTARR_API_KEY"; };
         BOOKSTACK_TOKEN_ID = { unit = "bookstack-secrets"; key = "BOOKSTACK_TOKEN_ID"; };
         BOOKSTACK_TOKEN_SECRET = { unit = "bookstack-secrets"; key = "BOOKSTACK_TOKEN_SECRET"; };
+        FIRECRAWL_API_KEY = { unit = "firecrawl-secrets"; key = "FIRECRAWL_API_KEY"; };
         PYLOAD_API_KEY = { unit = "pyload-secrets"; key = "PYLOAD_API_KEY"; };
         ROMM_USERNAME = { unit = "romm-secrets"; key = "ROMM_USER"; };
         ROMM_PASSWORD = { unit = "romm-secrets"; key = "ROMM_PASS"; };
