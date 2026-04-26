@@ -19,9 +19,10 @@ default bundled skills instead.
 - **BREAKING** Remove `GHOSTSHIP_CODEX_CHANNEL` from the supported downstream
   Hermes contract and treat `GHOSTSHIP_ROUTER_CHANNEL` as the only
   repo-owned forced Discord lane.
-- **BREAKING** Treat Codex as the normal primary model path for the managed
-  runtime, with direct `opencode-go/minimax-m2.7` as the configured fallback
-  lane and the local router exposed as custom provider `agentic`.
+- **BREAKING** Treat Codex `openai-codex/gpt-5.5` as the normal primary model
+  path for the managed runtime, with direct `opencode-go/minimax-m2.7` as the
+  configured fallback lane, Firecrawl as the managed web backend, and the local
+  router exposed as custom provider `agentic`.
 - **BREAKING** Make the rollout contract explicitly destructive again: stop
   Hermes, remove `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and
   `/srv/apps/hermes/nix`, then let the latest published image reseed fresh
@@ -32,6 +33,9 @@ default bundled skills instead.
 - Remove the stale downstream `CLOAKBROWSER_URL` expectation so Hermes follows
   the image-owned native CloakBrowser path through `google-chrome` and the
   persistent `AGENT_BROWSER_PROFILE`.
+- Add the image-managed Bitwarden CLI appdata env and encrypted
+  operator-filled stubs for `BW_CLIENTID`, `BW_CLIENTSECRET`, `BW_PASSWORD`,
+  `GITHUB_TOKEN`, and `NVIDIA_BUILD_API_KEY`.
 - Update the `/nix` contract to describe both safe first-boot seeding for an
   empty mount and boot-time reconciliation of the image-managed default profile
   for reused non-empty `/nix`.

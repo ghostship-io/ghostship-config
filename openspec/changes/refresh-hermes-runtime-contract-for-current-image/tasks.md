@@ -45,3 +45,12 @@
 - [x] 4.4 During implementation and rollout, verify the host actually applies
   the latest published `ghcr.io/ghostship-io/ghostship-hermes:latest` image instead of
   reusing a stale cached image.
+
+## 5. Apply Latest Upstream Follow-Up
+
+- [x] 5.1 Update Codex primary from `openai-codex/gpt-5.4` to
+  `openai-codex/gpt-5.5` and record Firecrawl as the managed web backend.
+- [x] 5.2 Add the upstream Bitwarden Password Manager CLI contract with
+  `BITWARDENCLI_APPDATA_DIR=/home/hermes/.local/state/bitwarden-cli`.
+- [x] 5.3 Add encrypted `hermes-secrets` stubs for Bitwarden, GitHub, and
+  NVIDIA Build credentials.
