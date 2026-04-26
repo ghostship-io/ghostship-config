@@ -34,9 +34,9 @@ logical-unit secret files.
 - Develop-role hosts use the richer interactive profile and default to `fish`.
 - WSL-role hosts layer WSL-specific mounts, Windows interop, and notification
   helpers on top of the develop profile.
-- WSL-role hosts import the Windows PATH for desktop interop and do not use
-  `services.envfs`; Linux compatibility wrappers are added only for observed
-  failures.
+- WSL-role hosts import the Windows PATH for desktop interop and use patched
+  `services.envfs` for Linux/FHS paths such as `/usr/bin/bash`; the patch
+  filters Windows/DrvFS PATH binaries out of `/usr/bin`.
 - System packages are reserved for host/admin essentials, service/runtime
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.
@@ -323,11 +323,11 @@ Supported onboarding flow:
   repo is native `nix` and `nixos-rebuild`.
 - WSL hosts expose wrapped `wsl-open`, `win-powershell`, a Windows
   notification bridge for `notify-send`, and a `hard`-mounted NFS automount at
-  `/mnt/z`. They do not use `envfs`; Windows PATH import is enabled for desktop
-  interop, and repo-managed compatibility wrappers are added only for observed
-  failures. The old `/usr/bin/npm` and `/usr/bin/npx` wrappers were removed
-  after validation showed the raw Node package-manager entrypoints work when
-  symlinked instead of copied.
+  `/mnt/z`. Windows PATH import is enabled for desktop interop, and patched
+  `envfs` provides Linux/FHS paths such as `/usr/bin/bash` while filtering
+  Windows/DrvFS PATH binaries out of `/usr/bin`. The old `/usr/bin/npm` and
+  `/usr/bin/npx` wrappers were removed after validation showed the raw Node
+  package-manager entrypoints work when symlinked instead of copied.
   The managed Paseo desktop-attachment path is `localhost:6768` from Windows to
   the WSL daemon. WSL activation now stops the `/mnt/z` automount and unmounts
   any live NFS mount before reloading the generated mount units so host
@@ -338,7 +338,7 @@ Supported onboarding flow:
 - WSL hosts also cap `nix.settings.cores` at `4` so each build job cannot
   fan out across all reported host threads and recreate the same memory-pressure
   stalls from inside a smaller job queue.
-- When a WSL change alters `wsl.extraBin`-owned `/bin/...` entries, a
+- When a WSL change alters `envfs` or `wsl.extraBin`-owned `/bin/...` entries, a
   full WSL distro restart may be needed after `nixos-rebuild switch` before
   those refreshed paths appear in the live instance.
 - Login sessions raise the soft `nofile` limit to `65536` to keep busy shells,

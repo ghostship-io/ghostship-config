@@ -31,9 +31,6 @@ changelog.
   unrelated valid hook entries and warning instead of rewriting malformed JSON.
   Restart already-running Codex sessions after the relevant rebuild or switch
   if they were holding the stale hook state open.
-- The `apply_patch` tool is currently broken in worktrees on this host. Use
-  Python-based file edits instead of the `apply_patch` tool when editing from a
-  worktree, and verify the diff immediately after each edit.
 - Develop hosts replace Codex's built-in
   `~/.codex/skills/.system/skill-creator` path with a symlink to the managed
   shared `~/.agents/skills/skill-creator`, and
@@ -76,11 +73,12 @@ changelog.
 - Managed Synology NFS mounts should use `hard`, not `soft`, on both WSL and
   NixOS clients so transient NAS stalls do not surface as client-side I/O
   errors or integrity failures during copies.
-- WSL hosts do not use `services.envfs`; keep
-  `wsl.wslConf.interop.appendWindowsPath = true`, rely on Windows PATH import
-  for desktop interop, and add repo-managed Linux compatibility wrappers only
-  after an observed failure. The old npm/npx wrappers were removed after
-  validation showed symlinked raw Node entrypoints work.
+- WSL hosts use patched `services.envfs` so Windows-side tooling can resolve
+  Linux/FHS paths such as `/usr/bin/bash`, keep
+  `wsl.wslConf.interop.appendWindowsPath = true` for desktop interop, and patch
+  envfs to filter Windows/DrvFS PATH binaries out of `/usr/bin`. The old
+  npm/npx wrappers were removed after validation showed symlinked raw Node
+  entrypoints work.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode
@@ -144,9 +142,9 @@ changelog.
   `C:\Users\the owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
 - WSL registry `BasePath` values may be missing or use `\??\` / `\\?\` NT
   prefixes. Guard for that before using them as normal paths.
-- WSL `wsl.extraBin` changes can require a full WSL distro restart after a
-  `nixos-rebuild switch` before refreshed `/bin/...` entries appear in the
-  live instance.
+- WSL `envfs` or `wsl.extraBin` changes can require a full WSL distro restart
+  after a `nixos-rebuild switch` before refreshed `/usr/bin/...` or `/bin/...`
+  entries appear in the live instance.
 
 ## Remote Access and Deployment
 

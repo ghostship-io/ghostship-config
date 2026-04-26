@@ -1,6 +1,6 @@
 # Common Windows Interop Tools
 
-WSL hosts in this repo import the Windows PATH into the Linux shell. Use explicit `/mnt/c/...` paths or repo-managed wrappers when deterministic behavior matters.
+WSL hosts in this repo import the Windows PATH into the Linux shell and use patched envfs for Linux/FHS paths. Envfs filters Windows/DrvFS PATH binaries out of `/usr/bin`, but deterministic Windows flows should still use explicit `/mnt/c/...` paths or repo-managed wrappers.
 
 - **PowerShell**: `win-powershell -Command '$env:UserName'` - Launch Windows PowerShell through the repo-managed wrapper.
 - **Explorer**: `/mnt/c/Windows/explorer.exe .` - Open current folder in Windows Explorer.

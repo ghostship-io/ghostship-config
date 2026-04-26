@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **WSL envfs removal**: Removed `services.envfs` from WSL hosts, restored
-  Windows PATH import for desktop interop, removed the repo-managed npm/npx WSL
-  wrappers after validating symlinked raw Node entrypoints, and documented that
-  future Linux compatibility wrappers should be added only for observed
-  failures.
+- **WSL patched envfs restore**: Restored `services.envfs` on WSL hosts for
+  Linux/FHS paths such as `/usr/bin/bash`, kept Windows PATH import for desktop
+  interop, patched envfs to ignore Windows/DrvFS PATH binaries under
+  `/usr/bin`, and kept the old npm/npx WSL wrappers removed after validation
+  showed symlinked raw Node entrypoints work.
 
 - **Merge worktree finish contract**: Updated the shared `merge-worktree` skill
   so its bundled finish helper fast-forwards local `main` without removing the

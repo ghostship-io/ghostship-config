@@ -1,0 +1,106 @@
+--- a/src/fs.rs
++++ b/src/fs.rs
+@@ -258,6 +258,57 @@
+     }
+ }
+ 
++
++fn decode_proc_mount_path(raw_path: &str) -> PathBuf {
++    let mut decoded = Vec::with_capacity(raw_path.len());
++    let bytes = raw_path.as_bytes();
++    let mut index = 0;
++
++    while index < bytes.len() {
++        if bytes[index] == b'\\'
++            && index + 3 < bytes.len()
++            && bytes[index + 1].is_ascii_digit()
++            && bytes[index + 2].is_ascii_digit()
++            && bytes[index + 3].is_ascii_digit()
++        {
++            let value = (bytes[index + 1] - b'0') * 64
++                + (bytes[index + 2] - b'0') * 8
++                + (bytes[index + 3] - b'0');
++            decoded.push(value);
++            index += 4;
++        } else {
++            decoded.push(bytes[index]);
++            index += 1;
++        }
++    }
++
++    PathBuf::from(OsString::from_vec(decoded))
++}
++
++fn drvfs_mountpoints_from_mounts(mounts: &str) -> Vec<PathBuf> {
++    mounts
++        .lines()
++        .filter_map(|line| {
++            let fields: Vec<&str> = line.split_whitespace().collect();
++            if fields.len() >= 3 && fields[2] == "drvfs" {
++                Some(decode_proc_mount_path(fields[1]))
++            } else {
++                None
++            }
++        })
++        .collect()
++}
++
++fn is_drvfs_path(path: &Path) -> bool {
++    fs::read_to_string("/proc/mounts")
++        .map(|mounts| {
++            drvfs_mountpoints_from_mounts(&mounts)
++                .into_iter()
++                .any(|mountpoint| path.starts_with(mountpoint))
++        })
++        .unwrap_or(false)
++}
++
+ fn _which<P1, P2>(path: &Path, exe_name: P1, mountpoints: &[P2]) -> Option<PathBuf>
+ where
+     P1: AsRef<Path>,
+@@ -267,6 +318,10 @@
+         return None;
+     }
+ 
++    if is_drvfs_path(path) {
++        return None;
++    }
++
+     // Do we still need this check if we already check for mountpoints?
+     if let Ok(stat) = path.symlink_metadata() {
+         if stat.nlink() as u32 == ENVFS_MAGIC {
+@@ -652,3 +707,34 @@
+         reply.data(data);
+     }
+ }
++
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn decodes_proc_mount_octal_escapes() {
++        assert_eq!(
++            decode_proc_mount_path("/mnt/Windows\\040Drive"),
++            PathBuf::from("/mnt/Windows Drive")
++        );
++    }
++
++    #[test]
++    fn parses_drvfs_mountpoints_only() {
++        let mounts = "\
++C:\\\\ /mnt/c drvfs rw,noatime 0 0
++none /usr/bin envfs rw,nosuid,nodev 0 0
++D:\\\\ /mnt/Windows\\040Drive drvfs rw,noatime 0 0
++";
++
++        assert_eq!(
++            drvfs_mountpoints_from_mounts(mounts),
++            vec![
++                PathBuf::from("/mnt/c"),
++                PathBuf::from("/mnt/Windows Drive")
++            ]
++        );
++    }
++}
