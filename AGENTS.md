@@ -76,9 +76,9 @@ changelog.
 - WSL hosts use patched `services.envfs` so Windows-side tooling can resolve
   Linux/FHS paths such as `/usr/bin/bash`, keep
   `wsl.wslConf.interop.appendWindowsPath = true` for desktop interop, and patch
-  envfs to filter Windows/DrvFS PATH binaries out of `/usr/bin`. The old
-  npm/npx wrappers were removed after validation showed symlinked raw Node
-  entrypoints work.
+  envfs to filter Windows/DrvFS PATH binaries out of `/usr/bin` while allowing
+  metadata/path probes so shebang launchers such as npm and npx can reopen
+  envfs-synthesized entries without wrappers.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode

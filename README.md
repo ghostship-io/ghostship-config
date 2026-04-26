@@ -325,9 +325,9 @@ Supported onboarding flow:
   notification bridge for `notify-send`, and a `hard`-mounted NFS automount at
   `/mnt/z`. Windows PATH import is enabled for desktop interop, and patched
   `envfs` provides Linux/FHS paths such as `/usr/bin/bash` while filtering
-  Windows/DrvFS PATH binaries out of `/usr/bin`. The old `/usr/bin/npm` and
-  `/usr/bin/npx` wrappers were removed after validation showed the raw Node
-  package-manager entrypoints work when symlinked instead of copied.
+  Windows/DrvFS PATH binaries out of `/usr/bin`. Envfs also allows
+  metadata/path probes so shebang launchers such as npm and npx can reopen
+  envfs-synthesized entries without WSL wrappers.
   The managed Paseo desktop-attachment path is `localhost:6768` from Windows to
   the WSL daemon. WSL activation now stops the `/mnt/z` automount and unmounts
   any live NFS mount before reloading the generated mount units so host

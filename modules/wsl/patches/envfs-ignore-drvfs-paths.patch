@@ -1,10 +1,9 @@
 --- a/src/fs.rs
 +++ b/src/fs.rs
-@@ -258,6 +258,57 @@
+@@ -258,6 +258,56 @@
      }
  }
- 
-+
+
 +fn decode_proc_mount_path(raw_path: &str) -> PathBuf {
 +    let mut decoded = Vec::with_capacity(raw_path.len());
 +    let bytes = raw_path.as_bytes();
@@ -58,10 +57,10 @@
  fn _which<P1, P2>(path: &Path, exe_name: P1, mountpoints: &[P2]) -> Option<PathBuf>
  where
      P1: AsRef<Path>,
-@@ -267,6 +318,10 @@
+@@ -267,6 +317,10 @@
          return None;
      }
- 
+
 +    if is_drvfs_path(path) {
 +        return None;
 +    }
@@ -69,7 +68,86 @@
      // Do we still need this check if we already check for mountpoints?
      if let Ok(stat) = path.symlink_metadata() {
          if stat.nlink() as u32 == ENVFS_MAGIC {
-@@ -652,3 +707,34 @@
+@@ -371,9 +425,66 @@
+     num == libc::SYS_faccessat as usize || num == libc::SYS_faccessat2 as usize
+ }
+
+-// TODO: Currently only supports arch which has the newfstatat system call
+-fn is_fstatat_syscall(num: usize) -> bool {
++#[cfg(any(
++    target_arch = "x86_64",
++    target_arch = "arm",
++    target_arch = "powerpc",
++    target_arch = "powerpc64",
++    target_arch = "sparc64",
++    target_arch = "mips",
++    target_arch = "mips64",
++    target_arch = "s390x"
++))]
++fn is_legacy_metadata_syscall(num: usize) -> bool {
++    num == libc::SYS_stat as usize || num == libc::SYS_lstat as usize
++}
++
++#[cfg(not(any(
++    target_arch = "x86_64",
++    target_arch = "arm",
++    target_arch = "powerpc",
++    target_arch = "powerpc64",
++    target_arch = "sparc64",
++    target_arch = "mips",
++    target_arch = "mips64",
++    target_arch = "s390x"
++)))]
++fn is_legacy_metadata_syscall(_num: usize) -> bool {
++    false
++}
++
++fn is_metadata_syscall(num: usize) -> bool {
+     num == libc::SYS_newfstatat as usize
++        || num == libc::SYS_statx as usize
++        || is_legacy_metadata_syscall(num)
++}
++
++#[cfg(any(
++    target_arch = "x86_64",
++    target_arch = "arm",
++    target_arch = "powerpc",
++    target_arch = "powerpc64",
++    target_arch = "sparc64",
++    target_arch = "mips",
++    target_arch = "mips64",
++    target_arch = "s390x"
++))]
++fn is_readlink_syscall(num: usize) -> bool {
++    num == libc::SYS_readlink as usize || num == libc::SYS_readlinkat as usize
++}
++
++#[cfg(not(any(
++    target_arch = "x86_64",
++    target_arch = "arm",
++    target_arch = "powerpc",
++    target_arch = "powerpc64",
++    target_arch = "sparc64",
++    target_arch = "mips",
++    target_arch = "mips64",
++    target_arch = "s390x"
++)))]
++fn is_readlink_syscall(num: usize) -> bool {
++    num == libc::SYS_readlinkat as usize
+ }
+
+ fn resolve_target<P1, P2>(
+@@ -440,7 +551,8 @@
+     let allowed_syscall = is_open_syscall(args[0])
+         || is_execve_syscall(args[0])
+         || is_access_syscall(args[0])
+-        || is_fstatat_syscall(args[0])
++        || is_metadata_syscall(args[0])
++        || is_readlink_syscall(args[0])
+         || env.contains_key(OsStr::new("ENVFS_RESOLVE_ALWAYS"));
+
+     if allowed_syscall {
+@@ -652,3 +764,34 @@
          reply.data(data);
      }
  }

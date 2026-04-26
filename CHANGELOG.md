@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WSL patched envfs restore**: Restored `services.envfs` on WSL hosts for
   Linux/FHS paths such as `/usr/bin/bash`, kept Windows PATH import for desktop
   interop, patched envfs to ignore Windows/DrvFS PATH binaries under
-  `/usr/bin`, and kept the old npm/npx WSL wrappers removed after validation
-  showed symlinked raw Node entrypoints work.
+  `/usr/bin`, and allowed metadata/path probes so shebang launchers such as
+  npm and npx can reopen envfs-synthesized entries without WSL wrappers.
 
 - **Merge worktree finish contract**: Updated the shared `merge-worktree` skill
   so its bundled finish helper fast-forwards local `main` without removing the
