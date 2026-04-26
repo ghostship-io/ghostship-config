@@ -76,12 +76,11 @@ changelog.
 - Managed Synology NFS mounts should use `hard`, not `soft`, on both WSL and
   NixOS clients so transient NAS stalls do not surface as client-side I/O
   errors or integrity failures during copies.
-- WSL hosts enable `services.envfs` so Windows-side tooling that assumes FHS
-  paths like `/usr/bin/bash` keeps working without host-local hacks, keep
-  `wsl.wslConf.interop.appendWindowsPath = false` so `envfs` does not synthesize
-  accidental Windows executables under `/usr/bin`, and back `/usr/bin/npm` plus
-  `/usr/bin/npx` with explicit WSL wrapper entries that exec the real Nix store
-  binaries instead of the broken raw Node shims.
+- WSL hosts do not use `services.envfs`; keep
+  `wsl.wslConf.interop.appendWindowsPath = true`, rely on Windows PATH import
+  for desktop interop, and add repo-managed Linux compatibility wrappers only
+  after an observed failure. The old npm/npx wrappers were removed after
+  validation showed symlinked raw Node entrypoints work.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode
@@ -127,9 +126,9 @@ changelog.
 
 - Prefer `/mnt/c/...` for Windows files. Treat `/mnt/z` as a lazy mount that
   may need verification before use.
-- Use explicit `/mnt/c/...` paths or repo-managed wrappers such as `wsl-open`
-  and `win-powershell` for Windows executables on WSL hosts; do not rely on
-  bare `powershell.exe` or other imported Windows PATH commands.
+- Windows PATH import is enabled on WSL hosts, but repo scripts should prefer
+  explicit `/mnt/c/...` paths or repo-managed wrappers such as `wsl-open` and
+  `win-powershell` when deterministic behavior matters.
 - WSL activation should stop `mnt-z.automount` and unmount any live `/mnt/z`
   NFS mount before reloading generated mount units so switches do not fail on
   stale `/mnt/z` mount state.
@@ -146,7 +145,7 @@ changelog.
 - WSL registry `BasePath` values may be missing or use `\??\` / `\\?\` NT
   prefixes. Guard for that before using them as normal paths.
 - WSL `wsl.extraBin` changes can require a full WSL distro restart after a
-  `nixos-rebuild switch` before refreshed `/usr/bin/...` entries appear in the
+  `nixos-rebuild switch` before refreshed `/bin/...` entries appear in the
   live instance.
 
 ## Remote Access and Deployment

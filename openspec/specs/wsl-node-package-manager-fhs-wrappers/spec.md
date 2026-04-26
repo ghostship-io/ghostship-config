@@ -1,30 +1,35 @@
-## ADDED Requirements
+# wsl-node-package-manager-fhs-wrappers Specification
 
-### Requirement: WSL provides explicit repo-managed npm and npx FHS wrappers
-WSL host configuration SHALL provide explicit `npm` and `npx` compatibility entrypoints for FHS paths instead of exposing raw upstream launcher shims that depend on the original npm filesystem layout.
+## Purpose
+Define that WSL npm and npx compatibility wrappers are failure-driven rather than installed speculatively.
 
-#### Scenario: npm compatibility entrypoint is explicit
-- **WHEN** the supported WSL `/usr/bin/npm` path is inspected
-- **THEN** it SHALL resolve through a repo-managed wrapper entrypoint that execs the real Nix store `npm` binary
+## Requirements
 
-#### Scenario: npx compatibility entrypoint is explicit
-- **WHEN** the supported WSL `/usr/bin/npx` path is inspected
-- **THEN** it SHALL resolve through a repo-managed wrapper entrypoint that execs the real Nix store `npx` binary
+### Requirement: WSL does not provide speculative npm and npx wrappers
+WSL host configuration SHALL not provide repo-managed `npm` and `npx` compatibility wrappers unless a concrete post-envfs-removal failure is observed.
 
-### Requirement: WSL npm and npx FHS wrappers avoid the broken raw shim behavior
-The supported WSL `npm` and `npx` FHS paths SHALL not depend on raw launcher files whose relative module lookup fails under `/usr/bin`.
+#### Scenario: npm compatibility wrapper is absent by default
+- **WHEN** the WSL compatibility wrapper configuration is inspected
+- **THEN** it SHALL not add a repo-managed `npm` wrapper
 
-#### Scenario: npm wrapper does not use the raw upstream shim path directly
-- **WHEN** the repo-managed WSL `npm` compatibility path is reviewed
-- **THEN** it SHALL not depend on the broken raw launcher behavior that resolves `../lib/cli.js` relative to `/usr/bin`
+#### Scenario: npx compatibility wrapper is absent by default
+- **WHEN** the WSL compatibility wrapper configuration is inspected
+- **THEN** it SHALL not add a repo-managed `npx` wrapper
 
-#### Scenario: npx wrapper does not use the raw upstream shim path directly
-- **WHEN** the repo-managed WSL `npx` compatibility path is reviewed
-- **THEN** it SHALL not depend on the broken raw launcher behavior that resolves `../lib/cli.js` relative to `/usr/bin`
+### Requirement: Node package-manager validation uses the managed updater
+The repo SHALL validate npm and npx behavior through the managed `ghostship-agent-maintenance` updater before adding replacement wrappers.
+
+#### Scenario: updater validates npm usage
+- **WHEN** the envfs removal is applied to a WSL host
+- **THEN** `ghostship-agent-maintenance` SHALL complete without npm spawn failures before npm remains wrapper-free
+
+#### Scenario: updater validates npx usage
+- **WHEN** the envfs removal is applied to a WSL host
+- **THEN** `ghostship-agent-maintenance` SHALL complete without npx spawn failures before npx remains wrapper-free
 
 ### Requirement: Docs describe the supported Node package-manager compatibility path
-The repo SHALL document that the supported WSL `npm` and `npx` compatibility paths are explicit repo-managed wrappers rather than accidental raw upstream shims.
+The repo SHALL document that npm and npx wrappers are not added speculatively and were removed after validation showed symlinked raw Node entrypoints work.
 
-#### Scenario: WSL workflow docs mention wrapper-backed compatibility
+#### Scenario: WSL workflow docs mention failure-driven compatibility
 - **WHEN** the WSL workflow documentation or repo agent memory is inspected
-- **THEN** it SHALL describe `/usr/bin/npm` and `/usr/bin/npx` as explicit compatibility wrappers
+- **THEN** it SHALL describe npm and npx wrappers as absent by default unless a concrete failure is observed

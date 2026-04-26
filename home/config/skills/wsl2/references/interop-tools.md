@@ -1,6 +1,6 @@
 # Common Windows Interop Tools
 
-WSL hosts in this repo do not import the Windows PATH into the Linux shell. Use explicit `/mnt/c/...` paths or repo-managed wrappers.
+WSL hosts in this repo import the Windows PATH into the Linux shell. Use explicit `/mnt/c/...` paths or repo-managed wrappers when deterministic behavior matters.
 
 - **PowerShell**: `win-powershell -Command '$env:UserName'` - Launch Windows PowerShell through the repo-managed wrapper.
 - **Explorer**: `/mnt/c/Windows/explorer.exe .` - Open current folder in Windows Explorer.

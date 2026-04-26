@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **WSL envfs removal**: Removed `services.envfs` from WSL hosts, restored
+  Windows PATH import for desktop interop, removed the repo-managed npm/npx WSL
+  wrappers after validating symlinked raw Node entrypoints, and documented that
+  future Linux compatibility wrappers should be added only for observed
+  failures.
+
 - **Merge worktree finish contract**: Updated the shared `merge-worktree` skill
   so its bundled finish helper fast-forwards local `main` without removing the
   source worktree, and clarified that agents should invoke the helper from the
