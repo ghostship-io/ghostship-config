@@ -93,7 +93,7 @@ let
 
     STATE_DIR="/srv/apps/vuetorrent"
     STATE_FILE="$STATE_DIR/auto-resume-attempts.json"
-    MAX_ATTEMPTS=10
+    MAX_ATTEMPTS=20
     QBT_API="http://127.0.0.1:5000/api/v2"
 
     mkdir -p "$STATE_DIR"

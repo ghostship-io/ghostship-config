@@ -313,7 +313,7 @@ changelog.
 - Gluetun on `chill-penguin` should stay on Gluetun's custom-provider WireGuard path for PIA. `podman-gluetun` should start from the cached winner at `/srv/apps/gluetun/pia-wireguard-selection.json` or do only a provisional latency pick when no cache exists, regenerate `/run/secrets/gluetun-runtime.env` from that active winner during startup, and rely on `gluetun-pia-selector` to rerank Vancouver port-forward-capable WireGuard servers 5 minutes after boot and every 8 hours thereafter. The selector should pin Vancouver, benchmark the top 10 Vancouver servers with a bounded generic HTTPS download pull, and restart Gluetun only when a materially faster Vancouver winner is found while keeping PIA VPN-side port forwarding plus qBittorrent/VueTorrent port reconciliation wired through Gluetun's native hooks and the generic `/v1/portforward` monitor path.
 - qBittorrent 5.1.4 on `chill-penguin` can stay `disconnected` if it only binds to Gluetun by interface name (`tun0`). Reconcile `current_interface_address` to Gluetun's live `tun0` IPv4 as part of the Gluetun monitor or port-forward reconciliation, not just the interface name and listen port.
 - Managed qBittorrent queue policy is 5 active downloads, 20 active torrents, and a 10 MB/s global download cap.
-- Managed qBittorrent errored-torrent recovery retries every 5 minutes and stops after 10 automatic resume attempts per torrent hash.
+- Managed qBittorrent errored-torrent recovery retries every 5 minutes and stops after 20 automatic resume attempts per torrent hash.
 
 ## Secrets and Bootstrap
 

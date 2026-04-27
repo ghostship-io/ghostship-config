@@ -186,7 +186,7 @@ name after the VPN namespace changes. The managed qBittorrent queue allows 5
 active downloads and 20 active torrents, with the global download cap set to
 10 MB/s. A `vuetorrent-auto-resume` timer retries errored qBittorrent torrents
 every 5 minutes through qBittorrent's internal Web API start action and leaves a
-torrent errored after 10 automatic resume attempts for that torrent hash. The
+torrent errored after 20 automatic resume attempts for that torrent hash. The
 Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
 legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`, and does not
 require any application-specific benchmark credentials.
