@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **VueTorrent errored-torrent auto-resume**: Added a managed timer that
   retries errored qBittorrent torrents every 5 minutes and stops retrying a
-  torrent after 10 automatic resume attempts for its hash.
+  torrent after 10 automatic resume attempts for its hash. The retry action
+  uses qBittorrent 5's `/api/v2/torrents/start` endpoint.
 
 - **VueTorrent queue limits**: Set the managed qBittorrent queue to 5 active
   downloads, 20 active torrents, and a 10 MB/s global download limit.

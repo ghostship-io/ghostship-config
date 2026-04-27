@@ -153,7 +153,7 @@ let
         continue
       fi
 
-      if ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "hashes=$hash" "$QBT_API/torrents/resume" >/dev/null 2>&1; then
+      if ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "hashes=$hash" "$QBT_API/torrents/start" >/dev/null 2>&1; then
         next_attempts=$((attempts + 1))
         ${pkgs.jq}/bin/jq --arg hash "$hash" --argjson attempts "$next_attempts" '.[$hash] = $attempts' "$work_state" > "$next_state"
         mv "$next_state" "$work_state"
