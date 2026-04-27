@@ -87,6 +87,87 @@ let
     ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_bind_args[@]}"
     echo "Primed VueTorrent binding for $TUN_INTERFACE/$TUN_IP before startup."
   '';
+  vuetorrent-auto-resume-script = pkgs.writeShellScriptBin "vuetorrent-auto-resume" ''
+    #!/bin/sh
+    set -eu
+
+    STATE_DIR="/srv/apps/vuetorrent"
+    STATE_FILE="$STATE_DIR/auto-resume-attempts.json"
+    MAX_ATTEMPTS=10
+    QBT_API="http://127.0.0.1:5000/api/v2"
+
+    mkdir -p "$STATE_DIR"
+
+    if [ ! -s "$STATE_FILE" ] || ! ${pkgs.jq}/bin/jq -e 'type == "object"' "$STATE_FILE" >/dev/null 2>&1; then
+      printf '{}\n' > "$STATE_FILE"
+    fi
+
+    if ! ${pkgs.podman}/bin/podman ps --filter "name=gluetun" --filter "status=running" --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx gluetun; then
+      echo "Gluetun is not running; skipping qBittorrent auto-resume."
+      exit 0
+    fi
+
+    if ! ${pkgs.podman}/bin/podman ps --filter "name=vuetorrent" --filter "status=running" --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx vuetorrent; then
+      echo "VueTorrent is not running; skipping qBittorrent auto-resume."
+      exit 0
+    fi
+
+    if ! ${pkgs.podman}/bin/podman exec gluetun wget -qO- "$QBT_API/app/version" >/dev/null 2>&1; then
+      echo "qBittorrent API is not reachable; skipping qBittorrent auto-resume."
+      exit 0
+    fi
+
+    all_torrents=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- "$QBT_API/torrents/info" 2>/dev/null || true)
+    if ! printf '%s' "$all_torrents" | ${pkgs.jq}/bin/jq -e 'type == "array"' >/dev/null 2>&1; then
+      echo "qBittorrent all-torrents response was not valid JSON; skipping qBittorrent auto-resume."
+      exit 0
+    fi
+
+    errored_torrents=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- "$QBT_API/torrents/info?filter=errored" 2>/dev/null || true)
+    if ! printf '%s' "$errored_torrents" | ${pkgs.jq}/bin/jq -e 'type == "array"' >/dev/null 2>&1; then
+      echo "qBittorrent errored-torrents response was not valid JSON; skipping qBittorrent auto-resume."
+      exit 0
+    fi
+
+    hashes_file=$(mktemp "$STATE_DIR/.auto-resume-hashes.XXXXXX")
+    work_state=$(mktemp "$STATE_DIR/.auto-resume-state.XXXXXX")
+    next_state=$(mktemp "$STATE_DIR/.auto-resume-next.XXXXXX")
+    trap 'rm -f "$hashes_file" "$work_state" "$next_state"' EXIT
+
+    all_hashes=$(printf '%s' "$all_torrents" | ${pkgs.jq}/bin/jq -c '[.[].hash]')
+    ${pkgs.jq}/bin/jq --argjson hashes "$all_hashes" \
+      'with_entries(select(.key as $hash | $hashes | index($hash)))' \
+      "$STATE_FILE" > "$work_state"
+
+    printf '%s' "$errored_torrents" | ${pkgs.jq}/bin/jq -r '.[].hash' > "$hashes_file"
+
+    resumed=0
+    skipped=0
+    while IFS= read -r hash; do
+      [ -n "$hash" ] || continue
+      attempts=$(${pkgs.jq}/bin/jq -r --arg hash "$hash" '.[$hash] // 0' "$work_state")
+
+      if [ "$attempts" -ge "$MAX_ATTEMPTS" ]; then
+        echo "Leaving errored qBittorrent torrent $hash untouched after $attempts automatic resume attempts."
+        skipped=$((skipped + 1))
+        continue
+      fi
+
+      if ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "hashes=$hash" "$QBT_API/torrents/resume" >/dev/null 2>&1; then
+        next_attempts=$((attempts + 1))
+        ${pkgs.jq}/bin/jq --arg hash "$hash" --argjson attempts "$next_attempts" '.[$hash] = $attempts' "$work_state" > "$next_state"
+        mv "$next_state" "$work_state"
+        echo "Resumed errored qBittorrent torrent $hash (automatic attempt $next_attempts/$MAX_ATTEMPTS)."
+        resumed=$((resumed + 1))
+      else
+        echo "Failed to resume errored qBittorrent torrent $hash; attempt count unchanged."
+      fi
+    done < "$hashes_file"
+
+    mv "$work_state" "$STATE_FILE"
+    chmod 0644 "$STATE_FILE"
+    echo "qBittorrent auto-resume complete: resumed=$resumed skipped=$skipped."
+  '';
 in
 {
   virtualisation.oci-containers.containers."vuetorrent" = {
@@ -126,6 +207,33 @@ in
     preStart = lib.mkAfter ''
       ${vuetorrent-prestart-script}/bin/vuetorrent-prestart.sh
     '';
+  };
+
+  systemd.services.vuetorrent-auto-resume = {
+    description = "Resume errored qBittorrent torrents with a bounded retry count";
+    after = [
+      "podman-gluetun.service"
+      "podman-vuetorrent.service"
+    ];
+    wants = [
+      "podman-gluetun.service"
+      "podman-vuetorrent.service"
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${vuetorrent-auto-resume-script}/bin/vuetorrent-auto-resume";
+    };
+  };
+
+  systemd.timers.vuetorrent-auto-resume = {
+    description = "Periodically resume errored qBittorrent torrents";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "10m";
+      OnUnitActiveSec = "5m";
+      Persistent = true;
+      Unit = "vuetorrent-auto-resume.service";
+    };
   };
 
   systemd.tmpfiles.rules = [
