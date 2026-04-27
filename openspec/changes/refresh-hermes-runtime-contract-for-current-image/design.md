@@ -4,7 +4,7 @@ The repo currently documents and wires a Hermes contract that was accurate for
 an earlier upstream image but is no longer current. The drift is not only
 cosmetic:
 
-- local docs and specs still describe `GHOSTSHIP_CODEX_CHANNEL` as supported
+- local docs and specs still describe `GHOSTSHIP_ROUTER_CHANNEL` as supported
   even though upstream removed that env from the runtime contract
 - the local contract still assumes upstream-generated root `.env` defaults even
   though the current image treats runtime env and persisted `.hermes/.env` as
@@ -26,10 +26,11 @@ must describe a fresh boot path rather than a drift-preserving migration.
 **Goals**
 - Realign the repo's Hermes runtime contract to the current upstream
   `ghostship-hermes` `main` image.
-- Remove the retired Codex Discord lane from the documented downstream
+- Remove the retired router Discord lane from the documented downstream
   contract.
-- Capture Codex as the normal primary model path after re-auth, with OpenCode
-  fallback and router `agentic` custom-provider support.
+- Capture Codex as the forced Discord channel model path after re-auth, with
+  the local router primary for normal routing and OpenCode Go as the paid
+  fallback lane.
 - Clarify the exact semantics of a destructive reset and what state is lost.
 - Clarify that a fresh reset relies on bundled upstream default skill seeding,
   not repo-seeded `skill-creator`.
@@ -56,34 +57,33 @@ Rationale:
 - The user asked for the latest image changes, not historical compatibility.
 - The current local contract is already known to have drifted.
 
-### 2. Remove `GHOSTSHIP_CODEX_CHANNEL` from the supported downstream contract
+### 2. Restore `GHOSTSHIP_CODEX_CHANNEL` and remove `GHOSTSHIP_ROUTER_CHANNEL`
 
-The supported runtime contract will treat `GHOSTSHIP_ROUTER_CHANNEL` as the
-only repo-owned forced Discord lane. Any stale `GHOSTSHIP_CODEX_CHANNEL` value
-must be treated as retired contract drift.
+The supported runtime contract will treat `GHOSTSHIP_CODEX_CHANNEL` as the
+repo-owned forced Discord Codex lane. Any stale `GHOSTSHIP_ROUTER_CHANNEL`
+value must be treated as retired contract drift.
 
 Rationale:
-- Upstream explicitly removed the managed Codex-pinned lane and its downstream
-  env key.
+- Upstream explicitly restored the managed Codex-pinned lane and removed the
+  router-channel downstream env key.
 - Keeping the key in this repo would document behavior the image no longer
   promises.
 
 Alternatives considered:
-- Keep documenting `GHOSTSHIP_CODEX_CHANNEL` because a local channel id still
+- Keep documenting `GHOSTSHIP_ROUTER_CHANNEL` because a local channel id still
   exists. Rejected because that channel can remain a normal free-response
   channel without being a supported forced-route contract.
 
-### 3. Codex is the normal primary lane, not a special Discord override
+### 3. The router is primary, with Codex as the forced Discord override
 
-The refreshed contract will capture `openai-codex/gpt-5.5` as the primary
-managed model lane, `opencode-go/minimax-m2.7` as the configured fallback, the
-router custom provider pinned to alias `agentic`, Firecrawl as the managed web
-backend, and `agent.reasoning_effort` defaulting to `medium`.
+The refreshed contract will capture the local router as the normal primary
+model lane, `openai-codex/gpt-5.5` as the forced Discord Codex channel lane,
+`opencode-go/minimax-m2.7` as the configured paid fallback, Firecrawl as the
+managed web backend, and `agent.reasoning_effort` defaulting to `medium`.
 
 Rationale:
-- The user explicitly wants Codex primary now.
-- Upstream documents Codex-primary runtime defaults and no longer treats Codex
-  as a Discord-only forced lane.
+- Upstream `36841a0` made the router primary and restored the forced Codex
+  Discord channel.
 
 ### 4. Full reset means deleting all persisted workstation state
 
@@ -197,25 +197,26 @@ Rationale:
 
 - [Risk] The new contract makes the next rollout more obviously destructive than
   before. -> Mitigation: state the reset consequences directly in specs/tasks.
-- [Risk] Operators may still expect the retired Codex Discord lane to exist.
-  -> Mitigation: make the removal explicit and treat any old channel as a
-  normal free-response session instead of a forced lane.
+- [Risk] Operators may still expect the retired router Discord lane to exist.
+  -> Mitigation: make the removal explicit and treat any old router channel as
+  a normal free-response session instead of a forced lane.
 - [Risk] Fresh reset boot may surprise operators by requiring re-auth before
-  Codex-primary works again. -> Mitigation: include re-auth as an explicit
+  the forced Codex channel works again. -> Mitigation: include re-auth as an explicit
   post-reset task.
 - [Risk] Upstream bundled skill seeding could change later. -> Mitigation:
   scope this contract refresh to the current image on `main`.
 
 ## Migration Plan
 
-1. Update the host wiring and docs to remove `GHOSTSHIP_CODEX_CHANNEL` from the
-   supported contract and keep only the router-pinned forced channel.
-2. Update the documented runtime defaults so Codex is the normal primary lane,
-   OpenCode is fallback, Firecrawl is the web backend, and router `agentic`
-   remains the custom provider path.
+1. Update the host wiring and docs to remove `GHOSTSHIP_ROUTER_CHANNEL` from
+   the supported contract and keep the Codex-pinned forced channel.
+2. Update the documented runtime defaults so the router is the normal primary
+   path, Codex is the forced Discord channel path, OpenCode Go is fallback, and
+   Firecrawl is the web backend.
 3. Remove the stale downstream `CLOAKBROWSER_URL` export and document the
    image-owned native CloakBrowser path.
-4. Add Bitwarden CLI runtime env and encrypted operator secret stubs.
+4. Add Bitwarden CLI runtime env plus encrypted operator secret stubs for
+   OpenCode Zen, ZenMux, and Electron Hub.
 5. Update the persistence contract to describe both empty `/nix` seeding and
    reused non-empty `/nix` reconciliation.
 6. During rollout, stop Hermes, remove `/srv/apps/hermes/home`,
@@ -223,7 +224,7 @@ Rationale:
    image boot fresh.
 7. Verify the fresh runtime has no repo-seeded `skill-creator`, does have the
    bundled upstream default skill set, and requires a fresh Codex auth before
-   the normal primary lane is usable.
+   the forced Codex channel is usable.
 
 ## Open Questions
 

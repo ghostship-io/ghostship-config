@@ -47,13 +47,14 @@ intentionally operator-managed persisted `/home/hermes/.hermes/.env`.
 - **AND** it SHALL not assume the current image rewrites that file on behalf of
   the host
 
-#### Scenario: Supported downstream env excludes the retired Codex lane key
+#### Scenario: Supported downstream env excludes the retired router lane key
 - **WHEN** the Hermes runtime contract is documented for `chill-penguin`
 - **THEN** the supported downstream Discord env surface SHALL include
   `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_USERS`, `DISCORD_HOME_CHANNEL`,
-  `DISCORD_FREE_RESPONSE_CHANNELS`, and `GHOSTSHIP_ROUTER_CHANNEL`
+  `DISCORD_FREE_RESPONSE_CHANNELS`, `GHOSTSHIP_CODEX_CHANNEL`, and
+  `DISCORD_WEBHOOK_CHANNEL`
 - **AND** the supported downstream contract SHALL not require
-  `GHOSTSHIP_CODEX_CHANNEL`
+  `GHOSTSHIP_ROUTER_CHANNEL`
 
 #### Scenario: Runtime env contract keeps Codex auth outside env
 - **WHEN** operators prepare the fresh Hermes runtime after a full reset
@@ -83,5 +84,6 @@ Manager-only `bws` contract as the normal path.
 - **THEN** repo-managed host wiring SHALL set
   `BITWARDENCLI_APPDATA_DIR=/home/hermes/.local/state/bitwarden-cli`
 - **AND** `hermes-secrets` SHALL carry stubs for `BW_CLIENTID`,
-  `BW_CLIENTSECRET`, and `BW_PASSWORD`
+  `BW_CLIENTSECRET`, `BW_PASSWORD`, `OPENCODE_ZEN_API_KEY`,
+  `ZENMUX_API_KEY`, and `ELECTRON_HUB_API_KEY`
 - **AND** operators SHALL fill those stubs before relying on `bw-unlock`

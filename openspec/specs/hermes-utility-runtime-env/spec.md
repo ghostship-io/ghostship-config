@@ -38,6 +38,7 @@ container-wide contract owned by the repo-managed host wiring.
   `GOOGLE_AI_STUDIO_API_KEY`, `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`,
   `OPENROUTER_HTTP_REFERER`, `OPENROUTER_TITLE`, `OPENAI_API_KEY`,
   `OPENAI_BASE_URL`, `OPENCODE_API_KEY`, `OPENCODE_GO_API_KEY`,
+  `OPENCODE_ZEN_API_KEY`, `ZENMUX_API_KEY`, `ELECTRON_HUB_API_KEY`,
   `OPENCODE_BASE_URL`, `GITHUB_TOKEN`, `GH_TOKEN`, `HASS_URL`, `HASS_TOKEN`,
   `BWS_ACCESS_TOKEN`, `BWS_SERVER_URL`, `BROWSERBASE_API_KEY`,
   `BROWSERBASE_PROJECT_ID`, `BROWSER_USE_API_KEY`, `BROWSERBASE_PROXIES`,
@@ -109,13 +110,14 @@ intentionally operator-managed persisted `/home/hermes/.hermes/.env`.
 - **AND** it SHALL not assume the current image rewrites that file on behalf of
   the host
 
-#### Scenario: Supported downstream env excludes the retired Codex lane key
+#### Scenario: Supported downstream env excludes the retired router lane key
 - **WHEN** the Hermes runtime contract is documented for `chill-penguin`
 - **THEN** the supported downstream Discord env surface SHALL include
   `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_USERS`, `DISCORD_HOME_CHANNEL`,
-  `DISCORD_FREE_RESPONSE_CHANNELS`, and `GHOSTSHIP_ROUTER_CHANNEL`
+  `DISCORD_FREE_RESPONSE_CHANNELS`, `GHOSTSHIP_CODEX_CHANNEL`, and
+  `DISCORD_WEBHOOK_CHANNEL`
 - **AND** the supported downstream contract SHALL not require
-  `GHOSTSHIP_CODEX_CHANNEL`
+  `GHOSTSHIP_ROUTER_CHANNEL`
 
 #### Scenario: Runtime env contract keeps Codex auth outside env
 - **WHEN** operators prepare the fresh Hermes runtime after a full reset
@@ -133,12 +135,13 @@ translation inputs.
 - **WHEN** the Hermes container definition is evaluated after this change
 - **THEN** it SHALL provide `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_USERS`,
   `DISCORD_FREE_RESPONSE_CHANNELS`, `DISCORD_HOME_CHANNEL`, and
-  `WEBHOOK_SECRET` through the supported container env and env-file contract
+  `GHOSTSHIP_CODEX_CHANNEL`, `DISCORD_WEBHOOK_CHANNEL`, and `WEBHOOK_SECRET`
+  through the supported container env and env-file contract
 - **AND** `DISCORD_BOT_TOKEN` and `DISCORD_ALLOWED_USERS` SHALL come from the
   current `supervisor` identity inputs
 - **AND** `DISCORD_FREE_RESPONSE_CHANNELS` SHALL combine the current managed
-  free-response channels, with `GHOSTSHIP_ROUTER_CHANNEL` as the only
-  repo-owned forced-route lane
+  free-response channels, with `GHOSTSHIP_CODEX_CHANNEL` as the repo-owned
+  forced Codex lane
 - **AND** `DISCORD_HOME_CHANNEL` SHALL use the current assistant channel input
 - **AND** it SHALL not require profile-scoped translation inputs for Discord or
   webhook settings

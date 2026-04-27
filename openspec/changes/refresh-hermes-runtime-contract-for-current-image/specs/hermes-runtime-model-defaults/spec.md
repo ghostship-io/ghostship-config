@@ -1,12 +1,13 @@
 ## ADDED Requirements
 
-### Requirement: Hermes SHALL use Codex as the normal primary model lane
+### Requirement: Hermes SHALL use router primary with a forced Codex Discord lane
 The self-hosted Hermes runtime on `chill-penguin` SHALL treat the current
-upstream Codex-primary model contract as the supported default.
+upstream router-primary model contract and forced Codex Discord channel as the
+supported default.
 
-#### Scenario: Managed runtime uses Codex primary, OpenCode fallback, and router custom provider
+#### Scenario: Managed runtime uses router primary, Codex channel pin, and OpenCode Go fallback
 - **WHEN** the refreshed Hermes runtime contract is applied on `chill-penguin`
-- **THEN** the supported managed primary model lane SHALL be
+- **THEN** the supported forced Discord Codex channel lane SHALL be
   `openai-codex/gpt-5.5`
 - **AND** the supported managed fallback model lane SHALL be
   `opencode-go/minimax-m2.7`
@@ -21,7 +22,7 @@ upstream Codex-primary model contract as the supported default.
   `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`
 - **THEN** the reset SHALL remove persisted Codex auth from
   `/home/hermes/.hermes/auth.json`
-- **AND** operators SHALL need to re-auth Codex before the normal primary lane
+- **AND** operators SHALL need to re-auth Codex before the forced Codex channel
   is usable again
-- **AND** the refreshed runtime contract SHALL not describe Codex as a
-  Discord-only forced route
+- **AND** the refreshed runtime contract SHALL still allow the configured
+  `GHOSTSHIP_CODEX_CHANNEL` to force Discord sessions onto Codex
