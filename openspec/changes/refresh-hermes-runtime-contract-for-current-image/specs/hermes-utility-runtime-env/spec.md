@@ -72,3 +72,16 @@ details as part of the supported downstream operator env contract.
 - **AND** operators SHALL rely on the image-owned `google-chrome` plus
   `AGENT_BROWSER_PROFILE=/home/hermes/.local/state/cloakbrowser` path for the
   supported stock local browser workflow
+
+### Requirement: Hermes SHALL support the image-managed Bitwarden CLI contract
+The managed Hermes container on `chill-penguin` SHALL support the upstream
+Password Manager CLI `bw` contract without restoring the retired Secrets
+Manager-only `bws` contract as the normal path.
+
+#### Scenario: Host wiring carries Bitwarden CLI appdata and credentials
+- **WHEN** the Hermes container definition is evaluated for `chill-penguin`
+- **THEN** repo-managed host wiring SHALL set
+  `BITWARDENCLI_APPDATA_DIR=/home/hermes/.local/state/bitwarden-cli`
+- **AND** `hermes-secrets` SHALL carry stubs for `BW_CLIENTID`,
+  `BW_CLIENTSECRET`, and `BW_PASSWORD`
+- **AND** operators SHALL fill those stubs before relying on `bw-unlock`

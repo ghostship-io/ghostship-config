@@ -75,10 +75,10 @@ Alternatives considered:
 
 ### 3. Codex is the normal primary lane, not a special Discord override
 
-The refreshed contract will capture `openai-codex/gpt-5.4` as the primary
+The refreshed contract will capture `openai-codex/gpt-5.5` as the primary
 managed model lane, `opencode-go/minimax-m2.7` as the configured fallback, the
-router custom provider pinned to alias `agentic`, and `agent.reasoning_effort`
-defaulting to `medium`.
+router custom provider pinned to alias `agentic`, Firecrawl as the managed web
+backend, and `agent.reasoning_effort` defaulting to `medium`.
 
 Rationale:
 - The user explicitly wants Codex primary now.
@@ -180,6 +180,19 @@ Rationale:
 - The live host still exported `CLOAKBROWSER_URL`, which no longer matches the
   supported runtime shape.
 
+### 10. Bitwarden uses the image-managed Password Manager CLI path
+
+The refreshed contract will carry
+`BITWARDENCLI_APPDATA_DIR=/home/hermes/.local/state/bitwarden-cli` and add
+operator-filled `BW_CLIENTID`, `BW_CLIENTSECRET`, and `BW_PASSWORD` stubs to
+`hermes-secrets` for the upstream `bw-unlock` workflow.
+
+Rationale:
+- Upstream replaced the normal Bitwarden Secrets Manager `bws` path with the
+  Password Manager CLI `bw`.
+- Raw `bw` invocations need the same appdata directory as the image-managed
+  wrappers.
+
 ## Risks / Trade-offs
 
 - [Risk] The new contract makes the next rollout more obviously destructive than
@@ -198,15 +211,17 @@ Rationale:
 1. Update the host wiring and docs to remove `GHOSTSHIP_CODEX_CHANNEL` from the
    supported contract and keep only the router-pinned forced channel.
 2. Update the documented runtime defaults so Codex is the normal primary lane,
-   OpenCode is fallback, and router `agentic` remains the custom provider path.
+   OpenCode is fallback, Firecrawl is the web backend, and router `agentic`
+   remains the custom provider path.
 3. Remove the stale downstream `CLOAKBROWSER_URL` export and document the
    image-owned native CloakBrowser path.
-4. Update the persistence contract to describe both empty `/nix` seeding and
+4. Add Bitwarden CLI runtime env and encrypted operator secret stubs.
+5. Update the persistence contract to describe both empty `/nix` seeding and
    reused non-empty `/nix` reconciliation.
-5. During rollout, stop Hermes, remove `/srv/apps/hermes/home`,
+6. During rollout, stop Hermes, remove `/srv/apps/hermes/home`,
    `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`, then let the
    image boot fresh.
-6. Verify the fresh runtime has no repo-seeded `skill-creator`, does have the
+7. Verify the fresh runtime has no repo-seeded `skill-creator`, does have the
    bundled upstream default skill set, and requires a fresh Codex auth before
    the normal primary lane is usable.
 

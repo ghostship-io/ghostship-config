@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Hermes latest-image contract update**: Updated the `chill-penguin` Hermes
+  contract for upstream `ghostship-hermes` `main` at `8a1a5cb`: Codex primary
+  is now `openai-codex/gpt-5.5`, the managed web backend is Firecrawl, and
+  Hermes receives the image-owned Bitwarden CLI appdata path plus new
+  `hermes-secrets` stubs for Bitwarden, GitHub, and NVIDIA Build credentials.
+
 - **WSL patched envfs restore**: Restored `services.envfs` on WSL hosts for
   Linux/FHS paths such as `/usr/bin/bash`, kept Windows PATH import for desktop
   interop, patched envfs to ignore Windows/DrvFS PATH binaries under
@@ -73,7 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   native instruction files, and taught WSL activation to publish the same file
   to the Windows-side Codex Desktop path `%USERPROFILE%\.codex\AGENTS.md`.
 
-- **Hermes current-image runtime refresh**: Dropped `GHOSTSHIP_CODEX_CHANNEL` from the supported Hermes downstream env contract, kept Codex as the normal `openai-codex/gpt-5.4` primary lane with `opencode-go/minimax-m2.7` fallback and router `agentic`, removed the stale downstream `CLOAKBROWSER_URL` export so Hermes follows the image-owned native CloakBrowser path, documented `/nix` first-boot seeding plus later default-profile reconciliation, and clarified that the next full Hermes reset must pull the latest published `ghcr.io/ghostship-io/ghostship-hermes:latest` image, wipe persisted auth/XDG/custom-skill/workspace/user-Nix state, rely on bundled upstream default skill seeding, and require fresh Codex auth afterward.
+- **Hermes current-image runtime refresh**: Dropped `GHOSTSHIP_CODEX_CHANNEL` from the supported Hermes downstream env contract, kept Codex as the normal `openai-codex/gpt-5.5` primary lane with `opencode-go/minimax-m2.7` fallback and router `agentic`, removed the stale downstream `CLOAKBROWSER_URL` export so Hermes follows the image-owned native CloakBrowser path, documented `/nix` first-boot seeding plus later default-profile reconciliation, and clarified that the next full Hermes reset must pull the latest published `ghcr.io/ghostship-io/ghostship-hermes:latest` image, wipe persisted auth/XDG/custom-skill/workspace/user-Nix state, rely on bundled upstream default skill seeding, and require fresh Codex auth afterward.
 - **Ragenix helper path fix**: Fixed `secrets/rules.nix` to emit rule keys relative to the rules file directory so `secret-edit <logical-id>` and other `ragenix` operations match the tracked `secrets/files/**/*.age` paths again.
 - **Managed Paseo daemon and Node FHS wrappers**: Added `paseo` to the same wrapper-plus-maintenance flow used by the other agent CLIs, added a WSL-only `ghostship-paseo` system service that keeps a local daemon on `127.0.0.1:6768` for the Windows desktop app, documented Paseo's current daemon/app version-lockstep expectation, and replaced the broken raw WSL `/usr/bin/npm` plus `/usr/bin/npx` paths with explicit wrapper-backed WSL entries that exec the real Nix store binaries.
 - **Develop web service removal**: Removed the managed `opencode-web` and

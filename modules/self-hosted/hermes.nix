@@ -47,6 +47,7 @@ let
     RSS_BRIDGE_URL = "http://rss-bridge";
     SYNOLOGY_URL = "http://192.168.200.106:5000/";
     SYNOLOGY_VERIFY_SSL = "false";
+    BITWARDENCLI_APPDATA_DIR = "/home/hermes/.local/state/bitwarden-cli";
   };
   hermes-runtime-env-sync = pkgs.writeTextFile {
     name = "hermes-runtime-env-sync.py";
