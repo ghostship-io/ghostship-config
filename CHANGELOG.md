@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **VueTorrent queue limits**: Set the managed qBittorrent queue to 5 active
+  downloads, 20 active torrents, and a 10 MB/s global download limit.
+
 - **Hermes latest-image contract update**: Updated the `chill-penguin` Hermes
   contract for upstream `ghostship-hermes` `main` at `8a1a5cb`: Codex primary
   is now `openai-codex/gpt-5.5`, the managed web backend is Firecrawl, and

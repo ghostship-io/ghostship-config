@@ -41,6 +41,10 @@ let
         Preferences.WebUI\\ReverseProxySupportEnabled=literal:true
         Preferences.WebUI\\AlternativeUIEnabled=literal:true
         Preferences.WebUI\\RootFolder=literal:/vuetorrent
+        Preferences.Queueing\\QueueingEnabled=literal:true
+        Preferences.Queueing\\MaxActiveDownloads=literal:5
+        Preferences.Queueing\\MaxActiveTorrents=literal:20
+        Preferences.Connection\\GlobalDLLimit=literal:10240
       )
 
       ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_args[@]}"
