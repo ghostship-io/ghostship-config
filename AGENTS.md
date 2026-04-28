@@ -12,13 +12,11 @@ changelog.
 - The shared workflow preferences require verified work to be committed before
   task completion.
 - If a change needs a plan, implement it in a git worktree.
-- For repo research, use `brainstorming` and `openspec-explore` when those
-  capabilities are available.
+- For repo research, use `brainstorming` when it is available.
 - Use the `nix` skill for Nix-platform work and the `python` skill for Python
   work when they are available.
 - Shared skills live under `home/config/skills/*` and are linked into
-  `~/.agents/skills`. Repo-local OpenSpec assets live separately under
-  `.codex/`, `.gemini/`, and `.opencode/`.
+  `~/.agents/skills`.
 - The shared local skill is named `skill-creator` and is vendored from the
   upstream `skill-creator` package in `vercel-labs/agent-browser` `v0.9.3`.
 - Managed `skills.sh` installs are separate from the repo-managed
@@ -35,25 +33,6 @@ changelog.
   `~/.codex/skills/.system/skill-creator` path with a symlink to the managed
   shared `~/.agents/skills/skill-creator`, and
   `ghostship-agent-maintenance` reasserts that override after Codex updates.
-- OpenSpec slash commands and agent assets are project-local. Refresh them by
-  running `openspec update` in an OpenSpec-enabled repo.
-- The develop-host `openspec` wrapper reapplies append-only Ghostship
-  propose/apply/archive snippets after both `openspec init` and
-  `openspec update` without a separate OpenSpec config directory.
-- The managed `openspec` wrapper should keep upstream telemetry opted out by
-  default with `DO_NOT_TRACK=1` and `OPENSPEC_TELEMETRY=0` so blocked egress
-  does not spam harmless PostHog flush stack traces after successful commands.
-- The Ghostship `propose` override should create or reuse the change
-  worktree at the start, create proposal/design/tasks from that worktree, and
-  end with a detailed overview of the full proposed change.
-- The Ghostship `apply` override should commit planning artifacts in the
-  active worktree, continue from that worktree, track issues found during
-  apply, and update the current proposal instead of creating a new proposal or
-  worktree when the user changes the work mid-apply.
-- The Ghostship `archive` override should reconcile any matching change
-  worktree back into `main`, commit the archive move on `main`, remove the
-  worktree, try to leave `main` clean, and finish with a list of issues or
-  follow-up work to consider next.
 - `.envrc` uses `use flake`, so the root `flake.nix` must expose either
   `devShells.<system>.default` or `packages.<system>.default`.
 - Default dev-shell package order currently matters on this host: keep `git`
@@ -89,7 +68,7 @@ changelog.
   pattern as the other agent CLIs.
 - WSL desktop-facing OpenCode support uses the `opencode-server` user service
   on `127.0.0.1:8421`; do not add a repo-managed Paseo daemon.
-- Develop hosts install `codex`, `gemini`, `opencode`, `paseo`, and `openspec` into the
+- Develop hosts install `codex`, `gemini`, `opencode`, and `paseo` into the
   user-local npm prefix under
   `/home/nixos/.local/share/ghostship-agent-tools/npm`, and
   `ghostship-agent-maintenance.service` plus its timer own installing and
@@ -336,5 +315,3 @@ changelog.
   it is missing.
 - `references/host-intake/<hostname>/` is temporary staging for Codex-assisted
   host integration. Remove it after Codex finishes integrating the host.
-- Active spec, proposal, and task artifacts live under the repo-root
-  `openspec/` tree.

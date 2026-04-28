@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
+  command surfaces, repo-local planning tree, and stale CLI cleanup path from
+  develop-host agent tooling. Removed the installed global
+  `using-git-worktrees` skill in favor of the maintained `merge-worktree`
+  workflow.
+
 - **Hermes 36841a0 env contract**: Updated the `chill-penguin` Hermes env
   wiring for upstream `ghostship-hermes` `36841a0`, restoring
   `GHOSTSHIP_CODEX_CHANNEL=1492841053642817606`, adding
@@ -75,10 +81,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `obra/superpowers/brainstorming` `skills.sh` install to the develop-host
   maintenance flow so `ghostship-agent-maintenance` keeps it installed and
   refreshed without expanding the repo-managed shared skill inventory.
-
-- **using-git-worktrees cleanup**: Removed the stale
-  `using-git-worktrees` reference from the OpenSpec archive override and repo
-  guidance while keeping the repo-managed `merge-worktree` skill in place.
 
 - **Caveman and workflow retirement**: Removed the managed Caveman default
   behavior from develop hosts, replaced the old Codex Caveman injection with

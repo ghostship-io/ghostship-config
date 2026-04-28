@@ -9,7 +9,6 @@ in
   environment.systemPackages = [
     agentTooling.agentBrowser
     agentTooling.agentMaintenance
-    agentTooling.openspecCli
   ];
 
   imports = [

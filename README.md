@@ -17,8 +17,6 @@ logical-unit secret files.
 ## Layout
 
 - `flake.nix`: shared host construction and top-level outputs
-- `openspec/`: repo-local spec, change, and task artifacts shared by Codex,
-  Gemini, and OpenCode
 - `hosts/`: per-host configuration and role assignment
 - `modules/common/`: shared NixOS base modules
 - `modules/develop/`: develop-role system tooling and wrappers
@@ -47,8 +45,8 @@ logical-unit secret files.
 ## Agent Launchers
 
 - Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`,
-  `paseo`, `agent-deck`, `agent-browser`, and `openspec` through Nix-managed
-  wrapper scripts.
+  `paseo`, `agent-deck`, and `agent-browser` through Nix-managed wrapper
+  scripts.
 - The shared agent instructions live at `home/config/AGENTS.md` in the repo and
   are published to each agent's native path. Codex reads `~/.codex/AGENTS.md`,
   Gemini reads `~/.gemini/GEMINI.md`, and OpenCode reads
@@ -59,33 +57,9 @@ logical-unit secret files.
 - The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
   unless you override it explicitly, so local automation stays on the
   profile-capable Chrome engine even if upstream auto-selection changes.
-- `codex`, `gemini`, `gemini-cli`, `opencode`, `paseo`, `agent-deck`, and
-  `openspec` delegate to
-  installed user-local CLIs under
-  `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`. The `openspec`
-  wrapper falls back to `npx` only until maintenance bootstraps the managed
-  binary.
-- The `openspec` wrapper defaults `openspec init` to
-  `--tools codex,gemini,opencode --profile core` unless you pass explicit
-  `--tools` or `--profile` values.
-- The managed `openspec` wrapper also defaults `DO_NOT_TRACK=1` and
-  `OPENSPEC_TELEMETRY=0` so upstream OpenSpec `1.2.0` does not print noisy
-  PostHog flush stack traces on hosts where telemetry egress is blocked.
-- The wrapper also reapplies personal OpenSpec overrides after both
-  `openspec init` and `openspec update`, but those overrides are append-only:
-  the wrapper keeps the upstream generated workflow files and adds only three
-  built-in Ghostship propose/apply/archive snippets on top.
-- The Ghostship `propose` override creates or reuses the change
-  worktree before planning, writes proposal/design/tasks from that worktree,
-  and ends with a detailed overview of the full proposed change.
-- The Ghostship `apply` override commits planning artifacts in the active
-  worktree, continues implementation from that worktree, tracks issues found
-  during apply, and ends with a detailed overview of the completed work and any
-  proposal updates.
-- The Ghostship `archive` override reconciles the change worktree back into
-  `main`, commits the archive move there, removes the worktree, tries to leave
-  `main` clean, and ends with a list of issues or follow-up work to consider
-  next.
+- `codex`, `gemini`, `gemini-cli`, `opencode`, `paseo`, and `agent-deck`
+  delegate to installed user-local CLIs under
+  `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`.
 - `ghostship-agent-maintenance.service` owns automatic agent upkeep. Its
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent
@@ -128,10 +102,6 @@ logical-unit secret files.
   every new shell.
 - Those launcher defaults only take effect after the relevant develop-host
   NixOS rebuild or Home Manager switch applies the generated config files.
-- OpenSpec CLI updates are automatic through maintenance, but scaffold refresh
-  is still manual. Run `openspec update .` inside an OpenSpec-enabled repo when
-  you want to refresh slash-command assets.
-
 ## Shared Skills
 
 - Shared repo-managed skills live under `home/config/skills/` and are linked
@@ -152,8 +122,6 @@ logical-unit secret files.
   `~/.codex/skills/.system/skill-creator` path with a managed symlink to
   `~/.agents/skills/skill-creator`, and `ghostship-agent-maintenance`
   reasserts that override after Codex CLI refreshes.
-- Repo-local OpenSpec assets under `.codex/`, `.gemini/`, and `.opencode/`
-  are a separate layer from the shared `~/.agents/skills` inventory.
 
 ## Self-Hosted Stack
 
