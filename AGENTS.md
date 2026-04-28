@@ -172,9 +172,14 @@ changelog.
   ES-DE mandatory, put new code in the focused submodule rather than the
   aggregator, keep the host disk layout label-based (`BOOT`, `swap`, `nixos`,
   `roms`) with the `nixos` Btrfs filesystem mounted at `/`, no `/fast` mount,
-  and `/srv/emulation/roms` mounted from the `roms` Btrfs filesystem; use the
-  official ES-DE AppImage package unless a source build is explicitly
-  revisited.
+  and `/srv/emulation/roms` mounted from the `roms` Btrfs filesystem. Keep
+  OpenSSH enabled with root key login only and no password or
+  keyboard-interactive authentication. Keep Wi-Fi available but constrain
+  NetworkManager Wi-Fi profiles to 5 GHz instead of rfkilling the radio, so
+  Bluetooth stays usable and SSH remains reachable. During bootstrap, boot
+  Boomer to a tty shell with `kiosk` auto-login and leave ES-DE/Gamescope as a
+  manual `boomer-start-esde` action. Use the official ES-DE AppImage package
+  unless a source build is explicitly revisited.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
 - Homepage `services.yaml` updates can leave stale entries behind when keys are

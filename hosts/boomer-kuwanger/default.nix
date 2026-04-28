@@ -10,6 +10,16 @@
   # Hostname
   networking.hostName = "boomer-kuwanger";
 
+  services.openssh = {
+    enable = true;
+    openFirewall = true;
+    settings = {
+      PermitRootLogin = "prohibit-password";
+      PasswordAuthentication = false;
+      KbdInteractiveAuthentication = false;
+    };
+  };
+
   ghostship.host.roles = {
     server = true;
   };
@@ -28,6 +38,7 @@
     visuals.defaultProfile = "megabezel-auto";
     visuals.upscaler = "gamescope-fsr-auto";
     controllers.assignment = "connection-order-persistent";
+    startup.mode = "console";
   };
 
   # Enable Hyprland

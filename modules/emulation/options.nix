@@ -75,6 +75,11 @@ in
       default = "connection-order-persistent";
       description = "Player assignment policy for Bluetooth controllers.";
     };
+    startup.mode = mkOption {
+      type = types.enum [ "kiosk" "console" ];
+      default = "kiosk";
+      description = "Whether Boomer boots directly into ES-DE or a local debug console.";
+    };
     romDisk = {
       uuid = mkOption {
         type = types.nullOr types.str;

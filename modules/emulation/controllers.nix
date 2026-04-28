@@ -113,18 +113,22 @@ in
       KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0660", GROUP="input", TAG+="uaccess"
     '';
 
-    systemd.services.boomer-disable-wifi = {
-      description = "Disable Wi-Fi radio for Bluetooth-focused emulation profile";
+    systemd.services.boomer-wifi-5ghz-only = {
+      description = "Keep Wi-Fi profiles constrained to 5 GHz for Bluetooth-focused emulation";
       wantedBy = [ "multi-user.target" ];
-      after = [ "NetworkManager.service" "bluetooth.service" ];
+      after = [ "NetworkManager.service" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
       };
       path = [ pkgs.networkmanager pkgs.util-linux ];
       script = ''
-        nmcli radio wifi off || true
-        rfkill block wlan || true
+        rfkill unblock wlan || true
+        nmcli radio wifi on || true
+        nmcli -t -f UUID,TYPE connection show | while IFS=: read -r uuid type; do
+          [ "$type" = "802-11-wireless" ] || continue
+          nmcli connection modify "$uuid" 802-11-wireless.band a connection.autoconnect yes connection.autoconnect-priority 100 || true
+        done
       '';
     };
 

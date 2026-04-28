@@ -141,41 +141,108 @@ let
     export XDG_CACHE_HOME="${cfg.dataRoot}/xdg/cache"
     export TMPDIR="${cfg.dataRoot}/tmp"
     export SDL_GAMECONTROLLERCONFIG_FILE="${cfg.configRoot}/controllers/gamecontrollerdb.txt"
-    boomer-sync-esde-config
-    ${lib.concatMapStringsSep "\n" (pkg: "${lib.getExe pkg}") config.ghostship.emulation.internal.setupScripts}
+    if [ "$(id -u)" = 0 ]; then
+      boomer-sync-esde-config
+      ${lib.concatMapStringsSep "\n" (pkg: "${lib.getExe pkg}") config.ghostship.emulation.internal.setupScripts}
+    elif [ ! -d "${cfg.esde.appDataDir}/custom_systems" ]; then
+      echo "Boomer emulation state is not prepared yet; run boomer-sync-esde-config as root."
+      exit 1
+    fi
     if [ "''${BOOMER_ESDE_NO_GAMESCOPE:-0}" = "1" ]; then
       exec es-de --fullscreen
     fi
     exec gamescope -f -e -- es-de --fullscreen
   '';
+
+  boomerStartEsde = pkgs.writeShellScriptBin "boomer-start-esde" ''
+    set -euo pipefail
+    if [ "$(id -u)" != 0 ]; then
+      exec ${lib.getExe boomerEmulationSession}
+    fi
+    exec ${pkgs.systemd}/bin/systemctl start boomer-emulation-session.service
+  '';
+
+  boomerStopEsde = pkgs.writeShellScriptBin "boomer-stop-esde" ''
+    set -euo pipefail
+    exec ${pkgs.systemd}/bin/systemctl stop boomer-emulation-session.service
+  '';
 in
 {
-  config = lib.mkIf cfg.enable {
-    ghostship.emulation.internal.scripts = {
-      inherit boomerEmulationSession boomerSyncEsdeConfig;
-    };
-
-    services.greetd = {
-      enable = true;
-      settings.default_session = {
-        command = "${lib.getExe boomerEmulationSession}";
-        user = cfg.user;
+  config = lib.mkIf cfg.enable (lib.mkMerge [
+    {
+      ghostship.emulation.internal.scripts = {
+        inherit boomerEmulationSession boomerStartEsde boomerStopEsde boomerSyncEsdeConfig;
       };
-    };
 
-    systemd.services.boomer-emulation-setup = {
-      description = "Prepare Boomer Kuwanger emulation runtime state";
-      wantedBy = [ "multi-user.target" ];
-      before = [ "greetd.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
+      systemd.services.boomer-emulation-session = {
+        description = "Launch Boomer Kuwanger ES-DE session";
+        after = [ "boomer-emulation-setup.service" "systemd-user-sessions.service" ];
+        wants = [ "boomer-emulation-setup.service" ];
+        conflicts = lib.optionals (cfg.startup.mode == "console") [ "getty@tty1.service" ];
+        serviceConfig = {
+          User = cfg.user;
+          Group = cfg.group;
+          WorkingDirectory = "/home/${cfg.user}";
+          PAMName = "login";
+          TTYPath = "/dev/tty1";
+          TTYReset = true;
+          TTYVHangup = true;
+          StandardInput = "tty";
+          StandardOutput = "journal+console";
+          StandardError = "journal+console";
+          Restart = "no";
+        };
+        script = ''
+          exec ${lib.getExe boomerEmulationSession}
+        '';
       };
-      path = [ boomerSyncEsdeConfig ] ++ config.ghostship.emulation.internal.setupScripts;
-      script = ''
-        boomer-sync-esde-config
-        ${lib.concatMapStringsSep "\n" (pkg: "${lib.getExe pkg}") config.ghostship.emulation.internal.setupScripts}
+
+      systemd.services.boomer-emulation-setup = {
+        description = "Prepare Boomer Kuwanger emulation runtime state";
+        wantedBy = [ "multi-user.target" ];
+        before = lib.optionals (cfg.startup.mode == "kiosk") [ "greetd.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+        };
+        path = [ boomerSyncEsdeConfig ] ++ config.ghostship.emulation.internal.setupScripts;
+        script = ''
+          boomer-sync-esde-config
+          ${lib.concatMapStringsSep "\n" (pkg: "${lib.getExe pkg}") config.ghostship.emulation.internal.setupScripts}
+        '';
+      };
+    }
+
+    (lib.mkIf (cfg.startup.mode == "kiosk") {
+      services.greetd = {
+        enable = true;
+        settings.default_session = {
+          command = "${lib.getExe boomerEmulationSession}";
+          user = cfg.user;
+        };
+      };
+    })
+
+    (lib.mkIf (cfg.startup.mode == "console") {
+      services.greetd.enable = lib.mkForce false;
+      services.getty.autologinUser = cfg.user;
+      security.polkit.enable = true;
+      security.polkit.extraConfig = ''
+        polkit.addRule(function(action, subject) {
+          if (subject.user != "${cfg.user}") {
+            return;
+          }
+          if (action.id != "org.freedesktop.systemd1.manage-units") {
+            return;
+          }
+          var unit = action.lookup("unit");
+          var verb = action.lookup("verb");
+          if (unit == "boomer-emulation-session.service" &&
+              (verb == "start" || verb == "stop" || verb == "restart")) {
+            return polkit.Result.YES;
+          }
+        });
       '';
-    };
-  };
+    })
+  ]);
 }

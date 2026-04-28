@@ -18,7 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   controller-order persistence, shader fallback status, ROM coverage checks,
   and standalone emulator config scaffolds. Declared Boomer's final label-based
   disk layout with the OS disk mounted at `/` and the ROM disk mounted at
-  `/srv/emulation/roms`.
+  `/srv/emulation/roms`. Enabled durable SSH with root key login only, disabled
+  password and keyboard-interactive SSH authentication, and added Boomer's host
+  SSH key to the emulation secret recipient group. Replaced the first-pass
+  Wi-Fi rfkill service with a 5 GHz-only NetworkManager profile policy so Wi-Fi
+  remains available while avoiding 2.4 GHz associations for Bluetooth. Switched
+  Boomer's bootstrap startup mode to a tty shell with `kiosk` auto-login and a
+  manual `boomer-start-esde` Gamescope/ES-DE launch action until hardware
+  bring-up is stable.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from

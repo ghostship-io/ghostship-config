@@ -123,11 +123,11 @@ let
   toolScripts = {
     boomer-wifi-status = mkMenuTool "boomer-wifi-status" "Wi-Fi Status" [
       { label = "Radio status"; command = "nmcli radio; echo; nmcli device status || true"; }
-      { label = "Disable Wi-Fi"; command = "nmcli radio wifi off || true; rfkill block wlan || true; nmcli radio"; }
-      { label = "Enable Wi-Fi temporarily"; command = "rfkill unblock wlan || true; nmcli radio wifi on || true; nmcli radio"; }
+      { label = "Active connections"; command = "nmcli connection show --active"; }
+      { label = "Force 5 GHz profiles"; command = "rfkill unblock wlan || true; nmcli radio wifi on || true; nmcli -t -f UUID,TYPE connection show | while IFS=: read -r uuid type; do [ \"$type\" = \"802-11-wireless\" ] && nmcli connection modify \"$uuid\" 802-11-wireless.band a connection.autoconnect yes connection.autoconnect-priority 100 || true; done; nmcli radio"; }
     ];
     boomer-wifi-connect = mkMenuTool "boomer-wifi-connect" "Wi-Fi Connect" [
-      { label = "Open NetworkManager TUI"; command = "rfkill unblock wlan || true; nmcli radio wifi on || true; nmtui"; }
+      { label = "Open NetworkManager TUI"; command = "rfkill unblock wlan || true; nmcli radio wifi on || true; nmtui; nmcli -t -f UUID,TYPE connection show | while IFS=: read -r uuid type; do [ \"$type\" = \"802-11-wireless\" ] && nmcli connection modify \"$uuid\" 802-11-wireless.band a connection.autoconnect yes connection.autoconnect-priority 100 || true; done"; }
       { label = "Show nearby networks"; command = "rfkill unblock wlan || true; nmcli radio wifi on || true; nmcli device wifi list || true"; }
     ];
     boomer-bluetooth-status = mkMenuTool "boomer-bluetooth-status" "Bluetooth Status" [
