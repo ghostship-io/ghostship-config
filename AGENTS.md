@@ -176,7 +176,9 @@ changelog.
   OpenSSH enabled with root key login only and no password or
   keyboard-interactive authentication. Keep Wi-Fi available but constrain
   NetworkManager Wi-Fi profiles to 5 GHz instead of rfkilling the radio, so
-  Bluetooth stays usable and SSH remains reachable. During bootstrap, boot
+  Bluetooth stays usable and SSH remains reachable. The Wi-Fi bootstrap service
+  should wait for NetworkManager, clear stale Wi-Fi interface pins, and bring up
+  saved 5 GHz profiles if autoconnect does not fire. During bootstrap, boot
   Boomer to a tty shell with `kiosk` auto-login and leave ES-DE/Gamescope as a
   manual `boomer-start-esde` action. Use the official ES-DE AppImage package
   unless a source build is explicitly revisited.

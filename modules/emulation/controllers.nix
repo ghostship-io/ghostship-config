@@ -121,14 +121,51 @@ in
         Type = "oneshot";
         RemainAfterExit = true;
       };
-      path = [ pkgs.networkmanager pkgs.util-linux ];
+      path = [ pkgs.networkmanager pkgs.util-linux pkgs.gawk ];
       script = ''
+        log() {
+          echo "boomer-wifi-5ghz-only: $*"
+        }
+
         rfkill unblock wlan || true
+        for attempt in $(seq 1 30); do
+          if nmcli -t -f RUNNING general 2>/dev/null | grep -qx running; then
+            break
+          fi
+          log "waiting for NetworkManager ($attempt/30)"
+          sleep 1
+        done
+
+        nmcli networking on || true
         nmcli radio wifi on || true
+
+        for attempt in $(seq 1 30); do
+          if nmcli -t -f DEVICE,TYPE device status 2>/dev/null | awk -F: '$2 == "wifi" { found=1 } END { exit found ? 0 : 1 }'; then
+            break
+          fi
+          log "waiting for Wi-Fi device ($attempt/30)"
+          sleep 1
+        done
+
         nmcli -t -f UUID,TYPE connection show | while IFS=: read -r uuid type; do
           [ "$type" = "802-11-wireless" ] || continue
-          nmcli connection modify "$uuid" 802-11-wireless.band a connection.autoconnect yes connection.autoconnect-priority 100 || true
+          nmcli connection modify "$uuid" \
+            connection.interface-name "" \
+            802-11-wireless.band a \
+            connection.autoconnect yes \
+            connection.autoconnect-priority 100 || true
         done
+
+        if ! nmcli -t -f TYPE connection show --active | grep -qx "802-11-wireless"; then
+          log "no active Wi-Fi connection; trying saved 5 GHz profiles"
+          nmcli -t -f UUID,TYPE connection show | while IFS=: read -r uuid type; do
+            [ "$type" = "802-11-wireless" ] || continue
+            nmcli --wait 20 connection up uuid "$uuid" || true
+            nmcli -t -f TYPE connection show --active | grep -qx "802-11-wireless" && break
+          done
+        fi
+
+        nmcli -t -f NAME,TYPE,DEVICE connection show --active || true
       '';
     };
 
@@ -157,6 +194,7 @@ in
       description = "Joycond Cemuhook motion server";
       wantedBy = [ "multi-user.target" ];
       after = [ "joycond.service" ];
+      path = [ pkgs.kmod ];
       serviceConfig = {
         ExecStart = "${pkgs.joycond-cemuhook}/bin/joycond-cemuhook";
         Restart = "on-failure";

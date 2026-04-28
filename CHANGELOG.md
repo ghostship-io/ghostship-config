@@ -25,7 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remains available while avoiding 2.4 GHz associations for Bluetooth. Switched
   Boomer's bootstrap startup mode to a tty shell with `kiosk` auto-login and a
   manual `boomer-start-esde` Gamescope/ES-DE launch action until hardware
-  bring-up is stable.
+  bring-up is stable. Hardened Boomer's Wi-Fi bootstrap service so it waits for
+  NetworkManager, clears stale Wi-Fi interface pins, and explicitly brings up
+  saved 5 GHz profiles when autoconnect does not fire on first boot.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from
