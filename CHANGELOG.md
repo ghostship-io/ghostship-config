@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   saved 5 GHz profiles when autoconnect does not fire on first boot. Disabled
   BlueZ's unused BAP/LE Audio plugin on Boomer so the Bluetooth daemon stops
   logging ISO-socket errors while keeping controller-oriented Bluetooth active.
+  Reworked the controller monitor to read BlueZ devices over D-Bus instead of
+  polling `bluetoothctl`, added ES-DE preflight/status helpers, cleared
+  unexpected service capabilities so the ES-DE AppImage can run under Gamescope,
+  and verified manual ES-DE launch/stop with console recovery on the HX100G.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from

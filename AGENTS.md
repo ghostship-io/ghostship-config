@@ -182,8 +182,10 @@ changelog.
   BAP/LE Audio plugin disabled unless LE Audio hardware becomes a requirement;
   Switch-mode controllers do not need it. During bootstrap, boot Boomer to a
   tty shell with `kiosk` auto-login and leave ES-DE/Gamescope as a manual
-  `boomer-start-esde` action. Use the official ES-DE AppImage package unless a
-  source build is explicitly revisited.
+  `boomer-start-esde` action. The ES-DE AppImage under Gamescope needs the
+  session service to clear capability bounding/ambient sets or bubblewrap exits
+  with unexpected capabilities. Use the official ES-DE AppImage package unless
+  a source build is explicitly revisited.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
 - Homepage `services.yaml` updates can leave stale entries behind when keys are

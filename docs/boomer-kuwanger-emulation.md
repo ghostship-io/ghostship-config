@@ -1,9 +1,11 @@
 # Boomer Kuwanger Emulation PC
 
 `boomer-kuwanger` is managed as a dedicated NixOS emulation box through the
-split `modules/emulation/` module set. The host boots the `kiosk` user directly
-into ES-DE, keeps writable emulator state under `/srv/emulation`, and launches
-every configured system through the repo-managed `boomer-run-emulator` wrapper.
+split `modules/emulation/` module set. During hardware bring-up, the host boots
+the `kiosk` user to a tty and leaves ES-DE/Gamescope as a manual
+`boomer-start-esde` action. It keeps writable emulator state under
+`/srv/emulation` and launches every configured system through the repo-managed
+`boomer-run-emulator` wrapper.
 
 ## Runtime Layout
 
@@ -52,6 +54,19 @@ installs Art Book Next, and generates:
 Additional setup scripts sync RetroArch, ES-DE tools, and standalone emulator
 config scaffolds before the frontend starts. Existing ES-DE settings are
 preserved after first creation so runtime UI changes can survive rebuilds.
+
+During bootstrap, use:
+
+- `boomer-esde-preflight` to check DRM, Vulkan, ES-DE appdata, and service
+  readiness.
+- `boomer-start-esde` to launch ES-DE under Gamescope on the RX 6650M and
+  `HDMI-A-2`.
+- `boomer-esde-status` to inspect the active session and latest logs.
+- `boomer-stop-esde` to return control to `getty@tty1`.
+
+The ES-DE AppImage runs under bubblewrap, so the systemd session clears Linux
+capabilities before launching Gamescope. Keep that service hardening in place
+unless ES-DE is rebuilt from source.
 
 ## ROMs
 
@@ -185,9 +200,9 @@ Player assignment is connection-order based. Runtime state is stored at:
 state through sysfs. If a controller identity does not expose LED sysfs entries,
 logical assignment still remains stable.
 
-Wi-Fi is disabled at boot through NetworkManager/rfkill to prioritize Bluetooth
-stability. Do not blacklist shared Wi-Fi/Bluetooth kernel modules until live
-hardware confirms the adapter split.
+Wi-Fi stays available for SSH, but NetworkManager Wi-Fi profiles are constrained
+to 5 GHz to avoid 2.4 GHz contention with Bluetooth. Do not blacklist shared
+Wi-Fi/Bluetooth kernel modules until live hardware confirms the adapter split.
 
 ## ES-DE Tools
 
@@ -197,6 +212,10 @@ profile/shader switching, core status, scraper status, launch log review, ROM
 coverage checks, restart, shutdown, and reboot. Tools edit runtime config under
 `/srv/emulation/config` and do not mutate Nix-managed packages or RetroArch core
 derivations.
+
+These tools are exposed as an ES-DE `Tools` system. Upstream ES-DE does not
+provide a stable Batocera-style API for arbitrary native main-menu actions; that
+would require a maintained ES-DE source build or patch.
 
 ## Scraping Secrets
 
@@ -224,7 +243,8 @@ After SSH access exists:
    `emulation-scraper-secrets`.
 2. Verify the label-based Btrfs mounts for `/` and
    `/srv/emulation/roms`.
-3. Boot and confirm greetd lands in ES-DE with Art Book Next.
+3. Boot to the tty, run `boomer-esde-preflight`, then launch ES-DE with
+   `boomer-start-esde` and confirm Art Book Next appears.
 4. Pair all four controllers in Switch mode and verify connection-order player
    assignment.
 5. Run `boomer-retroarch-shader-smoke-test`.

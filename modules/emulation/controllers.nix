@@ -1,4 +1,8 @@
-{ config, lib, pkgs, ... }:
+{ config
+, lib
+, pkgs
+, ...
+}:
 
 let
   cfg = config.ghostship.emulation;
@@ -10,6 +14,7 @@ let
     state_dir="${cfg.configRoot}/controllers"
     order_file="$state_dir/player-order.json"
     log_file="${cfg.dataRoot}/logs/controller-leds.log"
+    last_led_status=""
     mkdir -p "$state_dir" "$(dirname "$log_file")"
     touch "$log_file"
     chown ${cfg.user}:${cfg.group} "$state_dir" "$log_file" || true
@@ -21,15 +26,50 @@ let
       fi
     }
 
+    sanitize_known_bad_order() {
+      ensure_order_file
+      if jq -e '
+          ([.players[]? | select(.mac | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"))] | length) == 0
+          and ([.players[]? | select(.mac == "Controller")] | length) > 0
+        ' "$order_file" >/dev/null 2>&1; then
+        printf '{"players":[]}\n' >"$order_file"
+        chown ${cfg.user}:${cfg.group} "$order_file" || true
+        chmod 0644 "$order_file" || true
+        echo "$(date -u +%FT%TZ) reset bogus controller order file" >>"$log_file"
+      fi
+    }
+
+    connected_bluez_devices() {
+      busctl --system --json=short call org.bluez / org.freedesktop.DBus.ObjectManager GetManagedObjects 2>/dev/null \
+        | jq -r '
+            .data[0]
+            | to_entries[]
+            | select(.value["org.bluez.Device1"]?)
+            | .value["org.bluez.Device1"]
+            | select(.Connected.data == true)
+            | [
+                .Address.data,
+                ((.Alias.data // .Name.data // "unknown-controller") | gsub("[\t\r\n]"; " "))
+              ]
+            | @tsv
+          '
+    }
+
     record_connected_devices() {
       ensure_order_file
       tmp="$(mktemp)"
       jq '.players |= map(. + {connected:false})' "$order_file" >"$tmp"
       mv "$tmp" "$order_file"
 
-      bluetoothctl devices Connected 2>/dev/null | while read -r _ mac rest; do
+      connected_tmp="$(mktemp)"
+      connected_bluez_devices >"$connected_tmp" || true
+
+      while IFS=$'\t' read -r mac name; do
         [ -n "''${mac:-}" ] || continue
-        name="''${rest:-unknown-controller}"
+        if ! printf '%s\n' "$mac" | grep -Eiq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$'; then
+          continue
+        fi
+        name="''${name:-unknown-controller}"
         tmp="$(mktemp)"
         if jq -e --arg mac "$mac" '.players[]? | select(.mac == $mac)' "$order_file" >/dev/null; then
           jq --arg mac "$mac" --arg name "$name" \
@@ -41,7 +81,8 @@ let
             "$order_file" >"$tmp"
         fi
         mv "$tmp" "$order_file"
-      done
+      done <"$connected_tmp"
+      rm -f "$connected_tmp"
 
       tmp="$(mktemp)"
       jq '.players |= [to_entries[] | .value + {player:(.key + 1)}]' "$order_file" >"$tmp"
@@ -61,21 +102,28 @@ let
             found=1
             if [ "$player" -le 4 ]; then
               echo 1 >"$led/brightness" 2>/dev/null || true
-              echo "$(date -u +%FT%TZ) set $name for player $player" >>"$log_file"
               player=$((player + 1))
             fi
             ;;
         esac
       done
       if [ "$found" = 0 ]; then
-        echo "$(date -u +%FT%TZ) no supported controller LED sysfs entries found" >>"$log_file"
+        status="no supported controller LED sysfs entries found"
+      else
+        status="set $((player - 1)) controller LED entries"
+      fi
+      if [ "$status" != "$last_led_status" ]; then
+        echo "$(date -u +%FT%TZ) $status" >>"$log_file"
+        last_led_status="$status"
       fi
     }
+
+    sanitize_known_bad_order
 
     while true; do
       record_connected_devices || true
       apply_leds || true
-      sleep 2
+      sleep 10
     done
   '';
 in
@@ -122,7 +170,11 @@ in
         Type = "oneshot";
         RemainAfterExit = true;
       };
-      path = [ pkgs.networkmanager pkgs.util-linux pkgs.gawk ];
+      path = [
+        pkgs.networkmanager
+        pkgs.util-linux
+        pkgs.gawk
+      ];
       script = ''
         log() {
           echo "boomer-wifi-5ghz-only: $*"
@@ -157,13 +209,38 @@ in
             connection.autoconnect-priority 100 || true
         done
 
-        if ! nmcli -t -f TYPE connection show --active | grep -qx "802-11-wireless"; then
-          log "no active Wi-Fi connection; trying saved 5 GHz profiles"
-          nmcli -t -f UUID,TYPE connection show | while IFS=: read -r uuid type; do
-            [ "$type" = "802-11-wireless" ] || continue
-            nmcli --wait 20 connection up uuid "$uuid" || true
-            nmcli -t -f TYPE connection show --active | grep -qx "802-11-wireless" && break
+        wifi_active() {
+          nmcli -t -f TYPE connection show --active 2>/dev/null | grep -qx "802-11-wireless"
+        }
+
+        wait_for_wifi_active() {
+          max="''${1:-30}"
+          for attempt in $(seq 1 "$max"); do
+            if wifi_active; then
+              return 0
+            fi
+            sleep 1
           done
+          return 1
+        }
+
+        if ! wifi_active; then
+          log "no active Wi-Fi connection; trying saved 5 GHz profiles"
+          while IFS=: read -r uuid type; do
+            [ "$type" = "802-11-wireless" ] || continue
+            tmp="$(mktemp)"
+            nmcli --wait 5 connection up uuid "$uuid" >"$tmp" 2>&1 || true
+            if wait_for_wifi_active 25; then
+              rm -f "$tmp"
+              break
+            fi
+            sed 's/^/boomer-wifi-5ghz-only: nmcli: /' "$tmp" || true
+            rm -f "$tmp"
+          done < <(nmcli -t -f UUID,TYPE connection show)
+        fi
+
+        if ! wifi_active; then
+          log "no active Wi-Fi connection after saved profile attempts"
         fi
 
         nmcli -t -f NAME,TYPE,DEVICE connection show --active || true
@@ -173,11 +250,14 @@ in
     systemd.services.boomer-controller-leds = {
       description = "Maintain Boomer Kuwanger controller player order and LED state";
       wantedBy = [ "multi-user.target" ];
-      after = [ "bluetooth.service" "boomer-emulation-setup.service" ];
+      after = [
+        "bluetooth.service"
+        "boomer-emulation-setup.service"
+      ];
       serviceConfig = {
         ExecStart = "${lib.getExe boomerControllerLeds}";
         Restart = "always";
-        RestartSec = "2s";
+        RestartSec = "5s";
       };
     };
 
