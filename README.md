@@ -152,9 +152,10 @@ bound interface address to the live WireGuard `tun0` address after startup,
 because qBittorrent 5.1.4 can stay disconnected if it only binds by interface
 name after the VPN namespace changes. The managed qBittorrent queue allows 5
 active downloads and 20 active torrents, with the global download cap set to
-10 MB/s. A `vuetorrent-auto-resume` timer retries errored qBittorrent torrents
-every 5 minutes through qBittorrent's internal Web API start action and leaves a
-torrent errored after 20 automatic resume attempts for that torrent hash. The
+20 MB/s, slow torrents excluded from active queue limits, and qBittorrent's
+post-completion recheck enabled. A `vuetorrent-auto-resume` timer retries
+errored qBittorrent torrents every 5 minutes through qBittorrent's internal
+Web API start action without a per-torrent retry cap. The
 Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
 legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`, and does not
 require any application-specific benchmark credentials.
