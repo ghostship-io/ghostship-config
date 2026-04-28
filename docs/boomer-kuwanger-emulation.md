@@ -7,8 +7,8 @@ every configured system through the repo-managed `boomer-run-emulator` wrapper.
 
 ## Runtime Layout
 
-- `/srv/emulation/roms`: local ROM root. The future 4TB ROM SSD should mount
-  here once the real disk UUID is known.
+- `/srv/emulation/roms`: local ROM root, mounted from the 4 TB Btrfs filesystem
+  labeled `roms`.
 - `/srv/emulation/bios`: BIOS, firmware, keys, and other user-provided files.
 - `/srv/emulation/saves`, `/srv/emulation/states`, `/srv/emulation/screenshots`:
   runtime output outside ROM folders.
@@ -19,9 +19,36 @@ every configured system through the repo-managed `boomer-run-emulator` wrapper.
 - `/srv/emulation/logs`: launch, RetroArch, controller, and tool logs.
 - `/home/kiosk/Emulation`: symlink to `/srv/emulation`.
 
-The module intentionally does not declare a fake ROM disk mount. Set
-`ghostship.emulation.romDisk.uuid` after bootstrapping the hardware to mount
-the real SSD at `/srv/emulation/roms`.
+The Boomer host config uses label-based mounts. The emulation module's optional
+`ghostship.emulation.romDisk.uuid` remains available for non-Boomer deployments,
+but Boomer itself expects the installed disks to use the labels and subvolumes
+below.
+
+## Disk Layout
+
+`/dev/nvme0n1` is the 512 GB OS/performance disk:
+
+- `p1`: 1 GiB FAT32, label `BOOT`, mounted at `/boot`.
+- `p2`: 32 GiB swap, label `swap`.
+- `p3`: remaining space Btrfs, label `nixos`.
+
+The `nixos` filesystem must contain these subvolumes:
+
+- `@`: mounted at `/`.
+- `@nix`: mounted at `/nix`.
+- `@home`: mounted at `/home`.
+- `@fast`: mounted at `/fast`.
+
+`/dev/nvme1n1` is the 4 TB ROM disk:
+
+- `p1`: whole disk Btrfs, label `roms`, mounted at `/srv/emulation/roms`.
+
+Btrfs mounts use `noatime`, `compress=zstd:1`, and `discard=async`. The ROM
+mount intentionally avoids `autodefrag`.
+
+`/fast` is used for emulator shader caches, staging, temporary files, and Nix
+build scratch space. The host sets `nix.settings.build-dir = "/fast/nix-build"`
+and the kiosk session uses `/fast/emulation` for cache/temp paths.
 
 ## Frontend
 
@@ -43,7 +70,8 @@ preserved after first creation so runtime UI changes can survive rebuilds.
 The module maps every ROM folder discovered under `/mnt/z/Library/ROMs/roms`
 into ES-DE. On boot, if a matching `/mnt/z` source folder is visible and
 `/srv/emulation/roms/<folder>` is missing, the setup service creates a symlink.
-Otherwise it creates an empty local folder for the future SSD.
+Otherwise it creates an empty local folder, which should be hidden by the real
+`roms` mount on the installed machine.
 
 RetroArch is preferred when a usable libretro core exists. Standalone emulators
 are installed where RetroArch is not the right target: Dolphin, Cemu, xemu,
@@ -206,7 +234,8 @@ After SSH access exists:
 
 1. Add the boomer host SSH key to `secrets/recipients.nix` and rekey
    `emulation-scraper-secrets`.
-2. Add the real 4TB ROM SSD mount at `/srv/emulation/roms`.
+2. Verify the label-based Btrfs mounts for `/`, `/nix`, `/home`, `/fast`, and
+   `/srv/emulation/roms`.
 3. Boot and confirm greetd lands in ES-DE with Art Book Next.
 4. Pair all four controllers in Switch mode and verify connection-order player
    assignment.

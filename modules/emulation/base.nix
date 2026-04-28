@@ -43,7 +43,8 @@ in
         ESDE_APPDATA_DIR = cfg.esde.appDataDir;
         BOOMER_EMULATION_DATA_ROOT = cfg.dataRoot;
         BOOMER_EMULATION_CONFIG_ROOT = cfg.configRoot;
-        MESA_SHADER_CACHE_DIR = "${cfg.dataRoot}/cache/mesa-shaders";
+        BOOMER_EMULATION_FAST_ROOT = "/fast/emulation";
+        MESA_SHADER_CACHE_DIR = "/fast/emulation/cache/mesa-shaders";
         RADV_PERFTEST = "gpl";
       };
 

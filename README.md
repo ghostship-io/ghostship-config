@@ -48,8 +48,9 @@ logical-unit secret files.
 `kiosk` user into ES-DE with Art Book Next, RetroArch cores, Gamescope FSR
 launch wrappers, bundled shader packs, controller tooling, and scraper secret
 wiring. Runtime state lives under `/srv/emulation`; the future 4TB ROM SSD
-should mount at `/srv/emulation/roms` by setting
-`ghostship.emulation.romDisk.uuid` once the hardware UUID is known.
+mounts at `/srv/emulation/roms` from the Btrfs filesystem labeled `roms`.
+The OS/performance disk uses one Btrfs filesystem labeled `nixos` with
+`@`, `@nix`, `@home`, and `@fast` subvolumes.
 
 See [`docs/boomer-kuwanger-emulation.md`](docs/boomer-kuwanger-emulation.md)
 for ROM, BIOS, PICO-8, TeknoParrot, controller, shader, display, and scraper

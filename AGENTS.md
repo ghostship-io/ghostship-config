@@ -170,7 +170,8 @@ changelog.
   service `preStart`, not in `system.activationScripts`.
 - Boomer Kuwanger's emulation profile is owned by `modules/emulation`: keep
   ES-DE mandatory, put new code in the focused submodule rather than the
-  aggregator, leave the ROM SSD mount undeclared until the real UUID is known,
+  aggregator, keep the host disk layout label-based (`BOOT`, `swap`, `nixos`,
+  `roms`) with `/srv/emulation/roms` mounted from the `roms` Btrfs filesystem,
   and use the official ES-DE AppImage package unless a source build is
   explicitly revisited.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with

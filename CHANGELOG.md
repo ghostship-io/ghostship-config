@@ -16,7 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   module into focused submodules and added ROM disk options, per-core RetroArch
   option/override generation, display matrix testing, richer ES-DE tool menus,
   controller-order persistence, shader fallback status, ROM coverage checks,
-  and standalone emulator config scaffolds.
+  and standalone emulator config scaffolds. Declared Boomer's final label-based
+  disk layout with Btrfs subvolumes on the OS/performance disk, `/fast` cache
+  and build scratch paths, and the ROM disk mounted at `/srv/emulation/roms`.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from

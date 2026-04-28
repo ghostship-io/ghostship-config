@@ -138,7 +138,8 @@ let
     export ESDE_APPDATA_DIR="${cfg.esde.appDataDir}"
     export XDG_DATA_HOME="${cfg.dataRoot}/xdg/share"
     export XDG_CONFIG_HOME="${cfg.dataRoot}/xdg/config"
-    export XDG_CACHE_HOME="${cfg.dataRoot}/xdg/cache"
+    export XDG_CACHE_HOME="/fast/emulation/xdg/cache"
+    export TMPDIR="/fast/emulation/tmp"
     export SDL_GAMECONTROLLERCONFIG_FILE="${cfg.configRoot}/controllers/gamecontrollerdb.txt"
     boomer-sync-esde-config
     ${lib.concatMapStringsSep "\n" (pkg: "${lib.getExe pkg}") config.ghostship.emulation.internal.setupScripts}
