@@ -91,6 +91,7 @@ in
     hardware.bluetooth = {
       enable = true;
       powerOnBoot = true;
+      disabledPlugins = [ "bap" ];
       settings = {
         General = {
           Experimental = true;

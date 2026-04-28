@@ -27,7 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   manual `boomer-start-esde` Gamescope/ES-DE launch action until hardware
   bring-up is stable. Hardened Boomer's Wi-Fi bootstrap service so it waits for
   NetworkManager, clears stale Wi-Fi interface pins, and explicitly brings up
-  saved 5 GHz profiles when autoconnect does not fire on first boot.
+  saved 5 GHz profiles when autoconnect does not fire on first boot. Disabled
+  BlueZ's unused BAP/LE Audio plugin on Boomer so the Bluetooth daemon stops
+  logging ISO-socket errors while keeping controller-oriented Bluetooth active.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from
