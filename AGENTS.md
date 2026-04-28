@@ -171,9 +171,10 @@ changelog.
 - Boomer Kuwanger's emulation profile is owned by `modules/emulation`: keep
   ES-DE mandatory, put new code in the focused submodule rather than the
   aggregator, keep the host disk layout label-based (`BOOT`, `swap`, `nixos`,
-  `roms`) with `/srv/emulation/roms` mounted from the `roms` Btrfs filesystem,
-  and use the official ES-DE AppImage package unless a source build is
-  explicitly revisited.
+  `roms`) with the `nixos` Btrfs filesystem mounted at `/`, no `/fast` mount,
+  and `/srv/emulation/roms` mounted from the `roms` Btrfs filesystem; use the
+  official ES-DE AppImage package unless a source build is explicitly
+  revisited.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
 - Homepage `services.yaml` updates can leave stale entries behind when keys are

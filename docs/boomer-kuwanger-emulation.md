@@ -21,23 +21,15 @@ every configured system through the repo-managed `boomer-run-emulator` wrapper.
 
 The Boomer host config uses label-based mounts. The emulation module's optional
 `ghostship.emulation.romDisk.uuid` remains available for non-Boomer deployments,
-but Boomer itself expects the installed disks to use the labels and subvolumes
-below.
+but Boomer itself expects the installed disks to use the labels below.
 
 ## Disk Layout
 
-`/dev/nvme0n1` is the 512 GB OS/performance disk:
+`/dev/nvme0n1` is the 512 GB OS disk:
 
 - `p1`: 1 GiB FAT32, label `BOOT`, mounted at `/boot`.
 - `p2`: 32 GiB swap, label `swap`.
-- `p3`: remaining space Btrfs, label `nixos`.
-
-The `nixos` filesystem must contain these subvolumes:
-
-- `@`: mounted at `/`.
-- `@nix`: mounted at `/nix`.
-- `@home`: mounted at `/home`.
-- `@fast`: mounted at `/fast`.
+- `p3`: remaining space Btrfs, label `nixos`, mounted at `/`.
 
 `/dev/nvme1n1` is the 4 TB ROM disk:
 
@@ -45,10 +37,6 @@ The `nixos` filesystem must contain these subvolumes:
 
 Btrfs mounts use `noatime`, `compress=zstd:1`, and `discard=async`. The ROM
 mount intentionally avoids `autodefrag`.
-
-`/fast` is used for emulator shader caches, staging, temporary files, and Nix
-build scratch space. The host sets `nix.settings.build-dir = "/fast/nix-build"`
-and the kiosk session uses `/fast/emulation` for cache/temp paths.
 
 ## Frontend
 
@@ -234,7 +222,7 @@ After SSH access exists:
 
 1. Add the boomer host SSH key to `secrets/recipients.nix` and rekey
    `emulation-scraper-secrets`.
-2. Verify the label-based Btrfs mounts for `/`, `/nix`, `/home`, `/fast`, and
+2. Verify the label-based Btrfs mounts for `/` and
    `/srv/emulation/roms`.
 3. Boot and confirm greetd lands in ES-DE with Art Book Next.
 4. Pair all four controllers in Switch mode and verify connection-order player
