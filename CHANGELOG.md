@@ -12,7 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Next, RetroArch cores, bundled shader packs including Mega Bezel, Gamescope
   FSR launch wrappers, standalone emulator coverage, PICO-8 `requireFile`,
   TeknoParrot free prefix scaffolding, Bluetooth/controller services, Wi-Fi
-  disable policy, ES-DE tools, and scraper secret catalog entries.
+  disable policy, ES-DE tools, and scraper secret catalog entries. Split the
+  module into focused submodules and added ROM disk options, per-core RetroArch
+  option/override generation, display matrix testing, richer ES-DE tool menus,
+  controller-order persistence, shader fallback status, ROM coverage checks,
+  and standalone emulator config scaffolds.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from

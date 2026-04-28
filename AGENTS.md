@@ -169,8 +169,9 @@ changelog.
 - If generated config depends on `sops`-managed secrets, put it in the relevant
   service `preStart`, not in `system.activationScripts`.
 - Boomer Kuwanger's emulation profile is owned by `modules/emulation`: keep
-  ES-DE mandatory, leave the ROM SSD mount undeclared until the real UUID is
-  known, and use the official ES-DE AppImage package unless a source build is
+  ES-DE mandatory, put new code in the focused submodule rather than the
+  aggregator, leave the ROM SSD mount undeclared until the real UUID is known,
+  and use the official ES-DE AppImage package unless a source build is
   explicitly revisited.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.

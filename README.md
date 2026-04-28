@@ -44,11 +44,12 @@ logical-unit secret files.
 
 ## Boomer Kuwanger Emulation
 
-`boomer-kuwanger` imports `modules/emulation/default.nix` and boots a `kiosk`
-user into ES-DE with Art Book Next, RetroArch cores, Gamescope FSR launch
-wrappers, bundled shader packs, controller tooling, and scraper secret wiring.
-Runtime state lives under `/srv/emulation`; the future 4TB ROM SSD should mount
-at `/srv/emulation/roms` once the hardware UUID is known.
+`boomer-kuwanger` imports the split `modules/emulation/` module set and boots a
+`kiosk` user into ES-DE with Art Book Next, RetroArch cores, Gamescope FSR
+launch wrappers, bundled shader packs, controller tooling, and scraper secret
+wiring. Runtime state lives under `/srv/emulation`; the future 4TB ROM SSD
+should mount at `/srv/emulation/roms` by setting
+`ghostship.emulation.romDisk.uuid` once the hardware UUID is known.
 
 See [`docs/boomer-kuwanger-emulation.md`](docs/boomer-kuwanger-emulation.md)
 for ROM, BIOS, PICO-8, TeknoParrot, controller, shader, display, and scraper

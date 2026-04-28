@@ -1,9 +1,9 @@
 # Boomer Kuwanger Emulation PC
 
-`boomer-kuwanger` is managed as a dedicated NixOS emulation box through
-`modules/emulation/default.nix`. The host boots the `kiosk` user directly into
-ES-DE, keeps writable emulator state under `/srv/emulation`, and launches every
-configured system through the repo-managed `boomer-run-emulator` wrapper.
+`boomer-kuwanger` is managed as a dedicated NixOS emulation box through the
+split `modules/emulation/` module set. The host boots the `kiosk` user directly
+into ES-DE, keeps writable emulator state under `/srv/emulation`, and launches
+every configured system through the repo-managed `boomer-run-emulator` wrapper.
 
 ## Runtime Layout
 
@@ -12,15 +12,16 @@ configured system through the repo-managed `boomer-run-emulator` wrapper.
 - `/srv/emulation/bios`: BIOS, firmware, keys, and other user-provided files.
 - `/srv/emulation/saves`, `/srv/emulation/states`, `/srv/emulation/screenshots`:
   runtime output outside ROM folders.
-- `/srv/emulation/config`: emulator overrides, RetroArch profiles, controller
-  state, display overrides, and TeknoParrot prefix state.
+- `/srv/emulation/config`: emulator overrides, display policy, RetroArch
+  profiles, per-core options, controller state, and TeknoParrot prefix state.
 - `/srv/emulation/es-de`: ES-DE appdata, settings, themes, custom systems, and
   scraped media.
 - `/srv/emulation/logs`: launch, RetroArch, controller, and tool logs.
 - `/home/kiosk/Emulation`: symlink to `/srv/emulation`.
 
-The module intentionally does not declare a fake ROM disk mount. Add the real
-filesystem UUID after bootstrapping the hardware.
+The module intentionally does not declare a fake ROM disk mount. Set
+`ghostship.emulation.romDisk.uuid` after bootstrapping the hardware to mount
+the real SSD at `/srv/emulation/roms`.
 
 ## Frontend
 
@@ -32,9 +33,10 @@ installs Art Book Next, and generates:
 - `/srv/emulation/es-de/custom_systems/es_find_rules.xml`
 - `/srv/emulation/es-de/settings/es_settings.xml`
 
-`boomer-sync-esde-config` creates or refreshes the appdata skeleton at boot. It
-preserves existing ES-DE settings after first creation so runtime UI changes can
-survive rebuilds.
+`boomer-sync-esde-config` creates or refreshes the appdata skeleton at boot.
+Additional setup scripts sync RetroArch, ES-DE tools, and standalone emulator
+config scaffolds before the frontend starts. Existing ES-DE settings are
+preserved after first creation so runtime UI changes can survive rebuilds.
 
 ## ROMs
 
@@ -102,6 +104,8 @@ The default policy:
 
 Runtime override knobs can live in `/srv/emulation/config/display.env` for
 manual testing, but durable policy changes belong in the Nix module.
+Run `boomer-display-profile --matrix-test` to verify the deterministic FSR
+policy without display hardware.
 
 ## RetroArch
 
@@ -116,7 +120,10 @@ Defaults:
 - Saves, states, screenshots, and logs outside ROM folders.
 - Config save on exit disabled.
 - Upstream joypad autoconfig installed when available.
-- Core options tuned for Vulkan or higher internal resolution where practical.
+- Per-core option files live under
+  `/srv/emulation/config/retroarch/core-options`.
+- Per-system override files live under
+  `/srv/emulation/config/retroarch/system-overrides`.
 
 ## Shaders
 
@@ -136,10 +143,14 @@ Default shader profile is `megabezel-auto`. The installed runtime profiles are:
 - `megabezel-passthrough`
 - `sharp-clean`
 - `integer-raw`
+- `performance`
 
 Mega Bezel is the default because that was requested, but `sharp-clean` and
 `integer-raw` are available for clarity-first tuning if Mega Bezel is too
-expensive or too stylized on target hardware.
+expensive or too stylized on target hardware. `boomer-retroarch-shader-smoke-test`
+writes `/srv/emulation/config/retroarch/shader-status.json`; the launcher uses
+that marker to fall back from Mega Bezel to `sharp-clean` if the required shader
+tree is missing.
 
 ## Controllers And Bluetooth
 
@@ -164,11 +175,12 @@ hardware confirms the adapter split.
 
 ## ES-DE Tools
 
-The ES-DE Tools system exposes controller-friendly launchers for Wi-Fi,
-Bluetooth, player assignment, display profile inspection, RetroArch profiles,
-shader/core status, scraper status, restart, shutdown, and reboot. Tools edit
-runtime config under `/srv/emulation/config` and do not mutate Nix-managed
-packages or RetroArch core derivations.
+The ES-DE Tools system exposes controller-friendly terminal menus for Wi-Fi,
+Bluetooth, player assignment, display profile inspection, RetroArch
+profile/shader switching, core status, scraper status, launch log review, ROM
+coverage checks, restart, shutdown, and reboot. Tools edit runtime config under
+`/srv/emulation/config` and do not mutate Nix-managed packages or RetroArch core
+derivations.
 
 ## Scraping Secrets
 
@@ -201,5 +213,6 @@ After SSH access exists:
 5. Run `boomer-retroarch-shader-smoke-test`.
 6. Launch one game per emulator family and inspect
    `/srv/emulation/logs/launches`.
-7. Test 1080p, 1440p, 4K, and ultrawide displays and refine Gamescope FSR
+7. Run `boomer-display-profile --matrix-test` and `boomer-rom-coverage-check`.
+8. Test 1080p, 1440p, 4K, and ultrawide displays and refine Gamescope FSR
    thresholds if frame pacing misses budget.
