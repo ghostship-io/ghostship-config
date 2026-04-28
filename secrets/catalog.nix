@@ -229,6 +229,16 @@
       format = "env";
       exports = [ "CHAPTARR_API_KEY" ];
     };
+
+    emulation-scraper-secrets = {
+      relativeFile = "secrets/files/services/emulation-scraper-secrets.env.age";
+      path = ./files/services/emulation-scraper-secrets.env.age;
+      recipientGroup = "emulation-runtime";
+      recipients = recipients.groups.emulation-runtime;
+      mode = "0400";
+      format = "env";
+      exports = [ "SCREENSCRAPER_USER" "SCREENSCRAPER_PASS" "THEGAMESDB_API_KEY" ];
+    };
   };
 
   projections = {
@@ -339,6 +349,18 @@
         ROMM_PASSWORD = { unit = "romm-secrets"; key = "ROMM_PASS"; };
         GRIMMORY_USERNAME = { unit = "grimmory-secrets"; key = "GRIMMORY_USER"; };
         GRIMMORY_PASSWORD = { unit = "grimmory-secrets"; key = "GRIMMORY_PASS"; };
+      };
+    };
+
+    emulation-scraper = {
+      fileName = "emulation-scraper.env";
+      owner = "kiosk";
+      group = "kiosk";
+      mode = "0440";
+      fields = {
+        SCREENSCRAPER_USER = { unit = "emulation-scraper-secrets"; key = "SCREENSCRAPER_USER"; };
+        SCREENSCRAPER_PASS = { unit = "emulation-scraper-secrets"; key = "SCREENSCRAPER_PASS"; };
+        THEGAMESDB_API_KEY = { unit = "emulation-scraper-secrets"; key = "THEGAMESDB_API_KEY"; };
       };
     };
   };

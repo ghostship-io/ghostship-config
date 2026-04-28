@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer Kuwanger emulation PC**: Added a dedicated `modules/emulation`
+  NixOS module, enabled it on `boomer-kuwanger`, and wired ES-DE with Art Book
+  Next, RetroArch cores, bundled shader packs including Mega Bezel, Gamescope
+  FSR launch wrappers, standalone emulator coverage, PICO-8 `requireFile`,
+  TeknoParrot free prefix scaffolding, Bluetooth/controller services, Wi-Fi
+  disable policy, ES-DE tools, and scraper secret catalog entries.
+
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from
   develop-host agent tooling. Removed the installed global

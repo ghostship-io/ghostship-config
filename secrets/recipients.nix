@@ -18,5 +18,7 @@ rec {
   groups = {
     editors = [ keys.operators.ragenix keys.operators.armored-armadillo ];
     self-hosted-runtime = groups.editors ++ [ keys.hosts.chill-penguin ];
+    # Add boomer-kuwanger's host SSH key here after bootstrap.
+    emulation-runtime = groups.editors;
   };
 }

@@ -4,6 +4,7 @@
   imports = [
     ./hardware-configuration.nix
     ../../modules/common/default.nix
+    ../../modules/emulation/default.nix
   ];
 
   # Hostname
@@ -11,6 +12,22 @@
 
   ghostship.host.roles = {
     server = true;
+  };
+
+  ghostship.emulation = {
+    enable = true;
+    user = "kiosk";
+    group = "kiosk";
+    dataRoot = "/srv/emulation";
+    romRoot = "/srv/emulation/roms";
+    biosRoot = "/srv/emulation/bios";
+    configRoot = "/srv/emulation/config";
+    frontend = "es-de";
+    theme = "art-book-next";
+    esde.appDataDir = "/srv/emulation/es-de";
+    visuals.defaultProfile = "megabezel-auto";
+    visuals.upscaler = "gamescope-fsr-auto";
+    controllers.assignment = "connection-order-persistent";
   };
 
   # Enable Hyprland

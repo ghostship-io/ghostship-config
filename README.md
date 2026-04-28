@@ -12,7 +12,7 @@ logical-unit secret files.
 | `launch-octopus` | `develop + wsl` | Primary WSL2 development environment |
 | `armored-armadillo` | `develop + wsl` | Secondary WSL2 development environment |
 | `chill-penguin` | `server` | Apple Silicon self-hosted server |
-| `boomer-kuwanger` | `server` | AMD desktop with a minimal server-style user profile |
+| `boomer-kuwanger` | `server + emulation` | AMD HX100G dedicated ES-DE emulation PC |
 
 ## Layout
 
@@ -41,6 +41,18 @@ logical-unit secret files.
 - Develop-role Home Manager packages include shared interactive CLI tools such
   as `gh` so GitHub workflows are available on every develop host after the
   relevant Home Manager or NixOS switch.
+
+## Boomer Kuwanger Emulation
+
+`boomer-kuwanger` imports `modules/emulation/default.nix` and boots a `kiosk`
+user into ES-DE with Art Book Next, RetroArch cores, Gamescope FSR launch
+wrappers, bundled shader packs, controller tooling, and scraper secret wiring.
+Runtime state lives under `/srv/emulation`; the future 4TB ROM SSD should mount
+at `/srv/emulation/roms` once the hardware UUID is known.
+
+See [`docs/boomer-kuwanger-emulation.md`](docs/boomer-kuwanger-emulation.md)
+for ROM, BIOS, PICO-8, TeknoParrot, controller, shader, display, and scraper
+setup notes.
 
 ## Agent Launchers
 
