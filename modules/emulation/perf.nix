@@ -636,7 +636,7 @@ let
     status = launch_status
     if launch_status == "missing-rom":
         status = "missing-rom"
-    elif re.search(r"bios|firmware|keys|prod\.keys|title\.keys|mcpx|bootrom|system card|required firmware|no bios detected|cannot open bios|bios.*(missing|not found)", combined_log):
+    elif re.search(r"(missing|not found|required|cannot open|no).*?(bios|firmware|keys|prod\.keys|title\.keys|mcpx|bootrom|system card)|(bios|firmware|keys|prod\.keys|title\.keys|mcpx|bootrom|system card).*?(missing|not found|required|cannot open)", combined_log):
         status = "blocked-missing-runtime"
     elif re.search(r"failed to open libretro core|failed to load content|failed to extract content|could not read content file|file format is unknown|unknown disk format|not a psp game|failed to (create|initialize).*vulkan|vk_error_|segmentation fault|trace/breakpoint trap", combined_log):
         status = "fail-fatal-log"
