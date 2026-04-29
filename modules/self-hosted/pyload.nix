@@ -23,6 +23,22 @@ let
         lsiown abc:abc \
             /downloads
       '';
+      originalDefaultConfigBlock = ''
+        # default config file
+        cp -n \
+            /defaults/pyload.cfg \
+            /config/settings/pyload.cfg
+      '';
+      patchedDefaultConfigBlock = ''
+        # default config file
+        cp -n \
+            /defaults/pyload.cfg \
+            /config/settings/pyload.cfg
+
+        sed -i -E \
+            's#^([[:space:]]*folder storage_folder : "Download folder" = ).*#\1/downloads/PyLoad#' \
+            /config/settings/pyload.cfg
+      '';
       originalPermissionsBlock = ''
         # permissions
         lsiown -R abc:abc \
@@ -37,10 +53,17 @@ let
 
         echo "**** Skipping ownership changes for /downloads; host permissions are managed outside the container. ****"
       '';
-      patched = builtins.replaceStrings
-        [ originalPermissionsBlock ]
-        [ patchedPermissionsBlock ]
-        upstream;
+      patched =
+        builtins.replaceStrings
+          [
+            originalDefaultConfigBlock
+            originalPermissionsBlock
+          ]
+          [
+            patchedDefaultConfigBlock
+            patchedPermissionsBlock
+          ]
+          upstream;
     in
     assert patched != upstream;
     pkgs.writeTextFile {

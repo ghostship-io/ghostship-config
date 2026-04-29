@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **PyLoad download directory**: Set PyLoad's app config default download
+  folder to `/downloads/PyLoad` during container initialization while keeping
+  the shared `/downloads` mount unchanged.
 - **Boomer Kuwanger emulation PC**: Added a dedicated `modules/emulation`
   NixOS module, enabled it on `boomer-kuwanger`, and wired ES-DE with Art Book
   Next, RetroArch cores, bundled shader packs including Mega Bezel, Gamescope
