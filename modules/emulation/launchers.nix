@@ -17,6 +17,7 @@ let
       pkgs.gamemode
       pkgs.jq
       pkgs.mangohud
+      pkgs.xdg-utils
       packages.pico8Package
       packages.ryubingCanaryPackage
       packages.winePackage
