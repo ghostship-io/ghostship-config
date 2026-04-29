@@ -541,23 +541,31 @@ let
         data = [dict(zip(header, row)) for row in rows[header_index + 1:] if row]
         if not data:
             return None
-        elapsed_values = [number(row, "elapsed") for row in data]
-        elapsed_values = [value for value in elapsed_values if value is not None]
-        filtered = data
-        if elapsed_values and max(elapsed_values) > warmup * 1000000:
-            threshold = warmup * 1000000000
-            candidate = [row for row in data if (number(row, "elapsed") or 0) >= threshold]
-            if candidate:
-                filtered = candidate
+    elapsed_values = [number(row, "elapsed") for row in data]
+    elapsed_values = [value for value in elapsed_values if value is not None]
+    filtered = data
+    cooldown = min(3.0, max(0.0, duration - warmup) / 4.0)
+    if elapsed_values and max(elapsed_values) > warmup * 1000000:
+        scale = 1000000000
+        start_threshold = warmup * scale
+        end_threshold = max(elapsed_values) - (cooldown * scale)
+        candidate = [
+            row for row in data
+            if (number(row, "elapsed") or 0) >= start_threshold
+            and (number(row, "elapsed") or 0) <= end_threshold
+        ]
+        if candidate:
+            filtered = candidate
         fps = [number(row, "fps") for row in filtered]
         fps = [value for value in fps if value is not None]
         frametime = [number(row, "frametime") for row in filtered]
         frametime = [value for value in frametime if value is not None]
         metrics = {
             "csv": path,
-            "samples": len(filtered),
-            "warmup_seconds": warmup,
-            "duration_seconds": duration,
+        "samples": len(filtered),
+        "warmup_seconds": warmup,
+        "cooldown_seconds": cooldown,
+        "duration_seconds": duration,
             "avg_fps": statistics.fmean(fps) if fps else None,
             "p01_fps": percentile(fps, 1) if fps else None,
             "p001_fps": percentile(fps, 0.1) if fps else None,
