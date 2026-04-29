@@ -64,6 +64,10 @@ During bootstrap, use:
 - `esde-status` to inspect the active session and latest logs.
 - `stop-esde` to return control to `getty@tty1`.
 
+ES-DE game launches reuse the frontend Gamescope session. Direct tty launches
+still wrap emulators in DRM Gamescope, but nested Gamescope is skipped when
+`DISPLAY` or `WAYLAND_DISPLAY` is already present.
+
 The ES-DE AppImage runs under bubblewrap, so the systemd session clears Linux
 capabilities before launching Gamescope. Keep that service hardening in place
 unless ES-DE is rebuilt from source.

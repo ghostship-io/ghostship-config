@@ -571,7 +571,13 @@ PY
     if [ "''${EMULATION_MANGOHUD:-0}" = "1" ]; then
       run_cmd=(mangohud "''${run_cmd[@]}")
     fi
+    use_gamescope=0
     if [ "''${EMULATION_DISABLE_GAMESCOPE:-0}" != "1" ]; then
+      if [ "''${EMULATION_FORCE_GAMESCOPE:-0}" = "1" ] || { [ -z "''${WAYLAND_DISPLAY:-}" ] && [ -z "''${DISPLAY:-}" ]; }; then
+        use_gamescope=1
+      fi
+    fi
+    if [ "$use_gamescope" = "1" ]; then
       if [ -z "''${WAYLAND_DISPLAY:-}" ] && [ -z "''${DISPLAY:-}" ]; then
         mapfile -t gamescope_args < <(
           jq -r '

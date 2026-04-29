@@ -186,8 +186,10 @@ changelog.
   emulation commands and services intentionally avoid a `boomer-` prefix. The
   ES-DE AppImage under Gamescope needs the session service to clear capability
   bounding/ambient sets or bubblewrap exits with unexpected capabilities; the
-  same is true for root-reexec smoke/perf test units. Use the official ES-DE
-  AppImage package unless a source build is explicitly revisited. PipeWire may
+  same is true for root-reexec smoke/perf test units. ES-DE-launched games
+  should reuse the frontend display session and not start nested Gamescope;
+  direct tty launches may still wrap emulators in Gamescope. Use the official
+  ES-DE AppImage package unless a source build is explicitly revisited. PipeWire may
   prefer USB audio adapters on Boomer; keep
   `audio-route` in the ES-DE session and emulator launcher so the current
   available AMD HDMI/DP profile becomes the default sink. Smoke tests should

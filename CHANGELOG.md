@@ -66,6 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/mnt/z/Library/ROMs/roms` library.
   Added `POOM.p8.png` as the PICO-8 smoke cart and made PICO-8 launches request
   an explicit Gamescope Xwayland server so SDL can initialize on the TV path.
+  Forced ES-DE's live theme setting to Art Book Next during setup and changed
+  frontend-launched games to reuse the existing ES-DE Gamescope session instead
+  of starting a nested Gamescope compositor.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from

@@ -60,7 +60,9 @@ let
   esSettingsXml = pkgs.writeText "emulation-es-settings.xml" ''
     <?xml version="1.0"?>
     <settings>
+      <string name="Theme" value="art-book-next-es-de" />
       <string name="ThemeSet" value="art-book-next-es-de" />
+      <string name="ThemeAspectRatio" value="automatic" />
       <string name="Scraper" value="screenscraper" />
       <string name="ScraperRegion" value="na" />
       <string name="ScraperLanguage" value="en" />
@@ -92,6 +94,7 @@ let
       lib.makeBinPath (
         [
           pkgs.jq
+          pkgs.python3
         ]
         ++ lib.optional (
           config.ghostship.emulation.internal.scripts ? renderScraperSettings
@@ -129,6 +132,48 @@ let
     fi
 
     ln -sfn ${packages.artBookNext}/share/es-de/themes/art-book-next-es-de "${cfg.esde.appDataDir}/themes/art-book-next-es-de"
+    python3 - "${cfg.esde.appDataDir}/settings/es_settings.xml" <<'PY'
+    import os
+    import re
+    import sys
+    import tempfile
+    import xml.etree.ElementTree as ET
+    from pathlib import Path
+
+    settings_path = Path(sys.argv[1])
+    raw_settings = settings_path.read_text() if settings_path.exists() else ""
+    try:
+        root = ET.fromstring(raw_settings)
+        if root.tag != "settings":
+            wrapper = ET.Element("settings")
+            wrapper.append(root)
+            root = wrapper
+    except ET.ParseError:
+        body = re.sub(r"^\s*<\?xml[^>]*\?>", "", raw_settings, count=1)
+        root = ET.fromstring(f"<settings>{body}</settings>") if body.strip() else ET.Element("settings")
+
+    def set_string(name, value):
+        for entry in root.findall("string"):
+            if entry.get("name") == name:
+                entry.set("value", value)
+                return
+        ET.SubElement(root, "string", {"name": name, "value": value})
+
+    set_string("Theme", "art-book-next-es-de")
+    set_string("ThemeSet", "art-book-next-es-de")
+    set_string("ThemeAspectRatio", "automatic")
+
+    fd, tmp = tempfile.mkstemp(prefix="es_settings.", dir=str(settings_path.parent))
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write('<?xml version="1.0"?>\n')
+        for entry in root:
+            handle.write(ET.tostring(entry, encoding="unicode"))
+            handle.write("\n")
+    os.chmod(tmp, 0o640)
+    Path(tmp).replace(settings_path)
+    PY
+    chown ${cfg.user}:${cfg.group} "${cfg.esde.appDataDir}/settings/es_settings.xml"
+    chmod 0640 "${cfg.esde.appDataDir}/settings/es_settings.xml"
 
     printf '%s' '${emu.allSystemsJson}' | jq -c '.[]' | while read -r system; do
       folder="$(jq -r '.folder' <<<"$system")"
