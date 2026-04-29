@@ -219,7 +219,7 @@ let
       platform = "wii";
       theme = "wii";
       emulator = "dolphin";
-      extensions = "${commonRetroExtensions} ${discExtensions} .wbfs .WBFS .rvz .RVZ .nkit.iso .NKIT.ISO";
+      extensions = "${commonRetroExtensions} ${discExtensions} .wbfs .WBFS .rvz .RVZ .nkit.iso .NKIT.ISO .wad .WAD";
       fixedAspect = "16:9";
     }
     {

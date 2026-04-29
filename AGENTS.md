@@ -213,7 +213,8 @@ changelog.
   Boomer because its SDL path uses X11. Boomer's managed ES-DE UI defaults are
   manufacturer/hardware/release systems sorting, visible clock, Switch Pro
   controller prompts, first-controller-only input, 12-hour clock format, and
-  Hawaii standard time.
+  Hawaii standard time. WiiWare games should stay as extracted `.wad` files in
+  the Wii ROM folder so ES-DE can launch them through Dolphin.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
 - Homepage `services.yaml` updates can leave stale entries behind when keys are
