@@ -55,7 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tuning recommendations without automatically mutating runtime profiles.
   Cleared transient smoke/perf test capability sets so `steam-run`/bubblewrap
   emulators launch without the unexpected-capabilities failure seen during
-  PICO-8 testing.
+  PICO-8 testing, and classified PICO-8 performance tests as 30 FPS by default
+  because many carts, including the `POOM.p8.png` smoke cart, target that rate.
   Replaced nixpkgs' stable Ryubing package with a pinned official Ryubing
   Canary binary package and added `update-ryubing-canary` so the pin can be
   advanced from the official latest redirect before Boomer rebuilds. Added

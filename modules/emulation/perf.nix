@@ -603,9 +603,9 @@ let
         two_d = {
             "fbneo", "pcengine", "pcenginecd", "gb", "gbc", "gba", "nes", "snes",
             "neogeocd", "ngpc", "gamegear", "genesis", "mastersystem", "segacd",
-            "virtualboy", "pico8",
+            "virtualboy",
         }
-        thirty = {"psp", "ps2", "switch", "xbox", "n3ds", "teknoparrot"}
+        thirty = {"psp", "ps2", "switch", "xbox", "n3ds", "teknoparrot", "pico8"}
         compat = {"doom"}
         if system in two_d:
             return {"class": "2d60", "avg_fps": 59.5, "p01_fps": 57.0, "p99_frametime_ms": 20.0}
