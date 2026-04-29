@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **PyLoad download directory**: Set PyLoad's app config default download
   folder to `/downloads/PyLoad` during container initialization while keeping
-  the shared `/downloads` mount unchanged.
+  the shared `/downloads` mount unchanged, and remove the image's
+  `--storagedir /downloads` command-line override so PyLoad honors the managed
+  app setting.
 - **Self-hosted secrets**: Limit the self-hosted secret module to
   `self-hosted-runtime` units so host-specific emulation secrets stay managed
   by the emulation module.

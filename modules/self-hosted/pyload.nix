@@ -71,6 +71,22 @@ let
       executable = true;
       text = patched;
     };
+  pyloadSvcRun = pkgs.writeTextFile {
+    name = "pyload-svc-run";
+    executable = true;
+    text = ''
+      #!/usr/bin/with-contenv bash
+      # shellcheck shell=bash
+
+      PORT=$(sed -n -e '/webui/,/proxy/p' /config/settings/pyload.cfg | grep "Port" | awk -F '=' '{print $2}' | tr -d ' ')
+
+      export LD_PRELOAD="/lib/libgcompat.so.0"
+
+      exec \
+          s6-notifyoncheck -d -n 300 -w 1000 -c "nc -z localhost ''${PORT:-8000}" \
+          s6-setuidgid abc pyload --userdir /config
+    '';
+  };
 in
 
 {
@@ -98,6 +114,7 @@ in
       "/srv/apps/pyload:/config"
       "/mnt/share/Downloads:/downloads"
       "${pyloadInitConfigRun}:/etc/s6-overlay/s6-rc.d/init-pyload-config/run:ro"
+      "${pyloadSvcRun}:/etc/s6-overlay/s6-rc.d/svc-pyload/run:ro"
     ];
   };
 

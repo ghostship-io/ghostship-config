@@ -292,6 +292,9 @@ changelog.
   `/api` even when healthy. Keep the Podman health check on the public
   `http://127.0.0.1:8000/favicon.ico` endpoint instead of the auth-protected
   API path.
+- PyLoad's LinuxServer image starts with `--storagedir /downloads` by default,
+  which overrides and rewrites `pyload.cfg`. Keep the service run override if
+  the managed app config should own `general.storage_folder`.
 - Repo edits to `modules/self-hosted/romm.nix` are not live until the host is
   rebuilt. Inspect the live container files before treating a repo change as
   tested.
