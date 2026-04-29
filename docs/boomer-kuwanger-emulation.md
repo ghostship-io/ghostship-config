@@ -76,9 +76,11 @@ into ES-DE. On boot, if a matching `/mnt/z` source folder is visible and
 Otherwise it creates an empty local folder, which should be hidden by the real
 `roms` mount on the installed machine.
 
-RetroArch is preferred when a usable libretro core exists. Standalone emulators
-are installed where RetroArch is not the right target: Dolphin, Cemu, xemu,
-Ryubing/Ryujinx, Supermodel, GZDoom, PICO-8, and TeknoParrot free.
+RetroArch is preferred when a usable, RetroAchievements-compatible libretro
+core exists. Standalone emulators are installed where they are the better
+operational or RetroAchievements target: Dolphin, Cemu, xemu,
+Ryubing/Ryujinx, Azahar, PCSX2, PPSSPP, Supermodel, GZDoom, PICO-8, and
+TeknoParrot free.
 
 ## BIOS, Firmware, And Keys
 
@@ -121,27 +123,29 @@ The wrapper uses a dedicated Wine prefix at:
 /srv/emulation/config/teknoparrot/prefix
 ```
 
-## Display And FSR
+## Display And Aspect Scaling
 
 `display-profile` discovers connected DRM outputs first, prefers the RX 6650M,
 supports either HDMI port, and falls back to Wayland/X11 resolution probes when
 needed. It emits JSON with the selected connector, DRM card, output size,
-render size, aspect class, FSR state, and Gamescope arguments. `run-emulator`
-wraps emulator launches in Gamescope by default.
+render size, aspect class, viewport recommendations, and Gamescope arguments.
+`run-emulator` wraps emulator launches in Gamescope by default.
 
 The default policy:
 
 - Run ES-DE at native display resolution.
-- Disable FSR for exact native output or clean low-resolution 2D cases.
-- Enable Gamescope FSR for heavy 3D systems when render size is lower than the
-  display target.
+- Never use Gamescope FSR.
+- Keep `render_width`/`render_height` equal to the active display output.
+- Use emulator-native internal resolution scaling for standalone and 3D
+  systems.
+- Use RetroArch Slang shaders for clean 2D scaling.
 - Center fixed-aspect systems on ultrawide displays unless a native widescreen
   emulator mode is selected later.
 
 Runtime override knobs can live in `/srv/emulation/config/display.env` for
 manual testing, but durable policy changes belong in the Nix module.
-Run `display-profile --matrix-test` to verify the deterministic FSR
-policy without display hardware.
+Run `display-profile --matrix-test` to verify native render/output sizing,
+`fsr=false`, and aspect-safe viewport recommendations without display hardware.
 
 ## Audio
 
@@ -180,8 +184,24 @@ shape expected by the target emulator.
 ## RetroArch
 
 RetroArch is built with explicit cores for arcade, 8-bit, 16-bit, handheld,
-PlayStation, Saturn, Dreamcast, N64, DS, PSP, PS2, and 3DS fallback coverage.
-Managed config is written under `/srv/emulation/config/retroarch`.
+PC Engine/SuperGrafx, PlayStation, Saturn, Dreamcast, N64, DS, PSP/PS2
+fallback coverage, and 3DS fallback coverage. Managed config is written under
+`/srv/emulation/config/retroarch`.
+
+Default ES-DE mappings now use RetroAchievements-aligned cores where practical:
+
+- NES/FDS: FCEUmm.
+- PC Engine / PC Engine CD / SuperGrafx: Beetle SuperGrafx.
+- GB/GBC: Gambatte.
+- GBA: mGBA.
+- SNES: Snes9x.
+- N64: Mupen64Plus-Next.
+- DS: DeSmuME.
+- Dreamcast: Flycast.
+- PlayStation: Beetle PSX HW.
+
+Standalone defaults are PCSX2 for PS2, PPSSPP for PSP, Dolphin for GameCube
+and Wii, and Azahar for 3DS when available.
 
 Defaults:
 
@@ -205,8 +225,18 @@ RetroArch's expected layout:
 - `shaders_glsl`
 - `shaders_cg`
 
-Default shader profile is `megabezel-auto`. The installed runtime profiles are:
+Default shader profile is `nnedi3-clean`. The installed runtime profiles are:
 
+- `nnedi3-clean`
+- `nnedi3-quality`
+- `nnedi3-balanced`
+- `nnedi3-fast`
+- `sharp-bilinear-prescale`
+- `sharp-bilinear-simple`
+- `pixel-aa-fast`
+- `scalefx-aa-fast`
+- `xbrz-freescale`
+- `no-shader`
 - `megabezel-auto`
 - `megabezel-standard`
 - `megabezel-potato`
@@ -215,12 +245,13 @@ Default shader profile is `megabezel-auto`. The installed runtime profiles are:
 - `integer-raw`
 - `performance`
 
-Mega Bezel is the default because that was requested, but `sharp-clean` and
-`integer-raw` are available for clarity-first tuning if Mega Bezel is too
-expensive or too stylized on target hardware. `retroarch-shader-smoke-test`
-writes `/srv/emulation/config/retroarch/shader-status.json`; the launcher uses
-that marker to fall back from Mega Bezel to `sharp-clean` if the required shader
-tree is missing.
+NNEDI3 is used for clean 2D upscaling by default. Handheld systems use lighter
+NNEDI3 where appropriate, 3D-heavy RetroArch systems default to no shader or a
+light sharp-bilinear profile, and Mega Bezel remains installed and selectable
+but is no longer the default. `retroarch-shader-smoke-test` writes
+`/srv/emulation/config/retroarch/shader-status.json`; the launcher uses that
+marker to fall back from missing NNEDI3/Mega Bezel paths to sharp or no-shader
+profiles.
 
 ## Controllers And Bluetooth
 
@@ -273,12 +304,37 @@ The generated projection is:
 the Boomer host key. Rekey the secret after changing recipients so the machine
 can decrypt it at runtime.
 
+## RetroAchievements Secrets
+
+The RetroAchievements secret unit is `emulation-retroachievements-secrets` with:
+
+- `RETROACHIEVEMENTS_USER`
+- `RETROACHIEVEMENTS_PASS`
+
+The generated projection is:
+
+```text
+/run/ghostship-secrets/emulation-retroachievements.env
+```
+
+`render-retroachievements-settings` writes RetroArch's runtime
+`cheevos_*` settings to:
+
+```text
+/srv/emulation/config/retroarch/retroachievements.cfg
+```
+
+RetroArch receives that file through `run-emulator` append config. Standalone
+emulator achievement login remains `manual-login-required` until each live
+config format is confirmed on Boomer; the status file records that deliberately
+instead of guessing at credential keys.
+
 ## Verification On Hardware
 
 After SSH access exists:
 
-1. Verify `emulation-scraper-secrets` decrypts and projects ScreenScraper
-   credentials.
+1. Verify `emulation-scraper-secrets` and
+   `emulation-retroachievements-secrets` decrypt and project credentials.
 2. Verify the label-based Btrfs mounts for `/` and
    `/srv/emulation/roms`.
 3. Boot to the tty, run `esde-preflight`, then launch ES-DE with
@@ -292,5 +348,5 @@ After SSH access exists:
    `/srv/emulation/logs/launches`.
 8. Run `display-profile --matrix-test`, `rom-coverage-check`,
    `smoke-rom-select`, and `smoke-test --dry-run`.
-9. Test 1080p, 1440p, 4K, and ultrawide displays and refine Gamescope FSR
-   thresholds if frame pacing misses budget.
+9. Test 1080p, 1440p, 4K, and ultrawide displays and confirm fixed-aspect
+   content stays centered and unstretched.

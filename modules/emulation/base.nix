@@ -266,12 +266,15 @@ in
         ]
         ++ builtins.attrValues config.ghostship.emulation.internal.scripts
         ++ emu.optionalPackages [
+          "azahar"
           "cemu"
           "dolphin-emu"
           "gzdoom"
           "joycond"
           "joycond-cemuhook"
           "lime3ds"
+          "pcsx2"
+          "ppsspp-sdl"
           "protontricks"
           "ryubing"
           "xemu"

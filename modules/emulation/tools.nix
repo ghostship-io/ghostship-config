@@ -68,6 +68,7 @@ let
         pkgs.wireplumber
       ] ++ lib.optionals (config.ghostship.emulation.internal.scripts ? audioRoute) [ config.ghostship.emulation.internal.scripts.audioRoute ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? displayProfile) [ config.ghostship.emulation.internal.scripts.displayProfile ]
+      ++ lib.optionals (config.ghostship.emulation.internal.scripts ? renderRetroAchievementsSettings) [ config.ghostship.emulation.internal.scripts.renderRetroAchievementsSettings ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? renderScraperSettings) [ config.ghostship.emulation.internal.scripts.renderScraperSettings ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? retroarchShaderSmokeTest) [ config.ghostship.emulation.internal.scripts.retroarchShaderSmokeTest ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? romCoverageCheck) [ config.ghostship.emulation.internal.scripts.romCoverageCheck ]
@@ -170,7 +171,7 @@ let
     ];
     display-profile-override = mkMenuTool "display-profile-override" "Display Profile Override" [
       { label = "Show current override"; command = "[ -r ${cfg.configRoot}/display.env ] && cat ${cfg.configRoot}/display.env || echo 'No override file.'"; }
-      { label = "Write disabled template"; command = "cat > ${cfg.configRoot}/display.env <<'EOF'\n# EMULATION_DISPLAY_WIDTH=3840\n# EMULATION_DISPLAY_HEIGHT=2160\n# EMULATION_RENDER_SIZE=2954x1662\n# EMULATION_FORCE_FSR=1\n# EMULATION_DISABLE_FSR=1\nEOF\ncat ${cfg.configRoot}/display.env"; }
+      { label = "Write disabled template"; command = "cat > ${cfg.configRoot}/display.env <<'EOF'\n# Optional manual display override for testing only.\n# EMULATION_DISPLAY_WIDTH=3840\n# EMULATION_DISPLAY_HEIGHT=2160\n# EMULATION_DISPLAY_REFRESH=60\n# EMULATION_CONNECTOR=HDMI-A-1\n# EMULATION_DRM_CARD=card1\nEOF\ncat ${cfg.configRoot}/display.env"; }
     ];
     retroarch-core-status = mkMenuTool "retroarch-core-status" "RetroArch Core Status" [
       { label = "RetroArch version"; command = "retroarch --version | head -n 1"; }
@@ -186,6 +187,11 @@ let
       { label = "Show/switch profile"; command = profileMenuCommand; }
       { label = "Shader policy"; command = "jq . ${cfg.configRoot}/retroarch/shader-policy.json"; }
       { label = "Shader smoke test"; command = "retroarch-shader-smoke-test || true"; }
+    ];
+    retroachievements-status = mkMenuTool "retroachievements-status" "RetroAchievements Status" [
+      { label = "Secret projection"; command = "ls -l /run/ghostship-secrets/emulation-retroachievements.env 2>/dev/null || echo 'No decrypted RetroAchievements projection.'"; }
+      { label = "Rendered settings"; command = "render-retroachievements-settings || true; [ -r ${cfg.configRoot}/retroachievements/status.json ] && jq . ${cfg.configRoot}/retroachievements/status.json || true"; }
+      { label = "RetroArch config present"; command = "if [ -r ${cfg.configRoot}/retroarch/retroachievements.cfg ]; then grep -E 'cheevos_(enable|hardcore_mode_enable|username)' ${cfg.configRoot}/retroarch/retroachievements.cfg || true; else echo 'No RetroArch RetroAchievements config rendered.'; fi"; }
     ];
     esde-scraper-status = mkMenuTool "esde-scraper-status" "ES-DE Scraper Status" [
       { label = "Secret projection"; command = "ls -l /run/ghostship-secrets/emulation-scraper.env 2>/dev/null || echo 'No decrypted scraper projection.'"; }

@@ -35,8 +35,8 @@
     frontend = "es-de";
     theme = "art-book-next";
     esde.appDataDir = "/srv/emulation/es-de";
-    visuals.defaultProfile = "megabezel-auto";
-    visuals.upscaler = "gamescope-fsr-auto";
+    visuals.defaultProfile = "nnedi3-clean";
+    visuals.upscaler = "none";
     controllers.assignment = "connection-order-persistent";
     startup.mode = "console";
   };

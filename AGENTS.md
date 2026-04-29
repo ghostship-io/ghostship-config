@@ -192,7 +192,10 @@ changelog.
   available AMD HDMI/DP profile becomes the default sink. Smoke tests should
   not add runtime ROM extraction; manually extract only proven failing smoke
   copies and point `/srv/emulation/config/smoke/roms.json` at the launchable
-  file.
+  file. Keep Boomer's emulator defaults RetroAchievements-aligned where
+  practical: Beetle SuperGrafx for PCE/PCE CD, FCEUmm for NES/FDS, Azahar for
+  3DS, standalone PCSX2 for PS2, standalone PPSSPP for PSP, and no Gamescope
+  FSR; use emulator-native scaling plus NNEDI3/sharp RetroArch shaders.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
 - Homepage `services.yaml` updates can leave stale entries behind when keys are

@@ -9,7 +9,10 @@ let
 
   optionalPackage = name: lib.optional (builtins.hasAttr name pkgs) (builtins.getAttr name pkgs);
   optionalPackages = names: lib.concatMap optionalPackage names;
-  n3dsEmulator = if builtins.hasAttr "lime3ds" pkgs then "lime3ds" else "retroarch-citra";
+  n3dsEmulator =
+    if builtins.hasAttr "azahar" pkgs then "azahar"
+    else if builtins.hasAttr "lime3ds" pkgs then "lime3ds"
+    else "retroarch-citra";
 
   xmlEscape =
     value:
@@ -18,12 +21,14 @@ let
   coreNames = [
     "fbneo"
     "mame"
+    "fceumm"
     "mesen"
     "snes9x"
     "bsnes"
     "bsnes-hd"
     "genesis-plus-gx"
     "picodrive"
+    "beetle-supergrafx"
     "beetle-pce-fast"
     "gambatte"
     "sameboy"
@@ -83,7 +88,7 @@ let
       fullname = "NEC PC Engine";
       platform = "pcengine";
       theme = "pcengine";
-      emulator = "retroarch-beetle-pce-fast";
+      emulator = "retroarch-beetle-supergrafx";
       extensions = "${commonRetroExtensions} .pce .PCE .sgx .SGX";
       fixedAspect = "4:3";
     }
@@ -93,7 +98,7 @@ let
       fullname = "NEC PC Engine CD";
       platform = "pcenginecd";
       theme = "pcenginecd";
-      emulator = "retroarch-beetle-pce-fast";
+      emulator = "retroarch-beetle-supergrafx";
       extensions = "${commonRetroExtensions} ${discExtensions}";
       fixedAspect = "4:3";
     }
@@ -173,7 +178,7 @@ let
       fullname = "Nintendo Entertainment System";
       platform = "nes";
       theme = "nes";
-      emulator = "retroarch-mesen";
+      emulator = "retroarch-fceumm";
       extensions = "${commonRetroExtensions} .nes .NES .fds .FDS";
       fixedAspect = "4:3";
     }
@@ -323,7 +328,7 @@ let
       fullname = "Sony PlayStation 2";
       platform = "ps2";
       theme = "ps2";
-      emulator = "retroarch-pcsx2";
+      emulator = "pcsx2";
       extensions = "${commonRetroExtensions} ${discExtensions} .cso .CSO";
       fixedAspect = "16:9";
     }
@@ -333,7 +338,7 @@ let
       fullname = "Sony PlayStation Portable";
       platform = "psp";
       theme = "psp";
-      emulator = "retroarch-ppsspp";
+      emulator = "ppsspp";
       extensions = "${commonRetroExtensions} .iso .ISO .cso .CSO .pbp .PBP";
       fixedAspect = "16:9";
     }
@@ -420,6 +425,10 @@ let
     {
       file = "RetroArch Shader Profiles.sh";
       target = "retroarch-shader-profiles";
+    }
+    {
+      file = "RetroAchievements Status.sh";
+      target = "retroachievements-status";
     }
     {
       file = "ES-DE Scraper Status.sh";

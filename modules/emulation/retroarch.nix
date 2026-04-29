@@ -12,7 +12,7 @@ let
     video_fullscreen = "true"
     video_vsync = "true"
     video_shader_enable = "true"
-    video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/bezel/Mega_Bezel/Presets/Base_CRT_Presets_DREZ/MBZ__3__STD__GDV__DREZ-VIEWPORT.slangp"
+    video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/edge-smoothing/nnedi3/nnedi3-nns32-4x-rgb.slangp"
     video_shader_dir = "${cfg.configRoot}/retroarch/shaders"
     libretro_directory = "${packages.retroarchPackage}/lib/retroarch/cores"
     libretro_info_path = "${cfg.configRoot}/retroarch/info"
@@ -46,6 +46,14 @@ let
     "retroarch-fbneo.opt" = ''
       fbneo-allow-patched-romsets = "enabled"
     '';
+    "retroarch-fceumm.opt" = ''
+      fceumm_region = "Auto"
+      fceumm_ramstate = "enabled"
+    '';
+    "retroarch-beetle-supergrafx.opt" = ''
+      pce_fast_cdimagecache = "enabled"
+      pce_fast_cdbios = "System Card 3"
+    '';
     "retroarch-beetle-psx-hw.opt" = ''
       beetle_psx_hw_renderer = "hardware_vk"
       beetle_psx_hw_pgxp_mode = "memory + CPU"
@@ -73,10 +81,65 @@ let
     '';
     "retroarch-flycast.opt" = ''
       flycast_renderer = "vulkan"
+      reicast_threaded_rendering = "disabled"
     '';
   };
 
   profiles = {
+    "nnedi3-clean.cfg" = ''
+      video_shader_enable = "true"
+      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/edge-smoothing/nnedi3/nnedi3-nns32-4x-rgb.slangp"
+      video_smooth = "false"
+      video_scale_integer = "false"
+    '';
+    "nnedi3-quality.cfg" = ''
+      video_shader_enable = "true"
+      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/edge-smoothing/nnedi3/nnedi3-nns32-4x-rgb.slangp"
+      video_smooth = "false"
+      video_scale_integer = "false"
+    '';
+    "nnedi3-balanced.cfg" = ''
+      video_shader_enable = "true"
+      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/edge-smoothing/nnedi3/nnedi3-nns32-2x-rgb-nns32-4x-luma.slangp"
+      video_smooth = "false"
+      video_scale_integer = "false"
+    '';
+    "nnedi3-fast.cfg" = ''
+      video_shader_enable = "true"
+      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/edge-smoothing/nnedi3/nnedi3-nns16-2x-rgb.slangp"
+      video_smooth = "false"
+      video_scale_integer = "false"
+    '';
+    "sharp-bilinear-prescale.cfg" = ''
+      video_shader_enable = "true"
+      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/pixel-art-scaling/sharp-bilinear-2x-prescale.slangp"
+      video_smooth = "false"
+      video_scale_integer = "false"
+    '';
+    "sharp-bilinear-simple.cfg" = ''
+      video_shader_enable = "true"
+      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/pixel-art-scaling/sharp-bilinear-simple.slangp"
+      video_smooth = "false"
+      video_scale_integer = "false"
+    '';
+    "pixel-aa-fast.cfg" = ''
+      video_shader_enable = "true"
+      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/pixel-art-scaling/pixel_aa_fast.slangp"
+      video_smooth = "false"
+      video_scale_integer = "false"
+    '';
+    "scalefx-aa-fast.cfg" = ''
+      video_shader_enable = "true"
+      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/presets/scalefx-plus-smoothing/scalefx-aa-fast.slangp"
+      video_smooth = "false"
+      video_scale_integer = "false"
+    '';
+    "xbrz-freescale.cfg" = ''
+      video_shader_enable = "true"
+      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/edge-smoothing/xbrz/xbrz-freescale-multipass.slangp"
+      video_smooth = "false"
+      video_scale_integer = "false"
+    '';
     "megabezel-auto.cfg" = ''
       video_shader_enable = "true"
       video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/bezel/Mega_Bezel/Presets/Base_CRT_Presets_DREZ/MBZ__3__STD__GDV__DREZ-VIEWPORT.slangp"
@@ -95,7 +158,12 @@ let
     '';
     "sharp-clean.cfg" = ''
       video_shader_enable = "true"
-      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/interpolation/sharp-bilinear.slangp"
+      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/pixel-art-scaling/sharp-bilinear-2x-prescale.slangp"
+    '';
+    "no-shader.cfg" = ''
+      video_shader_enable = "false"
+      video_smooth = "false"
+      video_scale_integer = "false"
     '';
     "integer-raw.cfg" = ''
       video_shader_enable = "false"
@@ -165,10 +233,41 @@ let
     input_menu_toggle_btn = "3"
   '';
 
+  systemShaderDefaults = {
+    fbneo = "nnedi3-clean";
+    pcengine = "nnedi3-clean";
+    pcenginecd = "nnedi3-clean";
+    gb = "nnedi3-fast";
+    gbc = "nnedi3-fast";
+    gba = "nnedi3-clean";
+    n64 = "no-shader";
+    nds = "nnedi3-fast";
+    nes = "nnedi3-clean";
+    snes = "nnedi3-clean";
+    virtualboy = "sharp-bilinear-prescale";
+    neogeocd = "nnedi3-clean";
+    ngpc = "nnedi3-fast";
+    dreamcast = "no-shader";
+    gamegear = "nnedi3-fast";
+    genesis = "nnedi3-clean";
+    mastersystem = "nnedi3-clean";
+    saturn = "sharp-bilinear-simple";
+    segacd = "nnedi3-clean";
+    psx = "sharp-bilinear-simple";
+  };
+
   shaderPolicy = pkgs.writeText "emulation-shader-policy.json" (builtins.toJSON {
-    default = "megabezel-auto";
-    fallback = "sharp-clean";
+    default = "nnedi3-clean";
+    fallback = "sharp-bilinear-prescale";
     profiles = builtins.attrNames profiles;
+    systemDefaults = systemShaderDefaults;
+    cleanScaling = {
+      quality = "nnedi3-quality";
+      balanced = "nnedi3-balanced";
+      fast = "nnedi3-fast";
+      sharp = "sharp-bilinear-prescale";
+      raw = "integer-raw";
+    };
     megabezel = {
       requiredPath = "shaders_slang/bezel/Mega_Bezel";
       highQuality = "megabezel-standard";
@@ -209,7 +308,9 @@ let
 
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${retroarchCfg} "${cfg.configRoot}/retroarch/retroarch.cfg"
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${shaderPolicy} "${cfg.configRoot}/retroarch/shader-policy.json"
-    cp -R --no-preserve=mode,ownership "${packages.retroarchPackage}/share/libretro/info/." "${cfg.configRoot}/retroarch/info/" || true
+    if [ -d "${packages.retroarchPackage}/share/libretro/info" ]; then
+      cp -R --no-preserve=mode,ownership "${packages.retroarchPackage}/share/libretro/info/." "${cfg.configRoot}/retroarch/info/" || true
+    fi
     chown -R ${cfg.user}:${cfg.group} "${cfg.configRoot}/retroarch/info" "${cfg.dataRoot}/logs/retroarch"
     touch "${cfg.dataRoot}/logs/retroarch/retroarch.log"
     chown ${cfg.user}:${cfg.group} "${cfg.dataRoot}/logs/retroarch/retroarch.log"
@@ -246,7 +347,14 @@ let
     done
 
     if [ ! -e "${cfg.configRoot}/retroarch/profiles/current.cfg" ]; then
-      ln -s "megabezel-auto.cfg" "${cfg.configRoot}/retroarch/profiles/current.cfg"
+      ln -s "nnedi3-clean.cfg" "${cfg.configRoot}/retroarch/profiles/current.cfg"
+    else
+      current_target="$(readlink "${cfg.configRoot}/retroarch/profiles/current.cfg" 2>/dev/null || true)"
+      case "$current_target" in
+        ""|megabezel-auto.cfg)
+          ln -sfn "nnedi3-clean.cfg" "${cfg.configRoot}/retroarch/profiles/current.cfg"
+          ;;
+      esac
     fi
     chown -h ${cfg.user}:${cfg.group} "${cfg.configRoot}/retroarch/profiles/current.cfg" || true
 
@@ -262,11 +370,15 @@ let
     status="${cfg.configRoot}/retroarch/shader-status.json"
     missing=0
     slang=false
+    nnedi3=false
+    sharp=false
     megabezel=false
     glsl=false
     cg=false
 
     if [ -e "$shader_root/shaders_slang" ]; then slang=true; else missing=1; fi
+    if [ -e "$shader_root/shaders_slang/edge-smoothing/nnedi3/nnedi3-nns32-4x-rgb.slangp" ]; then nnedi3=true; else missing=1; fi
+    if [ -e "$shader_root/shaders_slang/pixel-art-scaling/sharp-bilinear-2x-prescale.slangp" ]; then sharp=true; else missing=1; fi
     if [ -e "$shader_root/shaders_slang/bezel/Mega_Bezel" ]; then megabezel=true; else missing=1; fi
     if [ -e "$shader_root/shaders_glsl" ]; then glsl=true; else missing=1; fi
     if [ -e "$shader_root/shaders_cg" ]; then cg=true; else missing=1; fi
@@ -274,11 +386,13 @@ let
     install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$status")"
     jq -n \
       --argjson slang "$slang" \
+      --argjson nnedi3 "$nnedi3" \
+      --argjson sharp "$sharp" \
       --argjson megabezel "$megabezel" \
       --argjson glsl "$glsl" \
       --argjson cg "$cg" \
       --arg checked_at "$(date -u +%FT%TZ)" \
-      '{checked_at:$checked_at, slang:$slang, megabezel:$megabezel, glsl:$glsl, cg:$cg}' >"$status.tmp"
+      '{checked_at:$checked_at, slang:$slang, nnedi3:$nnedi3, sharp:$sharp, megabezel:$megabezel, glsl:$glsl, cg:$cg}' >"$status.tmp"
     chown ${cfg.user}:${cfg.group} "$status.tmp"
     chmod 0644 "$status.tmp"
     mv "$status.tmp" "$status"

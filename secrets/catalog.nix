@@ -239,6 +239,16 @@
       format = "env";
       exports = [ "SCREENSCRAPER_USER" "SCREENSCRAPER_PASS" ];
     };
+
+    emulation-retroachievements-secrets = {
+      relativeFile = "secrets/files/services/emulation-retroachievements-secrets.env.age";
+      path = ./files/services/emulation-retroachievements-secrets.env.age;
+      recipientGroup = "emulation-runtime";
+      recipients = recipients.groups.emulation-runtime;
+      mode = "0400";
+      format = "env";
+      exports = [ "RETROACHIEVEMENTS_USER" "RETROACHIEVEMENTS_PASS" ];
+    };
   };
 
   projections = {
@@ -360,6 +370,17 @@
       fields = {
         SCREENSCRAPER_USER = { unit = "emulation-scraper-secrets"; key = "SCREENSCRAPER_USER"; };
         SCREENSCRAPER_PASS = { unit = "emulation-scraper-secrets"; key = "SCREENSCRAPER_PASS"; };
+      };
+    };
+
+    emulation-retroachievements = {
+      fileName = "emulation-retroachievements.env";
+      owner = "kiosk";
+      group = "kiosk";
+      mode = "0440";
+      fields = {
+        RETROACHIEVEMENTS_USER = { unit = "emulation-retroachievements-secrets"; key = "RETROACHIEVEMENTS_USER"; };
+        RETROACHIEVEMENTS_PASS = { unit = "emulation-retroachievements-secrets"; key = "RETROACHIEVEMENTS_PASS"; };
       };
     };
   };

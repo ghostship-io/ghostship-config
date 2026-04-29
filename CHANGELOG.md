@@ -42,6 +42,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Status tool, tightened smoke-test fatal-log detection, and documented that
   only proven failing smoke copies should be manually extracted. Added a
   one-page Boomer hardware/software/system overview document.
+  Realigned Boomer's default emulator map with RetroAchievements-friendly
+  choices, moved PC Engine to Beetle SuperGrafx, NES/FDS to FCEUmm, PS2 to
+  standalone PCSX2, PSP to standalone PPSSPP, and 3DS to Azahar where
+  available. Removed Gamescope FSR entirely, keeping Gamescope only as the
+  fullscreen/session wrapper, changed the RetroArch default shader policy from
+  Mega Bezel to clean NNEDI3/sharp profiles, kept Mega Bezel selectable, and
+  added a dedicated RetroAchievements secret projection plus RetroArch runtime
+  credential renderer.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from

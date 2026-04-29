@@ -176,11 +176,13 @@ let
     done
 
     [ -r "$manifest" ] || smoke-rom-select "${cfg.romRoot}" "$manifest"
+    current_systems='${emu.allSystemsJson}'
     if [ "$dry_run" = 1 ]; then
-      jq -r '
+      jq -r --argjson current "$current_systems" '
+        def current_emulator($id): (($current[] | select(.id == $id) | .emulator) // empty);
         .systems[] as $system
         | $system.entries[]
-        | "run-emulator " + ($system.id | @sh) + " " + ($system.emulator | @sh) + " " + ((if (.smoke_path | length) > 0 then .smoke_path else .source_path end) | @sh)
+        | "run-emulator " + ($system.id | @sh) + " " + ((current_emulator($system.id) // $system.emulator) | @sh) + " " + ((if (.smoke_path | length) > 0 then .smoke_path else .source_path end) | @sh)
       ' "$manifest"
       exit 0
     fi
@@ -193,7 +195,12 @@ let
     chown ${cfg.user}:${cfg.group} "$run_dir" "$perf_dir" 2>/dev/null || true
     report="$run_dir/results.jsonl"
 
-    jq -c '.systems[] as $system | $system.entries[] | {system_id:$system.id, folder:$system.folder, emulator:$system.emulator, name:.name, source_path:.source_path, smoke_path:.smoke_path}' "$manifest" |
+    jq -c --argjson current "$current_systems" '
+      def current_emulator($id): (($current[] | select(.id == $id) | .emulator) // empty);
+      .systems[] as $system
+      | $system.entries[]
+      | {system_id:$system.id, folder:$system.folder, emulator:(current_emulator($system.id) // $system.emulator), name:.name, source_path:.source_path, smoke_path:.smoke_path}
+    ' "$manifest" |
       while read -r item; do
         system_id="$(jq -r '.system_id' <<<"$item")"
         emulator="$(jq -r '.emulator' <<<"$item")"
@@ -271,7 +278,10 @@ let
 
     if [ "''${1:-}" = "--manifest" ]; then
       manifest="$2"
-      jq '{generated_at, source_root, target_root, systems: [.systems[] | {id, emulator, count:(.entries | length), entries:[.entries[].name]}]}' "$manifest"
+      jq --argjson current '${emu.allSystemsJson}' '
+        def current_emulator($id): (($current[] | select(.id == $id) | .emulator) // empty);
+        {generated_at, source_root, target_root, systems: [.systems[] | {id, emulator:(current_emulator(.id) // .emulator), count:(.entries | length), entries:[.entries[].name]}]}
+      ' "$manifest"
       exit 0
     fi
 
