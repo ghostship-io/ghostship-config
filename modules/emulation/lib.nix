@@ -374,75 +374,79 @@ let
   tools = [
     {
       file = "Wi-Fi Status.sh";
-      target = "boomer-wifi-status";
+      target = "wifi-status";
     }
     {
       file = "Wi-Fi Connect.sh";
-      target = "boomer-wifi-connect";
+      target = "wifi-connect";
     }
     {
       file = "Bluetooth Status.sh";
-      target = "boomer-bluetooth-status";
+      target = "bluetooth-status";
     }
     {
       file = "Bluetooth Pair Controller.sh";
-      target = "boomer-bluetooth-pair-controller";
+      target = "bluetooth-pair-controller";
     }
     {
       file = "Bluetooth Reconnect Controllers.sh";
-      target = "boomer-bluetooth-reconnect-controllers";
+      target = "bluetooth-reconnect-controllers";
     }
     {
       file = "Player Assignment.sh";
-      target = "boomer-player-assignment";
+      target = "player-assignment";
     }
     {
       file = "Display Profile Test.sh";
-      target = "boomer-display-profile-tool";
+      target = "display-profile-tool";
     }
     {
       file = "Display Profile Override.sh";
-      target = "boomer-display-profile-override";
+      target = "display-profile-override";
     }
     {
       file = "RetroArch Core Status.sh";
-      target = "boomer-retroarch-core-status";
+      target = "retroarch-core-status";
     }
     {
       file = "RetroArch Graphics Profiles.sh";
-      target = "boomer-retroarch-graphics-profiles";
+      target = "retroarch-graphics-profiles";
     }
     {
       file = "RetroArch Shader Profiles.sh";
-      target = "boomer-retroarch-shader-profiles";
+      target = "retroarch-shader-profiles";
     }
     {
       file = "ES-DE Scraper Status.sh";
-      target = "boomer-esde-scraper-status";
+      target = "esde-scraper-status";
     }
     {
       file = "ES-DE Scrape Missing Media.sh";
-      target = "boomer-esde-scrape-missing-media";
+      target = "esde-scrape-missing-media";
     }
     {
       file = "Launch Log Review.sh";
-      target = "boomer-launch-log-review";
+      target = "launch-log-review";
     }
     {
       file = "ROM Coverage Check.sh";
-      target = "boomer-rom-coverage-check-tool";
+      target = "rom-coverage-check-tool";
+    }
+    {
+      file = "Smoke Tests.sh";
+      target = "smoke-tests";
     }
     {
       file = "Restart ES-DE.sh";
-      target = "boomer-restart-esde";
+      target = "restart-esde";
     }
     {
       file = "Shutdown.sh";
-      target = "boomer-shutdown";
+      target = "system-shutdown";
     }
     {
       file = "Reboot.sh";
-      target = "boomer-reboot";
+      target = "system-reboot";
     }
   ];
 

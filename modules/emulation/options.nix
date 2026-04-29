@@ -78,7 +78,7 @@ in
     startup.mode = mkOption {
       type = types.enum [ "kiosk" "console" ];
       default = "kiosk";
-      description = "Whether Boomer boots directly into ES-DE or a local debug console.";
+      description = "Whether the emulation host boots directly into ES-DE or a local debug console.";
     };
     romDisk = {
       uuid = mkOption {
@@ -130,7 +130,7 @@ in
     assertions = [
       {
         assertion = cfg.frontend == "es-de";
-        message = "boomer-kuwanger emulation profile only supports ES-DE.";
+        message = "The emulation profile only supports ES-DE.";
       }
     ];
   };

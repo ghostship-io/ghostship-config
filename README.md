@@ -46,9 +46,10 @@ logical-unit secret files.
 
 `boomer-kuwanger` imports the split `modules/emulation/` module set and boots a
 `kiosk` user to a tty during hardware bring-up. ES-DE with Art Book Next is
-launched manually with `boomer-start-esde`; emulator launches still use the
+launched manually with `start-esde`; emulator launches still use the
 Gamescope FSR wrapper policy, RetroArch cores, bundled shader packs, controller
-tooling, and scraper secret wiring. Runtime state lives under `/srv/emulation`;
+tooling, smoke-test tooling, dynamic display discovery, and ScreenScraper secret
+wiring. Runtime state lives under `/srv/emulation`;
 the future 4TB ROM SSD
 mounts at `/srv/emulation/roms` from the Btrfs filesystem labeled `roms`.
 The OS disk uses one Btrfs filesystem labeled `nixos` mounted at `/`.

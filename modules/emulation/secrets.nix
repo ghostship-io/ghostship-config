@@ -4,7 +4,7 @@ let
   cfg = config.ghostship.emulation;
   emu = config.ghostship.emulation.internal.lib;
 
-  boomerRenderScraperSettings = pkgs.writeShellScriptBin "boomer-render-esde-scraper-settings" ''
+  renderScraperSettings = pkgs.writeShellScriptBin "render-esde-scraper-settings" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.python3 ]}:$PATH
     secret_env="/run/ghostship-secrets/emulation-scraper.env"
@@ -12,6 +12,7 @@ let
     [ -r "$secret_env" ] || exit 0
     python3 - "$secret_env" "$settings" <<'PY'
     import os
+    import re
     import shlex
     import sys
     import tempfile
@@ -34,12 +35,19 @@ let
         values[key] = value
 
     if settings_path.exists():
-        tree = ET.parse(settings_path)
-        root = tree.getroot()
+        raw_settings = settings_path.read_text()
+        try:
+            root = ET.fromstring(raw_settings)
+            if root.tag != "settings":
+                wrapper = ET.Element("settings")
+                wrapper.append(root)
+                root = wrapper
+        except ET.ParseError:
+            body = re.sub(r"^\s*<\?xml[^>]*\?>", "", raw_settings, count=1)
+            root = ET.fromstring(f"<settings>{body}</settings>")
     else:
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         root = ET.Element("settings")
-        tree = ET.ElementTree(root)
 
     def set_entry(tag, name, value):
         for entry in root.findall(tag):
@@ -54,10 +62,6 @@ let
         set_entry("string", "ScraperPasswordScreenScraper", values["SCREENSCRAPER_PASS"])
     if values.get("SCREENSCRAPER_USER") and values.get("SCREENSCRAPER_PASS"):
         set_entry("bool", "ScraperUseAccountScreenScraper", "true")
-    if values.get("THEGAMESDB_API_KEY"):
-        set_entry("string", "ScraperTheGamesDBAPIKey", values["THEGAMESDB_API_KEY"])
-        set_entry("string", "ScraperTheGamesDBApiKey", values["THEGAMESDB_API_KEY"])
-
     set_entry("string", "Scraper", "screenscraper")
     set_entry("bool", "ScrapeVideos", "true")
     set_entry("bool", "ScrapeScreenshots", "true")
@@ -66,8 +70,11 @@ let
     set_entry("bool", "MiximageGenerate", "true")
 
     fd, tmp = tempfile.mkstemp(prefix="es_settings.", dir=str(settings_path.parent))
-    os.close(fd)
-    tree.write(tmp, encoding="utf-8", xml_declaration=True)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write('<?xml version="1.0"?>\n')
+        for entry in root:
+            handle.write(ET.tostring(entry, encoding="unicode"))
+            handle.write("\n")
     os.chmod(tmp, 0o640)
     Path(tmp).replace(settings_path)
     PY
@@ -77,7 +84,7 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
-    ghostship.emulation.internal.scripts.boomerRenderScraperSettings = boomerRenderScraperSettings;
+    ghostship.emulation.internal.scripts.renderScraperSettings = renderScraperSettings;
 
     age.identityPaths = lib.mkDefault [ "/etc/ssh/ssh_host_ed25519_key" ];
     age.secrets.emulation-scraper-secrets = {
@@ -85,15 +92,15 @@ in
       mode = "0400";
     };
 
-    systemd.services.boomer-emulation-secrets = {
-      description = "Project Boomer Kuwanger emulation scraper secrets";
+    systemd.services.emulation-secrets = {
+      description = "ES-DE ScreenScraper secrets";
       wantedBy = [ "multi-user.target" ];
-      after = [ "agenix.service" "boomer-emulation-setup.service" ];
+      after = [ "agenix.service" "emulation-setup.service" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
       };
-      path = [ pkgs.coreutils pkgs.gawk boomerRenderScraperSettings ];
+      path = [ pkgs.coreutils pkgs.gawk renderScraperSettings ];
       script = ''
         secret_path="${config.age.secrets.emulation-scraper-secrets.path}"
         projection="/run/ghostship-secrets/emulation-scraper.env"
@@ -101,12 +108,12 @@ in
           install -d -m 0755 /run/ghostship-secrets
           awk -F= '
             /^[[:space:]]*($|#)/ { next }
-            $1 ~ /^(SCREENSCRAPER_USER|SCREENSCRAPER_PASS|THEGAMESDB_API_KEY)$/ { print }
+            $1 ~ /^(SCREENSCRAPER_USER|SCREENSCRAPER_PASS)$/ { print }
           ' "$secret_path" >"$projection.tmp"
           chown ${cfg.user}:${cfg.group} "$projection.tmp"
           chmod 0440 "$projection.tmp"
           mv "$projection.tmp" "$projection"
-          boomer-render-esde-scraper-settings || true
+          render-esde-scraper-settings || true
         fi
       '';
     };

@@ -4,7 +4,7 @@ let
   cfg = config.ghostship.emulation;
   packages = config.ghostship.emulation.internal.packages;
 
-  retroarchCfg = pkgs.writeText "boomer-retroarch.cfg" ''
+  retroarchCfg = pkgs.writeText "emulation-retroarch.cfg" ''
     video_driver = "vulkan"
     audio_driver = "pipewire"
     input_driver = "udev"
@@ -165,7 +165,7 @@ let
     input_menu_toggle_btn = "3"
   '';
 
-  shaderPolicy = pkgs.writeText "boomer-shader-policy.json" (builtins.toJSON {
+  shaderPolicy = pkgs.writeText "emulation-shader-policy.json" (builtins.toJSON {
     default = "megabezel-auto";
     fallback = "sharp-clean";
     profiles = builtins.attrNames profiles;
@@ -180,18 +180,18 @@ let
   profileFiles = lib.mapAttrsToList
     (name: text: {
       inherit name;
-      file = pkgs.writeText "boomer-${name}" text;
+      file = pkgs.writeText "emulation-${name}" text;
     })
     profiles;
 
   coreOptionFiles = lib.mapAttrsToList
     (name: text: {
       inherit name;
-      file = pkgs.writeText "boomer-${name}" text;
+      file = pkgs.writeText "emulation-${name}" text;
     })
     coreOptions;
 
-  boomerSyncRetroarchConfig = pkgs.writeShellScriptBin "boomer-sync-retroarch-config" ''
+  syncRetroarchConfig = pkgs.writeShellScriptBin "sync-retroarch-config" ''
     set -euo pipefail
     export PATH=${config.ghostship.emulation.internal.lib.scriptPath}:$PATH
 
@@ -249,7 +249,7 @@ let
     ln -sfn ${packages.shaderCg}/share/libretro/shaders_cg "${cfg.configRoot}/retroarch/shaders/shaders_cg"
   '';
 
-  boomerRetroarchShaderSmokeTest = pkgs.writeShellScriptBin "boomer-retroarch-shader-smoke-test" ''
+  retroarchShaderSmokeTest = pkgs.writeShellScriptBin "retroarch-shader-smoke-test" ''
     set -euo pipefail
     export PATH=${config.ghostship.emulation.internal.lib.scriptPath}:$PATH
     shader_root="${cfg.configRoot}/retroarch/shaders"
@@ -285,8 +285,8 @@ in
 {
   config = lib.mkIf cfg.enable {
     ghostship.emulation.internal.scripts = {
-      inherit boomerRetroarchShaderSmokeTest boomerSyncRetroarchConfig;
+      inherit retroarchShaderSmokeTest syncRetroarchConfig;
     };
-    ghostship.emulation.internal.setupScripts = [ boomerSyncRetroarchConfig ];
+    ghostship.emulation.internal.setupScripts = [ syncRetroarchConfig ];
   };
 }

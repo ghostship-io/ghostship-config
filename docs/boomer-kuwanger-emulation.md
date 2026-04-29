@@ -3,9 +3,9 @@
 `boomer-kuwanger` is managed as a dedicated NixOS emulation box through the
 split `modules/emulation/` module set. During hardware bring-up, the host boots
 the `kiosk` user to a tty and leaves ES-DE/Gamescope as a manual
-`boomer-start-esde` action. It keeps writable emulator state under
+`start-esde` action. It keeps writable emulator state under
 `/srv/emulation` and launches every configured system through the repo-managed
-`boomer-run-emulator` wrapper.
+`run-emulator` wrapper.
 
 ## Runtime Layout
 
@@ -50,19 +50,19 @@ installs Art Book Next, and generates:
 - `/srv/emulation/es-de/custom_systems/es_find_rules.xml`
 - `/srv/emulation/es-de/settings/es_settings.xml`
 
-`boomer-sync-esde-config` creates or refreshes the appdata skeleton at boot.
+`sync-esde-config` creates or refreshes the appdata skeleton at boot.
 Additional setup scripts sync RetroArch, ES-DE tools, and standalone emulator
 config scaffolds before the frontend starts. Existing ES-DE settings are
 preserved after first creation so runtime UI changes can survive rebuilds.
 
 During bootstrap, use:
 
-- `boomer-esde-preflight` to check DRM, Vulkan, ES-DE appdata, and service
+- `esde-preflight` to check DRM, Vulkan, ES-DE appdata, and service
   readiness.
-- `boomer-start-esde` to launch ES-DE under Gamescope on the RX 6650M and
-  `HDMI-A-2`.
-- `boomer-esde-status` to inspect the active session and latest logs.
-- `boomer-stop-esde` to return control to `getty@tty1`.
+- `start-esde` to launch ES-DE under Gamescope on the RX 6650M and the
+  currently connected HDMI/DP output.
+- `esde-status` to inspect the active session and latest logs.
+- `stop-esde` to return control to `getty@tty1`.
 
 The ES-DE AppImage runs under bubblewrap, so the systemd session clears Linux
 capabilities before launching Gamescope. Keep that service hardening in place
@@ -120,9 +120,11 @@ The wrapper uses a dedicated Wine prefix at:
 
 ## Display And FSR
 
-`boomer-display-profile` detects the active resolution with Wayland/X11
-fallbacks and computes output size, render size, aspect class, and FSR state.
-`boomer-run-emulator` wraps emulator launches in Gamescope by default.
+`display-profile` discovers connected DRM outputs first, prefers the RX 6650M,
+supports either HDMI port, and falls back to Wayland/X11 resolution probes when
+needed. It emits JSON with the selected connector, DRM card, output size,
+render size, aspect class, FSR state, and Gamescope arguments. `run-emulator`
+wraps emulator launches in Gamescope by default.
 
 The default policy:
 
@@ -135,8 +137,24 @@ The default policy:
 
 Runtime override knobs can live in `/srv/emulation/config/display.env` for
 manual testing, but durable policy changes belong in the Nix module.
-Run `boomer-display-profile --matrix-test` to verify the deterministic FSR
+Run `display-profile --matrix-test` to verify the deterministic FSR
 policy without display hardware.
+
+## Smoke ROMs
+
+Smoke ROM tooling lives under `/srv/emulation/smoke-roms` and
+`/srv/emulation/config/smoke/roms.json`.
+
+- `smoke-rom-select`: selects up to three top-level ROM entries per non-empty
+  source system, preferring demanding known titles and otherwise choosing the
+  largest entries.
+- `smoke-rom-sync`: copies the selected entries into the smoke ROM tree.
+- `smoke-test`: launches each selected entry through `run-emulator`, with
+  Gamescope, GameMode, and MangoHud logging.
+- `smoke-report`: summarizes the latest test run.
+
+The smoke harness is intended for target-display validation. A `--dry-run`
+mode prints the exact `run-emulator` calls without launching games.
 
 ## RetroArch
 
@@ -178,7 +196,7 @@ Default shader profile is `megabezel-auto`. The installed runtime profiles are:
 
 Mega Bezel is the default because that was requested, but `sharp-clean` and
 `integer-raw` are available for clarity-first tuning if Mega Bezel is too
-expensive or too stylized on target hardware. `boomer-retroarch-shader-smoke-test`
+expensive or too stylized on target hardware. `retroarch-shader-smoke-test`
 writes `/srv/emulation/config/retroarch/shader-status.json`; the launcher uses
 that marker to fall back from Mega Bezel to `sharp-clean` if the required shader
 tree is missing.
@@ -196,7 +214,7 @@ Player assignment is connection-order based. Runtime state is stored at:
 /srv/emulation/config/controllers/player-order.json
 ```
 
-`boomer-controller-leds` watches connected devices and tries to apply player LED
+`controller-leds` watches connected devices and tries to apply player LED
 state through sysfs. If a controller identity does not expose LED sysfs entries,
 logical assignment still remains stable.
 
@@ -223,7 +241,6 @@ The scraper secret unit is `emulation-scraper-secrets` with:
 
 - `SCREENSCRAPER_USER`
 - `SCREENSCRAPER_PASS`
-- `THEGAMESDB_API_KEY`
 
 The generated projection is:
 
@@ -231,25 +248,26 @@ The generated projection is:
 /run/ghostship-secrets/emulation-scraper.env
 ```
 
-`secrets/recipients.nix` currently gives `emulation-runtime` to operator edit
-keys only. Add `boomer-kuwanger`'s host SSH key after bootstrap, then rekey the
-secret so the machine can decrypt it at runtime.
+`secrets/recipients.nix` gives `emulation-runtime` to operator edit keys and
+the Boomer host key. Rekey the secret after changing recipients so the machine
+can decrypt it at runtime.
 
 ## Verification On Hardware
 
 After SSH access exists:
 
-1. Add the boomer host SSH key to `secrets/recipients.nix` and rekey
-   `emulation-scraper-secrets`.
+1. Verify `emulation-scraper-secrets` decrypts and projects ScreenScraper
+   credentials.
 2. Verify the label-based Btrfs mounts for `/` and
    `/srv/emulation/roms`.
-3. Boot to the tty, run `boomer-esde-preflight`, then launch ES-DE with
-   `boomer-start-esde` and confirm Art Book Next appears.
+3. Boot to the tty, run `esde-preflight`, then launch ES-DE with
+   `start-esde` and confirm Art Book Next appears.
 4. Pair all four controllers in Switch mode and verify connection-order player
    assignment.
-5. Run `boomer-retroarch-shader-smoke-test`.
+5. Run `retroarch-shader-smoke-test`.
 6. Launch one game per emulator family and inspect
    `/srv/emulation/logs/launches`.
-7. Run `boomer-display-profile --matrix-test` and `boomer-rom-coverage-check`.
+7. Run `display-profile --matrix-test`, `rom-coverage-check`,
+   `smoke-rom-select`, and `smoke-test --dry-run`.
 8. Test 1080p, 1440p, 4K, and ultrawide displays and refine Gamescope FSR
    thresholds if frame pacing misses budget.

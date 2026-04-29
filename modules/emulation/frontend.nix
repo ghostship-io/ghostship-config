@@ -15,12 +15,12 @@ let
       <fullname>${emu.xmlEscape system.fullname}</fullname>
       <path>${emu.xmlEscape "${cfg.romRoot}/${system.folder}"}</path>
       <extension>${emu.xmlEscape system.extensions}</extension>
-      <command>boomer-run-emulator ${emu.xmlEscape system.id} ${emu.xmlEscape system.emulator} %ROM%</command>
+      <command>run-emulator ${emu.xmlEscape system.id} ${emu.xmlEscape system.emulator} %ROM%</command>
       <platform>${emu.xmlEscape system.platform}</platform>
       <theme>${emu.xmlEscape system.theme}</theme>
     </system>'';
 
-  esSystemsXml = pkgs.writeText "boomer-es-systems.xml" ''
+  esSystemsXml = pkgs.writeText "emulation-es-systems.xml" ''
     <?xml version="1.0"?>
     <systemList>
     ${lib.concatMapStringsSep "\n" mkSystemXml emu.allSystems}
@@ -36,12 +36,12 @@ let
     </systemList>
   '';
 
-  esFindRulesXml = pkgs.writeText "boomer-es-find-rules.xml" ''
+  esFindRulesXml = pkgs.writeText "emulation-es-find-rules.xml" ''
     <?xml version="1.0"?>
     <ruleList>
-      <emulator name="BOOMER_WRAPPER">
+      <emulator name="EMULATION_WRAPPER">
         <rule type="systempath">
-          <entry>boomer-run-emulator</entry>
+          <entry>run-emulator</entry>
         </rule>
       </emulator>
       <emulator name="RETROARCH">
@@ -57,7 +57,7 @@ let
     </ruleList>
   '';
 
-  esSettingsXml = pkgs.writeText "boomer-es-settings.xml" ''
+  esSettingsXml = pkgs.writeText "emulation-es-settings.xml" ''
     <?xml version="1.0"?>
     <settings>
       <string name="ThemeSet" value="art-book-next-es-de" />
@@ -86,7 +86,7 @@ let
     </settings>
   '';
 
-  boomerSyncEsdeConfig = pkgs.writeShellScriptBin "boomer-sync-esde-config" ''
+  syncEsdeConfig = pkgs.writeShellScriptBin "sync-esde-config" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:${
       lib.makeBinPath (
@@ -94,8 +94,8 @@ let
           pkgs.jq
         ]
         ++ lib.optional (
-          config.ghostship.emulation.internal.scripts ? boomerRenderScraperSettings
-        ) config.ghostship.emulation.internal.scripts.boomerRenderScraperSettings
+          config.ghostship.emulation.internal.scripts ? renderScraperSettings
+        ) config.ghostship.emulation.internal.scripts.renderScraperSettings
       )
     }:$PATH
 
@@ -108,9 +108,12 @@ let
       "${cfg.dataRoot}/screenshots" \
       "${cfg.configRoot}" \
       "${cfg.configRoot}/es-de" \
+      "${cfg.configRoot}/smoke" \
       "${cfg.dataRoot}/logs" \
       "${cfg.dataRoot}/logs/esde-session" \
       "${cfg.dataRoot}/logs/launches" \
+      "${cfg.dataRoot}/logs/smoke" \
+      "${cfg.dataRoot}/smoke-roms" \
       "${cfg.dataRoot}/tmp" \
       "${cfg.dataRoot}/tools" \
       "${cfg.esde.appDataDir}" \
@@ -140,19 +143,21 @@ let
 
     ln -sfn "${cfg.dataRoot}" /home/${cfg.user}/Emulation
     chown -h ${cfg.user}:${cfg.group} /home/${cfg.user}/Emulation || true
-    if command -v boomer-render-esde-scraper-settings >/dev/null 2>&1; then
-      boomer-render-esde-scraper-settings || true
+    if command -v render-esde-scraper-settings >/dev/null 2>&1; then
+      render-esde-scraper-settings || true
     fi
   '';
 
-  boomerEsdePreflight = pkgs.writeShellScriptBin "boomer-esde-preflight" ''
+  esdePreflight = pkgs.writeShellScriptBin "esde-preflight" ''
     set -u
     export PATH=${emu.scriptPath}:${
       lib.makeBinPath [
         packages.esdePackage
         pkgs.gamescope
+        pkgs.jq
         pkgs.util-linux
         pkgs.vulkan-tools
+        config.ghostship.emulation.internal.scripts.displayProfile
       ]
     }:$PATH
 
@@ -175,10 +180,10 @@ let
     check "kiosk user exists" test -n "$uid"
     check "kiosk runtime directory exists" test -d "$runtime_dir"
     check "kiosk session D-Bus socket exists" test -S "$runtime_dir/bus"
-    check "DRM card1 exists" test -e /dev/dri/card1
-    check "kiosk can read/write DRM card1" runuser -u ${cfg.user} -- test -w /dev/dri/card1
+    check "connected display detected" sh -c 'display-profile | jq -e ".connected == true and (.connector | length > 0)"'
+    check "selected DRM card exists" sh -c 'device="$(display-profile | jq -r ".drm_device // empty")"; [ -n "$device" ] && [ -e "$device" ]'
+    check "kiosk can read/write selected DRM card" sh -c 'device="$(display-profile | jq -r ".drm_device // empty")"; [ -n "$device" ] && runuser -u ${cfg.user} -- test -w "$device"'
     check "kiosk can access render nodes" sh -c 'runuser -u ${cfg.user} -- sh -c "test -w /dev/dri/renderD128 || test -w /dev/dri/renderD129"'
-    check "HDMI-A-2 is connected" sh -c 'grep -qx connected /sys/class/drm/card1-HDMI-A-2/status'
     check "RX 6650M Vulkan device is visible" sh -c 'vulkaninfo --summary 2>/dev/null | grep -Eq "deviceID[[:space:]]*=[[:space:]]*0x73ef|AMD Radeon RX 6650M"'
     check "gamescope is available" gamescope --version
     check "ES-DE is available" es-de --version
@@ -191,17 +196,19 @@ let
     exit "$fail"
   '';
 
-  boomerEsdeStatus = pkgs.writeShellScriptBin "boomer-esde-status" ''
+  esdeStatus = pkgs.writeShellScriptBin "esde-status" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:${
       lib.makeBinPath [
         pkgs.procps
         pkgs.systemd
+        pkgs.jq
+        config.ghostship.emulation.internal.scripts.displayProfile
       ]
     }:$PATH
 
-    printf 'boomer-emulation-session: '
-    systemctl is-active boomer-emulation-session.service || true
+    printf 'emulation-session: '
+    systemctl is-active emulation-session.service || true
 
     printf '\nprocesses:\n'
     pgrep -a -u ${cfg.user} gamescope || true
@@ -217,6 +224,9 @@ let
       fi
     done
 
+    printf '\ndisplay profile:\n'
+    display-profile | jq . || true
+
     printf '\nlatest ES-DE session log:\n'
     latest="$(find "${cfg.dataRoot}/logs/esde-session" -type f -name '*.log' -printf '%T@ %p\n' 2>/dev/null | sort -nr | sed -n '1s/^[^ ]* //p')"
     if [ -n "$latest" ]; then
@@ -227,17 +237,20 @@ let
     fi
 
     printf '\nrecent service journal:\n'
-    journalctl -u boomer-emulation-session.service -n 80 --no-pager || true
+    journalctl -u emulation-session.service -n 80 --no-pager || true
   '';
 
-  boomerEmulationSession = pkgs.writeShellScriptBin "boomer-emulation-session" ''
+  emulationSession = pkgs.writeShellScriptBin "emulation-session" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:${
       lib.makeBinPath (
         [
-          boomerSyncEsdeConfig
+          syncEsdeConfig
+          config.ghostship.emulation.internal.scripts.displayProfile
           packages.esdePackage
           pkgs.gamescope
+          pkgs.jq
+          pkgs.vulkan-tools
         ]
         ++ config.ghostship.emulation.internal.setupScripts
       )
@@ -254,48 +267,73 @@ let
     export SDL_GAMECONTROLLERCONFIG_FILE="${cfg.configRoot}/controllers/gamecontrollerdb.txt"
     export MESA_VK_DEVICE_SELECT="''${MESA_VK_DEVICE_SELECT:-1002:73ef}"
     export DRI_PRIME="''${DRI_PRIME:-1}"
-    if [ -e /dev/dri/card1 ]; then
-      drm_devices="/dev/dri/card1"
-      [ -e /dev/dri/card0 ] && drm_devices="$drm_devices:/dev/dri/card0"
-      export WLR_DRM_DEVICES="$drm_devices"
-    fi
 
     log_dir="${cfg.dataRoot}/logs/esde-session"
     mkdir -p "$log_dir"
     log_file="$log_dir/$(date -u +%Y%m%dT%H%M%SZ).log"
     exec > >(tee -a "$log_file") 2>&1
-    echo "$(date -u +%FT%TZ) starting Boomer ES-DE session"
+    echo "$(date -u +%FT%TZ) starting ES-DE session"
     echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
     echo "MESA_VK_DEVICE_SELECT=$MESA_VK_DEVICE_SELECT"
-    echo "WLR_DRM_DEVICES=''${WLR_DRM_DEVICES:-unset}"
     grep '^Cap' /proc/$$/status || true
 
     if [ "$(id -u)" = 0 ]; then
-      boomer-sync-esde-config
+      sync-esde-config
       ${lib.concatMapStringsSep "\n" (
         pkg: "${lib.getExe pkg}"
       ) config.ghostship.emulation.internal.setupScripts}
     elif [ ! -d "${cfg.esde.appDataDir}/custom_systems" ]; then
-      echo "Boomer emulation state is not prepared yet; run boomer-sync-esde-config as root."
+      echo "emulation state is not prepared yet; run sync-esde-config as root."
       exit 1
     fi
-    if [ "''${BOOMER_ESDE_NO_GAMESCOPE:-0}" = "1" ]; then
+    if [ "''${EMULATION_ESDE_NO_GAMESCOPE:-0}" = "1" ]; then
       exec es-de --no-update-check --no-splash
     fi
-    exec gamescope --backend drm -f --prefer-vk-device 1002:73ef --prefer-output HDMI-A-2 --force-windows-fullscreen -- es-de --no-update-check --no-splash
+
+    profile_json=""
+    for attempt in $(seq 1 20); do
+      profile_json="$(display-profile || true)"
+      if [ -n "$profile_json" ] && jq -e '.connected == true' <<<"$profile_json" >/dev/null 2>&1; then
+        break
+      fi
+      echo "$(date -u +%FT%TZ) waiting for a connected display ($attempt/20)"
+      sleep 1
+    done
+    if [ -z "$profile_json" ]; then
+      profile_json="$(display-profile)"
+    fi
+
+    drm_device="$(jq -r '.drm_device // empty' <<<"$profile_json")"
+    if [ -n "$drm_device" ]; then
+      drm_devices="$drm_device"
+      for card in /dev/dri/card*; do
+        [ -e "$card" ] || continue
+        [ "$card" = "$drm_device" ] && continue
+        drm_devices="$drm_devices:$card"
+      done
+      export WLR_DRM_DEVICES="$drm_devices"
+    fi
+    if ! vulkaninfo --summary 2>/dev/null | grep -Eq "deviceID[[:space:]]*=[[:space:]]*0x73ef|AMD Radeon RX 6650M"; then
+      unset MESA_VK_DEVICE_SELECT
+    fi
+    profile_compact="$(jq -c . <<<"$profile_json" 2>/dev/null || printf '%s' "$profile_json")"
+    echo "display-profile=$profile_compact"
+    echo "WLR_DRM_DEVICES=''${WLR_DRM_DEVICES:-unset}"
+    mapfile -t gamescope_args < <(jq -r '.frontend_gamescope_args[]' <<<"$profile_json")
+    exec gamescope "''${gamescope_args[@]}" -- es-de --no-update-check --no-splash
   '';
 
-  boomerStartEsde = pkgs.writeShellScriptBin "boomer-start-esde" ''
+  startEsde = pkgs.writeShellScriptBin "start-esde" ''
     set -euo pipefail
     if [ "$(id -u)" != 0 ]; then
-      exec ${lib.getExe boomerEmulationSession}
+      exec ${lib.getExe emulationSession}
     fi
-    exec ${pkgs.systemd}/bin/systemctl start boomer-emulation-session.service
+    exec ${pkgs.systemd}/bin/systemctl start emulation-session.service
   '';
 
-  boomerStopEsde = pkgs.writeShellScriptBin "boomer-stop-esde" ''
+  stopEsde = pkgs.writeShellScriptBin "stop-esde" ''
     set -euo pipefail
-    exec ${pkgs.systemd}/bin/systemctl stop boomer-emulation-session.service
+    exec ${pkgs.systemd}/bin/systemctl stop emulation-session.service
   '';
 in
 {
@@ -304,22 +342,22 @@ in
       {
         ghostship.emulation.internal.scripts = {
           inherit
-            boomerEmulationSession
-            boomerEsdePreflight
-            boomerEsdeStatus
-            boomerStartEsde
-            boomerStopEsde
-            boomerSyncEsdeConfig
+            emulationSession
+            esdePreflight
+            esdeStatus
+            startEsde
+            stopEsde
+            syncEsdeConfig
             ;
         };
 
-        systemd.services.boomer-emulation-session = {
-          description = "Launch Boomer Kuwanger ES-DE session";
+        systemd.services.emulation-session = {
+          description = "Launch ES-DE emulation session";
           after = [
-            "boomer-emulation-setup.service"
+            "emulation-setup.service"
             "systemd-user-sessions.service"
           ];
-          wants = [ "boomer-emulation-setup.service" ];
+          wants = [ "emulation-setup.service" ];
           conflicts = lib.optionals (cfg.startup.mode == "console") [ "getty@tty1.service" ];
           serviceConfig = {
             User = cfg.user;
@@ -342,21 +380,21 @@ in
             ExecStopPost = "+${pkgs.systemd}/bin/systemctl start getty@tty1.service";
           };
           script = ''
-            exec ${lib.getExe boomerEmulationSession}
+            exec ${lib.getExe emulationSession}
           '';
         };
 
-        systemd.services.boomer-emulation-setup = {
-          description = "Prepare Boomer Kuwanger emulation runtime state";
+        systemd.services.emulation-setup = {
+          description = "Prepare emulation runtime state";
           wantedBy = [ "multi-user.target" ];
           before = lib.optionals (cfg.startup.mode == "kiosk") [ "greetd.service" ];
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
           };
-          path = [ boomerSyncEsdeConfig ] ++ config.ghostship.emulation.internal.setupScripts;
+          path = [ syncEsdeConfig ] ++ config.ghostship.emulation.internal.setupScripts;
           script = ''
-            boomer-sync-esde-config
+            sync-esde-config
             ${lib.concatMapStringsSep "\n" (
               pkg: "${lib.getExe pkg}"
             ) config.ghostship.emulation.internal.setupScripts}
@@ -368,7 +406,7 @@ in
         services.greetd = {
           enable = true;
           settings.default_session = {
-            command = "${lib.getExe boomerEmulationSession}";
+            command = "${lib.getExe emulationSession}";
             user = cfg.user;
           };
         };
@@ -388,7 +426,7 @@ in
             }
             var unit = action.lookup("unit");
             var verb = action.lookup("verb");
-            if (unit == "boomer-emulation-session.service" &&
+            if (unit == "emulation-session.service" &&
                 (verb == "start" || verb == "stop" || verb == "restart")) {
               return polkit.Result.YES;
             }

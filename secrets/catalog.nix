@@ -237,7 +237,7 @@
       recipients = recipients.groups.emulation-runtime;
       mode = "0400";
       format = "env";
-      exports = [ "SCREENSCRAPER_USER" "SCREENSCRAPER_PASS" "THEGAMESDB_API_KEY" ];
+      exports = [ "SCREENSCRAPER_USER" "SCREENSCRAPER_PASS" ];
     };
   };
 
@@ -360,7 +360,6 @@
       fields = {
         SCREENSCRAPER_USER = { unit = "emulation-scraper-secrets"; key = "SCREENSCRAPER_USER"; };
         SCREENSCRAPER_PASS = { unit = "emulation-scraper-secrets"; key = "SCREENSCRAPER_PASS"; };
-        THEGAMESDB_API_KEY = { unit = "emulation-scraper-secrets"; key = "THEGAMESDB_API_KEY"; };
       };
     };
   };

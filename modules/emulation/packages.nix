@@ -67,7 +67,7 @@ let
   };
 
   shaderSlang = pkgs.stdenvNoCC.mkDerivation {
-    pname = "boomer-libretro-shaders-slang";
+    pname = "emulation-libretro-shaders-slang";
     version = "0-unstable-2026-04-28";
     src = pkgs.fetchFromGitHub {
       owner = "libretro";
@@ -84,7 +84,7 @@ let
   };
 
   shaderGlsl = pkgs.stdenvNoCC.mkDerivation {
-    pname = "boomer-libretro-shaders-glsl";
+    pname = "emulation-libretro-shaders-glsl";
     version = "0-unstable-2026-04-28";
     src = pkgs.fetchFromGitHub {
       owner = "libretro";
@@ -101,7 +101,7 @@ let
   };
 
   shaderCg = pkgs.stdenvNoCC.mkDerivation {
-    pname = "boomer-libretro-shaders-cg";
+    pname = "emulation-libretro-shaders-cg";
     version = "0-unstable-2026-04-28";
     src = pkgs.fetchFromGitHub {
       owner = "libretro";

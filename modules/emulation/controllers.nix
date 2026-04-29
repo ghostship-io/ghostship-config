@@ -8,7 +8,7 @@ let
   cfg = config.ghostship.emulation;
   emu = config.ghostship.emulation.internal.lib;
 
-  boomerControllerLeds = pkgs.writeShellScriptBin "boomer-controller-leds" ''
+  controllerLeds = pkgs.writeShellScriptBin "controller-leds" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:$PATH
     state_dir="${cfg.configRoot}/controllers"
@@ -129,7 +129,7 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
-    ghostship.emulation.internal.scripts.boomerControllerLeds = boomerControllerLeds;
+    ghostship.emulation.internal.scripts.controllerLeds = controllerLeds;
 
     boot.kernelModules = [ "hid-nintendo" ];
     boot.extraModprobeConfig = ''
@@ -162,7 +162,7 @@ in
       KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0660", GROUP="input", TAG+="uaccess"
     '';
 
-    systemd.services.boomer-wifi-5ghz-only = {
+    systemd.services.wifi-5ghz-only = {
       description = "Keep Wi-Fi profiles constrained to 5 GHz for Bluetooth-focused emulation";
       wantedBy = [ "multi-user.target" ];
       after = [ "NetworkManager.service" ];
@@ -177,7 +177,7 @@ in
       ];
       script = ''
         log() {
-          echo "boomer-wifi-5ghz-only: $*"
+          echo "wifi-5ghz-only: $*"
         }
 
         rfkill unblock wlan || true
@@ -234,7 +234,7 @@ in
               rm -f "$tmp"
               break
             fi
-            sed 's/^/boomer-wifi-5ghz-only: nmcli: /' "$tmp" || true
+            sed 's/^/wifi-5ghz-only: nmcli: /' "$tmp" || true
             rm -f "$tmp"
           done < <(nmcli -t -f UUID,TYPE connection show)
         fi
@@ -247,15 +247,15 @@ in
       '';
     };
 
-    systemd.services.boomer-controller-leds = {
-      description = "Maintain Boomer Kuwanger controller player order and LED state";
+    systemd.services.controller-leds = {
+      description = "Maintain controller player order and LED state";
       wantedBy = [ "multi-user.target" ];
       after = [
         "bluetooth.service"
-        "boomer-emulation-setup.service"
+        "emulation-setup.service"
       ];
       serviceConfig = {
-        ExecStart = "${lib.getExe boomerControllerLeds}";
+        ExecStart = "${lib.getExe controllerLeds}";
         Restart = "always";
         RestartSec = "5s";
       };

@@ -22,7 +22,7 @@ let
     "gzdoom"
   ] ++ lib.optional (packages.supermodelPackage != null) packages.supermodelPackage);
 
-  displayPolicy = pkgs.writeText "boomer-display-policy.json" (builtins.toJSON {
+  displayPolicy = pkgs.writeText "emulation-display-policy.json" (builtins.toJSON {
     upscaler = "gamescope-fsr-auto";
     ultrawide = "center-fixed-aspect";
     renderTargets = {
@@ -51,26 +51,117 @@ let
     ];
   });
 
-  boomerDisplayProfile = pkgs.writeShellScriptBin "boomer-display-profile" ''
+  displayProfile = pkgs.writeShellScriptBin "display-profile" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:$PATH
+
+    preferred_vendor="0x1002"
+    preferred_device="0x73ef"
+
+    connector_from_output() {
+      output="$1"
+      card="''${output%%-*}"
+      printf '%s\n' "''${output#"$card"-}"
+    }
+
+    mode_for_output() {
+      output_dir="$1"
+      if [ -r "$output_dir/modes" ]; then
+        sed -n '1p' "$output_dir/modes"
+      fi
+    }
+
+    discover_output() {
+      forced_connector="''${EMULATION_CONNECTOR:-}"
+      forced_drm_card="''${EMULATION_DRM_CARD:-}"
+      best_score=-1
+      best_output=""
+      best_card=""
+      best_connector=""
+      best_mode=""
+      best_dgpu=false
+
+      for status in /sys/class/drm/card*-*/status; do
+        [ -e "$status" ] || continue
+        grep -qx connected "$status" || continue
+        output_dir="''${status%/status}"
+        output="''${output_dir##*/}"
+        card="''${output%%-*}"
+        connector="$(connector_from_output "$output")"
+        card_device="/sys/class/drm/$card/device"
+        vendor="$(sed -n '1p' "$card_device/vendor" 2>/dev/null || true)"
+        device="$(sed -n '1p' "$card_device/device" 2>/dev/null || true)"
+        mode="$(mode_for_output "$output_dir")"
+        [ -n "$mode" ] || continue
+
+        score=10
+        dgpu=false
+        if [ "$vendor" = "$preferred_vendor" ] && [ "$device" = "$preferred_device" ]; then
+          score=$((score + 100))
+          dgpu=true
+        elif [ "$vendor" = "$preferred_vendor" ]; then
+          score=$((score + 50))
+        fi
+        if [ -n "$forced_connector" ] && [ "$connector" = "$forced_connector" ]; then
+          score=$((score + 1000))
+        fi
+        if [ -n "$forced_drm_card" ] && [ "$card" = "$forced_drm_card" ]; then
+          score=$((score + 500))
+        fi
+        case "$connector" in
+          HDMI-A-*) score=$((score + 20)) ;;
+          DP-*|DisplayPort-*) score=$((score + 10)) ;;
+        esac
+
+        if [ "$score" -gt "$best_score" ]; then
+          best_score="$score"
+          best_output="$output"
+          best_card="$card"
+          best_connector="$connector"
+          best_mode="$mode"
+          best_dgpu="$dgpu"
+        fi
+      done
+
+      if [ -n "$best_output" ]; then
+        printf '%s\t%s\t%s\t%s\t%s\n' "$best_output" "$best_card" "$best_connector" "$best_mode" "$best_dgpu"
+      fi
+    }
 
     if [ "''${1:-}" = "--matrix-test" ]; then
       tmp="$(mktemp)"
       for spec in 1280x720 1920x1080 1920x1200 2560x1080 2560x1440 2560x1600 3440x1440 3840x1600 3840x2160 5120x1440 5120x2160 7680x4320; do
-        BOOMER_DISPLAY_WIDTH="''${spec%x*}" BOOMER_DISPLAY_HEIGHT="''${spec#*x}" BOOMER_EMULATOR_HEAVY=0 "$0" >>"$tmp"
-        BOOMER_DISPLAY_WIDTH="''${spec%x*}" BOOMER_DISPLAY_HEIGHT="''${spec#*x}" BOOMER_EMULATOR_HEAVY=1 "$0" >>"$tmp"
+        EMULATION_DISPLAY_WIDTH="''${spec%x*}" EMULATION_DISPLAY_HEIGHT="''${spec#*x}" EMULATION_EMULATOR_HEAVY=0 "$0" >>"$tmp"
+        EMULATION_DISPLAY_WIDTH="''${spec%x*}" EMULATION_DISPLAY_HEIGHT="''${spec#*x}" EMULATION_EMULATOR_HEAVY=1 "$0" >>"$tmp"
       done
       jq -s . "$tmp"
       rm -f "$tmp"
       exit 0
     fi
 
-    width="''${BOOMER_DISPLAY_WIDTH:-}"
-    height="''${BOOMER_DISPLAY_HEIGHT:-}"
-    refresh="''${BOOMER_DISPLAY_REFRESH:-60}"
-    system_id="''${BOOMER_SYSTEM_ID:-unknown}"
-    emulator_id="''${BOOMER_EMULATOR_ID:-unknown}"
+    width="''${EMULATION_DISPLAY_WIDTH:-}"
+    height="''${EMULATION_DISPLAY_HEIGHT:-}"
+    refresh="''${EMULATION_DISPLAY_REFRESH:-60}"
+    system_id="''${EMULATION_SYSTEM_ID:-unknown}"
+    emulator_id="''${EMULATION_EMULATOR_ID:-unknown}"
+    output="''${EMULATION_OUTPUT:-}"
+    drm_card="''${EMULATION_DRM_CARD:-}"
+    connector="''${EMULATION_CONNECTOR:-}"
+    dgpu=false
+    connected=false
+
+    if [ -z "$width" ] || [ -z "$height" ] || [ -z "$connector" ]; then
+      discovered="$(discover_output || true)"
+      if [ -n "$discovered" ]; then
+        connected=true
+        IFS=$'\t' read -r output drm_card connector mode dgpu <<<"$discovered"
+        if [ -z "$width" ] || [ -z "$height" ]; then
+          width="''${mode%x*}"
+          mode_rest="''${mode#*x}"
+          height="''${mode_rest%%[^0-9]*}"
+        fi
+      fi
+    fi
 
     if [ -z "$width" ] || [ -z "$height" ]; then
       if command -v wlr-randr >/dev/null 2>&1; then
@@ -98,9 +189,13 @@ let
 
     width="''${width:-1920}"
     height="''${height:-1080}"
+    drm_device=""
+    if [ -n "$drm_card" ] && [ -e "/dev/dri/$drm_card" ]; then
+      drm_device="/dev/dri/$drm_card"
+    fi
     aspect="$(awk -v w="$width" -v h="$height" 'BEGIN { if (h == 0) h = 1; printf "%.3f", w / h }')"
     class="$(awk -v a="$aspect" 'BEGIN { if (a > 2.9) print "super-ultrawide"; else if (a > 1.9) print "ultrawide"; else if (a > 1.65) print "widescreen"; else print "standard"; }')"
-    heavy="''${BOOMER_EMULATOR_HEAVY:-0}"
+    heavy="''${EMULATION_EMULATOR_HEAVY:-0}"
     render_width="$width"
     render_height="$height"
     fsr=false
@@ -126,11 +221,11 @@ let
         ;;
     esac
 
-    if [ "''${BOOMER_FORCE_FSR:-0}" = "1" ]; then fsr=true; fi
-    if [ "''${BOOMER_DISABLE_FSR:-0}" = "1" ]; then fsr=false; render_width="$width"; render_height="$height"; fi
-    if [ -n "''${BOOMER_RENDER_SIZE:-}" ] && printf '%s' "$BOOMER_RENDER_SIZE" | grep -Eq '^[0-9]+x[0-9]+$'; then
-      render_width="''${BOOMER_RENDER_SIZE%x*}"
-      render_height="''${BOOMER_RENDER_SIZE#*x}"
+    if [ "''${EMULATION_FORCE_FSR:-0}" = "1" ]; then fsr=true; fi
+    if [ "''${EMULATION_DISABLE_FSR:-0}" = "1" ]; then fsr=false; render_width="$width"; render_height="$height"; fi
+    if [ -n "''${EMULATION_RENDER_SIZE:-}" ] && printf '%s' "$EMULATION_RENDER_SIZE" | grep -Eq '^[0-9]+x[0-9]+$'; then
+      render_width="''${EMULATION_RENDER_SIZE%x*}"
+      render_height="''${EMULATION_RENDER_SIZE#*x}"
       if [ "$render_width" != "$width" ] || [ "$render_height" != "$height" ]; then fsr=true; fi
     fi
     if [ "$render_width" = "$width" ] && [ "$render_height" = "$height" ]; then fsr=false; fi
@@ -146,6 +241,12 @@ let
     jq -n \
       --arg system_id "$system_id" \
       --arg emulator_id "$emulator_id" \
+      --arg output "$output" \
+      --arg drm_card "$drm_card" \
+      --arg drm_device "$drm_device" \
+      --arg connector "$connector" \
+      --argjson connected "$connected" \
+      --argjson dgpu "$dgpu" \
       --argjson output_width "$width" \
       --argjson output_height "$height" \
       --arg refresh "$refresh" \
@@ -157,10 +258,33 @@ let
       --arg fsr_sharpness "$fsr_sharpness" \
       --arg scale_mode "$scale_mode" \
       --arg fixed_aspect "$fixed_aspect" \
-      '{system_id:$system_id, emulator_id:$emulator_id, output_width:$output_width, output_height:$output_height, refresh:$refresh, aspect:($aspect|tonumber), class:$class, render_width:$render_width, render_height:$render_height, fsr:$fsr, fsr_sharpness:($fsr_sharpness|tonumber), scale_mode:$scale_mode, fixed_aspect:$fixed_aspect}'
+      '{
+        system_id:$system_id,
+        emulator_id:$emulator_id,
+        connected:$connected,
+        output:$output,
+        drm_card:$drm_card,
+        drm_device:$drm_device,
+        connector:$connector,
+        preferred_dgpu:$dgpu,
+        preferred_vk_device:(if $dgpu then "1002:73ef" else "" end),
+        output_width:$output_width,
+        output_height:$output_height,
+        refresh:$refresh,
+        aspect:($aspect|tonumber),
+        class:$class,
+        render_width:$render_width,
+        render_height:$render_height,
+        fsr:$fsr,
+        fsr_sharpness:($fsr_sharpness|tonumber),
+        scale_mode:$scale_mode,
+        fixed_aspect:$fixed_aspect,
+        gamescope_args:(["-f","-e","-W",($output_width|tostring),"-H",($output_height|tostring),"-w",($render_width|tostring),"-h",($render_height|tostring),"-S",$scale_mode] + (if $fsr then ["-F","fsr","--fsr-sharpness",($fsr_sharpness|tostring)] else [] end)),
+        frontend_gamescope_args:(["--backend","drm","-f","-W",($output_width|tostring),"-H",($output_height|tostring),"--force-windows-fullscreen"] + (if $connector != "" then ["--prefer-output",$connector] else [] end) + (if $dgpu then ["--prefer-vk-device","1002:73ef"] else [] end))
+      }'
   '';
 
-  boomerTeknoparrotFree = pkgs.writeShellScriptBin "boomer-teknoparrot-free" ''
+  teknoparrotFree = pkgs.writeShellScriptBin "teknoparrot-free" ''
         set -euo pipefail
         export PATH=${emu.scriptPath}:${lib.makeBinPath [ packages.winePackage pkgs.curl pkgs.unzip ]}:$PATH
         prefix="${cfg.configRoot}/teknoparrot"
@@ -184,12 +308,12 @@ let
         exec wine "$install_dir/TeknoParrotUi.exe" "$rom"
   '';
 
-  boomerRunEmulator = pkgs.writeShellScriptBin "boomer-run-emulator" ''
+  runEmulator = pkgs.writeShellScriptBin "run-emulator" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:${launcherPath}:$PATH
 
     if [ "$#" -lt 3 ]; then
-      echo "Usage: boomer-run-emulator <system-id> <emulator-id> <rom-path>" >&2
+      echo "Usage: run-emulator <system-id> <emulator-id> <rom-path>" >&2
       exit 64
     fi
 
@@ -198,8 +322,8 @@ let
     system_id="$1"
     emulator_id="$2"
     rom_path="$3"
-    export BOOMER_SYSTEM_ID="$system_id"
-    export BOOMER_EMULATOR_ID="$emulator_id"
+    export EMULATION_SYSTEM_ID="$system_id"
+    export EMULATION_EMULATOR_ID="$emulator_id"
     log_dir="${cfg.dataRoot}/logs/launches"
     mkdir -p "$log_dir"
     log_file="$log_dir/$(date -u +%Y%m%dT%H%M%SZ)-$system_id.jsonl"
@@ -254,15 +378,8 @@ let
     case "$emulator_id" in
       dolphin|cemu|xemu|ryubing|lime3ds|supermodel|teknoparrot|retroarch-pcsx2|retroarch-beetle-psx-hw|retroarch-beetle-saturn|retroarch-mupen64plus|retroarch-parallel-n64|retroarch-ppsspp|retroarch-flycast) heavy=1 ;;
     esac
-    export BOOMER_EMULATOR_HEAVY="$heavy"
-    profile_json="$(boomer-display-profile)"
-    output_width="$(jq -r '.output_width' <<<"$profile_json")"
-    output_height="$(jq -r '.output_height' <<<"$profile_json")"
-    render_width="$(jq -r '.render_width' <<<"$profile_json")"
-    render_height="$(jq -r '.render_height' <<<"$profile_json")"
-    fsr="$(jq -r '.fsr' <<<"$profile_json")"
-    fsr_sharpness="$(jq -r '.fsr_sharpness' <<<"$profile_json")"
-    scale_mode="$(jq -r '.scale_mode' <<<"$profile_json")"
+    export EMULATION_EMULATOR_HEAVY="$heavy"
+    profile_json="$(display-profile)"
 
     cmd=()
     case "$emulator_id" in
@@ -302,7 +419,7 @@ let
       supermodel) cmd=(supermodel "$rom_path" -fullscreen) ;;
       gzdoom) cmd=(gzdoom -iwad "$rom_path") ;;
       pico8) cmd=(pico8 -run "$rom_path") ;;
-      teknoparrot) cmd=(boomer-teknoparrot-free "$rom_path") ;;
+      teknoparrot) cmd=(teknoparrot-free "$rom_path") ;;
       *)
         log_event "error" "unknown emulator"
         echo "Unknown emulator: $emulator_id" >&2
@@ -312,14 +429,11 @@ let
 
     log_event "launch" "$profile_json"
     run_cmd=("''${cmd[@]}")
-    if [ "''${BOOMER_MANGOHUD:-0}" = "1" ]; then
+    if [ "''${EMULATION_MANGOHUD:-0}" = "1" ]; then
       run_cmd=(mangohud "''${run_cmd[@]}")
     fi
-    if [ "''${BOOMER_DISABLE_GAMESCOPE:-0}" != "1" ]; then
-      gamescope_args=(-f -e -W "$output_width" -H "$output_height" -w "$render_width" -h "$render_height" -S "$scale_mode")
-      if [ "$fsr" = "true" ]; then
-        gamescope_args+=(-F fsr --fsr-sharpness "$fsr_sharpness")
-      fi
+    if [ "''${EMULATION_DISABLE_GAMESCOPE:-0}" != "1" ]; then
+      mapfile -t gamescope_args < <(jq -r '.gamescope_args[]' <<<"$profile_json")
       run_cmd=(gamescope "''${gamescope_args[@]}" -- "''${run_cmd[@]}")
     fi
     if command -v gamemoderun >/dev/null 2>&1; then
@@ -328,7 +442,7 @@ let
     exec "''${run_cmd[@]}"
   '';
 
-  boomerRomCoverageCheck = pkgs.writeShellScriptBin "boomer-rom-coverage-check" ''
+  romCoverageCheck = pkgs.writeShellScriptBin "rom-coverage-check" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:$PATH
     source_root="''${1:-/mnt/z/Library/ROMs/roms}"
@@ -346,7 +460,7 @@ let
     exit "$missing"
   '';
 
-  boomerSyncEmulatorConfigs = pkgs.writeShellScriptBin "boomer-sync-emulator-configs" ''
+  syncEmulatorConfigs = pkgs.writeShellScriptBin "sync-emulator-configs" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:$PATH
     install -d -m 0755 -o ${cfg.user} -g ${cfg.group} \
@@ -358,9 +472,11 @@ let
       "${cfg.configRoot}/emulators/ryubing" \
       "${cfg.configRoot}/emulators/supermodel" \
       "${cfg.configRoot}/emulators/gzdoom" \
+      "${cfg.configRoot}/emulators/pico8" \
+      "${cfg.configRoot}/emulators/teknoparrot" \
       "${cfg.configRoot}/teknoparrot"
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${displayPolicy} "${cfg.configRoot}/display/policy.json"
-    for dir in dolphin cemu xemu ryubing supermodel gzdoom; do
+    for dir in dolphin cemu xemu ryubing supermodel gzdoom pico8 teknoparrot; do
       readme="${cfg.configRoot}/emulators/$dir/README.txt"
       if [ ! -e "$readme" ]; then
         printf '%s\n' "Runtime config scaffold for $dir. Durable defaults are managed by Nix; hardware tuning can start here." >"$readme"
@@ -374,13 +490,13 @@ in
   config = lib.mkIf cfg.enable {
     ghostship.emulation.internal.scripts = {
       inherit
-        boomerDisplayProfile
-        boomerRomCoverageCheck
-        boomerRunEmulator
-        boomerSyncEmulatorConfigs
-        boomerTeknoparrotFree
+        displayProfile
+        romCoverageCheck
+        runEmulator
+        syncEmulatorConfigs
+        teknoparrotFree
         ;
     };
-    ghostship.emulation.internal.setupScripts = [ boomerSyncEmulatorConfigs ];
+    ghostship.emulation.internal.setupScripts = [ syncEmulatorConfigs ];
   };
 }

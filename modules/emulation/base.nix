@@ -54,8 +54,8 @@ in
 
         environment.sessionVariables = {
           ESDE_APPDATA_DIR = cfg.esde.appDataDir;
-          BOOMER_EMULATION_DATA_ROOT = cfg.dataRoot;
-          BOOMER_EMULATION_CONFIG_ROOT = cfg.configRoot;
+          EMULATION_DATA_ROOT = cfg.dataRoot;
+          EMULATION_CONFIG_ROOT = cfg.configRoot;
           MESA_SHADER_CACHE_DIR = "${cfg.dataRoot}/cache/mesa-shaders";
           RADV_PERFTEST = "gpl";
         };
@@ -108,12 +108,15 @@ in
           "d ${cfg.configRoot}/controllers 0755 ${cfg.user} ${cfg.group} -"
           "d ${cfg.configRoot}/display 0755 ${cfg.user} ${cfg.group} -"
           "d ${cfg.configRoot}/emulators 0755 ${cfg.user} ${cfg.group} -"
+          "d ${cfg.configRoot}/smoke 0755 ${cfg.user} ${cfg.group} -"
           "d ${cfg.configRoot}/retroarch 0755 ${cfg.user} ${cfg.group} -"
           "d ${cfg.configRoot}/retroarch/shaders 0755 ${cfg.user} ${cfg.group} -"
           "d ${cfg.configRoot}/retroarch/shaders-user 0755 ${cfg.user} ${cfg.group} -"
           "d ${cfg.configRoot}/es-de 0755 ${cfg.user} ${cfg.group} -"
           "d ${cfg.dataRoot}/logs 0755 ${cfg.user} ${cfg.group} -"
           "d ${cfg.dataRoot}/logs/esde-session 0755 ${cfg.user} ${cfg.group} -"
+          "d ${cfg.dataRoot}/logs/smoke 0755 ${cfg.user} ${cfg.group} -"
+          "d ${cfg.dataRoot}/smoke-roms 0755 ${cfg.user} ${cfg.group} -"
           "d ${cfg.dataRoot}/tmp 0755 ${cfg.user} ${cfg.group} -"
           "d /run/ghostship-secrets 0755 root root -"
           "L+ /home/${cfg.user}/Emulation - - - - ${cfg.dataRoot}"
