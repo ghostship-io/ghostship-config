@@ -98,6 +98,13 @@ scripts/update-ryubing-canary /root/nixos-config
 
 Nix still needs a fixed hash, so the build itself stays reproducible; the
 updater is the intentional step that converts "latest Canary" into a Nix pin.
+Switch homebrew `.nro` entries can keep their asset folders beside the launched
+file. When `run-emulator` sees a sibling `data/` directory, it links that
+directory into Ryubing's emulated SD card at
+`/srv/emulation/xdg/config/Ryujinx/sdcard/data`, replacing only an existing
+symlink. Proprietary keys stay operator-managed under
+`/srv/emulation/bios/switch` and are exposed to Ryubing's runtime system
+directory at launch.
 
 ## GZDoom
 
@@ -275,7 +282,12 @@ firmware, keys, or proprietary emulator runtime files are reported as
 `blocked-missing-runtime`; frame pacing failures are reported as
 `fail-performance` with a recommendation such as lowering NNEDI3 quality,
 falling back to sharp-bilinear, or lowering emulator-native internal
-resolution.
+resolution. FBNeo logs many harmless `No romset found` search-path probes
+before finding an arcade set; those probes are not treated as missing runtime
+files once FBNeo reports a found romset or `No missing files, proceeding`.
+For fast-scrolling FBNeo games such as OutRun, keep NNEDI3 as the default 2D
+arcade policy and use per-content fallbacks in this order:
+`nnedi3-balanced`, `nnedi3-fast`, `sharp-bilinear-prescale`, then `no-shader`.
 
 ## RetroArch
 

@@ -204,6 +204,8 @@ changelog.
   repo-pinned official Ryubing Canary package from
   `modules/emulation/ryubing-canary-pin.nix`, refreshing it with
   `scripts/update-ryubing-canary` before rebuilding when upstream advances.
+  Switch `.nro` homebrew can keep sibling `data/` assets beside the ROM;
+  `run-emulator` links that directory into Ryubing's emulated SD card at launch.
   Keep Boomer's ES-DE ROM folder names aligned exactly with
   `/mnt/z/Library/ROMs/roms`; Doom uses `Fantasy - GZDoom (2005)` with
   Batocera-style `.gzdoom` launchers at the ROM-folder top level and assets

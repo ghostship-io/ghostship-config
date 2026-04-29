@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Self-hosted secrets**: Limit the self-hosted secret module to
   `self-hosted-runtime` units so host-specific emulation secrets stay managed
   by the emulation module.
+- **Boomer FBNeo and Switch launch fixes**: Fixed the performance harness so
+  FBNeo's harmless romset search misses no longer classify a successfully loaded
+  game as `blocked-missing-runtime`, documented the OutRun shader fallback path,
+  and made Ryubing `.nro` launches expose sibling homebrew `data/` assets plus
+  existing Switch keys through Ryubing's runtime directories.
+
 - **Boomer Kuwanger emulation PC**: Added a dedicated `modules/emulation`
   NixOS module, enabled it on `boomer-kuwanger`, and wired ES-DE with Art Book
   Next, RetroArch cores, bundled shader packs including Mega Bezel, Gamescope
