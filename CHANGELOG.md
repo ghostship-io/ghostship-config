@@ -84,12 +84,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   providers.
 
 - **VueTorrent errored-torrent auto-resume**: Added a managed timer that
-  retries errored qBittorrent torrents every 5 minutes and stops retrying a
-  torrent after 20 automatic resume attempts for its hash. The retry action
-  uses qBittorrent 5's `/api/v2/torrents/start` endpoint.
+  retries errored qBittorrent torrents every 5 minutes without a per-torrent
+  retry cap. The retry action uses qBittorrent 5's
+  `/api/v2/torrents/start` endpoint.
 
 - **VueTorrent queue limits**: Set the managed qBittorrent queue to 5 active
-  downloads, 20 active torrents, and a 10 MB/s global download limit.
+  downloads, 20 active torrents, a 20 MB/s global download limit, slow torrents
+  excluded from active queue limits, and post-completion rechecks enabled.
 
 - **Hermes latest-image contract update**: Updated the `chill-penguin` Hermes
   contract for upstream `ghostship-hermes` `main` at `8a1a5cb`: Codex primary

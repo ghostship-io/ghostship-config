@@ -44,7 +44,9 @@ let
         Preferences.Queueing\\QueueingEnabled=literal:true
         Preferences.Queueing\\MaxActiveDownloads=literal:5
         Preferences.Queueing\\MaxActiveTorrents=literal:20
-        Preferences.Connection\\GlobalDLLimit=literal:10240
+        Preferences.Connection\\GlobalDLLimit=literal:20480
+        Preferences.Advanced\\RecheckOnCompletion=literal:true
+        BitTorrent.Session\\IgnoreSlowTorrentsForQueueing=literal:true
       )
 
       ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_args[@]}"
@@ -93,7 +95,6 @@ let
 
     STATE_DIR="/srv/apps/vuetorrent"
     STATE_FILE="$STATE_DIR/auto-resume-attempts.json"
-    MAX_ATTEMPTS=20
     QBT_API="http://127.0.0.1:5000/api/v2"
 
     mkdir -p "$STATE_DIR"
@@ -142,22 +143,15 @@ let
     printf '%s' "$errored_torrents" | ${pkgs.jq}/bin/jq -r '.[].hash' > "$hashes_file"
 
     resumed=0
-    skipped=0
     while IFS= read -r hash; do
       [ -n "$hash" ] || continue
       attempts=$(${pkgs.jq}/bin/jq -r --arg hash "$hash" '.[$hash] // 0' "$work_state")
-
-      if [ "$attempts" -ge "$MAX_ATTEMPTS" ]; then
-        echo "Leaving errored qBittorrent torrent $hash untouched after $attempts automatic resume attempts."
-        skipped=$((skipped + 1))
-        continue
-      fi
 
       if ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "hashes=$hash" "$QBT_API/torrents/start" >/dev/null 2>&1; then
         next_attempts=$((attempts + 1))
         ${pkgs.jq}/bin/jq --arg hash "$hash" --argjson attempts "$next_attempts" '.[$hash] = $attempts' "$work_state" > "$next_state"
         mv "$next_state" "$work_state"
-        echo "Resumed errored qBittorrent torrent $hash (automatic attempt $next_attempts/$MAX_ATTEMPTS)."
+        echo "Resumed errored qBittorrent torrent $hash (automatic attempt $next_attempts)."
         resumed=$((resumed + 1))
       else
         echo "Failed to resume errored qBittorrent torrent $hash; attempt count unchanged."
@@ -166,7 +160,7 @@ let
 
     mv "$work_state" "$STATE_FILE"
     chmod 0644 "$STATE_FILE"
-    echo "qBittorrent auto-resume complete: resumed=$resumed skipped=$skipped."
+    echo "qBittorrent auto-resume complete: resumed=$resumed."
   '';
 in
 {
@@ -210,7 +204,7 @@ in
   };
 
   systemd.services.vuetorrent-auto-resume = {
-    description = "Resume errored qBittorrent torrents with a bounded retry count";
+    description = "Resume errored qBittorrent torrents indefinitely";
     after = [
       "podman-gluetun.service"
       "podman-vuetorrent.service"
