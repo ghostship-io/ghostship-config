@@ -31,8 +31,10 @@ let
 
     preferred_regex='metroid|god[ _:-]*of[ _:-]*war|halo|resident[ _:-]*evil|conker|star[ _:-]*ocean|gran[ _:-]*turismo|forza|f-zero|mario[ _:-]*kart|zelda|xenoblade|hyrule|pokemon|tekken|ridge[ _:-]*racer|soulcalibur|panzer[ _:-]*dragoon|virtua|daytona|outrun|doom|quake|final[ _:-]*fantasy|kingdom[ _:-]*hearts|samba[ _:-]*de[ _:-]*amigo|sonic[ _:-]*adventure'
 
-    install -d -m 0755 "$(dirname "$manifest")"
-    chown ${cfg.user}:${cfg.group} "$(dirname "$manifest")" 2>/dev/null || true
+    manifest_dir="$(dirname "$manifest")"
+    mkdir -p "$manifest_dir"
+    chmod 0755 "$manifest_dir" 2>/dev/null || true
+    chown ${cfg.user}:${cfg.group} "$manifest_dir" 2>/dev/null || true
     systems_tmp="$(mktemp)"
     printf '%s' '${emu.allSystemsJson}' | jq -c '.[]' | while read -r system; do
       folder="$(jq -r '.folder' <<<"$system")"
@@ -58,7 +60,9 @@ let
       }
 
       entries_tmp="$(mktemp)"
-      sort -r "$scored_tmp" | head -n 3 | while IFS=$'\t' read -r _score size entry; do
+      sorted_tmp="$(mktemp)"
+      sort -r "$scored_tmp" >"$sorted_tmp"
+      head -n 3 "$sorted_tmp" | while IFS=$'\t' read -r _score size entry; do
         name="''${entry##*/}"
         jq -n \
           --arg name "$name" \
@@ -68,12 +72,12 @@ let
           '{name:$name, source_path:$source_path, smoke_path:$smoke_path, size:$size}'
       done >"$entries_tmp"
 
-      jq -n \
-        --argjson system "$system" \
-        --slurpfile entries "$entries_tmp" \
-        '{id:$system.id, folder:$system.folder, fullname:$system.fullname, emulator:$system.emulator, entries:$entries[0]}'
+        jq -n \
+          --argjson system "$system" \
+          --slurpfile entries "$entries_tmp" \
+          '{id:$system.id, folder:$system.folder, fullname:$system.fullname, emulator:$system.emulator, entries:$entries}'
 
-      rm -f "$scored_tmp" "$entries_tmp"
+      rm -f "$scored_tmp" "$entries_tmp" "$sorted_tmp"
     done >"$systems_tmp"
 
     jq -s \
@@ -126,6 +130,38 @@ let
     set -euo pipefail
     export PATH=${smokePath}:${lib.makeBinPath [ smokeRomSelect smokeReport ]}:$PATH
 
+    if [ "$(id -u)" = "0" ] && [ "''${EMULATION_SMOKE_NO_REEXEC:-0}" != "1" ]; then
+      unit="emulation-smoke-test-$(date -u +%Y%m%dT%H%M%SZ)"
+      ${pkgs.systemd}/bin/systemctl stop emulation-session.service getty@tty1.service || true
+      set +e
+      ${pkgs.systemd}/bin/systemd-run --unit="$unit" --wait --collect \
+        -p User=${cfg.user} \
+        -p Group=${cfg.group} \
+        -p PAMName=login \
+        -p TTYPath=/dev/tty1 \
+        -p TTYReset=yes \
+        -p TTYVHangup=yes \
+        -p TTYVTDisallocate=yes \
+        -p StandardInput=tty \
+        -p StandardOutput=journal+console \
+        -p StandardError=journal+console \
+        -p WorkingDirectory=/home/${cfg.user} \
+        -p After=emulation-setup.service \
+        -p Conflicts=emulation-session.service \
+        ${pkgs.coreutils}/bin/env \
+        XDG_RUNTIME_DIR="/run/user/1001" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1001/bus" \
+        ESDE_APPDATA_DIR="${cfg.esde.appDataDir}" \
+        EMULATION_SMOKE_NO_REEXEC=1 \
+        EMULATION_SMOKE_DURATION="''${EMULATION_SMOKE_DURATION:-90}" \
+        "$0" "$@"
+      rc=$?
+      set -e
+      ${pkgs.systemd}/bin/systemctl start getty@tty1.service || true
+      ${pkgs.systemd}/bin/journalctl -u "$unit" --no-pager -n 120 >&2 || true
+      exit "$rc"
+    fi
+
     dry_run=0
     manifest="${cfg.configRoot}/smoke/roms.json"
     duration="''${EMULATION_SMOKE_DURATION:-90}"
@@ -164,8 +200,10 @@ let
         name="$(jq -r '.name' <<<"$item")"
         rom_path="$(jq -r '.smoke_path' <<<"$item")"
         [ -e "$rom_path" ] || rom_path="$(jq -r '.source_path' <<<"$item")"
-        stdout="$run_dir/$system_id-$(printf '%s' "$name" | tr '/ ' '__').out"
-        stderr="$run_dir/$system_id-$(printf '%s' "$name" | tr '/ ' '__').err"
+        safe_name="$(printf '%s' "$name" | tr '/ ' '__')"
+        stdout="$run_dir/$system_id-$safe_name.out"
+        stderr="$run_dir/$system_id-$safe_name.err"
+        retroarch_log="$run_dir/$system_id-$safe_name.retroarch.log"
         start_epoch="$(date +%s)"
         status="pass"
         rc=0
@@ -174,19 +212,35 @@ let
           status="missing-rom"
           rc=66
         else
+          if printf '%s' "$emulator" | grep -q '^retroarch-'; then
+            : >"${cfg.dataRoot}/logs/retroarch/retroarch.log" 2>/dev/null || true
+          fi
           set +e
           EMULATION_MANGOHUD=1 \
-          MANGOHUD=1 \
           MANGOHUD_CONFIG="autostart_log=1,output_folder=$perf_dir,log_duration=$duration" \
-          timeout --foreground "$duration" run-emulator "$system_id" "$emulator" "$rom_path" >"$stdout" 2>"$stderr"
+          timeout --kill-after=5s "$duration" run-emulator "$system_id" "$emulator" "$rom_path" >"$stdout" 2>"$stderr"
           rc=$?
           set -e
+          if printf '%s' "$emulator" | grep -q '^retroarch-' && [ -s "${cfg.dataRoot}/logs/retroarch/retroarch.log" ]; then
+            cp "${cfg.dataRoot}/logs/retroarch/retroarch.log" "$retroarch_log" || true
+            {
+              printf '\n==== retroarch.log ====\n'
+              cat "$retroarch_log"
+            } >>"$stderr" || true
+          fi
+          elapsed_after="$(( $(date +%s) - start_epoch ))"
           case "$rc" in
-            0) status="pass-exited" ;;
+            0)
+              if [ "$elapsed_after" -lt 5 ] && [ "''${duration%%.*}" -ge 8 ]; then
+                status="fail-early-exit"
+              else
+                status="pass-exited"
+              fi
+              ;;
             124) status="pass-timeout" ;;
             *) status="fail-exited" ;;
           esac
-          if grep -Eiq 'missing RetroArch core|No such file|failed to initialize|Vulkan.*(failed|error)|segmentation fault|Trace/breakpoint trap' "$stderr" 2>/dev/null; then
+          if grep -Eiq 'missing RetroArch core|failed to open libretro core|failed to load content|failed to extract content|could not read content file|core failed to load|required firmware|no bios detected|cannot open bios|bios.*(missing|not found)|file format is unknown|unknown disk format|not a psp game|no content, starting dummy core|CPU_Init.*recognize|failed to (create|initialize).*Vulkan|Vulkan.*initialization.*failed|VK_ERROR_(INITIALIZATION_FAILED|DEVICE_LOST|OUT_OF_DEVICE_MEMORY)|segmentation fault|Trace/breakpoint trap' "$stderr" 2>/dev/null; then
             status="fail-fatal-log"
           fi
         fi
@@ -201,9 +255,10 @@ let
           --arg status "$status" \
           --arg stdout "$stdout" \
           --arg stderr "$stderr" \
+          --arg retroarch_log "$retroarch_log" \
           --argjson exit_code "$rc" \
           --argjson duration_seconds "$((end_epoch - start_epoch))" \
-          '{run_id:$run_id, system_id:$system_id, emulator:$emulator, name:$name, rom_path:$rom_path, status:$status, exit_code:$exit_code, duration_seconds:$duration_seconds, stdout:$stdout, stderr:$stderr}' >>"$report"
+          '{run_id:$run_id, system_id:$system_id, emulator:$emulator, name:$name, rom_path:$rom_path, status:$status, exit_code:$exit_code, duration_seconds:$duration_seconds, stdout:$stdout, stderr:$stderr, retroarch_log:$retroarch_log}' >>"$report"
       done
 
     chown -R ${cfg.user}:${cfg.group} "$run_dir" 2>/dev/null || true

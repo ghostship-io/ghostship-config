@@ -41,12 +41,6 @@
     startup.mode = "console";
   };
 
-  # Enable Hyprland
-  programs.hyprland = {
-    enable = true;
-    xwayland.enable = true;
-  };
-
   # Graphics (Mesa)
   hardware.graphics = {
     enable = true;

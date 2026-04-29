@@ -36,6 +36,7 @@ let
     "flycast"
     "mupen64plus"
     "parallel-n64"
+    "desmume"
     "melonds"
     "ppsspp"
     "pcsx2"
@@ -162,7 +163,7 @@ let
       fullname = "Nintendo DS";
       platform = "nds";
       theme = "nds";
-      emulator = "retroarch-melonds";
+      emulator = "retroarch-desmume";
       extensions = "${commonRetroExtensions} .nds .NDS";
       fixedAspect = "native";
     }
@@ -395,6 +396,10 @@ let
     {
       file = "Player Assignment.sh";
       target = "player-assignment";
+    }
+    {
+      file = "Audio Status.sh";
+      target = "audio-status";
     }
     {
       file = "Display Profile Test.sh";

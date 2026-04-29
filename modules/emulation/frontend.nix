@@ -246,6 +246,7 @@ let
       lib.makeBinPath (
         [
           syncEsdeConfig
+          config.ghostship.emulation.internal.scripts.audioRoute
           config.ghostship.emulation.internal.scripts.displayProfile
           packages.esdePackage
           pkgs.gamescope
@@ -276,6 +277,7 @@ let
     echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
     echo "MESA_VK_DEVICE_SELECT=$MESA_VK_DEVICE_SELECT"
     grep '^Cap' /proc/$$/status || true
+    audio-route || true
 
     if [ "$(id -u)" = 0 ]; then
       sync-esde-config

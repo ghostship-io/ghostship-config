@@ -63,7 +63,11 @@ let
         terminalTool
         toolMenu
         config.ghostship.emulation.internal.packages.retroarchPackage
-      ] ++ lib.optionals (config.ghostship.emulation.internal.scripts ? displayProfile) [ config.ghostship.emulation.internal.scripts.displayProfile ]
+        pkgs.pipewire
+        pkgs.python3
+        pkgs.wireplumber
+      ] ++ lib.optionals (config.ghostship.emulation.internal.scripts ? audioRoute) [ config.ghostship.emulation.internal.scripts.audioRoute ]
+      ++ lib.optionals (config.ghostship.emulation.internal.scripts ? displayProfile) [ config.ghostship.emulation.internal.scripts.displayProfile ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? renderScraperSettings) [ config.ghostship.emulation.internal.scripts.renderScraperSettings ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? retroarchShaderSmokeTest) [ config.ghostship.emulation.internal.scripts.retroarchShaderSmokeTest ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? romCoverageCheck) [ config.ghostship.emulation.internal.scripts.romCoverageCheck ]
@@ -153,6 +157,11 @@ let
       { label = "Rebuild from connected controllers"; command = "action=rebuild; ${playerAssignmentCommand}"; }
       { label = "Rotate players"; command = "action=rotate; ${playerAssignmentCommand}"; }
       { label = "Clear saved order"; command = "action=clear; ${playerAssignmentCommand}"; }
+    ];
+    audio-status = mkMenuTool "audio-status" "Audio Status" [
+      { label = "PipeWire status"; command = "wpctl status"; }
+      { label = "Route to HDMI"; command = "audio-route"; }
+      { label = "Play HDMI test tone"; command = "python3 - <<'PY'\nimport math, struct, wave\nrate = 48000\nwith wave.open('/tmp/emulation-test-tone.wav', 'wb') as w:\n    w.setnchannels(2); w.setsampwidth(2); w.setframerate(rate)\n    for i in range(rate * 2):\n        v = int(0.25 * 32767 * math.sin(2 * math.pi * 880 * i / rate))\n        w.writeframes(struct.pack('<hh', v, v))\nPY\naudio-route\npw-play /tmp/emulation-test-tone.wav"; }
     ];
     display-profile-tool = mkMenuTool "display-profile-tool" "Display Profile Test" [
       { label = "Current profile"; command = "display-profile | jq ."; }

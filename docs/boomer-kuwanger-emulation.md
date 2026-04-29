@@ -90,6 +90,9 @@ Keep all proprietary runtime files out of the repo:
 - Xbox MCPX and HDD image material for xemu: `/srv/emulation/bios/xbox`
 
 The Nix module only creates the directories and emulator launch contract.
+Current smoke coverage has confirmed these BIOS-gated files are still needed
+for the selected disc tests: `scph5500.bin` for Japanese PlayStation,
+`mpr-17933.bin` for Saturn, and a valid Neo Geo CD BIOS set for NeoCD.
 
 ## PICO-8
 
@@ -140,6 +143,18 @@ manual testing, but durable policy changes belong in the Nix module.
 Run `display-profile --matrix-test` to verify the deterministic FSR
 policy without display hardware.
 
+## Audio
+
+Audio uses PipeWire with Pulse compatibility. `audio-route` runs from the
+frontend session, emulator launcher, and user service to prefer the AMD
+Navi 21/23 HDMI/DP audio card over USB audio adapters. It does not hardcode one
+physical HDMI port; it asks PipeWire which AMD HDMI/DP profile is currently
+`available`, sets that card profile, and makes the matching HDMI sink default.
+
+Use the ES-DE `Audio Status` tool or run `audio-route` from SSH to inspect and
+repair the route. The same tool can play a short test tone through the selected
+HDMI sink.
+
 ## Smoke ROMs
 
 Smoke ROM tooling lives under `/srv/emulation/smoke-roms` and
@@ -155,6 +170,12 @@ Smoke ROM tooling lives under `/srv/emulation/smoke-roms` and
 
 The smoke harness is intended for target-display validation. A `--dry-run`
 mode prints the exact `run-emulator` calls without launching games.
+
+The runtime launcher does not transform ROMs. If a smoke entry fails because
+the selected copied entry is an archive or folder shape that the emulator will
+not open, manually extract only that smoke copy and point `roms.json` at the
+playable file. The final ROM set should already be stored in the launchable
+shape expected by the target emulator.
 
 ## RetroArch
 
@@ -262,12 +283,14 @@ After SSH access exists:
    `/srv/emulation/roms`.
 3. Boot to the tty, run `esde-preflight`, then launch ES-DE with
    `start-esde` and confirm Art Book Next appears.
-4. Pair all four controllers in Switch mode and verify connection-order player
+4. Run `audio-route` or the ES-DE `Audio Status` tool and confirm HDMI audio on
+   each physical HDMI port you intend to use.
+5. Pair all four controllers in Switch mode and verify connection-order player
    assignment.
-5. Run `retroarch-shader-smoke-test`.
-6. Launch one game per emulator family and inspect
+6. Run `retroarch-shader-smoke-test`.
+7. Launch one game per emulator family and inspect
    `/srv/emulation/logs/launches`.
-7. Run `display-profile --matrix-test`, `rom-coverage-check`,
+8. Run `display-profile --matrix-test`, `rom-coverage-check`,
    `smoke-rom-select`, and `smoke-test --dry-run`.
-8. Test 1080p, 1440p, 4K, and ultrawide displays and refine Gamescope FSR
+9. Test 1080p, 1440p, 4K, and ultrawide displays and refine Gamescope FSR
    thresholds if frame pacing misses budget.

@@ -15,7 +15,7 @@ let
     video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/bezel/Mega_Bezel/Presets/Base_CRT_Presets_DREZ/MBZ__3__STD__GDV__DREZ-VIEWPORT.slangp"
     video_shader_dir = "${cfg.configRoot}/retroarch/shaders"
     libretro_directory = "${packages.retroarchPackage}/lib/retroarch/cores"
-    libretro_info_path = "${packages.retroarchPackage}/share/libretro/info"
+    libretro_info_path = "${cfg.configRoot}/retroarch/info"
     system_directory = "${cfg.biosRoot}"
     savefile_directory = "${cfg.dataRoot}/saves"
     savestate_directory = "${cfg.dataRoot}/states"
@@ -199,6 +199,7 @@ let
       "${cfg.configRoot}/retroarch" \
       "${cfg.configRoot}/retroarch/autoconfig" \
       "${cfg.configRoot}/retroarch/core-options" \
+      "${cfg.configRoot}/retroarch/info" \
       "${cfg.configRoot}/retroarch/profiles" \
       "${cfg.configRoot}/retroarch/remaps" \
       "${cfg.configRoot}/retroarch/shaders" \
@@ -208,6 +209,11 @@ let
 
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${retroarchCfg} "${cfg.configRoot}/retroarch/retroarch.cfg"
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${shaderPolicy} "${cfg.configRoot}/retroarch/shader-policy.json"
+    cp -R --no-preserve=mode,ownership "${packages.retroarchPackage}/share/libretro/info/." "${cfg.configRoot}/retroarch/info/" || true
+    chown -R ${cfg.user}:${cfg.group} "${cfg.configRoot}/retroarch/info" "${cfg.dataRoot}/logs/retroarch"
+    touch "${cfg.dataRoot}/logs/retroarch/retroarch.log"
+    chown ${cfg.user}:${cfg.group} "${cfg.dataRoot}/logs/retroarch/retroarch.log"
+    chmod 0644 "${cfg.dataRoot}/logs/retroarch/retroarch.log"
     if [ -d "${packages.joypadAutoconfig}/share/libretro/autoconfig" ]; then
       cp -R --no-preserve=mode,ownership "${packages.joypadAutoconfig}/share/libretro/autoconfig/." "${cfg.configRoot}/retroarch/autoconfig/" || true
     fi

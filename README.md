@@ -49,14 +49,18 @@ logical-unit secret files.
 launched manually with `start-esde`; emulator launches still use the
 Gamescope FSR wrapper policy, RetroArch cores, bundled shader packs, controller
 tooling, smoke-test tooling, dynamic display discovery, and ScreenScraper secret
-wiring. Runtime state lives under `/srv/emulation`;
+wiring. HDMI audio is routed through PipeWire by selecting the currently
+available AMD HDMI/DP profile before ES-DE and emulator launches. Runtime state
+lives under `/srv/emulation`;
 the future 4TB ROM SSD
 mounts at `/srv/emulation/roms` from the Btrfs filesystem labeled `roms`.
 The OS disk uses one Btrfs filesystem labeled `nixos` mounted at `/`.
 
-See [`docs/boomer-kuwanger-emulation.md`](docs/boomer-kuwanger-emulation.md)
-for ROM, BIOS, PICO-8, TeknoParrot, controller, shader, display, and scraper
-setup notes.
+See [`docs/boomer-kuwanger-overview.md`](docs/boomer-kuwanger-overview.md) for
+a one-page hardware/software map and
+[`docs/boomer-kuwanger-emulation.md`](docs/boomer-kuwanger-emulation.md) for
+ROM, BIOS, PICO-8, TeknoParrot, controller, shader, display, and scraper setup
+notes.
 
 ## Agent Launchers
 

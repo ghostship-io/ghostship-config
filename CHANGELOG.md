@@ -37,7 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Renamed public emulation tools and services to drop the project prefix, made
   Gamescope display selection dynamic across connected HDMI/DP outputs, narrowed
   ES-DE scraper secret wiring to ScreenScraper, and added smoke ROM selection,
-  sync, launch-test, and report helpers.
+  sync, launch-test, and report helpers. Added PipeWire HDMI audio routing that
+  selects the currently available AMD HDMI/DP profile, exposed an ES-DE Audio
+  Status tool, tightened smoke-test fatal-log detection, and documented that
+  only proven failing smoke copies should be manually extracted. Added a
+  one-page Boomer hardware/software/system overview document.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from

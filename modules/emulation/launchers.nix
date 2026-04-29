@@ -13,6 +13,7 @@ let
     pkgs.mangohud
     packages.pico8Package
     packages.winePackage
+    config.ghostship.emulation.internal.scripts.audioRoute
   ] ++ emu.optionalPackages [
     "dolphin-emu"
     "cemu"
@@ -311,6 +312,12 @@ let
   runEmulator = pkgs.writeShellScriptBin "run-emulator" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:${launcherPath}:$PATH
+    export ESDE_APPDATA_DIR="${cfg.esde.appDataDir}"
+    export XDG_DATA_HOME="${cfg.dataRoot}/xdg/share"
+    export XDG_CONFIG_HOME="${cfg.dataRoot}/xdg/config"
+    export XDG_CACHE_HOME="${cfg.dataRoot}/xdg/cache"
+    export MESA_SHADER_CACHE_DIR="${cfg.dataRoot}/cache/mesa-shaders"
+    export TMPDIR="${cfg.dataRoot}/tmp"
 
     if [ "$#" -lt 3 ]; then
       echo "Usage: run-emulator <system-id> <emulator-id> <rom-path>" >&2
@@ -324,6 +331,7 @@ let
     rom_path="$3"
     export EMULATION_SYSTEM_ID="$system_id"
     export EMULATION_EMULATOR_ID="$emulator_id"
+    audio-route || true
     log_dir="${cfg.dataRoot}/logs/launches"
     mkdir -p "$log_dir"
     log_file="$log_dir/$(date -u +%Y%m%dT%H%M%SZ)-$system_id.jsonl"
@@ -355,6 +363,7 @@ let
         retroarch-flycast) echo flycast_libretro.so ;;
         retroarch-mupen64plus) echo mupen64plus_next_libretro.so ;;
         retroarch-parallel-n64) echo parallel_n64_libretro.so ;;
+        retroarch-desmume) echo desmume_libretro.so ;;
         retroarch-melonds) echo melonds_libretro.so ;;
         retroarch-ppsspp) echo ppsspp_libretro.so ;;
         retroarch-pcsx2) echo pcsx2_libretro.so ;;
@@ -365,6 +374,7 @@ let
 
     core_pattern_for() {
       case "$1" in
+        retroarch-desmume) echo '*desmume*_libretro.so' ;;
         retroarch-melonds) echo '*melon*ds*_libretro.so' ;;
         retroarch-bsnes-hd) echo '*bsnes*hd*_libretro.so' ;;
         retroarch-mupen64plus) echo '*mupen64plus*_libretro.so' ;;
@@ -433,7 +443,19 @@ let
       run_cmd=(mangohud "''${run_cmd[@]}")
     fi
     if [ "''${EMULATION_DISABLE_GAMESCOPE:-0}" != "1" ]; then
-      mapfile -t gamescope_args < <(jq -r '.gamescope_args[]' <<<"$profile_json")
+      if [ -z "''${WAYLAND_DISPLAY:-}" ] && [ -z "''${DISPLAY:-}" ]; then
+        mapfile -t gamescope_args < <(
+          jq -r '
+            ["--backend","drm","-f","-W",(.output_width|tostring),"-H",(.output_height|tostring),"-w",(.render_width|tostring),"-h",(.render_height|tostring),"-S",.scale_mode,"--force-windows-fullscreen"]
+            + (if .connector != "" then ["--prefer-output",.connector] else [] end)
+            + (if .preferred_vk_device != "" then ["--prefer-vk-device",.preferred_vk_device] else [] end)
+            + (if .fsr then ["-F","fsr","--fsr-sharpness",(.fsr_sharpness|tostring)] else [] end)
+            | .[]
+          ' <<<"$profile_json"
+        )
+      else
+        mapfile -t gamescope_args < <(jq -r '.gamescope_args[]' <<<"$profile_json")
+      fi
       run_cmd=(gamescope "''${gamescope_args[@]}" -- "''${run_cmd[@]}")
     fi
     if command -v gamemoderun >/dev/null 2>&1; then
