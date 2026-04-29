@@ -1,7 +1,8 @@
-{ config
-, lib
-, pkgs
-, ...
+{
+  config,
+  lib,
+  pkgs,
+  ...
 }:
 
 let
@@ -12,16 +13,18 @@ let
   audioRoute = pkgs.writeShellScriptBin "audio-route" ''
     set -euo pipefail
     volume="''${EMULATION_AUDIO_VOLUME:-0.85}"
-    export PATH=${lib.makeBinPath [
-      pkgs.coreutils
-      pkgs.gawk
-      pkgs.gnugrep
-      pkgs.gnused
-      pkgs.jq
-      pkgs.pulseaudio
-      pkgs.util-linux
-      pkgs.wireplumber
-    ]}:$PATH
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.gawk
+        pkgs.gnugrep
+        pkgs.gnused
+        pkgs.jq
+        pkgs.pulseaudio
+        pkgs.util-linux
+        pkgs.wireplumber
+      ]
+    }:$PATH
 
     if [ "$(id -un)" != "${cfg.user}" ]; then
       uid="$(id -u ${cfg.user})"
@@ -243,6 +246,7 @@ in
           packages.joypadAutoconfig
           packages.pico8Package
           packages.retroarchPackage
+          packages.ryubingCanaryPackage
           packages.shaderCg
           packages.shaderGlsl
           packages.shaderSlang
@@ -276,7 +280,6 @@ in
           "pcsx2"
           "ppsspp-sdl"
           "protontricks"
-          "ryubing"
           "xemu"
         ]
         ++ lib.optional (packages.supermodelPackage != null) packages.supermodelPackage;

@@ -197,7 +197,10 @@ changelog.
   3DS, standalone PCSX2 for PS2, standalone PPSSPP for PSP, and no Gamescope
   FSR; use emulator-native scaling plus NNEDI3/sharp RetroArch shaders. Keep
   perf tests in `modules/emulation/perf.nix`, launch through `run-emulator`,
-  and write recommendations instead of auto-mutating runtime profiles.
+  and write recommendations instead of auto-mutating runtime profiles. Use the
+  repo-pinned official Ryubing Canary package from
+  `modules/emulation/ryubing-canary-pin.nix`, refreshing it with
+  `scripts/update-ryubing-canary` before rebuilding when upstream advances.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
 - Homepage `services.yaml` updates can leave stale entries behind when keys are

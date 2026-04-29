@@ -1,50 +1,61 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.ghostship.emulation;
   emu = config.ghostship.emulation.internal.lib;
   packages = config.ghostship.emulation.internal.packages;
 
-  launcherPath = lib.makeBinPath ([
-    packages.retroarchPackage
-    pkgs.gamescope
-    pkgs.gamemode
-    pkgs.jq
-    pkgs.mangohud
-    packages.pico8Package
-    packages.winePackage
-    config.ghostship.emulation.internal.scripts.audioRoute
-  ] ++ emu.optionalPackages [
-    "azahar"
-    "dolphin-emu"
-    "cemu"
-    "xemu"
-    "ryubing"
-    "lime3ds"
-    "pcsx2"
-    "ppsspp-sdl"
-    "gzdoom"
-  ] ++ lib.optional (packages.supermodelPackage != null) packages.supermodelPackage);
+  launcherPath = lib.makeBinPath (
+    [
+      packages.retroarchPackage
+      pkgs.gamescope
+      pkgs.gamemode
+      pkgs.jq
+      pkgs.mangohud
+      packages.pico8Package
+      packages.ryubingCanaryPackage
+      packages.winePackage
+      config.ghostship.emulation.internal.scripts.audioRoute
+    ]
+    ++ emu.optionalPackages [
+      "azahar"
+      "dolphin-emu"
+      "cemu"
+      "xemu"
+      "lime3ds"
+      "pcsx2"
+      "ppsspp-sdl"
+      "gzdoom"
+    ]
+    ++ lib.optional (packages.supermodelPackage != null) packages.supermodelPackage
+  );
 
-  displayPolicy = pkgs.writeText "emulation-display-policy.json" (builtins.toJSON {
-    upscaler = "none";
-    ultrawide = "center-fixed-aspect";
-    gamescope = {
-      fsr = false;
-      scaleMode = "fit";
-      stretchFixedAspect = false;
-    };
-    nativeScaling = {
-      xemu = "internal-resolution-scale";
-      ryubing = "resolution-scale-and-native-filter";
-      dolphin = "internal-resolution";
-      pcsx2 = "hardware-renderer-internal-resolution";
-      ppsspp = "rendering-resolution";
-      cemu = "graphics-packs";
-      azahar = "internal-resolution";
-      supermodel = "-res output_width,output_height";
-    };
-  });
+  displayPolicy = pkgs.writeText "emulation-display-policy.json" (
+    builtins.toJSON {
+      upscaler = "none";
+      ultrawide = "center-fixed-aspect";
+      gamescope = {
+        fsr = false;
+        scaleMode = "fit";
+        stretchFixedAspect = false;
+      };
+      nativeScaling = {
+        xemu = "internal-resolution-scale";
+        ryubing = "resolution-scale-and-native-filter";
+        dolphin = "internal-resolution";
+        pcsx2 = "hardware-renderer-internal-resolution";
+        ppsspp = "rendering-resolution";
+        cemu = "graphics-packs";
+        azahar = "internal-resolution";
+        supermodel = "-res output_width,output_height";
+      };
+    }
+  );
 
   displayProfile = pkgs.writeShellScriptBin "display-profile" ''
     set -euo pipefail
@@ -273,7 +284,13 @@ let
 
   teknoparrotFree = pkgs.writeShellScriptBin "teknoparrot-free" ''
         set -euo pipefail
-        export PATH=${emu.scriptPath}:${lib.makeBinPath [ packages.winePackage pkgs.curl pkgs.unzip ]}:$PATH
+        export PATH=${emu.scriptPath}:${
+          lib.makeBinPath [
+            packages.winePackage
+            pkgs.curl
+            pkgs.unzip
+          ]
+        }:$PATH
         prefix="${cfg.configRoot}/teknoparrot"
         install_dir="$prefix/TeknoParrot"
         rom="''${1:-}"
@@ -546,6 +563,57 @@ let
     exit "$missing"
   '';
 
+  updateRyubingCanary = pkgs.writeShellScriptBin "update-ryubing-canary" ''
+        set -euo pipefail
+        export PATH=${
+          lib.makeBinPath [
+            pkgs.coreutils
+            pkgs.curl
+            pkgs.gnugrep
+            pkgs.gnused
+            pkgs.nix
+          ]
+        }:$PATH
+
+        repo="''${1:-$PWD}"
+        pin_file="$repo/modules/emulation/ryubing-canary-pin.nix"
+        latest_endpoint="https://update.ryujinx.app/latest/canary"
+
+        if [ ! -f "$pin_file" ]; then
+          echo "Missing pin file: $pin_file" >&2
+          exit 66
+        fi
+
+        final_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "$latest_endpoint")"
+        version="$(printf '%s\n' "$final_url" | sed -n 's#.*/\([0-9][0-9.]*\)$#\1#p')"
+        if [ -z "$version" ]; then
+          echo "Could not resolve Ryubing Canary version from $latest_endpoint -> $final_url" >&2
+          exit 65
+        fi
+
+        current="$(sed -n 's/.*version = "\(.*\)";.*/\1/p' "$pin_file")"
+        if [ "''${2:-}" != "--force" ] && [ "$current" = "$version" ]; then
+          echo "Ryubing Canary is already pinned to latest version $version"
+          exit 0
+        fi
+
+        url="https://git.ryujinx.app/Ryubing/Canary/releases/download/$version/ryujinx-canary-$version-linux_x64.tar.gz"
+        hash_base32="$(nix-prefetch-url "$url")"
+        hash_sri="$(nix hash convert --hash-algo sha256 --to sri "$hash_base32")"
+
+        tmp="$(mktemp)"
+        cat >"$tmp" <<EOF
+    {
+      version = "$version";
+      url = "$url";
+      hash = "$hash_sri";
+    }
+    EOF
+        mv "$tmp" "$pin_file"
+        echo "Pinned Ryubing Canary $version"
+        echo "$hash_sri"
+  '';
+
   syncEmulatorConfigs = pkgs.writeShellScriptBin "sync-emulator-configs" ''
         set -euo pipefail
         export PATH=${emu.scriptPath}:$PATH
@@ -602,6 +670,7 @@ in
         runEmulator
         syncEmulatorConfigs
         teknoparrotFree
+        updateRyubingCanary
         ;
     };
     ghostship.emulation.internal.setupScripts = [ syncEmulatorConfigs ];

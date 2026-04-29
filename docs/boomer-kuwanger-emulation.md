@@ -82,10 +82,24 @@ operational or RetroAchievements target: Dolphin, Cemu, xemu,
 Ryubing/Ryujinx, Azahar, PCSX2, PPSSPP, Supermodel, GZDoom, PICO-8, and
 TeknoParrot free.
 
+Ryubing uses the official Canary Linux x64 release, not nixpkgs' stable
+`ryubing` package. The current pin follows the official latest redirect at
+`https://update.ryujinx.app/latest/canary` and is recorded in
+`modules/emulation/ryubing-canary-pin.nix`. Run this before a Boomer rebuild to
+advance the pin when upstream publishes a new Canary:
+
+```sh
+scripts/update-ryubing-canary /root/nixos-config
+```
+
+Nix still needs a fixed hash, so the build itself stays reproducible; the
+updater is the intentional step that converts "latest Canary" into a Nix pin.
+
 ## BIOS, Firmware, And Keys
 
 Keep all proprietary runtime files out of the repo:
 
+- Imported BIOS source mirror: `/srv/emulation/bios/systems`
 - Switch firmware and keys: `/srv/emulation/bios/switch`
 - PlayStation/PlayStation 2 BIOS: `/srv/emulation/bios`
 - Sega CD, Saturn, Neo Geo CD, PC Engine CD BIOS: `/srv/emulation/bios`

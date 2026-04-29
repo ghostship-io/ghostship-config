@@ -53,6 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   quick, overnight, shader-matrix, scaling-matrix, report, compare, and profile
   tools that reuse `run-emulator`, parse MangoHud CSV frame metrics, and write
   tuning recommendations without automatically mutating runtime profiles.
+  Replaced nixpkgs' stable Ryubing package with a pinned official Ryubing
+  Canary binary package and added `update-ryubing-canary` so the pin can be
+  advanced from the official latest redirect before Boomer rebuilds.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from

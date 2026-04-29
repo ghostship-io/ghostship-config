@@ -1,38 +1,126 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.ghostship.emulation;
   emu = config.ghostship.emulation.internal.lib;
 
   winePackage =
-    if pkgs ? wineWowPackages && pkgs.wineWowPackages ? staging then pkgs.wineWowPackages.staging
-    else if pkgs ? wineWow64Packages && pkgs.wineWow64Packages ? staging then pkgs.wineWow64Packages.staging
-    else pkgs.wine;
+    if pkgs ? wineWowPackages && pkgs.wineWowPackages ? staging then
+      pkgs.wineWowPackages.staging
+    else if pkgs ? wineWow64Packages && pkgs.wineWow64Packages ? staging then
+      pkgs.wineWow64Packages.staging
+    else
+      pkgs.wine;
 
   supermodelPackage =
     if pkgs ? supermodel then
-      pkgs.supermodel.overrideAttrs
-        (old: {
-          postPatch = (old.postPatch or "") + ''
-            if [ -f Src/Game.h ] && ! grep -q '<cstdint>' Src/Game.h; then
-              sed -i '1i #include <cstdint>' Src/Game.h
-            fi
-          '';
-        })
+      pkgs.supermodel.overrideAttrs (old: {
+        postPatch = (old.postPatch or "") + ''
+          if [ -f Src/Game.h ] && ! grep -q '<cstdint>' Src/Game.h; then
+            sed -i '1i #include <cstdint>' Src/Game.h
+          fi
+        '';
+      })
     else
       null;
 
-  retroarchPackage = pkgs.retroarch.withCores (cores:
-    lib.filter (core: core != null) (map (name: cores.${name} or null) emu.coreNames));
+  retroarchPackage = pkgs.retroarch.withCores (
+    cores: lib.filter (core: core != null) (map (name: cores.${name} or null) emu.coreNames)
+  );
 
   emptyJoypadAutoconfig = pkgs.runCommand "empty-retroarch-joypad-autoconfig" { } ''
     mkdir -p $out/share/libretro/autoconfig
   '';
 
+  ryubingCanaryPin = import ./ryubing-canary-pin.nix;
+
+  ryubingCanaryRuntimeLibs = [
+    pkgs.alsa-lib
+    pkgs.fontconfig
+    pkgs.freetype
+    pkgs.glib
+    pkgs.gtk3
+    pkgs.icu
+    pkgs.jack2
+    pkgs.libGL
+    pkgs.libdrm
+    pkgs.libdecor
+    pkgs.libice
+    pkgs.libpulseaudio
+    pkgs.libsm
+    pkgs.libusb1
+    pkgs.libxscrnsaver
+    pkgs.libxtst
+    pkgs.libxkbcommon
+    pkgs.openssl
+    pkgs.pipewire
+    pkgs.sndio
+    pkgs.stdenv.cc.cc.lib
+    pkgs.udev
+    pkgs.vulkan-loader
+    pkgs.wayland
+    pkgs.libx11
+    pkgs.libxcursor
+    pkgs.libxext
+    pkgs.libxi
+    pkgs.libxrandr
+    pkgs.libxcb
+  ];
+
+  ryubingCanaryPackage = pkgs.stdenv.mkDerivation {
+    pname = "ryubing-canary";
+    inherit (ryubingCanaryPin) version;
+
+    src = pkgs.fetchurl {
+      inherit (ryubingCanaryPin) url hash;
+    };
+
+    nativeBuildInputs = [
+      pkgs.autoPatchelfHook
+      pkgs.makeWrapper
+    ];
+
+    buildInputs = ryubingCanaryRuntimeLibs;
+    autoPatchelfIgnoreMissingDeps = [
+      "libGLES_CM.so.1"
+      "libsteam_api.so"
+    ];
+
+    sourceRoot = ".";
+    dontBuild = true;
+
+    installPhase = ''
+      runHook preInstall
+      mkdir -p "$out/opt/ryubing-canary" "$out/bin"
+      cp -R publish/. "$out/opt/ryubing-canary/"
+      chmod +x "$out/opt/ryubing-canary/Ryujinx" "$out/opt/ryubing-canary/Ryujinx.sh" || true
+      makeWrapper "$out/opt/ryubing-canary/Ryujinx" "$out/bin/ryujinx" \
+        --set LANG C.UTF-8 \
+        --set DOTNET_EnableAlternateStackCheck 1 \
+        --prefix LD_LIBRARY_PATH : "$out/opt/ryubing-canary:${lib.makeLibraryPath ryubingCanaryRuntimeLibs}"
+      ln -s "$out/bin/ryujinx" "$out/bin/Ryujinx"
+      runHook postInstall
+    '';
+
+    meta = {
+      homepage = "https://git.ryujinx.app/Ryubing/Canary/releases";
+      description = "Ryubing Canary Nintendo Switch emulator binary release";
+      license = lib.licenses.mit;
+      platforms = [ "x86_64-linux" ];
+      mainProgram = "ryujinx";
+    };
+  };
+
   joypadAutoconfig =
-    if pkgs ? retroarch-joypad-autoconfig
-    then pkgs.retroarch-joypad-autoconfig
-    else emptyJoypadAutoconfig;
+    if pkgs ? retroarch-joypad-autoconfig then
+      pkgs.retroarch-joypad-autoconfig
+    else
+      emptyJoypadAutoconfig;
 
   esdePackage = pkgs.appimageTools.wrapType2 rec {
     pname = "es-de";
@@ -125,7 +213,10 @@ let
       sha256 = "1alyii0bc9r9j2519q3jhxn8xazrcffy0kl8k07mnn208y2wxwpd";
       url = "file:///mnt/c/Users/the owner/Downloads/pico-8_0.2.7_amd64.zip";
     };
-    nativeBuildInputs = [ pkgs.makeWrapper pkgs.unzip ];
+    nativeBuildInputs = [
+      pkgs.makeWrapper
+      pkgs.unzip
+    ];
     unpackPhase = ''
       unzip "$src"
     '';
@@ -150,6 +241,7 @@ in
         joypadAutoconfig
         pico8Package
         retroarchPackage
+        ryubingCanaryPackage
         shaderCg
         shaderGlsl
         shaderSlang

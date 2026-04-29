@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo="${1:-$(pwd)}"
+pin_file="$repo/modules/emulation/ryubing-canary-pin.nix"
+latest_endpoint="https://update.ryujinx.app/latest/canary"
+
+if [[ ! -f "$pin_file" ]]; then
+  echo "Missing pin file: $pin_file" >&2
+  exit 66
+fi
+
+final_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "$latest_endpoint")"
+version="$(printf '%s\n' "$final_url" | sed -n 's#.*/\([0-9][0-9.]*\)$#\1#p')"
+if [[ -z "$version" ]]; then
+  echo "Could not resolve Ryubing Canary version from $latest_endpoint -> $final_url" >&2
+  exit 65
+fi
+
+current="$(sed -n 's/.*version = "\(.*\)";.*/\1/p' "$pin_file")"
+if [[ "${2:-}" != "--force" && "$current" == "$version" ]]; then
+  echo "Ryubing Canary is already pinned to latest version $version"
+  exit 0
+fi
+
+url="https://git.ryujinx.app/Ryubing/Canary/releases/download/$version/ryujinx-canary-$version-linux_x64.tar.gz"
+hash_base32="$(nix-prefetch-url "$url")"
+hash_sri="$(nix hash convert --hash-algo sha256 --to sri "$hash_base32")"
+
+tmp="$(mktemp)"
+cat >"$tmp" <<EOF
+{
+  version = "$version";
+  url = "$url";
+  hash = "$hash_sri";
+}
+EOF
+mv "$tmp" "$pin_file"
+
+echo "Pinned Ryubing Canary $version"
+echo "$hash_sri"
