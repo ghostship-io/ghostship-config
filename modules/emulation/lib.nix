@@ -346,18 +346,8 @@ let
 
   optionalSystems = [
     {
-      id = "model3";
-      folder = "Sega - Model 3 (1996)";
-      fullname = "Sega Model 3";
-      platform = "arcade";
-      theme = "arcade";
-      emulator = "supermodel";
-      extensions = "${commonRetroExtensions} .bin .BIN";
-      fixedAspect = "4:3";
-    }
-    {
       id = "doom";
-      folder = "Ports - Doom";
+      folder = "Fantasy - GZDoom (2005)";
       fullname = "Doom";
       platform = "doom";
       theme = "doom";
@@ -367,7 +357,7 @@ let
     }
     {
       id = "pico8";
-      folder = "PICO-8 (2015)";
+      folder = "Fantasy - PICO-8 (2015)";
       fullname = "PICO-8";
       platform = "pico8";
       theme = "pico8";

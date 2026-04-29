@@ -97,9 +97,10 @@ updater is the intentional step that converts "latest Canary" into a Nix pin.
 
 ## GZDoom
 
-The Doom system uses `Ports - Doom` in ES-DE and accepts normal WAD/PK3 files
-plus Batocera-style `.gzdoom` launchers. A `.gzdoom` launcher is a text file
-with one non-empty GZDoom argument line, for example:
+The Doom system uses the source library folder `Fantasy - GZDoom (2005)` in
+ES-DE and accepts normal WAD/PK3 files plus Batocera-style `.gzdoom` launchers.
+A `.gzdoom` launcher is a text file with one non-empty GZDoom argument line,
+for example:
 
 ```text
 -iwad assets/Doom II - Hell on Earth/DOOM2.WAD -file assets/SIGIL/SIGIL_v1_21.wad

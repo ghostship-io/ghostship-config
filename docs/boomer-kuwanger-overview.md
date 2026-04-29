@@ -51,7 +51,7 @@
 | PlayStation | RetroArch Beetle PSX HW |
 | PlayStation 2 | PCSX2 standalone |
 | PSP | PPSSPP standalone |
-| Sega Model 3 | Supermodel |
+| Sega Model 3 | Supermodel installed; ES-DE collection appears when the source library adds a matching folder |
 | Doom ports | GZDoom |
 | PICO-8 | Official PICO-8 package via `requireFile` |
 

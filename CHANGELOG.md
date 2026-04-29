@@ -61,7 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Canary binary package and added `update-ryubing-canary` so the pin can be
   advanced from the official latest redirect before Boomer rebuilds. Added
   Batocera-style `.gzdoom` launcher support for the Doom system so ES-DE can
-  list curated launch files while GZDoom receives the referenced WAD/PK3 assets.
+  list curated launch files while GZDoom receives the referenced WAD/PK3 assets,
+  and aligned Boomer's ES-DE ROM folder names exactly with the source
+  `/mnt/z/Library/ROMs/roms` library.
   Added `POOM.p8.png` as the PICO-8 smoke cart and made PICO-8 launches request
   an explicit Gamescope Xwayland server so SDL can initialize on the TV path.
 
