@@ -1,13 +1,19 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   recipients = import ../../secrets/recipients.nix;
   catalog = import ../../secrets/catalog.nix { inherit recipients; };
-  unitCatalog = catalog.units;
+  unitCatalog = lib.filterAttrs (_: meta: meta.recipientGroup == "self-hosted-runtime") catalog.units;
   projectionCatalog = catalog.projections;
   projectionDir = "/run/ghostship-secrets";
 
-  mkAgeSecret = meta:
+  mkAgeSecret =
+    meta:
     {
       file = meta.path;
     }
@@ -30,10 +36,18 @@ let
       import tempfile
       from pathlib import Path
 
-      SPEC = json.loads(${builtins.toJSON (builtins.toJSON {
-        units = lib.mapAttrs (name: _: { path = (builtins.getAttr name config.age.secrets).path; }) unitCatalog;
-        projections = lib.mapAttrs (name: meta: meta // { path = "${projectionDir}/" + meta.fileName; }) projectionCatalog;
-      })})
+      SPEC = json.loads(${
+        builtins.toJSON (
+          builtins.toJSON {
+            units = lib.mapAttrs (name: _: {
+              path = (builtins.getAttr name config.age.secrets).path;
+            }) unitCatalog;
+            projections = lib.mapAttrs (
+              name: meta: meta // { path = "${projectionDir}/" + meta.fileName; }
+            ) projectionCatalog;
+          }
+        )
+      })
 
       def parse_env_file(path_str):
           path = Path(path_str)
@@ -108,8 +122,12 @@ in
     age.secrets = lib.mapAttrs (_: meta: mkAgeSecret meta) unitCatalog;
 
     ghostship.selfHostedSecrets = {
-      units = lib.mapAttrs (name: meta: meta // { path = (builtins.getAttr name config.age.secrets).path; }) unitCatalog;
-      projections = lib.mapAttrs (name: meta: meta // { path = "${projectionDir}/" + meta.fileName; }) projectionCatalog;
+      units = lib.mapAttrs (
+        name: meta: meta // { path = (builtins.getAttr name config.age.secrets).path; }
+      ) unitCatalog;
+      projections = lib.mapAttrs (
+        name: meta: meta // { path = "${projectionDir}/" + meta.fileName; }
+      ) projectionCatalog;
       render = projectionRenderer;
     };
 

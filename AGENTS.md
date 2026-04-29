@@ -350,6 +350,8 @@ changelog.
   root paths prefixed with `secrets/`.
 - Use service-local `*-secrets` bundles and catalog-driven projections instead
   of shared catch-all `HOMEPAGE_*` bundles or repeated raw secret path wiring.
+- Keep self-hosted secret activation limited to `self-hosted-runtime` catalog
+  units; emulation secrets are declared by `modules/emulation`.
 - `bootstrap.sh` is the installer-time host bootstrap entrypoint. It captures a
   temporary intake bundle with `hardware-configuration.nix`, metadata, and the
   host SSH `ed25519` public key. WSL2 bootstrap must generate that host key if
