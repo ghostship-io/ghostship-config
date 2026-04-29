@@ -214,7 +214,9 @@ changelog.
   manufacturer/hardware/release systems sorting, visible clock, Switch Pro
   controller prompts, first-controller-only input, 12-hour clock format, and
   Hawaii standard time. WiiWare games should stay as extracted `.wad` files in
-  the Wii ROM folder so ES-DE can launch them through Dolphin.
+  the Wii ROM folder so ES-DE can launch them through Dolphin. Dolphin runtime
+  config/cache can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu`
+  because it contains save/NAND state.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
 - Homepage `services.yaml` updates can leave stale entries behind when keys are

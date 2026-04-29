@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
+  Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
+  and WiiWare launches do not block on first-run dialogs.
 - **Boomer WiiWare ROM support**: Add `.wad` and `.WAD` to the managed Wii
   ES-DE extensions so extracted WiiWare titles launch through Dolphin.
 - **Boomer ES-DE preferences**: Enforce ES-DE's manufacturer/hardware/release

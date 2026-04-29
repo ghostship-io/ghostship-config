@@ -728,6 +728,130 @@ PY
           "${cfg.configRoot}/emulators/teknoparrot" \
           "${cfg.configRoot}/teknoparrot"
         install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${displayPolicy} "${cfg.configRoot}/display/policy.json"
+        dolphin_config_dir="${cfg.dataRoot}/xdg/config/dolphin-emu"
+        install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$dolphin_config_dir"
+        cat >"$dolphin_config_dir/Dolphin.ini" <<'EOF'
+    [Analytics]
+    PermissionAsked = True
+    Enabled = False
+    [Core]
+    CPUThread = True
+    SkipIPL = True
+    GFXBackend = Vulkan
+    SIDevice0 = 6
+    SIDevice1 = 0
+    SIDevice2 = 0
+    SIDevice3 = 0
+    WiimoteContinuousScanning = True
+    WiimoteEnableSpeaker = False
+    [Display]
+    Fullscreen = True
+    RenderWindowWidth = 1920
+    RenderWindowHeight = 1080
+    RenderWindowAutoSize = False
+    [Interface]
+    ConfirmStop = False
+    [DSP]
+    DSPThread = True
+    Backend = Cubeb
+    Volume = 100
+    EOF
+        cat >"$dolphin_config_dir/GFX.ini" <<'EOF'
+    [Settings]
+    BackendMultithreading = True
+    InternalResolution = 3
+    AspectRatio = 0
+    ShaderCompilationMode = 2
+    ShaderCache = True
+    WaitForShadersBeforeStarting = False
+    BorderlessFullscreen = True
+    [Hardware]
+    VSync = False
+    [Enhancements]
+    MaxAnisotropy = 4
+    EOF
+        cat >"$dolphin_config_dir/GCPadNew.ini" <<'EOF'
+    [GCPad1]
+    Device = SDL/0/Nintendo Switch Pro Controller
+    Buttons/A = `Button 0`
+    Buttons/B = `Button 1`
+    Buttons/X = `Button 2`
+    Buttons/Y = `Button 3`
+    Buttons/Z = `Button 7`
+    Buttons/Start = `Button 9`
+    Main Stick/Up = `Axis 1-`
+    Main Stick/Down = `Axis 1+`
+    Main Stick/Left = `Axis 0-`
+    Main Stick/Right = `Axis 0+`
+    Main Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
+    C-Stick/Up = `Axis 3-`
+    C-Stick/Down = `Axis 3+`
+    C-Stick/Left = `Axis 2-`
+    C-Stick/Right = `Axis 2+`
+    C-Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
+    Triggers/L = `Button 4`
+    Triggers/R = `Button 5`
+    D-Pad/Up = `Hat 0 N`
+    D-Pad/Down = `Hat 0 S`
+    D-Pad/Left = `Hat 0 W`
+    D-Pad/Right = `Hat 0 E`
+    [GCPad2]
+    Device = SDL/0/Nintendo Switch Pro Controller
+    [GCPad3]
+    Device = SDL/0/Nintendo Switch Pro Controller
+    [GCPad4]
+    Device = SDL/0/Nintendo Switch Pro Controller
+    EOF
+        cat >"$dolphin_config_dir/WiimoteNew.ini" <<'EOF'
+    [Wiimote1]
+    Source = 1
+    Device = SDL/0/Nintendo Switch Pro Controller
+    Buttons/A = `Button 0`
+    Buttons/B = `Button 7`
+    Buttons/1 = `Button 1`
+    Buttons/2 = `Button 3`
+    Buttons/- = `Button 8`
+    Buttons/+ = `Button 9`
+    Buttons/Home = `Button 10`
+    D-Pad/Up = `Hat 0 N`
+    D-Pad/Down = `Hat 0 S`
+    D-Pad/Left = `Hat 0 W`
+    D-Pad/Right = `Hat 0 E`
+    IR/Up = `Axis 3-`
+    IR/Down = `Axis 3+`
+    IR/Left = `Axis 2-`
+    IR/Right = `Axis 2+`
+    Shake/X = `Button 11`
+    Shake/Y = `Button 11`
+    Shake/Z = `Button 11`
+    Extension = Nunchuk
+    Nunchuk/Buttons/C = `Button 4`
+    Nunchuk/Buttons/Z = `Button 5`
+    Nunchuk/Stick/Up = `Axis 1-`
+    Nunchuk/Stick/Down = `Axis 1+`
+    Nunchuk/Stick/Left = `Axis 0-`
+    Nunchuk/Stick/Right = `Axis 0+`
+    Nunchuk/Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
+    [Wiimote2]
+    Source = 0
+    Device = SDL/0/Nintendo Switch Pro Controller
+    [Wiimote3]
+    Source = 0
+    Device = SDL/0/Nintendo Switch Pro Controller
+    [Wiimote4]
+    Source = 0
+    Device = SDL/0/Nintendo Switch Pro Controller
+    [BalanceBoard]
+    Source = 0
+    EOF
+        cat >"$dolphin_config_dir/Logger.ini" <<'EOF'
+    [Options]
+    Verbosity = 1
+    WriteToFile = False
+    WriteToConsole = False
+    EOF
+        chown -R ${cfg.user}:${cfg.group} "$dolphin_config_dir"
+        find "$dolphin_config_dir" -type f -exec chmod 0644 {} +
         for dir in azahar dolphin cemu pcsx2 ppsspp xemu ryubing supermodel gzdoom pico8 teknoparrot; do
           readme="${cfg.configRoot}/emulators/$dir/README.txt"
           if [ ! -e "$readme" ]; then
