@@ -435,6 +435,39 @@ let
     }
     bootstrap_emulator_config "$emulator_id"
 
+    prepare_ryubing_runtime() {
+      ryujinx_config_dir="$XDG_CONFIG_HOME/Ryujinx"
+      ryujinx_system_dir="$ryujinx_config_dir/system"
+      ryujinx_sdcard_dir="$ryujinx_config_dir/sdcard"
+      mkdir -p "$ryujinx_system_dir" "$ryujinx_sdcard_dir"
+
+      for key_name in prod.keys title.keys; do
+        key_source="${cfg.biosRoot}/switch/$key_name"
+        key_target="$ryujinx_system_dir/$key_name"
+        if [ -r "$key_source" ] && { [ ! -e "$key_target" ] || [ -L "$key_target" ]; }; then
+          ln -sfn "$key_source" "$key_target"
+        fi
+      done
+
+      case "$system_id:$emulator_id:$rom_path" in
+        switch:ryubing:*.nro|switch:ryubing:*.NRO)
+          rom_dir="$(dirname "$rom_path")"
+          asset_source="$rom_dir/data"
+          asset_target="$ryujinx_sdcard_dir/data"
+          if [ -d "$asset_source" ]; then
+            if [ ! -e "$asset_target" ] || [ -L "$asset_target" ]; then
+              ln -sfn "$asset_source" "$asset_target"
+              log_event "runtime" "linked Ryubing homebrew data: $asset_target -> $asset_source"
+            elif [ -d "$asset_target" ]; then
+              log_event "runtime" "kept existing Ryubing sdcard data directory: $asset_target"
+            else
+              log_event "warning" "Ryubing sdcard data path exists and is not a directory or symlink: $asset_target"
+            fi
+          fi
+          ;;
+      esac
+    }
+
     cmd=()
     run_cwd=""
     parse_gzdoom_launcher() {
@@ -532,7 +565,10 @@ PY
       dolphin) cmd=(dolphin-emu -b -e "$rom_path") ;;
       cemu) cmd=(cemu -f -g "$rom_path") ;;
       xemu) cmd=(xemu -full-screen -dvd_path "$rom_path") ;;
-      ryubing) cmd=(ryujinx "$rom_path") ;;
+      ryubing)
+        prepare_ryubing_runtime
+        cmd=(ryujinx "$rom_path")
+        ;;
       azahar)
         azahar_bin="$(first_command azahar azahar-qt)"
         cmd=("$azahar_bin" "$rom_path")

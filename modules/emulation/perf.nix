@@ -644,9 +644,15 @@ let
 
     combined_log = (text(stderr_path) + "\n" + text(retroarch_log)).lower()
     status = launch_status
+    missing_runtime_log = re.search(r"(missing|required|cannot open).*?(bios|firmware|keys|prod\.keys|title\.keys|mcpx|bootrom|system card)|(bios|firmware|keys|prod\.keys|title\.keys|mcpx|bootrom|system card).*?(missing|not found|required|cannot open)", combined_log)
+    fbneo_content_ready = system_id == "fbneo" and (
+        "[fbneo] no missing files, proceeding" in combined_log
+        or "[fbneo] romset found at" in combined_log
+    )
+    fbneo_explicit_missing = system_id == "fbneo" and re.search(r"\[fbneo\].*(missing files|required files|missing rom|missing bios)", combined_log)
     if launch_status == "missing-rom":
         status = "missing-rom"
-    elif re.search(r"(missing|not found|required|cannot open|no).*?(bios|firmware|keys|prod\.keys|title\.keys|mcpx|bootrom|system card)|(bios|firmware|keys|prod\.keys|title\.keys|mcpx|bootrom|system card).*?(missing|not found|required|cannot open)", combined_log):
+    elif missing_runtime_log and (system_id != "fbneo" or not fbneo_content_ready or fbneo_explicit_missing):
         status = "blocked-missing-runtime"
     elif re.search(r"failed to open libretro core|failed to load content|failed to extract content|could not read content file|file format is unknown|unknown disk format|not a psp game|failed to (create|initialize).*vulkan|vk_error_|segmentation fault|trace/breakpoint trap", combined_log):
         status = "fail-fatal-log"
