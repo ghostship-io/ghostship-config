@@ -206,7 +206,10 @@ Smoke ROM tooling lives under `/srv/emulation/smoke-roms` and
 - `smoke-report`: summarizes the latest test run.
 
 The smoke harness is intended for target-display validation. A `--dry-run`
-mode prints the exact `run-emulator` calls without launching games.
+mode prints the exact `run-emulator` calls without launching games. Root-run
+smoke tests re-exec as `kiosk` on tty1 with cleared capability sets so
+`steam-run`/bubblewrap-based emulators, including PICO-8, launch the same way
+they do from ES-DE.
 
 The runtime launcher does not transform ROMs. If a smoke entry fails because
 the selected copied entry is an archive or folder shape that the emulator will
@@ -248,6 +251,9 @@ Commands:
   status, and recommendations.
 - `perf-compare`: compares two runs and flags >3% FPS regressions or >2 ms p99
   frame-time regressions.
+- Root-run performance tests use the same capability-cleared tty re-exec path
+  as the smoke harness so fullscreen Gamescope launches match the production
+  kiosk session.
 - `perf-profile current`: shows the active RetroArch profile and current
   standalone runtime scaling policy files.
 

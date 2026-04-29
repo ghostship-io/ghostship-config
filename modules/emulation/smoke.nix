@@ -146,6 +146,8 @@ let
         -p StandardOutput=journal+console \
         -p StandardError=journal+console \
         -p WorkingDirectory=/home/${cfg.user} \
+        -p CapabilityBoundingSet= \
+        -p AmbientCapabilities= \
         -p After=emulation-setup.service \
         -p Conflicts=emulation-session.service \
         ${pkgs.coreutils}/bin/env \

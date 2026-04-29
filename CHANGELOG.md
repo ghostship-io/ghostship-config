@@ -53,6 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   quick, overnight, shader-matrix, scaling-matrix, report, compare, and profile
   tools that reuse `run-emulator`, parse MangoHud CSV frame metrics, and write
   tuning recommendations without automatically mutating runtime profiles.
+  Cleared transient smoke/perf test capability sets so `steam-run`/bubblewrap
+  emulators launch without the unexpected-capabilities failure seen during
+  PICO-8 testing.
   Replaced nixpkgs' stable Ryubing package with a pinned official Ryubing
   Canary binary package and added `update-ryubing-canary` so the pin can be
   advanced from the official latest redirect before Boomer rebuilds. Added
