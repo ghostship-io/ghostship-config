@@ -135,6 +135,10 @@ The official PICO-8 zip is consumed with `pkgs.requireFile`:
 The package wraps the Linux PICO-8 binary with `steam-run` so it can launch on
 NixOS without committing proprietary files.
 
+PICO-8 uses SDL's X11 video path on Boomer, so `run-emulator` adds an explicit
+Gamescope Xwayland server for PICO-8 launches. Current smoke coverage uses
+`POOM.p8.png` from the PICO-8 library as the heavier test cart.
+
 ## TeknoParrot Free
 
 Only the free TeknoParrot path is scaffolded. No premium unlocks, bypasses,

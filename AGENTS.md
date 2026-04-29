@@ -202,7 +202,8 @@ changelog.
   `modules/emulation/ryubing-canary-pin.nix`, refreshing it with
   `scripts/update-ryubing-canary` before rebuilding when upstream advances.
   Doom uses `Ports - Doom` with Batocera-style `.gzdoom` launchers at the
-  ROM-folder top level and assets underneath that folder.
+  ROM-folder top level and assets underneath that folder. PICO-8 needs an
+  explicit Gamescope Xwayland server on Boomer because its SDL path uses X11.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
 - Homepage `services.yaml` updates can leave stale entries behind when keys are

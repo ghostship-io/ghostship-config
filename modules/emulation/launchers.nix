@@ -584,6 +584,9 @@ PY
       else
         mapfile -t gamescope_args < <(jq -r '.gamescope_args[]' <<<"$profile_json")
       fi
+      if [ "$emulator_id" = "pico8" ]; then
+        gamescope_args+=("--xwayland-count" "1")
+      fi
       run_cmd=(gamescope "''${gamescope_args[@]}" -- "''${run_cmd[@]}")
     fi
     if command -v gamemoderun >/dev/null 2>&1; then
