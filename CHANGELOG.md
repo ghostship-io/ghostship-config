@@ -55,7 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tuning recommendations without automatically mutating runtime profiles.
   Replaced nixpkgs' stable Ryubing package with a pinned official Ryubing
   Canary binary package and added `update-ryubing-canary` so the pin can be
-  advanced from the official latest redirect before Boomer rebuilds.
+  advanced from the official latest redirect before Boomer rebuilds. Added
+  Batocera-style `.gzdoom` launcher support for the Doom system so ES-DE can
+  list curated launch files while GZDoom receives the referenced WAD/PK3 assets.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from

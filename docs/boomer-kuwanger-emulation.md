@@ -95,6 +95,21 @@ scripts/update-ryubing-canary /root/nixos-config
 Nix still needs a fixed hash, so the build itself stays reproducible; the
 updater is the intentional step that converts "latest Canary" into a Nix pin.
 
+## GZDoom
+
+The Doom system uses `Ports - Doom` in ES-DE and accepts normal WAD/PK3 files
+plus Batocera-style `.gzdoom` launchers. A `.gzdoom` launcher is a text file
+with one non-empty GZDoom argument line, for example:
+
+```text
+-iwad assets/Doom II - Hell on Earth/DOOM2.WAD -file assets/SIGIL/SIGIL_v1_21.wad
+```
+
+`run-emulator` parses that line with shell-style quoting, does not execute it
+through a shell, and launches GZDoom from the `.gzdoom` file's directory so
+relative asset paths work. Keep assets under the Doom ROM folder and put the
+human-facing launchers at the top level for cleaner ES-DE scraping.
+
 ## BIOS, Firmware, And Keys
 
 Keep all proprietary runtime files out of the repo:

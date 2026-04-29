@@ -436,6 +436,44 @@ let
     bootstrap_emulator_config "$emulator_id"
 
     cmd=()
+    run_cwd=""
+    parse_gzdoom_launcher() {
+      launcher="$1"
+      launcher_line="$(grep -v -E '^[[:space:]]*(#|$)' "$launcher" | head -n 1 || true)"
+      if [ -z "$launcher_line" ]; then
+        log_event "error" "empty GZDoom launcher"
+        echo "Empty GZDoom launcher: $launcher" >&2
+        exit 64
+      fi
+      set +e
+      mapfile -d "" -t gzdoom_args < <(
+        GZDOOM_LAUNCHER_LINE="$launcher_line" ${pkgs.python3}/bin/python3 - <<'PY'
+import os
+import shlex
+import sys
+
+try:
+    args = shlex.split(os.environ["GZDOOM_LAUNCHER_LINE"], comments=False, posix=True)
+except ValueError as exc:
+    print(f"Invalid .gzdoom launcher syntax: {exc}", file=sys.stderr)
+    sys.exit(64)
+
+for arg in args:
+    sys.stdout.buffer.write(arg.encode("utf-8") + b"\0")
+PY
+      )
+      parse_rc="$?"
+      set -e
+      if [ "$parse_rc" -ne 0 ]; then
+        exit "$parse_rc"
+      fi
+      if [ "''${#gzdoom_args[@]}" -eq 0 ]; then
+        log_event "error" "GZDoom launcher produced no arguments"
+        echo "GZDoom launcher produced no arguments: $launcher" >&2
+        exit 64
+      fi
+    }
+
     case "$emulator_id" in
       retroarch-*)
         core_file="$(core_file_for "$emulator_id")"
@@ -509,7 +547,16 @@ let
         cmd=("$ppsspp_bin" "$rom_path")
         ;;
       supermodel) cmd=(supermodel "$rom_path" -res="$output_width","$output_height" -fullscreen) ;;
-      gzdoom) cmd=(gzdoom -iwad "$rom_path") ;;
+      gzdoom)
+        run_cwd="$(dirname "$rom_path")"
+        case "$rom_path" in
+          *.gzdoom|*.GZDOOM)
+            parse_gzdoom_launcher "$rom_path"
+            cmd=(gzdoom "''${gzdoom_args[@]}")
+            ;;
+          *) cmd=(gzdoom -iwad "$rom_path") ;;
+        esac
+        ;;
       pico8) cmd=(pico8 -run "$rom_path") ;;
       teknoparrot) cmd=(teknoparrot-free "$rom_path") ;;
       *)
@@ -541,6 +588,9 @@ let
     fi
     if command -v gamemoderun >/dev/null 2>&1; then
       run_cmd=(gamemoderun "''${run_cmd[@]}")
+    fi
+    if [ -n "$run_cwd" ]; then
+      cd "$run_cwd"
     fi
     exec "''${run_cmd[@]}"
   '';

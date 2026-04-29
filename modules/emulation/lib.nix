@@ -362,7 +362,7 @@ let
       platform = "doom";
       theme = "doom";
       emulator = "gzdoom";
-      extensions = ".wad .WAD .iwad .IWAD .pk3 .PK3 .pk7 .PK7";
+      extensions = ".wad .WAD .iwad .IWAD .pwad .PWAD .pk3 .PK3 .pk7 .PK7 .gzdoom .GZDOOM";
       fixedAspect = "native";
     }
     {
