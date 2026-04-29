@@ -181,6 +181,58 @@ not open, manually extract only that smoke copy and point `roms.json` at the
 playable file. The final ROM set should already be stored in the launchable
 shape expected by the target emulator.
 
+## Performance Testing
+
+Performance tooling builds on the smoke ROM manifest and always launches
+through `run-emulator`, so Gamescope, GameMode, HDMI audio routing, display
+policy, RetroArch profile selection, and emulator logging follow the same path
+as normal play. Gamescope FSR remains disabled for every run.
+
+Runtime state:
+
+- `/srv/emulation/config/perf/policy.json`: mode defaults, thresholds, shader
+  profiles, scaling profiles, and tuning notes.
+- `/srv/emulation/logs/perf/<run-id>/context.json`: package versions, kernel,
+  display profile, audio summary, Vulkan summary, and mapped systems.
+- `/srv/emulation/logs/perf/<run-id>/results.jsonl`: one JSON result per ROM
+  and profile.
+- `/srv/emulation/logs/perf/<run-id>/recommended-changes.json`: proposed
+  tuning changes only; nothing is applied automatically.
+- `/srv/emulation/logs/perf/<run-id>/mangohud/*.csv`: raw MangoHud frame data.
+
+Commands:
+
+- `perf-test --quick`: one ROM per mapped system, 75 seconds each with a
+  15-second warmup.
+- `perf-test --overnight`: up to three ROMs per mapped system, 180 seconds each
+  with a 30-second warmup.
+- `perf-test --shader-matrix`: RetroArch systems only, comparing default,
+  `nnedi3-fast`, `nnedi3-clean`, `sharp-bilinear-prescale`, and `no-shader`.
+- `perf-test --scaling-matrix`: standalone systems only, recording baseline,
+  quality, and performance scaling profiles for emulator-native tuning.
+- `perf-test --single <system> <rom>`: focused debug run for one ROM.
+- `perf-report`: latest report table with average FPS, 1% low, p99 frame time,
+  status, and recommendations.
+- `perf-compare`: compares two runs and flags >3% FPS regressions or >2 ms p99
+  frame-time regressions.
+- `perf-profile current`: shows the active RetroArch profile and current
+  standalone runtime scaling policy files.
+
+Use `--duration`, `--warmup`, and `--systems` for short validation loops, for
+example:
+
+```sh
+perf-test --shader-matrix --systems nes,pcengine,gba,snes,fbneo --duration 12 --warmup 2
+perf-test --scaling-matrix --systems psp,gc --duration 12 --warmup 2
+```
+
+Statuses distinguish launch failures from tuning failures. Missing BIOS,
+firmware, keys, or proprietary emulator runtime files are reported as
+`blocked-missing-runtime`; frame pacing failures are reported as
+`fail-performance` with a recommendation such as lowering NNEDI3 quality,
+falling back to sharp-bilinear, or lowering emulator-native internal
+resolution.
+
 ## RetroArch
 
 RetroArch is built with explicit cores for arcade, 8-bit, 16-bit, handheld,

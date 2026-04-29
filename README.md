@@ -49,10 +49,10 @@ logical-unit secret files.
 launched manually with `start-esde`; emulator launches still use the
 Gamescope fullscreen wrapper, RetroAchievements-aligned RetroArch cores,
 bundled shader packs, controller tooling, smoke-test tooling, dynamic display
-discovery, and ScreenScraper/RetroAchievements secret wiring. Gamescope FSR is
-disabled; scaling is handled by RetroArch shaders or emulator-native internal
-resolution controls while preserving aspect ratio. HDMI audio is routed through
-PipeWire by selecting the currently
+discovery, performance-test tooling, and ScreenScraper/RetroAchievements secret
+wiring. Gamescope FSR is disabled; scaling is handled by RetroArch shaders or
+emulator-native internal resolution controls while preserving aspect ratio.
+HDMI audio is routed through PipeWire by selecting the currently
 available AMD HDMI/DP profile before ES-DE and emulator launches. Runtime state
 lives under `/srv/emulation`;
 the future 4TB ROM SSD

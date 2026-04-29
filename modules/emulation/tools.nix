@@ -70,6 +70,10 @@ let
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? displayProfile) [ config.ghostship.emulation.internal.scripts.displayProfile ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? renderRetroAchievementsSettings) [ config.ghostship.emulation.internal.scripts.renderRetroAchievementsSettings ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? renderScraperSettings) [ config.ghostship.emulation.internal.scripts.renderScraperSettings ]
+      ++ lib.optionals (config.ghostship.emulation.internal.scripts ? perfCompare) [ config.ghostship.emulation.internal.scripts.perfCompare ]
+      ++ lib.optionals (config.ghostship.emulation.internal.scripts ? perfProfile) [ config.ghostship.emulation.internal.scripts.perfProfile ]
+      ++ lib.optionals (config.ghostship.emulation.internal.scripts ? perfReport) [ config.ghostship.emulation.internal.scripts.perfReport ]
+      ++ lib.optionals (config.ghostship.emulation.internal.scripts ? perfTest) [ config.ghostship.emulation.internal.scripts.perfTest ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? retroarchShaderSmokeTest) [ config.ghostship.emulation.internal.scripts.retroarchShaderSmokeTest ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? romCoverageCheck) [ config.ghostship.emulation.internal.scripts.romCoverageCheck ]
       ++ lib.optionals (config.ghostship.emulation.internal.scripts ? smokeRomSelect) [ config.ghostship.emulation.internal.scripts.smokeRomSelect ]
@@ -215,6 +219,16 @@ let
       { label = "Dry-run launches"; command = "smoke-test --dry-run"; }
       { label = "Run smoke test"; command = "smoke-test"; }
       { label = "Latest report"; command = "smoke-report"; }
+    ];
+    performance-tests = mkMenuTool "performance-tests" "Performance Tests" [
+      { label = "Quick performance test"; command = "perf-test --quick"; }
+      { label = "Overnight performance test"; command = "perf-test --overnight"; }
+      { label = "Shader matrix"; command = "perf-test --shader-matrix"; }
+      { label = "Scaling matrix"; command = "perf-test --scaling-matrix"; }
+      { label = "Latest report"; command = "perf-report"; }
+      { label = "Compare latest two runs"; command = "perf-compare || true"; }
+      { label = "Current performance profile"; command = "perf-profile current"; }
+      { label = "Latest recommendations"; command = "perf-profile latest-recommendations"; }
     ];
     restart-esde = pkgs.writeShellScriptBin "restart-esde" ''
       set -euo pipefail

@@ -49,7 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fullscreen/session wrapper, changed the RetroArch default shader policy from
   Mega Bezel to clean NNEDI3/sharp profiles, kept Mega Bezel selectable, and
   added a dedicated RetroAchievements secret projection plus RetroArch runtime
-  credential renderer.
+  credential renderer. Added a repeatable emulator performance harness with
+  quick, overnight, shader-matrix, scaling-matrix, report, compare, and profile
+  tools that reuse `run-emulator`, parse MangoHud CSV frame metrics, and write
+  tuning recommendations without automatically mutating runtime profiles.
 
 - **OpenSpec removal**: Removed the managed OpenSpec wrapper, generated agent
   command surfaces, repo-local planning tree, and stale CLI cleanup path from

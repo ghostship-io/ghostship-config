@@ -399,6 +399,7 @@ let
           mkdir -p "$dir"
           jq -n \
             --arg emulator "$emulator" \
+            --arg scaling_profile "''${EMULATION_PERF_SCALING_PROFILE:-default}" \
             --argjson output_width "$output_width" \
             --argjson output_height "$output_height" \
             '{
@@ -408,6 +409,7 @@ let
               gamescope_fsr:false,
               aspect_policy:"preserve",
               scaling:"emulator-native",
+              scaling_profile:$scaling_profile,
               generated_at:now|todate
             }' >"$dir/runtime-scaling-policy.json.tmp"
           mv "$dir/runtime-scaling-policy.json.tmp" "$dir/runtime-scaling-policy.json"
@@ -430,15 +432,27 @@ let
           exit 66
         fi
         profile="${cfg.configRoot}/retroarch/profiles/current.cfg"
-        if [ ! -r "$profile" ]; then
-          profile="${cfg.configRoot}/retroarch/profiles/${cfg.visuals.defaultProfile}.cfg"
-        fi
-        profile_name="$(readlink "$profile" 2>/dev/null || basename "$profile")"
-        if [ "$profile_name" = "${cfg.visuals.defaultProfile}.cfg" ] && [ -r "${cfg.configRoot}/retroarch/shader-policy.json" ]; then
-          system_profile="$(jq -r --arg system "$system_id" '.systemDefaults[$system] // empty' "${cfg.configRoot}/retroarch/shader-policy.json")"
-          if [ -n "$system_profile" ] && [ -r "${cfg.configRoot}/retroarch/profiles/$system_profile.cfg" ]; then
-            profile="${cfg.configRoot}/retroarch/profiles/$system_profile.cfg"
-            profile_name="$system_profile.cfg"
+        profile_override="''${EMULATION_RETROARCH_PROFILE:-}"
+        if [ -n "$profile_override" ] && [ "$profile_override" != "default" ]; then
+          case "$profile_override" in *.cfg) ;; *) profile_override="$profile_override.cfg" ;; esac
+          if [ ! -r "${cfg.configRoot}/retroarch/profiles/$profile_override" ]; then
+            log_event "error" "unknown RetroArch profile $profile_override"
+            echo "Unknown RetroArch profile: $profile_override" >&2
+            exit 64
+          fi
+          profile="${cfg.configRoot}/retroarch/profiles/$profile_override"
+          profile_name="$profile_override"
+        else
+          if [ ! -r "$profile" ]; then
+            profile="${cfg.configRoot}/retroarch/profiles/${cfg.visuals.defaultProfile}.cfg"
+          fi
+          profile_name="$(readlink "$profile" 2>/dev/null || basename "$profile")"
+          if [ "$profile_name" = "${cfg.visuals.defaultProfile}.cfg" ] && [ -r "${cfg.configRoot}/retroarch/shader-policy.json" ]; then
+            system_profile="$(jq -r --arg system "$system_id" '.systemDefaults[$system] // empty' "${cfg.configRoot}/retroarch/shader-policy.json")"
+            if [ -n "$system_profile" ] && [ -r "${cfg.configRoot}/retroarch/profiles/$system_profile.cfg" ]; then
+              profile="${cfg.configRoot}/retroarch/profiles/$system_profile.cfg"
+              profile_name="$system_profile.cfg"
+            fi
           fi
         fi
         shader_status="${cfg.configRoot}/retroarch/shader-status.json"

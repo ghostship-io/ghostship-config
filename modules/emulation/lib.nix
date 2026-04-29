@@ -451,6 +451,10 @@ let
       target = "smoke-tests";
     }
     {
+      file = "Performance Tests.sh";
+      target = "performance-tests";
+    }
+    {
       file = "Restart ES-DE.sh";
       target = "restart-esde";
     }
