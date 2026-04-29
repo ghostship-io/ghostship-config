@@ -148,8 +148,11 @@ let
     };
     installPhase = ''
       runHook preInstall
-      mkdir -p "$out/share/es-de/themes/art-book-next-es-de"
-      cp -R . "$out/share/es-de/themes/art-book-next-es-de/"
+      theme_dir="$out/share/es-de/themes/art-book-next-es-de"
+      mkdir -p "$theme_dir"
+      cp -R . "$theme_dir/"
+      find "$theme_dir" -maxdepth 1 -name 'aspect-ratio*.xml' -exec \
+        sed -i '/<clock name="clock">/a\         <format>%I:%M %p</format>' {} +
       runHook postInstall
     '';
   };

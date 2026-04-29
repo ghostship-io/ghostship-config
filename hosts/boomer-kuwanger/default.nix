@@ -9,6 +9,7 @@
 
   # Hostname
   networking.hostName = "boomer-kuwanger";
+  time.timeZone = "Pacific/Honolulu";
 
   services.openssh = {
     enable = true;

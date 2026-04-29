@@ -63,10 +63,14 @@ let
       <string name="Theme" value="art-book-next-es-de" />
       <string name="ThemeSet" value="art-book-next-es-de" />
       <string name="ThemeAspectRatio" value="automatic" />
+      <string name="SystemsSorting" value="manufacturer_hwtype_year" />
+      <string name="InputControllerType" value="switchpro" />
       <string name="Scraper" value="screenscraper" />
       <string name="ScraperRegion" value="na" />
       <string name="ScraperLanguage" value="en" />
       <string name="MediaDirectory" value="${emu.xmlEscape "${cfg.esde.appDataDir}/downloaded_media"}" />
+      <bool name="DisplayClock" value="true" />
+      <bool name="InputOnlyFirstController" value="true" />
       <bool name="ScraperUseAccountScreenScraper" value="true" />
       <bool name="ScrapeGameNames" value="true" />
       <bool name="ScrapeRatings" value="true" />
@@ -159,9 +163,21 @@ let
                 return
         ET.SubElement(root, "string", {"name": name, "value": value})
 
+    def set_bool(name, value):
+        text_value = "true" if value else "false"
+        for entry in root.findall("bool"):
+            if entry.get("name") == name:
+                entry.set("value", text_value)
+                return
+        ET.SubElement(root, "bool", {"name": name, "value": text_value})
+
     set_string("Theme", "art-book-next-es-de")
     set_string("ThemeSet", "art-book-next-es-de")
     set_string("ThemeAspectRatio", "automatic")
+    set_string("SystemsSorting", "manufacturer_hwtype_year")
+    set_string("InputControllerType", "switchpro")
+    set_bool("DisplayClock", True)
+    set_bool("InputOnlyFirstController", True)
 
     fd, tmp = tempfile.mkstemp(prefix="es_settings.", dir=str(settings_path.parent))
     with os.fdopen(fd, "w", encoding="utf-8") as handle:

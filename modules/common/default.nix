@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 
 {
   imports = [
@@ -150,7 +150,7 @@
   };
 
   # Set your time zone.
-  time.timeZone = "UTC"; # User should override this in host config if needed
+  time.timeZone = lib.mkDefault "UTC";
 
   # Select internationalisation properties.
   i18n.defaultLocale = "en_US.UTF-8";

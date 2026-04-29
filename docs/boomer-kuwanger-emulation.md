@@ -53,7 +53,10 @@ installs Art Book Next, and generates:
 `sync-esde-config` creates or refreshes the appdata skeleton at boot.
 Additional setup scripts sync RetroArch, ES-DE tools, and standalone emulator
 config scaffolds before the frontend starts. Existing ES-DE settings are
-preserved after first creation so runtime UI changes can survive rebuilds.
+preserved after first creation so runtime UI changes can survive rebuilds,
+except for managed defaults such as theme, systems sorting, display clock, and
+controller UI hints. Boomer runs in Hawaii standard time and the managed Art
+Book Next theme package formats the ES-DE clock as 12-hour time.
 
 During bootstrap, use:
 

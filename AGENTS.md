@@ -210,7 +210,10 @@ changelog.
   `/mnt/z/Library/ROMs/roms`; Doom uses `Fantasy - GZDoom (2005)` with
   Batocera-style `.gzdoom` launchers at the ROM-folder top level and assets
   underneath that folder. PICO-8 needs an explicit Gamescope Xwayland server on
-  Boomer because its SDL path uses X11.
+  Boomer because its SDL path uses X11. Boomer's managed ES-DE UI defaults are
+  manufacturer/hardware/release systems sorting, visible clock, Switch Pro
+  controller prompts, first-controller-only input, 12-hour clock format, and
+  Hawaii standard time.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
 - Homepage `services.yaml` updates can leave stale entries behind when keys are
