@@ -1261,18 +1261,14 @@ PY
 
     bind pad_a +use
     bind pad_b +jump
-    bind pad_x weapnext
-    bind pad_y togglemap
+    bind pad_x togglemap
+    bind pad_y +crouch
     bind joy2 +use
     bind joy1 +jump
-    bind joy4 weapnext
-    bind joy3 togglemap
+    bind joy4 togglemap
+    bind joy3 +crouch
     bind rtrigger +attack
     bind ltrigger +altattack
-    unbind joy5
-    unbind joy6
-    bind joy7 menu_main
-    bind joy8 crouch
     bind joy9 centerview
     bind joy10 weapprev
     bind joy11 weapnext
@@ -1305,10 +1301,8 @@ PY
     bind axis8minus +forward
     bind axis8plus +back
 
-    mapbind pad_y togglemap
     mapbind pad_a am_setmark
     mapbind pad_b am_clearmarks
-    mapbind joy3 togglemap
     mapbind joy2 am_setmark
     mapbind joy1 am_clearmarks
     mapbind axis1minus +am_panleft
@@ -1371,16 +1365,16 @@ PY
     binding_settings = {
         "Pad_A": "+use",
         "Pad_B": "+jump",
-        "Pad_X": "weapnext",
-        "Pad_Y": "togglemap",
+        "Pad_X": "togglemap",
+        "Pad_Y": "+crouch",
         "Joy1": "+jump",
         "Joy2": "+use",
-        "Joy3": "togglemap",
-        "Joy4": "weapnext",
+        "Joy3": "+crouch",
+        "Joy4": "togglemap",
         "Joy5": None,
         "Joy6": None,
-        "Joy7": "menu_main",
-        "Joy8": "crouch",
+        "Joy7": None,
+        "Joy8": None,
         "Joy9": "centerview",
         "Joy10": "weapprev",
         "Joy11": "weapnext",
@@ -1417,8 +1411,6 @@ PY
         "POV1Right": "+moveright",
     }
     automap_settings = {
-        "Pad_Y": "togglemap",
-        "Joy3": "togglemap",
         "Pad_A": "am_setmark",
         "Joy2": "am_setmark",
         "Pad_B": "am_clearmarks",
