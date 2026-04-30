@@ -268,6 +268,32 @@ let
                     if BTN_SELECT in pressed[path]:
                         if now - last_select_start[path] <= DOUBLE_PRESS_SECONDS:
                             terminate_group(args.pid, args.log, system=args.system, emulator=args.emulator)
+                            release_deadline = time.monotonic() + 3.0
+                            while time.monotonic() < release_deadline:
+                                try:
+                                    r, _, _ = select.select(list(fds.values()), [], [], 0.2)
+                                except OSError:
+                                    break
+                                rev = {fd: p for p, fd in fds.items()}
+                                for fd in r:
+                                    p = rev.get(fd)
+                                    if not p:
+                                        continue
+                                    try:
+                                        d = os.read(fd, EVENT.size * 16)
+                                    except OSError:
+                                        continue
+                                    for off in range(0, len(d) - EVENT.size + 1, EVENT.size):
+                                        _, _, t, c, v = EVENT.unpack(d[off:off + EVENT.size])
+                                        if t != EV_KEY:
+                                            continue
+                                        if v:
+                                            pressed[p].add(c)
+                                        else:
+                                            pressed[p].discard(c)
+                                if not any(BTN_SELECT in s for s in pressed.values()):
+                                    log(args.log, "Select released after exit; safe for ES-DE to resume")
+                                    break
                             return 0
                         last_select_start[path] = now
                         continue
