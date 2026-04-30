@@ -45,8 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   frontend session before the restart is queued. Tune Boomer's MediaTek
   MT7921/MT7961 Bluetooth stack for four Switch Pro controllers by preferring
   BR/EDR mode, disabling Wi-Fi power save and MT7921e ASPM, keeping BlueZ and
-  `hid-nintendo` focused debug logging enabled, removing joycond/cemuhook from
-  the active service set, rate-limiting controller autoconnect, minimizing
+  `hid-nintendo` detailed debug logging available on demand instead of during
+  normal play, removing joycond/cemuhook from the active service set,
+  rate-limiting controller autoconnect, re-checking live connected state before
+  each host-initiated connect, minimizing
   sysfs LED writes, and logging controller HID health plus pairing diagnostics.
   Dynamically compact connected controller player slots so remaining controllers
   slide down when a middle player disconnects and the returning controller joins

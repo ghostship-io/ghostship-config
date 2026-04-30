@@ -407,7 +407,8 @@ The one-shot apply is not start-limited and briefly waits for a reconnecting
 controller's LED sysfs path before relying on later retries.
 `controller-autoconnect` polls at a low cadence with short bounded connect
 attempts, uses BlueZ D-Bus state for discovery, reconnects paired Switch Pro
-controllers serially, and leaves headphones and other accessories alone.
+controllers serially, re-checks live connected state before each attempt, and
+leaves headphones and other accessories alone.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices
@@ -423,7 +424,10 @@ controller-bluetooth-diagnostics 20
 ```
 
 The diagnostics command writes a timestamped summary plus a short `btmon`
-capture under `/srv/emulation/logs/bluetooth-diagnostics/`.
+capture under `/srv/emulation/logs/bluetooth-diagnostics/`. Full BlueZ and
+`hid-nintendo` debug logging is kept as an on-demand diagnostic path only,
+because continuously logging every controller HID report creates unnecessary
+load during normal four-controller play.
 
 Wi-Fi stays available for SSH, but NetworkManager Wi-Fi profiles are constrained
 to 5 GHz by default to avoid 2.4 GHz contention with Bluetooth. The ES-DE

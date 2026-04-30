@@ -221,8 +221,9 @@ changelog.
   Nintendo output subcommand over Bluetooth. For Boomer's MediaTek MT7921/MT7961
   combo radio, prefer BR/EDR mode, keep Wi-Fi on 5 GHz with Wi-Fi power save and
   MT7921e ASPM disabled, leave joycond/cemuhook inactive by default, and keep
-  focused BlueZ/`hid-nintendo` diagnostics available under
-  `/srv/emulation/logs/`. Avoid continuous `btmgmt` polling in background
+  focused BlueZ/`hid-nintendo` diagnostics available on demand under
+  `/srv/emulation/logs/`, not continuously enabled during normal play. Avoid
+  continuous `btmgmt` polling in background
   services; bound Bluetooth diagnostics so a busy controller cannot stall
   activation. Player order should compact connected Switch controllers into
   the lowest open slots while preserving relative order, with reconnecting

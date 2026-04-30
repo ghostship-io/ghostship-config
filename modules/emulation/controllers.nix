@@ -384,6 +384,9 @@ let
         if connected_device "$connected"; then
           continue
         fi
+        if timeout 3s bluetoothctl info "$mac" 2>/dev/null | grep -q 'Connected: yes'; then
+          continue
+        fi
         log "connecting ''${name:-Switch Pro Controller} ($mac)"
         if [ "$manage_pairing" = true ]; then
           timeout 5s bluetoothctl trust "$mac" >/dev/null 2>&1 || true
@@ -764,7 +767,7 @@ in
 
     systemd.services.bluetooth.serviceConfig.ExecStart = lib.mkForce [
       ""
-      "${config.hardware.bluetooth.package}/libexec/bluetooth/bluetoothd -f /etc/bluetooth/main.conf --noplugin=bap -E --debug=*"
+      "${config.hardware.bluetooth.package}/libexec/bluetooth/bluetoothd -f /etc/bluetooth/main.conf --noplugin=bap -E"
     ];
     systemd.services.bluetooth.restartIfChanged = lib.mkForce true;
 
@@ -786,6 +789,21 @@ in
         TimeoutStartSec = "60s";
       };
       script = ''
+        dynamic_debug=/sys/kernel/debug/dynamic_debug/control
+        if [ -w "$dynamic_debug" ]; then
+          for query in \
+            'func __joycon_hid_send -p' \
+            'func joycon_hid_send_sync -p' \
+            'func joycon_send_subcmd -p' \
+            'func joycon_set_player_leds -p' \
+            'func joycon_send_rumble_data -p' \
+            'file drivers/bluetooth/btusb.c -p' \
+            'file drivers/bluetooth/btmtk.c -p'
+          do
+            printf '%s\n' "$query" >"$dynamic_debug" 2>/dev/null || true
+          done
+        fi
+
         btmgmt_set() {
           timeout 5s btmgmt "$@" || true
         }
@@ -805,7 +823,6 @@ in
 
     systemd.services.controller-bluetooth-debug = {
       description = "Enable focused Bluetooth and hid-nintendo debug logging";
-      wantedBy = [ "multi-user.target" ];
       after = [ "systemd-modules-load.service" ];
       serviceConfig = {
         Type = "oneshot";
