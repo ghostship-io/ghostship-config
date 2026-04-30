@@ -196,10 +196,12 @@ changelog.
   Bluetooth Settings TUI has selected a connected Bluetooth audio sink. Keep
   visible Boomer ES-DE utilities collapsed to Bluetooth Settings, Wi-Fi
   Settings, and system power/session actions; the settings entries should stay
-  large-font, keyboard-and-controller friendly TUIs. Smoke tests should
-  not add runtime ROM extraction; manually extract only proven failing smoke
-  copies and point `/srv/emulation/config/smoke/roms.json` at the launchable
-  file. Keep Boomer's emulator defaults RetroAchievements-aligned where
+  large-font, keyboard-and-controller friendly TUIs. In the ES-DE Gamescope
+  session these TUIs should launch through Xwayland `xterm`; `foot` fails there
+  because Gamescope does not expose the Wayland subcompositor it needs. Smoke
+  tests should not add runtime ROM extraction; manually extract only proven
+  failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
+  launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where
   practical: Beetle SuperGrafx for PCE/PCE CD, FCEUmm for NES/FDS, Azahar for
   3DS, standalone PCSX2 for PS2, standalone PPSSPP for PSP, and no Gamescope
   FSR; use emulator-native scaling plus NNEDI3/sharp RetroArch shaders. Keep

@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   support keyboard and controller input, Bluetooth pairing/audio routing,
   player assignment, Wi-Fi profile management, and the 2.4 GHz policy toggle
   while keeping lower-level helper scripts available outside the visible menu.
+  Launch the TUIs through Xwayland `xterm` in the ES-DE Gamescope session and
+  log launcher diagnostics under `/srv/emulation/logs/tools/`.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

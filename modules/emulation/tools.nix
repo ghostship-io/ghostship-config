@@ -30,18 +30,30 @@ let
   mkSettingsTool = name: title: mode:
     pkgs.writeShellScriptBin name ''
       set -euo pipefail
-      export PATH=${lib.makeBinPath [ settingsTui pkgs.foot ]}:$PATH
-      if [ -n "''${WAYLAND_DISPLAY:-}" ] && command -v foot >/dev/null 2>&1; then
-        exec foot -T ${lib.escapeShellArg title} -f monospace:size=28 -- emulation-settings-tui ${mode}
-      fi
-      exec emulation-settings-tui ${mode}
+      export PATH=${lib.makeBinPath [ settingsTui pkgs.foot pkgs.xterm ]}:$PATH
+      log_dir=${lib.escapeShellArg cfg.dataRoot}/logs/tools
+      mkdir -p "$log_dir"
+      log_file="$log_dir/${name}.log"
+      {
+        printf '%s launching ${name}: DISPLAY=%s WAYLAND_DISPLAY=%s TERM=%s\n' "$(date -Is)" "''${DISPLAY:-}" "''${WAYLAND_DISPLAY:-}" "''${TERM:-}"
+        if [ -n "''${DISPLAY:-}" ] && command -v xterm >/dev/null 2>&1; then
+          exec xterm -T ${lib.escapeShellArg title} -fa Monospace -fs 28 -geometry 92x26 -e emulation-settings-tui ${mode}
+        fi
+        if [ -n "''${WAYLAND_DISPLAY:-}" ] && command -v foot >/dev/null 2>&1; then
+          exec foot -T ${lib.escapeShellArg title} -f monospace:size=28 -- emulation-settings-tui ${mode}
+        fi
+        exec emulation-settings-tui ${mode}
+      } >>"$log_file" 2>&1
     '';
 
   terminalTool = pkgs.writeShellScriptBin "terminal-tool" ''
     set -euo pipefail
-    export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.foot ]}:$PATH
+    export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.foot pkgs.xterm ]}:$PATH
     title="''${1:-Emulation Tool}"
     command="''${2:-true}"
+    if [ -n "''${DISPLAY:-}" ] && command -v xterm >/dev/null 2>&1; then
+      exec xterm -T "$title" -fa Monospace -fs 28 -geometry 92x26 -e sh -lc "$command; status=\$?; printf '\n%s\n' 'Press Enter to close.'; read -r _; exit \$status"
+    fi
     if [ -n "''${WAYLAND_DISPLAY:-}" ] && command -v foot >/dev/null 2>&1; then
       exec foot -T "$title" sh -lc "$command; status=\$?; printf '\n%s\n' 'Press Enter to close.'; read -r _; exit \$status"
     fi

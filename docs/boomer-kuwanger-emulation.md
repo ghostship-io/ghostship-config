@@ -392,10 +392,13 @@ hardware confirms the adapter split.
 
 The ES-DE Tools system exposes large-font terminal TUIs for `Bluetooth Settings`
 and `Wi-Fi Settings`, plus restart, reboot, and shutdown. The settings TUIs
-support keyboard and controller navigation from the couch. Helper scripts for
-audio, display, RetroArch, scraping, launch logs, ROM coverage, smoke tests, and
-performance tests remain available on disk for SSH or background use, but are
-not shown in the ES-DE menu.
+support keyboard and controller navigation from the couch. Under the ES-DE
+Gamescope session they launch through Xwayland `xterm`, with `foot` kept as a
+pure Wayland fallback. Launch diagnostics are written under
+`/srv/emulation/logs/tools/`. Helper scripts for audio, display, RetroArch,
+scraping, launch logs, ROM coverage, smoke tests, and performance tests remain
+available on disk for SSH or background use, but are not shown in the ES-DE
+menu.
 
 These tools are exposed as an ES-DE `Tools` system. Upstream ES-DE does not
 provide a stable Batocera-style API for arbitrary native main-menu actions; that
