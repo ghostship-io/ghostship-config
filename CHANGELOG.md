@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **VueTorrent download paths**: Persist qBittorrent's default save path at
+  `/downloads/Torrent`, keep incomplete torrent data under
+  `/downloads/Torrent/.incomplete`, and create that directory before
+  VueTorrent starts so partfiles do not land in the shared downloads root.
 - **Hermes shutdown signal**: Switch the `chill-penguin` Hermes container stop
   signal to `SIGTERM` so s6-overlay handles host-driven shutdown cleanly.
 - **Codex queue skill**: Added a shared `codex-queue` skill for long

@@ -185,7 +185,10 @@ because qBittorrent 5.1.4 can stay disconnected if it only binds by interface
 name after the VPN namespace changes. The managed qBittorrent queue allows 5
 active downloads and 20 active torrents, with the global download cap set to
 20 MB/s, slow torrents excluded from active queue limits, and qBittorrent's
-post-completion recheck enabled. A `vuetorrent-auto-resume` timer retries
+post-completion recheck enabled. Torrent data is rooted at
+`/downloads/Torrent`, with incomplete torrent data under
+`/downloads/Torrent/.incomplete`, so the shared `/downloads` mount root stays
+clear of qBittorrent partfiles. A `vuetorrent-auto-resume` timer retries
 errored qBittorrent torrents every 5 minutes through qBittorrent's internal
 Web API start action without a per-torrent retry cap. The
 Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or

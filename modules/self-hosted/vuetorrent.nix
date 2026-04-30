@@ -46,6 +46,11 @@ let
         Preferences.Queueing\\MaxActiveTorrents=literal:20
         Preferences.Connection\\GlobalDLLimit=literal:20480
         Preferences.Advanced\\RecheckOnCompletion=literal:true
+        Preferences.Downloads\\SavePath=literal:/downloads/Torrent
+        Preferences.Downloads\\TempPath=literal:/downloads/Torrent/.incomplete
+        BitTorrent.Session\\DefaultSavePath=literal:/downloads/Torrent
+        BitTorrent.Session\\TempPath=literal:/downloads/Torrent/.incomplete
+        BitTorrent.Session\\TempPathEnabled=literal:true
         BitTorrent.Session\\IgnoreSlowTorrentsForQueueing=literal:true
       )
 
@@ -60,8 +65,11 @@ let
     set -eu
 
     CONFIG_FILE="/srv/apps/vuetorrent/qBittorrent/qBittorrent.conf"
+    DOWNLOAD_TEMP_DIR="/mnt/share/Downloads/Torrent/.incomplete"
     TUN_INTERFACE="tun0"
     TUN_IP=""
+
+    ${pkgs.coreutils}/bin/install -d -m 0777 "$DOWNLOAD_TEMP_DIR"
 
     if [ ! -f "$CONFIG_FILE" ]; then
       exit 0
