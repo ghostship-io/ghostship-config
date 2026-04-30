@@ -37,6 +37,7 @@ ACTION_BACK = "back"
 ACTION_REFRESH = "refresh"
 ACTION_ALT = "alt"
 ACTION_QUIT = "quit"
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 @dataclass
@@ -95,7 +96,8 @@ def is_mac(value):
 def parse_bt_devices(output):
     devices = []
     for line in output.splitlines():
-        match = re.match(r"^Device\s+([0-9A-Fa-f:]{17})\s+(.+)$", line.strip())
+        stripped = ANSI_RE.sub("", line.strip())
+        match = re.match(r"^(?:\[NEW\]\s+)?Device\s+([0-9A-Fa-f:]{17})\s+(.+)$", stripped)
         if match:
             devices.append({"mac": mac_key(match.group(1)), "name": match.group(2).strip()})
     return devices
@@ -711,15 +713,15 @@ class BluetoothBackend:
             rows.append({"label": device["name"], "desc": f"{device['mac']} - {state}", **device})
         return rows
 
-    def scan(self, seconds=8):
+    def scan(self, seconds=10):
         run_cmd(["bluetoothctl", "power", "on"], timeout=8)
         run_cmd(["bluetoothctl", "agent", "KeyboardDisplay"], timeout=8)
         run_cmd(["bluetoothctl", "default-agent"], timeout=8)
         run_cmd(["bluetoothctl", "pairable", "on"], timeout=8)
-        run_cmd(["bluetoothctl", "scan", "on"], timeout=8)
-        time.sleep(seconds)
+        _, out, _ = run_cmd(["bluetoothctl", "--timeout", str(seconds), "scan", "on"], timeout=seconds + 5)
         run_cmd(["bluetoothctl", "scan", "off"], timeout=8)
-        seen = {d["mac"]: d for d in self.devices()}
+        seen = {d["mac"]: d for d in parse_bt_devices(out)}
+        seen.update({d["mac"]: d for d in self.devices()})
         return sorted(seen.values(), key=lambda row: row["name"].lower())
 
     def action(self, *args, timeout=20):
@@ -1029,7 +1031,7 @@ class SettingsApp:
         self.tui.show_output("Bluetooth Status", self.bluetooth_status_lines())
 
     def bluetooth_scan_pair(self):
-        self.tui.progress("Bluetooth Scan", ["Scanning for 8 seconds...", "Put the device in pairing mode now."])
+        self.tui.progress("Bluetooth Scan", ["Scanning for 10 seconds...", "Put the device in pairing mode now."])
         devices = self.bt.scan()
         row = self.tui.choose(
             "Pair Device",
@@ -1296,6 +1298,7 @@ class SettingsApp:
 def smoke_test(mode):
     if mode == "bluetooth":
         sample = "Device AA:BB:CC:DD:EE:FF Switch Pro Controller\nDevice 11:22:33:44:55:66 Headphones"
+        scan_sample = "\x1b[0;92m[NEW]\x1b[0m Device 22:33:44:55:66:77 8BitDo Ultimate Controller\n[CHG] Device 22:33:44:55:66:77 RSSI: -62"
         show = """Controller 4C:24:CE:FA:E3:2A
     Name: boomer-kuwanger
     Powered: yes
@@ -1315,6 +1318,9 @@ def smoke_test(mode):
         assert is_controller_name("8BitDo Ultimate Wireless Controller")
         assert not is_controller_name("AMIRA-KEYBOAR USB KEYBOARD")
         assert not is_controller_name("AMIRA-KEYBOAR USB KEYBOARD Mouse")
+        assert parse_bt_devices(scan_sample) == [
+            {"mac": "22:33:44:55:66:77", "name": "8BitDo Ultimate Controller"}
+        ]
         metrics = pane_metrics(26, 92)
         worst_connected = [
             {"mac": f"AA:BB:CC:DD:EE:0{slot}", "name": f"Controller With A Long Friendly Name {slot}"}

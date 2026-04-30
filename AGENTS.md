@@ -208,7 +208,8 @@ changelog.
   to controller-like devices so arrow keys do not double-step. In the ES-DE
   Gamescope session these TUIs should launch through Xwayland `xterm`; `foot`
   fails there because Gamescope does not expose the Wayland subcompositor it
-  needs. Smoke
+  needs. Bluetooth pairing scans should use `bluetoothctl --timeout` and parse
+  live `[NEW] Device` output, not rely only on the post-scan device cache. Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
   launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where
