@@ -900,7 +900,14 @@ PY
         ;;
       dolphin) cmd=(dolphin-emu -b -e "$rom_path") ;;
       cemu) cmd=(cemu -f -g "$rom_path") ;;
-      xemu) cmd=(xemu -full-screen -dvd_path "$rom_path") ;;
+      xemu)
+        cmd=(
+          xemu
+          -full-screen
+          -config_path "${cfg.dataRoot}/xdg/share/xemu/xemu/xemu.toml"
+          -dvd_path "$rom_path"
+        )
+        ;;
       ryubing)
         prepare_ryubing_runtime
         cmd=(ryujinx "$rom_path")
@@ -1112,13 +1119,13 @@ EOF
           chown ${cfg.user}:${cfg.group} "$xemu_data_dir/eeprom.bin"
           chmod 0644 "$xemu_data_dir/eeprom.bin"
         fi
-        cat >"$xemu_data_dir/xemu.toml" <<XEMUTOML
-        [sys.files]
-        bootrom_path = '$xemu_bios_dir/mcpx_1.0.bin'
-        flashrom_path = '$xemu_bios_dir/Complex_4627.bin'
-        eeprom_path = '$xemu_data_dir/eeprom.bin'
-        hdd_path = '$xemu_bios_dir/xbox_hdd.qcow2'
-XEMUTOML
+        printf '%s\n' \
+          '[sys.files]' \
+          "bootrom_path = '$xemu_bios_dir/mcpx_1.0.bin'" \
+          "flashrom_path = '$xemu_bios_dir/Complex_4627.bin'" \
+          "eeprom_path = '$xemu_data_dir/eeprom.bin'" \
+          "hdd_path = '$xemu_bios_dir/xbox_hdd.qcow2'" \
+          >"$xemu_data_dir/xemu.toml"
         chown ${cfg.user}:${cfg.group} "$xemu_data_dir/xemu.toml"
         chmod 0644 "$xemu_data_dir/xemu.toml"
         dolphin_config_dir="${cfg.dataRoot}/xdg/config/dolphin-emu"

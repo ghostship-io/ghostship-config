@@ -266,6 +266,9 @@ changelog.
   `scripts/update-ryubing-canary` before rebuilding when upstream advances.
   Switch `.nro` homebrew can keep sibling `data/` assets beside the ROM;
   `run-emulator` links that directory into Ryubing's emulated SD card at launch.
+  Xemu launches with an explicit Nix-generated
+  `/srv/emulation/xdg/share/xemu/xemu/xemu.toml`; keep Xbox machine paths in
+  that config instead of relying on Xemu's implicit config discovery.
   Keep Boomer's ES-DE ROM folder names aligned exactly with
   `/mnt/z/Library/ROMs/roms`; Doom uses `Fantasy - GZDoom (2005)` with
   Batocera-style `.gzdoom` launchers at the ROM-folder top level and assets

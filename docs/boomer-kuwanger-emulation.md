@@ -148,9 +148,12 @@ Keep all proprietary runtime files out of the repo:
 - Switch firmware and keys: `/srv/emulation/bios/switch`
 - PlayStation/PlayStation 2 BIOS: `/srv/emulation/bios`
 - Sega CD, Saturn, Neo Geo CD, PC Engine CD BIOS: `/srv/emulation/bios`
-- Xbox MCPX and HDD image material for xemu: `/srv/emulation/bios/xbox`
+- Xbox MCPX, BIOS, and HDD image material for xemu: `/srv/emulation/bios/xbox`
 
-The Nix module only creates the directories and emulator launch contract.
+The Nix module creates Xemu's machine settings at
+`/srv/emulation/xdg/share/xemu/xemu/xemu.toml` and launches Xemu with that
+config explicitly. Keep `mcpx_1.0.bin`, `Complex_4627.bin`, and
+`xbox_hdd.qcow2` under `/srv/emulation/bios/xbox`.
 Current smoke coverage has confirmed these BIOS-gated files are still needed
 for the selected disc tests: `scph5500.bin` for Japanese PlayStation,
 `mpr-17933.bin` for Saturn, and a valid Neo Geo CD BIOS set for NeoCD.

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer Xemu first-run setup**: Launch Xemu with the Nix-generated
+  `xemu.toml` machine settings so Xbox games do not stop at the manual machine
+  configuration prompt when the required BIOS and HDD files are present.
 - **Boomer smoke-test kiosk restore**: Restore `greetd` instead of
   `getty@tty1` after root-run smoke tests on kiosk-mode hosts so Boomer returns
   to ES-DE instead of a console login prompt.
