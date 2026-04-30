@@ -396,6 +396,9 @@ or pairing. If a controller identity does not expose LED sysfs entries, logical
 assignment still remains stable. Connected controllers are compacted into the
 lowest open player slots while preserving their relative order, so if P2 turns
 off P3/P4 slide down and the returning controller lands at the end.
+Controller add events trigger a one-shot reconcile, and the background
+reconcile uses a short D-Bus polling cadence with a lock so one-shot and loop
+updates cannot race against each other.
 `controller-autoconnect` polls at a low cadence with short bounded connect
 attempts, uses BlueZ D-Bus state for discovery, reconnects paired Switch Pro
 controllers serially, and leaves headphones and other accessories alone.

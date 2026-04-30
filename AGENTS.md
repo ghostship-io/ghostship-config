@@ -226,7 +226,9 @@ changelog.
   services; bound Bluetooth diagnostics so a busy controller cannot stall
   activation. Player order should compact connected Switch controllers into
   the lowest open slots while preserving relative order, with reconnecting
-  controllers joining at the end. Smoke
+  controllers joining at the end. Trigger a one-shot controller reconcile from
+  controller input add events and serialize LED/order writes so the background
+  loop and one-shot apply cannot race. Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
   launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where

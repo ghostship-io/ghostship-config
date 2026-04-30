@@ -20,6 +20,7 @@ let
     mkdir -p "$state_dir" "$(dirname "$log_file")"
     touch "$log_file"
     chown ${cfg.user}:${cfg.group} "$state_dir" "$log_file" || true
+    exec 9>"$state_dir/controller-leds.lock"
 
     ensure_order_file() {
       if ! jq -e '.players | type == "array"' "$order_file" >/dev/null 2>&1; then
@@ -260,9 +261,14 @@ let
     }
 
     run_once() {
+      if ! flock -w 10 9; then
+        echo "$(date -u +%FT%TZ) skipped controller LED apply because another reconciliation is active" >>"$log_file"
+        return 0
+      fi
       sanitize_known_bad_order
       record_connected_devices || true
       apply_leds true || true
+      flock -u 9
     }
 
     case "$mode" in
@@ -279,16 +285,21 @@ let
     esac
 
     while true; do
-      sanitize_known_bad_order
-      record_connected_devices || true
-      state="$(desired_led_state || true)"
-      previous="$(cat "$last_state_file" 2>/dev/null || true)"
-      if [ "$state" != "$previous" ]; then
-        apply_leds false || true
-        printf '%s\n' "$state" >"$last_state_file"
-        chown ${cfg.user}:${cfg.group} "$last_state_file" || true
+      if flock -w 10 9; then
+        sanitize_known_bad_order
+        record_connected_devices || true
+        state="$(desired_led_state || true)"
+        previous="$(cat "$last_state_file" 2>/dev/null || true)"
+        if [ "$state" != "$previous" ]; then
+          apply_leds false || true
+          printf '%s\n' "$state" >"$last_state_file"
+          chown ${cfg.user}:${cfg.group} "$last_state_file" || true
+        fi
+        flock -u 9
+      else
+        echo "$(date -u +%FT%TZ) skipped controller LED loop because another reconciliation is active" >>"$log_file"
       fi
-      sleep 15
+      sleep 5
     done
   '';
 
@@ -509,6 +520,7 @@ in
       SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="2009", TEST=="power/control", ATTR{power/control}="on"
       KERNEL=="hidraw*", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="310b", MODE="0660", GROUP="input", TAG+="uaccess"
       KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0660", GROUP="input", TAG+="uaccess"
+      ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Pro Controller", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-leds-apply.service"
     '';
 
     systemd.services.wifi-5ghz-only = {
