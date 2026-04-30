@@ -253,7 +253,9 @@ changelog.
   Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
-  launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where
+  launchable file. Root-run smoke tests on kiosk-mode Boomer should restore
+  `greetd`, not `getty@tty1`, after borrowing tty1 so ES-DE comes back instead
+  of a login prompt. Keep Boomer's emulator defaults RetroAchievements-aligned where
   practical: Beetle SuperGrafx for PCE/PCE CD, FCEUmm for NES/FDS, Azahar for
   3DS, standalone PCSX2 for PS2, standalone PPSSPP for PSP, and no Gamescope
   FSR; use emulator-native scaling plus NNEDI3/sharp RetroArch shaders. Keep
@@ -285,7 +287,9 @@ changelog.
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
   Switch A/B, and launch GZDoom with the managed Boomer controls cfg so
   left stick/D-pad move, right stick looks, Use/Confirm is A, Jump/Back is B,
-  Y toggles map, `+` opens menu, and Square/Capture is unbound.
+  Y toggles map, `+` opens menu, and Square/Capture is unbound. GZDoom's SDL
+  `[Joy:JS:*]` axis map must be seeded so Switch Pro axis 0/1 are strafe/forward,
+  axis 2 is yaw, axis 3 is pitch, and unused axes are disabled.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

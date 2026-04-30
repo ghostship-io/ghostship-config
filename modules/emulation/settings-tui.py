@@ -767,11 +767,12 @@ CONTROLLER_MAPS = [
                 "Prev Weapon -> L",
                 "Next Weapon -> R",
                 "Map Toggle -> Y",
+                "Map Pan -> Left Stick/D-pad",
                 "Inventory/Action -> X",
                 "Menu -> +",
                 "Square -> No-op",
             ],
-            ["Right stick controls both horizontal and vertical look."],
+            ["Right stick uses native SDL axes for horizontal and vertical look."],
             [
                 "Menu: + / Start",
                 "Map: Y toggles",
@@ -2235,6 +2236,7 @@ def smoke_test(mode):
         assert any("Move -> Left Stick/D-pad" in line for line in gzdoom["detail"])
         assert any("Look -> Right Stick" in line for line in gzdoom["detail"])
         assert any("Map Toggle -> Y" in line for line in gzdoom["detail"])
+        assert any("Map Pan -> Left Stick/D-pad" in line for line in gzdoom["detail"])
         assert any("Menu -> +" in line for line in gzdoom["detail"])
         assert any("Square -> No-op" in line for line in gzdoom["detail"])
         assert metrics["right_x"] + metrics["right_width"] < 92

@@ -1202,22 +1202,26 @@ PY
     use_joystick true
     freelook true
     lookstrafe false
-    joy_xaxis 4
-    joy_yaxis 3
-    joy_zaxis 1
-    joy_zrot 2
-    joy_xrot 1
-    joy_yrot 2
-    joy_xthreshold 0.15
-    joy_ythreshold 0.15
-    joy_zthreshold 0.15
-    joy_zrotthreshold 0.15
-    joy_xrotthreshold 0.15
-    joy_yrotthreshold 0.15
 
     unbind pad_back
     unbind joy9
     unbind joy14
+    unbind axis1plus
+    unbind axis1minus
+    unbind axis2plus
+    unbind axis2minus
+    unbind axis3plus
+    unbind axis3minus
+    unbind axis4plus
+    unbind axis4minus
+    unbind axis5plus
+    unbind axis5minus
+    unbind axis6plus
+    unbind axis6minus
+    unbind axis7plus
+    unbind axis7minus
+    unbind axis8plus
+    unbind axis8minus
     unbind dpadup
     unbind dpaddown
     unbind dpadleft
@@ -1247,6 +1251,10 @@ PY
     bind joy10 menu_main
     bind lthumb crouch
     bind rthumb centerview
+    bind axis1minus +moveleft
+    bind axis1plus +moveright
+    bind axis2minus +forward
+    bind axis2plus +back
     bind dpadup +forward
     bind dpaddown +back
     bind dpadleft +moveleft
@@ -1256,12 +1264,16 @@ PY
     bind pov1left +moveleft
     bind pov1right +moveright
 
-    mapbind pad_y am_togglefollow
+    mapbind pad_y togglemap
     mapbind pad_a am_setmark
     mapbind pad_b am_clearmarks
-    mapbind joy3 am_togglefollow
+    mapbind joy3 togglemap
     mapbind joy2 am_setmark
     mapbind joy1 am_clearmarks
+    mapbind axis1minus +am_panleft
+    mapbind axis1plus +am_panright
+    mapbind axis2minus +am_panup
+    mapbind axis2plus +am_pandown
     mapbind dpadright +am_panright
     mapbind dpadleft +am_panleft
     mapbind dpadup +am_panup
@@ -1277,6 +1289,87 @@ PY
     EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         chmod 0644 "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
+        user_home="$(getent passwd ${cfg.user} | cut -d: -f6)"
+        if [ -n "$user_home" ]; then
+          gzdoom_ini="$user_home/.config/gzdoom/gzdoom.ini"
+          install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$gzdoom_ini")"
+          python3 - "$gzdoom_ini" <<'PY'
+    import sys
+    from pathlib import Path
+
+    path = Path(sys.argv[1])
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True) if path.exists() else []
+
+    # GZDoom's Linux SDL joystick backend reads these per-device AxisNmap keys
+    # from [Joy:JS:N]. Values are EJoyAxis: -1 none, 0 yaw, 1 pitch,
+    # 2 forward, 3 strafe. Switch Pro exposes left X/Y then right X/Y here.
+    axis_settings = {
+        "Axis0deadzone": "0.20",
+        "Axis0map": "3",
+        "Axis1deadzone": "0.20",
+        "Axis1map": "2",
+        "Axis2deadzone": "0.20",
+        "Axis2map": "0",
+        "Axis3deadzone": "0.20",
+        "Axis3map": "1",
+        "Axis4deadzone": "1.0",
+        "Axis4map": "-1",
+        "Axis5deadzone": "1.0",
+        "Axis5map": "-1",
+    }
+
+    def upsert_section(input_lines, section, settings):
+        out = []
+        in_section = False
+        found_section = False
+        seen = set()
+
+        def append_missing():
+            for key, value in settings.items():
+                if key not in seen:
+                    out.append(f"{key}={value}\n")
+                    seen.add(key)
+
+        for line in input_lines:
+            stripped = line.strip()
+            starts_section = stripped.startswith("[") and stripped.endswith("]")
+            if starts_section:
+                if in_section:
+                    append_missing()
+                in_section = stripped == f"[{section}]"
+                if in_section:
+                    found_section = True
+                    seen = set()
+                out.append(line)
+                continue
+            if in_section and "=" in line:
+                key = line.split("=", 1)[0].strip()
+                if key in settings:
+                    out.append(f"{key}={settings[key]}\n")
+                    seen.add(key)
+                    continue
+            out.append(line)
+
+        if in_section:
+            append_missing()
+        if not found_section:
+            if out and not out[-1].endswith("\n"):
+                out[-1] += "\n"
+            if out and out[-1].strip():
+                out.append("\n")
+            out.append(f"[{section}]\n")
+            for key, value in settings.items():
+                out.append(f"{key}={value}\n")
+        return out
+
+    for index in range(4):
+        lines = upsert_section(lines, f"Joy:JS:{index}", axis_settings)
+
+    path.write_text("".join(lines), encoding="utf-8")
+    PY
+          chown ${cfg.user}:${cfg.group} "$gzdoom_ini"
+          chmod 0644 "$gzdoom_ini"
+        fi
         for dir in azahar dolphin cemu pcsx2 ppsspp xemu ryubing supermodel gzdoom pico8 teknoparrot; do
           readme="${cfg.configRoot}/emulators/$dir/README.txt"
           if [ ! -e "$readme" ]; then

@@ -132,7 +132,20 @@ let
 
     if [ "$(id -u)" = "0" ] && [ "''${EMULATION_SMOKE_NO_REEXEC:-0}" != "1" ]; then
       unit="emulation-smoke-test-$(date -u +%Y%m%dT%H%M%SZ)"
-      ${pkgs.systemd}/bin/systemctl stop emulation-session.service getty@tty1.service || true
+      restore_console() {
+        if [ "${cfg.startup.mode}" = "kiosk" ]; then
+          ${pkgs.systemd}/bin/systemctl stop getty@tty1.service || true
+          ${pkgs.systemd}/bin/systemctl start greetd.service || true
+        else
+          ${pkgs.systemd}/bin/systemctl start getty@tty1.service || true
+        fi
+      }
+      trap restore_console EXIT
+      if [ "${cfg.startup.mode}" = "kiosk" ]; then
+        ${pkgs.systemd}/bin/systemctl stop greetd.service emulation-session.service getty@tty1.service || true
+      else
+        ${pkgs.systemd}/bin/systemctl stop emulation-session.service getty@tty1.service || true
+      fi
       set +e
       ${pkgs.systemd}/bin/systemd-run --unit="$unit" --wait --collect \
         -p User=${cfg.user} \
@@ -159,7 +172,8 @@ let
         "$0" "$@"
       rc=$?
       set -e
-      ${pkgs.systemd}/bin/systemctl start getty@tty1.service || true
+      restore_console
+      trap - EXIT
       ${pkgs.systemd}/bin/journalctl -u "$unit" --no-pager -n 120 >&2 || true
       exit "$rc"
     fi

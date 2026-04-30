@@ -135,6 +135,9 @@ Jump/Back, ZR is Fire, ZL is Alt Fire, Y toggles the map, X is
 Inventory/Action, and `+` opens the menu. Square/Capture is intentionally
 unbound for GZDoom. The managed GZDoom package also patches joystick menu
 handling so physical Switch A advances menus and physical Switch B backs out.
+The setup script also writes GZDoom's `[Joy:JS:*]` SDL axis map so left X/Y are
+strafe/forward, right X/Y are yaw/pitch, and unused/phantom axes cannot drive
+the view upward on launch.
 
 ## BIOS, Firmware, And Keys
 
@@ -235,7 +238,9 @@ The smoke harness is intended for target-display validation. A `--dry-run`
 mode prints the exact `run-emulator` calls without launching games. Root-run
 smoke tests re-exec as `kiosk` on tty1 with cleared capability sets so
 `steam-run`/bubblewrap-based emulators, including PICO-8, launch the same way
-they do from ES-DE.
+they do from ES-DE. On kiosk-mode hosts, the wrapper stops `greetd` only while
+the test owns tty1 and restores `greetd` afterward so the console returns to
+ES-DE instead of a login prompt.
 
 The runtime launcher does not transform ROMs. If a smoke entry fails because
 the selected copied entry is an archive or folder shape that the emulator will
