@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer controller probe documentation**: Document the live Switch Pro
+  kernel event mapping from the Boomer raw input probe so emulator bindings can
+  be based on observed `EV_KEY`/`EV_ABS` codes instead of inferred labels.
 - **Boomer Xemu first-run setup**: Launch Xemu with the Nix-generated
   `xemu.toml` machine settings and disable Xemu's welcome wizard so Xbox games
   do not stop at the manual machine configuration prompt when the required BIOS

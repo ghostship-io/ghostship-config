@@ -141,6 +141,33 @@ strafe/forward, right X/Y are yaw/pitch with reduced vertical sensitivity,
 D-pad hat axes can also move/pan, and unused/phantom axes cannot drive the view
 upward on launch.
 
+### Switch Pro Raw Input Probe
+
+The current Boomer controller baseline was probed on April 30, 2026 from
+`/dev/input/event16` (`Pro Controller`) with the raw log saved on Boomer at
+`/srv/emulation/logs/controller-probes/raw-20260430-135115.log`.
+
+| Physical control | Linux event |
+| --- | --- |
+| B / South | `EV_KEY 304 BTN_SOUTH` |
+| A / East | `EV_KEY 305 BTN_EAST` |
+| X / North | `EV_KEY 307 BTN_NORTH` |
+| Y / West | `EV_KEY 308 BTN_WEST` |
+| Square / Capture | `EV_KEY 309 BTN_Z` |
+| L1 / L | `EV_KEY 310 BTN_TL` |
+| R1 / R | `EV_KEY 311 BTN_TR` |
+| L2 / ZL | `EV_KEY 312 BTN_TL2` |
+| R2 / ZR | `EV_KEY 313 BTN_TR2` |
+| Select / `-` | `EV_KEY 314 BTN_SELECT` |
+| Start / `+` | `EV_KEY 315 BTN_START` |
+| Left stick click | `EV_KEY 317 BTN_THUMBL` |
+| Right stick click | `EV_KEY 318 BTN_THUMBR` |
+| D-pad left/right | `EV_ABS 16 ABS_HAT0X`, `-1` left and `1` right |
+| D-pad up/down | `EV_ABS 17 ABS_HAT0Y`, `-1` up and `1` down |
+| Left stick X/Y | `EV_ABS 0 ABS_X`, `EV_ABS 1 ABS_Y` |
+| Right stick X/Y | `EV_ABS 3 ABS_RX`, `EV_ABS 4 ABS_RY` |
+| Star / Home | Not observed in this probe; may be controller-local |
+
 ## BIOS, Firmware, And Keys
 
 Keep all proprietary runtime files out of the repo:

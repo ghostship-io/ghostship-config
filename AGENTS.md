@@ -304,6 +304,9 @@ changelog.
   Switch Pro axis 0/1 are strafe/forward, axis 2 is yaw, axis 3 is pitch with
   reduced scale, trigger axes 4/5 are action buttons only, D-pad hat axes can
   move/pan, and unused axes are disabled.
+  Boomer's probed kernel Switch Pro raw map is documented in
+  `docs/boomer-kuwanger-emulation.md`; use that table instead of inferring
+  physical labels from emulator names.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it
