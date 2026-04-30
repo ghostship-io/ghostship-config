@@ -1416,6 +1416,8 @@ PY
         "Pad_B": "am_clearmarks",
         "Joy1": "am_clearmarks",
         "Pad_X": None,
+        "Pad_Y": None,
+        "Joy3": None,
         "Axis1Minus": "+am_panleft",
         "Axis1Plus": "+am_panright",
         "Axis2Minus": "+am_panup",
