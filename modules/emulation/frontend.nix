@@ -29,7 +29,7 @@ let
         <fullname>Tools</fullname>
         <path>${emu.xmlEscape "${cfg.dataRoot}/tools"}</path>
         <extension>.sh .SH</extension>
-        <command>%ROM%</command>
+        <command>${pkgs.bash}/bin/bash %ROM%</command>
         <platform>tools</platform>
         <theme>tools</theme>
       </system>
