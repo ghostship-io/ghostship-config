@@ -1224,12 +1224,10 @@ PY
         chown -R ${cfg.user}:${cfg.group} "$dolphin_config_dir"
         find "$dolphin_config_dir" -type f -exec chmod 0644 {} +
         cat >"${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg" <<'EOF'
-    // Boomer Switch Pro controller defaults. Managed by Nix.
+    // Boomer controller defaults. Managed by Nix.
     use_joystick true
     freelook true
     lookstrafe false
-    set joy_trigger_threshold 0.25
-    set joy_axis_threshold 0.25
 
     unbind pad_back
     unbind joy9
@@ -1269,25 +1267,14 @@ PY
     bind joy3 togglemap
     bind rtrigger +attack
     bind ltrigger +altattack
-    unbind joy7
-    unbind joy8
-    bind joy5 weapprev
-    bind joy6 weapnext
-    bind joy9 centerview
-    bind joy10 weapprev
-    bind joy11 weapnext
-    unbind joy12
-    unbind joy13
-    unbind joy14
-    unbind joy15
-    unbind joy16
-    unbind axis4plus
-    unbind axis4minus
-    unbind axis5plus
-    unbind axis5minus
+    bind joy7 +attack
+    bind joy8 +altattack
     bind lshoulder weapprev
     bind rshoulder weapnext
+    bind joy5 weapprev
+    bind joy6 weapnext
     bind pad_start menu_main
+    bind joy10 menu_main
     bind lthumb crouch
     bind rthumb centerview
     bind axis1minus +moveleft
@@ -1302,23 +1289,17 @@ PY
     bind pov1down +back
     bind pov1left +moveleft
     bind pov1right +moveright
-    bind axis7plus +moveleft
-    bind axis7minus +moveright
-    bind axis8minus +forward
-    bind axis8plus +back
 
+    mapbind pad_y togglemap
     mapbind pad_a am_setmark
     mapbind pad_b am_clearmarks
+    mapbind joy3 togglemap
     mapbind joy2 am_setmark
     mapbind joy1 am_clearmarks
     mapbind axis1minus +am_panleft
     mapbind axis1plus +am_panright
     mapbind axis2minus +am_panup
     mapbind axis2plus +am_pandown
-    mapbind axis7plus +am_panleft
-    mapbind axis7minus +am_panright
-    mapbind axis8minus +am_panup
-    mapbind axis8plus +am_pandown
     mapbind dpadright +am_panright
     mapbind dpadleft +am_panleft
     mapbind dpadup +am_panup
@@ -1329,8 +1310,8 @@ PY
     mapbind pov1down +am_pandown
     mapbind lshoulder +am_zoomout
     mapbind rshoulder +am_zoomin
-    mapbind joy10 +am_zoomout
-    mapbind joy11 +am_zoomin
+    mapbind joy5 +am_zoomout
+    mapbind joy6 +am_zoomin
     EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         chmod 0644 "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
@@ -1381,11 +1362,11 @@ PY
         "Joy4": "+crouch",
         "Joy5": "weapprev",
         "Joy6": "weapnext",
-        "Joy7": None,
-        "Joy8": None,
-        "Joy9": "centerview",
-        "Joy10": "weapprev",
-        "Joy11": "weapnext",
+        "Joy7": "+attack",
+        "Joy8": "+altattack",
+        "Joy9": None,
+        "Joy10": "menu_main",
+        "Joy11": None,
         "Joy12": None,
         "Joy13": None,
         "Joy14": None,
@@ -1405,10 +1386,10 @@ PY
         "Axis5Plus": None,
         "Axis6Minus": None,
         "Axis6Plus": None,
-        "Axis7Minus": "+moveright",
-        "Axis7Plus": "+moveleft",
-        "Axis8Minus": "+forward",
-        "Axis8Plus": "+back",
+        "Axis7Minus": None,
+        "Axis7Plus": None,
+        "Axis8Minus": None,
+        "Axis8Plus": None,
         "DPadUp": "+forward",
         "DPadDown": "+back",
         "DPadLeft": "+moveleft",
@@ -1424,16 +1405,12 @@ PY
         "Pad_B": "am_clearmarks",
         "Joy1": "am_clearmarks",
         "Pad_X": None,
-        "Pad_Y": None,
-        "Joy3": None,
+        "Pad_Y": "togglemap",
+        "Joy3": "togglemap",
         "Axis1Minus": "+am_panleft",
         "Axis1Plus": "+am_panright",
         "Axis2Minus": "+am_panup",
         "Axis2Plus": "+am_pandown",
-        "Axis7Minus": "+am_panright",
-        "Axis7Plus": "+am_panleft",
-        "Axis8Minus": "+am_panup",
-        "Axis8Plus": "+am_pandown",
         "DPadUp": "+am_panup",
         "DPadDown": "+am_pandown",
         "DPadLeft": "+am_panleft",
