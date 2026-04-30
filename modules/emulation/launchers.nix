@@ -1371,6 +1371,8 @@ PY
         "Pad_B": "+jump",
         "Pad_X": "+crouch",
         "Pad_Y": "togglemap",
+        "LTrigger": "+attack",
+        "RTrigger": "+altattack",
         "Joy1": "+jump",
         "Joy2": "+use",
         "Joy3": "togglemap",
