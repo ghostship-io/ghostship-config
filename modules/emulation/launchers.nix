@@ -1269,6 +1269,8 @@ PY
     bind joy3 togglemap
     bind rtrigger +attack
     bind ltrigger +altattack
+    bind joy7 +altattack
+    bind joy8 +attack
     bind joy5 weapprev
     bind joy6 weapnext
     bind joy9 centerview
@@ -1375,8 +1377,8 @@ PY
         "Joy4": "weapnext",
         "Joy5": "weapprev",
         "Joy6": "weapnext",
-        "Joy7": None,
-        "Joy8": None,
+        "Joy7": "+altattack",
+        "Joy8": "+attack",
         "Joy9": "centerview",
         "Joy10": "weapprev",
         "Joy11": "weapnext",
