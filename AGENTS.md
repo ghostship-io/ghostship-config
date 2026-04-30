@@ -234,7 +234,7 @@ changelog.
   underneath that folder. PICO-8 needs an explicit Gamescope Xwayland server on
   Boomer because its SDL path uses X11. Boomer's managed ES-DE UI defaults are
   manufacturer/hardware/release systems sorting, visible clock, Switch Pro
-  controller prompts, first-controller-only input, 12-hour clock format, and
+  controller prompts, all-controller ES-DE menu input, 12-hour clock format, and
   Hawaii standard time. WiiWare games should stay as extracted `.wad` files in
   the Wii ROM folder so ES-DE can launch them through Dolphin. Dolphin runtime
   config/cache can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu`

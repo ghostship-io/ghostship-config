@@ -84,7 +84,7 @@ let
       <string name="ScraperLanguage" value="en" />
       <string name="MediaDirectory" value="${emu.xmlEscape "${cfg.esde.appDataDir}/downloaded_media"}" />
       <bool name="DisplayClock" value="true" />
-      <bool name="InputOnlyFirstController" value="true" />
+      <bool name="InputOnlyFirstController" value="false" />
       <bool name="ScraperUseAccountScreenScraper" value="true" />
       <bool name="ScrapeGameNames" value="true" />
       <bool name="ScrapeRatings" value="true" />
@@ -193,7 +193,7 @@ let
     set_string("SystemsSorting", "manufacturer_hwtype_year")
     set_string("InputControllerType", "switchpro")
     set_bool("DisplayClock", True)
-    set_bool("InputOnlyFirstController", True)
+    set_bool("InputOnlyFirstController", False)
 
     fd, tmp = tempfile.mkstemp(prefix="es_settings.", dir=str(settings_path.parent))
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
