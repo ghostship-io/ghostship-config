@@ -11,6 +11,8 @@ changelog.
   repo-specific guidance. Keep it concise, imperative, and high-signal.
 - The shared workflow preferences require verified work to be committed before
   task completion.
+- After finishing work in a Codex worktree, merge the result into local `main`,
+  push `main`, and deploy Boomer when reachable.
 - If a change needs a plan, implement it in a git worktree.
 - For repo research, use `brainstorming` when it is available.
 - Use the `nix` skill for Nix-platform work and the `python` skill for Python
