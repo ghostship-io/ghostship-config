@@ -47,7 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Dynamically compact connected controller player slots so remaining controllers
   slide down when a middle player disconnects and the returning controller joins
   at the end. Trigger controller slot reconciliation from controller input add
-  events and serialize LED/order writes to reduce transient wrong player LEDs.
+  events and BlueZ connected-property changes with short delayed retries for
+  HID LED readiness, and serialize LED/order writes to reduce transient wrong
+  player LEDs.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

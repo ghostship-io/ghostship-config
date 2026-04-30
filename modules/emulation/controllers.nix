@@ -403,6 +403,58 @@ let
     esac
   '';
 
+  controllerReconcileEvents = pkgs.writeShellScriptBin "controller-reconcile-events" ''
+    set -euo pipefail
+    export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.dbus pkgs.systemd ]}:$PATH
+    log_file="${cfg.dataRoot}/logs/controller-reconcile-events.log"
+    mkdir -p "$(dirname "$log_file")"
+    touch "$log_file"
+
+    trigger_reconcile() {
+      reason="$1"
+      echo "$(date -u +%FT%TZ) bluez connected change: $reason" >>"$log_file"
+      systemctl start --no-block controller-leds-apply.service >/dev/null 2>&1 || true
+      (
+        sleep 1
+        systemctl start --no-block controller-leds-apply.service >/dev/null 2>&1 || true
+        sleep 2
+        systemctl start --no-block controller-leds-apply.service >/dev/null 2>&1 || true
+      ) &
+    }
+
+    in_device=0
+    saw_connected=0
+    dbus-monitor --system "type='signal',sender='org.bluez',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',arg0='org.bluez.Device1'" 2>>"$log_file" \
+      | while IFS= read -r line; do
+          case "$line" in
+            *"member=PropertiesChanged"*)
+              in_device=0
+              saw_connected=0
+              ;;
+            *'string "org.bluez.Device1"'*)
+              in_device=1
+              ;;
+            *'string "Connected"'*)
+              if [ "$in_device" = 1 ]; then
+                saw_connected=1
+              fi
+              ;;
+            *"boolean true"*)
+              if [ "$in_device" = 1 ] && [ "$saw_connected" = 1 ]; then
+                trigger_reconcile connected
+                saw_connected=0
+              fi
+              ;;
+            *"boolean false"*)
+              if [ "$in_device" = 1 ] && [ "$saw_connected" = 1 ]; then
+                trigger_reconcile disconnected
+                saw_connected=0
+              fi
+              ;;
+          esac
+        done
+  '';
+
   controllerBluetoothHealth = pkgs.writeShellScriptBin "controller-bluetooth-health" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:$PATH
@@ -663,6 +715,22 @@ in
         Restart = "always";
         RestartSec = "5s";
       };
+    };
+
+    systemd.services.controller-reconcile-events = {
+      description = "Trigger controller player reconciliation from BlueZ events";
+      wantedBy = [ "multi-user.target" ];
+      after = [
+        "bluetooth.service"
+        "controller-leds.service"
+      ];
+      serviceConfig = {
+        ExecStart = "${lib.getExe controllerReconcileEvents}";
+        Restart = "always";
+        RestartSec = "2s";
+      };
+      bindsTo = [ "bluetooth.service" ];
+      partOf = [ "bluetooth.service" ];
     };
 
     systemd.services.bluetooth.serviceConfig.ExecStart = lib.mkForce [
