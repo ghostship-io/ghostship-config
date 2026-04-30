@@ -1317,6 +1317,66 @@ PY
         "Axis5deadzone": "1.0",
         "Axis5map": "-1",
     }
+    binding_settings = {
+        "Pad_A": "+use",
+        "Pad_B": "+jump",
+        "Pad_X": "invuse",
+        "Pad_Y": "togglemap",
+        "Joy1": "+jump",
+        "Joy2": "+use",
+        "Joy3": "togglemap",
+        "Joy4": "invuse",
+        "Joy5": "weapprev",
+        "Joy6": "weapnext",
+        "Joy7": "+altattack",
+        "Joy8": "+attack",
+        "Joy9": None,
+        "Joy10": "menu_main",
+        "Joy14": None,
+        "Pad_Back": None,
+        "Pad_Start": "menu_main",
+        "Axis1Minus": "+moveleft",
+        "Axis1Plus": "+moveright",
+        "Axis2Minus": "+forward",
+        "Axis2Plus": "+back",
+        "Axis3Minus": None,
+        "Axis3Plus": None,
+        "Axis4Minus": None,
+        "Axis4Plus": None,
+        "Axis5Minus": None,
+        "Axis5Plus": None,
+        "Axis6Minus": None,
+        "Axis6Plus": None,
+        "DPadUp": "+forward",
+        "DPadDown": "+back",
+        "DPadLeft": "+moveleft",
+        "DPadRight": "+moveright",
+        "POV1Up": "+forward",
+        "POV1Down": "+back",
+        "POV1Left": "+moveleft",
+        "POV1Right": "+moveright",
+    }
+    automap_settings = {
+        "Pad_Y": "togglemap",
+        "Joy3": "togglemap",
+        "Pad_A": "am_setmark",
+        "Joy2": "am_setmark",
+        "Pad_B": "am_clearmarks",
+        "Joy1": "am_clearmarks",
+        "Pad_X": None,
+        "Axis1Minus": "+am_panleft",
+        "Axis1Plus": "+am_panright",
+        "Axis2Minus": "+am_panup",
+        "Axis2Plus": "+am_pandown",
+        "DPadUp": "+am_panup",
+        "DPadDown": "+am_pandown",
+        "DPadLeft": "+am_panleft",
+        "DPadRight": "+am_panright",
+        "POV1Up": "+am_panup",
+        "POV1Down": "+am_pandown",
+        "POV1Left": "+am_panleft",
+        "POV1Right": "+am_panright",
+    }
 
     def upsert_section(input_lines, section, settings):
         out = []
@@ -1326,7 +1386,7 @@ PY
 
         def append_missing():
             for key, value in settings.items():
-                if key not in seen:
+                if key not in seen and value is not None:
                     out.append(f"{key}={value}\n")
                     seen.add(key)
 
@@ -1345,7 +1405,8 @@ PY
             if in_section and "=" in line:
                 key = line.split("=", 1)[0].strip()
                 if key in settings:
-                    out.append(f"{key}={settings[key]}\n")
+                    if settings[key] is not None:
+                        out.append(f"{key}={settings[key]}\n")
                     seen.add(key)
                     continue
             out.append(line)
@@ -1364,6 +1425,8 @@ PY
 
     for index in range(4):
         lines = upsert_section(lines, f"Joy:JS:{index}", axis_settings)
+    lines = upsert_section(lines, "Doom.Bindings", binding_settings)
+    lines = upsert_section(lines, "Doom.AutomapBindings", automap_settings)
 
     path.write_text("".join(lines), encoding="utf-8")
     PY
