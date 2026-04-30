@@ -197,7 +197,7 @@ def pane_metrics(height, width):
 
 
 def bluetooth_visible_labels(powered):
-    labels = ["Status", "Bluetooth Toggle"]
+    labels = ["Status", "Show Paired", "Bluetooth Toggle"]
     if powered:
         labels.append("Restart Bluetooth")
     labels.extend(
@@ -237,6 +237,7 @@ NON_CONTROLLER_NAME_HINTS = (
     "consumer control",
     "hd-audio",
     "hdmi",
+    "imu",
     "keyboard",
     "mouse",
     "power button",
@@ -267,8 +268,40 @@ def controller_device_info(event_path):
     return {"event": event_path, "name": name or Path(event_path).name, "mac": mac_key(uniq)}
 
 
+def capability_has_bit(value, bit):
+    try:
+        words = [int(word, 16) for word in (value or "").split()]
+    except ValueError:
+        return False
+    word_index = bit // 64
+    bit_index = bit % 64
+    if word_index >= len(words):
+        return False
+    return bool(words[-1 - word_index] & (1 << bit_index))
+
+
+def capability_has_any_bit(value):
+    try:
+        return any(int(word, 16) for word in (value or "").split())
+    except ValueError:
+        return False
+
+
+def event_has_controller_navigation(event_path):
+    base = Path("/sys/class/input") / Path(event_path).name / "device" / "capabilities"
+    try:
+        key_caps = (base / "key").read_text(encoding="utf-8", errors="replace").strip()
+    except Exception:
+        key_caps = ""
+    try:
+        abs_caps = (base / "abs").read_text(encoding="utf-8", errors="replace").strip()
+    except Exception:
+        abs_caps = ""
+    return capability_has_any_bit(key_caps) or capability_has_bit(abs_caps, 16) or capability_has_bit(abs_caps, 17)
+
+
 def is_controller_event_device(event_path):
-    return is_controller_name(controller_device_info(event_path).get("name", ""))
+    return is_controller_name(controller_device_info(event_path).get("name", "")) and event_has_controller_navigation(event_path)
 
 
 def format_bluetooth_status(adapter_lines, connected, paired, players, audio_output):
@@ -348,8 +381,8 @@ class ControllerReader(threading.Thread):
                 self.emit(action, path)
             elif code >= BTN_MISC:
                 self.emit(ACTION_SELECT, path)
-        elif ev_type == EV_ABS and code in (0, 1, 16, 17):
-            if code in (0, 16):
+        elif ev_type == EV_ABS and code in (16, 17):
+            if code == 16:
                 action = ACTION_LEFT if value < 0 else ACTION_RIGHT if value > 0 else None
             else:
                 action = ACTION_UP if value < 0 else ACTION_DOWN if value > 0 else None
@@ -950,6 +983,12 @@ class SettingsApp:
                     "action": self.bluetooth_status,
                 },
                 {
+                    "label": "Show Paired",
+                    "detail_only": True,
+                    "detail": self.bluetooth_paired_lines,
+                    "action": self.bluetooth_paired,
+                },
+                {
                     "label": "Bluetooth Toggle",
                     "desc": f"Turn Bluetooth {toggle_target}.",
                     "detail": [f"Current state: {'On' if powered else 'Off'}", f"Select to turn Bluetooth {toggle_target}."],
@@ -1033,6 +1072,21 @@ class SettingsApp:
 
     def bluetooth_status(self):
         self.tui.show_output("Bluetooth Status", self.bluetooth_status_lines())
+
+    def bluetooth_paired_lines(self):
+        connected = {device["mac"] for device in self.bt.devices("Connected")}
+        paired = self.bt.devices("Paired")
+        if not paired:
+            return ["No paired Bluetooth devices."]
+        lines = [f"Paired devices ({len(paired)}):"]
+        for device in paired:
+            state = "connected" if device["mac"] in connected else "not connected"
+            lines.append(f"{ellipsize(device['name'], 36)}")
+            lines.append(f"  {device['mac']} - {state}")
+        return lines
+
+    def bluetooth_paired(self):
+        self.tui.show_output("Show Paired", self.bluetooth_paired_lines())
 
     def bluetooth_scan_pair(self):
         self.tui.progress("Bluetooth Scan", ["Scanning for 10 seconds...", "Put the device in pairing mode now."])
@@ -1317,14 +1371,20 @@ def smoke_test(mode):
         labels_off = bluetooth_visible_labels(False)
         adapter_lines = parse_bluetooth_adapter_lines(show)
         assert "Bluetooth Toggle" in labels_on
+        assert labels_on[:2] == ["Status", "Show Paired"]
         assert "Restart Bluetooth" in labels_on
         assert "Restart Bluetooth" not in labels_off
         assert "Scanning: No" in adapter_lines
         assert not any("Discoverable" in line or "Pairable" in line for line in adapter_lines)
         assert is_controller_name("Nintendo Switch Pro Controller")
         assert is_controller_name("8BitDo Ultimate Wireless Controller")
+        assert not is_controller_name("Pro Controller (IMU)")
         assert not is_controller_name("AMIRA-KEYBOAR USB KEYBOARD")
         assert not is_controller_name("AMIRA-KEYBOAR USB KEYBOARD Mouse")
+        assert capability_has_bit("3001b", 16)
+        assert capability_has_bit("3001b", 17)
+        assert not capability_has_bit("3f", 16)
+        assert not capability_has_any_bit("0 0 0")
         assert parse_bt_devices(scan_sample) == [
             {"mac": "22:33:44:55:66:77", "name": "8BitDo Ultimate Controller"}
         ]

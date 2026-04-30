@@ -205,12 +205,16 @@ changelog.
   help so the right pane stays contained. Player assignment should allow
   keyboard as a player device, with B/Esc canceling before assignment. Let the
   terminal handle keyboard input and keep the raw `/dev/input` reader limited
-  to controller-like devices so arrow keys do not double-step. In the ES-DE
+  to real controller navigation event nodes, excluding Switch Pro IMU motion
+  devices and analog-stick idle noise. In the ES-DE
   Gamescope session these TUIs should launch through Xwayland `xterm`; `foot`
   fails there because Gamescope does not expose the Wayland subcompositor it
   needs. Bluetooth pairing scans should use `bluetoothctl --timeout` and parse
   live `[NEW] Device` output, not rely only on the post-scan device cache; pair
-  commands should register their own BlueZ agent. Smoke
+  commands should register their own BlueZ agent. Keep a `Show Paired` item
+  directly under Bluetooth status. Controller LED writes should target the
+  matched controller sysfs root and avoid generic fallbacks that light unrelated
+  player LEDs. Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
   launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where

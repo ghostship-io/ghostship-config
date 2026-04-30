@@ -395,16 +395,18 @@ and `Wi-Fi Settings`, plus restart, reboot, and shutdown. The settings TUIs
 use a dark two-column layout: actions on the left, selected-action status and
 details on the right. They support keyboard and controller navigation from the
 couch. Bluetooth status shows whether Boomer is scanning for nearby devices, but
-does not expose host-only discoverable or pairable fields. Non-status actions
-show only concise action help in the right pane so long status blocks do not
-crowd the menu. Player assignment accepts keyboard input as a player device, and
-B/Esc backs out before any assignment is made. Under the ES-DE Gamescope session
-they launch through Xwayland `xterm`, with `foot` kept as a pure Wayland
-fallback. Bluetooth pairing uses a 10-second non-interactive BlueZ scan and
-parses newly discovered devices from the live scan output. The pair command
-registers a BlueZ agent for that command instead of relying on a stale
-interactive session. Keyboard input is handled by the terminal, while the raw `/dev/input`
-reader is limited to controller-like devices so navigation does not double-step.
+does not expose host-only discoverable or pairable fields. `Show Paired` sits
+directly under status and previews all paired devices in the right pane.
+Non-status actions show only concise action help in the right pane so long
+status blocks do not crowd the menu. Player assignment accepts keyboard input as
+a player device, and B/Esc backs out before any assignment is made. Under the
+ES-DE Gamescope session they launch through Xwayland `xterm`, with `foot` kept
+as a pure Wayland fallback. Bluetooth pairing uses a 10-second non-interactive
+BlueZ scan and parses newly discovered devices from the live scan output. The
+pair command registers a BlueZ agent for that command instead of relying on a
+stale interactive session. Keyboard input is handled by the terminal, while the
+raw `/dev/input` reader is limited to real controller navigation devices so
+Switch Pro IMU motion data and analog-stick idle noise do not move the menu.
 Launch diagnostics are written under `/srv/emulation/logs/tools/`. Helper
 scripts for audio, display, RetroArch, scraping, launch logs, ROM coverage,
 smoke tests, and performance tests remain available on disk for SSH or

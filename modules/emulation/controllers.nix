@@ -99,50 +99,32 @@ let
       found=0
       while IFS=$'\t' read -r player mac; do
         [ -n "''${player:-}" ] || continue
-        input_name=""
+        device_root=""
         for event in /sys/class/input/event*; do
           [ -r "$event/device/uniq" ] || continue
           uniq="$(tr '[:lower:]' '[:upper:]' <"$event/device/uniq" 2>/dev/null || true)"
           [ "$uniq" = "$(printf '%s' "$mac" | tr '[:lower:]' '[:upper:]')" ] || continue
-          input_name="$(basename "$(readlink -f "$event/device")")"
+          input_path="$(readlink -f "$event/device")"
+          device_root="$(dirname "$(dirname "$input_path")")"
           break
         done
-        [ -n "$input_name" ] || continue
-        for led in /sys/class/leds/"$input_name"::*; do
+        [ -n "''${device_root:-}" ] || continue
+        for led in "$device_root"/leds/*:green:player-[1-4]; do
           [ -e "$led/brightness" ] || continue
           led_name="$(basename "$led")"
           case "$led_name" in
-            *player*)
+            *:green:player-"$player")
               found=1
-              case "$led_name" in
-                *player"$player"*|*player_"$player"*|*player-"$player"*)
-                  echo 1 >"$led/brightness" 2>/dev/null || true
-                  ;;
-                *)
-                  echo 0 >"$led/brightness" 2>/dev/null || true
-                  ;;
-              esac
+              echo 1 >"$led/brightness" 2>/dev/null || true
+              ;;
+            *:green:player-[1-4])
+              found=1
+              echo 0 >"$led/brightness" 2>/dev/null || true
               ;;
           esac
         done
       done < <(jq -r '.players[]? | select(.connected == true) | [.player, .mac] | @tsv' "$order_file" 2>/dev/null || true)
 
-      if [ "$found" = 0 ]; then
-        player=1
-        for led in /sys/class/leds/*; do
-          [ -e "$led/brightness" ] || continue
-          name="$(basename "$led")"
-          case "$name" in
-            *player*|*pro_controller*|*8BitDo*|*nintendo*)
-              found=1
-              if [ "$player" -le 4 ]; then
-                echo 1 >"$led/brightness" 2>/dev/null || true
-                player=$((player + 1))
-              fi
-              ;;
-          esac
-        done
-      fi
       if [ "$found" = 0 ]; then
         status="no supported controller LED sysfs entries found"
       else
