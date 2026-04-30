@@ -182,10 +182,10 @@ changelog.
   Bluetooth stays usable and SSH remains reachable. The Wi-Fi bootstrap service
   should wait for NetworkManager, clear stale Wi-Fi interface pins, and bring up
   saved 5 GHz profiles if autoconnect does not fire. Keep BlueZ's unused
-  BAP/LE Audio plugin disabled unless LE Audio hardware becomes a requirement;
-  Switch-mode controllers do not need it. Boomer should boot directly into the
-  ES-DE/Gamescope kiosk session; keep `start-esde` available as a manual
-  maintenance command. Public
+  BAP/CSIP LE Audio plugins disabled unless LE Audio hardware becomes a
+  requirement; Switch-mode controllers do not need them. Boomer should boot
+  directly into the ES-DE/Gamescope kiosk session; keep `start-esde` available
+  as a manual maintenance command. Public
   emulation commands and services intentionally avoid a `boomer-` prefix. The
   ES-DE AppImage under Gamescope needs the session service to clear capability
   bounding/ambient sets or bubblewrap exits with unexpected capabilities; the

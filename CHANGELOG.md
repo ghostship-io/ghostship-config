@@ -80,6 +80,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   all-controller menu input during frontend config sync. Set Boomer to Hawaii
   standard time and patch Art Book Next's clock format with ES-DE-supported
   hour/minute tokens so the clock renders the hour.
+- **Boomer service log cleanup**: Disable BlueZ's unused CSIP plugin alongside
+  BAP, keep `audio-route` pointed at PipeWire Pulse instead of autospawning
+  PulseAudio, and start UPower under the kiosk boot target for WirePlumber.
 - **PyLoad download directory**: Set PyLoad's app config default download
   folder to `/downloads/PyLoad` during container initialization while keeping
   the shared `/downloads` mount unchanged, and remove the image's
@@ -115,8 +118,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bring-up is stable. Hardened Boomer's Wi-Fi bootstrap service so it waits for
   NetworkManager, clears stale Wi-Fi interface pins, and explicitly brings up
   saved 5 GHz profiles when autoconnect does not fire on first boot. Disabled
-  BlueZ's unused BAP/LE Audio plugin on Boomer so the Bluetooth daemon stops
-  logging ISO-socket errors while keeping controller-oriented Bluetooth active.
+  BlueZ's unused BAP/CSIP LE Audio plugins on Boomer so the Bluetooth daemon
+  stops logging ISO-socket errors while keeping controller-oriented Bluetooth
+  active.
   Reworked the controller monitor to read BlueZ devices over D-Bus instead of
   polling `bluetoothctl`, added ES-DE preflight/status helpers, cleared
   unexpected service capabilities so the ES-DE AppImage can run under Gamescope,

@@ -255,6 +255,7 @@ in
         powerManagement.cpuFreqGovernor = "performance";
         security.rtkit.enable = true;
         services.upower.enable = true;
+        systemd.services.upower.wantedBy = lib.mkForce [ "multi-user.target" ];
 
         services.pipewire = {
           enable = true;
