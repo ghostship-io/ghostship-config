@@ -22,12 +22,16 @@ let
     screenshot_directory = "${cfg.dataRoot}/screenshots"
     input_autodetect_enable = "true"
     joypad_autoconfig_dir = "${cfg.configRoot}/retroarch/autoconfig"
-    input_menu_toggle_gamepad_combo = "3"
-    input_enable_hotkey_btn = "8"
-    input_menu_toggle_btn = "3"
+    input_menu_toggle_gamepad_combo = "0"
+    input_enable_hotkey_btn = "13"
+    input_menu_toggle_btn = "12"
     input_exit_emulator_btn = "9"
     input_save_state_btn = "5"
     input_load_state_btn = "4"
+    input_reset_btn = "0"
+    input_fps_toggle_btn = "2"
+    input_screenshot_btn = "1"
+    input_hold_fast_forward_btn = "7"
     config_save_on_exit = "false"
     log_verbosity = "true"
     log_to_file = "true"
@@ -202,7 +206,7 @@ let
     input_r_x_minus_axis = "-3"
     input_r_y_plus_axis = "+4"
     input_r_y_minus_axis = "-4"
-    input_menu_toggle_btn = "3"
+    input_menu_toggle_btn = "12"
   '';
 
   autoconfigSwitchPro = pkgs.writeText "Nintendo Switch Pro Controller.cfg" ''
@@ -230,7 +234,7 @@ let
     input_r_x_minus_axis = "-2"
     input_r_y_plus_axis = "+3"
     input_r_y_minus_axis = "-3"
-    input_menu_toggle_btn = "3"
+    input_menu_toggle_btn = "12"
   '';
 
   systemShaderDefaults = {
@@ -340,6 +344,13 @@ let
           printf 'core_options_path = "%s"\n' "$option_file"
           printf 'video_smooth = "false"\n'
           printf 'video_aspect_ratio_auto = "true"\n'
+          case "$id" in
+            fbneo|pcengine|pcenginecd|gb|gbc|gba|nds|nes|snes|virtualboy|neogeocd|ngpc|gamegear|genesis|mastersystem|saturn|segacd)
+              for player in 1 2 3 4; do
+                printf 'input_player%s_analog_dpad_mode = "1"\n' "$player"
+              done
+              ;;
+          esac
         } >"$override"
         chown ${cfg.user}:${cfg.group} "$override"
         chmod 0644 "$override"

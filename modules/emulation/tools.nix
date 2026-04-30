@@ -28,6 +28,10 @@ let
   '';
 
   mkSettingsTool = name: title: mode:
+    let
+      fontSize = if mode == "maps" then "22" else "28";
+      geometry = if mode == "maps" then "110x30" else "92x26";
+    in
     pkgs.writeShellScriptBin name ''
       set -euo pipefail
       export PATH=${lib.makeBinPath [ settingsTui pkgs.foot pkgs.xterm ]}:$PATH
@@ -37,10 +41,10 @@ let
       {
         printf '%s launching ${name}: DISPLAY=%s WAYLAND_DISPLAY=%s TERM=%s\n' "$(date -Is)" "''${DISPLAY:-}" "''${WAYLAND_DISPLAY:-}" "''${TERM:-}"
         if [ -n "''${DISPLAY:-}" ] && command -v xterm >/dev/null 2>&1; then
-          exec xterm -T ${lib.escapeShellArg title} -fa Monospace -fs 28 -geometry 92x26 -e emulation-settings-tui ${mode}
+          exec xterm -T ${lib.escapeShellArg title} -fa Monospace -fs ${fontSize} -geometry ${geometry} -e emulation-settings-tui ${mode}
         fi
         if [ -n "''${WAYLAND_DISPLAY:-}" ] && command -v foot >/dev/null 2>&1; then
-          exec foot -T ${lib.escapeShellArg title} -f monospace:size=28 -- emulation-settings-tui ${mode}
+          exec foot -T ${lib.escapeShellArg title} -f monospace:size=${fontSize} -- emulation-settings-tui ${mode}
         fi
         exec emulation-settings-tui ${mode}
       } >>"$log_file" 2>&1
@@ -178,20 +182,28 @@ let
     esac
   '';
 
-  restartEsdeDelayed = pkgs.writeShellScript "restart-esde-delayed" ''
-    set -euo pipefail
-    sleep 1
-    ${pkgs.systemd}/bin/systemctl stop emulation-session.service || true
-    for _ in $(${pkgs.coreutils}/bin/seq 1 10); do
-      if ! ${pkgs.systemd}/bin/systemctl is-active --quiet emulation-session.service; then
-        break
-      fi
-      sleep 0.5
-    done
-    ${pkgs.systemd}/bin/systemctl stop getty@tty1.service || true
-    ${pkgs.systemd}/bin/systemctl reset-failed emulation-session.service getty@tty1.service || true
-    exec ${pkgs.systemd}/bin/systemctl start emulation-session.service
-  '';
+  restartEsdeDelayed = pkgs.writeShellScript "restart-esde-delayed" (
+    if cfg.startup.mode == "kiosk" then ''
+      set -euo pipefail
+      sleep 1
+      ${pkgs.systemd}/bin/systemctl stop emulation-session.service || true
+      ${pkgs.systemd}/bin/systemctl reset-failed greetd.service emulation-session.service || true
+      exec ${pkgs.systemd}/bin/systemctl restart greetd.service
+    '' else ''
+      set -euo pipefail
+      sleep 1
+      ${pkgs.systemd}/bin/systemctl stop emulation-session.service || true
+      for _ in $(${pkgs.coreutils}/bin/seq 1 10); do
+        if ! ${pkgs.systemd}/bin/systemctl is-active --quiet emulation-session.service; then
+          break
+        fi
+        sleep 0.5
+      done
+      ${pkgs.systemd}/bin/systemctl stop getty@tty1.service || true
+      ${pkgs.systemd}/bin/systemctl reset-failed emulation-session.service getty@tty1.service || true
+      exec ${pkgs.systemd}/bin/systemctl start emulation-session.service
+    ''
+  );
 
   toolScripts = {
     bluetooth-settings = mkSettingsTool "bluetooth-settings" "Bluetooth Settings" "bluetooth";

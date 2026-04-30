@@ -61,7 +61,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   BlueZ-triggered retries through the one-shot unit and avoid force-writing
   already-correct LED entries so hid-nintendo output reports are not flooded.
   Debounce BlueZ event bursts and update the background state marker from
-  one-shot applies to prevent immediate duplicate LED rewrites.
+  one-shot applies to prevent immediate duplicate LED rewrites. Restore
+  Boomer's default boot path to the ES-DE kiosk session, make the ES-DE restart
+  tool handle both greetd kiosk mode and console mode, and give `bluetoothd`
+  plus system D-Bus conservative CPU scheduling weight boosts without enabling
+  realtime scheduling or IRQ pinning. Add ROCKNIX-style Switch Pro hotkeys with
+  Star/Home as quick menu, Square/Capture as the preferred modifier, Select as
+  fallback and force-kill modifier, a raw controller hotkey monitor for stuck
+  emulator exits, left-stick-as-D-pad overrides for D-pad-only RetroArch
+  systems, and detailed ASCII Controller Maps for every Boomer system family.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

@@ -17,6 +17,7 @@ let
       pkgs.gamemode
       pkgs.jq
       pkgs.mangohud
+      pkgs.util-linux
       pkgs.xdg-utils
       packages.pico8Package
       packages.ryubingCanaryPackage
@@ -57,6 +58,212 @@ let
       };
     }
   );
+
+  controllerHotkeysPy = pkgs.writeText "controller-hotkeys.py" ''
+    #!/usr/bin/env python3
+    import argparse
+    import glob
+    import os
+    import select
+    import signal
+    import struct
+    import sys
+    import time
+    from pathlib import Path
+
+    EVENT = struct.Struct("@llHHi")
+    EV_KEY = 0x01
+    BTN_CAPTURE = 309
+    BTN_SELECT = 314
+    BTN_START = 315
+    BTN_MODE = 316
+    DOUBLE_PRESS_SECONDS = 0.9
+
+    def log(path, message):
+        if not path:
+            return
+        try:
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} controller-hotkeys {message}\n")
+        except OSError:
+            pass
+
+    def input_name(event_path):
+        try:
+            return (Path("/sys/class/input") / Path(event_path).name / "device/name").read_text(
+                encoding="utf-8", errors="replace"
+            ).strip()
+        except OSError:
+            return ""
+
+    def supported_event(event_path):
+        name = input_name(event_path).lower()
+        return name == "pro controller"
+
+    def open_events():
+        fds = {}
+        for event_path in sorted(glob.glob("/dev/input/event*")):
+            if not supported_event(event_path):
+                continue
+            try:
+                fds[event_path] = os.open(event_path, os.O_RDONLY | os.O_NONBLOCK)
+            except OSError:
+                continue
+        return fds
+
+    def signal_group(pid, sig):
+        try:
+            pgid = os.getpgid(pid)
+            os.killpg(pgid, sig)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return False
+
+    def alive(pid):
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+    def main():
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--pid", type=int, required=True)
+        parser.add_argument("--log", default="")
+        parser.add_argument("--system", default="")
+        parser.add_argument("--emulator", default="")
+        args = parser.parse_args()
+
+        fds = open_events()
+        if not fds:
+            log(args.log, "no Switch Pro controller input devices found")
+            return 0
+
+        pressed = {path: set() for path in fds}
+        last_select_start = {path: 0.0 for path in fds}
+        last_capture_start = {path: 0.0 for path in fds}
+        log(args.log, f"watching {len(fds)} Switch Pro controller(s) for {args.system}/{args.emulator}")
+
+        while alive(args.pid):
+            try:
+                readable, _, _ = select.select(list(fds.values()), [], [], 0.2)
+            except OSError:
+                break
+            reverse = {fd: path for path, fd in fds.items()}
+            for fd in readable:
+                path = reverse.get(fd)
+                if not path:
+                    continue
+                try:
+                    data = os.read(fd, EVENT.size * 16)
+                except OSError:
+                    continue
+                for offset in range(0, len(data) - EVENT.size + 1, EVENT.size):
+                    _sec, _usec, ev_type, code, value = EVENT.unpack(data[offset : offset + EVENT.size])
+                    if ev_type != EV_KEY:
+                        continue
+                    if value:
+                        pressed[path].add(code)
+                    else:
+                        pressed[path].discard(code)
+                        continue
+                    if code == BTN_MODE:
+                        log(args.log, "Star/Home pressed; emulator-native quick menu binding should handle this")
+                    if code != BTN_START:
+                        continue
+                    now = time.monotonic()
+                    if BTN_SELECT in pressed[path]:
+                        if now - last_select_start[path] <= DOUBLE_PRESS_SECONDS:
+                            log(args.log, "Select + Start double-press force kill")
+                            signal_group(args.pid, signal.SIGKILL)
+                            return 0
+                        last_select_start[path] = now
+                        continue
+                    if BTN_CAPTURE in pressed[path]:
+                        if now - last_capture_start[path] <= DOUBLE_PRESS_SECONDS:
+                            log(args.log, "Capture + Start double-press graceful quit")
+                            signal_group(args.pid, signal.SIGTERM)
+                            return 0
+                        last_capture_start[path] = now
+                        continue
+        return 0
+
+    if __name__ == "__main__":
+        sys.exit(main())
+  '';
+
+  controllerHotkeys = pkgs.writeShellScriptBin "controller-hotkeys" ''
+    set -euo pipefail
+    exec ${pkgs.python3}/bin/python3 ${controllerHotkeysPy} "$@"
+  '';
+
+  switchProButtonProbePy = pkgs.writeText "switch-pro-button-probe.py" ''
+    #!/usr/bin/env python3
+    import glob
+    import os
+    import select
+    import struct
+    import time
+    from pathlib import Path
+
+    EVENT = struct.Struct("@llHHi")
+    EV_KEY = 0x01
+    NAMES = {
+        304: "B/South",
+        305: "A/East",
+        307: "X/North",
+        308: "Y/West",
+        309: "Square/Capture",
+        310: "L1",
+        311: "R1",
+        312: "ZL",
+        313: "ZR",
+        314: "Select/-",
+        315: "Start/+",
+        316: "Star/Home",
+        317: "Left Stick Press",
+        318: "Right Stick Press",
+    }
+
+    def name(path):
+        try:
+            return (Path("/sys/class/input") / Path(path).name / "device/name").read_text(
+                encoding="utf-8", errors="replace"
+            ).strip()
+        except OSError:
+            return ""
+
+    fds = {}
+    for path in sorted(glob.glob("/dev/input/event*")):
+        if name(path).lower() == "pro controller":
+            try:
+                fds[path] = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+                print(f"Watching {path} ({name(path)})")
+            except OSError:
+                pass
+    if not fds:
+        print("No Switch Pro controller event devices found.")
+        raise SystemExit(1)
+    print("Press buttons now; exiting after 12 seconds.")
+    deadline = time.monotonic() + 12
+    while time.monotonic() < deadline:
+        readable, _, _ = select.select(list(fds.values()), [], [], 0.25)
+        reverse = {fd: path for path, fd in fds.items()}
+        for fd in readable:
+            path = reverse.get(fd, "?")
+            data = os.read(fd, EVENT.size * 16)
+            for offset in range(0, len(data) - EVENT.size + 1, EVENT.size):
+                _sec, _usec, ev_type, code, value = EVENT.unpack(data[offset : offset + EVENT.size])
+                if ev_type == EV_KEY and value == 1:
+                    print(f"{Path(path).name}: code {code} {NAMES.get(code, 'unknown')}")
+  '';
+
+  switchProButtonProbe = pkgs.writeShellScriptBin "switch-pro-button-probe" ''
+    set -euo pipefail
+    exec ${pkgs.python3}/bin/python3 ${switchProButtonProbePy} "$@"
+  '';
 
   displayProfile = pkgs.writeShellScriptBin "display-profile" ''
     set -euo pipefail
@@ -640,7 +847,24 @@ PY
     if [ -n "$run_cwd" ]; then
       cd "$run_cwd"
     fi
-    exec "''${run_cmd[@]}"
+    setsid "''${run_cmd[@]}" &
+    emulator_pid="$!"
+    ${lib.getExe controllerHotkeys} --pid "$emulator_pid" --system "$system_id" --emulator "$emulator_id" --log "$log_file" &
+    hotkey_pid="$!"
+    cleanup() {
+      kill "$hotkey_pid" >/dev/null 2>&1 || true
+      if kill -0 "$emulator_pid" >/dev/null 2>&1; then
+        kill -- "-$emulator_pid" >/dev/null 2>&1 || true
+      fi
+    }
+    trap cleanup INT TERM HUP
+    set +e
+    wait "$emulator_pid"
+    status="$?"
+    set -e
+    kill "$hotkey_pid" >/dev/null 2>&1 || true
+    wait "$hotkey_pid" >/dev/null 2>&1 || true
+    exit "$status"
   '';
 
   romCoverageCheck = pkgs.writeShellScriptBin "rom-coverage-check" ''
@@ -816,7 +1040,7 @@ PY
     Buttons/2 = \`Button 2\`
     Buttons/- = \`Button 8\`
     Buttons/+ = \`Button 9\`
-    Buttons/Home = \`Button 10\`
+    Buttons/Home = \`Button 12\`
     D-Pad/Up = \`Hat 0 N\`
     D-Pad/Down = \`Hat 0 S\`
     D-Pad/Left = \`Hat 0 W\`
@@ -825,9 +1049,9 @@ PY
     IR/Down = \`Axis 3+\`
     IR/Left = \`Axis 2-\`
     IR/Right = \`Axis 2+\`
-    Shake/X = \`Button 11\`
-    Shake/Y = \`Button 11\`
-    Shake/Z = \`Button 11\`
+    Shake/X = \`Button 13\`
+    Shake/Y = \`Button 13\`
+    Shake/Z = \`Button 13\`
     Extension = Nunchuk
     Nunchuk/Buttons/C = \`Button 4\`
     Nunchuk/Buttons/Z = \`Button 5\`
@@ -884,9 +1108,15 @@ PY
       "global_sdl_hints": {
         "SDL_GAMECONTROLLER_USE_BUTTON_LABELS": "1"
       },
+      "hotkey_policy": {
+        "quick_menu": "Star/Home",
+        "preferred_modifier": "Square/Capture",
+        "fallback_modifier": "Select/-",
+        "force_kill": "Select/- held plus Start/+ double-press"
+      },
       "managed_defaults": {
-        "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels",
-        "dolphin": "GameCube and Wii profiles map physical A/B/X/Y to matching labels and use SDL slots 0-3",
+        "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels, Star/Home to quick menu, and Square/Capture as the preferred hotkey modifier",
+        "dolphin": "GameCube and Wii profiles map physical A/B/X/Y to matching labels, use SDL slots 0-3, and reserve Wii Home for Star/Home",
         "ppsspp": "inherits SDL Switch label hints from run-emulator",
         "pcsx2": "inherits SDL Switch label hints from run-emulator",
         "azahar": "inherits SDL Switch label hints from run-emulator",
@@ -909,9 +1139,11 @@ in
   config = lib.mkIf cfg.enable {
     ghostship.emulation.internal.scripts = {
       inherit
+        controllerHotkeys
         displayProfile
         romCoverageCheck
         runEmulator
+        switchProButtonProbe
         syncEmulatorConfigs
         teknoparrotFree
         updateRyubingCanary

@@ -183,9 +183,9 @@ changelog.
   should wait for NetworkManager, clear stale Wi-Fi interface pins, and bring up
   saved 5 GHz profiles if autoconnect does not fire. Keep BlueZ's unused
   BAP/LE Audio plugin disabled unless LE Audio hardware becomes a requirement;
-  Switch-mode controllers do not need it. During bootstrap, boot Boomer to a
-  tty shell with `kiosk` auto-login and leave ES-DE/Gamescope as a manual
-  `start-esde` action until dynamic display handling is verified. Public
+  Switch-mode controllers do not need it. Boomer should boot directly into the
+  ES-DE/Gamescope kiosk session; keep `start-esde` available as a manual
+  maintenance command. Public
   emulation commands and services intentionally avoid a `boomer-` prefix. The
   ES-DE AppImage under Gamescope needs the session service to clear capability
   bounding/ambient sets or bubblewrap exits with unexpected capabilities; the
@@ -225,7 +225,11 @@ changelog.
   `/srv/emulation/logs/`, not continuously enabled during normal play. Avoid
   continuous `btmgmt` polling in background
   services; bound Bluetooth diagnostics so a busy controller cannot stall
-  activation. Player order should compact connected Switch controllers into
+  activation. Keep normal Bluetooth priority boosts conservative: `bluetoothd`
+  may use a small negative nice value and higher CPU weight, and system D-Bus
+  may get a modest CPU weight boost; do not enable realtime scheduling or IRQ
+  pinning unless a measured emulator-load test justifies it. Player order should
+  compact connected Switch controllers into
   the lowest open slots while preserving relative order, with reconnecting
   controllers joining at the end. Trigger a one-shot controller reconcile from
   controller input add events and debounced BlueZ connected-property changes;
@@ -261,7 +265,10 @@ changelog.
   Hawaii standard time. Boomer's controller automation should treat Switch Pro
   style controllers as the primary path, keep LEDs on Switch-style player count
   patterns only, and avoid auto-assigning audio devices or generic peripherals
-  as players. WiiWare games should stay as extracted `.wad` files in the Wii ROM
+  as players. Boomer's Switch Pro shortcuts should stay ROCKNIX-style:
+  Star/Home is quick menu, Square/Capture is the preferred hotkey modifier,
+  Select is fallback and Select+Start double-press is the force-kill escape.
+  WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it
   contains save/NAND state.

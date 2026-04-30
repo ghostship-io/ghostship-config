@@ -39,7 +39,7 @@
     visuals.defaultProfile = "nnedi3-clean";
     visuals.upscaler = "none";
     controllers.assignment = "connection-order-persistent";
-    startup.mode = "console";
+    startup.mode = "kiosk";
   };
 
   # Graphics (Mesa)

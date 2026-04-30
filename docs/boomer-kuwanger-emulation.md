@@ -1,9 +1,9 @@
 # Boomer Kuwanger Emulation PC
 
 `boomer-kuwanger` is managed as a dedicated NixOS emulation box through the
-split `modules/emulation/` module set. During hardware bring-up, the host boots
-the `kiosk` user to a tty and leaves ES-DE/Gamescope as a manual
-`start-esde` action. It keeps writable emulator state under
+split `modules/emulation/` module set. The host boots directly into ES-DE under
+Gamescope through the `kiosk` user. `start-esde` remains available as a manual
+launch helper for maintenance sessions. It keeps writable emulator state under
 `/srv/emulation` and launches every configured system through the repo-managed
 `run-emulator` wrapper.
 
@@ -63,8 +63,8 @@ During bootstrap, use:
 
 - `esde-preflight` to check DRM, Vulkan, ES-DE appdata, and service
   readiness.
-- `start-esde` to launch ES-DE under Gamescope on the RX 6650M and the
-  currently connected HDMI/DP output.
+- `start-esde` to launch ES-DE manually under Gamescope on the RX 6650M and
+  the currently connected HDMI/DP output.
 - `esde-status` to inspect the active session and latest logs.
 - `stop-esde` to return control to `getty@tty1`.
 
@@ -410,6 +410,14 @@ attempts, uses BlueZ D-Bus state for discovery, reconnects paired Switch Pro
 controllers serially, re-checks live connected state before each attempt, and
 leaves headphones and other accessories alone.
 
+Controller shortcuts follow a ROCKNIX-style Switch Pro layout. Star/Home opens
+the emulator quick menu by default. Square/Capture is the preferred hotkey
+modifier, with Select as the fallback if Capture is not exposed. Select held
+plus a double Start press force-kills the active emulator process group, so a
+stuck game can always return to ES-DE. RetroArch maps Square/Capture hotkeys to
+save/load, reset, FPS, screenshot, and fast-forward actions, and D-pad-only
+RetroArch systems also accept left-stick D-pad input.
+
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices
 directly so there is no extra userspace daemon competing for controller output
@@ -428,6 +436,10 @@ capture under `/srv/emulation/logs/bluetooth-diagnostics/`. Full BlueZ and
 `hid-nintendo` debug logging is kept as an on-demand diagnostic path only,
 because continuously logging every controller HID report creates unnecessary
 load during normal four-controller play.
+`bluetoothd` runs with a small safe CPU scheduling boost, and system D-Bus gets
+a smaller CPU weight bump because BlueZ control events use D-Bus. Do not enable
+realtime scheduling or IRQ pinning by default; the live kernel already gives
+Bluetooth HCI workers and IRQ threads elevated priority.
 
 Wi-Fi stays available for SSH, but NetworkManager Wi-Fi profiles are constrained
 to 5 GHz by default to avoid 2.4 GHz contention with Bluetooth. The ES-DE
@@ -445,6 +457,10 @@ controller navigation from the couch. Bluetooth status shows whether Boomer is
 scanning for nearby devices, but does not expose host-only discoverable or
 pairable fields. `Show Paired` sits directly under status and previews all
 paired devices in the right pane.
+`Controller Maps` uses the same two-pane layout with a slightly smaller font,
+right-pane scrolling, and ASCII original-controller diagrams that show
+`Original Button -> Switch Pro Button` mappings plus the common hotkeys for
+each Boomer system family.
 Non-status actions show only concise action help in the right pane so long
 status blocks do not crowd the menu. Player assignment accepts keyboard input as
 a player device, and B/Esc backs out before any assignment is made. Under the
@@ -460,9 +476,9 @@ the raw `/dev/input` reader is limited to real controller navigation devices so
 Switch Pro IMU motion data and analog-stick idle noise do not move the menu.
 Player assignment drains pending input before listening and accepts only a real
 button/key press, so stale stick navigation cannot move a controller to another
-slot. `Restart ES-DE` stops the old frontend, stops the fallback tty getty, and
-then starts `emulation-session.service` again from a dedicated service outside
-the frontend process tree.
+slot. `Restart ES-DE` runs through a dedicated delayed system service outside
+the frontend process tree; in kiosk mode it restarts the greetd-managed session,
+and in console mode it restarts `emulation-session.service`.
 Launch diagnostics are written under `/srv/emulation/logs/tools/`. Helper
 scripts for audio, display, RetroArch, scraping, launch logs, ROM coverage,
 smoke tests, and performance tests remain available on disk for SSH or

@@ -769,7 +769,11 @@ in
       ""
       "${config.hardware.bluetooth.package}/libexec/bluetooth/bluetoothd -f /etc/bluetooth/main.conf --noplugin=bap -E"
     ];
+    systemd.services.bluetooth.serviceConfig.Nice = -5;
+    systemd.services.bluetooth.serviceConfig.CPUWeight = 500;
     systemd.services.bluetooth.restartIfChanged = lib.mkForce true;
+
+    systemd.services.dbus.serviceConfig.CPUWeight = 200;
 
     systemd.services.controller-bluetooth-tuning = {
       description = "Apply Bluetooth controller tuning for Boomer Switch Pro controllers";
