@@ -399,7 +399,8 @@ off P3/P4 slide down and the returning controller lands at the end.
 Controller add events and BlueZ `Connected` property changes trigger a one-shot
 reconcile with short delayed retries for HID LED readiness, and the background
 reconcile uses a short D-Bus polling cadence with a lock so one-shot and loop
-updates cannot race against each other.
+updates cannot race against each other. LED writes are batched across all
+controllers so reassignment does not visibly step through players one at a time.
 `controller-autoconnect` polls at a low cadence with short bounded connect
 attempts, uses BlueZ D-Bus state for discovery, reconnects paired Switch Pro
 controllers serially, and leaves headphones and other accessories alone.

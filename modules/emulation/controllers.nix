@@ -198,6 +198,7 @@ let
       force="''${1:-false}"
       found=0
       changed=0
+      pending_leds="$(mktemp)"
       while IFS=$'\t' read -r player mac; do
         [ -n "''${player:-}" ] || continue
         device_root=""
@@ -231,21 +232,27 @@ let
                 trigger_value="$desired"
               fi
               if [ "$current" != "$desired" ]; then
-                echo "$desired" >"$led/brightness" 2>/dev/null || true
+                printf '%s\t%s\n' "$desired" "$led/brightness" >>"$pending_leds"
                 changed=1
                 controller_changed=1
-                sleep 0.08
               fi
               ;;
           esac
         done
         if [ "$force" = true ] && [ "$controller_changed" = 0 ] && [ -n "$trigger_led" ]; then
-          echo "$trigger_value" >"$trigger_led" 2>/dev/null || true
+          printf '%s\t%s\n' "$trigger_value" "$trigger_led" >>"$pending_leds"
           changed=1
-          sleep 0.08
         fi
-        sleep 0.12
       done < <(desired_led_rows)
+
+      while IFS=$'\t' read -r value path; do
+        [ -n "''${path:-}" ] || continue
+        (
+          echo "$value" >"$path" 2>/dev/null || true
+        ) &
+      done <"$pending_leds"
+      wait || true
+      rm -f "$pending_leds"
 
       if [ "$found" = 0 ]; then
         status="no supported controller LED sysfs entries found"

@@ -49,7 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   at the end. Trigger controller slot reconciliation from controller input add
   events and BlueZ connected-property changes with short delayed retries for
   HID LED readiness, and serialize LED/order writes to reduce transient wrong
-  player LEDs.
+  player LEDs. Batch Switch controller LED writes so reassignment no longer
+  walks each controller visibly one at a time.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.
