@@ -254,7 +254,9 @@ let
     set -euo pipefail
     export PATH=${emu.scriptPath}:$PATH
     log_file="${cfg.dataRoot}/logs/controller-autoconnect.log"
+    cursor_file="${cfg.dataRoot}/config/controllers/autoconnect-cursor"
     mkdir -p "$(dirname "$log_file")"
+    mkdir -p "$(dirname "$cursor_file")"
     touch "$log_file"
 
     log() {
@@ -287,8 +289,24 @@ let
 
     connect_once() {
       manage_pairing="''${1:-false}"
+      attempt_limit="''${2:-0}"
       did_connect=0
-      while IFS=$'\t' read -r mac name connected _paired _modalias _icon; do
+      mapfile -t rows < <(bluez_switch_pro_rows)
+      total="''${#rows[@]}"
+      [ "$total" -gt 0 ] || return 0
+
+      start=0
+      if [ "$attempt_limit" -gt 0 ]; then
+        start="$(cat "$cursor_file" 2>/dev/null || echo 0)"
+        case "$start" in
+          *[!0-9]*|"") start=0 ;;
+        esac
+        start=$((start % total))
+      fi
+
+      for offset in $(seq 0 $((total - 1))); do
+        idx=$(((start + offset) % total))
+        IFS=$'\t' read -r mac name connected _paired _modalias _icon <<<"''${rows[$idx]}"
         [ -n "''${mac:-}" ] || continue
         if connected_device "$connected"; then
           continue
@@ -304,8 +322,12 @@ let
         else
           log "connect failed ''${name:-Switch Pro Controller} ($mac)"
         fi
+        if [ "$attempt_limit" -gt 0 ]; then
+          echo $(((idx + 1) % total)) >"$cursor_file"
+          break
+        fi
         sleep 1
-      done < <(bluez_switch_pro_rows)
+      done
       if [ "$did_connect" = 1 ]; then
         ${lib.getExe controllerLeds} apply || true
       fi
@@ -317,7 +339,7 @@ let
         ;;
       loop)
         while true; do
-          connect_once false
+          connect_once false 1
           sleep 60
         done
         ;;
