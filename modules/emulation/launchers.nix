@@ -1261,11 +1261,11 @@ PY
 
     bind pad_a +use
     bind pad_b +jump
-    bind pad_x weapnext
+    bind pad_x +crouch
     bind pad_y togglemap
     bind joy2 +use
     bind joy1 +jump
-    bind joy4 weapnext
+    bind joy4 +crouch
     bind joy3 togglemap
     bind rtrigger +attack
     bind ltrigger +altattack
@@ -1369,12 +1369,12 @@ PY
     binding_settings = {
         "Pad_A": "+use",
         "Pad_B": "+jump",
-        "Pad_X": "weapnext",
+        "Pad_X": "+crouch",
         "Pad_Y": "togglemap",
         "Joy1": "+jump",
         "Joy2": "+use",
         "Joy3": "togglemap",
-        "Joy4": "weapnext",
+        "Joy4": "+crouch",
         "Joy5": "weapprev",
         "Joy6": "weapnext",
         "Joy7": "+altattack",
