@@ -155,8 +155,9 @@ The Nix module creates Xemu's machine settings at
 `/srv/emulation/xdg/share/xemu/xemu/xemu.toml`, disables Xemu's welcome wizard
 and menubar, and launches Xemu with that config explicitly. Keep
 `mcpx_1.0.bin`, `Complex_4627.bin`, and `xbox_hdd.qcow2` under
-`/srv/emulation/bios/xbox`. ES-DE only lists Xbox games named with the
-`.xiso.iso` suffix.
+`/srv/emulation/bios/xbox`. Name launchable Xbox images with the `.xiso.iso`
+suffix and keep redump backups from ending in `.iso` so ES-DE does not list
+the unbootable video partition dumps.
 Current smoke coverage has confirmed these BIOS-gated files are still needed
 for the selected disc tests: `scph5500.bin` for Japanese PlayStation,
 `mpr-17933.bin` for Saturn, and a valid Neo Geo CD BIOS set for NeoCD.

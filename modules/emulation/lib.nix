@@ -79,7 +79,7 @@ let
       platform = "xbox";
       theme = "xbox";
       emulator = "xemu";
-      extensions = ".xiso.iso .XISO.ISO";
+      extensions = ".iso .ISO";
       fixedAspect = "16:9";
     }
     {

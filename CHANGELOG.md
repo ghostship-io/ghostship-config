@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `xemu.toml` machine settings and disable Xemu's welcome wizard so Xbox games
   do not stop at the manual machine configuration prompt when the required BIOS
   and HDD files are present. Hide Xemu's menubar during gameplay, and have
-  ES-DE list only `.xiso.iso` Xbox images so redump ISOs stay hidden.
+  Xbox launchable images use the `.xiso.iso` naming convention while redump
+  backups stay outside ES-DE's `.iso` scan suffix.
 - **Boomer emulation setup rendering**: Keep the generated GZDoom config
   Python heredoc flush-left so `emulation-setup.service` can complete during
   deployment.
