@@ -40,9 +40,18 @@ let
 
     export HOME="''${HOME:-/home/${cfg.user}}"
     export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    export PULSE_SERVER="unix:$XDG_RUNTIME_DIR/pulse/native"
+    for _ in $(seq 1 20); do
+      [ -S "$XDG_RUNTIME_DIR/bus" ] && [ -S "$XDG_RUNTIME_DIR/pulse/native" ] && break
+      sleep 0.25
+    done
     if [ -S "$XDG_RUNTIME_DIR/bus" ]; then
       export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
     fi
+
+    pactl() {
+      command pactl --server="$PULSE_SERVER" "$@"
+    }
 
     audio_pref="${cfg.configRoot}/audio/output.json"
 
@@ -245,6 +254,7 @@ in
 
         powerManagement.cpuFreqGovernor = "performance";
         security.rtkit.enable = true;
+        services.upower.enable = true;
 
         services.pipewire = {
           enable = true;

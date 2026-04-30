@@ -152,7 +152,7 @@ let
       mkdir -p "$theme_dir"
       cp -R . "$theme_dir/"
       find "$theme_dir" -maxdepth 1 -name 'aspect-ratio*.xml' -exec \
-        sed -i '/<clock name="clock">/a\         <format>%I:%M %p</format>' {} +
+        sed -i '/<clock name="clock">/a\         <format>%H:%M</format>' {} +
       runHook postInstall
     '';
   };

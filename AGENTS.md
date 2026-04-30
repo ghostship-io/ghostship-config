@@ -261,11 +261,13 @@ changelog.
   underneath that folder. PICO-8 needs an explicit Gamescope Xwayland server on
   Boomer because its SDL path uses X11. Boomer's managed ES-DE UI defaults are
   manufacturer/hardware/release systems sorting, visible clock, Switch Pro
-  controller prompts, all-controller ES-DE menu input, 12-hour clock format, and
-  Hawaii standard time. Boomer's controller automation should treat Switch Pro
-  style controllers as the primary path, keep LEDs on Switch-style player count
-  patterns only, and avoid auto-assigning audio devices or generic peripherals
-  as players. Boomer's Switch Pro shortcuts should stay ROCKNIX-style:
+  controller prompts, all-controller ES-DE menu input, Hawaii standard time, and
+  a visible clock using ES-DE-supported `%H:%M` formatting; true 12-hour clock
+  text needs a source-level ES-DE formatter patch. Boomer's controller
+  automation should treat Switch Pro style controllers as the primary path, keep
+  LEDs on Switch-style player count patterns only, and avoid auto-assigning
+  audio devices or generic peripherals as players. Boomer's Switch Pro
+  shortcuts should stay ROCKNIX-style:
   Star/Home is quick menu, Square/Capture is the preferred hotkey modifier,
   Select is fallback and Select+Start double-press is the force-kill escape.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM

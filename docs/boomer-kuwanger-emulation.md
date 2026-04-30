@@ -57,7 +57,9 @@ preserved after first creation so runtime UI changes can survive rebuilds,
 except for managed defaults such as theme, systems sorting, display clock, and
 controller UI hints. ES-DE menu input is available from all connected
 controllers, not only player 1. Boomer runs in Hawaii standard time and the
-managed Art Book Next theme package formats the ES-DE clock as 12-hour time.
+managed Art Book Next theme package uses ES-DE's supported `%H:%M` clock
+format so the hour renders reliably. True 12-hour time needs ES-DE formatter
+support beyond the official AppImage's theme tokens.
 
 During bootstrap, use:
 

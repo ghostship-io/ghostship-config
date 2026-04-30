@@ -573,7 +573,10 @@ in
     hardware.bluetooth = {
       enable = true;
       powerOnBoot = true;
-      disabledPlugins = [ "bap" ];
+      disabledPlugins = [
+        "bap"
+        "csip"
+      ];
       settings = {
         General = {
           Experimental = true;
@@ -767,7 +770,7 @@ in
 
     systemd.services.bluetooth.serviceConfig.ExecStart = lib.mkForce [
       ""
-      "${config.hardware.bluetooth.package}/libexec/bluetooth/bluetoothd -f /etc/bluetooth/main.conf --noplugin=bap -E"
+      "${config.hardware.bluetooth.package}/libexec/bluetooth/bluetoothd -f /etc/bluetooth/main.conf --noplugin=bap,csip -E"
     ];
     systemd.services.bluetooth.serviceConfig.Nice = -5;
     systemd.services.bluetooth.serviceConfig.CPUWeight = 500;

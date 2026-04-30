@@ -78,7 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer ES-DE preferences**: Enforce ES-DE's manufacturer/hardware/release
   systems sorting, display clock, Switch Pro controller prompts, and
   all-controller menu input during frontend config sync. Set Boomer to Hawaii
-  standard time and patch Art Book Next's clock format to 12-hour time.
+  standard time and patch Art Book Next's clock format with ES-DE-supported
+  hour/minute tokens so the clock renders the hour.
 - **PyLoad download directory**: Set PyLoad's app config default download
   folder to `/downloads/PyLoad` during container initialization while keeping
   the shared `/downloads` mount unchanged, and remove the image's
