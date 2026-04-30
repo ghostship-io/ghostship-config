@@ -15,6 +15,7 @@ let
     order_file="$state_dir/player-order.json"
     log_file="${cfg.dataRoot}/logs/controller-leds.log"
     last_led_status=""
+    mode="''${1:-loop}"
     mkdir -p "$state_dir" "$(dirname "$log_file")"
     touch "$log_file"
     chown ${cfg.user}:${cfg.group} "$state_dir" "$log_file" || true
@@ -55,10 +56,42 @@ let
           '
     }
 
+    supported_player_device() {
+      mac="$1"
+      name="''${2:-}"
+      info="$(bluetoothctl info "$mac" 2>/dev/null || true)"
+      text="$(printf '%s\n%s\n' "$name" "$info" | tr '[:upper:]' '[:lower:]')"
+      if printf '%s\n' "$text" | grep -Eiq 'audio|headphone|headset|speaker|keyboard|mouse|phone|television| tv|shield'; then
+        return 1
+      fi
+      printf '%s\n' "$text" | grep -Eiq '^pro controller$|modalias: usb:v057ep2009|name: pro controller|alias: pro controller|nintendo switch pro|joy-con|joycon'
+    }
+
+    prune_non_player_devices() {
+      ensure_order_file
+      jq -r '.players[]? | [.mac, (.name // "")] | @tsv' "$order_file" 2>/dev/null \
+        | while IFS=$'\t' read -r mac name; do
+            [ -n "''${mac:-}" ] || continue
+            if ! printf '%s\n' "$mac" | grep -Eiq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$'; then
+              continue
+            fi
+            if supported_player_device "$mac" "$name"; then
+              continue
+            fi
+            tmp="$(mktemp)"
+            jq --arg mac "$(printf '%s' "$mac" | tr '[:lower:]' '[:upper:]')" \
+              '.players |= map(select(((.mac // "") | ascii_upcase) != $mac))' \
+              "$order_file" >"$tmp"
+            mv "$tmp" "$order_file"
+            echo "$(date -u +%FT%TZ) pruned non-controller player entry $mac" >>"$log_file"
+          done
+    }
+
     record_connected_devices() {
       ensure_order_file
+      prune_non_player_devices
       tmp="$(mktemp)"
-      jq '.players |= map(. + {connected:false})' "$order_file" >"$tmp"
+      jq '.players |= map(if ((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")) then . + {connected:false} else . end)' "$order_file" >"$tmp"
       mv "$tmp" "$order_file"
 
       connected_tmp="$(mktemp)"
@@ -70,6 +103,7 @@ let
           continue
         fi
         name="''${name:-unknown-controller}"
+        supported_player_device "$mac" "$name" || continue
         tmp="$(mktemp)"
         if jq -e --arg mac "$mac" '.players[]? | select(.mac == $mac)' "$order_file" >/dev/null; then
           jq --arg mac "$mac" --arg name "$name" \
@@ -112,14 +146,15 @@ let
         for led in "$device_root"/leds/*:green:player-[1-4]; do
           [ -e "$led/brightness" ] || continue
           led_name="$(basename "$led")"
-          case "$led_name" in
-            *:green:player-"$player")
+          led_index="''${led_name##*:green:player-}"
+          case "$led_index" in
+            [1-4])
               found=1
-              echo 1 >"$led/brightness" 2>/dev/null || true
-              ;;
-            *:green:player-[1-4])
-              found=1
-              echo 0 >"$led/brightness" 2>/dev/null || true
+              if [ "$led_index" -le "$player" ]; then
+                echo 1 >"$led/brightness" 2>/dev/null || true
+              else
+                echo 0 >"$led/brightness" 2>/dev/null || true
+              fi
               ;;
           esac
         done
@@ -136,18 +171,96 @@ let
       fi
     }
 
-    sanitize_known_bad_order
-
-    while true; do
+    run_once() {
+      sanitize_known_bad_order
       record_connected_devices || true
       apply_leds || true
-      sleep 10
+    }
+
+    case "$mode" in
+      apply|once|--once)
+        run_once
+        exit 0
+        ;;
+      loop)
+        ;;
+      *)
+        echo "Usage: controller-leds [loop|apply]" >&2
+        exit 64
+        ;;
+    esac
+
+    while true; do
+      run_once
+      sleep 2
     done
+  '';
+
+  controllerAutoconnect = pkgs.writeShellScriptBin "controller-autoconnect" ''
+    set -euo pipefail
+    export PATH=${emu.scriptPath}:$PATH
+    log_file="${cfg.dataRoot}/logs/controller-autoconnect.log"
+    mkdir -p "$(dirname "$log_file")"
+    touch "$log_file"
+
+    log() {
+      echo "$(date -u +%FT%TZ) $*" >>"$log_file"
+    }
+
+    switch_pro_device() {
+      info="$1"
+      printf '%s\n' "$info" | grep -Eiq 'Modalias:.*v057E[pP]2009|Name: Pro Controller|Alias: Pro Controller|Name: Nintendo Switch Pro|Alias: Nintendo Switch Pro'
+    }
+
+    connected_device() {
+      printf '%s\n' "$1" | grep -Eq 'Connected: yes|BREDR\.Connected: yes'
+    }
+
+    connect_once() {
+      bluetoothctl power on >/dev/null 2>&1 || true
+      bluetoothctl devices Paired | awk '/^Device / {print $2}' | while read -r mac; do
+        [ -n "''${mac:-}" ] || continue
+        info="$(bluetoothctl info "$mac" 2>/dev/null || true)"
+        [ -n "$info" ] || continue
+        switch_pro_device "$info" || continue
+        name="$(printf '%s\n' "$info" | awk -F': ' '/^\s*Name:/ {print $2; exit}')"
+        bluetoothctl trust "$mac" >/dev/null 2>&1 || true
+        bluetoothctl wake "$mac" on >/dev/null 2>&1 || true
+        if connected_device "$info"; then
+          continue
+        fi
+        log "connecting ''${name:-Switch Pro Controller} ($mac)"
+        if timeout 15s bluetoothctl connect "$mac" >>"$log_file" 2>&1; then
+          log "connected ''${name:-Switch Pro Controller} ($mac)"
+          ${lib.getExe controllerLeds} apply || true
+        else
+          log "connect failed ''${name:-Switch Pro Controller} ($mac)"
+        fi
+        sleep 1
+      done
+    }
+
+    case "''${1:-loop}" in
+      once|--once)
+        connect_once
+        ;;
+      loop)
+        while true; do
+          connect_once
+          sleep 6
+        done
+        ;;
+      *)
+        echo "Usage: controller-autoconnect [loop|once]" >&2
+        exit 64
+        ;;
+    esac
   '';
 in
 {
   config = lib.mkIf cfg.enable {
     ghostship.emulation.internal.scripts.controllerLeds = controllerLeds;
+    ghostship.emulation.internal.scripts.controllerAutoconnect = controllerAutoconnect;
 
     boot.kernelModules = [ "hid-nintendo" ];
     boot.extraModprobeConfig = ''
@@ -289,6 +402,32 @@ in
       ];
       serviceConfig = {
         ExecStart = "${lib.getExe controllerLeds}";
+        Restart = "always";
+        RestartSec = "5s";
+      };
+    };
+
+    systemd.services.controller-leds-apply = {
+      description = "Apply controller player LED state once";
+      after = [
+        "bluetooth.service"
+        "emulation-setup.service"
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${lib.getExe controllerLeds} apply";
+      };
+    };
+
+    systemd.services.controller-autoconnect = {
+      description = "Automatically reconnect paired Switch Pro controllers";
+      wantedBy = [ "multi-user.target" ];
+      after = [
+        "bluetooth.service"
+        "emulation-setup.service"
+      ];
+      serviceConfig = {
+        ExecStart = "${lib.getExe controllerAutoconnect}";
         Restart = "always";
         RestartSec = "5s";
       };

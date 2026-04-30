@@ -343,6 +343,7 @@ let
     export XDG_CACHE_HOME="${cfg.dataRoot}/xdg/cache"
     export TMPDIR="${cfg.dataRoot}/tmp"
     export SDL_GAMECONTROLLERCONFIG_FILE="${cfg.configRoot}/controllers/gamecontrollerdb.txt"
+    export SDL_GAMECONTROLLER_USE_BUTTON_LABELS=1
     export MESA_VK_DEVICE_SELECT="''${MESA_VK_DEVICE_SELECT:-1002:73ef}"
     export DRI_PRIME="''${DRI_PRIME:-1}"
 

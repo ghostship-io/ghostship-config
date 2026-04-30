@@ -27,6 +27,9 @@ EV_KEY = 0x01
 EV_ABS = 0x03
 BTN_MISC = 0x100
 EVENT_STRUCT = struct.Struct("@llHHi")
+JOY_DEADZONE = 12000
+JOY_RELEASE = 7000
+JOY_REPEAT_SECONDS = 0.25
 
 ACTION_UP = "up"
 ACTION_DOWN = "down"
@@ -101,6 +104,62 @@ def parse_bt_devices(output):
         if match:
             devices.append({"mac": mac_key(match.group(1)), "name": match.group(2).strip()})
     return devices
+
+
+def bluetooth_info_value(output, key):
+    prefix = f"{key}:"
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(prefix):
+            return stripped.split(":", 1)[1].strip()
+    return ""
+
+
+def bluetooth_info_flag(output, key):
+    return bluetooth_info_value(output, key).lower() == "yes"
+
+
+def bluetooth_paired_or_bonded(output):
+    return any(bluetooth_info_flag(output, key) for key in ("Paired", "Bonded", "BREDR.Paired", "BREDR.Bonded"))
+
+
+def bluetooth_connected(output):
+    return any(bluetooth_info_flag(output, key) for key in ("Connected", "BREDR.Connected", "LE.Connected"))
+
+
+def looks_pairable_for_boomer(device, info):
+    text = f"{device.get('name', '')}\n{info}".lower()
+    allow_hints = (
+        "8bitdo",
+        "audio sink",
+        "gamepad",
+        "headphone",
+        "headset",
+        "hidp",
+        "human interface device",
+        "input-gaming",
+        "input-keyboard",
+        "input-mouse",
+        "keyboard",
+        "modalias: usb:v057ep2009",
+        "mouse",
+        "nintendo",
+        "pro controller",
+        "speaker",
+        "switch",
+        "wiimote",
+    )
+    deny_patterns = (
+        r"\bandroid\b",
+        r"\bbedroom tv\b",
+        r"\bhome_",
+        r"\biphone\b",
+        r"\bliving room tv\b",
+        r"\bphone\b",
+        r"\bshield\b",
+        r"\btelevision\b",
+    )
+    return any(hint in text for hint in allow_hints) and not any(re.search(pattern, text) for pattern in deny_patterns)
 
 
 def parse_nmcli_rows(output):
@@ -212,6 +271,178 @@ def bluetooth_visible_labels(powered):
         ]
     )
     return labels
+
+
+def controller_map(title, original, mappings, notes=()):
+    lines = [
+        title,
+        "",
+        "Original",
+        "  " + original,
+        "",
+        "Switch Pro",
+        "        [L]        [R]",
+        "   [D-PAD]   [-]  [+]       X",
+        "                         Y   A",
+        "                           B",
+        "        Left Stick      Right Stick",
+        "",
+        "Mapping",
+    ]
+    lines.extend(f"  {line}" for line in mappings)
+    if notes:
+        lines.extend(["", "Notes"])
+        lines.extend(f"  {line}" for line in notes)
+    return lines
+
+
+CONTROLLER_MAPS = [
+    {
+        "label": "Switch Pro Reference",
+        "detail": [
+            "Switch Pro Reference",
+            "",
+            "Physical labels are authoritative.",
+            "",
+            "  A = confirm / primary action",
+            "  B = back / cancel",
+            "  X = refresh or top face button",
+            "  Y = alternate action or left face button",
+            "  + = start",
+            "  - = select",
+            "  D-pad and left stick navigate menus",
+            "",
+            "RetroArch hotkeys",
+            "  - + + exits RetroArch",
+            "  - + X opens RetroArch menu",
+            "  - + R saves state",
+            "  - + L loads state",
+        ],
+    },
+    {
+        "label": "NES / Famicom",
+        "detail": controller_map(
+            "NES / Famicom",
+            "[D-PAD]   SELECT START   B   A",
+            ["D-pad -> D-pad", "- -> Select", "+ -> Start", "B -> B", "A -> A"],
+        ),
+    },
+    {
+        "label": "SNES / Super Famicom",
+        "detail": controller_map(
+            "SNES / Super Famicom",
+            "L [D-PAD] SELECT START  Y X / B A  R",
+            ["D-pad -> D-pad", "- -> Select", "+ -> Start", "Y -> Y", "X -> X", "B -> B", "A -> A", "L/R -> L/R"],
+        ),
+    },
+    {
+        "label": "Genesis / Saturn",
+        "detail": controller_map(
+            "Genesis / Saturn",
+            "[D-PAD]  START   X Y Z / A B C",
+            ["D-pad -> D-pad", "+ -> Start", "Y/X/R -> X/Y/Z", "B/A/L -> A/B/C"],
+            ["Six-button layouts use shoulders for Z/C where needed."],
+        ),
+    },
+    {
+        "label": "PlayStation",
+        "detail": controller_map(
+            "PlayStation",
+            "L1 L2 [D-PAD] SELECT START  TRI CIRC / SQR CROSS  R1 R2",
+            ["D-pad/sticks -> D-pad/sticks", "- -> Select", "+ -> Start", "Y -> Square", "X -> Triangle", "B -> Cross", "A -> Circle", "L/R/ZL/ZR -> L1/R1/L2/R2"],
+        ),
+    },
+    {
+        "label": "Nintendo 64",
+        "detail": controller_map(
+            "Nintendo 64",
+            "[D-PAD]  Stick  A B  C-buttons  Z  L R  Start",
+            ["Left stick -> N64 stick", "A -> A", "B -> B", "Right stick -> C-buttons", "ZL -> Z", "L/R -> L/R", "+ -> Start"],
+        ),
+    },
+    {
+        "label": "GameCube",
+        "detail": controller_map(
+            "GameCube",
+            "[Stick] [D-PAD]  A B X Y  C-Stick  L R Z  Start",
+            ["Left stick -> Main Stick", "Right stick -> C-Stick", "A -> A", "B -> B", "X -> X", "Y -> Y", "L/R -> L/R", "ZR -> Z", "+ -> Start"],
+        ),
+    },
+    {
+        "label": "Wii Remote + Nunchuk",
+        "detail": controller_map(
+            "Wii Remote + Nunchuk",
+            "Remote: D-pad A B 1 2 - + Home / Nunchuk: Stick C Z",
+            ["D-pad -> Wii D-pad", "A -> A", "ZR -> B", "B -> 1", "Y -> 2", "-/+ -> -/+", "Left stick -> Nunchuk stick", "L/R -> C/Z"],
+            ["Right stick is used for pointer/IR in Dolphin."],
+        ),
+    },
+    {
+        "label": "Wii Classic",
+        "detail": controller_map(
+            "Wii Classic",
+            "[D-PAD] sticks  a b x y  L R ZL ZR  - + Home",
+            ["Switch face buttons -> matching labels", "Sticks -> sticks", "Shoulders -> shoulders", "-/+ -> -/+"],
+        ),
+    },
+    {
+        "label": "Xbox",
+        "detail": controller_map(
+            "Xbox",
+            "[D-PAD] sticks  A B X Y  Black White  L R  Start Back",
+            ["A/B/X/Y -> matching labels", "L/R -> triggers", "ZL/ZR -> Black/White where needed", "-/+ -> Back/Start"],
+        ),
+    },
+    {
+        "label": "PSP",
+        "detail": controller_map(
+            "PSP",
+            "[D-PAD] analog  TRI CIRC / SQR CROSS  L R  Start Select",
+            ["Left stick -> analog", "D-pad -> D-pad", "Y -> Square", "X -> Triangle", "B -> Cross", "A -> Circle", "L/R -> L/R", "-/+ -> Select/Start"],
+        ),
+    },
+    {
+        "label": "DS / 3DS",
+        "detail": controller_map(
+            "DS / 3DS",
+            "[D-PAD] Circle Pad  X Y / B A  L R  Start Select",
+            ["A/B/X/Y -> matching labels", "Left stick -> Circle Pad", "D-pad -> D-pad", "L/R/ZL/ZR -> shoulders", "-/+ -> Select/Start"],
+        ),
+    },
+    {
+        "label": "Switch",
+        "detail": controller_map(
+            "Switch",
+            "Switch Pro Controller",
+            ["Everything maps label-to-label.", "A/B/X/Y -> A/B/X/Y", "L/R/ZL/ZR -> L/R/ZL/ZR", "-/+ -> -/+"],
+        ),
+    },
+    {
+        "label": "Arcade",
+        "detail": controller_map(
+            "Arcade",
+            "[Stick]  Coin Start  Buttons 1-6",
+            ["Left stick/D-pad -> arcade stick", "- -> Coin", "+ -> Start", "B/A/Y/X/L/R -> Buttons 1-6"],
+        ),
+    },
+    {
+        "label": "GZDoom",
+        "detail": controller_map(
+            "GZDoom",
+            "Keyboard/mouse shooter controls",
+            ["Left stick -> move", "Right stick -> look", "ZR -> fire", "ZL -> alt fire", "A -> use", "B -> jump", "Y/X -> weapon actions"],
+            ["Exact game bindings can vary by WAD."],
+        ),
+    },
+    {
+        "label": "PICO-8",
+        "detail": controller_map(
+            "PICO-8",
+            "[D-PAD]  O  X  Pause",
+            ["D-pad/left stick -> movement", "B -> O", "A -> X", "+ -> Pause/Menu"],
+        ),
+    },
+]
 
 
 CONTROLLER_NAME_HINTS = (
@@ -336,6 +567,7 @@ class ControllerReader(threading.Thread):
         self.stop_event = threading.Event()
         self.fds = {}
         self.last_abs = {}
+        self.last_abs_emit = {}
 
     def refresh_devices(self):
         wanted = {path for path in glob.glob("/dev/input/event*") if is_controller_event_device(path)}
@@ -369,27 +601,36 @@ class ControllerReader(threading.Thread):
                 545: ACTION_DOWN,
                 546: ACTION_LEFT,
                 547: ACTION_RIGHT,
-                304: ACTION_SELECT,
-                305: ACTION_BACK,
-                307: ACTION_ALT,
-                308: ACTION_REFRESH,
+                304: ACTION_BACK,
+                305: ACTION_SELECT,
+                307: ACTION_REFRESH,
+                308: ACTION_ALT,
                 314: ACTION_BACK,
                 315: ACTION_SELECT,
             }
             action = key_map.get(code)
             if action:
                 self.emit(action, path)
-            elif code >= BTN_MISC:
-                self.emit(ACTION_SELECT, path)
-        elif ev_type == EV_ABS and code in (16, 17):
-            if code == 16:
+        elif ev_type == EV_ABS and code in (0, 1, 16, 17):
+            threshold = 1 if code in (16, 17) else JOY_DEADZONE
+            release = 0 if code in (16, 17) else JOY_RELEASE
+            if abs(value) <= release:
+                self.last_abs[(path, code)] = None
+                return
+            if abs(value) < threshold:
+                return
+            if code in (0, 16):
                 action = ACTION_LEFT if value < 0 else ACTION_RIGHT if value > 0 else None
             else:
                 action = ACTION_UP if value < 0 else ACTION_DOWN if value > 0 else None
             key = (path, code)
-            if action and self.last_abs.get(key) != value:
+            now = time.monotonic()
+            last_action = self.last_abs.get(key)
+            last_emit = self.last_abs_emit.get(key, 0)
+            if action and (last_action != action or now - last_emit >= JOY_REPEAT_SECONDS):
                 self.emit(action, path)
-            self.last_abs[key] = value
+                self.last_abs_emit[key] = now
+            self.last_abs[key] = action
 
     def run(self):
         while not self.stop_event.is_set():
@@ -471,7 +712,7 @@ class Tui:
         self.add(0, 2, title.upper(), curses.color_pair(1) | curses.A_BOLD)
         if subtitle:
             self.add(1, 2, subtitle, curses.color_pair(3) | curses.A_DIM)
-        footer = "Move: D-pad/Arrows/WASD  Select: A/Enter  Back: B/Esc  Refresh: X/R"
+        footer = "Move: D-pad/Left Stick/Arrows/WASD  Select: A/Enter  Back: B/Esc  Refresh: X/R"
         self.add(height - 2, 0, " " * (width - 1), curses.color_pair(1))
         self.add(height - 2, 2, footer, curses.color_pair(1) | curses.A_DIM)
         self.add(height - 1, 2, self.message, curses.color_pair(1) | curses.A_DIM)
@@ -746,6 +987,27 @@ class BluetoothBackend:
             rows.append({"label": device["name"], "desc": f"{device['mac']} - {state}", **device})
         return rows
 
+    def pairing_rows(self):
+        paired = {d["mac"] for d in self.devices("Paired")}
+        connected = {d["mac"] for d in self.devices("Connected")}
+        rows = []
+        for device in self.scan():
+            if device["mac"] in connected:
+                continue
+            info = self.info(device["mac"])
+            if not looks_pairable_for_boomer(device, info):
+                continue
+            paired_state = device["mac"] in paired or bluetooth_paired_or_bonded(info)
+            state = "paired" if paired_state else "not paired"
+            rows.append({"label": device["name"], "desc": f"{device['mac']} - {state}", "paired": paired_state, **device})
+        return rows
+
+    def paired_or_bonded(self, mac):
+        return bluetooth_paired_or_bonded(self.info(mac))
+
+    def connected_mac(self, mac):
+        return bluetooth_connected(self.info(mac))
+
     def scan(self, seconds=10):
         run_cmd(["bluetoothctl", "power", "on"], timeout=8)
         run_cmd(["bluetoothctl", "agent", "KeyboardDisplay"], timeout=8)
@@ -771,6 +1033,7 @@ class BluetoothBackend:
         output = []
         for device in self.devices("Paired"):
             self.action("trust", device["mac"])
+            self.action("wake", device["mac"], "on")
             code, out, err = self.action("connect", device["mac"], timeout=20)
             output.append(f"{device['name']} ({device['mac']}): {'OK' if code == 0 else 'failed'}")
             if out:
@@ -959,8 +1222,10 @@ class SettingsApp:
         try:
             if self.tui.mode == "bluetooth":
                 self.bluetooth_menu()
-            else:
+            elif self.tui.mode == "wifi":
                 self.wifi_menu()
+            else:
+                self.controller_maps_menu()
         finally:
             self.tui.stop()
 
@@ -969,6 +1234,19 @@ class SettingsApp:
         code, out, err = func()
         self.tui.message = "OK" if code == 0 else f"Failed with exit {code}"
         self.tui.show_output(title, [out, err])
+
+    def controller_maps_menu(self):
+        items = [
+            {"label": row["label"], "detail_only": True, "detail": row["detail"], "action": lambda row=row: self.tui.show_output(row["label"], row["detail"])}
+            for row in CONTROLLER_MAPS
+        ]
+        while self.tui.running:
+            choice = self.tui.menu("Controller Maps", items)
+            if not choice:
+                return
+            if choice == "refresh":
+                continue
+            choice["action"]()
 
     def bluetooth_menu(self):
         while self.tui.running:
@@ -1090,32 +1368,60 @@ class SettingsApp:
 
     def bluetooth_scan_pair(self):
         self.tui.progress("Bluetooth Scan", ["Scanning for 10 seconds...", "Put the device in pairing mode now."])
-        devices = self.bt.scan()
         row = self.tui.choose(
             "Pair Device",
-            [{"label": d["name"], "desc": d["mac"], **d} for d in devices],
-            "No Bluetooth devices found.",
+            self.bt.pairing_rows(),
+            "No unconnected controllers, audio devices, or Bluetooth peripherals found.",
         )
         if not row:
             return
         def action():
             output = []
-            for args in (("pair", row["mac"]), ("trust", row["mac"]), ("connect", row["mac"])):
-                if args[0] == "pair":
-                    code, out, err = self.bt.pair(row["mac"])
-                else:
-                    code, out, err = self.bt.action(*args, timeout=35)
+            if not row.get("paired"):
+                code, out, err = self.bt.pair(row["mac"])
+                output.append(f"$ bluetoothctl pair {row['mac']}")
+                output.extend([out, err])
+                if code != 0:
+                    if self.bt.paired_or_bonded(row["mac"]):
+                        output.append("Pairing reported an error, but BlueZ now reports the device is paired. Continuing.")
+                    else:
+                        return code, "\n".join([line for line in output if line]), ""
+            for args in (("trust", row["mac"]), ("wake", row["mac"], "on")):
+                code, out, err = self.bt.action(*args, timeout=20)
                 output.append(f"$ bluetoothctl {' '.join(args)}")
                 output.extend([out, err])
-                if code != 0 and args[0] == "pair":
-                    break
+                if code != 0 and args[0] != "wake":
+                    return code, "\n".join([line for line in output if line]), ""
+            code, out, err = self.bt.action("connect", row["mac"], timeout=35)
+            output.append(f"$ bluetoothctl connect {row['mac']}")
+            output.extend([out, err])
+            if code != 0:
+                if self.bt.connected_mac(row["mac"]):
+                    output.append("Connect reported an error, but BlueZ now reports the device is connected.")
+                else:
+                    return code, "\n".join([line for line in output if line]), ""
+            run_cmd(["systemctl", "start", "controller-leds-apply.service"], timeout=15)
             return 0, "\n".join([line for line in output if line]), ""
         self.run_and_show("Pair Device", action)
 
     def bluetooth_connect_paired(self):
         row = self.tui.choose("Connect Device", self.bt.paired_rows(), "No paired devices.")
         if row:
-            self.run_and_show("Connect Device", lambda: self.bt.action("connect", row["mac"], timeout=25))
+            def action():
+                output = []
+                for args in (("trust", row["mac"]), ("wake", row["mac"], "on"), ("connect", row["mac"])):
+                    code, out, err = self.bt.action(*args, timeout=25)
+                    output.extend([out, err])
+                    if code != 0 and args[0] == "connect":
+                        if self.bt.connected_mac(row["mac"]):
+                            output.append("Connect reported an error, but BlueZ now reports the device is connected.")
+                            break
+                        return code, "\n".join([line for line in output if line]), ""
+                    if code != 0 and args[0] != "wake":
+                        return code, "\n".join([line for line in output if line]), ""
+                run_cmd(["systemctl", "start", "controller-leds-apply.service"], timeout=15)
+                return 0, "\n".join([line for line in output if line]), ""
+            self.run_and_show("Connect Device", action)
 
     def bluetooth_disconnect(self):
         devices = self.bt.devices("Connected")
@@ -1171,12 +1477,32 @@ class SettingsApp:
         name = detected.get("name") or "Unknown controller"
         players = order.get("players", [])
         current = next((p for p in players if mac and mac_key(p.get("mac")) == mac), None)
-        lines = [f"Detected: {name}", f"MAC: {mac or 'unknown'}", f"Current slot: P{current.get('player')}" if current else "Current slot: unassigned"]
-        items = [
-            {"label": f"Assign to Player {slot}", "desc": "Swap if occupied", "row": {"slot": slot}}
-            for slot in range(1, 5)
+        current_slot = f"P{current.get('player')}" if current else "unassigned"
+        slot_lines = []
+        for slot in range(1, 5):
+            occupant = next((row for row in players if int(row.get("player", 0) or 0) == slot), None)
+            slot_lines.append(f"P{slot}: {occupant.get('name') if occupant else 'empty'}")
+        base_lines = [
+            f"Detected: {name}",
+            f"ID: {mac or 'unknown'}",
+            f"Current slot: {current_slot}",
+            "",
+            "Slots:",
+            *slot_lines,
         ]
-        choice = self.tui.menu("Choose Player Slot", items, lines)
+        items = []
+        for slot in range(1, 5):
+            occupant = next((row for row in players if int(row.get("player", 0) or 0) == slot), None)
+            target_lines = [
+                *base_lines,
+                "",
+                f"Target: Player {slot}",
+                f"Current occupant: {occupant.get('name') if occupant else 'empty'}",
+                "Selecting this slot swaps controllers if occupied.",
+            ]
+            items.append({"label": f"Assign to Player {slot}", "detail_only": True, "detail": target_lines, "row": {"slot": slot}})
+        self.tui.message = f"{name}: current slot {current_slot}"
+        choice = self.tui.menu("Player Assignment", items)
         if not choice or choice == "refresh":
             return
         self.assign_player(mac, name, choice["row"]["slot"])
@@ -1200,8 +1526,8 @@ class SettingsApp:
             players.append({"player": slot, "mac": mac, "name": name, "connected": True})
         players.sort(key=lambda row: row.get("player", 99))
         write_json(PLAYER_ORDER, {"players": players})
-        run_cmd(["systemctl", "restart", "controller-leds.service"], timeout=15)
-        self.tui.show_output("Player Assignment", [f"{name} assigned to Player {slot}.", "Controller LED service restarted."])
+        run_cmd(["systemctl", "start", "controller-leds-apply.service"], timeout=15)
+        self.tui.show_output("Player Assignment", [f"{name} assigned to Player {slot}.", "Controller LEDs updated."])
 
     def wifi_menu(self):
         while self.tui.running:
@@ -1385,6 +1711,23 @@ def smoke_test(mode):
         assert capability_has_bit("3001b", 17)
         assert not capability_has_bit("3f", 16)
         assert not capability_has_any_bit("0 0 0")
+        assert looks_pairable_for_boomer(
+            {"name": "Pro Controller"},
+            "Icon: input-gaming\nModalias: usb:v057Ep2009d0001\nPaired: no",
+        )
+        assert looks_pairable_for_boomer({"name": "Headphones"}, "UUID: Audio Sink\nPaired: yes")
+        assert not looks_pairable_for_boomer({"name": "Living Room TV"}, "Icon: video-display\nPaired: no")
+        reader = ControllerReader(queue.Queue())
+        emitted = []
+        reader.emit = lambda action, path: emitted.append(action)
+        reader.handle_event("/dev/input/event0", EV_KEY, 304, 1)
+        reader.handle_event("/dev/input/event0", EV_KEY, 305, 1)
+        reader.handle_event("/dev/input/event0", EV_KEY, 307, 1)
+        reader.handle_event("/dev/input/event0", EV_KEY, 308, 1)
+        assert emitted == [ACTION_BACK, ACTION_SELECT, ACTION_REFRESH, ACTION_ALT]
+        emitted.clear()
+        reader.handle_event("/dev/input/event0", EV_ABS, 1, 16000)
+        assert emitted == [ACTION_DOWN]
         assert parse_bt_devices(scan_sample) == [
             {"mac": "22:33:44:55:66:77", "name": "8BitDo Ultimate Controller"}
         ]
@@ -1411,7 +1754,7 @@ def smoke_test(mode):
         assert metrics["content_bottom"] < 26
         assert metrics["right_x"] + metrics["right_width"] < 92
         print(json.dumps({"devices": parse_bt_devices(sample), "labels_on": labels_on, "adapter": adapter_lines}, indent=2))
-    else:
+    elif mode == "wifi":
         sample = "SKYNET:WPA2:88:149:*\nGuest::52:6:"
         rows = parse_nmcli_rows(sample)
         metrics = pane_metrics(26, 92)
@@ -1420,11 +1763,19 @@ def smoke_test(mode):
         assert metrics["content_bottom"] < 26
         assert metrics["right_x"] + metrics["right_width"] < 92
         print(json.dumps({"rows": rows, "layout": metrics}, indent=2))
+    else:
+        metrics = pane_metrics(26, 92)
+        assert len(CONTROLLER_MAPS) >= 10
+        assert CONTROLLER_MAPS[0]["label"] == "Switch Pro Reference"
+        wrapped = wrap_lines(CONTROLLER_MAPS[0]["detail"], metrics["right_width"])
+        assert wrapped
+        assert metrics["right_x"] + metrics["right_width"] < 92
+        print(json.dumps({"maps": [row["label"] for row in CONTROLLER_MAPS], "layout": metrics}, indent=2))
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=["bluetooth", "wifi"])
+    parser.add_argument("mode", choices=["bluetooth", "wifi", "maps"])
     parser.add_argument("--smoke-test", action="store_true")
     args = parser.parse_args()
     if args.smoke_test:

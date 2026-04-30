@@ -22,11 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compact Bluetooth status for four controllers plus headphones, and allow
   keyboard player assignment with B/Esc cancel. Fix Bluetooth pairing scans to
   run a real 10-second BlueZ discovery and parse newly discovered devices from
-  the live scan output, while registering the BlueZ pairing agent during the
-  pair command itself. Add a `Show Paired` Bluetooth menu item, ignore Switch
-  Pro IMU/analog-stick idle noise in the raw input reader, and update controller
-  LEDs through the controller-specific sysfs LED directory so only the assigned
-  player LED is lit.
+  the live scan output, filter the pairing picker to unconnected controllers,
+  audio devices, and Bluetooth peripherals, and show whether each candidate is
+  already paired. Register the BlueZ pairing agent during the pair command
+  itself, tolerate BlueZ pair/connect commands that report an error after the
+  device has already paired or connected, add a `Show Paired` Bluetooth menu
+  item, ignore Switch Pro IMU/analog-stick idle noise in the raw input reader,
+  and update controller LEDs through the controller-specific sysfs LED
+  directory with Switch-style player counts. Add a controller-only Switch Pro
+  autoconnect service, a `Controller Maps` TUI, and route `Restart ES-DE`
+  through a dedicated delayed system service so it does not kill its own
+  frontend session before the restart is queued.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

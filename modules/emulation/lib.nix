@@ -377,6 +377,10 @@ let
       target = "wifi-settings";
     }
     {
+      file = "Controller Maps.sh";
+      target = "controller-maps";
+    }
+    {
       file = "Restart ES-DE.sh";
       target = "restart-esde";
     }

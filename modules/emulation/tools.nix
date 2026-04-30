@@ -178,9 +178,16 @@ let
     esac
   '';
 
+  restartEsdeDelayed = pkgs.writeShellScript "restart-esde-delayed" ''
+    set -euo pipefail
+    sleep 1
+    exec ${pkgs.systemd}/bin/systemctl restart emulation-session.service
+  '';
+
   toolScripts = {
     bluetooth-settings = mkSettingsTool "bluetooth-settings" "Bluetooth Settings" "bluetooth";
     wifi-settings = mkSettingsTool "wifi-settings" "Wi-Fi Settings" "wifi";
+    controller-maps = mkSettingsTool "controller-maps" "Controller Maps" "maps";
     wifi-status = mkMenuTool "wifi-status" "Wi-Fi Status" [
       { label = "Radio status"; command = "nmcli radio; echo; nmcli device status || true"; }
       { label = "Active connections"; command = "nmcli connection show --active"; }
@@ -279,7 +286,7 @@ let
     ];
     restart-esde = pkgs.writeShellScriptBin "restart-esde" ''
       set -euo pipefail
-      systemctl restart emulation-session.service
+      ${pkgs.systemd}/bin/systemctl start --no-block restart-esde.service
     '';
     system-shutdown = pkgs.writeShellScriptBin "system-shutdown" ''
       set -euo pipefail
@@ -316,12 +323,22 @@ in
         if ((unit == "bluetooth.service" ||
              unit == "NetworkManager.service" ||
              unit == "wifi-5ghz-only.service" ||
-             unit == "controller-leds.service") &&
+             unit == "controller-leds.service" ||
+             unit == "controller-leds-apply.service" ||
+             unit == "controller-autoconnect.service" ||
+             unit == "restart-esde.service") &&
             (verb == "start" || verb == "stop" || verb == "restart")) {
           return polkit.Result.YES;
         }
       });
     '';
+    systemd.services.restart-esde = {
+      description = "Restart ES-DE from outside the active emulation session";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = restartEsdeDelayed;
+      };
+    };
     ghostship.emulation.internal.scripts = toolScripts // {
       inherit terminalTool toolMenu settingsTui syncEsdeTools;
     };

@@ -321,6 +321,8 @@ let
     export XDG_CONFIG_HOME="${cfg.dataRoot}/xdg/config"
     export XDG_CACHE_HOME="${cfg.dataRoot}/xdg/cache"
     export MESA_SHADER_CACHE_DIR="${cfg.dataRoot}/cache/mesa-shaders"
+    export SDL_GAMECONTROLLERCONFIG_FILE="${cfg.configRoot}/controllers/gamecontrollerdb.txt"
+    export SDL_GAMECONTROLLER_USE_BUTTON_LABELS=1
     export TMPDIR="${cfg.dataRoot}/tmp"
 
     if [ "$#" -lt 3 ]; then
@@ -771,77 +773,72 @@ PY
     [Enhancements]
     MaxAnisotropy = 4
     EOF
-        cat >"$dolphin_config_dir/GCPadNew.ini" <<'EOF'
-    [GCPad1]
-    Device = SDL/0/Nintendo Switch Pro Controller
-    Buttons/A = `Button 0`
-    Buttons/B = `Button 1`
-    Buttons/X = `Button 2`
-    Buttons/Y = `Button 3`
-    Buttons/Z = `Button 7`
-    Buttons/Start = `Button 9`
-    Main Stick/Up = `Axis 1-`
-    Main Stick/Down = `Axis 1+`
-    Main Stick/Left = `Axis 0-`
-    Main Stick/Right = `Axis 0+`
+        : >"$dolphin_config_dir/GCPadNew.ini"
+        for slot in 1 2 3 4; do
+          index=$((slot - 1))
+          cat >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
+    [GCPad$slot]
+    Device = SDL/$index/Nintendo Switch Pro Controller
+    Buttons/A = \`Button 1\`
+    Buttons/B = \`Button 0\`
+    Buttons/X = \`Button 3\`
+    Buttons/Y = \`Button 2\`
+    Buttons/Z = \`Button 7\`
+    Buttons/Start = \`Button 9\`
+    Main Stick/Up = \`Axis 1-\`
+    Main Stick/Down = \`Axis 1+\`
+    Main Stick/Left = \`Axis 0-\`
+    Main Stick/Right = \`Axis 0+\`
     Main Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
-    C-Stick/Up = `Axis 3-`
-    C-Stick/Down = `Axis 3+`
-    C-Stick/Left = `Axis 2-`
-    C-Stick/Right = `Axis 2+`
+    C-Stick/Up = \`Axis 3-\`
+    C-Stick/Down = \`Axis 3+\`
+    C-Stick/Left = \`Axis 2-\`
+    C-Stick/Right = \`Axis 2+\`
     C-Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
-    Triggers/L = `Button 4`
-    Triggers/R = `Button 5`
-    D-Pad/Up = `Hat 0 N`
-    D-Pad/Down = `Hat 0 S`
-    D-Pad/Left = `Hat 0 W`
-    D-Pad/Right = `Hat 0 E`
-    [GCPad2]
-    Device = SDL/0/Nintendo Switch Pro Controller
-    [GCPad3]
-    Device = SDL/0/Nintendo Switch Pro Controller
-    [GCPad4]
-    Device = SDL/0/Nintendo Switch Pro Controller
+    Triggers/L = \`Button 4\`
+    Triggers/R = \`Button 5\`
+    D-Pad/Up = \`Hat 0 N\`
+    D-Pad/Down = \`Hat 0 S\`
+    D-Pad/Left = \`Hat 0 W\`
+    D-Pad/Right = \`Hat 0 E\`
     EOF
-        cat >"$dolphin_config_dir/WiimoteNew.ini" <<'EOF'
-    [Wiimote1]
+        done
+        : >"$dolphin_config_dir/WiimoteNew.ini"
+        for slot in 1 2 3 4; do
+          index=$((slot - 1))
+          cat >>"$dolphin_config_dir/WiimoteNew.ini" <<EOF
+    [Wiimote$slot]
     Source = 1
-    Device = SDL/0/Nintendo Switch Pro Controller
-    Buttons/A = `Button 0`
-    Buttons/B = `Button 7`
-    Buttons/1 = `Button 1`
-    Buttons/2 = `Button 3`
-    Buttons/- = `Button 8`
-    Buttons/+ = `Button 9`
-    Buttons/Home = `Button 10`
-    D-Pad/Up = `Hat 0 N`
-    D-Pad/Down = `Hat 0 S`
-    D-Pad/Left = `Hat 0 W`
-    D-Pad/Right = `Hat 0 E`
-    IR/Up = `Axis 3-`
-    IR/Down = `Axis 3+`
-    IR/Left = `Axis 2-`
-    IR/Right = `Axis 2+`
-    Shake/X = `Button 11`
-    Shake/Y = `Button 11`
-    Shake/Z = `Button 11`
+    Device = SDL/$index/Nintendo Switch Pro Controller
+    Buttons/A = \`Button 1\`
+    Buttons/B = \`Button 7\`
+    Buttons/1 = \`Button 0\`
+    Buttons/2 = \`Button 2\`
+    Buttons/- = \`Button 8\`
+    Buttons/+ = \`Button 9\`
+    Buttons/Home = \`Button 10\`
+    D-Pad/Up = \`Hat 0 N\`
+    D-Pad/Down = \`Hat 0 S\`
+    D-Pad/Left = \`Hat 0 W\`
+    D-Pad/Right = \`Hat 0 E\`
+    IR/Up = \`Axis 3-\`
+    IR/Down = \`Axis 3+\`
+    IR/Left = \`Axis 2-\`
+    IR/Right = \`Axis 2+\`
+    Shake/X = \`Button 11\`
+    Shake/Y = \`Button 11\`
+    Shake/Z = \`Button 11\`
     Extension = Nunchuk
-    Nunchuk/Buttons/C = `Button 4`
-    Nunchuk/Buttons/Z = `Button 5`
-    Nunchuk/Stick/Up = `Axis 1-`
-    Nunchuk/Stick/Down = `Axis 1+`
-    Nunchuk/Stick/Left = `Axis 0-`
-    Nunchuk/Stick/Right = `Axis 0+`
+    Nunchuk/Buttons/C = \`Button 4\`
+    Nunchuk/Buttons/Z = \`Button 5\`
+    Nunchuk/Stick/Up = \`Axis 1-\`
+    Nunchuk/Stick/Down = \`Axis 1+\`
+    Nunchuk/Stick/Left = \`Axis 0-\`
+    Nunchuk/Stick/Right = \`Axis 0+\`
     Nunchuk/Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
-    [Wiimote2]
-    Source = 0
-    Device = SDL/0/Nintendo Switch Pro Controller
-    [Wiimote3]
-    Source = 0
-    Device = SDL/0/Nintendo Switch Pro Controller
-    [Wiimote4]
-    Source = 0
-    Device = SDL/0/Nintendo Switch Pro Controller
+    EOF
+        done
+        cat >>"$dolphin_config_dir/WiimoteNew.ini" <<'EOF'
     [BalanceBoard]
     Source = 0
     EOF
@@ -879,6 +876,33 @@ PY
     EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/scaling-policy.json"
         chmod 0644 "${cfg.configRoot}/emulators/scaling-policy.json"
+        cat >"${cfg.configRoot}/emulators/controller-policy.json" <<'EOF'
+    {
+      "primary_controller": "Nintendo Switch Pro Controller",
+      "vendor_product": "057e:2009",
+      "button_policy": "physical_switch_labels",
+      "global_sdl_hints": {
+        "SDL_GAMECONTROLLER_USE_BUTTON_LABELS": "1"
+      },
+      "managed_defaults": {
+        "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels",
+        "dolphin": "GameCube and Wii profiles map physical A/B/X/Y to matching labels and use SDL slots 0-3",
+        "ppsspp": "inherits SDL Switch label hints from run-emulator",
+        "pcsx2": "inherits SDL Switch label hints from run-emulator",
+        "azahar": "inherits SDL Switch label hints from run-emulator",
+        "cemu": "inherits SDL Switch label hints from run-emulator",
+        "xemu": "inherits SDL Switch label hints from run-emulator",
+        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support",
+        "supermodel": "inherits SDL Switch label hints from run-emulator"
+      },
+      "known_gaps": {
+        "motion": "hid_nintendo exposes a separate IMU device; emulator support varies",
+        "rumble": "hid_nintendo exposes force feedback through ff-memless; emulator support varies"
+      }
+    }
+    EOF
+        chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/controller-policy.json"
+        chmod 0644 "${cfg.configRoot}/emulators/controller-policy.json"
   '';
 in
 {

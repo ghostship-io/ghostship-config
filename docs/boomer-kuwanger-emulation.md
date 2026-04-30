@@ -367,10 +367,11 @@ profiles.
 
 ## Controllers And Bluetooth
 
-The first pass targets four 8BitDo Ultimate 2C Bluetooth controllers in Switch
-mode. The host enables BlueZ experimental behavior, `hid-nintendo`, joycond
-where available, Switch Pro/8BitDo udev access, and disables USB autosuspend
-for the known controller identities.
+The primary controller path is four Nintendo Switch Pro-style Bluetooth
+controllers exposed as `057e:2009` / `Pro Controller`. The host enables BlueZ
+experimental behavior, `hid-nintendo`, joycond where available, Switch
+Pro/8BitDo Switch-mode udev access, and disables USB autosuspend for the known
+controller identities.
 
 Player assignment is managed by the ES-DE `Bluetooth Settings` TUI. Runtime
 state is stored at:
@@ -379,9 +380,12 @@ state is stored at:
 /srv/emulation/config/controllers/player-order.json
 ```
 
-`controller-leds` watches connected devices and tries to apply player LED state
-through sysfs according to the saved player slots. If a controller identity does
-not expose LED sysfs entries, logical assignment still remains stable.
+`controller-leds` watches only Switch-style controller identities and applies
+Switch-style player LED counts through sysfs according to the saved player
+slots. If a controller identity does not expose LED sysfs entries, logical
+assignment still remains stable. `controller-autoconnect` reconnects paired
+Switch Pro controllers serially and leaves headphones and other accessories
+alone.
 
 Wi-Fi stays available for SSH, but NetworkManager Wi-Fi profiles are constrained
 to 5 GHz by default to avoid 2.4 GHz contention with Bluetooth. The ES-DE
@@ -391,23 +395,29 @@ hardware confirms the adapter split.
 
 ## ES-DE Tools
 
-The ES-DE Tools system exposes large-font terminal TUIs for `Bluetooth Settings`
-and `Wi-Fi Settings`, plus restart, reboot, and shutdown. The settings TUIs
-use a dark two-column layout: actions on the left, selected-action status and
-details on the right. They support keyboard and controller navigation from the
-couch. Bluetooth status shows whether Boomer is scanning for nearby devices, but
-does not expose host-only discoverable or pairable fields. `Show Paired` sits
-directly under status and previews all paired devices in the right pane.
+The ES-DE Tools system exposes large-font terminal TUIs for `Bluetooth Settings`,
+`Wi-Fi Settings`, and `Controller Maps`, plus restart, reboot, and shutdown.
+The settings TUIs use a dark two-column layout: actions on the left,
+selected-action status and details on the right. They support keyboard and
+controller navigation from the couch. Bluetooth status shows whether Boomer is
+scanning for nearby devices, but does not expose host-only discoverable or
+pairable fields. `Show Paired` sits directly under status and previews all
+paired devices in the right pane.
 Non-status actions show only concise action help in the right pane so long
 status blocks do not crowd the menu. Player assignment accepts keyboard input as
 a player device, and B/Esc backs out before any assignment is made. Under the
 ES-DE Gamescope session they launch through Xwayland `xterm`, with `foot` kept
 as a pure Wayland fallback. Bluetooth pairing uses a 10-second non-interactive
-BlueZ scan and parses newly discovered devices from the live scan output. The
-pair command registers a BlueZ agent for that command instead of relying on a
-stale interactive session. Keyboard input is handled by the terminal, while the
-raw `/dev/input` reader is limited to real controller navigation devices so
+BlueZ scan, parses newly discovered devices from the live scan output, hides
+already connected devices, filters the picker to likely audio/controller/HID
+peripherals, and shows whether each candidate is already paired. The pair
+command registers a BlueZ agent for that command instead of relying on a stale
+interactive session, and rechecks BlueZ state before treating a reported
+pair/connect error as fatal. Keyboard input is handled by the terminal, while
+the raw `/dev/input` reader is limited to real controller navigation devices so
 Switch Pro IMU motion data and analog-stick idle noise do not move the menu.
+`Restart ES-DE` queues a dedicated delayed system service so the restart runs
+outside the frontend process tree.
 Launch diagnostics are written under `/srv/emulation/logs/tools/`. Helper
 scripts for audio, display, RetroArch, scraping, launch logs, ROM coverage,
 smoke tests, and performance tests remain available on disk for SSH or
