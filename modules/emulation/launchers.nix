@@ -1253,8 +1253,7 @@ PY
     unbind joy14
     unbind joy15
     unbind joy16
-    bind axis6plus +attack
-    bind axis5plus +altattack
+    bind axis5plus +attack
     bind lshoulder weapprev
     bind rshoulder weapnext
     bind pad_start menu_main
@@ -1372,9 +1371,9 @@ PY
         "Axis4Minus": None,
         "Axis4Plus": None,
         "Axis5Minus": None,
-        "Axis5Plus": "+altattack",
+        "Axis5Plus": "+attack",
         "Axis6Minus": None,
-        "Axis6Plus": "+attack",
+        "Axis6Plus": None,
         "Axis7Minus": "+moveright",
         "Axis7Plus": "+moveleft",
         "Axis8Minus": "+forward",
