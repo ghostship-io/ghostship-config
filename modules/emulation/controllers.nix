@@ -286,7 +286,7 @@ let
     }
 
     connect_once() {
-      bluetoothctl power on >/dev/null 2>&1 || true
+      manage_pairing="''${1:-false}"
       did_connect=0
       while IFS=$'\t' read -r mac name connected _paired _modalias _icon; do
         [ -n "''${mac:-}" ] || continue
@@ -294,15 +294,17 @@ let
           continue
         fi
         log "connecting ''${name:-Switch Pro Controller} ($mac)"
-        bluetoothctl trust "$mac" >/dev/null 2>&1 || true
-        bluetoothctl wake "$mac" on >/dev/null 2>&1 || true
-        if timeout 15s bluetoothctl connect "$mac" >>"$log_file" 2>&1; then
+        if [ "$manage_pairing" = true ]; then
+          timeout 5s bluetoothctl trust "$mac" >/dev/null 2>&1 || true
+          timeout 5s bluetoothctl wake "$mac" on >/dev/null 2>&1 || true
+        fi
+        if timeout 6s bluetoothctl connect "$mac" >>"$log_file" 2>&1; then
           log "connected ''${name:-Switch Pro Controller} ($mac)"
           did_connect=1
         else
           log "connect failed ''${name:-Switch Pro Controller} ($mac)"
         fi
-        sleep 2
+        sleep 1
       done < <(bluez_switch_pro_rows)
       if [ "$did_connect" = 1 ]; then
         ${lib.getExe controllerLeds} apply || true
@@ -311,12 +313,12 @@ let
 
     case "''${1:-loop}" in
       once|--once)
-        connect_once
+        connect_once true
         ;;
       loop)
         while true; do
-          connect_once
-          sleep 30
+          connect_once false
+          sleep 60
         done
         ;;
       *)

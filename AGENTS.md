@@ -219,7 +219,9 @@ changelog.
   combo radio, prefer BR/EDR mode, keep Wi-Fi on 5 GHz with Wi-Fi power save and
   MT7921e ASPM disabled, leave joycond/cemuhook inactive by default, and keep
   focused BlueZ/`hid-nintendo` diagnostics available under
-  `/srv/emulation/logs/`. Smoke
+  `/srv/emulation/logs/`. Avoid continuous `btmgmt` polling in background
+  services; bound Bluetooth diagnostics so a busy controller cannot stall
+  activation. Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
   launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where

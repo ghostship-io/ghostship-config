@@ -394,8 +394,9 @@ each sysfs LED write sends a Nintendo output subcommand over Bluetooth.
 One-shot applies still force a single pattern refresh after explicit assignment
 or pairing. If a controller identity does not expose LED sysfs entries, logical
 assignment still remains stable. `controller-autoconnect` polls at a low
-cadence, uses BlueZ D-Bus state for discovery, reconnects paired Switch Pro
-controllers serially, and leaves headphones and other accessories alone.
+cadence with short bounded connect attempts, uses BlueZ D-Bus state for
+discovery, reconnects paired Switch Pro controllers serially, and leaves
+headphones and other accessories alone.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices
