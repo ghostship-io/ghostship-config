@@ -355,7 +355,6 @@ let
         {
           printf '%s recent_hid_warnings=%s\n' "$(date -u +%FT%TZ)" "$warnings"
           map_hid_roots | sed 's/^/  /'
-          btmgmt con 2>/dev/null | sed 's/^/  /' || true
         } >>"$log_file"
       fi
       sleep 60
@@ -374,19 +373,19 @@ let
     {
       date -u +%FT%TZ
       echo "== btmgmt info =="
-      btmgmt info || true
+      timeout 5s btmgmt info || true
       echo
       echo "== btmgmt expinfo =="
-      btmgmt expinfo || true
+      timeout 5s btmgmt expinfo || true
       echo
       echo "== btmgmt connections =="
-      btmgmt con || true
+      timeout 5s btmgmt con || true
       echo
       echo "== paired devices =="
-      bluetoothctl devices Paired || true
+      timeout 5s bluetoothctl devices Paired || true
       echo
       echo "== connected devices =="
-      bluetoothctl devices Connected || true
+      timeout 5s bluetoothctl devices Connected || true
       echo
       echo "== controller player order =="
       cat "${cfg.configRoot}/controllers/player-order.json" 2>/dev/null || true
@@ -609,7 +608,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        TimeoutStartSec = "35s";
+        TimeoutStartSec = "60s";
       };
       script = ''
         btmgmt_set() {
@@ -618,7 +617,6 @@ in
 
         echo N > /sys/module/btusb/parameters/enable_autosuspend 2>/dev/null || true
         echo Y > /sys/module/mt7921e/parameters/disable_aspm 2>/dev/null || true
-        btmgmt_set power on
         btmgmt_set bredr on
         btmgmt_set le off
         btmgmt_set advertising off
@@ -667,6 +665,8 @@ in
         Restart = "always";
         RestartSec = "5s";
       };
+      bindsTo = [ "bluetooth.service" ];
+      partOf = [ "bluetooth.service" ];
     };
   };
 }
