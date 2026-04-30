@@ -1275,7 +1275,6 @@ EOF
 
     unbind joy9
     unbind joy3
-    unbind joy14
     unbind pad_y
     unbind axis1plus
     unbind axis1minus
@@ -1310,16 +1309,17 @@ EOF
     bind joy1 +jump
     bind joy4 crouch
     unbind joy3
-    bind rtrigger weapnext
+    bind rtrigger +altattack
     bind ltrigger weapnext
     bind joy7 weapnext
-    bind joy8 weapnext
+    bind joy8 +altattack
     bind lshoulder weapprev
     bind rshoulder weapnext
     bind joy5 weapprev
     bind joy6 weapnext
     bind pad_back menu_main
     bind joy9 menu_main
+    bind joy14 menu_main
     bind pad_start togglemap
     bind joy10 togglemap
     bind lthumb crouch
@@ -1329,7 +1329,13 @@ EOF
     bind axis2minus +forward
     bind axis2plus +back
     bind axis4plus +altattack
+    bind axis4minus +altattack
     bind axis5plus +attack
+    bind axis5minus +attack
+    bind axis6minus +moveleft
+    bind axis6plus +moveright
+    bind axis7minus +forward
+    bind axis7plus +back
     bind dpadup +forward
     bind dpaddown +back
     bind dpadleft +moveleft
@@ -1349,6 +1355,10 @@ EOF
     mapbind axis1plus +am_panright
     mapbind axis2minus +am_panup
     mapbind axis2plus +am_pandown
+    mapbind axis6minus +am_panleft
+    mapbind axis6plus +am_panright
+    mapbind axis7minus +am_panup
+    mapbind axis7plus +am_pandown
     mapbind dpadright +am_panright
     mapbind dpadleft +am_panleft
     mapbind dpadup +am_panup
@@ -1404,7 +1414,7 @@ binding_settings = {
     "Pad_X": "crouch",
     "Pad_Y": None,
     "LTrigger": "weapnext",
-    "RTrigger": "weapnext",
+    "RTrigger": "+altattack",
     "Joy1": "+jump",
     "Joy2": "+use",
     "Joy3": None,
@@ -1412,13 +1422,13 @@ binding_settings = {
     "Joy5": "weapprev",
     "Joy6": "weapnext",
     "Joy7": "weapnext",
-    "Joy8": "weapnext",
+    "Joy8": "+altattack",
     "Joy9": "menu_main",
     "Joy10": "togglemap",
     "Joy11": None,
     "Joy12": None,
     "Joy13": None,
-    "Joy14": None,
+    "Joy14": "menu_main",
     "Joy15": None,
     "Joy16": None,
     "Pad_Back": "menu_main",
@@ -1429,14 +1439,14 @@ binding_settings = {
     "Axis2Plus": "+back",
     "Axis3Minus": None,
     "Axis3Plus": None,
-    "Axis4Minus": None,
+    "Axis4Minus": "+altattack",
     "Axis4Plus": "+altattack",
-    "Axis5Minus": None,
+    "Axis5Minus": "+attack",
     "Axis5Plus": "+attack",
-    "Axis6Minus": None,
-    "Axis6Plus": None,
-    "Axis7Minus": None,
-    "Axis7Plus": None,
+    "Axis6Minus": "+moveleft",
+    "Axis6Plus": "+moveright",
+    "Axis7Minus": "+forward",
+    "Axis7Plus": "+back",
     "Axis8Minus": None,
     "Axis8Plus": None,
     "DPadUp": "+forward",
@@ -1463,6 +1473,10 @@ automap_settings = {
     "Axis1Plus": "+am_panright",
     "Axis2Minus": "+am_panup",
     "Axis2Plus": "+am_pandown",
+    "Axis6Minus": "+am_panleft",
+    "Axis6Plus": "+am_panright",
+    "Axis7Minus": "+am_panup",
+    "Axis7Plus": "+am_pandown",
     "DPadUp": "+am_panup",
     "DPadDown": "+am_pandown",
     "DPadLeft": "+am_panleft",
