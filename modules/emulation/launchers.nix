@@ -1134,6 +1134,9 @@ EOF
           chmod 0644 "$xemu_data_dir/eeprom.bin"
         fi
         printf '%s\n' \
+          '[general]' \
+          'show_welcome = false' \
+          "" \
           '[sys.files]' \
           "bootrom_path = '$xemu_bios_dir/mcpx_1.0.bin'" \
           "flashrom_path = '$xemu_bios_dir/Complex_4627.bin'" \

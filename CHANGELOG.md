@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 - **Boomer Xemu first-run setup**: Launch Xemu with the Nix-generated
-  `xemu.toml` machine settings so Xbox games do not stop at the manual machine
-  configuration prompt when the required BIOS and HDD files are present.
+  `xemu.toml` machine settings and disable Xemu's welcome wizard so Xbox games
+  do not stop at the manual machine configuration prompt when the required BIOS
+  and HDD files are present.
 - **Boomer emulation setup rendering**: Keep the generated GZDoom config
   Python heredoc flush-left so `emulation-setup.service` can complete during
   deployment.
