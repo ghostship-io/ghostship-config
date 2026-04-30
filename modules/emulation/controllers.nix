@@ -94,6 +94,41 @@ let
       fi
     }
 
+    compact_player_slots() {
+      ensure_order_file
+      before="$(jq -c '.players // []' "$order_file" 2>/dev/null || echo '[]')"
+      tmp="$(mktemp)"
+      jq '
+        def switch_mac: ((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
+        def slot: (.player | tonumber? // 99);
+        def pack($rows; $used):
+          reduce ($rows[]) as $row
+            ({players: [], used: $used};
+              ([1, 2, 3, 4] | map(select(. as $candidate | (.used | index($candidate) | not))) | .[0]) as $next
+              | if $next == null then
+                  .players += [$row + {player: ((.used | length) + 1)}]
+                else
+                  .players += [$row + {player: $next}]
+                  | .used += [$next]
+                end
+            );
+
+        (.players // []) as $players
+        | ($players | map(select((.mac // "") == "KEYBOARD"))) as $keyboard
+        | ($keyboard | map(slot | select(. >= 1 and . <= 4))) as $reserved
+        | ($players | map(select(((.mac // "") != "KEYBOARD") and switch_mac and (.connected == true))) | sort_by(slot)) as $connected
+        | ($players | map(select(((.mac // "") != "KEYBOARD") and switch_mac and (.connected != true))) | sort_by(slot)) as $disconnected
+        | (pack($connected; $reserved)) as $active
+        | (pack($disconnected; $active.used)) as $inactive
+        | .players = (($keyboard | sort_by(slot)) + $active.players + $inactive.players | sort_by(slot))
+      ' "$order_file" >"$tmp"
+      mv "$tmp" "$order_file"
+      after="$(jq -c '.players // []' "$order_file" 2>/dev/null || echo '[]')"
+      if [ "$before" != "$after" ]; then
+        echo "$(date -u +%FT%TZ) compacted connected controller player slots" >>"$log_file"
+      fi
+    }
+
     record_connected_devices() {
       ensure_order_file
       prune_non_player_devices
@@ -128,6 +163,8 @@ let
         mv "$tmp" "$order_file"
       done <"$connected_tmp"
       rm -f "$connected_tmp"
+
+      compact_player_slots
 
       tmp="$(mktemp)"
       jq '.players |= sort_by(.player)' "$order_file" >"$tmp"

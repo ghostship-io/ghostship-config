@@ -224,7 +224,9 @@ changelog.
   focused BlueZ/`hid-nintendo` diagnostics available under
   `/srv/emulation/logs/`. Avoid continuous `btmgmt` polling in background
   services; bound Bluetooth diagnostics so a busy controller cannot stall
-  activation. Smoke
+  activation. Player order should compact connected Switch controllers into
+  the lowest open slots while preserving relative order, with reconnecting
+  controllers joining at the end. Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
   launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where

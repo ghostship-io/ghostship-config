@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `hid-nintendo` focused debug logging enabled, removing joycond/cemuhook from
   the active service set, rate-limiting controller autoconnect, minimizing
   sysfs LED writes, and logging controller HID health plus pairing diagnostics.
+  Dynamically compact connected controller player slots so remaining controllers
+  slide down when a middle player disconnects and the returning controller joins
+  at the end.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.
