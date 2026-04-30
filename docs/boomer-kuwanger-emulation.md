@@ -400,15 +400,19 @@ state is stored at:
 /srv/emulation/config/controllers/player-order.json
 ```
 
-`controller-leds` watches only Switch-style controller identities from BlueZ and
-local HID input nodes, then applies Switch-style player LED counts through sysfs
-according to the saved player slots. It writes only changed LED files at a
-bounded half-second cadence, because each sysfs LED write sends a Nintendo
-output subcommand over Bluetooth or USB HID. One-shot applies still force a
-single pattern refresh after explicit assignment or pairing. If BlueZ D-Bus is
-slow or wedged, local HID devices still keep connected USB and already-exposed
-Bluetooth controllers in player reconciliation. If a controller identity does
-not expose LED sysfs entries, logical assignment still remains stable.
+`controller-leds` watches Switch-style Bluetooth controller identities from
+BlueZ and Switch-Pro USB HID input nodes from the kernel, then applies
+Switch-style player LED counts through sysfs according to the saved player
+slots. It writes only changed LED files at a bounded half-second cadence,
+because each sysfs LED write sends a Nintendo output subcommand over Bluetooth
+or USB HID. One-shot applies still force a single pattern refresh after explicit
+assignment or pairing. Bluetooth connection truth comes from BlueZ, not stale
+local HID nodes, so a disconnected Bluetooth controller is not kept alive only
+because its old `/sys` input device has not disappeared yet. If a controller
+identity does not expose LED sysfs entries, logical assignment still remains
+stable. Some 8BitDo USB wired modes expose `2dc8:301a` through `hid-generic`;
+that mode can provide input but does not expose Nintendo player LED sysfs
+controls.
 Connected controllers are compacted into the lowest open player slots while
 preserving their relative order, so if P2 turns off P3/P4 slide down and the
 returning controller lands at the end.

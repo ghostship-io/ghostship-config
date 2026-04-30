@@ -54,9 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   slide down when a middle player disconnects and the returning controller joins
   at the end. Trigger controller slot reconciliation from controller input add
   events and BlueZ connected-property changes with short delayed retries for
-  HID LED readiness, merge local Switch-style HID nodes so USB controllers share
-  the same player assignment and LED path, and serialize LED/order writes to
-  reduce transient wrong player LEDs. Keep one-shot LED applies from being
+  HID LED readiness, merge USB Switch-Pro HID nodes so USB controllers share the
+  same player assignment and LED path, avoid treating stale Bluetooth HID nodes
+  as connected when BlueZ no longer reports them, and serialize LED/order writes
+  to reduce transient wrong player LEDs. Keep one-shot LED applies from being
   start-limited during fast reconnect cycles. Coalesce
   BlueZ-triggered retries through the one-shot unit and avoid force-writing
   already-correct LED entries so hid-nintendo output reports are not flooded.

@@ -90,6 +90,10 @@ let
         uniq="$(cat "$event/device/uniq" 2>/dev/null || true)"
         switch_identifier "$uniq" || continue
         modalias="$(cat "$event/device/modalias" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+        case "$modalias" in
+          input:b0003*) ;;
+          *) continue ;;
+        esac
         supported_player_device "$uniq" "$name" "$modalias" "input-gaming" || continue
         printf '%s\t%s\ttrue\tfalse\tfalse\tfalse\t%s\tinput-gaming\n' \
           "$(printf '%s' "$uniq" | tr '[:lower:]' '[:upper:]')" \
