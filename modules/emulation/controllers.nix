@@ -914,9 +914,17 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        TimeoutStartSec = "60s";
+        TimeoutStartSec = "20s";
       };
       script = ''
+        log_file="${cfg.dataRoot}/logs/controller-bluetooth-tuning.log"
+        mkdir -p "$(dirname "$log_file")"
+        touch "$log_file"
+
+        log() {
+          echo "$(date -u +%FT%TZ) $*" >>"$log_file"
+        }
+
         dynamic_debug=/sys/kernel/debug/dynamic_debug/control
         if [ -w "$dynamic_debug" ]; then
           for query in \
@@ -933,7 +941,9 @@ in
         fi
 
         btmgmt_set() {
-          timeout 5s btmgmt "$@" || true
+          if ! timeout -k 1s 2s btmgmt "$@" >>"$log_file" 2>&1; then
+            log "skipped slow btmgmt $*"
+          fi
         }
 
         echo N > /sys/module/btusb/parameters/enable_autosuspend 2>/dev/null || true

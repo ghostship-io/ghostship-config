@@ -225,8 +225,8 @@ changelog.
   joycond/cemuhook inactive by default, and keep focused BlueZ/`hid-nintendo`
   diagnostics available on demand under
   `/srv/emulation/logs/`, not continuously enabled during normal play. Avoid
-  continuous `btmgmt` polling in background
-  services; bound Bluetooth diagnostics so a busy controller cannot stall
+  continuous `btmgmt` polling in background services; bound Bluetooth
+  diagnostics and startup `btmgmt` tuning so a busy controller cannot stall
   activation. Keep normal Bluetooth priority boosts conservative: `bluetoothd`
   may use a small negative nice value and higher CPU weight, and system D-Bus
   may get a modest CPU weight boost; do not enable realtime scheduling or IRQ

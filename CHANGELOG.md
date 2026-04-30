@@ -70,7 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   input latency over controller battery life. Make controller reconciliation
   fail-soft when BlueZ D-Bus is slow, rate-limit Switch LED sysfs writes to a
   half-second cadence, and modestly boost system D-Bus scheduling for BlueZ
-  control traffic. Add Switch-style hotkeys with Square/Capture as menu,
+  control traffic. Bound startup `btmgmt` tuning calls so a busy Bluetooth
+  adapter does not hold controller services for long. Add Switch-style hotkeys
+  with Square/Capture as menu,
   Select/Minus as the hotkey modifier, Star/Home documented as the controller
   turbo button, a raw controller hotkey monitor for normal emulator exits,
   left-stick-as-D-pad overrides for D-pad-only RetroArch systems, text-only

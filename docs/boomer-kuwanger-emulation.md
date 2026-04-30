@@ -390,7 +390,8 @@ accessories are not the primary target.
 `controller-bluetooth-low-latency` removes Bluetooth `SNIFF` low-power policy
 from the adapter and connected Switch Pro controller links after boot and
 reconnects. This trades controller battery life for lower input latency during
-multiplayer sessions.
+multiplayer sessions. Startup `btmgmt` tuning is deliberately bounded per
+command so a busy adapter cannot stall controller services for long.
 
 Player assignment is managed by the ES-DE `Bluetooth Settings` TUI. Runtime
 state is stored at:
