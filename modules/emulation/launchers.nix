@@ -1228,6 +1228,8 @@ PY
     use_joystick true
     freelook true
     lookstrafe false
+    set joy_trigger_threshold 0.25
+    set joy_axis_threshold 0.25
 
     unbind pad_back
     unbind joy9
@@ -1279,6 +1281,7 @@ PY
     unbind joy14
     unbind joy15
     unbind joy16
+    bind axis4plus +altattack
     bind axis5plus +attack
     bind lshoulder weapprev
     bind rshoulder weapnext
@@ -1395,7 +1398,7 @@ PY
         "Axis3Minus": None,
         "Axis3Plus": None,
         "Axis4Minus": None,
-        "Axis4Plus": None,
+        "Axis4Plus": "+altattack",
         "Axis5Minus": None,
         "Axis5Plus": "+attack",
         "Axis6Minus": None,
