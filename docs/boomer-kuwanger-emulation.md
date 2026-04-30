@@ -127,6 +127,10 @@ for example:
 through a shell, and launches GZDoom from the `.gzdoom` file's directory so
 relative asset paths work. Keep assets under the Doom ROM folder and put the
 human-facing launchers at the top level for cleaner ES-DE scraping.
+Every GZDoom launch also executes the managed
+`/srv/emulation/config/emulators/gzdoom/boomer-controls.cfg` file so joystick
+input is enabled and Switch-style controls are applied: A is Use/Confirm, B is
+Jump, ZR is Fire, ZL is Alt Fire, Y is Map, and X is Inventory.
 
 ## BIOS, Firmware, And Keys
 
@@ -422,7 +426,8 @@ modifier, with Select as the fallback if Capture is not exposed. Select held
 plus a double Start press asks the active emulator process group to exit
 normally. RetroArch maps Square/Capture hotkeys to save/load, reset, FPS,
 screenshot, and fast-forward actions, and D-pad-only RetroArch systems also
-accept left-stick D-pad input.
+accept left-stick D-pad input. The N64 RetroArch override remaps Mupen64Plus so
+physical Switch A sends N64 A and physical Switch B sends N64 B.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices
@@ -464,10 +469,9 @@ controller navigation from the couch. Bluetooth status shows whether Boomer is
 scanning for nearby devices, but does not expose host-only discoverable or
 pairable fields. `Show Paired` sits directly under status and previews all
 paired devices in the right pane.
-`Controller Maps` uses the same two-pane layout with a slightly smaller font,
-right-pane scrolling, and ASCII original-controller diagrams that show
-`Original Button -> Switch Pro Button` mappings plus the common hotkeys for
-each Boomer system family.
+`Controller Maps` uses the same two-pane layout with a slightly smaller font.
+Each page keeps a two-column button map at the top and common hotkeys below it
+so the right pane fits without ASCII controller diagrams.
 Non-status actions show only concise action help in the right pane so long
 status blocks do not crowd the menu. Player assignment accepts keyboard input as
 a player device, and B/Esc backs out before any assignment is made. Under the

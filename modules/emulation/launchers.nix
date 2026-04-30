@@ -795,12 +795,17 @@ PY
       supermodel) cmd=(supermodel "$rom_path" -res="$output_width","$output_height" -fullscreen) ;;
       gzdoom)
         run_cwd="$(dirname "$rom_path")"
+        gzdoom_controls="${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
+        gzdoom_common_args=()
+        if [ -r "$gzdoom_controls" ]; then
+          gzdoom_common_args=(-exec "$gzdoom_controls")
+        fi
         case "$rom_path" in
           *.gzdoom|*.GZDOOM)
             parse_gzdoom_launcher "$rom_path"
-            cmd=(gzdoom "''${gzdoom_args[@]}")
+            cmd=(gzdoom "''${gzdoom_common_args[@]}" "''${gzdoom_args[@]}")
             ;;
-          *) cmd=(gzdoom -iwad "$rom_path") ;;
+          *) cmd=(gzdoom "''${gzdoom_common_args[@]}" -iwad "$rom_path") ;;
         esac
         ;;
       pico8) cmd=(pico8 -run "$rom_path") ;;
@@ -1074,6 +1079,41 @@ PY
     EOF
         chown -R ${cfg.user}:${cfg.group} "$dolphin_config_dir"
         find "$dolphin_config_dir" -type f -exec chmod 0644 {} +
+        cat >"${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg" <<'EOF'
+    // Boomer Switch Pro controller defaults. Managed by Nix.
+    use_joystick true
+    freelook true
+    lookstrafe false
+
+    bind pad_a +use
+    bind pad_b +jump
+    bind pad_x invuse
+    bind pad_y togglemap
+    bind rtrigger +attack
+    bind ltrigger +altattack
+    bind lshoulder weapprev
+    bind rshoulder weapnext
+    bind pad_start menu_main
+    bind pad_back pause
+    bind lthumb crouch
+    bind rthumb centerview
+    bind dpadleft invprev
+    bind dpadright invnext
+    bind dpadup togglemap
+    bind dpaddown invuse
+
+    mapbind pad_y am_togglefollow
+    mapbind pad_a am_setmark
+    mapbind pad_b am_clearmarks
+    mapbind dpadright +am_panright
+    mapbind dpadleft +am_panleft
+    mapbind dpadup +am_panup
+    mapbind dpaddown +am_pandown
+    mapbind lshoulder +am_zoomout
+    mapbind rshoulder +am_zoomin
+    EOF
+        chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
+        chmod 0644 "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         for dir in azahar dolphin cemu pcsx2 ppsspp xemu ryubing supermodel gzdoom pico8 teknoparrot; do
           readme="${cfg.configRoot}/emulators/$dir/README.txt"
           if [ ! -e "$readme" ]; then
@@ -1123,7 +1163,8 @@ PY
         "cemu": "inherits SDL Switch label hints from run-emulator",
         "xemu": "inherits SDL Switch label hints from run-emulator",
         "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support",
-        "supermodel": "inherits SDL Switch label hints from run-emulator"
+        "supermodel": "inherits SDL Switch label hints from run-emulator",
+        "gzdoom": "run-emulator executes boomer-controls.cfg so Use/Confirm is physical A and Jump is physical B"
       },
       "known_gaps": {
         "motion": "hid_nintendo exposes a separate IMU device; emulator support varies",

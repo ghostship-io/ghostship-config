@@ -350,6 +350,14 @@ let
                 printf 'input_player%s_analog_dpad_mode = "1"\n' "$player"
               done
               ;;
+            n64)
+              for player in 1 2 3 4; do
+                printf 'input_player%s_b_btn = "1"\n' "$player"
+                printf 'input_player%s_y_btn = "0"\n' "$player"
+                printf 'input_player%s_a_btn = "3"\n' "$player"
+                printf 'input_player%s_x_btn = "2"\n' "$player"
+              done
+              ;;
           esac
         } >"$override"
         chown ${cfg.user}:${cfg.group} "$override"

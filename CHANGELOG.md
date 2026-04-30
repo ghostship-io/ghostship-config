@@ -71,7 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Star/Home as quick menu, Square/Capture as the preferred modifier, Select as
   fallback, a raw controller hotkey monitor for normal emulator exits,
   left-stick-as-D-pad overrides for D-pad-only RetroArch
-  systems, and detailed ASCII Controller Maps for every Boomer system family.
+  systems, text-only two-column Controller Maps for every Boomer system family,
+  an N64 direct A/B remap, and managed GZDoom Switch-style controller bindings.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

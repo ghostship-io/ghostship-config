@@ -289,77 +289,69 @@ def bluetooth_visible_labels(powered):
     return labels
 
 
-def controller_map(title, art, mappings, notes=()):
-    lines = [
-        title,
-        "",
-        "Original Controller",
-    ]
-    lines.extend(f"  {line}" for line in art)
-    lines.extend(["", "Original -> Switch Pro"])
-    lines.extend(f"  {line}" for line in mappings)
-    lines.extend(
-        [
-            "",
-            "Common Hotkeys",
-            "  Star/Home alone -> emulator quick menu",
-            "  Hotkey + Star/Home -> native Home where supported",
-            "  Hotkey + Start twice -> normal quit where supported",
-            "  Select + Start twice -> normal exit",
-            "  Hotkey + R1 -> save state",
-            "  Hotkey + L1 -> load state",
-            "  Hotkey + B -> reset where supported",
-            "  Hotkey + Y -> FPS where supported",
-            "  Hotkey + A -> screenshot where supported",
-            "  Hotkey + R2 -> fast-forward where supported",
-            "  Hotkey = Square/Capture, fallback Select",
-        ]
-    )
-    if notes:
-        lines.extend(["", "Notes"])
-        lines.extend(f"  {line}" for line in notes)
+BUTTON_MAP_COLUMN_WIDTH = 27
+
+
+COMMON_HOTKEYS = [
+    "Quick Menu: Star/Home",
+    "Home: Hotkey + Star/Home if supported",
+    "Exit: Select + Start twice",
+    "Save/Load: Hotkey + R / L",
+    "Reset/FPS/Shot/Fast: Hotkey + B/Y/A/ZR",
+    "Hotkey: Square/Capture; fallback Select/-",
+]
+
+
+def two_column_button_lines(entries):
+    lines = []
+    for index in range(0, len(entries), 2):
+        left = ellipsize(entries[index], BUTTON_MAP_COLUMN_WIDTH)
+        right = ellipsize(entries[index + 1], BUTTON_MAP_COLUMN_WIDTH) if index + 1 < len(entries) else ""
+        lines.append(f"{left:<{BUTTON_MAP_COLUMN_WIDTH}} {right}".rstrip())
+    return lines
+
+
+def controller_map(title, mappings, notes=(), hotkeys=()):
+    lines = [title, "", "Button Map"]
+    lines.extend(f"  {line}" for line in two_column_button_lines(mappings))
+    lines.extend(["", "Hotkeys"])
+    lines.extend(f"  {line}" for line in (hotkeys or COMMON_HOTKEYS))
+    lines.extend(f"  Note: {line}" for line in notes)
     return lines
 
 
 CONTROLLER_MAPS = [
     {
         "label": "Switch Pro Reference",
-        "detail": [
+        "detail": controller_map(
             "Switch Pro Reference",
-            "",
-            "Physical labels are authoritative.",
-            "",
-            "  A = confirm / primary action",
-            "  B = back / cancel",
-            "  X = refresh or top face button",
-            "  Y = alternate action or left face button",
-            "  + = start",
-            "  - = select",
-            "  Star/Home = quick menu",
-            "  Square/Capture = preferred hotkey modifier",
-            "  D-pad and left stick navigate menus",
-            "",
-            "ROCKNIX-style hotkeys",
-            "  Star/Home opens the emulator quick menu",
-            "  Square + Star/Home opens native Home where supported",
-            "  Square + Start twice quits where supported",
-            "  Select + Start twice exits normally",
-            "  Square + R saves state",
-            "  Square + L loads state",
-        ],
+            [
+                "A -> A / confirm",
+                "B -> B / back",
+                "X -> X / refresh",
+                "Y -> Y / action",
+                "+ -> Start",
+                "- -> Select",
+                "D-pad -> D-pad",
+                "Left Stick -> Move",
+                "Square -> Hotkey",
+                "Star/Home -> Quick Menu",
+            ],
+            ["Physical Switch labels are authoritative."],
+        ),
     },
     {
         "label": "NES / Famicom",
         "detail": controller_map(
             "NES / Famicom",
             [
-                "+-----------------------------+",
-                "| D-Pad -> D-pad              |",
-                "| Select -> -     Start -> +  |",
-                "| B -> B          A -> A      |",
-                "+-----------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> D-pad",
+                "B -> B",
+                "A -> A",
+                "Select -> -",
+                "Start -> +",
             ],
-            ["D-pad also maps to left stick."],
         ),
     },
     {
@@ -367,13 +359,17 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "SNES / Super Famicom",
             [
-                " L -> L                         R -> R",
-                "+--------------------------------------+",
-                "| D-Pad -> D-pad   Select -> - Start -> + |",
-                "| Y -> Y  X -> X        B -> B  A -> A |",
-                "+--------------------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> D-pad",
+                "B -> B",
+                "A -> A",
+                "Y -> Y",
+                "X -> X",
+                "L -> L",
+                "R -> R",
+                "Select -> -",
+                "Start -> +",
             ],
-            ["D-pad also maps to left stick."],
         ),
     },
     {
@@ -381,13 +377,13 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Game Boy / Game Boy Color",
             [
-                "+-----------------------------+",
-                "| D-Pad -> D-pad              |",
-                "| Select -> -     Start -> +  |",
-                "| B -> B          A -> A      |",
-                "+-----------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> D-pad",
+                "B -> B",
+                "A -> A",
+                "Select -> -",
+                "Start -> +",
             ],
-            ["D-pad also maps to left stick."],
         ),
     },
     {
@@ -395,13 +391,15 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Game Boy Advance",
             [
-                " L -> L                         R -> R",
-                "+--------------------------------------+",
-                "| D-Pad -> D-pad   Select -> - Start -> + |",
-                "| B -> B                    A -> A     |",
-                "+--------------------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> D-pad",
+                "B -> B",
+                "A -> A",
+                "L -> L",
+                "R -> R",
+                "Select -> -",
+                "Start -> +",
             ],
-            ["D-pad also maps to left stick."],
         ),
     },
     {
@@ -409,14 +407,16 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Virtual Boy",
             [
-                " L -> L                         R -> R",
-                "+--------------------------------------+",
-                "| Left D-Pad -> D-pad / left stick     |",
-                "| Right D-Pad -> right stick           |",
-                "| Select -> - Start -> +  B -> B A -> A |",
-                "+--------------------------------------+",
+                "Left D-pad -> D-pad",
+                "Left Stick -> D-pad",
+                "Right D-pad -> Right Stick",
+                "B -> B",
+                "A -> A",
+                "L -> L",
+                "R -> R",
+                "Select -> -",
+                "Start -> +",
             ],
-            ["Right D-pad uses the right stick where the emulator exposes it."],
         ),
     },
     {
@@ -424,13 +424,17 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Genesis / Saturn",
             [
-                "             X -> Y   Y -> X   Z -> R1",
-                "+--------------------------------------+",
-                "| D-Pad -> D-pad       Start -> +      |",
-                "|             A -> B   B -> A   C -> L1 |",
-                "+--------------------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> D-pad",
+                "A -> A",
+                "B -> B",
+                "C -> R",
+                "X -> X",
+                "Y -> Y",
+                "Z -> ZR",
+                "Mode -> -",
+                "Start -> +",
             ],
-            ["D-pad also maps to left stick."],
             ["Six-button layouts keep all six inputs reachable."],
         ),
     },
@@ -439,13 +443,12 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Master System / Game Gear",
             [
-                "+-----------------------------+",
-                "| D-Pad -> D-pad              |",
-                "| Button 1 -> B  Button 2 -> A |",
-                "| Pause/Start -> +            |",
-                "+-----------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> D-pad",
+                "Button 1 -> B",
+                "Button 2 -> A",
+                "Pause -> +",
             ],
-            ["D-pad also maps to left stick."],
         ),
     },
     {
@@ -453,14 +456,16 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Dreamcast",
             [
-                " L Trigger -> ZL              R Trigger -> ZR",
-                "+--------------------------------------------+",
-                "| D-Pad -> D-pad   Analog -> left stick      |",
-                "| X -> Y   Y -> X        B -> B   A -> A     |",
-                "| Start -> +                                 |",
-                "+--------------------------------------------+",
+                "Analog -> Left Stick",
+                "D-pad -> D-pad",
+                "A -> A",
+                "B -> B",
+                "X -> X",
+                "Y -> Y",
+                "L Trigger -> ZL",
+                "R Trigger -> ZR",
+                "Start -> +",
             ],
-            ["VMU/menu actions stay emulator-specific."],
         ),
     },
     {
@@ -468,13 +473,13 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "PC Engine / PC Engine CD",
             [
-                "+-----------------------------+",
-                "| D-Pad -> D-pad              |",
-                "| Select -> -      Run -> +   |",
-                "| II -> B          I -> A     |",
-                "+-----------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> D-pad",
+                "I -> A",
+                "II -> B",
+                "Select -> -",
+                "Run -> +",
             ],
-            ["D-pad also maps to left stick."],
         ),
     },
     {
@@ -482,13 +487,16 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Neo Geo / Neo Geo Pocket",
             [
-                "+--------------------------------------+",
-                "| Stick -> D-pad / left stick          |",
-                "| Select/Coin -> -      Start -> +     |",
-                "| A -> B   B -> A   C -> Y   D -> X    |",
-                "+--------------------------------------+",
+                "Stick -> D-pad",
+                "Left Stick -> D-pad",
+                "A -> A",
+                "B -> B",
+                "C -> X",
+                "D -> Y",
+                "Coin/Select -> -",
+                "Start -> +",
             ],
-            ["Pocket two-button games use B/A as A/B."],
+            ["Pocket two-button games use direct A/B."],
         ),
     },
     {
@@ -496,14 +504,20 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "PlayStation",
             [
-                " L2 -> ZL  L1 -> L             R1 -> R  R2 -> ZR",
-                "+-----------------------------------------------+",
-                "| D-Pad -> D-pad     Select -> -   Start -> +   |",
-                "| [] -> Y  /\\ -> X       X -> B   O -> A        |",
-                "| Left stick -> left       Right stick -> right |",
-                "+-----------------------------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> Left Stick",
+                "Right Stick -> Right Stick",
+                "Cross -> A",
+                "Circle -> B",
+                "Square -> Y",
+                "Triangle -> X",
+                "L1 -> L",
+                "R1 -> R",
+                "L2 -> ZL",
+                "R2 -> ZR",
+                "Select -> -",
+                "Start -> +",
             ],
-            ["DualShock sticks map to matching sticks."],
         ),
     },
     {
@@ -511,16 +525,19 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Nintendo 64",
             [
-                " L -> L                         R -> R",
-                "+-----------------------------------------+",
-                "| D-Pad -> D-pad      Analog -> left stick |",
-                "| C-buttons -> right stick                 |",
-                "| B -> Y             A -> B                |",
-                "| C-Left -> Y dup    C-Up -> X dup         |",
-                "| Z -> ZL/ZR         Start -> +            |",
-                "+-----------------------------------------+",
+                "Analog -> Left Stick",
+                "D-pad -> D-pad",
+                "A -> A",
+                "B -> B",
+                "C-buttons -> Right Stick",
+                "C-Up -> X",
+                "C-Left -> Y",
+                "Z -> ZL",
+                "L -> L",
+                "R -> R",
+                "Start -> +",
             ],
-            ["ROCKNIX-style N64 keeps A on the bottom face button and B on the left face button."],
+            ["N64 A/B map directly to Switch A/B."],
         ),
     },
     {
@@ -528,15 +545,18 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "GameCube",
             [
-                " L -> L                         R -> R",
-                "+----------------------------------------+",
-                "| Main Stick -> left   C-Stick -> right  |",
-                "| D-Pad -> D-pad                         |",
-                "| Y -> Y  X -> X       B -> B  A -> A    |",
-                "| Z -> ZR              Start -> +        |",
-                "+----------------------------------------+",
+                "Main Stick -> Left Stick",
+                "C-Stick -> Right Stick",
+                "D-pad -> D-pad",
+                "A -> A",
+                "B -> B",
+                "X -> X",
+                "Y -> Y",
+                "L -> ZL",
+                "R -> ZR",
+                "Z -> R",
+                "Start -> +",
             ],
-            ["Physical A/B/X/Y keep their Switch labels."],
         ),
     },
     {
@@ -544,15 +564,19 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Wii Remote + Nunchuk",
             [
-                " Remote D-Pad -> D-pad    Home -> Hotkey+Star",
-                "+---------------------------------------------+",
-                "| A -> A        B trigger -> ZR               |",
-                "| 1 -> B        2 -> Y       -/+ -> -/+       |",
-                "| Nunchuk stick -> left stick                 |",
-                "| C -> L        Z -> R       Pointer -> right |",
-                "+---------------------------------------------+",
+                "Remote D-pad -> D-pad",
+                "Pointer -> Right Stick",
+                "A -> A",
+                "B Trigger -> ZR",
+                "1 -> B",
+                "2 -> Y",
+                "- -> -",
+                "+ -> +",
+                "Home -> Hotkey+Home",
+                "Nunchuk Stick -> Left Stick",
+                "C -> L",
+                "Z -> R",
             ],
-            ["Star/Home alone opens Dolphin quick menu where supported."],
             ["Hotkey + Star/Home maps Wii Home where Dolphin exposes it."],
         ),
     },
@@ -561,14 +585,20 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Wii Classic",
             [
-                " ZL -> ZL  L -> L             R -> R  ZR -> ZR",
-                "+---------------------------------------------+",
-                "| D-Pad -> D-pad       sticks -> sticks       |",
-                "| y -> Y  x -> X        b -> B  a -> A        |",
-                "| - -> -      + -> +    Home -> Hotkey+Star   |",
-                "+---------------------------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> Left Stick",
+                "Right Stick -> Right Stick",
+                "a -> A",
+                "b -> B",
+                "x -> X",
+                "y -> Y",
+                "L -> L",
+                "R -> R",
+                "ZL -> ZL",
+                "ZR -> ZR",
+                "- -> -",
+                "+ -> +",
             ],
-            ["Classic Controller labels map directly to Switch labels."],
         ),
     },
     {
@@ -576,12 +606,19 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Wii U GamePad / Pro Controller",
             [
-                " ZL -> ZL  L -> L             R -> R  ZR -> ZR",
-                "+---------------------------------------------+",
-                "| D-Pad -> D-pad       sticks -> sticks       |",
-                "| Y -> Y  X -> X        B -> B  A -> A        |",
-                "| - -> -      + -> +    Home -> Hotkey+Star   |",
-                "+---------------------------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> Left Stick",
+                "Right Stick -> Right Stick",
+                "A -> A",
+                "B -> B",
+                "X -> X",
+                "Y -> Y",
+                "L -> L",
+                "R -> R",
+                "ZL -> ZL",
+                "ZR -> ZR",
+                "- -> -",
+                "+ -> +",
             ],
             ["Star/Home alone opens Cemu quick menu where supported."],
         ),
@@ -591,15 +628,20 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Xbox",
             [
-                " L Trigger -> ZL              R Trigger -> ZR",
-                "+--------------------------------------------+",
-                "| D-Pad -> D-pad        sticks -> sticks     |",
-                "| X -> Y  Y -> X        A -> B  B -> A       |",
-                "| Back -> -             Start -> +           |",
-                "| Black -> L            White -> R           |",
-                "+--------------------------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> Left Stick",
+                "Right Stick -> Right Stick",
+                "A -> A",
+                "B -> B",
+                "X -> X",
+                "Y -> Y",
+                "Left Trigger -> ZL",
+                "Right Trigger -> ZR",
+                "White -> L",
+                "Black -> R",
+                "Back -> -",
+                "Start -> +",
             ],
-            ["Xbox letter positions follow the original controller layout."],
         ),
     },
     {
@@ -607,13 +649,17 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "PSP",
             [
-                " L -> L                         R -> R",
-                "+--------------------------------------------+",
-                "| D-Pad -> D-pad        analog -> left stick |",
-                "| [] -> Y  /\\ -> X       X -> B  O -> A      |",
-                "| Select -> -            Start -> +          |",
-                "| Home -> Hotkey + Star/Home                 |",
-                "+--------------------------------------------+",
+                "D-pad -> D-pad",
+                "Analog -> Left Stick",
+                "Cross -> A",
+                "Circle -> B",
+                "Square -> Y",
+                "Triangle -> X",
+                "L -> L",
+                "R -> R",
+                "Select -> -",
+                "Start -> +",
+                "Home -> Hotkey+Home",
             ],
             ["Hotkey + Star/Home maps PSP Home where supported."],
         ),
@@ -623,13 +669,20 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "DS / 3DS",
             [
-                " ZL -> ZL  L -> L             R -> R  ZR -> ZR",
-                "+---------------------------------------------+",
-                "| D-Pad -> D-pad       Circle Pad -> left     |",
-                "| C-stick -> right stick where supported      |",
-                "| Y -> Y  X -> X        B -> B  A -> A        |",
-                "| Select -> - Start -> + Home -> Hotkey+Star  |",
-                "+---------------------------------------------+",
+                "D-pad -> D-pad",
+                "Circle Pad -> Left Stick",
+                "C-Stick -> Right Stick",
+                "A -> A",
+                "B -> B",
+                "X -> X",
+                "Y -> Y",
+                "L -> L",
+                "R -> R",
+                "ZL -> ZL",
+                "ZR -> ZR",
+                "Select -> -",
+                "Start -> +",
+                "Home -> Hotkey+Home",
             ],
             ["Hotkey + Star/Home maps HOME where supported."],
         ),
@@ -639,14 +692,20 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Switch",
             [
-                " ZL -> ZL  L -> L             R -> R  ZR -> ZR",
-                "+---------------------------------------------+",
-                "| D-Pad -> D-pad       sticks -> sticks       |",
-                "| Y -> Y  X -> X        B -> B  A -> A        |",
-                "| - -> -      + -> +    Home -> Hotkey+Star   |",
-                "+---------------------------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> Left Stick",
+                "Right Stick -> Right Stick",
+                "A -> A",
+                "B -> B",
+                "X -> X",
+                "Y -> Y",
+                "L -> L",
+                "R -> R",
+                "ZL -> ZL",
+                "ZR -> ZR",
+                "- -> -",
+                "+ -> +",
             ],
-            ["Switch inputs map label-to-label."],
         ),
     },
     {
@@ -654,14 +713,19 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "Arcade",
             [
-                "+--------------------------------------+",
-                "| Stick -> D-pad / left stick          |",
-                "| Coin -> -             Start -> +     |",
-                "| B1 -> B  B2 -> A  B3 -> Y  B4 -> X   |",
-                "| B5 -> L  B6 -> R  B7 -> ZL B8 -> ZR  |",
-                "+--------------------------------------+",
+                "Stick -> D-pad",
+                "Left Stick -> Stick",
+                "Coin -> -",
+                "Start -> +",
+                "B1 -> A",
+                "B2 -> B",
+                "B3 -> X",
+                "B4 -> Y",
+                "B5 -> L",
+                "B6 -> R",
+                "B7 -> ZL",
+                "B8 -> ZR",
             ],
-            ["Eight-button layouts use shoulders and triggers after face buttons."],
         ),
     },
     {
@@ -669,16 +733,18 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "GZDoom",
             [
-                "+--------------------------------------+",
-                "| Move -> left stick   Look -> right   |",
-                "| Fire -> ZR           Alt fire -> ZL  |",
-                "| Use -> A             Jump -> B       |",
-                "| Prev/Next weapon -> L/R              |",
-                "| Map/Inventory -> Y/X                 |",
-                "+--------------------------------------+",
+                "Move -> Left Stick",
+                "Look -> Right Stick",
+                "Fire -> ZR",
+                "Alt Fire -> ZL",
+                "Use/Confirm -> A",
+                "Jump -> B",
+                "Prev Weapon -> L",
+                "Next Weapon -> R",
+                "Map -> Y",
+                "Inventory -> X",
             ],
             ["Shooter controls are mapped for modern twin-stick play."],
-            ["Exact game bindings can vary by WAD."],
         ),
     },
     {
@@ -686,13 +752,13 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "PICO-8",
             [
-                "+-----------------------------+",
-                "| D-Pad -> D-pad / left stick |",
-                "| O -> B        X -> A        |",
-                "| Pause/Menu -> +             |",
-                "+-----------------------------+",
+                "D-pad -> D-pad",
+                "Left Stick -> D-pad",
+                "O -> B",
+                "X -> A",
+                "Pause/Menu -> +",
             ],
-            ["PICO-8 two-button games use B/A as O/X."],
+            ["PICO-8 X/A stays the primary action."],
         ),
     },
 ]
@@ -2112,9 +2178,18 @@ def smoke_test(mode):
         for row in CONTROLLER_MAPS:
             wrapped = wrap_lines(row["detail"], metrics["right_width"])
             assert wrapped
+            assert len(wrapped) <= metrics["content_height"]
             assert all(len(line) <= metrics["right_width"] for line in wrapped)
+            assert "Button Map" in row["detail"]
+            assert "Hotkeys" in row["detail"]
             assert any("Star/Home" in line for line in row["detail"])
             assert any("Select + Start twice" in line for line in row["detail"])
+            assert not any("Original Controller" in line or "+---" in line for line in row["detail"])
+        n64 = next(row for row in CONTROLLER_MAPS if row["label"] == "Nintendo 64")
+        assert any("A -> A" in line for line in n64["detail"])
+        assert any("B -> B" in line for line in n64["detail"])
+        gzdoom = next(row for row in CONTROLLER_MAPS if row["label"] == "GZDoom")
+        assert any("Use/Confirm -> A" in line for line in gzdoom["detail"])
         assert metrics["right_x"] + metrics["right_width"] < 92
         print(json.dumps({"maps": [row["label"] for row in CONTROLLER_MAPS], "layout": metrics}, indent=2))
 
