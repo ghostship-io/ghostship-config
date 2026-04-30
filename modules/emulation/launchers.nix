@@ -17,6 +17,7 @@ let
       pkgs.gamemode
       pkgs.jq
       pkgs.mangohud
+      pkgs.coreutils
       pkgs.util-linux
       pkgs.xdg-utils
       packages.pico8Package
@@ -818,6 +819,30 @@ EOF
       esac
     }
 
+    prepare_xemu_disc() {
+      case "$rom_path" in
+        *.iso|*.ISO) ;;
+        *) return 0 ;;
+      esac
+
+      rom_size="$(stat -c %s "$rom_path")"
+      if [ "$rom_size" -lt 7000000000 ]; then
+        return 0
+      fi
+
+      cache_dir="${cfg.dataRoot}/xemu/xiso-cache"
+      mkdir -p "$cache_dir"
+      cache_key="$(printf '%s\0%s\0%s' "$rom_path" "$rom_size" "$(stat -c %Y "$rom_path")" | sha256sum | cut -d ' ' -f 1)"
+      cache_path="$cache_dir/$cache_key.xiso.iso"
+      if [ ! -s "$cache_path" ]; then
+        tmp_path="$cache_path.tmp.$$"
+        log_event "runtime" "converting Xbox redump ISO to cached xemu XISO: $cache_path"
+        dd if="$rom_path" of="$tmp_path" bs=1M skip=387 status=none
+        mv "$tmp_path" "$cache_path"
+      fi
+      rom_path="$cache_path"
+    }
+
     cmd=()
     run_cwd=""
     parse_gzdoom_launcher() {
@@ -915,6 +940,7 @@ PY
       dolphin) cmd=(dolphin-emu -b -e "$rom_path") ;;
       cemu) cmd=(cemu -f -g "$rom_path") ;;
       xemu)
+        prepare_xemu_disc
         cmd=(
           xemu
           -full-screen
@@ -1136,6 +1162,9 @@ EOF
         printf '%s\n' \
           '[general]' \
           'show_welcome = false' \
+          "" \
+          '[display.ui]' \
+          'show_menubar = false' \
           "" \
           '[sys.files]' \
           "bootrom_path = '$xemu_bios_dir/mcpx_1.0.bin'" \
