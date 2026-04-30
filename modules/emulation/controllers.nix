@@ -609,19 +609,24 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
+        TimeoutStartSec = "35s";
       };
       script = ''
+        btmgmt_set() {
+          timeout 5s btmgmt "$@" || true
+        }
+
         echo N > /sys/module/btusb/parameters/enable_autosuspend 2>/dev/null || true
         echo Y > /sys/module/mt7921e/parameters/disable_aspm 2>/dev/null || true
-        btmgmt power on || true
-        btmgmt bredr on || true
-        btmgmt le off || true
-        btmgmt advertising off || true
-        btmgmt connectable on || true
-        btmgmt bondable on || true
-        btmgmt fast-conn on || true
-        btmgmt ssp on || true
-        btmgmt sc on || true
+        btmgmt_set power on
+        btmgmt_set bredr on
+        btmgmt_set le off
+        btmgmt_set advertising off
+        btmgmt_set connectable on
+        btmgmt_set bondable on
+        btmgmt_set fast-conn on
+        btmgmt_set ssp on
+        btmgmt_set sc on
       '';
     };
 
