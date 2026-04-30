@@ -29,6 +29,19 @@ let
     else
       null;
 
+  gzdoomPackage =
+    if pkgs ? gzdoom then
+      pkgs.gzdoom.overrideAttrs (old: {
+        postPatch = (old.postPatch or "") + ''
+          substituteInPlace src/common/menu/menu.cpp \
+            --replace-fail "case KEY_JOY1:" "case GHOSTSHIP_KEY_JOY1:" \
+            --replace-fail "case KEY_JOY2:" "case KEY_JOY1:" \
+            --replace-fail "case GHOSTSHIP_KEY_JOY1:" "case KEY_JOY2:"
+        '';
+      })
+    else
+      null;
+
   retroarchPackage = pkgs.retroarch.withCores (
     cores: lib.filter (core: core != null) (map (name: cores.${name} or null) emu.coreNames)
   );
@@ -241,6 +254,7 @@ in
         artBookNext
         emptyJoypadAutoconfig
         esdePackage
+        gzdoomPackage
         joypadAutoconfig
         pico8Package
         retroarchPackage

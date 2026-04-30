@@ -236,11 +236,14 @@ changelog.
   controllers joining at the end. Trigger a one-shot controller reconcile from
   controller input add events and debounced BlueZ connected-property changes;
   serialize LED/order writes so the background loop and one-shot apply cannot
-  race, update the background state marker from one-shot applies, and batch LED
-  writes across controllers to avoid visible one-at-a-time reassignment. Do not
-  start-limit one-shot LED applies during fast reconnect cycles, but avoid
-  direct rapid `controller-leds apply` fan-out or force-writing already-correct
-  LEDs because hid-nintendo output reports can wedge the Bluetooth daemon. For Boomer
+  race, update the background state marker from one-shot applies, and rate-limit
+  changed LED writes to roughly one write every half second. Merge local
+  Switch-style HID input nodes into player reconciliation so USB controllers
+  and already-exposed Bluetooth controllers do not depend on BlueZ D-Bus state.
+  Do not start-limit one-shot LED applies during fast reconnect cycles, but
+  avoid direct rapid `controller-leds apply` fan-out or force-writing
+  already-correct LEDs because hid-nintendo output reports can wedge the
+  Bluetooth daemon. For Boomer
   emulation changes, deploy to Boomer before calling the work complete: push
   main, merge on `/root/nixos-config`, build, switch, and verify live services.
   Smoke
@@ -269,13 +272,14 @@ changelog.
   automation should treat Switch Pro style controllers as the primary path, keep
   LEDs on Switch-style player count patterns only, and avoid auto-assigning
   audio devices or generic peripherals as players. Boomer's Switch Pro
-  shortcuts should stay ROCKNIX-style:
-  Star/Home is quick menu, Square/Capture is the preferred hotkey modifier,
-  Select is fallback and Select+Start double-press is a normal emulator exit.
+  shortcuts should stay Switch-style:
+  Square/Capture is menu, Select/Minus is the hotkey modifier, Star/Home is a
+  controller-local turbo button when exposed, and Select+Start double-press is
+  a normal emulator exit.
   Controller Maps should stay text-only with a compact two-column button map
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
   Switch A/B, and launch GZDoom with the managed Boomer controls cfg so
-  Use/Confirm is A and Jump is B.
+  Use/Confirm is A, Jump/Back is B, and Square/Capture opens the menu.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

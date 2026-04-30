@@ -54,10 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   slide down when a middle player disconnects and the returning controller joins
   at the end. Trigger controller slot reconciliation from controller input add
   events and BlueZ connected-property changes with short delayed retries for
-  HID LED readiness, and serialize LED/order writes to reduce transient wrong
-  player LEDs. Batch Switch controller LED writes so reassignment no longer
-  walks each controller visibly one at a time, and keep one-shot LED applies
-  from being start-limited during fast reconnect cycles. Coalesce
+  HID LED readiness, merge local Switch-style HID nodes so USB controllers share
+  the same player assignment and LED path, and serialize LED/order writes to
+  reduce transient wrong player LEDs. Keep one-shot LED applies from being
+  start-limited during fast reconnect cycles. Coalesce
   BlueZ-triggered retries through the one-shot unit and avoid force-writing
   already-correct LED entries so hid-nintendo output reports are not flooded.
   Debounce BlueZ event bursts and update the background state marker from
@@ -67,12 +67,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plus system D-Bus conservative CPU scheduling weight boosts without enabling
   realtime scheduling or IRQ pinning. Disable Bluetooth `SNIFF` low-power link
   policy for connected Switch Pro controllers so multiplayer sessions favor
-  input latency over controller battery life. Add ROCKNIX-style Switch Pro hotkeys with
-  Star/Home as quick menu, Square/Capture as the preferred modifier, Select as
-  fallback, a raw controller hotkey monitor for normal emulator exits,
-  left-stick-as-D-pad overrides for D-pad-only RetroArch
-  systems, text-only two-column Controller Maps for every Boomer system family,
-  an N64 direct A/B remap, and managed GZDoom Switch-style controller bindings.
+  input latency over controller battery life. Make controller reconciliation
+  fail-soft when BlueZ D-Bus is slow, rate-limit Switch LED sysfs writes to a
+  half-second cadence, and modestly boost system D-Bus scheduling for BlueZ
+  control traffic. Add Switch-style hotkeys with Square/Capture as menu,
+  Select/Minus as the hotkey modifier, Star/Home documented as the controller
+  turbo button, a raw controller hotkey monitor for normal emulator exits,
+  left-stick-as-D-pad overrides for D-pad-only RetroArch systems, text-only
+  two-column Controller Maps for every Boomer system family, an N64 direct A/B
+  remap, and managed GZDoom Switch-style controller bindings plus a patched
+  GZDoom menu confirm/back mapping.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

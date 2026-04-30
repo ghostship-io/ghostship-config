@@ -130,7 +130,9 @@ human-facing launchers at the top level for cleaner ES-DE scraping.
 Every GZDoom launch also executes the managed
 `/srv/emulation/config/emulators/gzdoom/boomer-controls.cfg` file so joystick
 input is enabled and Switch-style controls are applied: A is Use/Confirm, B is
-Jump, ZR is Fire, ZL is Alt Fire, Y is Map, and X is Inventory.
+Jump, ZR is Fire, ZL is Alt Fire, Y is Map, X is Inventory, and Square/Capture
+opens the menu. The managed GZDoom package also patches joystick menu handling
+so physical Switch A advances menus and physical Switch B backs out.
 
 ## BIOS, Firmware, And Keys
 
@@ -373,8 +375,8 @@ profiles.
 
 ## Controllers And Bluetooth
 
-The primary controller path is four Nintendo Switch Pro-style Bluetooth
-controllers exposed as `057e:2009` / `Pro Controller`. The host enables BlueZ
+The primary controller path is four Nintendo Switch Pro-style controllers
+exposed as `057e:2009` over Bluetooth or USB. The host enables BlueZ
 experimental behavior, `hid-nintendo`, Switch Pro/8BitDo Switch-mode udev
 access, and disables USB autosuspend for the known controller identities.
 Boomer's live radio stack is the MediaTek MT7921/MT7961 combo device
@@ -397,22 +399,25 @@ state is stored at:
 /srv/emulation/config/controllers/player-order.json
 ```
 
-`controller-leds` watches only Switch-style controller identities and applies
-Switch-style player LED counts through sysfs according to the saved player
-slots. It writes only changed LED files during the background loop, because
-each sysfs LED write sends a Nintendo output subcommand over Bluetooth.
-One-shot applies still force a single pattern refresh after explicit assignment
-or pairing. If a controller identity does not expose LED sysfs entries, logical
-assignment still remains stable. Connected controllers are compacted into the
-lowest open player slots while preserving their relative order, so if P2 turns
-off P3/P4 slide down and the returning controller lands at the end.
+`controller-leds` watches only Switch-style controller identities from BlueZ and
+local HID input nodes, then applies Switch-style player LED counts through sysfs
+according to the saved player slots. It writes only changed LED files at a
+bounded half-second cadence, because each sysfs LED write sends a Nintendo
+output subcommand over Bluetooth or USB HID. One-shot applies still force a
+single pattern refresh after explicit assignment or pairing. If BlueZ D-Bus is
+slow or wedged, local HID devices still keep connected USB and already-exposed
+Bluetooth controllers in player reconciliation. If a controller identity does
+not expose LED sysfs entries, logical assignment still remains stable.
+Connected controllers are compacted into the lowest open player slots while
+preserving their relative order, so if P2 turns off P3/P4 slide down and the
+returning controller lands at the end.
 Controller add events and BlueZ `Connected` property changes trigger a debounced
 one-shot reconcile after the connect/disconnect burst settles, and the
 background reconcile uses a short D-Bus polling cadence with a lock so one-shot
 and loop updates cannot race against each other. One-shot applies update the
 background state marker, and LED writes are limited to entries that actually
-need to change and batched across all controllers so reassignment does not
-visibly step through players one at a time.
+need to change and serialized at a half-second cadence so hid-nintendo output
+reports are not flooded.
 The one-shot apply is not start-limited and briefly waits for a reconnecting
 controller's LED sysfs path before relying on later retries.
 `controller-autoconnect` polls at a low cadence with short bounded connect
@@ -420,11 +425,11 @@ attempts, uses BlueZ D-Bus state for discovery, reconnects paired Switch Pro
 controllers serially, re-checks live connected state before each attempt, and
 leaves headphones and other accessories alone.
 
-Controller shortcuts follow a ROCKNIX-style Switch Pro layout. Star/Home opens
-the emulator quick menu by default. Square/Capture is the preferred hotkey
-modifier, with Select as the fallback if Capture is not exposed. Select held
+Controller shortcuts follow a Switch-style layout. Square/Capture is the menu
+button, Select/Minus is the hotkey modifier, and Star/Home is treated as a
+controller-local turbo button when the firmware exposes it at all. Select held
 plus a double Start press asks the active emulator process group to exit
-normally. RetroArch maps Square/Capture hotkeys to save/load, reset, FPS,
+normally. RetroArch maps Select/Minus hotkeys to save/load, reset, FPS,
 screenshot, and fast-forward actions, and D-pad-only RetroArch systems also
 accept left-stick D-pad input. The N64 RetroArch override remaps Mupen64Plus so
 physical Switch A sends N64 A and physical Switch B sends N64 B.

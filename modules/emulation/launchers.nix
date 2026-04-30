@@ -32,8 +32,8 @@ let
       "lime3ds"
       "pcsx2"
       "ppsspp-sdl"
-      "gzdoom"
     ]
+    ++ lib.optional (packages.gzdoomPackage != null) packages.gzdoomPackage
     ++ lib.optional (packages.supermodelPackage != null) packages.supermodelPackage
   );
 
@@ -98,7 +98,7 @@ let
 
     def supported_event(event_path):
         name = input_name(event_path).lower()
-        return name == "pro controller"
+        return "pro controller" in name and "imu" not in name
 
     def open_events():
         fds = {}
@@ -143,7 +143,6 @@ let
 
         pressed = {path: set() for path in fds}
         last_select_start = {path: 0.0 for path in fds}
-        last_capture_start = {path: 0.0 for path in fds}
         log(args.log, f"watching {len(fds)} Switch Pro controller(s) for {args.system}/{args.emulator}")
 
         while alive(args.pid):
@@ -170,7 +169,9 @@ let
                         pressed[path].discard(code)
                         continue
                     if code == BTN_MODE:
-                        log(args.log, "Star/Home pressed; emulator-native quick menu binding should handle this")
+                        log(args.log, "Star/Home pressed; treated as controller-local turbo when exposed")
+                    if code == BTN_CAPTURE:
+                        log(args.log, "Square/Capture pressed; emulator-native menu binding should handle this")
                     if code != BTN_START:
                         continue
                     now = time.monotonic()
@@ -180,13 +181,6 @@ let
                             signal_group(args.pid, signal.SIGTERM)
                             return 0
                         last_select_start[path] = now
-                        continue
-                    if BTN_CAPTURE in pressed[path]:
-                        if now - last_capture_start[path] <= DOUBLE_PRESS_SECONDS:
-                            log(args.log, "Capture + Start double-press graceful quit")
-                            signal_group(args.pid, signal.SIGTERM)
-                            return 0
-                        last_capture_start[path] = now
                         continue
         return 0
 
@@ -237,7 +231,8 @@ let
 
     fds = {}
     for path in sorted(glob.glob("/dev/input/event*")):
-        if name(path).lower() == "pro controller":
+        lowered = name(path).lower()
+        if "pro controller" in lowered and "imu" not in lowered:
             try:
                 fds[path] = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
                 print(f"Watching {path} ({name(path)})")
@@ -1045,7 +1040,7 @@ PY
     Buttons/2 = \`Button 2\`
     Buttons/- = \`Button 8\`
     Buttons/+ = \`Button 9\`
-    Buttons/Home = \`Button 12\`
+    Buttons/Home = \`Button 13\`
     D-Pad/Up = \`Hat 0 N\`
     D-Pad/Down = \`Hat 0 S\`
     D-Pad/Left = \`Hat 0 W\`
@@ -1054,9 +1049,9 @@ PY
     IR/Down = \`Axis 3+\`
     IR/Left = \`Axis 2-\`
     IR/Right = \`Axis 2+\`
-    Shake/X = \`Button 13\`
-    Shake/Y = \`Button 13\`
-    Shake/Z = \`Button 13\`
+    Shake/X = \`Button 10\`
+    Shake/Y = \`Button 10\`
+    Shake/Z = \`Button 10\`
     Extension = Nunchuk
     Nunchuk/Buttons/C = \`Button 4\`
     Nunchuk/Buttons/Z = \`Button 5\`
@@ -1089,12 +1084,23 @@ PY
     bind pad_b +jump
     bind pad_x invuse
     bind pad_y togglemap
+    bind joy2 +use
+    bind joy1 +jump
+    bind joy4 invuse
+    bind joy3 togglemap
     bind rtrigger +attack
     bind ltrigger +altattack
+    bind joy8 +attack
+    bind joy7 +altattack
     bind lshoulder weapprev
     bind rshoulder weapnext
+    bind joy5 weapprev
+    bind joy6 weapnext
     bind pad_start menu_main
     bind pad_back pause
+    bind joy14 menu_main
+    bind joy10 menu_main
+    bind joy9 pause
     bind lthumb crouch
     bind rthumb centerview
     bind dpadleft invprev
@@ -1105,12 +1111,21 @@ PY
     mapbind pad_y am_togglefollow
     mapbind pad_a am_setmark
     mapbind pad_b am_clearmarks
+    mapbind joy3 am_togglefollow
+    mapbind joy2 am_setmark
+    mapbind joy1 am_clearmarks
     mapbind dpadright +am_panright
     mapbind dpadleft +am_panleft
     mapbind dpadup +am_panup
     mapbind dpaddown +am_pandown
+    mapbind pov1right +am_panright
+    mapbind pov1left +am_panleft
+    mapbind pov1up +am_panup
+    mapbind pov1down +am_pandown
     mapbind lshoulder +am_zoomout
     mapbind rshoulder +am_zoomin
+    mapbind joy5 +am_zoomout
+    mapbind joy6 +am_zoomin
     EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         chmod 0644 "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
@@ -1149,14 +1164,14 @@ PY
         "SDL_GAMECONTROLLER_USE_BUTTON_LABELS": "1"
       },
       "hotkey_policy": {
-        "quick_menu": "Star/Home",
-        "preferred_modifier": "Square/Capture",
-        "fallback_modifier": "Select/-",
+        "menu": "Square/Capture",
+        "modifier": "Select/-",
+        "turbo": "Star/Home when exposed by the controller firmware",
         "normal_exit": "Select/- held plus Start/+ double-press"
       },
       "managed_defaults": {
-        "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels, Star/Home to quick menu, and Square/Capture as the preferred hotkey modifier",
-        "dolphin": "GameCube and Wii profiles map physical A/B/X/Y to matching labels, use SDL slots 0-3, and reserve Wii Home for Star/Home",
+        "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels, Square/Capture to menu, and Select/- as the hotkey modifier",
+        "dolphin": "GameCube and Wii profiles map physical A/B/X/Y to matching labels and use SDL slots 0-3",
         "ppsspp": "inherits SDL Switch label hints from run-emulator",
         "pcsx2": "inherits SDL Switch label hints from run-emulator",
         "azahar": "inherits SDL Switch label hints from run-emulator",
@@ -1164,7 +1179,7 @@ PY
         "xemu": "inherits SDL Switch label hints from run-emulator",
         "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support",
         "supermodel": "inherits SDL Switch label hints from run-emulator",
-        "gzdoom": "run-emulator executes boomer-controls.cfg so Use/Confirm is physical A and Jump is physical B"
+        "gzdoom": "run-emulator executes boomer-controls.cfg and uses a patched GZDoom menu so Use/Confirm is physical A and Jump/Back is physical B"
       },
       "known_gaps": {
         "motion": "hid_nintendo exposes a separate IMU device; emulator support varies",

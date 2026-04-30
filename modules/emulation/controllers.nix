@@ -17,6 +17,7 @@ let
     log_file="${cfg.dataRoot}/logs/controller-leds.log"
     last_led_status=""
     mode="''${1:-loop}"
+    led_write_delay="0.5"
     mkdir -p "$state_dir" "$(dirname "$log_file")"
     touch "$log_file"
     chown ${cfg.user}:${cfg.group} "$state_dir" "$log_file" || true
@@ -43,7 +44,7 @@ let
     }
 
     bluez_device_rows() {
-      busctl --system --json=short call org.bluez / org.freedesktop.DBus.ObjectManager GetManagedObjects 2>/dev/null \
+      timeout 3s busctl --system --json=short call org.bluez / org.freedesktop.DBus.ObjectManager GetManagedObjects 2>/dev/null \
         | jq -r '
             .data[0]
             | to_entries[]
@@ -63,6 +64,10 @@ let
           '
     }
 
+    switch_identifier() {
+      printf '%s\n' "''${1:-}" | grep -Eiq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$'
+    }
+
     supported_player_device() {
       mac="$1"
       name="''${2:-}"
@@ -72,7 +77,25 @@ let
       if printf '%s\n' "$text" | grep -Eiq 'audio|headphone|headset|speaker|keyboard|mouse|phone|television| tv|shield'; then
         return 1
       fi
-      printf '%s\n' "$text" | grep -Eiq '^pro controller$|usb:v057ep2009|name: pro controller|alias: pro controller|nintendo switch pro|joy-con|joycon'
+      printf '%s\n' "$text" | grep -Eiq '(^|[^a-z])pro controller([^a-z]|$)|usb:v057ep2009|name: pro controller|alias: pro controller|nintendo switch pro|joy-con|joycon'
+    }
+
+    local_switch_rows() {
+      for event in /sys/class/input/event*; do
+        [ -r "$event/device/name" ] || continue
+        name="$(cat "$event/device/name" 2>/dev/null || true)"
+        case "$name" in
+          ""|*"IMU"*|*"imu"*) continue ;;
+        esac
+        uniq="$(cat "$event/device/uniq" 2>/dev/null || true)"
+        switch_identifier "$uniq" || continue
+        modalias="$(cat "$event/device/modalias" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+        supported_player_device "$uniq" "$name" "$modalias" "input-gaming" || continue
+        printf '%s\t%s\ttrue\tfalse\tfalse\tfalse\t%s\tinput-gaming\n' \
+          "$(printf '%s' "$uniq" | tr '[:lower:]' '[:upper:]')" \
+          "$(printf '%s' "$name" | tr '\t\r\n' '   ')" \
+          "$modalias"
+      done | sort -u
     }
 
     prune_non_player_devices() {
@@ -84,7 +107,7 @@ let
           (.mac == "KEYBOARD") or
           (
             ((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")) and
-            ((.name // "") | test("(?i)(^pro controller$|nintendo switch pro|joy-con|joycon|switch pro)"))
+            ((.name // "") | test("(?i)(pro controller|nintendo switch pro|joy-con|joycon|switch pro)"))
           )
         ))
       ' "$order_file" >"$tmp"
@@ -138,17 +161,21 @@ let
     record_connected_devices() {
       ensure_order_file
       prune_non_player_devices
+      connected_tmp="$(mktemp)"
+      : >"$connected_tmp"
+      if ! bluez_device_rows >>"$connected_tmp"; then
+        echo "$(date -u +%FT%TZ) skipped controller order reconcile because BlueZ device query timed out" >>"$log_file"
+      fi
+      local_switch_rows >>"$connected_tmp" || true
+
       tmp="$(mktemp)"
       jq '.players |= map(if ((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")) then . + {connected:false} else . end)' "$order_file" >"$tmp"
       mv "$tmp" "$order_file"
 
-      connected_tmp="$(mktemp)"
-      bluez_device_rows >"$connected_tmp" || true
-
       while IFS=$'\t' read -r mac name connected _paired _trusted _wake modalias icon; do
         [ -n "''${mac:-}" ] || continue
         [ "''${connected:-false}" = true ] || continue
-        if ! printf '%s\n' "$mac" | grep -Eiq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$'; then
+        if ! switch_identifier "$mac"; then
           continue
         fi
         name="''${name:-unknown-controller}"
@@ -257,11 +284,12 @@ let
 
       while IFS=$'\t' read -r value path; do
         [ -n "''${path:-}" ] || continue
-        (
-          echo "$value" >"$path" 2>/dev/null || true
-        ) &
+        [ -e "$path" ] || continue
+        if ! timeout -k 1s 0.7s sh -c 'printf "%s\n" "$1" > "$2"' sh "$value" "$path" 2>/dev/null; then
+          echo "$(date -u +%FT%TZ) skipped slow controller LED write: $path" >>"$log_file"
+        fi
+        sleep "$led_write_delay"
       done <"$pending_leds"
-      wait || true
       rm -f "$pending_leds"
 
       if [ "$found" = 0 ]; then
@@ -283,11 +311,12 @@ let
         return 0
       fi
       sanitize_known_bad_order
-      record_connected_devices || true
-      apply_leds true || true
-      state="$(desired_led_state || true)"
-      printf '%s\n' "$state" >"$last_state_file"
-      chown ${cfg.user}:${cfg.group} "$last_state_file" || true
+      if record_connected_devices; then
+        apply_leds true || true
+        state="$(desired_led_state || true)"
+        printf '%s\n' "$state" >"$last_state_file"
+        chown ${cfg.user}:${cfg.group} "$last_state_file" || true
+      fi
       flock -u 9
     }
 
@@ -307,13 +336,14 @@ let
     while true; do
       if flock -w 10 9; then
         sanitize_known_bad_order
-        record_connected_devices || true
-        state="$(desired_led_state || true)"
-        previous="$(cat "$last_state_file" 2>/dev/null || true)"
-        if [ "$state" != "$previous" ]; then
-          apply_leds false || true
-          printf '%s\n' "$state" >"$last_state_file"
-          chown ${cfg.user}:${cfg.group} "$last_state_file" || true
+        if record_connected_devices; then
+          state="$(desired_led_state || true)"
+          previous="$(cat "$last_state_file" 2>/dev/null || true)"
+          if [ "$state" != "$previous" ]; then
+            apply_leds false || true
+            printf '%s\n' "$state" >"$last_state_file"
+            chown ${cfg.user}:${cfg.group} "$last_state_file" || true
+          fi
         fi
         flock -u 9
       else
@@ -335,7 +365,7 @@ let
     }
 
     switch_pro_macs() {
-      busctl --system --json=short call org.bluez / org.freedesktop.DBus.ObjectManager GetManagedObjects 2>/dev/null \
+      timeout 3s busctl --system --json=short call org.bluez / org.freedesktop.DBus.ObjectManager GetManagedObjects 2>/dev/null \
         | jq -r '
             .data[0]
             | to_entries[]
@@ -364,6 +394,13 @@ let
       fi
     fi
 
+    macs_tmp="$(mktemp)"
+    if ! switch_pro_macs >"$macs_tmp"; then
+      log "skipped controller link-policy tuning because BlueZ device query timed out"
+      rm -f "$macs_tmp"
+      exit 0
+    fi
+
     while IFS= read -r mac; do
       [ -n "''${mac:-}" ] || continue
       current="$(hcitool lp "$mac" 2>/dev/null || true)"
@@ -374,7 +411,8 @@ let
           log "failed to disable SNIFF link policy for $mac"
         fi
       fi
-    done < <(switch_pro_macs)
+    done <"$macs_tmp"
+    rm -f "$macs_tmp"
   '';
 
   controllerAutoconnect = pkgs.writeShellScriptBin "controller-autoconnect" ''
@@ -391,7 +429,7 @@ let
     }
 
     bluez_switch_pro_rows() {
-      busctl --system --json=short call org.bluez / org.freedesktop.DBus.ObjectManager GetManagedObjects 2>/dev/null \
+      timeout 3s busctl --system --json=short call org.bluez / org.freedesktop.DBus.ObjectManager GetManagedObjects 2>/dev/null \
         | jq -r '
             .data[0]
             | to_entries[]
@@ -418,7 +456,14 @@ let
       manage_pairing="''${1:-false}"
       attempt_limit="''${2:-0}"
       did_connect=0
-      mapfile -t rows < <(bluez_switch_pro_rows)
+      rows_tmp="$(mktemp)"
+      if ! bluez_switch_pro_rows >"$rows_tmp"; then
+        log "skipped autoconnect because BlueZ device query timed out"
+        rm -f "$rows_tmp"
+        return 0
+      fi
+      mapfile -t rows <"$rows_tmp"
+      rm -f "$rows_tmp"
       total="''${#rows[@]}"
       [ "$total" -gt 0 ] || return 0
 
@@ -554,6 +599,9 @@ let
         [ -r "$event/device/name" ] || continue
         name="$(cat "$event/device/name" 2>/dev/null || true)"
         case "$name" in
+          *"IMU"*|*"imu"*)
+            continue
+            ;;
           *"Pro Controller"*)
             uniq="$(cat "$event/device/uniq" 2>/dev/null | tr '[:lower:]' '[:upper:]' || true)"
             input_path="$(readlink -f "$event/device" 2>/dev/null || true)"
@@ -675,6 +723,7 @@ in
       KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0660", GROUP="input", TAG+="uaccess"
       ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Pro Controller", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-bluetooth-low-latency.service"
       ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Pro Controller", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-leds-apply.service"
+      ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Nintendo.Co.Ltd. Pro Controller", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-leds-apply.service"
     '';
 
     systemd.services.wifi-5ghz-only = {
@@ -789,6 +838,7 @@ in
         ExecStart = "${lib.getExe controllerLeds}";
         Restart = "always";
         RestartSec = "5s";
+        TimeoutStopSec = "5s";
       };
     };
 
@@ -803,6 +853,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${lib.getExe controllerLeds} apply";
+        TimeoutStartSec = "30s";
       };
     };
 
@@ -817,6 +868,7 @@ in
         ExecStart = "${lib.getExe controllerAutoconnect}";
         Restart = "always";
         RestartSec = "5s";
+        TimeoutStopSec = "5s";
       };
     };
 
@@ -844,7 +896,8 @@ in
     systemd.services.bluetooth.serviceConfig.CPUWeight = 500;
     systemd.services.bluetooth.restartIfChanged = lib.mkForce true;
 
-    systemd.services.dbus.serviceConfig.CPUWeight = 200;
+    systemd.services.dbus.serviceConfig.CPUWeight = 300;
+    systemd.services.dbus.serviceConfig.Nice = -2;
 
     systemd.services.controller-bluetooth-tuning = {
       description = "Apply Bluetooth controller tuning for Boomer Switch Pro controllers";
@@ -912,6 +965,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${lib.getExe controllerBluetoothLowLatency}";
+        TimeoutStartSec = "8s";
       };
       bindsTo = [ "bluetooth.service" ];
       partOf = [ "bluetooth.service" ];

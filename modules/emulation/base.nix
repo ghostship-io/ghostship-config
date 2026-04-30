@@ -335,7 +335,6 @@ in
           "azahar"
           "cemu"
           "dolphin-emu"
-          "gzdoom"
           "joycond"
           "joycond-cemuhook"
           "lime3ds"
@@ -344,6 +343,7 @@ in
           "protontricks"
           "xemu"
         ]
+        ++ lib.optional (packages.gzdoomPackage != null) packages.gzdoomPackage
         ++ lib.optional (packages.supermodelPackage != null) packages.supermodelPackage;
 
         systemd.tmpfiles.rules = [
