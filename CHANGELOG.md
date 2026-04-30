@@ -51,7 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   HID LED readiness, and serialize LED/order writes to reduce transient wrong
   player LEDs. Batch Switch controller LED writes so reassignment no longer
   walks each controller visibly one at a time, and keep one-shot LED applies
-  from being start-limited during fast reconnect cycles.
+  from being start-limited during fast reconnect cycles. Run BlueZ-triggered
+  reconciles directly with subsecond retries and force-write the full LED
+  pattern to reduce transient firmware/default LED states.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

@@ -231,7 +231,9 @@ changelog.
   retry shortly for HID LED readiness; serialize LED/order writes so the
   background loop and one-shot apply cannot race, and batch LED writes across
   controllers to avoid visible one-at-a-time reassignment. Do not start-limit
-  one-shot LED applies during fast reconnect cycles. Smoke
+  one-shot LED applies during fast reconnect cycles. For Boomer emulation
+  changes, deploy to Boomer before calling the work complete: push main, merge
+  on `/root/nixos-config`, build, switch, and verify live services. Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
   launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where

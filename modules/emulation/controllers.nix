@@ -228,14 +228,11 @@ let
         root_attempts=1
         root_delay=0
         if [ "$force" = true ]; then
-          root_attempts=20
-          root_delay=0.1
+          root_attempts=12
+          root_delay=0.05
         fi
         device_root="$(find_device_root "$mac" "$root_attempts" "$root_delay" || true)"
         [ -n "''${device_root:-}" ] || continue
-        trigger_led=""
-        trigger_value=""
-        controller_changed=0
         for led in "$device_root"/leds/*:green:player-[1-4]; do
           [ -e "$led/brightness" ] || continue
           led_name="$(basename "$led")"
@@ -249,22 +246,13 @@ let
                 desired=0
               fi
               current="$(cat "$led/brightness" 2>/dev/null || echo unknown)"
-              if [ -z "$trigger_led" ]; then
-                trigger_led="$led/brightness"
-                trigger_value="$desired"
-              fi
-              if [ "$current" != "$desired" ]; then
+              if [ "$force" = true ] || [ "$current" != "$desired" ]; then
                 printf '%s\t%s\n' "$desired" "$led/brightness" >>"$pending_leds"
                 changed=1
-                controller_changed=1
               fi
               ;;
           esac
         done
-        if [ "$force" = true ] && [ "$controller_changed" = 0 ] && [ -n "$trigger_led" ]; then
-          printf '%s\t%s\n' "$trigger_value" "$trigger_led" >>"$pending_leds"
-          changed=1
-        fi
       done < <(desired_led_rows)
 
       while IFS=$'\t' read -r value path; do
@@ -442,13 +430,14 @@ let
     trigger_reconcile() {
       reason="$1"
       echo "$(date -u +%FT%TZ) bluez connected change: $reason" >>"$log_file"
-      systemctl start --no-block controller-leds-apply.service >/dev/null 2>&1 || true
-      (
-        sleep 1
-        systemctl start --no-block controller-leds-apply.service >/dev/null 2>&1 || true
-        sleep 2
-        systemctl start --no-block controller-leds-apply.service >/dev/null 2>&1 || true
-      ) &
+      for delay in 0 0.25 0.75 1.5 3; do
+        (
+          if [ "$delay" != 0 ]; then
+            sleep "$delay"
+          fi
+          ${lib.getExe controllerLeds} apply >/dev/null 2>&1 || true
+        ) &
+      done
     }
 
     in_device=0
