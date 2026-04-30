@@ -277,13 +277,15 @@ changelog.
   LEDs on Switch-style player count patterns only, and avoid auto-assigning
   audio devices or generic peripherals as players. Boomer's Switch Pro
   shortcuts should stay Switch-style:
-  Square/Capture is menu, Select/Minus is the hotkey modifier, Star/Home is a
+  Square/Capture is menu or home only where the emulator supports a stable
+  native binding, Select/Minus is the hotkey modifier, Star/Home is a
   controller-local turbo button when exposed, and Select+Start double-press is
-  a normal emulator exit.
+  a normal emulator exit with a 5-second force-kill fallback.
   Controller Maps should stay text-only with a compact two-column button map
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
   Switch A/B, and launch GZDoom with the managed Boomer controls cfg so
-  Use/Confirm is A, Jump/Back is B, and Square/Capture opens the menu.
+  left stick/D-pad move, right stick looks, Use/Confirm is A, Jump/Back is B,
+  Y toggles map, `+` opens menu, and Square/Capture is unbound.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

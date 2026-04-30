@@ -129,10 +129,12 @@ relative asset paths work. Keep assets under the Doom ROM folder and put the
 human-facing launchers at the top level for cleaner ES-DE scraping.
 Every GZDoom launch also executes the managed
 `/srv/emulation/config/emulators/gzdoom/boomer-controls.cfg` file so joystick
-input is enabled and Switch-style controls are applied: A is Use/Confirm, B is
-Jump, ZR is Fire, ZL is Alt Fire, Y is Map, X is Inventory, and Square/Capture
-opens the menu. The managed GZDoom package also patches joystick menu handling
-so physical Switch A advances menus and physical Switch B backs out.
+input is enabled and Switch-style controls are applied: left stick and D-pad
+move, right stick looks left/right and up/down, A is Use/Confirm, B is
+Jump/Back, ZR is Fire, ZL is Alt Fire, Y toggles the map, X is
+Inventory/Action, and `+` opens the menu. Square/Capture is intentionally
+unbound for GZDoom. The managed GZDoom package also patches joystick menu
+handling so physical Switch A advances menus and physical Switch B backs out.
 
 ## BIOS, Firmware, And Keys
 
@@ -432,14 +434,17 @@ attempts, uses BlueZ D-Bus state for discovery, reconnects paired Switch Pro
 controllers serially, re-checks live connected state before each attempt, and
 leaves headphones and other accessories alone.
 
-Controller shortcuts follow a Switch-style layout. Square/Capture is the menu
-button, Select/Minus is the hotkey modifier, and Star/Home is treated as a
-controller-local turbo button when the firmware exposes it at all. Select held
-plus a double Start press asks the active emulator process group to exit
-normally. RetroArch maps Select/Minus hotkeys to save/load, reset, FPS,
-screenshot, and fast-forward actions, and D-pad-only RetroArch systems also
-accept left-stick D-pad input. The N64 RetroArch override remaps Mupen64Plus so
-physical Switch A sends N64 A and physical Switch B sends N64 B.
+Controller shortcuts follow a Switch-style layout. Square/Capture opens an
+emulator quick menu where a stable native binding exists, opens the system home
+screen where supported, and otherwise does nothing. Select/Minus is the hotkey
+modifier, and Star/Home is treated as a controller-local turbo button when the
+firmware exposes it at all. Select held plus a double Start press asks the
+active emulator process group to exit normally, then force-kills that process
+group after 5 seconds if it does not close. RetroArch maps Select/Minus hotkeys
+to save/load, reset, FPS, screenshot, and fast-forward actions, and D-pad-only
+RetroArch systems also accept left-stick D-pad input. The N64 RetroArch
+override remaps Mupen64Plus so physical Switch A sends N64 A and physical
+Switch B sends N64 B.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices

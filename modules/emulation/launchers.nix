@@ -62,7 +62,9 @@ let
   controllerHotkeysPy = pkgs.writeText "controller-hotkeys.py" ''
     #!/usr/bin/env python3
     import argparse
+    import subprocess
     import glob
+    import json
     import os
     import select
     import signal
@@ -78,13 +80,27 @@ let
     BTN_START = 315
     BTN_MODE = 316
     DOUBLE_PRESS_SECONDS = 0.9
+    FORCE_KILL_SECONDS = 5.0
 
-    def log(path, message):
+    def log(path, message, event="controller-hotkeys", system="", emulator=""):
         if not path:
             return
         try:
             with open(path, "a", encoding="utf-8") as handle:
-                handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} controller-hotkeys {message}\n")
+                handle.write(
+                    json.dumps(
+                        {
+                            "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            "event": event,
+                            "system": system,
+                            "emulator": emulator,
+                            "rom": "",
+                            "message": message,
+                        },
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                )
         except OSError:
             pass
 
@@ -111,9 +127,10 @@ let
                 continue
         return fds
 
-    def signal_group(pid, sig):
+    def signal_group(pid, sig, pgid=None):
         try:
-            pgid = os.getpgid(pid)
+            if pgid is None:
+                pgid = os.getpgid(pid)
             os.killpg(pgid, sig)
             return True
         except ProcessLookupError:
@@ -128,22 +145,95 @@ let
         except OSError:
             return False
 
+    def group_alive(pgid):
+        try:
+            os.killpg(pgid, 0)
+            return True
+        except OSError:
+            return False
+
+    def terminate_group(pid, log_path, timeout=FORCE_KILL_SECONDS, system="", emulator=""):
+        try:
+            pgid = os.getpgid(pid)
+        except ProcessLookupError:
+            log(log_path, "Select + Start exit skipped; emulator process is already gone", "exit-request", system, emulator)
+            return ["gone"]
+        except PermissionError:
+            log(log_path, "Select + Start exit failed; could not inspect emulator process group", "exit-request", system, emulator)
+            return ["permission-denied"]
+
+        actions = []
+        if signal_group(pid, signal.SIGTERM, pgid=pgid):
+            actions.append("sigterm")
+            log(log_path, "Select + Start double-press sent SIGTERM to emulator process group", "exit-request", system, emulator)
+        else:
+            actions.append("sigterm-failed")
+            log(log_path, "Select + Start SIGTERM failed; emulator process group is already gone or inaccessible", "exit-request", system, emulator)
+            return actions
+
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if not group_alive(pgid):
+                log(log_path, "emulator process group exited after SIGTERM", "exit-request", system, emulator)
+                return actions
+            time.sleep(0.1)
+
+        if signal_group(pid, signal.SIGKILL, pgid=pgid):
+            actions.append("sigkill")
+            log(log_path, "emulator still alive after 5 seconds; sent SIGKILL to emulator process group", "force-kill", system, emulator)
+        else:
+            actions.append("sigkill-skipped")
+            log(log_path, "emulator exited before SIGKILL escalation", "exit-request", system, emulator)
+        return actions
+
+    def self_test():
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"],
+            preexec_fn=os.setsid,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            actions = terminate_group(proc.pid, "", timeout=0.2)
+            if actions[:2] != ["sigterm", "sigkill"]:
+                raise AssertionError(f"unexpected termination actions: {actions}")
+            for _ in range(30):
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.1)
+            if proc.poll() is None:
+                raise AssertionError("self-test child survived SIGKILL")
+        finally:
+            if proc.poll() is None:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except OSError:
+                    pass
+                proc.wait(timeout=3)
+        print("controller-hotkeys self-test passed")
+
     def main():
         parser = argparse.ArgumentParser()
-        parser.add_argument("--pid", type=int, required=True)
+        parser.add_argument("--pid", type=int)
         parser.add_argument("--log", default="")
         parser.add_argument("--system", default="")
         parser.add_argument("--emulator", default="")
+        parser.add_argument("--self-test", action="store_true")
         args = parser.parse_args()
+        if args.self_test:
+            self_test()
+            return 0
+        if args.pid is None:
+            parser.error("--pid is required unless --self-test is used")
 
         fds = open_events()
         if not fds:
-            log(args.log, "no Switch Pro controller input devices found")
+            log(args.log, "no Switch Pro controller input devices found", system=args.system, emulator=args.emulator)
             return 0
 
         pressed = {path: set() for path in fds}
         last_select_start = {path: 0.0 for path in fds}
-        log(args.log, f"watching {len(fds)} Switch Pro controller(s) for {args.system}/{args.emulator}")
+        log(args.log, f"watching {len(fds)} Switch Pro controller(s) for {args.system}/{args.emulator}", system=args.system, emulator=args.emulator)
 
         while alive(args.pid):
             try:
@@ -169,16 +259,15 @@ let
                         pressed[path].discard(code)
                         continue
                     if code == BTN_MODE:
-                        log(args.log, "Star/Home pressed; treated as controller-local turbo when exposed")
+                        log(args.log, "Star/Home pressed; treated as controller-local turbo when exposed", system=args.system, emulator=args.emulator)
                     if code == BTN_CAPTURE:
-                        log(args.log, "Square/Capture pressed; emulator-native menu binding should handle this")
+                        log(args.log, "Square/Capture pressed; emulator-native menu binding should handle this", system=args.system, emulator=args.emulator)
                     if code != BTN_START:
                         continue
                     now = time.monotonic()
                     if BTN_SELECT in pressed[path]:
                         if now - last_select_start[path] <= DOUBLE_PRESS_SECONDS:
-                            log(args.log, "Select + Start double-press graceful quit")
-                            signal_group(args.pid, signal.SIGTERM)
+                            terminate_group(args.pid, args.log, system=args.system, emulator=args.emulator)
                             return 0
                         last_select_start[path] = now
                         continue
@@ -193,6 +282,11 @@ let
     exec ${pkgs.python3}/bin/python3 ${controllerHotkeysPy} "$@"
   '';
 
+  controllerHotkeysSmokeTest = pkgs.writeShellScriptBin "controller-hotkeys-smoke-test" ''
+    set -euo pipefail
+    exec ${lib.getExe controllerHotkeys} --self-test
+  '';
+
   switchProButtonProbePy = pkgs.writeText "switch-pro-button-probe.py" ''
     #!/usr/bin/env python3
     import glob
@@ -204,6 +298,7 @@ let
 
     EVENT = struct.Struct("@llHHi")
     EV_KEY = 0x01
+    EV_ABS = 0x03
     NAMES = {
         304: "B/South",
         305: "A/East",
@@ -219,6 +314,14 @@ let
         316: "Star/Home",
         317: "Left Stick Press",
         318: "Right Stick Press",
+    }
+    ABS_NAMES = {
+        0: "Left Stick X",
+        1: "Left Stick Y",
+        2: "Right Stick X",
+        3: "Right Stick Y",
+        16: "D-pad X",
+        17: "D-pad Y",
     }
 
     def name(path):
@@ -241,7 +344,7 @@ let
     if not fds:
         print("No Switch Pro controller event devices found.")
         raise SystemExit(1)
-    print("Press buttons now; exiting after 12 seconds.")
+    print("Press buttons or move sticks now; exiting after 12 seconds.")
     deadline = time.monotonic() + 12
     while time.monotonic() < deadline:
         readable, _, _ = select.select(list(fds.values()), [], [], 0.25)
@@ -253,6 +356,8 @@ let
                 _sec, _usec, ev_type, code, value = EVENT.unpack(data[offset : offset + EVENT.size])
                 if ev_type == EV_KEY and value == 1:
                     print(f"{Path(path).name}: code {code} {NAMES.get(code, 'unknown')}")
+                elif ev_type == EV_ABS and code in ABS_NAMES:
+                    print(f"{Path(path).name}: axis {code} {ABS_NAMES[code]} value {value}")
   '';
 
   switchProButtonProbe = pkgs.writeShellScriptBin "switch-pro-button-probe" ''
@@ -851,11 +956,29 @@ PY
     emulator_pid="$!"
     ${lib.getExe controllerHotkeys} --pid "$emulator_pid" --system "$system_id" --emulator "$emulator_id" --log "$log_file" &
     hotkey_pid="$!"
+
+    process_group_alive() {
+      kill -0 -- "-$1" >/dev/null 2>&1
+    }
+
+    terminate_process_group() {
+      pid="$1"
+      reason="$2"
+      process_group_alive "$pid" || return 0
+      log_event "exit-request" "$reason sent SIGTERM to emulator process group"
+      kill -TERM -- "-$pid" >/dev/null 2>&1 || true
+      for _ in $(seq 1 50); do
+        process_group_alive "$pid" || return 0
+        sleep 0.1
+      done
+      process_group_alive "$pid" || return 0
+      log_event "force-kill" "$reason still alive after 5 seconds; sent SIGKILL to emulator process group"
+      kill -KILL -- "-$pid" >/dev/null 2>&1 || true
+    }
+
     cleanup() {
       kill "$hotkey_pid" >/dev/null 2>&1 || true
-      if kill -0 "$emulator_pid" >/dev/null 2>&1; then
-        kill -- "-$emulator_pid" >/dev/null 2>&1 || true
-      fi
+      terminate_process_group "$emulator_pid" "run-emulator cleanup"
     }
     trap cleanup INT TERM HUP
     set +e
@@ -1079,6 +1202,30 @@ PY
     use_joystick true
     freelook true
     lookstrafe false
+    joy_xaxis 4
+    joy_yaxis 3
+    joy_zaxis 1
+    joy_zrot 2
+    joy_xrot 1
+    joy_yrot 2
+    joy_xthreshold 0.15
+    joy_ythreshold 0.15
+    joy_zthreshold 0.15
+    joy_zrotthreshold 0.15
+    joy_xrotthreshold 0.15
+    joy_yrotthreshold 0.15
+
+    unbind pad_back
+    unbind joy9
+    unbind joy14
+    unbind dpadup
+    unbind dpaddown
+    unbind dpadleft
+    unbind dpadright
+    unbind pov1up
+    unbind pov1down
+    unbind pov1left
+    unbind pov1right
 
     bind pad_a +use
     bind pad_b +jump
@@ -1097,16 +1244,17 @@ PY
     bind joy5 weapprev
     bind joy6 weapnext
     bind pad_start menu_main
-    bind pad_back pause
-    bind joy14 menu_main
     bind joy10 menu_main
-    bind joy9 pause
     bind lthumb crouch
     bind rthumb centerview
-    bind dpadleft invprev
-    bind dpadright invnext
-    bind dpadup togglemap
-    bind dpaddown invuse
+    bind dpadup +forward
+    bind dpaddown +back
+    bind dpadleft +moveleft
+    bind dpadright +moveright
+    bind pov1up +forward
+    bind pov1down +back
+    bind pov1left +moveleft
+    bind pov1right +moveright
 
     mapbind pad_y am_togglefollow
     mapbind pad_a am_setmark
@@ -1164,22 +1312,23 @@ PY
         "SDL_GAMECONTROLLER_USE_BUTTON_LABELS": "1"
       },
       "hotkey_policy": {
-        "menu": "Square/Capture",
+        "menu": "Square/Capture opens emulator quick menu where stable, home screen where supported, otherwise no-op",
         "modifier": "Select/-",
         "turbo": "Star/Home when exposed by the controller firmware",
-        "normal_exit": "Select/- held plus Start/+ double-press"
+        "normal_exit": "Select/- held plus Start/+ double-press sends SIGTERM, then SIGKILL after 5 seconds if needed",
+        "gzdoom_menu": "Start/+ opens the GZDoom menu; Y toggles the map; Square/Capture is intentionally unbound"
       },
       "managed_defaults": {
         "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels, Square/Capture to menu, and Select/- as the hotkey modifier",
-        "dolphin": "GameCube and Wii profiles map physical A/B/X/Y to matching labels and use SDL slots 0-3",
-        "ppsspp": "inherits SDL Switch label hints from run-emulator",
-        "pcsx2": "inherits SDL Switch label hints from run-emulator",
-        "azahar": "inherits SDL Switch label hints from run-emulator",
-        "cemu": "inherits SDL Switch label hints from run-emulator",
-        "xemu": "inherits SDL Switch label hints from run-emulator",
-        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support",
-        "supermodel": "inherits SDL Switch label hints from run-emulator",
-        "gzdoom": "run-emulator executes boomer-controls.cfg and uses a patched GZDoom menu so Use/Confirm is physical A and Jump/Back is physical B"
+        "dolphin": "GameCube and Wii profiles map physical A/B/X/Y to matching labels and use SDL slots 0-3; Wii Home uses Square where Dolphin exposes it",
+        "ppsspp": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
+        "pcsx2": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
+        "azahar": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
+        "cemu": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
+        "xemu": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
+        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Square/Home is no-op unless emulator-native support is configured",
+        "supermodel": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
+        "gzdoom": "run-emulator executes boomer-controls.cfg; A is Use/Confirm, B is Jump/Back, Y toggles map, Start/+ opens menu, and right stick controls look"
       },
       "known_gaps": {
         "motion": "hid_nintendo exposes a separate IMU device; emulator support varies",
@@ -1196,6 +1345,7 @@ in
     ghostship.emulation.internal.scripts = {
       inherit
         controllerHotkeys
+        controllerHotkeysSmokeTest
         displayProfile
         romCoverageCheck
         runEmulator

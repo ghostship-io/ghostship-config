@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer Switch Pro controller alignment**: Align generated controller maps
+  and emulator policy around physical Switch Pro labels: Star/Home stays
+  controller-local turbo, Select/Minus is the hotkey modifier, Square/Capture
+  opens emulator quick menu or home only where natively supported, and
+  unsupported Square/Capture actions are no-op. Make Select+Start double-press
+  send SIGTERM to the emulator process group and escalate to SIGKILL after 5
+  seconds if it stays alive. Rework GZDoom controls so left stick/D-pad move,
+  right stick looks up/down and left/right, Y toggles map, `+` opens the menu,
+  and Square/Capture is unbound.
 - **VueTorrent download paths**: Persist qBittorrent's default save path at
   `/downloads/Torrent`, keep incomplete torrent data under
   `/downloads/Torrent/.incomplete`, and create that directory before

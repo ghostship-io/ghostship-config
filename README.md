@@ -52,6 +52,9 @@ bundled shader packs, controller tooling, smoke-test tooling, dynamic display
 discovery, performance-test tooling, and ScreenScraper/RetroAchievements secret
 wiring. Gamescope FSR is disabled; scaling is handled by RetroArch shaders or
 emulator-native internal resolution controls while preserving aspect ratio.
+Controller shortcuts use Switch Pro labels: Select/Minus is the hotkey
+modifier, Star/Home is left as the controller turbo/local button, and
+Square/Capture is used only for emulator-native quick menu or home actions.
 Switch emulation uses the repo-pinned official Ryubing Canary release; refresh
 `modules/emulation/ryubing-canary-pin.nix` with `scripts/update-ryubing-canary`
 before rebuilding when upstream publishes a newer Canary.

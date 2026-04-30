@@ -303,7 +303,7 @@ BUTTON_MAP_COLUMN_WIDTH = 27
 
 
 COMMON_HOTKEYS = [
-    "Menu: Square/Capture",
+    "Square: menu/home/no-op",
     "Turbo: Star/Home (controller)",
     "Hotkey: - / Select",
     "Exit: Select + Start twice",
@@ -344,7 +344,7 @@ CONTROLLER_MAPS = [
                 "- -> Select / Hotkey",
                 "D-pad -> D-pad",
                 "Left Stick -> Move",
-                "Square -> Menu",
+                "Square -> Menu/Home/no-op",
                 "Star/Home -> Turbo",
             ],
             ["Physical Switch labels are authoritative."],
@@ -362,6 +362,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
+            ["Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -380,6 +381,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
+            ["Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -394,6 +396,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
+            ["Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -410,6 +413,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
+            ["Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -427,6 +431,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
+            ["Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -445,7 +450,7 @@ CONTROLLER_MAPS = [
                 "Mode -> -",
                 "Start -> +",
             ],
-            ["Six-button layouts keep all six inputs reachable."],
+            ["Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -459,6 +464,7 @@ CONTROLLER_MAPS = [
                 "Button 2 -> A",
                 "Pause -> +",
             ],
+            ["Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -476,6 +482,7 @@ CONTROLLER_MAPS = [
                 "R Trigger -> R/ZR",
                 "Start -> +",
             ],
+            ["Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -490,6 +497,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Run -> +",
             ],
+            ["Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -506,7 +514,7 @@ CONTROLLER_MAPS = [
                 "Coin/Select -> -",
                 "Start -> +",
             ],
-            ["Pocket two-button games use direct A/B."],
+            ["Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -517,10 +525,10 @@ CONTROLLER_MAPS = [
                 "D-pad -> D-pad",
                 "Left Stick -> Left Stick",
                 "Right Stick -> Right Stick",
-                "Cross -> A",
-                "Circle -> B",
-                "Square -> Y",
-                "Triangle -> X",
+                "PS Cross -> A",
+                "PS Circle -> B",
+                "PS Square -> Y",
+                "PS Triangle -> X",
                 "L1 -> L",
                 "R1 -> R",
                 "L2 -> ZL",
@@ -528,6 +536,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
+            ["Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -547,7 +556,7 @@ CONTROLLER_MAPS = [
                 "R -> R/ZR",
                 "Start -> +",
             ],
-            ["N64 A/B map directly to Switch A/B."],
+            ["N64 A/B stay direct; Square/Capture opens RetroArch quick menu."],
         ),
     },
     {
@@ -567,6 +576,7 @@ CONTROLLER_MAPS = [
                 "Z -> R",
                 "Start -> +",
             ],
+            ["Square/Capture is no-op for GameCube unless Dolphin exposes a stable quick menu."],
         ),
     },
     {
@@ -582,13 +592,13 @@ CONTROLLER_MAPS = [
                 "2 -> Y",
                 "- -> -",
                 "+ -> +",
-                "Home/Menu -> Square",
+                "Home/Menu -> Square/Capture",
                 "Shake -> L3",
                 "Nunchuk Stick -> Left Stick",
                 "C -> L",
                 "Z -> R",
             ],
-            ["Square maps Wii Home where Dolphin exposes it."],
+            ["Square/Capture maps Wii Home where Dolphin exposes it."],
         ),
     },
     {
@@ -610,6 +620,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
+            ["Square/Capture follows Dolphin support; otherwise it is no-op."],
         ),
     },
     {
@@ -631,7 +642,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
-            ["Square opens the emulator menu where supported."],
+            ["Square/Capture opens a Cemu menu only if emulator-native support is configured."],
         ),
     },
     {
@@ -653,6 +664,7 @@ CONTROLLER_MAPS = [
                 "Back -> -",
                 "Start -> +",
             ],
+            ["Square/Capture is no-op unless xemu adds stable guide/menu binding."],
         ),
     },
     {
@@ -662,17 +674,17 @@ CONTROLLER_MAPS = [
             [
                 "D-pad -> D-pad",
                 "Analog -> Left Stick",
-                "Cross -> A",
-                "Circle -> B",
-                "Square -> Y",
-                "Triangle -> X",
+                "PSP Cross -> A",
+                "PSP Circle -> B",
+                "PSP Square -> Y",
+                "PSP Triangle -> X",
                 "L -> L/ZL",
                 "R -> R/ZR",
                 "Select -> -",
                 "Start -> +",
-                "Home/Menu -> Square",
+                "Home/Menu -> Square/Capture",
             ],
-            ["Square maps PSP Home/menu where supported."],
+            ["Square/Capture maps PSP Home/menu only where PPSSPP exposes it."],
         ),
     },
     {
@@ -693,9 +705,9 @@ CONTROLLER_MAPS = [
                 "ZR -> ZR",
                 "Select -> -",
                 "Start -> +",
-                "Home/Menu -> Square",
+                "Home/Menu -> Square/Capture",
             ],
-            ["Square maps HOME/menu where supported."],
+            ["Square/Capture maps HOME/menu only where the 3DS emulator exposes it."],
         ),
     },
     {
@@ -717,6 +729,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
+            ["Square/Capture is no-op unless Ryubing exposes a stable home/menu binding."],
         ),
     },
     {
@@ -737,6 +750,7 @@ CONTROLLER_MAPS = [
                 "B7 -> ZL",
                 "B8 -> ZR",
             ],
+            ["RetroArch arcade uses Square/Capture for quick menu; TeknoParrot is scaffold-only."],
         ),
     },
     {
@@ -744,19 +758,27 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "GZDoom",
             [
-                "Move -> Left Stick",
+                "Move -> Left Stick/D-pad",
                 "Look -> Right Stick",
                 "Fire -> ZR",
                 "Alt Fire -> ZL",
                 "Use/Confirm -> A",
-                "Jump -> B",
+                "Jump/Back -> B",
                 "Prev Weapon -> L",
                 "Next Weapon -> R",
-                "Map -> Y",
-                "Inventory -> X",
-                "Menu -> Square",
+                "Map Toggle -> Y",
+                "Inventory/Action -> X",
+                "Menu -> +",
+                "Square -> No-op",
             ],
-            ["Shooter controls are mapped for modern twin-stick play."],
+            ["Right stick controls both horizontal and vertical look."],
+            [
+                "Menu: + / Start",
+                "Map: Y toggles",
+                "Turbo: Star/Home (controller)",
+                "Hotkey: - / Select",
+                "Exit: Select + Start twice",
+            ],
         ),
     },
     {
@@ -770,7 +792,7 @@ CONTROLLER_MAPS = [
                 "X -> A",
                 "Pause/Menu -> +",
             ],
-            ["PICO-8 X/A stays the primary action."],
+            ["PICO-8 X/A stays primary; Square/Capture is no-op."],
         ),
     },
 ]
@@ -941,7 +963,6 @@ class ControllerReader(threading.Thread):
                 305: ACTION_SELECT,
                 307: ACTION_REFRESH,
                 308: ACTION_ALT,
-                314: ACTION_BACK,
                 315: ACTION_SELECT,
             }
             action = key_map.get(code)
@@ -2114,6 +2135,8 @@ def smoke_test(mode):
         reader.handle_event("/dev/input/event0", EV_KEY, 308, 1)
         assert emitted == [(ACTION_BACK, "key"), (ACTION_SELECT, "key"), (ACTION_REFRESH, "key"), (ACTION_ALT, "key")]
         emitted.clear()
+        reader.handle_event("/dev/input/event0", EV_KEY, 314, 1)
+        assert emitted == []
         reader.handle_event("/dev/input/event0", EV_ABS, 1, 16000)
         assert emitted == [(ACTION_DOWN, "axis")]
         order = {
@@ -2202,12 +2225,18 @@ def smoke_test(mode):
             assert "Hotkeys" in row["detail"]
             assert any("Star/Home" in line for line in row["detail"])
             assert any("Select + Start twice" in line for line in row["detail"])
+            assert any("Square" in line for line in row["detail"])
             assert not any("Original Controller" in line or "+---" in line for line in row["detail"])
         n64 = next(row for row in CONTROLLER_MAPS if row["label"] == "Nintendo 64")
         assert any("A -> A" in line for line in n64["detail"])
         assert any("B -> B" in line for line in n64["detail"])
         gzdoom = next(row for row in CONTROLLER_MAPS if row["label"] == "GZDoom")
         assert any("Use/Confirm -> A" in line for line in gzdoom["detail"])
+        assert any("Move -> Left Stick/D-pad" in line for line in gzdoom["detail"])
+        assert any("Look -> Right Stick" in line for line in gzdoom["detail"])
+        assert any("Map Toggle -> Y" in line for line in gzdoom["detail"])
+        assert any("Menu -> +" in line for line in gzdoom["detail"])
+        assert any("Square -> No-op" in line for line in gzdoom["detail"])
         assert metrics["right_x"] + metrics["right_width"] < 92
         print(json.dumps({"maps": [row["label"] for row in CONTROLLER_MAPS], "layout": metrics}, indent=2))
 
