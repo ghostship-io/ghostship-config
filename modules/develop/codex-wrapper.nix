@@ -34,6 +34,7 @@ let
     { name = "wsl2"; }
     { name = "python"; }
     { name = "ssh"; }
+    { name = "codex-queue"; }
     { name = "skill-creator"; }
   ];
 

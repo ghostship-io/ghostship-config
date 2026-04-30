@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Hermes shutdown signal**: Switch the `chill-penguin` Hermes container stop
   signal to `SIGTERM` so s6-overlay handles host-driven shutdown cleanly.
+- **Codex queue skill**: Added a shared `codex-queue` skill for long
+  manual-review Codex CLI queues with JSONL sharding, tmux-backed worktrees,
+  idle-worker monitoring, ledger validation, smoke testing, and merge-preflight
+  support while preserving the rule that final item judgments stay manual.
 - **Boomer ES-DE tools menu**: Replace the individual controller and Wi-Fi
   tools with large-font `Bluetooth Settings` and `Wi-Fi Settings` TUIs that
   support keyboard and controller input, Bluetooth pairing/audio routing,
