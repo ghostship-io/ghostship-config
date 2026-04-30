@@ -194,6 +194,30 @@ let
       desired_led_rows | sort
     }
 
+    find_device_root() {
+      mac="$1"
+      max_attempts="''${2:-1}"
+      delay="''${3:-0}"
+      mac_upper="$(printf '%s' "$mac" | tr '[:lower:]' '[:upper:]')"
+      attempt=1
+      while [ "$attempt" -le "$max_attempts" ]; do
+        for event in /sys/class/input/event*; do
+          [ -r "$event/device/uniq" ] || continue
+          uniq="$(tr '[:lower:]' '[:upper:]' <"$event/device/uniq" 2>/dev/null || true)"
+          [ "$uniq" = "$mac_upper" ] || continue
+          input_path="$(readlink -f "$event/device" 2>/dev/null || true)"
+          [ -n "$input_path" ] || continue
+          dirname "$(dirname "$input_path")"
+          return 0
+        done
+        attempt=$((attempt + 1))
+        if [ "$attempt" -le "$max_attempts" ]; then
+          sleep "$delay"
+        fi
+      done
+      return 1
+    }
+
     apply_leds() {
       force="''${1:-false}"
       found=0
@@ -201,15 +225,13 @@ let
       pending_leds="$(mktemp)"
       while IFS=$'\t' read -r player mac; do
         [ -n "''${player:-}" ] || continue
-        device_root=""
-        for event in /sys/class/input/event*; do
-          [ -r "$event/device/uniq" ] || continue
-          uniq="$(tr '[:lower:]' '[:upper:]' <"$event/device/uniq" 2>/dev/null || true)"
-          [ "$uniq" = "$(printf '%s' "$mac" | tr '[:lower:]' '[:upper:]')" ] || continue
-          input_path="$(readlink -f "$event/device")"
-          device_root="$(dirname "$(dirname "$input_path")")"
-          break
-        done
+        root_attempts=1
+        root_delay=0
+        if [ "$force" = true ]; then
+          root_attempts=20
+          root_delay=0.1
+        fi
+        device_root="$(find_device_root "$mac" "$root_attempts" "$root_delay" || true)"
         [ -n "''${device_root:-}" ] || continue
         trigger_led=""
         trigger_value=""
@@ -704,6 +726,7 @@ in
         "emulation-setup.service"
         "controller-bluetooth-tuning.service"
       ];
+      unitConfig.StartLimitIntervalSec = 0;
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${lib.getExe controllerLeds} apply";

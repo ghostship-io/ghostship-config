@@ -230,7 +230,8 @@ changelog.
   controller input add events and BlueZ connected-property changes, and
   retry shortly for HID LED readiness; serialize LED/order writes so the
   background loop and one-shot apply cannot race, and batch LED writes across
-  controllers to avoid visible one-at-a-time reassignment. Smoke
+  controllers to avoid visible one-at-a-time reassignment. Do not start-limit
+  one-shot LED applies during fast reconnect cycles. Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
   launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where
