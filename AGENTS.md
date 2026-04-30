@@ -282,10 +282,11 @@ changelog.
   LEDs on Switch-style player count patterns only, and avoid auto-assigning
   audio devices or generic peripherals as players. Boomer's Switch Pro
   shortcuts should stay Switch-style:
-  Square/Capture is menu or home only where the emulator supports a stable
-  native binding, Select/Minus is the hotkey modifier, Star/Home is a
-  controller-local turbo button when exposed, and Select+Start double-press is
-  a normal emulator exit with a 5-second force-kill fallback.
+  Select+X is the quick-menu chord, Square/Capture is native console Home only
+  where explicitly configured and otherwise no-op, Select/Minus is the hotkey
+  modifier, Star/Home is a controller-local turbo button when exposed, and
+  Select+Start double-press is a normal emulator exit with a 5-second
+  force-kill fallback.
   Controller Maps should stay text-only with a compact two-column button map
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
   Switch A/B, and launch GZDoom with the managed Boomer controls cfg so

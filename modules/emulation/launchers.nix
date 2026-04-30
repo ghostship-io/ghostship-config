@@ -76,6 +76,7 @@ let
     EVENT = struct.Struct("@llHHi")
     EV_KEY = 0x01
     BTN_CAPTURE = 309
+    BTN_X = 307
     BTN_SELECT = 314
     BTN_START = 315
     BTN_MODE = 316
@@ -186,6 +187,13 @@ let
             log(log_path, "emulator exited before SIGKILL escalation", "exit-request", system, emulator)
         return actions
 
+    def rocknix_hotkey_action(code, pressed_codes):
+        if BTN_SELECT not in pressed_codes:
+            return ""
+        if code == BTN_X:
+            return "menu"
+        return ""
+
     def self_test():
         proc = subprocess.Popen(
             [sys.executable, "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"],
@@ -203,6 +211,10 @@ let
                 time.sleep(0.1)
             if proc.poll() is None:
                 raise AssertionError("self-test child survived SIGKILL")
+            if rocknix_hotkey_action(BTN_X, {BTN_SELECT, BTN_X}) != "menu":
+                raise AssertionError("Select + X did not resolve to menu")
+            if rocknix_hotkey_action(BTN_CAPTURE, {BTN_CAPTURE}) != "":
+                raise AssertionError("Square/Capture must not resolve to RetroArch menu")
         finally:
             if proc.poll() is None:
                 try:
@@ -261,7 +273,9 @@ let
                     if code == BTN_MODE:
                         log(args.log, "Star/Home pressed; treated as controller-local turbo when exposed", system=args.system, emulator=args.emulator)
                     if code == BTN_CAPTURE:
-                        log(args.log, "Square/Capture pressed; emulator-native menu binding should handle this", system=args.system, emulator=args.emulator)
+                        log(args.log, "Square/Capture pressed; emulator-native console Home binding may handle this", system=args.system, emulator=args.emulator)
+                    if rocknix_hotkey_action(code, pressed[path]) == "menu":
+                        log(args.log, "Select + X pressed; emulator quick menu binding should handle this", system=args.system, emulator=args.emulator)
                     if code != BTN_START:
                         continue
                     now = time.monotonic()
@@ -1536,22 +1550,23 @@ EOF
         "SDL_GAMECONTROLLER_USE_BUTTON_LABELS": "1"
       },
       "hotkey_policy": {
-        "menu": "Square/Capture opens emulator quick menu where stable, home screen where supported, otherwise no-op",
+        "menu": "Select/- plus X/North opens the emulator quick menu where supported",
+        "console_home": "Square/Capture opens the emulated console Home screen only where stable native support is configured, otherwise no-op",
         "modifier": "Select/-",
         "turbo": "Star/Home when exposed by the controller firmware",
         "normal_exit": "Select/- held plus Start/+ double-press sends SIGTERM, then SIGKILL after 5 seconds if needed",
         "gzdoom_menu": "Start/+ opens the GZDoom menu; X toggles the map; Square/Capture is intentionally unbound"
       },
       "managed_defaults": {
-        "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels, Square/Capture to menu, and Select/- as the hotkey modifier",
+        "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels; Select/- plus X/North opens the quick menu and Square/Capture is unbound",
         "dolphin": "GameCube and Wii profiles map physical A/B/X/Y to matching labels and use SDL slots 0-3; Wii Home uses Square where Dolphin exposes it",
-        "ppsspp": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
-        "pcsx2": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
-        "azahar": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
-        "cemu": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
-        "xemu": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
-        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Square/Home is no-op unless emulator-native support is configured",
-        "supermodel": "inherits SDL Switch label hints from run-emulator; Square/Home is no-op unless emulator-native support is configured",
+        "ppsspp": "inherits SDL Switch label hints from run-emulator; Square/Capture is no-op until a stable PSP Home binding is configured",
+        "pcsx2": "inherits SDL Switch label hints from run-emulator; Square/Capture is no-op unless emulator-native support is configured",
+        "azahar": "inherits SDL Switch label hints from run-emulator; Square/Capture is no-op until a stable 3DS HOME binding is configured",
+        "cemu": "inherits SDL Switch label hints from run-emulator; Square/Capture is no-op until a stable Wii U HOME binding is configured",
+        "xemu": "inherits SDL Switch label hints from run-emulator; Square/Capture is no-op unless emulator-native support is configured",
+        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Square/Capture is no-op until a stable Switch HOME binding is configured",
+        "supermodel": "inherits SDL Switch label hints from run-emulator; Square/Capture is no-op unless emulator-native support is configured",
         "gzdoom": "run-emulator executes boomer-controls.cfg; A is Use/Confirm, B is Jump/Back, X toggles map, Y toggles crouch, Start/+ opens menu, and right stick controls look"
       },
       "known_gaps": {

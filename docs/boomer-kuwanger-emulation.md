@@ -131,8 +131,8 @@ Every GZDoom launch executes the managed
 `/srv/emulation/config/emulators/gzdoom/boomer-controls.cfg` file so joystick
 input is enabled and Switch-style controls are applied: left stick and D-pad
 move, right stick looks left/right and up/down, A is Use/Confirm, B is
-Jump/Back, ZR is Fire, ZL is Alt Fire, Y toggles the map, X changes weapons,
-and `+` opens the menu. Square/Capture is intentionally
+Jump/Back, ZR is Fire, ZL is Alt Fire, X toggles the map, Y toggles crouch,
+L/R change weapons, and `+` opens the menu. Square/Capture is intentionally
 unbound for GZDoom. The managed GZDoom package also patches joystick menu
 handling so physical Switch A advances menus and physical Switch B backs out.
 The setup script also writes GZDoom's `[Joy:JS:*]` SDL axis map so left X/Y are
@@ -443,14 +443,15 @@ attempts, uses BlueZ D-Bus state for discovery, reconnects paired Switch Pro
 controllers serially, re-checks live connected state before each attempt, and
 leaves headphones and other accessories alone.
 
-Controller shortcuts follow a Switch-style layout. Square/Capture opens an
-emulator quick menu where a stable native binding exists, opens the system home
-screen where supported, and otherwise does nothing. Select/Minus is the hotkey
-modifier, and Star/Home is treated as a controller-local turbo button when the
-firmware exposes it at all. Select held plus a double Start press asks the
-active emulator process group to exit normally, then force-kills that process
-group after 5 seconds if it does not close. RetroArch maps Select/Minus hotkeys
-to save/load, reset, FPS, screenshot, and fast-forward actions, and D-pad-only
+Controller shortcuts follow a Rocknix-style Switch layout. Select/Minus is the
+hotkey modifier, Select+X opens emulator quick menus where supported, and
+Star/Home is treated as a controller-local turbo button when the firmware
+exposes it at all. Square/Capture opens native console Home screens only where
+that binding is explicitly configured, such as Dolphin's Wii profile, and
+otherwise does nothing. Select held plus a double Start press asks the active
+emulator process group to exit normally, then force-kills that process group
+after 5 seconds if it does not close. RetroArch maps Select/Minus hotkeys to
+save/load, reset, FPS, screenshot, and fast-forward actions, and D-pad-only
 RetroArch systems also accept left-stick D-pad input. The N64 RetroArch
 override remaps Mupen64Plus so physical Switch A sends N64 A and physical
 Switch B sends N64 B.

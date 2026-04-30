@@ -18,11 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to ES-DE instead of a console login prompt.
 - **Boomer Switch Pro controller alignment**: Align generated controller maps
   and emulator policy around physical Switch Pro labels: Star/Home stays
-  controller-local turbo, Select/Minus is the hotkey modifier, Square/Capture
-  opens emulator quick menu or home only where natively supported, and
-  unsupported Square/Capture actions are no-op. Make Select+Start double-press
-  send SIGTERM to the emulator process group and escalate to SIGKILL after 5
-  seconds if it stays alive. Rework GZDoom controls so left stick/D-pad move,
+  controller-local turbo, Select/Minus is the hotkey modifier, Select+X opens
+  emulator quick menus where supported, Square/Capture opens native console
+  Home only where explicitly configured, and unsupported Square/Capture actions
+  are no-op. Make Select+Start double-press send SIGTERM to the emulator
+  process group and escalate to SIGKILL after 5 seconds if it stays alive.
+  Rework GZDoom controls so left stick/D-pad move,
   right stick looks up/down and left/right, X toggles map, Y toggles crouch,
   L/R select previous/next weapon, ZL is alt fire, ZR is fire, `+` opens the
   menu, and Square/Capture is unbound. Seed GZDoom's SDL
@@ -100,7 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   half-second cadence, and modestly boost system D-Bus scheduling for BlueZ
   control traffic. Bound startup `btmgmt` tuning calls so a busy Bluetooth
   adapter does not hold controller services for long. Add Switch-style hotkeys
-  with Square/Capture as menu,
+  with Select+X as quick menu,
   Select/Minus as the hotkey modifier, Star/Home documented as the controller
   turbo button, a raw controller hotkey monitor for normal emulator exits,
   left-stick-as-D-pad overrides for D-pad-only RetroArch systems, text-only

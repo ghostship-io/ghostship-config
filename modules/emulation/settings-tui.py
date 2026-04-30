@@ -303,12 +303,12 @@ BUTTON_MAP_COLUMN_WIDTH = 27
 
 
 COMMON_HOTKEYS = [
-    "Square: menu/home/no-op",
+    "Quick Menu: Select + X",
     "Turbo: Star/Home (controller)",
     "Hotkey: - / Select",
     "Exit: Select + Start twice",
-    "Save/Load: Hotkey + R / L",
-    "Reset/FPS/Shot/Fast: Hotkey + B/Y/A/ZR",
+    "Save/Load: Select + R / L",
+    "Reset/FPS/Shot/Fast: Select + B/Y/A/ZR",
 ]
 
 
@@ -344,10 +344,10 @@ CONTROLLER_MAPS = [
                 "- -> Select / Hotkey",
                 "D-pad -> D-pad",
                 "Left Stick -> Move",
-                "Square -> Menu/Home/no-op",
+                "Square -> Console Home/no-op",
                 "Star/Home -> Turbo",
             ],
-            ["Physical Switch labels are authoritative."],
+            ["Rocknix hotkeys use Select as modifier; Square is not quick menu."],
         ),
     },
     {
@@ -362,7 +362,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Square/Capture opens RetroArch quick menu."],
+            ["Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -381,7 +381,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Square/Capture opens RetroArch quick menu."],
+            ["Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -396,7 +396,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Square/Capture opens RetroArch quick menu."],
+            ["Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -413,7 +413,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Square/Capture opens RetroArch quick menu."],
+            ["Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -431,7 +431,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Square/Capture opens RetroArch quick menu."],
+            ["Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -450,7 +450,7 @@ CONTROLLER_MAPS = [
                 "Mode -> -",
                 "Start -> +",
             ],
-            ["Square/Capture opens RetroArch quick menu."],
+            ["Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -464,7 +464,7 @@ CONTROLLER_MAPS = [
                 "Button 2 -> A",
                 "Pause -> +",
             ],
-            ["Square/Capture opens RetroArch quick menu."],
+            ["Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -482,7 +482,7 @@ CONTROLLER_MAPS = [
                 "R Trigger -> R/ZR",
                 "Start -> +",
             ],
-            ["Square/Capture opens RetroArch quick menu."],
+            ["Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -497,7 +497,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Run -> +",
             ],
-            ["Square/Capture opens RetroArch quick menu."],
+            ["Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -514,7 +514,7 @@ CONTROLLER_MAPS = [
                 "Coin/Select -> -",
                 "Start -> +",
             ],
-            ["Square/Capture opens RetroArch quick menu."],
+            ["Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -536,7 +536,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Square/Capture opens RetroArch quick menu."],
+            ["Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -556,7 +556,7 @@ CONTROLLER_MAPS = [
                 "R -> R/ZR",
                 "Start -> +",
             ],
-            ["N64 A/B stay direct; Square/Capture opens RetroArch quick menu."],
+            ["N64 A/B stay direct; Quick Menu is Select+X; Square/Capture is no-op."],
         ),
     },
     {
@@ -576,7 +576,7 @@ CONTROLLER_MAPS = [
                 "Z -> R",
                 "Start -> +",
             ],
-            ["Square/Capture is no-op for GameCube unless Dolphin exposes a stable quick menu."],
+            ["Quick Menu is Select+X where Dolphin supports it; Square/Capture is no-op for GameCube."],
         ),
     },
     {
@@ -592,7 +592,7 @@ CONTROLLER_MAPS = [
                 "2 -> Y",
                 "- -> -",
                 "+ -> +",
-                "Home/Menu -> Square/Capture",
+                "Wii Home -> Square/Capture",
                 "Shake -> L3",
                 "Nunchuk Stick -> Left Stick",
                 "C -> L",
@@ -620,7 +620,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
-            ["Square/Capture follows Dolphin support; otherwise it is no-op."],
+            ["Quick Menu is Select+X where Dolphin supports it; Square/Capture is no-op for Wii Classic."],
         ),
     },
     {
@@ -642,7 +642,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
-            ["Square/Capture opens a Cemu menu only if emulator-native support is configured."],
+            ["Square/Capture is no-op until a stable Wii U HOME binding is configured."],
         ),
     },
     {
@@ -682,9 +682,8 @@ CONTROLLER_MAPS = [
                 "R -> R/ZR",
                 "Select -> -",
                 "Start -> +",
-                "Home/Menu -> Square/Capture",
             ],
-            ["Square/Capture maps PSP Home/menu only where PPSSPP exposes it."],
+            ["Square/Capture is no-op until a stable PSP Home binding is configured."],
         ),
     },
     {
@@ -705,9 +704,8 @@ CONTROLLER_MAPS = [
                 "ZR -> ZR",
                 "Select -> -",
                 "Start -> +",
-                "Home/Menu -> Square/Capture",
             ],
-            ["Square/Capture maps HOME/menu only where the 3DS emulator exposes it."],
+            ["Square/Capture is no-op until a stable 3DS HOME binding is configured."],
         ),
     },
     {
@@ -729,7 +727,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
-            ["Square/Capture is no-op unless Ryubing exposes a stable home/menu binding."],
+            ["Square/Capture is no-op until a stable Switch HOME binding is configured."],
         ),
     },
     {
@@ -750,7 +748,7 @@ CONTROLLER_MAPS = [
                 "B7 -> ZL",
                 "B8 -> ZR",
             ],
-            ["RetroArch arcade uses Square/Capture for quick menu; TeknoParrot is scaffold-only."],
+            ["Quick Menu is Select+X for RetroArch arcade; Square/Capture is no-op."],
         ),
     },
     {
@@ -2227,10 +2225,15 @@ def smoke_test(mode):
             assert any("Star/Home" in line for line in row["detail"])
             assert any("Select + Start twice" in line for line in row["detail"])
             assert any("Square" in line for line in row["detail"])
+            assert not any("opens RetroArch quick menu" in line for line in row["detail"])
+            if row["label"] != "GZDoom":
+                assert any("Quick Menu: Select + X" in line for line in row["detail"])
             assert not any("Original Controller" in line or "+---" in line for line in row["detail"])
         n64 = next(row for row in CONTROLLER_MAPS if row["label"] == "Nintendo 64")
         assert any("A -> A" in line for line in n64["detail"])
         assert any("B -> B" in line for line in n64["detail"])
+        wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
+        assert any("Wii Home -> Square/Capture" in line for line in wii["detail"])
         gzdoom = next(row for row in CONTROLLER_MAPS if row["label"] == "GZDoom")
         assert any("Use/Confirm -> A" in line for line in gzdoom["detail"])
         assert any("Move -> Left Stick/D-pad" in line for line in gzdoom["detail"])
