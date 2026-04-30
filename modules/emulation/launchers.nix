@@ -1355,7 +1355,7 @@ PY
         "Axis2map": "0",
         "Axis3deadzone": "0.20",
         "Axis3map": "1",
-        "Axis3scale": "0.50",
+        "Axis3scale": "0.25",
         "Axis4deadzone": "0.25",
         "Axis4map": "-1",
         "Axis5deadzone": "0.25",
