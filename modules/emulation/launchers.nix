@@ -1104,6 +1104,23 @@ PY
           "${cfg.configRoot}/emulators/teknoparrot" \
           "${cfg.configRoot}/teknoparrot"
         install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${displayPolicy} "${cfg.configRoot}/display/policy.json"
+        xemu_data_dir="${cfg.dataRoot}/xdg/share/xemu/xemu"
+        xemu_bios_dir="${cfg.biosRoot}/xbox"
+        install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$xemu_data_dir"
+        if [ ! -f "$xemu_data_dir/eeprom.bin" ]; then
+          dd if=/dev/zero of="$xemu_data_dir/eeprom.bin" bs=256 count=1 status=none
+          chown ${cfg.user}:${cfg.group} "$xemu_data_dir/eeprom.bin"
+          chmod 0644 "$xemu_data_dir/eeprom.bin"
+        fi
+        cat >"$xemu_data_dir/xemu.toml" <<XEMUTOML
+        [sys.files]
+        bootrom_path = '$xemu_bios_dir/mcpx_1.0.bin'
+        flashrom_path = '$xemu_bios_dir/Complex_4627.bin'
+        eeprom_path = '$xemu_data_dir/eeprom.bin'
+        hdd_path = '$xemu_bios_dir/xbox_hdd.qcow2'
+        XEMUTOML
+        chown ${cfg.user}:${cfg.group} "$xemu_data_dir/xemu.toml"
+        chmod 0644 "$xemu_data_dir/xemu.toml"
         dolphin_config_dir="${cfg.dataRoot}/xdg/config/dolphin-emu"
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$dolphin_config_dir"
         cat >"$dolphin_config_dir/Dolphin.ini" <<'EOF'
