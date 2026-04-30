@@ -1267,10 +1267,10 @@ PY
     bind joy1 +jump
     bind joy4 +crouch
     bind joy3 togglemap
-    bind rtrigger +altattack
-    bind ltrigger +attack
-    bind joy7 +attack
-    bind joy8 +altattack
+    bind rtrigger +attack
+    bind ltrigger +altattack
+    unbind joy7
+    unbind joy8
     bind joy5 weapprev
     bind joy6 weapnext
     bind joy9 centerview
@@ -1281,8 +1281,10 @@ PY
     unbind joy14
     unbind joy15
     unbind joy16
-    bind axis4plus +attack
-    bind axis5plus +altattack
+    unbind axis4plus
+    unbind axis4minus
+    unbind axis5plus
+    unbind axis5minus
     bind lshoulder weapprev
     bind rshoulder weapnext
     bind pad_start menu_main
@@ -1371,16 +1373,16 @@ PY
         "Pad_B": "+jump",
         "Pad_X": "+crouch",
         "Pad_Y": "togglemap",
-        "LTrigger": "+attack",
-        "RTrigger": "+altattack",
+        "LTrigger": "+altattack",
+        "RTrigger": "+attack",
         "Joy1": "+jump",
         "Joy2": "+use",
         "Joy3": "togglemap",
         "Joy4": "+crouch",
         "Joy5": "weapprev",
         "Joy6": "weapnext",
-        "Joy7": "+attack",
-        "Joy8": "+altattack",
+        "Joy7": None,
+        "Joy8": None,
         "Joy9": "centerview",
         "Joy10": "weapprev",
         "Joy11": "weapnext",
@@ -1398,9 +1400,9 @@ PY
         "Axis3Minus": None,
         "Axis3Plus": None,
         "Axis4Minus": None,
-        "Axis4Plus": "+attack",
+        "Axis4Plus": None,
         "Axis5Minus": None,
-        "Axis5Plus": "+altattack",
+        "Axis5Plus": None,
         "Axis6Minus": None,
         "Axis6Plus": None,
         "Axis7Minus": "+moveright",
