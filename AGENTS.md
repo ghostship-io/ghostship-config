@@ -227,13 +227,13 @@ changelog.
   activation. Player order should compact connected Switch controllers into
   the lowest open slots while preserving relative order, with reconnecting
   controllers joining at the end. Trigger a one-shot controller reconcile from
-  controller input add events and BlueZ connected-property changes, and
-  retry shortly for HID LED readiness; serialize LED/order writes so the
-  background loop and one-shot apply cannot race, and batch LED writes across
-  controllers to avoid visible one-at-a-time reassignment. Do not start-limit
-  one-shot LED applies during fast reconnect cycles, but avoid direct rapid
-  `controller-leds apply` fan-out or force-writing already-correct LEDs because
-  hid-nintendo output reports can wedge the Bluetooth daemon. For Boomer
+  controller input add events and debounced BlueZ connected-property changes;
+  serialize LED/order writes so the background loop and one-shot apply cannot
+  race, update the background state marker from one-shot applies, and batch LED
+  writes across controllers to avoid visible one-at-a-time reassignment. Do not
+  start-limit one-shot LED applies during fast reconnect cycles, but avoid
+  direct rapid `controller-leds apply` fan-out or force-writing already-correct
+  LEDs because hid-nintendo output reports can wedge the Bluetooth daemon. For Boomer
   emulation changes, deploy to Boomer before calling the work complete: push
   main, merge on `/root/nixos-config`, build, switch, and verify live services.
   Smoke

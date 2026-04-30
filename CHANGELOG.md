@@ -58,6 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from being start-limited during fast reconnect cycles. Coalesce
   BlueZ-triggered retries through the one-shot unit and avoid force-writing
   already-correct LED entries so hid-nintendo output reports are not flooded.
+  Debounce BlueZ event bursts and update the background state marker from
+  one-shot applies to prevent immediate duplicate LED rewrites.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

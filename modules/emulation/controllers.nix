@@ -285,6 +285,9 @@ let
       sanitize_known_bad_order
       record_connected_devices || true
       apply_leds true || true
+      state="$(desired_led_state || true)"
+      printf '%s\n' "$state" >"$last_state_file"
+      chown ${cfg.user}:${cfg.group} "$last_state_file" || true
       flock -u 9
     }
 
@@ -423,21 +426,28 @@ let
   controllerReconcileEvents = pkgs.writeShellScriptBin "controller-reconcile-events" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.dbus pkgs.systemd ]}:$PATH
+    state_dir="${cfg.configRoot}/controllers"
+    trigger_file="$state_dir/reconcile-event"
+    worker_lock="$state_dir/reconcile-event.lock"
     log_file="${cfg.dataRoot}/logs/controller-reconcile-events.log"
-    mkdir -p "$(dirname "$log_file")"
+    mkdir -p "$state_dir" "$(dirname "$log_file")"
     touch "$log_file"
 
     trigger_reconcile() {
       reason="$1"
       echo "$(date -u +%FT%TZ) bluez connected change: $reason" >>"$log_file"
-      for delay in 0 1 3; do
-        (
-          if [ "$delay" != 0 ]; then
-            sleep "$delay"
-          fi
-          systemctl start --no-block controller-leds-apply.service >/dev/null 2>&1 || true
-        ) &
-      done
+      date +%s%N >"$trigger_file"
+      (
+        exec 8>"$worker_lock"
+        flock -n 8 || exit 0
+        while true; do
+          token="$(cat "$trigger_file" 2>/dev/null || true)"
+          sleep 1
+          latest="$(cat "$trigger_file" 2>/dev/null || true)"
+          [ "$token" = "$latest" ] && break
+        done
+        systemctl start --no-block controller-leds-apply.service >/dev/null 2>&1 || true
+      ) &
     }
 
     in_device=0

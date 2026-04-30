@@ -396,13 +396,13 @@ or pairing. If a controller identity does not expose LED sysfs entries, logical
 assignment still remains stable. Connected controllers are compacted into the
 lowest open player slots while preserving their relative order, so if P2 turns
 off P3/P4 slide down and the returning controller lands at the end.
-Controller add events and BlueZ `Connected` property changes trigger one-shot
-reconciles with short delayed retries for HID LED readiness, and the background
-reconcile uses a short D-Bus polling cadence with a lock so one-shot and loop
-updates cannot race against each other. LED writes are coalesced through the
-one-shot unit, limited to entries that actually need to change, and batched
-across all controllers so reassignment does not visibly step through players
-one at a time.
+Controller add events and BlueZ `Connected` property changes trigger a debounced
+one-shot reconcile after the connect/disconnect burst settles, and the
+background reconcile uses a short D-Bus polling cadence with a lock so one-shot
+and loop updates cannot race against each other. One-shot applies update the
+background state marker, and LED writes are limited to entries that actually
+need to change and batched across all controllers so reassignment does not
+visibly step through players one at a time.
 The one-shot apply is not start-limited and briefly waits for a reconnecting
 controller's LED sysfs path before relying on later retries.
 `controller-autoconnect` polls at a low cadence with short bounded connect
