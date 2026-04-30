@@ -132,7 +132,7 @@ in
       "--network=ghostship_net"
       "--privileged"
       "--no-hostname"
-      "--stop-signal=SIGRTMIN+3"
+      "--stop-signal=SIGTERM"
       "--stop-timeout=45"
       "--health-cmd=[\"/bin/sh\",\"-lc\",\"curl -fsS http://127.0.0.1:7681/api/status >/dev/null || exit 1\"]"
       "--health-interval=30s"

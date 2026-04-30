@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Hermes shutdown signal**: Switch the `chill-penguin` Hermes container stop
+  signal to `SIGTERM` so s6-overlay handles host-driven shutdown cleanly.
 - **Boomer ES-DE tools menu**: Replace the individual controller and Wi-Fi
   tools with large-font `Bluetooth Settings` and `Wi-Fi Settings` TUIs that
   support keyboard and controller input, Bluetooth pairing/audio routing,
