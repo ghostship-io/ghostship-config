@@ -24,7 +24,7 @@ let
     joypad_autoconfig_dir = "${cfg.configRoot}/retroarch/autoconfig"
     input_menu_toggle_gamepad_combo = "0"
     input_enable_hotkey_btn = "8"
-    input_menu_toggle_btn = "13"
+    input_menu_toggle_btn = "3"
     input_exit_emulator_btn = "9"
     input_save_state_btn = "5"
     input_load_state_btn = "4"
@@ -206,7 +206,6 @@ let
     input_r_x_minus_axis = "-3"
     input_r_y_plus_axis = "+4"
     input_r_y_minus_axis = "-4"
-    input_menu_toggle_btn = "13"
   '';
 
   autoconfigSwitchPro = pkgs.writeText "Nintendo Switch Pro Controller.cfg" ''
@@ -234,7 +233,6 @@ let
     input_r_x_minus_axis = "-2"
     input_r_y_plus_axis = "+3"
     input_r_y_minus_axis = "-3"
-    input_menu_toggle_btn = "13"
   '';
 
   systemShaderDefaults = {
