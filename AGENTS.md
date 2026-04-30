@@ -196,9 +196,12 @@ changelog.
   Bluetooth Settings TUI has selected a connected Bluetooth audio sink. Keep
   visible Boomer ES-DE utilities collapsed to Bluetooth Settings, Wi-Fi
   Settings, and system power/session actions; the settings entries should stay
-  large-font, keyboard-and-controller friendly TUIs. In the ES-DE Gamescope
-  session these TUIs should launch through Xwayland `xterm`; `foot` fails there
-  because Gamescope does not expose the Wayland subcompositor it needs. Smoke
+  large-font, keyboard-and-controller friendly TUIs with a dark two-column
+  layout, left-side actions, and right-side selected-action status. Hide
+  host-only BlueZ fields such as discoverable, pairable, and discovering from
+  the main Bluetooth status. In the ES-DE Gamescope session these TUIs should
+  launch through Xwayland `xterm`; `foot` fails there because Gamescope does
+  not expose the Wayland subcompositor it needs. Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
   launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where

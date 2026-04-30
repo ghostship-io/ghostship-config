@@ -12,6 +12,7 @@ import struct
 import subprocess
 import sys
 import threading
+import textwrap
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -106,6 +107,78 @@ def parse_nmcli_rows(output):
         if line.strip():
             rows.append(line.rstrip("\n").split(":"))
     return rows
+
+
+def parse_bluetooth_power(output):
+    for line in output.splitlines():
+        if line.strip().startswith("Powered:"):
+            return line.split(":", 1)[1].strip().lower() == "yes"
+    return False
+
+
+def parse_bluetooth_adapter_lines(output):
+    name = ""
+    powered = "unknown"
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Name:"):
+            name = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("Powered:"):
+            powered = stripped.split(":", 1)[1].strip().lower()
+    lines = [f"Power: {'On' if powered == 'yes' else 'Off' if powered == 'no' else 'Unknown'}"]
+    if name:
+        lines.append(f"Host: {name}")
+    return lines
+
+
+def menu_window(item_count, selected, visible_rows):
+    if item_count <= 0 or visible_rows <= 0:
+        return 0, 0
+    selected = max(0, min(selected, item_count - 1))
+    visible_rows = min(visible_rows, item_count)
+    start = selected - visible_rows // 2
+    start = max(0, min(start, item_count - visible_rows))
+    return start, start + visible_rows
+
+
+def pane_metrics(height, width):
+    content_top = 3
+    content_bottom = max(content_top, height - 4)
+    content_height = max(1, content_bottom - content_top + 1)
+    if width < 78:
+        left_width = max(22, min(width // 2 - 2, 32))
+    else:
+        left_width = min(36, max(28, width // 3))
+    separator_x = min(width - 2, left_width + 1)
+    right_x = min(width - 1, separator_x + 2)
+    right_width = max(1, width - right_x - 1)
+    return {
+        "content_top": content_top,
+        "content_bottom": content_bottom,
+        "content_height": content_height,
+        "left_width": left_width,
+        "separator_x": separator_x,
+        "right_x": right_x,
+        "right_width": right_width,
+    }
+
+
+def bluetooth_visible_labels(powered):
+    labels = ["Status", "Bluetooth Toggle"]
+    if powered:
+        labels.append("Restart Bluetooth")
+    labels.extend(
+        [
+            "Scan And Pair Device",
+            "Connect Paired Device",
+            "Disconnect Device",
+            "Reconnect All",
+            "Unpair Device",
+            "Player Assignment",
+            "Audio Output",
+        ]
+    )
+    return labels
 
 
 def controller_device_info(event_path):
@@ -230,11 +303,12 @@ class Tui:
         self.running = True
         curses.curs_set(0)
         curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
-        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_CYAN)
-        curses.init_pair(3, curses.COLOR_YELLOW, -1)
-        curses.init_pair(4, curses.COLOR_RED, -1)
-        curses.init_pair(5, curses.COLOR_GREEN, -1)
+        curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        curses.init_pair(3, curses.COLOR_WHITE, curses.COLOR_BLACK)
+        curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_BLACK)
+        curses.init_pair(5, curses.COLOR_WHITE, curses.COLOR_BLACK)
+        self.stdscr.bkgd(" ", curses.color_pair(1))
         self.stdscr.nodelay(True)
         self.stdscr.keypad(True)
         self.controller.start()
@@ -254,17 +328,92 @@ class Tui:
         except curses.error:
             pass
 
+    def wrapped(self, lines, width):
+        wrapped = []
+        for line in lines:
+            text = str(line)
+            if not text:
+                wrapped.append("")
+                continue
+            wrapped.extend(
+                textwrap.wrap(
+                    text,
+                    width=max(1, width),
+                    break_long_words=True,
+                    replace_whitespace=False,
+                )
+                or [""]
+            )
+        return wrapped
+
     def draw_frame(self, title, subtitle=""):
         self.stdscr.erase()
         height, width = self.stdscr.getmaxyx()
         self.add(0, 0, " " * (width - 1), curses.color_pair(1))
         self.add(0, 2, title.upper(), curses.color_pair(1) | curses.A_BOLD)
         if subtitle:
-            self.add(1, 2, subtitle, curses.color_pair(3))
-        footer = "Controller: D-pad move  A select  B back  X refresh  Y action | Keyboard: arrows/WASD enter esc r"
+            self.add(1, 2, subtitle, curses.color_pair(3) | curses.A_DIM)
+        footer = "Move: D-pad/Arrows/WASD  Select: A/Enter  Back: B/Esc  Refresh: X/R"
         self.add(height - 2, 0, " " * (width - 1), curses.color_pair(1))
-        self.add(height - 2, 2, footer, curses.color_pair(1))
-        self.add(height - 1, 2, self.message, curses.color_pair(5) if "OK" in self.message else curses.color_pair(3))
+        self.add(height - 2, 2, footer, curses.color_pair(1) | curses.A_DIM)
+        self.add(height - 1, 2, self.message, curses.color_pair(1) | curses.A_DIM)
+
+    def item_detail_lines(self, item, details):
+        lines = []
+        if item:
+            lines.append(item.get("label", ""))
+            if item.get("desc"):
+                lines.extend(["", item["desc"]])
+            detail = item.get("detail")
+            if callable(detail):
+                detail = detail()
+            if detail:
+                lines.append("")
+                lines.extend(detail)
+        if details:
+            if callable(details):
+                details = details(item)
+            if details:
+                if lines:
+                    lines.append("")
+                lines.extend(details)
+        return lines
+
+    def draw_two_pane(self, title, items, selected, detail_lines):
+        self.draw_frame(title)
+        height, width = self.stdscr.getmaxyx()
+        metrics = pane_metrics(height, width)
+        top = metrics["content_top"]
+        bottom = metrics["content_bottom"]
+        left_width = metrics["left_width"]
+        separator_x = metrics["separator_x"]
+        right_x = metrics["right_x"]
+        right_width = metrics["right_width"]
+        self.add(1, 2, "OPTIONS", curses.color_pair(1) | curses.A_BOLD)
+        self.add(1, right_x, "DETAILS", curses.color_pair(1) | curses.A_BOLD)
+        for y in range(top - 1, bottom + 1):
+            self.add(y, separator_x, "|", curses.color_pair(1) | curses.A_DIM)
+        menu_rows = metrics["content_height"]
+        if len(items) > menu_rows:
+            menu_rows = max(1, menu_rows - 1)
+        start, end = menu_window(len(items), selected, menu_rows)
+        visible = items[start:end]
+        if start > 0:
+            self.add(top - 1, 2, "more above", curses.color_pair(1) | curses.A_DIM)
+        if not visible:
+            self.add(top, 2, "No items available.", curses.color_pair(1) | curses.A_DIM)
+        for offset, item in enumerate(visible):
+            index = start + offset
+            attr = curses.color_pair(2) | curses.A_BOLD if index == selected else curses.color_pair(1)
+            marker = ">" if index == selected else " "
+            label = f"{marker} {item['label']}"
+            self.add(top + offset, 2, label.ljust(max(1, left_width - 2)), attr)
+        if end < len(items):
+            self.add(bottom, 2, "more below", curses.color_pair(1) | curses.A_DIM)
+        right_lines = self.wrapped(detail_lines, right_width)
+        for row, line in enumerate(right_lines[: metrics["content_height"]], start=top):
+            attr = curses.color_pair(1) | (curses.A_BOLD if row == top else curses.A_NORMAL)
+            self.add(row, right_x, line, attr)
 
     def get_input(self, timeout=0.1):
         try:
@@ -333,22 +482,10 @@ class Tui:
         return None
 
     def menu(self, title, items, details=None, selected=0):
-        details = details or []
+        selected = max(0, min(selected, len(items) - 1)) if items else 0
         while self.running:
-            self.draw_frame(title)
-            y = 3
-            for line in details[:8]:
-                self.add(y, 2, line)
-                y += 1
-            y += 1
-            if not items:
-                self.add(y, 4, "No items available.", curses.color_pair(4))
-            for index, item in enumerate(items):
-                attr = curses.color_pair(2) | curses.A_BOLD if index == selected else curses.A_NORMAL
-                marker = ">" if index == selected else " "
-                self.add(y + index * 2, 2, f"{marker} {item['label']}", attr)
-                if item.get("desc"):
-                    self.add(y + index * 2 + 1, 6, item["desc"], curses.color_pair(3))
+            item = items[selected] if items else None
+            self.draw_two_pane(title, items, selected, self.item_detail_lines(item, details))
             self.stdscr.refresh()
             event = self.get_input()
             if not event:
@@ -380,8 +517,10 @@ class Tui:
         top = 0
         while self.running:
             self.draw_frame(title, "Press B/Esc to go back. Use up/down to scroll.")
-            height, _ = self.stdscr.getmaxyx()
-            for row, line in enumerate(lines[top : top + height - 6], start=3):
+            height, width = self.stdscr.getmaxyx()
+            wrapped = self.wrapped(lines, max(1, width - 4))
+            visible_rows = max(1, height - 6)
+            for row, line in enumerate(wrapped[top : top + visible_rows], start=3):
                 self.add(row, 2, line)
             self.stdscr.refresh()
             event = self.get_text_input()
@@ -392,7 +531,7 @@ class Tui:
             if event.action == ACTION_UP:
                 top = max(0, top - 1)
             elif event.action == ACTION_DOWN:
-                top = min(max(0, len(lines) - 1), top + 1)
+                top = min(max(0, len(wrapped) - visible_rows), top + 1)
 
     def choose(self, title, rows, empty="No entries available"):
         items = []
@@ -449,7 +588,9 @@ class Tui:
 
     def progress(self, title, lines):
         self.draw_frame(title)
-        for index, line in enumerate(lines, start=4):
+        height, width = self.stdscr.getmaxyx()
+        wrapped = self.wrapped(lines, max(1, width - 4))
+        for index, line in enumerate(wrapped[: max(1, height - 6)], start=4):
             self.add(index, 2, line)
         self.stdscr.refresh()
 
@@ -468,14 +609,14 @@ class BluetoothBackend:
 
     def adapter_summary(self):
         _, out, err = run_cmd(["bluetoothctl", "show"], timeout=8)
-        lines = []
-        for wanted in ("Powered:", "Discoverable:", "Pairable:", "Discovering:"):
-            for line in out.splitlines():
-                if line.strip().startswith(wanted):
-                    lines.append(line.strip())
+        lines = parse_bluetooth_adapter_lines(out)
         if err:
             lines.append(err)
         return lines or ["Bluetooth adapter not found."]
+
+    def powered(self):
+        _, out, _ = run_cmd(["bluetoothctl", "show"], timeout=8)
+        return parse_bluetooth_power(out)
 
     def paired_rows(self):
         connected = {d["mac"] for d in self.devices("Connected")}
@@ -584,15 +725,45 @@ class WifiBackend:
     def status_lines(self):
         lines = []
         _, radio, _ = run_cmd(["nmcli", "radio"], timeout=8)
-        _, devices, _ = run_cmd(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status"], timeout=8)
-        _, active, _ = run_cmd(["nmcli", "-t", "-f", "NAME,TYPE,DEVICE", "connection", "show", "--active"], timeout=8)
+        _, devices, _ = run_cmd(
+            ["nmcli", "-t", "--escape", "no", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status"],
+            timeout=8,
+        )
         policy = self.policy()
-        lines.append("2.4 GHz: " + ("allowed" if policy.get("allow_24ghz") else "disabled for Bluetooth performance"))
-        lines.extend(radio.splitlines()[:3])
-        lines.extend(devices.splitlines()[:4])
-        if active:
-            lines.append("Active:")
-            lines.extend(active.splitlines()[:3])
+        lines.append("2.4 GHz: " + ("Allowed" if policy.get("allow_24ghz") else "Disabled for Bluetooth performance"))
+        wifi_line = next((line for line in radio.splitlines() if "WIFI" not in line and line.strip()), "")
+        if wifi_line:
+            parts = wifi_line.split()
+            if len(parts) >= 2:
+                lines.append(f"Wi-Fi radio: {parts[1].capitalize()}")
+        wifi_devices = [parts for parts in parse_nmcli_rows(devices) if len(parts) >= 3 and parts[1] == "wifi"]
+        active_device = next((parts for parts in wifi_devices if len(parts) >= 4 and parts[2].startswith("connected")), None)
+        if active_device:
+            lines.append(f"Active SSID: {active_device[3] or 'unknown'}")
+            lines.append(f"Device: {active_device[0]}")
+            _, ip, _ = run_cmd(["nmcli", "-t", "--escape", "no", "-f", "IP4.ADDRESS,IP4.GATEWAY", "device", "show", active_device[0]], timeout=8)
+            ip_lines = [line for line in ip.splitlines() if line]
+            if ip_lines:
+                lines.extend(ip_lines[:3])
+        elif wifi_devices:
+            lines.append("Active SSID: none")
+            lines.append(f"Device: {wifi_devices[0][0]} ({wifi_devices[0][2]})")
+        else:
+            lines.append("Wi-Fi device: not found")
+        saved = self.saved_profiles()
+        lines.append(f"Saved profiles: {len(saved)}")
+        _, nearby, _ = run_cmd(
+            ["nmcli", "-t", "--escape", "no", "-f", "SSID,SIGNAL,CHAN,IN-USE", "device", "wifi", "list", "--rescan", "no"],
+            timeout=8,
+        )
+        networks = [parts for parts in parse_nmcli_rows(nearby) if len(parts) >= 3 and parts[0]]
+        if networks:
+            lines.append("Nearby:")
+            for parts in networks[:3]:
+                current = " current" if len(parts) > 3 and parts[3] == "*" else ""
+                lines.append(f"{parts[0]}  {parts[1]}%  ch {parts[2]}{current}")
+        else:
+            lines.append("Nearby: not scanned yet")
         return lines
 
     def saved_profiles(self):
@@ -677,43 +848,106 @@ class SettingsApp:
 
     def bluetooth_menu(self):
         while self.tui.running:
-            pref = self.audio.preference()
-            details = self.bt.adapter_summary()
-            details.append("Audio output: " + (pref.get("description") or pref.get("mode", "hdmi")))
+            powered = self.bt.powered()
+            status = self.bluetooth_status_lines()
+            toggle_target = "off" if powered else "on"
             items = [
-                {"label": "Status", "desc": "Bluetooth, paired devices, connected devices, player order", "action": self.bluetooth_status},
-                {"label": "Bluetooth On", "desc": "Power on the adapter", "action": lambda: self.run_and_show("Bluetooth On", lambda: self.bt.action("power", "on"))},
-                {"label": "Bluetooth Off", "desc": "Power off the adapter", "action": lambda: self.run_and_show("Bluetooth Off", lambda: self.bt.action("power", "off"))},
-                {"label": "Restart Bluetooth", "desc": "Restart bluetooth.service", "action": lambda: self.run_and_show("Restart Bluetooth", self.bt.restart_service)},
-                {"label": "Scan And Pair Device", "desc": "Pair controllers, headphones, Wiimotes, keyboards, or accessories", "action": self.bluetooth_scan_pair},
-                {"label": "Connect Paired Device", "desc": "Connect one saved device", "action": self.bluetooth_connect_paired},
-                {"label": "Disconnect Device", "desc": "Disconnect one connected device", "action": self.bluetooth_disconnect},
-                {"label": "Reconnect All", "desc": "Trust and connect all paired devices", "action": self.bluetooth_reconnect_all},
-                {"label": "Unpair Device", "desc": "Remove a saved Bluetooth device", "action": self.bluetooth_unpair},
-                {"label": "Player Assignment", "desc": "Press a controller button, view slot, move or swap player slots", "action": self.player_assignment},
-                {"label": "Audio Output", "desc": "Choose HDMI or connected Bluetooth headphones", "action": self.audio_output},
+                {
+                    "label": "Status",
+                    "desc": "Bluetooth power, connected devices, paired devices, players, and audio.",
+                    "detail": status,
+                    "action": self.bluetooth_status,
+                },
+                {
+                    "label": "Bluetooth Toggle",
+                    "desc": f"Turn Bluetooth {toggle_target}.",
+                    "detail": [f"Current state: {'On' if powered else 'Off'}", f"Select to turn Bluetooth {toggle_target}.", "", *status],
+                    "action": lambda: self.run_and_show("Bluetooth Toggle", lambda: self.bt.action("power", toggle_target)),
+                },
             ]
-            choice = self.tui.menu("Bluetooth Settings", items, details)
+            if powered:
+                items.append(
+                    {
+                        "label": "Restart Bluetooth",
+                        "desc": "Restart bluetooth.service without rebooting Boomer.",
+                        "detail": ["Available because Bluetooth is on.", "Use this if paired devices stop responding.", "", *status],
+                        "action": lambda: self.run_and_show("Restart Bluetooth", self.bt.restart_service),
+                    }
+                )
+            items.extend(
+                [
+                    {
+                        "label": "Scan And Pair Device",
+                        "desc": "Find and pair controllers, headphones, Wiimotes, keyboards, or accessories.",
+                        "detail": ["Starts a short scan for nearby devices.", "Put the device in pairing mode first.", "", *status],
+                        "action": self.bluetooth_scan_pair,
+                    },
+                    {
+                        "label": "Connect Paired Device",
+                        "desc": "Connect one saved Bluetooth device.",
+                        "detail": ["Use this for a controller or headset that is already paired.", "", *status],
+                        "action": self.bluetooth_connect_paired,
+                    },
+                    {
+                        "label": "Disconnect Device",
+                        "desc": "Disconnect one currently connected Bluetooth device.",
+                        "detail": ["Leaves the pairing saved for later reconnect.", "", *status],
+                        "action": self.bluetooth_disconnect,
+                    },
+                    {
+                        "label": "Reconnect All",
+                        "desc": "Trust and reconnect every paired Bluetooth device.",
+                        "detail": ["Useful after waking controllers or headphones.", "", *status],
+                        "action": self.bluetooth_reconnect_all,
+                    },
+                    {
+                        "label": "Unpair Device",
+                        "desc": "Remove a saved Bluetooth pairing.",
+                        "detail": ["Use this before pairing a device from scratch again.", "", *status],
+                        "action": self.bluetooth_unpair,
+                    },
+                    {
+                        "label": "Player Assignment",
+                        "desc": "Press a controller button, then move or swap its player slot.",
+                        "detail": ["Supports player 1-4 assignment and controller LEDs when available.", "", *status],
+                        "action": self.player_assignment,
+                    },
+                    {
+                        "label": "Audio Output",
+                        "desc": "Choose HDMI or connected Bluetooth headphones.",
+                        "detail": ["Bluetooth audio is used only when explicitly selected and available.", "", *status],
+                        "action": self.audio_output,
+                    },
+                ]
+            )
+            choice = self.tui.menu("Bluetooth Settings", items)
             if not choice:
                 return
             if choice == "refresh":
                 continue
             choice["action"]()
 
-    def bluetooth_status(self):
+    def bluetooth_status_lines(self):
+        pref = self.audio.preference()
         order = read_json(PLAYER_ORDER, {"players": []})
         paired = self.bt.devices("Paired")
         connected = self.bt.devices("Connected")
-        lines = ["Adapter:", *self.bt.adapter_summary(), "", "Connected:"]
+        lines = [*self.bt.adapter_summary(), f"Audio output: {pref.get('description') or pref.get('mode', 'hdmi')}"]
+        lines.extend(["", "Connected devices:"])
         lines.extend([f"{d['name']}  {d['mac']}" for d in connected] or ["None"])
-        lines.extend(["", "Paired:"])
-        lines.extend([f"{d['name']}  {d['mac']}" for d in paired] or ["None"])
-        lines.extend(["", "Player order:"])
-        for player in order.get("players", []):
-            lines.append(f"P{player.get('player')}: {player.get('name')} {player.get('mac')} connected={player.get('connected')}")
-        if not order.get("players"):
+        lines.extend(["", f"Paired devices: {len(paired)}"])
+        lines.extend([f"{d['name']}  {d['mac']}" for d in paired[:4]] or ["None"])
+        lines.extend(["", "Player assignment:"])
+        players = order.get("players", [])
+        if players:
+            for player in players[:4]:
+                lines.append(f"P{player.get('player')}: {player.get('name')} {player.get('mac')}")
+        else:
             lines.append("No assigned controllers.")
-        self.tui.show_output("Bluetooth Status", lines)
+        return lines
+
+    def bluetooth_status(self):
+        self.tui.show_output("Bluetooth Status", self.bluetooth_status_lines())
 
     def bluetooth_scan_pair(self):
         self.tui.progress("Bluetooth Scan", ["Scanning for 8 seconds...", "Put the device in pairing mode now."])
@@ -823,18 +1057,70 @@ class SettingsApp:
 
     def wifi_menu(self):
         while self.tui.running:
+            status = self.wifi.status_lines()
+            allow_24 = self.wifi.policy().get("allow_24ghz", False)
             items = [
-                {"label": "Status", "desc": "Radio, device, active SSID, and IP details", "action": self.wifi_status},
-                {"label": "Wi-Fi On", "desc": "Enable Wi-Fi radio", "action": lambda: self.run_and_show("Wi-Fi On", lambda: run_cmd(["nmcli", "radio", "wifi", "on"], timeout=12))},
-                {"label": "Wi-Fi Off", "desc": "Disable Wi-Fi radio", "action": self.wifi_off},
-                {"label": "Restart Wi-Fi", "desc": "Cycle Wi-Fi radio and reapply policy", "action": self.wifi_restart},
-                {"label": "Connect Saved Network", "desc": "Connect an existing NetworkManager profile", "action": self.wifi_connect_saved},
-                {"label": "Connect New Network", "desc": "Scan and enter password with keyboard or controller", "action": self.wifi_connect_new},
-                {"label": "Disconnect Network", "desc": "Disconnect the active Wi-Fi device", "action": self.wifi_disconnect},
-                {"label": "Forget Network", "desc": "Delete a saved Wi-Fi profile", "action": self.wifi_forget},
-                {"label": "2.4 GHz Toggle", "desc": "Allow or disable 2.4 GHz Wi-Fi", "action": self.wifi_toggle_24},
+                {
+                    "label": "Status",
+                    "desc": "Wi-Fi radio, active SSID, IP details, saved profiles, and band policy.",
+                    "detail": status,
+                    "action": self.wifi_status,
+                },
+                {
+                    "label": "Wi-Fi On",
+                    "desc": "Enable the Wi-Fi radio.",
+                    "detail": ["Turns the Wi-Fi radio on.", "", *status],
+                    "action": lambda: self.run_and_show("Wi-Fi On", lambda: run_cmd(["nmcli", "radio", "wifi", "on"], timeout=12)),
+                },
+                {
+                    "label": "Wi-Fi Off",
+                    "desc": "Disable the Wi-Fi radio.",
+                    "detail": ["This can disconnect SSH if Wi-Fi is the active network.", "", *status],
+                    "action": self.wifi_off,
+                },
+                {
+                    "label": "Restart Wi-Fi",
+                    "desc": "Cycle Wi-Fi radio and reapply the 2.4/5 GHz policy.",
+                    "detail": ["Use this after changing networks or radio policy.", "", *status],
+                    "action": self.wifi_restart,
+                },
+                {
+                    "label": "Connect Saved Network",
+                    "desc": "Connect an existing NetworkManager Wi-Fi profile.",
+                    "detail": ["Uses a saved profile, then reapplies the band policy.", "", *status],
+                    "action": self.wifi_connect_saved,
+                },
+                {
+                    "label": "Connect New Network",
+                    "desc": "Scan nearby networks and enter a password with keyboard or controller.",
+                    "detail": ["Starts a fresh scan, then saves the selected network.", "", *status],
+                    "action": self.wifi_connect_new,
+                },
+                {
+                    "label": "Disconnect Network",
+                    "desc": "Disconnect the active Wi-Fi device.",
+                    "detail": ["Leaves saved profiles intact.", "", *status],
+                    "action": self.wifi_disconnect,
+                },
+                {
+                    "label": "Forget Network",
+                    "desc": "Delete a saved Wi-Fi profile.",
+                    "detail": ["Use this to remove stale or unwanted saved networks.", "", *status],
+                    "action": self.wifi_forget,
+                },
+                {
+                    "label": "2.4 GHz Toggle",
+                    "desc": "Allow or disable 2.4 GHz Wi-Fi.",
+                    "detail": [
+                        f"Current policy: {'2.4/5 GHz allowed' if allow_24 else '5 GHz only'}",
+                        "2.4 GHz can reduce Bluetooth controller and headphone performance.",
+                        "",
+                        *status,
+                    ],
+                    "action": self.wifi_toggle_24,
+                },
             ]
-            choice = self.tui.menu("Wi-Fi Settings", items, self.wifi.status_lines())
+            choice = self.tui.menu("Wi-Fi Settings", items)
             if not choice:
                 return
             if choice == "refresh":
@@ -927,11 +1213,35 @@ class SettingsApp:
 def smoke_test(mode):
     if mode == "bluetooth":
         sample = "Device AA:BB:CC:DD:EE:FF Switch Pro Controller\nDevice 11:22:33:44:55:66 Headphones"
-        print(json.dumps({"devices": parse_bt_devices(sample)}, indent=2))
+        show = """Controller 4C:24:CE:FA:E3:2A
+    Name: boomer-kuwanger
+    Powered: yes
+    Discoverable: no
+    Pairable: no
+    Discovering: no
+"""
+        labels_on = bluetooth_visible_labels(True)
+        labels_off = bluetooth_visible_labels(False)
+        adapter_lines = parse_bluetooth_adapter_lines(show)
+        assert "Bluetooth Toggle" in labels_on
+        assert "Restart Bluetooth" in labels_on
+        assert "Restart Bluetooth" not in labels_off
+        assert not any("Discoverable" in line or "Pairable" in line or "Discovering" in line for line in adapter_lines)
+        metrics = pane_metrics(26, 92)
+        start, end = menu_window(len(labels_on), len(labels_on) - 1, metrics["content_height"])
+        assert 0 <= start < end <= len(labels_on)
+        assert metrics["content_bottom"] < 26
+        assert metrics["right_x"] + metrics["right_width"] < 92
+        print(json.dumps({"devices": parse_bt_devices(sample), "labels_on": labels_on, "adapter": adapter_lines}, indent=2))
     else:
         sample = "SKYNET:WPA2:88:149:*\nGuest::52:6:"
         rows = parse_nmcli_rows(sample)
-        print(json.dumps({"rows": rows}, indent=2))
+        metrics = pane_metrics(26, 92)
+        start, end = menu_window(9, 8, metrics["content_height"])
+        assert 0 <= start < end <= 9
+        assert metrics["content_bottom"] < 26
+        assert metrics["right_x"] + metrics["right_width"] < 92
+        print(json.dumps({"rows": rows, "layout": metrics}, indent=2))
 
 
 def main():
