@@ -55,10 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   at the end. Trigger controller slot reconciliation from controller input add
   events and BlueZ connected-property changes with short delayed retries for
   HID LED readiness, merge USB Switch-Pro HID nodes so USB controllers share the
-  same player assignment and LED path, avoid treating stale Bluetooth HID nodes
-  as connected when BlueZ no longer reports them, and serialize LED/order writes
-  to reduce transient wrong player LEDs. Keep one-shot LED applies from being
-  start-limited during fast reconnect cycles. Coalesce
+  same player assignment and LED path, track the 8BitDo `2dc8:301a` wired USB
+  mode as an input-only player identity, avoid treating stale Bluetooth HID
+  nodes as connected when BlueZ no longer reports them, and serialize LED/order
+  writes to reduce transient wrong player LEDs. Keep one-shot LED applies from
+  being start-limited during fast reconnect cycles. Coalesce
   BlueZ-triggered retries through the one-shot unit and avoid force-writing
   already-correct LED entries so hid-nintendo output reports are not flooded.
   Debounce BlueZ event bursts and update the background state marker from

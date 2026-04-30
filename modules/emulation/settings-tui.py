@@ -112,6 +112,16 @@ def is_mac(value):
     return bool(re.match(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$", value or ""))
 
 
+def controller_identity(uniq, modalias):
+    if is_mac(uniq):
+        return mac_key(uniq)
+    match = re.search(r"v([0-9A-Fa-f]{4})p([0-9A-Fa-f]{4})", modalias or "")
+    if not match:
+        return mac_key(uniq)
+    stable = re.sub(r"[^0-9A-Za-z_.:-]+", "_", uniq or "unknown")
+    return f"USB:{match.group(1).upper()}:{match.group(2).upper()}:{stable}"
+
+
 def parse_bt_devices(output):
     devices = []
     for line in output.splitlines():
@@ -809,6 +819,7 @@ def controller_device_info(event_path):
     base = Path("/sys/class/input") / Path(event_path).name / "device"
     name = ""
     uniq = ""
+    modalias = ""
     try:
         name = (base / "name").read_text(encoding="utf-8", errors="replace").strip()
     except Exception:
@@ -817,7 +828,11 @@ def controller_device_info(event_path):
         uniq = (base / "uniq").read_text(encoding="utf-8", errors="replace").strip()
     except Exception:
         pass
-    return {"event": event_path, "name": name or Path(event_path).name, "mac": mac_key(uniq)}
+    try:
+        modalias = (base / "modalias").read_text(encoding="utf-8", errors="replace").strip()
+    except Exception:
+        pass
+    return {"event": event_path, "name": name or Path(event_path).name, "mac": controller_identity(uniq, modalias)}
 
 
 def capability_has_bit(value, bit):

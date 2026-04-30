@@ -64,12 +64,39 @@ let
           '
     }
 
-    switch_identifier() {
+    player_identifier() {
+      printf '%s\n' "''${1:-}" | grep -Eiq '^(([0-9a-f]{2}:){5}[0-9a-f]{2}|USB:[0-9a-f]{4}:[0-9a-f]{4}:.+)$'
+    }
+
+    led_identifier() {
       printf '%s\n' "''${1:-}" | grep -Eiq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$'
     }
 
+    usb_identifier_from_modalias() {
+      modalias="''${1:-}"
+      uniq="''${2:-unknown}"
+      vendor="$(printf '%s\n' "$modalias" | sed -n 's/.*v\([0-9a-fA-F]\{4\}\)p\([0-9a-fA-F]\{4\}\).*/\1/p')"
+      product="$(printf '%s\n' "$modalias" | sed -n 's/.*v\([0-9a-fA-F]\{4\}\)p\([0-9a-fA-F]\{4\}\).*/\2/p')"
+      [ -n "$vendor" ] && [ -n "$product" ] || return 1
+      stable="$(printf '%s' "$uniq" | tr -c '[:alnum:]_.:-' '_')"
+      printf 'USB:%s:%s:%s\n' \
+        "$(printf '%s' "$vendor" | tr '[:lower:]' '[:upper:]')" \
+        "$(printf '%s' "$product" | tr '[:lower:]' '[:upper:]')" \
+        "$stable"
+    }
+
+    controller_identifier() {
+      uniq="''${1:-}"
+      modalias="''${2:-}"
+      if led_identifier "$uniq"; then
+        printf '%s\n' "$(printf '%s' "$uniq" | tr '[:lower:]' '[:upper:]')"
+        return 0
+      fi
+      usb_identifier_from_modalias "$modalias" "$uniq"
+    }
+
     supported_player_device() {
-      mac="$1"
+      id="$1"
       name="''${2:-}"
       modalias="''${3:-}"
       icon="''${4:-}"
@@ -77,7 +104,7 @@ let
       if printf '%s\n' "$text" | grep -Eiq 'audio|headphone|headset|speaker|keyboard|mouse|phone|television| tv|shield'; then
         return 1
       fi
-      printf '%s\n' "$text" | grep -Eiq '(^|[^a-z])pro controller([^a-z]|$)|usb:v057ep2009|name: pro controller|alias: pro controller|nintendo switch pro|joy-con|joycon'
+      printf '%s\n' "$text" | grep -Eiq '(^|[^a-z])pro controller([^a-z]|$)|usb:v057ep2009|input:b0003v057ep2009|usb:v2dc8p301a|input:b0003v2dc8p301a|name: pro controller|alias: pro controller|nintendo switch pro|joy-con|joycon|8bitdo ultimate c 2'
     }
 
     local_switch_rows() {
@@ -88,15 +115,17 @@ let
           ""|*"IMU"*|*"imu"*) continue ;;
         esac
         uniq="$(cat "$event/device/uniq" 2>/dev/null || true)"
-        switch_identifier "$uniq" || continue
         modalias="$(cat "$event/device/modalias" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
         case "$modalias" in
           input:b0003*) ;;
           *) continue ;;
         esac
-        supported_player_device "$uniq" "$name" "$modalias" "input-gaming" || continue
+        id="$(controller_identifier "$uniq" "$modalias" || true)"
+        [ -n "''${id:-}" ] || continue
+        player_identifier "$id" || continue
+        supported_player_device "$id" "$name" "$modalias" "input-gaming" || continue
         printf '%s\t%s\ttrue\tfalse\tfalse\tfalse\t%s\tinput-gaming\n' \
-          "$(printf '%s' "$uniq" | tr '[:lower:]' '[:upper:]')" \
+          "$id" \
           "$(printf '%s' "$name" | tr '\t\r\n' '   ')" \
           "$modalias"
       done | sort -u
@@ -107,11 +136,14 @@ let
       before="$(jq -c '.players // []' "$order_file" 2>/dev/null || echo '[]')"
       tmp="$(mktemp)"
       jq '
+        def player_id:
+          (((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")) or
+           ((.mac // "") | test("^USB:[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}:.+")));
         .players |= map(select(
           (.mac == "KEYBOARD") or
           (
-            ((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")) and
-            ((.name // "") | test("(?i)(pro controller|nintendo switch pro|joy-con|joycon|switch pro)"))
+            player_id and
+            ((.name // "") | test("(?i)(pro controller|nintendo switch pro|joy-con|joycon|switch pro|8bitdo ultimate c 2)"))
           )
         ))
       ' "$order_file" >"$tmp"
@@ -127,7 +159,9 @@ let
       before="$(jq -c '.players // []' "$order_file" 2>/dev/null || echo '[]')"
       tmp="$(mktemp)"
       if ! jq '
-        def switch_mac: ((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
+        def player_id:
+          (((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")) or
+           ((.mac // "") | test("^USB:[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}:.+")));
         def slot: (.player | tonumber? // 99);
         def pack($rows; $used):
           reduce ($rows[]) as $row
@@ -145,8 +179,8 @@ let
         (.players // []) as $players
         | ($players | map(select((.mac // "") == "KEYBOARD"))) as $keyboard
         | ($keyboard | map(slot | select(. >= 1 and . <= 4))) as $reserved
-        | ($players | map(select(((.mac // "") != "KEYBOARD") and switch_mac and (.connected == true))) | sort_by(slot)) as $connected
-        | ($players | map(select(((.mac // "") != "KEYBOARD") and switch_mac and (.connected != true))) | sort_by(slot)) as $disconnected
+        | ($players | map(select(((.mac // "") != "KEYBOARD") and player_id and (.connected == true))) | sort_by(slot)) as $connected
+        | ($players | map(select(((.mac // "") != "KEYBOARD") and player_id and (.connected != true))) | sort_by(slot)) as $disconnected
         | (pack($connected; $reserved)) as $active
         | (pack($disconnected; $active.used)) as $inactive
         | .players = (($keyboard | sort_by(slot)) + $active.players + $inactive.players | sort_by(slot))
@@ -173,13 +207,13 @@ let
       local_switch_rows >>"$connected_tmp" || true
 
       tmp="$(mktemp)"
-      jq '.players |= map(if ((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")) then . + {connected:false} else . end)' "$order_file" >"$tmp"
+      jq '.players |= map(if (((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")) or ((.mac // "") | test("^USB:[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}:.+"))) then . + {connected:false} else . end)' "$order_file" >"$tmp"
       mv "$tmp" "$order_file"
 
       while IFS=$'\t' read -r mac name connected _paired _trusted _wake modalias icon; do
         [ -n "''${mac:-}" ] || continue
         [ "''${connected:-false}" = true ] || continue
-        if ! switch_identifier "$mac"; then
+        if ! player_identifier "$mac"; then
           continue
         fi
         name="''${name:-unknown-controller}"
@@ -194,12 +228,16 @@ let
           jq --arg mac "$mac_upper" --arg name "$name" \
             '([.players[]?.player] as $used
               | ([1, 2, 3, 4] | map(select(. as $slot | ($used | index($slot) | not))) | .[0])) as $next
-             | if $next == null then . else .players += [{player:$next, mac:$mac, name:$name, connected:true}] end' \
+             | if $next == null then .players += [{player:((.players | length) + 1), mac:$mac, name:$name, connected:true}] else .players += [{player:$next, mac:$mac, name:$name, connected:true}] end' \
             "$order_file" >"$tmp"
         fi
         mv "$tmp" "$order_file"
       done <"$connected_tmp"
       rm -f "$connected_tmp"
+
+      tmp="$(mktemp)"
+      jq '.players |= map(select((((.mac // "") | test("^USB:[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}:.+")) | not) or (.connected == true)))' "$order_file" >"$tmp"
+      mv "$tmp" "$order_file"
 
       compact_player_slots
 
@@ -722,8 +760,10 @@ in
     services.udev.extraRules = ''
       # 8BitDo Ultimate 2C Bluetooth and Nintendo Switch Pro mode controller identities.
       SUBSYSTEM=="usb", ATTR{idVendor}=="2dc8", ATTR{idProduct}=="310b", TEST=="power/control", ATTR{power/control}="on"
+      SUBSYSTEM=="usb", ATTR{idVendor}=="2dc8", ATTR{idProduct}=="301a", TEST=="power/control", ATTR{power/control}="on"
       SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="2009", TEST=="power/control", ATTR{power/control}="on"
       KERNEL=="hidraw*", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="310b", MODE="0660", GROUP="input", TAG+="uaccess"
+      KERNEL=="hidraw*", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="301a", MODE="0660", GROUP="input", TAG+="uaccess"
       KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0660", GROUP="input", TAG+="uaccess"
       ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Pro Controller", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-bluetooth-low-latency.service"
       ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Pro Controller", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-leds-apply.service"

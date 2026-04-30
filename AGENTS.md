@@ -237,12 +237,13 @@ changelog.
   controller input add events and debounced BlueZ connected-property changes;
   serialize LED/order writes so the background loop and one-shot apply cannot
   race, update the background state marker from one-shot applies, and rate-limit
-  changed LED writes to roughly one write every half second. Merge only USB
-  Switch-Pro HID input nodes into player reconciliation; Bluetooth controller
-  connection truth must come from BlueZ so stale Bluetooth HID nodes do not keep
-  receiving LED writes after disconnect or radio failure. Some 8BitDo wired USB
-  modes expose `2dc8:301a` via `hid-generic`, which can provide input but not
-  Nintendo player LED sysfs controls.
+  changed LED writes to roughly one write every half second. Merge supported USB
+  HID input nodes into player reconciliation; Bluetooth controller connection
+  truth must come from BlueZ so stale Bluetooth HID nodes do not keep receiving
+  LED writes after disconnect or radio failure. Some 8BitDo wired USB modes
+  expose `2dc8:301a` via `hid-generic`, which should be tracked as an
+  input-only player identity while connected because it can provide input but
+  not Nintendo player LED sysfs controls.
   Do not start-limit one-shot LED applies during fast reconnect cycles, but
   avoid direct rapid `controller-leds apply` fan-out or force-writing
   already-correct LEDs because hid-nintendo output reports can wedge the
