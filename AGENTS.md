@@ -272,9 +272,7 @@ changelog.
   `/srv/emulation/xdg/share/xemu/xemu/xemu.toml`; keep Xbox machine paths in
   that config instead of relying on Xemu's implicit config discovery. Keep
   `general.show_welcome = false` there or Xemu suppresses the configured BIOS
-  and stops in the first-run machine wizard. Large redump-style Xbox ISOs need
-  cached XISO conversion before launch or Xemu boots the video partition and
-  asks for an Xbox disc.
+  and stops in the first-run machine wizard.
   Keep Boomer's ES-DE ROM folder names aligned exactly with
   `/mnt/z/Library/ROMs/roms`; Doom uses `Fantasy - GZDoom (2005)` with
   Batocera-style `.gzdoom` launchers at the ROM-folder top level and assets
