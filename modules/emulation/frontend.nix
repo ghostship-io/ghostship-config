@@ -222,7 +222,7 @@ let
     pico8_source="/mnt/z/Library/ROMs/roms/$pico8_folder"
     pico8_target="${cfg.romRoot}/$pico8_folder"
     if [ -d "$pico8_source" ] && [ -d "$pico8_target" ]; then
-      if ! find "$pico8_target" -maxdepth 1 -type f \( -name '*.p8' -o -name '*.P8' -o -name '*.p8.png' -o -name '*.P8.PNG' \) -print -quit | grep -q .; then
+      if ! find -L "$pico8_target" -maxdepth 1 -type f \( -name '*.p8' -o -name '*.P8' -o -name '*.p8.png' -o -name '*.P8.PNG' \) -print -quit | grep -q .; then
         for cart in \
           "Celeste Classic.p8.png" \
           "Celeste Classic 2 - Lani's Trek.p8.png" \
