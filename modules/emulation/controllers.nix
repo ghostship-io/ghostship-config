@@ -323,6 +323,60 @@ let
     done
   '';
 
+  controllerBluetoothLowLatency = pkgs.writeShellScriptBin "controller-bluetooth-low-latency" ''
+    set -euo pipefail
+    export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.bluez pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.jq pkgs.systemd ]}:$PATH
+    log_file="${cfg.dataRoot}/logs/controller-bluetooth-latency.log"
+    mkdir -p "$(dirname "$log_file")"
+    touch "$log_file"
+
+    log() {
+      echo "$(date -u +%FT%TZ) $*" >>"$log_file"
+    }
+
+    switch_pro_macs() {
+      busctl --system --json=short call org.bluez / org.freedesktop.DBus.ObjectManager GetManagedObjects 2>/dev/null \
+        | jq -r '
+            .data[0]
+            | to_entries[]
+            | select(.value["org.bluez.Device1"]?)
+            | .value["org.bluez.Device1"]
+            | [
+                (.Address.data // ""),
+                ((.Alias.data // .Name.data // "Switch Pro Controller") | gsub("[\t\r\n]"; " ")),
+                ((.Connected.data // false) | tostring),
+                ((.Modalias.data // "") | ascii_downcase),
+                ((.Icon.data // "") | ascii_downcase)
+              ]
+            | select((.[2] == "true") and (((.[3] | test("v057ep2009")) or (.[1] | ascii_downcase | test("(^pro controller$|nintendo switch pro)")))))
+            | .[0]
+          '
+    }
+
+    if hciconfig hci0 >/dev/null 2>&1; then
+      adapter_policy="$(hciconfig -a hci0 2>/dev/null | sed -n 's/^[[:space:]]*Link policy: //p' | head -1 || true)"
+      if printf '%s\n' "$adapter_policy" | grep -q SNIFF; then
+        if hciconfig hci0 lp rswitch >/dev/null 2>&1; then
+          log "set hci0 link policy to RSWITCH"
+        else
+          log "failed to set hci0 link policy"
+        fi
+      fi
+    fi
+
+    while IFS= read -r mac; do
+      [ -n "''${mac:-}" ] || continue
+      current="$(hcitool lp "$mac" 2>/dev/null || true)"
+      if printf '%s\n' "$current" | grep -q SNIFF; then
+        if hcitool lp "$mac" rswitch >/dev/null 2>&1; then
+          log "disabled SNIFF link policy for $mac"
+        else
+          log "failed to disable SNIFF link policy for $mac"
+        fi
+      fi
+    done < <(switch_pro_macs)
+  '';
+
   controllerAutoconnect = pkgs.writeShellScriptBin "controller-autoconnect" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:$PATH
@@ -405,6 +459,7 @@ let
         sleep 1
       done
       if [ "$did_connect" = 1 ]; then
+        ${lib.getExe controllerBluetoothLowLatency} || true
         ${lib.getExe controllerLeds} apply || true
       fi
     }
@@ -449,6 +504,7 @@ let
           latest="$(cat "$trigger_file" 2>/dev/null || true)"
           [ "$token" = "$latest" ] && break
         done
+        systemctl start --no-block controller-bluetooth-low-latency.service >/dev/null 2>&1 || true
         systemctl start --no-block controller-leds-apply.service >/dev/null 2>&1 || true
       ) &
     }
@@ -547,6 +603,16 @@ let
       echo "== connected devices =="
       timeout 5s bluetoothctl devices Connected || true
       echo
+      echo "== controller link policy =="
+      timeout 5s hciconfig -a hci0 2>/dev/null | grep -E 'Link policy|Link mode' || true
+      timeout 5s bluetoothctl devices Connected 2>/dev/null \
+        | awk '/Pro Controller/ {print $2}' \
+        | while read -r mac; do
+            [ -n "$mac" ] || continue
+            printf '%s ' "$mac"
+            timeout 3s hcitool lp "$mac" 2>/dev/null || true
+          done
+      echo
       echo "== controller player order =="
       cat "${cfg.configRoot}/controllers/player-order.json" 2>/dev/null || true
       echo
@@ -561,6 +627,7 @@ in
   config = lib.mkIf cfg.enable {
     ghostship.emulation.internal.scripts.controllerLeds = controllerLeds;
     ghostship.emulation.internal.scripts.controllerAutoconnect = controllerAutoconnect;
+    ghostship.emulation.internal.scripts.controllerBluetoothLowLatency = controllerBluetoothLowLatency;
     ghostship.emulation.internal.scripts.controllerBluetoothHealth = controllerBluetoothHealth;
     ghostship.emulation.internal.scripts.controllerBluetoothDiagnostics = controllerBluetoothDiagnostics;
 
@@ -606,6 +673,7 @@ in
       SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="2009", TEST=="power/control", ATTR{power/control}="on"
       KERNEL=="hidraw*", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="310b", MODE="0660", GROUP="input", TAG+="uaccess"
       KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0660", GROUP="input", TAG+="uaccess"
+      ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Pro Controller", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-bluetooth-low-latency.service"
       ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Pro Controller", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-leds-apply.service"
     '';
 
@@ -825,7 +893,28 @@ in
         btmgmt_set fast-conn on
         btmgmt_set ssp on
         btmgmt_set sc on
+        ${lib.getExe controllerBluetoothLowLatency} || true
       '';
+    };
+
+    systemd.services.controller-bluetooth-low-latency = {
+      description = "Disable Bluetooth low-power sniff policy for Switch Pro controller links";
+      wantedBy = [ "multi-user.target" ];
+      after = [
+        "bluetooth.service"
+        "controller-bluetooth-tuning.service"
+      ];
+      before = [
+        "controller-autoconnect.service"
+        "controller-leds.service"
+      ];
+      unitConfig.StartLimitIntervalSec = 0;
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${lib.getExe controllerBluetoothLowLatency}";
+      };
+      bindsTo = [ "bluetooth.service" ];
+      partOf = [ "bluetooth.service" ];
     };
 
     systemd.services.controller-bluetooth-debug = {

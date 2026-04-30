@@ -65,7 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Boomer's default boot path to the ES-DE kiosk session, make the ES-DE restart
   tool handle both greetd kiosk mode and console mode, and give `bluetoothd`
   plus system D-Bus conservative CPU scheduling weight boosts without enabling
-  realtime scheduling or IRQ pinning. Add ROCKNIX-style Switch Pro hotkeys with
+  realtime scheduling or IRQ pinning. Disable Bluetooth `SNIFF` low-power link
+  policy for connected Switch Pro controllers so multiplayer sessions favor
+  input latency over controller battery life. Add ROCKNIX-style Switch Pro hotkeys with
   Star/Home as quick menu, Square/Capture as the preferred modifier, Select as
   fallback, a raw controller hotkey monitor for normal emulator exits,
   left-stick-as-D-pad overrides for D-pad-only RetroArch

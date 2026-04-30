@@ -381,6 +381,10 @@ Boomer prefers Bluetooth BR/EDR mode because Switch Pro controllers, Wiimotes,
 and normal A2DP headphone audio use classic Bluetooth. This intentionally
 reduces unused LE/ISO activity for the four-controller couch setup. BLE-only
 accessories are not the primary target.
+`controller-bluetooth-low-latency` removes Bluetooth `SNIFF` low-power policy
+from the adapter and connected Switch Pro controller links after boot and
+reconnects. This trades controller battery life for lower input latency during
+multiplayer sessions.
 
 Player assignment is managed by the ES-DE `Bluetooth Settings` TUI. Runtime
 state is stored at:
@@ -429,6 +433,7 @@ Diagnostics:
 
 ```text
 /srv/emulation/logs/controller-bluetooth-health.log
+/srv/emulation/logs/controller-bluetooth-latency.log
 /srv/emulation/logs/tools/bluetooth-pairing.log
 controller-bluetooth-diagnostics 20
 ```

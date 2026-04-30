@@ -220,8 +220,10 @@ changelog.
   player LEDs, and minimize repeated sysfs writes because each LED write sends a
   Nintendo output subcommand over Bluetooth. For Boomer's MediaTek MT7921/MT7961
   combo radio, prefer BR/EDR mode, keep Wi-Fi on 5 GHz with Wi-Fi power save and
-  MT7921e ASPM disabled, leave joycond/cemuhook inactive by default, and keep
-  focused BlueZ/`hid-nintendo` diagnostics available on demand under
+  MT7921e ASPM disabled, remove Bluetooth `SNIFF` link policy from connected
+  Switch Pro controllers to favor input latency over battery life, leave
+  joycond/cemuhook inactive by default, and keep focused BlueZ/`hid-nintendo`
+  diagnostics available on demand under
   `/srv/emulation/logs/`, not continuously enabled during normal play. Avoid
   continuous `btmgmt` polling in background
   services; bound Bluetooth diagnostics so a busy controller cannot stall
