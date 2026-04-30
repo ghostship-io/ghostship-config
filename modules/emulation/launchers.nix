@@ -1293,7 +1293,7 @@ PY
         if [ -n "$user_home" ]; then
           gzdoom_ini="$user_home/.config/gzdoom/gzdoom.ini"
           install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$gzdoom_ini")"
-          python3 - "$gzdoom_ini" <<'PY'
+          ${pkgs.python3}/bin/python3 - "$gzdoom_ini" <<'PY'
     import sys
     from pathlib import Path
 
