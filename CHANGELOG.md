@@ -25,9 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are no-op. Make Select+Start double-press send SIGTERM to the emulator
   process group and escalate to SIGKILL after 5 seconds if it stays alive.
   Rework GZDoom controls so left stick/D-pad move,
-  right stick looks up/down and left/right, X toggles map, Y toggles crouch,
-  L/R select previous/next weapon, ZL is alt fire, ZR is fire, `+` opens the
-  menu, and Square/Capture is unbound. Seed GZDoom's SDL
+  right stick looks up/down and left/right, Select/Minus toggles map,
+  Y toggles crouch, X is unbound, L/R select previous/next weapon, ZL is alt
+  fire, ZR is fire, `+` opens the menu, and Square/Capture is unbound. Seed GZDoom's SDL
   `[Joy:JS:*]` axis map so the right stick uses yaw/pitch instead of the Linux
   defaults that can look at the ceiling or treat vertical stick motion as
   left/right turning, with reduced vertical look sensitivity and D-pad hat axes
