@@ -311,6 +311,9 @@ COMMON_HOTKEYS = [
     "Reset/FPS/Shot/Fast: Select + B/Y/A/ZR",
 ]
 
+NO_HOME_NOTE = "Square/Capture: no stable Home binding."
+WII_HOME_NOTE = "Console Home: Square/Capture."
+
 
 def two_column_button_lines(entries):
     lines = []
@@ -344,10 +347,10 @@ CONTROLLER_MAPS = [
                 "- -> Select / Hotkey",
                 "D-pad -> D-pad",
                 "Left Stick -> Move",
-                "Square -> Console Home/no-op",
+                "Square -> Console Home*",
                 "Star/Home -> Turbo",
             ],
-            ["Rocknix hotkeys use Select as modifier; Square is not quick menu."],
+            ["Rocknix hotkeys use Select; Square is Home only where listed."],
         ),
     },
     {
@@ -362,7 +365,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Quick Menu is Select+X; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -381,7 +384,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Quick Menu is Select+X; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -396,7 +399,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Quick Menu is Select+X; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -413,7 +416,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Quick Menu is Select+X; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -431,7 +434,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Quick Menu is Select+X; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -450,7 +453,7 @@ CONTROLLER_MAPS = [
                 "Mode -> -",
                 "Start -> +",
             ],
-            ["Quick Menu is Select+X; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -464,7 +467,7 @@ CONTROLLER_MAPS = [
                 "Button 2 -> A",
                 "Pause -> +",
             ],
-            ["Quick Menu is Select+X; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -482,7 +485,7 @@ CONTROLLER_MAPS = [
                 "R Trigger -> R/ZR",
                 "Start -> +",
             ],
-            ["Quick Menu is Select+X; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -497,7 +500,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Run -> +",
             ],
-            ["Quick Menu is Select+X; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -514,7 +517,7 @@ CONTROLLER_MAPS = [
                 "Coin/Select -> -",
                 "Start -> +",
             ],
-            ["Quick Menu is Select+X; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -536,7 +539,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Quick Menu is Select+X; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -556,7 +559,7 @@ CONTROLLER_MAPS = [
                 "R -> R/ZR",
                 "Start -> +",
             ],
-            ["N64 A/B stay direct; Quick Menu is Select+X; Square/Capture is no-op."],
+            ["N64 A/B stay direct.", NO_HOME_NOTE],
         ),
     },
     {
@@ -576,7 +579,7 @@ CONTROLLER_MAPS = [
                 "Z -> R",
                 "Start -> +",
             ],
-            ["Quick Menu is Select+X where Dolphin supports it; Square/Capture is no-op for GameCube."],
+            ["Dolphin GameCube has no Home button.", NO_HOME_NOTE],
         ),
     },
     {
@@ -598,7 +601,7 @@ CONTROLLER_MAPS = [
                 "C -> L",
                 "Z -> R",
             ],
-            ["Square/Capture maps Wii Home where Dolphin exposes it."],
+            [WII_HOME_NOTE],
         ),
     },
     {
@@ -620,7 +623,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
-            ["Quick Menu is Select+X where Dolphin supports it; Square/Capture is no-op for Wii Classic."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -642,7 +645,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
-            ["Square/Capture is no-op until a stable Wii U HOME binding is configured."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -664,7 +667,7 @@ CONTROLLER_MAPS = [
                 "Back -> -",
                 "Start -> +",
             ],
-            ["Square/Capture is no-op unless xemu adds stable guide/menu binding."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -683,7 +686,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Square/Capture is no-op until a stable PSP Home binding is configured."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -705,7 +708,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            ["Square/Capture is no-op until a stable 3DS HOME binding is configured."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -727,7 +730,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
-            ["Square/Capture is no-op until a stable Switch HOME binding is configured."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -748,7 +751,7 @@ CONTROLLER_MAPS = [
                 "B7 -> ZL",
                 "B8 -> ZR",
             ],
-            ["Quick Menu is Select+X for RetroArch arcade; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
     {
@@ -791,7 +794,7 @@ CONTROLLER_MAPS = [
                 "X -> A",
                 "Pause/Menu -> +",
             ],
-            ["PICO-8 X/A stays primary; Square/Capture is no-op."],
+            [NO_HOME_NOTE],
         ),
     },
 ]
@@ -2234,6 +2237,11 @@ def smoke_test(mode):
         assert any("B -> B" in line for line in n64["detail"])
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
         assert any("Wii Home -> Square/Capture" in line for line in wii["detail"])
+        assert any(WII_HOME_NOTE in line for line in wii["detail"])
+        for row in CONTROLLER_MAPS:
+            if row["label"] in {"Switch Pro Reference", "Wii Remote + Nunchuk", "GZDoom"}:
+                continue
+            assert any(NO_HOME_NOTE in line for line in row["detail"])
         gzdoom = next(row for row in CONTROLLER_MAPS if row["label"] == "GZDoom")
         assert any("Use/Confirm -> A" in line for line in gzdoom["detail"])
         assert any("Move -> Left Stick/D-pad" in line for line in gzdoom["detail"])
