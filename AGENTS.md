@@ -70,7 +70,7 @@ changelog.
 - Develop hosts expose `agent-deck` through the same repo-managed wrapper
   pattern as the other agent CLIs.
 - WSL desktop-facing OpenCode support uses the `opencode-server` user service
-  on `127.0.0.1:8421`; do not add a repo-managed Paseo daemon.
+  on `127.0.0.1:4096`; do not add a repo-managed Paseo daemon.
 - Develop hosts install `codex`, `gemini`, `opencode`, and `paseo` into the
   user-local npm prefix under
   `/home/nixos/.local/share/ghostship-agent-tools/npm`, and
