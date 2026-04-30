@@ -377,72 +377,16 @@ let
       target = "wifi-connect";
     }
     {
-      file = "Bluetooth Status.sh";
-      target = "bluetooth-status";
-    }
-    {
-      file = "Bluetooth Pair Controller.sh";
+      file = "Controller Pair.sh";
       target = "bluetooth-pair-controller";
     }
     {
-      file = "Bluetooth Reconnect Controllers.sh";
+      file = "Controller Reconnect.sh";
       target = "bluetooth-reconnect-controllers";
     }
     {
-      file = "Player Assignment.sh";
+      file = "Controller Assignment.sh";
       target = "player-assignment";
-    }
-    {
-      file = "Audio Status.sh";
-      target = "audio-status";
-    }
-    {
-      file = "Display Profile Test.sh";
-      target = "display-profile-tool";
-    }
-    {
-      file = "Display Profile Override.sh";
-      target = "display-profile-override";
-    }
-    {
-      file = "RetroArch Core Status.sh";
-      target = "retroarch-core-status";
-    }
-    {
-      file = "RetroArch Graphics Profiles.sh";
-      target = "retroarch-graphics-profiles";
-    }
-    {
-      file = "RetroArch Shader Profiles.sh";
-      target = "retroarch-shader-profiles";
-    }
-    {
-      file = "RetroAchievements Status.sh";
-      target = "retroachievements-status";
-    }
-    {
-      file = "ES-DE Scraper Status.sh";
-      target = "esde-scraper-status";
-    }
-    {
-      file = "ES-DE Scrape Missing Media.sh";
-      target = "esde-scrape-missing-media";
-    }
-    {
-      file = "Launch Log Review.sh";
-      target = "launch-log-review";
-    }
-    {
-      file = "ROM Coverage Check.sh";
-      target = "rom-coverage-check-tool";
-    }
-    {
-      file = "Smoke Tests.sh";
-      target = "smoke-tests";
-    }
-    {
-      file = "Performance Tests.sh";
-      target = "performance-tests";
     }
     {
       file = "Restart ES-DE.sh";

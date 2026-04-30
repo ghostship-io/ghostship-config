@@ -203,9 +203,7 @@ Navi 21/23 HDMI/DP audio card over USB audio adapters. It does not hardcode one
 physical HDMI port; it asks PipeWire which AMD HDMI/DP profile is currently
 `available`, sets that card profile, and makes the matching HDMI sink default.
 
-Use the ES-DE `Audio Status` tool or run `audio-route` from SSH to inspect and
-repair the route. The same tool can play a short test tone through the selected
-HDMI sink.
+Run `audio-route` from SSH to inspect and repair the route.
 
 ## Smoke ROMs
 
@@ -388,11 +386,10 @@ Wi-Fi/Bluetooth kernel modules until live hardware confirms the adapter split.
 ## ES-DE Tools
 
 The ES-DE Tools system exposes controller-friendly terminal menus for Wi-Fi,
-Bluetooth, player assignment, display profile inspection, RetroArch
-profile/shader switching, core status, scraper status, launch log review, ROM
-coverage checks, restart, shutdown, and reboot. Tools edit runtime config under
-`/srv/emulation/config` and do not mutate Nix-managed packages or RetroArch core
-derivations.
+controller pairing/reconnect/assignment, restart, shutdown, and reboot. Helper
+scripts for audio, display, RetroArch, scraping, launch logs, ROM coverage,
+smoke tests, and performance tests remain available on disk for SSH or
+background use, but are not shown in the ES-DE menu.
 
 These tools are exposed as an ES-DE `Tools` system. Upstream ES-DE does not
 provide a stable Batocera-style API for arbitrary native main-menu actions; that
@@ -450,8 +447,8 @@ After SSH access exists:
    `/srv/emulation/roms`.
 3. Boot to the tty, run `esde-preflight`, then launch ES-DE with
    `start-esde` and confirm Art Book Next appears.
-4. Run `audio-route` or the ES-DE `Audio Status` tool and confirm HDMI audio on
-   each physical HDMI port you intend to use.
+4. Run `audio-route` and confirm HDMI audio on each physical HDMI port you
+   intend to use.
 5. Pair all four controllers in Switch mode and verify connection-order player
    assignment.
 6. Run `retroarch-shader-smoke-test`.

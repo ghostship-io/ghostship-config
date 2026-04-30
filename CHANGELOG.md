@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer ES-DE tools menu**: Slim the visible Tools menu to Wi-Fi,
+  controller pairing/reconnect/assignment, restart, shutdown, and reboot while
+  keeping the removed helper scripts available outside the menu.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.
