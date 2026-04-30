@@ -1601,7 +1601,8 @@ EOF
         "xemu": "inherits SDL Switch label hints from run-emulator; Square/Capture has no stable Home binding",
         "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Square/Capture has no stable Home binding",
         "supermodel": "inherits SDL Switch label hints from run-emulator; Square/Capture has no stable Home binding",
-        "gzdoom": "run-emulator executes boomer-controls.cfg; A is Use/Confirm, B is Jump/Back, Select/- toggles map, Y toggles crouch, X is unbound, L1/R1 select previous/next weapon, L2/R2 are alt fire/fire, Start/+ opens menu, and right stick controls look"
+        "gzdoom": "run-emulator executes boomer-controls.cfg; A is Use/Confirm, B is Jump/Back, Select/- toggles map, Y toggles crouch, X is unbound, L1/R1 select previous/next weapon, L2/R2 are alt fire/fire, Start/+ opens menu, and right stick controls look",
+        "pico8": "run-emulator launches carts with PICO-8; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu"
       },
       "known_gaps": {
         "motion": "hid_nintendo exposes a separate IMU device; emulator support varies",

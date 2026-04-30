@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer PICO-8 ES-DE support**: Seed a small starter set of existing NAS
+  PICO-8 carts into an empty ES-DE ROM folder and document the PICO-8 Switch
+  controller map in the on-device Controller Maps TUI and generated policy.
 - **Boomer Xemu first-run setup**: Launch Xemu with the Nix-generated
   `xemu.toml` machine settings and disable Xemu's welcome wizard so Xbox games
   do not stop at the manual machine configuration prompt when the required BIOS

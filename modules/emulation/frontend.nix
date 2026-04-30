@@ -218,6 +218,25 @@ let
       fi
     done
 
+    pico8_folder="Fantasy - PICO-8 (2015)"
+    pico8_source="/mnt/z/Library/ROMs/roms/$pico8_folder"
+    pico8_target="${cfg.romRoot}/$pico8_folder"
+    if [ -d "$pico8_source" ] && [ -d "$pico8_target" ]; then
+      if ! find "$pico8_target" -maxdepth 1 -type f \( -name '*.p8' -o -name '*.P8' -o -name '*.p8.png' -o -name '*.P8.PNG' \) -print -quit | grep -q .; then
+        for cart in \
+          "Celeste Classic.p8.png" \
+          "Celeste Classic 2 - Lani's Trek.p8.png" \
+          "Just One Boss.p8.png" \
+          "PICOHOT.p8.png" \
+          "POOM.p8.png" \
+          "Pico Tetris.p8.png"; do
+          if [ -f "$pico8_source/$cart" ] && [ ! -e "$pico8_target/$cart" ]; then
+            ln -s "$pico8_source/$cart" "$pico8_target/$cart"
+          fi
+        done
+      fi
+    fi
+
     ln -sfn "${cfg.dataRoot}" /home/${cfg.user}/Emulation
     chown -h ${cfg.user}:${cfg.group} /home/${cfg.user}/Emulation || true
     if command -v render-esde-scraper-settings >/dev/null 2>&1; then

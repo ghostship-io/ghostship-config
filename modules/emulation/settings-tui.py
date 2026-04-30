@@ -785,10 +785,9 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "PICO-8",
             [
-                "D-pad -> D-pad",
-                "Left Stick -> D-pad",
-                "O -> B",
-                "X -> A",
+                "Move -> D-pad/Left Stick",
+                "O / Primary -> B",
+                "X / Secondary -> A",
                 "Pause/Menu -> +",
             ],
             [],
