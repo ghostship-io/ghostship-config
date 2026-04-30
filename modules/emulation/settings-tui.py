@@ -304,15 +304,14 @@ BUTTON_MAP_COLUMN_WIDTH = 27
 
 COMMON_HOTKEYS = [
     "Quick Menu: Select + X",
-    "Turbo: Star/Home (controller)",
-    "Hotkey: - / Select",
     "Exit: Select + Start twice",
-    "Save/Load: Select + R / L",
-    "Reset/FPS/Shot/Fast: Select + B/Y/A/ZR",
+    "Save: Select + R",
+    "Load: Select + L",
+    "Reset: Select + B",
+    "FPS: Select + Y",
+    "Shot: Select + A",
+    "Fast: Select + ZR",
 ]
-
-NO_HOME_NOTE = "Square/Capture: no stable Home binding."
-WII_HOME_NOTE = "Console Home: Square/Capture."
 
 
 def two_column_button_lines(entries):
@@ -324,10 +323,11 @@ def two_column_button_lines(entries):
     return lines
 
 
-def controller_map(title, mappings, notes=(), hotkeys=()):
+def controller_map(title, mappings, notes=(), hotkeys=(), square="None"):
+    mappings = [*mappings, f"Square -> {square}", "Star/Home -> Turbo"]
     lines = [title, "", "Button Map"]
     lines.extend(f"  {line}" for line in two_column_button_lines(mappings))
-    lines.extend(["", "Hotkeys"])
+    lines.append("Hotkeys")
     lines.extend(f"  {line}" for line in (hotkeys or COMMON_HOTKEYS))
     lines.extend(f"  Note: {line}" for line in notes)
     return lines
@@ -344,13 +344,12 @@ CONTROLLER_MAPS = [
                 "X -> X / refresh",
                 "Y -> Y / action",
                 "+ -> Start",
-                "- -> Select / Hotkey",
+                "- -> Select",
                 "D-pad -> D-pad",
                 "Left Stick -> Move",
-                "Square -> Console Home*",
-                "Star/Home -> Turbo",
             ],
             ["Rocknix hotkeys use Select; Square is Home only where listed."],
+            square="Console Home*",
         ),
     },
     {
@@ -365,7 +364,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -384,7 +383,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -399,7 +398,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -416,7 +415,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -434,7 +433,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -453,7 +452,7 @@ CONTROLLER_MAPS = [
                 "Mode -> -",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -467,7 +466,7 @@ CONTROLLER_MAPS = [
                 "Button 2 -> A",
                 "Pause -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -485,7 +484,7 @@ CONTROLLER_MAPS = [
                 "R Trigger -> R/ZR",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -500,7 +499,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Run -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -517,7 +516,7 @@ CONTROLLER_MAPS = [
                 "Coin/Select -> -",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -539,7 +538,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -559,7 +558,7 @@ CONTROLLER_MAPS = [
                 "R -> R/ZR",
                 "Start -> +",
             ],
-            ["N64 A/B stay direct.", NO_HOME_NOTE],
+            ["N64 A/B stay direct."],
         ),
     },
     {
@@ -579,7 +578,7 @@ CONTROLLER_MAPS = [
                 "Z -> R",
                 "Start -> +",
             ],
-            ["Dolphin GameCube has no Home button.", NO_HOME_NOTE],
+            ["Dolphin GameCube has no Home button."],
         ),
     },
     {
@@ -595,13 +594,13 @@ CONTROLLER_MAPS = [
                 "2 -> Y",
                 "- -> -",
                 "+ -> +",
-                "Wii Home -> Square/Capture",
                 "Shake -> L3",
                 "Nunchuk Stick -> Left Stick",
                 "C -> L",
                 "Z -> R",
             ],
-            [WII_HOME_NOTE],
+            [],
+            square="Console Home",
         ),
     },
     {
@@ -623,7 +622,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -645,7 +644,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -667,7 +666,7 @@ CONTROLLER_MAPS = [
                 "Back -> -",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -686,7 +685,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -708,7 +707,7 @@ CONTROLLER_MAPS = [
                 "Select -> -",
                 "Start -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -730,7 +729,7 @@ CONTROLLER_MAPS = [
                 "- -> -",
                 "+ -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -751,7 +750,7 @@ CONTROLLER_MAPS = [
                 "B7 -> ZL",
                 "B8 -> ZR",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
     {
@@ -772,14 +771,11 @@ CONTROLLER_MAPS = [
                 "Next Weapon -> R1",
                 "Map Pan -> Left Stick/D-pad",
                 "Menu -> +",
-                "Square -> No-op",
             ],
             ["Right stick uses native SDL axes for horizontal and vertical look."],
             [
                 "Menu: + / Start",
                 "Map: - toggles",
-                "Turbo: Star/Home (controller)",
-                "Hotkey: - / Select",
                 "Exit: Select + Start twice",
             ],
         ),
@@ -795,7 +791,7 @@ CONTROLLER_MAPS = [
                 "X -> A",
                 "Pause/Menu -> +",
             ],
-            [NO_HOME_NOTE],
+            [],
         ),
     },
 ]
@@ -2237,12 +2233,11 @@ def smoke_test(mode):
         assert any("A -> A" in line for line in n64["detail"])
         assert any("B -> B" in line for line in n64["detail"])
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
-        assert any("Wii Home -> Square/Capture" in line for line in wii["detail"])
-        assert any(WII_HOME_NOTE in line for line in wii["detail"])
+        assert any("Square -> Console Home" in line for line in wii["detail"])
         for row in CONTROLLER_MAPS:
             if row["label"] in {"Switch Pro Reference", "Wii Remote + Nunchuk", "GZDoom"}:
                 continue
-            assert any(NO_HOME_NOTE in line for line in row["detail"])
+            assert any("Square -> None" in line for line in row["detail"])
         gzdoom = next(row for row in CONTROLLER_MAPS if row["label"] == "GZDoom")
         assert any("Use/Confirm -> A" in line for line in gzdoom["detail"])
         assert any("Move -> Left Stick/D-pad" in line for line in gzdoom["detail"])
@@ -2254,7 +2249,7 @@ def smoke_test(mode):
         assert any("Prev Weapon -> L1" in line for line in gzdoom["detail"])
         assert any("Next Weapon -> R1" in line for line in gzdoom["detail"])
         assert any("Menu -> +" in line for line in gzdoom["detail"])
-        assert any("Square -> No-op" in line for line in gzdoom["detail"])
+        assert any("Square -> None" in line for line in gzdoom["detail"])
         assert metrics["right_x"] + metrics["right_width"] < 92
         print(json.dumps({"maps": [row["label"] for row in CONTROLLER_MAPS], "layout": metrics}, indent=2))
 
