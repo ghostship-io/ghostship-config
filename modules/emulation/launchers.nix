@@ -1118,7 +1118,7 @@ PY
         flashrom_path = '$xemu_bios_dir/Complex_4627.bin'
         eeprom_path = '$xemu_data_dir/eeprom.bin'
         hdd_path = '$xemu_bios_dir/xbox_hdd.qcow2'
-        XEMUTOML
+XEMUTOML
         chown ${cfg.user}:${cfg.group} "$xemu_data_dir/xemu.toml"
         chmod 0644 "$xemu_data_dir/xemu.toml"
         dolphin_config_dir="${cfg.dataRoot}/xdg/config/dolphin-emu"
