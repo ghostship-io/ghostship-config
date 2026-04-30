@@ -592,6 +592,7 @@ in
       ""
       "${config.hardware.bluetooth.package}/libexec/bluetooth/bluetoothd -f /etc/bluetooth/main.conf --noplugin=bap -E --debug=*"
     ];
+    systemd.services.bluetooth.restartIfChanged = lib.mkForce true;
 
     systemd.services.controller-bluetooth-tuning = {
       description = "Apply Bluetooth controller tuning for Boomer Switch Pro controllers";
@@ -614,6 +615,8 @@ in
         echo Y > /sys/module/mt7921e/parameters/disable_aspm 2>/dev/null || true
         btmgmt power on || true
         btmgmt bredr on || true
+        btmgmt le off || true
+        btmgmt advertising off || true
         btmgmt connectable on || true
         btmgmt bondable on || true
         btmgmt fast-conn on || true
