@@ -385,11 +385,11 @@ Wi-Fi/Bluetooth kernel modules until live hardware confirms the adapter split.
 
 ## ES-DE Tools
 
-The ES-DE Tools system exposes controller-friendly terminal menus for Wi-Fi,
-controller pairing/reconnect/assignment, restart, shutdown, and reboot. Helper
-scripts for audio, display, RetroArch, scraping, launch logs, ROM coverage,
-smoke tests, and performance tests remain available on disk for SSH or
-background use, but are not shown in the ES-DE menu.
+The ES-DE Tools system exposes controller-friendly terminal menus for
+controller pairing/assignment/connect, Wi-Fi, restart, reboot, and shutdown in a
+managed order. Helper scripts for audio, display, RetroArch, scraping, launch
+logs, ROM coverage, smoke tests, and performance tests remain available on disk
+for SSH or background use, but are not shown in the ES-DE menu.
 
 These tools are exposed as an ES-DE `Tools` system. Upstream ES-DE does not
 provide a stable Batocera-style API for arbitrary native main-menu actions; that

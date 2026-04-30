@@ -57,6 +57,20 @@ let
     </ruleList>
   '';
 
+  mkToolGamelistEntry = index: tool: ''
+    <game>
+      <path>./${emu.xmlEscape tool.file}</path>
+      <name>${emu.xmlEscape (lib.removeSuffix ".sh" tool.file)}</name>
+      <sortname>${lib.fixedWidthNumber 2 (index + 1)}</sortname>
+    </game>'';
+
+  toolsGamelistXml = pkgs.writeText "emulation-tools-gamelist.xml" ''
+    <?xml version="1.0"?>
+    <gameList>
+    ${lib.concatStringsSep "\n" (lib.imap0 mkToolGamelistEntry emu.tools)}
+    </gameList>
+  '';
+
   esSettingsXml = pkgs.writeText "emulation-es-settings.xml" ''
     <?xml version="1.0"?>
     <settings>
@@ -125,12 +139,14 @@ let
       "${cfg.dataRoot}/tools" \
       "${cfg.esde.appDataDir}" \
       "${cfg.esde.appDataDir}/custom_systems" \
+      "${cfg.esde.appDataDir}/gamelists/tools" \
       "${cfg.esde.appDataDir}/settings" \
       "${cfg.esde.appDataDir}/themes" \
       "${cfg.esde.appDataDir}/scripts"
 
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${esSystemsXml} "${cfg.esde.appDataDir}/custom_systems/es_systems.xml"
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${esFindRulesXml} "${cfg.esde.appDataDir}/custom_systems/es_find_rules.xml"
+    install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${toolsGamelistXml} "${cfg.esde.appDataDir}/gamelists/tools/gamelist.xml"
     if [ ! -e "${cfg.esde.appDataDir}/settings/es_settings.xml" ]; then
       install -D -m 0640 -o ${cfg.user} -g ${cfg.group} ${esSettingsXml} "${cfg.esde.appDataDir}/settings/es_settings.xml"
     fi

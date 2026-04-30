@@ -369,36 +369,36 @@ let
 
   tools = [
     {
-      file = "Wi-Fi Status.sh";
-      target = "wifi-status";
-    }
-    {
-      file = "Wi-Fi Connect.sh";
-      target = "wifi-connect";
-    }
-    {
       file = "Controller Pair.sh";
       target = "bluetooth-pair-controller";
-    }
-    {
-      file = "Controller Reconnect.sh";
-      target = "bluetooth-reconnect-controllers";
     }
     {
       file = "Controller Assignment.sh";
       target = "player-assignment";
     }
     {
+      file = "Controller Connect.sh";
+      target = "bluetooth-reconnect-controllers";
+    }
+    {
+      file = "Wi-Fi Connect.sh";
+      target = "wifi-connect";
+    }
+    {
+      file = "Wi-Fi Status.sh";
+      target = "wifi-status";
+    }
+    {
       file = "Restart ES-DE.sh";
       target = "restart-esde";
     }
     {
-      file = "Shutdown.sh";
-      target = "system-shutdown";
-    }
-    {
       file = "Reboot.sh";
       target = "system-reboot";
+    }
+    {
+      file = "Shutdown.sh";
+      target = "system-shutdown";
     }
   ];
 
