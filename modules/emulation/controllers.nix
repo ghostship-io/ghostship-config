@@ -228,8 +228,8 @@ let
         root_attempts=1
         root_delay=0
         if [ "$force" = true ]; then
-          root_attempts=12
-          root_delay=0.05
+          root_attempts=20
+          root_delay=0.1
         fi
         device_root="$(find_device_root "$mac" "$root_attempts" "$root_delay" || true)"
         [ -n "''${device_root:-}" ] || continue
@@ -246,7 +246,7 @@ let
                 desired=0
               fi
               current="$(cat "$led/brightness" 2>/dev/null || echo unknown)"
-              if [ "$force" = true ] || [ "$current" != "$desired" ]; then
+              if [ "$current" != "$desired" ]; then
                 printf '%s\t%s\n' "$desired" "$led/brightness" >>"$pending_leds"
                 changed=1
               fi
@@ -430,12 +430,12 @@ let
     trigger_reconcile() {
       reason="$1"
       echo "$(date -u +%FT%TZ) bluez connected change: $reason" >>"$log_file"
-      for delay in 0 0.25 0.75 1.5 3; do
+      for delay in 0 1 3; do
         (
           if [ "$delay" != 0 ]; then
             sleep "$delay"
           fi
-          ${lib.getExe controllerLeds} apply >/dev/null 2>&1 || true
+          systemctl start --no-block controller-leds-apply.service >/dev/null 2>&1 || true
         ) &
       done
     }
