@@ -18,9 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   send SIGTERM to the emulator process group and escalate to SIGKILL after 5
   seconds if it stays alive. Rework GZDoom controls so left stick/D-pad move,
   right stick looks up/down and left/right, Y toggles map, `+` opens the menu,
-  and Square/Capture is unbound. Seed GZDoom's SDL `[Joy:JS:*]` axis map so the
-  right stick uses yaw/pitch instead of the Linux defaults that can look at the
-  ceiling or treat vertical stick motion as left/right turning.
+  X changes weapons, and Square/Capture is unbound. Seed GZDoom's SDL
+  `[Joy:JS:*]` axis map so the right stick uses yaw/pitch instead of the Linux
+  defaults that can look at the ceiling or treat vertical stick motion as
+  left/right turning, with reduced vertical look sensitivity and D-pad hat axes
+  mapped to movement.
 - **VueTorrent download paths**: Persist qBittorrent's default save path at
   `/downloads/Torrent`, keep incomplete torrent data under
   `/downloads/Torrent/.incomplete`, and create that directory before

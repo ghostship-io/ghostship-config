@@ -131,13 +131,14 @@ Every GZDoom launch also executes the managed
 `/srv/emulation/config/emulators/gzdoom/boomer-controls.cfg` file so joystick
 input is enabled and Switch-style controls are applied: left stick and D-pad
 move, right stick looks left/right and up/down, A is Use/Confirm, B is
-Jump/Back, ZR is Fire, ZL is Alt Fire, Y toggles the map, X is
-Inventory/Action, and `+` opens the menu. Square/Capture is intentionally
+Jump/Back, ZR is Fire, ZL is Alt Fire, Y toggles the map, X changes weapons,
+and `+` opens the menu. Square/Capture is intentionally
 unbound for GZDoom. The managed GZDoom package also patches joystick menu
 handling so physical Switch A advances menus and physical Switch B backs out.
 The setup script also writes GZDoom's `[Joy:JS:*]` SDL axis map so left X/Y are
-strafe/forward, right X/Y are yaw/pitch, and unused/phantom axes cannot drive
-the view upward on launch.
+strafe/forward, right X/Y are yaw/pitch with reduced vertical sensitivity,
+D-pad hat axes can also move/pan, and unused/phantom axes cannot drive the view
+upward on launch.
 
 ## BIOS, Firmware, And Keys
 

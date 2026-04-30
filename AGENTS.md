@@ -287,9 +287,10 @@ changelog.
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
   Switch A/B, and launch GZDoom with the managed Boomer controls cfg so
   left stick/D-pad move, right stick looks, Use/Confirm is A, Jump/Back is B,
-  Y toggles map, `+` opens menu, and Square/Capture is unbound. GZDoom's SDL
-  `[Joy:JS:*]` axis map must be seeded so Switch Pro axis 0/1 are strafe/forward,
-  axis 2 is yaw, axis 3 is pitch, and unused axes are disabled.
+  Y toggles map, X changes weapons, `+` opens menu through `Pad_Start`, and
+  Square/Capture is unbound. GZDoom's SDL `[Joy:JS:*]` axis map must be seeded so
+  Switch Pro axis 0/1 are strafe/forward, axis 2 is yaw, axis 3 is pitch with
+  reduced scale, D-pad hat axes can move/pan, and unused axes are disabled.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

@@ -768,7 +768,7 @@ CONTROLLER_MAPS = [
                 "Next Weapon -> R",
                 "Map Toggle -> Y",
                 "Map Pan -> Left Stick/D-pad",
-                "Inventory/Action -> X",
+                "Change Weapon -> X",
                 "Menu -> +",
                 "Square -> No-op",
             ],
@@ -2237,6 +2237,7 @@ def smoke_test(mode):
         assert any("Look -> Right Stick" in line for line in gzdoom["detail"])
         assert any("Map Toggle -> Y" in line for line in gzdoom["detail"])
         assert any("Map Pan -> Left Stick/D-pad" in line for line in gzdoom["detail"])
+        assert any("Change Weapon -> X" in line for line in gzdoom["detail"])
         assert any("Menu -> +" in line for line in gzdoom["detail"])
         assert any("Square -> No-op" in line for line in gzdoom["detail"])
         assert metrics["right_x"] + metrics["right_width"] < 92

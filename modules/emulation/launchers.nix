@@ -1233,22 +1233,24 @@ PY
 
     bind pad_a +use
     bind pad_b +jump
-    bind pad_x invuse
+    bind pad_x weapnext
     bind pad_y togglemap
     bind joy2 +use
     bind joy1 +jump
-    bind joy4 invuse
+    bind joy4 weapnext
     bind joy3 togglemap
     bind rtrigger +attack
     bind ltrigger +altattack
     bind joy8 +attack
     bind joy7 +altattack
+    bind axis6plus +attack
+    bind axis5plus +altattack
     bind lshoulder weapprev
     bind rshoulder weapnext
     bind joy5 weapprev
     bind joy6 weapnext
     bind pad_start menu_main
-    bind joy10 menu_main
+    unbind joy10
     bind lthumb crouch
     bind rthumb centerview
     bind axis1minus +moveleft
@@ -1312,26 +1314,31 @@ PY
         "Axis2map": "0",
         "Axis3deadzone": "0.20",
         "Axis3map": "1",
+        "Axis3scale": "0.50",
         "Axis4deadzone": "1.0",
         "Axis4map": "-1",
         "Axis5deadzone": "1.0",
         "Axis5map": "-1",
+        "Axis6deadzone": "0.10",
+        "Axis6map": "3",
+        "Axis7deadzone": "0.10",
+        "Axis7map": "2",
     }
     binding_settings = {
         "Pad_A": "+use",
         "Pad_B": "+jump",
-        "Pad_X": "invuse",
+        "Pad_X": "weapnext",
         "Pad_Y": "togglemap",
         "Joy1": "+jump",
         "Joy2": "+use",
         "Joy3": "togglemap",
-        "Joy4": "invuse",
+        "Joy4": "weapnext",
         "Joy5": "weapprev",
         "Joy6": "weapnext",
         "Joy7": "+altattack",
         "Joy8": "+attack",
         "Joy9": None,
-        "Joy10": "menu_main",
+        "Joy10": None,
         "Joy14": None,
         "Pad_Back": None,
         "Pad_Start": "menu_main",
@@ -1344,9 +1351,9 @@ PY
         "Axis4Minus": None,
         "Axis4Plus": None,
         "Axis5Minus": None,
-        "Axis5Plus": None,
+        "Axis5Plus": "+altattack",
         "Axis6Minus": None,
-        "Axis6Plus": None,
+        "Axis6Plus": "+attack",
         "DPadUp": "+forward",
         "DPadDown": "+back",
         "DPadLeft": "+moveleft",
