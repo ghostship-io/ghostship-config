@@ -119,13 +119,18 @@ def parse_bluetooth_power(output):
 def parse_bluetooth_adapter_lines(output):
     name = ""
     powered = "unknown"
+    discovering = "unknown"
     for line in output.splitlines():
         stripped = line.strip()
         if stripped.startswith("Name:"):
             name = stripped.split(":", 1)[1].strip()
         elif stripped.startswith("Powered:"):
             powered = stripped.split(":", 1)[1].strip().lower()
+        elif stripped.startswith("Discovering:"):
+            discovering = stripped.split(":", 1)[1].strip().lower()
     lines = [f"Power: {'On' if powered == 'yes' else 'Off' if powered == 'no' else 'Unknown'}"]
+    if discovering in ("yes", "no"):
+        lines.append(f"Scanning: {'Yes' if discovering == 'yes' else 'No'}")
     if name:
         lines.append(f"Host: {name}")
     return lines
@@ -181,6 +186,44 @@ def bluetooth_visible_labels(powered):
     return labels
 
 
+CONTROLLER_NAME_HINTS = (
+    "8bit",
+    "controller",
+    "dualshock",
+    "dualsense",
+    "gamepad",
+    "joy-con",
+    "joycon",
+    "joystick",
+    "nintendo",
+    "playstation",
+    "steam",
+    "switch",
+    "wii",
+    "wireless controller",
+    "xbox",
+)
+
+NON_CONTROLLER_NAME_HINTS = (
+    "audio",
+    "consumer control",
+    "hd-audio",
+    "hdmi",
+    "keyboard",
+    "mouse",
+    "power button",
+    "touchpad",
+    "video bus",
+)
+
+
+def is_controller_name(name):
+    lowered = (name or "").lower()
+    if not lowered or any(hint in lowered for hint in NON_CONTROLLER_NAME_HINTS):
+        return False
+    return any(hint in lowered for hint in CONTROLLER_NAME_HINTS)
+
+
 def controller_device_info(event_path):
     base = Path("/sys/class/input") / Path(event_path).name / "device"
     name = ""
@@ -196,6 +239,10 @@ def controller_device_info(event_path):
     return {"event": event_path, "name": name or Path(event_path).name, "mac": mac_key(uniq)}
 
 
+def is_controller_event_device(event_path):
+    return is_controller_name(controller_device_info(event_path).get("name", ""))
+
+
 class ControllerReader(threading.Thread):
     def __init__(self, events):
         super().__init__(daemon=True)
@@ -205,7 +252,7 @@ class ControllerReader(threading.Thread):
         self.last_abs = {}
 
     def refresh_devices(self):
-        wanted = set(glob.glob("/dev/input/event*"))
+        wanted = {path for path in glob.glob("/dev/input/event*") if is_controller_event_device(path)}
         for path in list(self.fds):
             if path not in wanted:
                 os.close(self.fds.pop(path))
@@ -1226,7 +1273,12 @@ def smoke_test(mode):
         assert "Bluetooth Toggle" in labels_on
         assert "Restart Bluetooth" in labels_on
         assert "Restart Bluetooth" not in labels_off
-        assert not any("Discoverable" in line or "Pairable" in line or "Discovering" in line for line in adapter_lines)
+        assert "Scanning: No" in adapter_lines
+        assert not any("Discoverable" in line or "Pairable" in line for line in adapter_lines)
+        assert is_controller_name("Nintendo Switch Pro Controller")
+        assert is_controller_name("8BitDo Ultimate Wireless Controller")
+        assert not is_controller_name("AMIRA-KEYBOAR USB KEYBOARD")
+        assert not is_controller_name("AMIRA-KEYBOAR USB KEYBOARD Mouse")
         metrics = pane_metrics(26, 92)
         start, end = menu_window(len(labels_on), len(labels_on) - 1, metrics["content_height"])
         assert 0 <= start < end <= len(labels_on)

@@ -198,10 +198,14 @@ changelog.
   Settings, and system power/session actions; the settings entries should stay
   large-font, keyboard-and-controller friendly TUIs with a dark two-column
   layout, left-side actions, and right-side selected-action status. Hide
-  host-only BlueZ fields such as discoverable, pairable, and discovering from
-  the main Bluetooth status. In the ES-DE Gamescope session these TUIs should
-  launch through Xwayland `xterm`; `foot` fails there because Gamescope does
-  not expose the Wayland subcompositor it needs. Smoke
+  host-only BlueZ fields such as discoverable and pairable from the main
+  Bluetooth status, but keep the discovering/scanning state visible because it
+  tells the user whether Boomer is actively looking for devices. Let the terminal
+  handle keyboard input and keep the raw `/dev/input` reader limited to
+  controller-like devices so arrow keys do not double-step. In the ES-DE
+  Gamescope session these TUIs should launch through Xwayland `xterm`; `foot`
+  fails there because Gamescope does not expose the Wayland subcompositor it
+  needs. Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
   launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where

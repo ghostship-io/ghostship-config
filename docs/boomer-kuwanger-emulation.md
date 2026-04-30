@@ -394,13 +394,15 @@ The ES-DE Tools system exposes large-font terminal TUIs for `Bluetooth Settings`
 and `Wi-Fi Settings`, plus restart, reboot, and shutdown. The settings TUIs
 use a dark two-column layout: actions on the left, selected-action status and
 details on the right. They support keyboard and controller navigation from the
-couch and avoid showing host-only Bluetooth fields such as discoverable,
-pairable, and discovering. Under the ES-DE Gamescope session they launch
-through Xwayland `xterm`, with `foot` kept as a pure Wayland fallback. Launch
-diagnostics are written under `/srv/emulation/logs/tools/`. Helper scripts for
-audio, display, RetroArch, scraping, launch logs, ROM coverage, smoke tests,
-and performance tests remain available on disk for SSH or background use, but
-are not shown in the ES-DE menu.
+couch. Bluetooth status shows whether Boomer is scanning for nearby devices, but
+does not expose host-only discoverable or pairable fields. Under the ES-DE
+Gamescope session they launch through Xwayland `xterm`, with `foot` kept as a
+pure Wayland fallback. Keyboard input is handled by the terminal, while the raw
+`/dev/input` reader is limited to controller-like devices so navigation does not
+double-step. Launch diagnostics are written under `/srv/emulation/logs/tools/`.
+Helper scripts for audio, display, RetroArch, scraping, launch logs, ROM
+coverage, smoke tests, and performance tests remain available on disk for SSH
+or background use, but are not shown in the ES-DE menu.
 
 These tools are exposed as an ES-DE `Tools` system. Upstream ES-DE does not
 provide a stable Batocera-style API for arbitrary native main-menu actions; that

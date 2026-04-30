@@ -16,7 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   log launcher diagnostics under `/srv/emulation/logs/tools/`. Refine the
   settings TUIs to a dark two-column layout with scroll-safe action lists,
   right-pane hover status, a single Bluetooth toggle, and hidden BlueZ host
-  fields.
+  discoverable/pairable fields while retaining the active scanning state. Limit
+  the raw input-event reader to controller-like devices so keyboard arrow
+  presses are not handled twice.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.
