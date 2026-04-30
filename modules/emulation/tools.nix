@@ -181,7 +181,16 @@ let
   restartEsdeDelayed = pkgs.writeShellScript "restart-esde-delayed" ''
     set -euo pipefail
     sleep 1
-    exec ${pkgs.systemd}/bin/systemctl restart emulation-session.service
+    ${pkgs.systemd}/bin/systemctl stop emulation-session.service || true
+    for _ in $(${pkgs.coreutils}/bin/seq 1 10); do
+      if ! ${pkgs.systemd}/bin/systemctl is-active --quiet emulation-session.service; then
+        break
+      fi
+      sleep 0.5
+    done
+    ${pkgs.systemd}/bin/systemctl stop getty@tty1.service || true
+    ${pkgs.systemd}/bin/systemctl reset-failed emulation-session.service getty@tty1.service || true
+    exec ${pkgs.systemd}/bin/systemctl start emulation-session.service
   '';
 
   toolScripts = {

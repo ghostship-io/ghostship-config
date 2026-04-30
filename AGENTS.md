@@ -213,8 +213,13 @@ changelog.
   live `[NEW] Device` output, not rely only on the post-scan device cache; pair
   commands should register their own BlueZ agent. Keep a `Show Paired` item
   directly under Bluetooth status. Controller LED writes should target the
-  matched controller sysfs root and avoid generic fallbacks that light unrelated
-  player LEDs. Smoke
+  matched controller sysfs root, avoid generic fallbacks that light unrelated
+  player LEDs, and minimize repeated sysfs writes because each LED write sends a
+  Nintendo output subcommand over Bluetooth. For Boomer's MediaTek MT7921/MT7961
+  combo radio, prefer BR/EDR mode, keep Wi-Fi on 5 GHz with Wi-Fi power save and
+  MT7921e ASPM disabled, leave joycond/cemuhook inactive by default, and keep
+  focused BlueZ/`hid-nintendo` diagnostics available under
+  `/srv/emulation/logs/`. Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
   launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where

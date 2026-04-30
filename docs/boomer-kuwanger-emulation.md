@@ -369,9 +369,16 @@ profiles.
 
 The primary controller path is four Nintendo Switch Pro-style Bluetooth
 controllers exposed as `057e:2009` / `Pro Controller`. The host enables BlueZ
-experimental behavior, `hid-nintendo`, joycond where available, Switch
-Pro/8BitDo Switch-mode udev access, and disables USB autosuspend for the known
-controller identities.
+experimental behavior, `hid-nintendo`, Switch Pro/8BitDo Switch-mode udev
+access, and disables USB autosuspend for the known controller identities.
+Boomer's live radio stack is the MediaTek MT7921/MT7961 combo device
+(`14c3:7961` Wi-Fi plus `0e8d:7961` USB Bluetooth), so the managed defaults
+also disable MT7921e ASPM and NetworkManager Wi-Fi power save.
+
+Boomer prefers Bluetooth BR/EDR mode because Switch Pro controllers, Wiimotes,
+and normal A2DP headphone audio use classic Bluetooth. This intentionally
+reduces unused LE/ISO activity for the four-controller couch setup. BLE-only
+accessories are not the primary target.
 
 Player assignment is managed by the ES-DE `Bluetooth Settings` TUI. Runtime
 state is stored at:
@@ -382,10 +389,29 @@ state is stored at:
 
 `controller-leds` watches only Switch-style controller identities and applies
 Switch-style player LED counts through sysfs according to the saved player
-slots. If a controller identity does not expose LED sysfs entries, logical
-assignment still remains stable. `controller-autoconnect` reconnects paired
-Switch Pro controllers serially and leaves headphones and other accessories
-alone.
+slots. It writes only changed LED files during the background loop, because
+each sysfs LED write sends a Nintendo output subcommand over Bluetooth.
+One-shot applies still force a single pattern refresh after explicit assignment
+or pairing. If a controller identity does not expose LED sysfs entries, logical
+assignment still remains stable. `controller-autoconnect` polls at a low
+cadence, uses BlueZ D-Bus state for discovery, reconnects paired Switch Pro
+controllers serially, and leaves headphones and other accessories alone.
+
+`joycond` and `joycond-cemuhook` stay installed for manual experiments but are
+not started by default. The normal path uses the kernel `hid-nintendo` devices
+directly so there is no extra userspace daemon competing for controller output
+reports.
+
+Diagnostics:
+
+```text
+/srv/emulation/logs/controller-bluetooth-health.log
+/srv/emulation/logs/tools/bluetooth-pairing.log
+controller-bluetooth-diagnostics 20
+```
+
+The diagnostics command writes a timestamped summary plus a short `btmon`
+capture under `/srv/emulation/logs/bluetooth-diagnostics/`.
 
 Wi-Fi stays available for SSH, but NetworkManager Wi-Fi profiles are constrained
 to 5 GHz by default to avoid 2.4 GHz contention with Bluetooth. The ES-DE
@@ -416,8 +442,11 @@ interactive session, and rechecks BlueZ state before treating a reported
 pair/connect error as fatal. Keyboard input is handled by the terminal, while
 the raw `/dev/input` reader is limited to real controller navigation devices so
 Switch Pro IMU motion data and analog-stick idle noise do not move the menu.
-`Restart ES-DE` queues a dedicated delayed system service so the restart runs
-outside the frontend process tree.
+Player assignment drains pending input before listening and accepts only a real
+button/key press, so stale stick navigation cannot move a controller to another
+slot. `Restart ES-DE` stops the old frontend, stops the fallback tty getty, and
+then starts `emulation-session.service` again from a dedicated service outside
+the frontend process tree.
 Launch diagnostics are written under `/srv/emulation/logs/tools/`. Helper
 scripts for audio, display, RetroArch, scraping, launch logs, ROM coverage,
 smoke tests, and performance tests remain available on disk for SSH or

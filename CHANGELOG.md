@@ -32,7 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directory with Switch-style player counts. Add a controller-only Switch Pro
   autoconnect service, a `Controller Maps` TUI, and route `Restart ES-DE`
   through a dedicated delayed system service so it does not kill its own
-  frontend session before the restart is queued.
+  frontend session before the restart is queued. Tune Boomer's MediaTek
+  MT7921/MT7961 Bluetooth stack for four Switch Pro controllers by preferring
+  BR/EDR mode, disabling Wi-Fi power save and MT7921e ASPM, keeping BlueZ and
+  `hid-nintendo` focused debug logging enabled, removing joycond/cemuhook from
+  the active service set, rate-limiting controller autoconnect, minimizing
+  sysfs LED writes, and logging controller HID health plus pairing diagnostics.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

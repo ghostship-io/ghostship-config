@@ -13,6 +13,7 @@ let
     export PATH=${emu.scriptPath}:$PATH
     state_dir="${cfg.configRoot}/controllers"
     order_file="$state_dir/player-order.json"
+    last_state_file="$state_dir/led-state.tsv"
     log_file="${cfg.dataRoot}/logs/controller-leds.log"
     last_led_status=""
     mode="''${1:-loop}"
@@ -40,17 +41,22 @@ let
       fi
     }
 
-    connected_bluez_devices() {
+    bluez_device_rows() {
       busctl --system --json=short call org.bluez / org.freedesktop.DBus.ObjectManager GetManagedObjects 2>/dev/null \
         | jq -r '
             .data[0]
             | to_entries[]
             | select(.value["org.bluez.Device1"]?)
             | .value["org.bluez.Device1"]
-            | select(.Connected.data == true)
             | [
-                .Address.data,
-                ((.Alias.data // .Name.data // "unknown-controller") | gsub("[\t\r\n]"; " "))
+                (.Address.data // ""),
+                ((.Alias.data // .Name.data // "unknown-controller") | gsub("[\t\r\n]"; " ")),
+                ((.Connected.data // false) | tostring),
+                ((.Paired.data // .Bonded.data // false) | tostring),
+                ((.Trusted.data // false) | tostring),
+                ((.WakeAllowed.data // false) | tostring),
+                ((.Modalias.data // "") | ascii_downcase),
+                ((.Icon.data // "") | ascii_downcase)
               ]
             | @tsv
           '
@@ -59,32 +65,33 @@ let
     supported_player_device() {
       mac="$1"
       name="''${2:-}"
-      info="$(bluetoothctl info "$mac" 2>/dev/null || true)"
-      text="$(printf '%s\n%s\n' "$name" "$info" | tr '[:upper:]' '[:lower:]')"
+      modalias="''${3:-}"
+      icon="''${4:-}"
+      text="$(printf '%s\n%s\n%s\n' "$name" "$modalias" "$icon" | tr '[:upper:]' '[:lower:]')"
       if printf '%s\n' "$text" | grep -Eiq 'audio|headphone|headset|speaker|keyboard|mouse|phone|television| tv|shield'; then
         return 1
       fi
-      printf '%s\n' "$text" | grep -Eiq '^pro controller$|modalias: usb:v057ep2009|name: pro controller|alias: pro controller|nintendo switch pro|joy-con|joycon'
+      printf '%s\n' "$text" | grep -Eiq '^pro controller$|usb:v057ep2009|name: pro controller|alias: pro controller|nintendo switch pro|joy-con|joycon'
     }
 
     prune_non_player_devices() {
       ensure_order_file
-      jq -r '.players[]? | [.mac, (.name // "")] | @tsv' "$order_file" 2>/dev/null \
-        | while IFS=$'\t' read -r mac name; do
-            [ -n "''${mac:-}" ] || continue
-            if ! printf '%s\n' "$mac" | grep -Eiq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$'; then
-              continue
-            fi
-            if supported_player_device "$mac" "$name"; then
-              continue
-            fi
-            tmp="$(mktemp)"
-            jq --arg mac "$(printf '%s' "$mac" | tr '[:lower:]' '[:upper:]')" \
-              '.players |= map(select(((.mac // "") | ascii_upcase) != $mac))' \
-              "$order_file" >"$tmp"
-            mv "$tmp" "$order_file"
-            echo "$(date -u +%FT%TZ) pruned non-controller player entry $mac" >>"$log_file"
-          done
+      before="$(jq -c '.players // []' "$order_file" 2>/dev/null || echo '[]')"
+      tmp="$(mktemp)"
+      jq '
+        .players |= map(select(
+          (.mac == "KEYBOARD") or
+          (
+            ((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")) and
+            ((.name // "") | test("(?i)(^pro controller$|nintendo switch pro|joy-con|joycon|switch pro)"))
+          )
+        ))
+      ' "$order_file" >"$tmp"
+      mv "$tmp" "$order_file"
+      after="$(jq -c '.players // []' "$order_file" 2>/dev/null || echo '[]')"
+      if [ "$before" != "$after" ]; then
+        echo "$(date -u +%FT%TZ) pruned non-switch controller player entries" >>"$log_file"
+      fi
     }
 
     record_connected_devices() {
@@ -95,27 +102,27 @@ let
       mv "$tmp" "$order_file"
 
       connected_tmp="$(mktemp)"
-      connected_bluez_devices >"$connected_tmp" || true
+      bluez_device_rows >"$connected_tmp" || true
 
-      while IFS=$'\t' read -r mac name; do
+      while IFS=$'\t' read -r mac name connected _paired _trusted _wake modalias icon; do
         [ -n "''${mac:-}" ] || continue
+        [ "''${connected:-false}" = true ] || continue
         if ! printf '%s\n' "$mac" | grep -Eiq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$'; then
           continue
         fi
         name="''${name:-unknown-controller}"
-        supported_player_device "$mac" "$name" || continue
+        supported_player_device "$mac" "$name" "$modalias" "$icon" || continue
+        mac_upper="$(printf '%s' "$mac" | tr '[:lower:]' '[:upper:]')"
         tmp="$(mktemp)"
-        if jq -e --arg mac "$mac" '.players[]? | select(.mac == $mac)' "$order_file" >/dev/null; then
-          jq --arg mac "$mac" --arg name "$name" \
-            '.players |= map(if .mac == $mac then . + {name:$name, connected:true} else . end)' \
+        if jq -e --arg mac "$mac_upper" '.players[]? | select(((.mac // "") | ascii_upcase) == $mac)' "$order_file" >/dev/null; then
+          jq --arg mac "$mac_upper" --arg name "$name" \
+            '.players |= map(if ((.mac // "") | ascii_upcase) == $mac then . + {mac:$mac, name:$name, connected:true} else . end)' \
             "$order_file" >"$tmp"
         else
-          jq --arg mac "$mac" --arg name "$name" \
-            'def next_player:
-              ([.players[]?.player] as $used
-               | ([1, 2, 3, 4] | map(select(. as $slot | ($used | index($slot) | not))) | .[0])
-               // ((.players | length) + 1));
-             .players += [{player:next_player, mac:$mac, name:$name, connected:true}]' \
+          jq --arg mac "$mac_upper" --arg name "$name" \
+            '([.players[]?.player] as $used
+              | ([1, 2, 3, 4] | map(select(. as $slot | ($used | index($slot) | not))) | .[0])) as $next
+             | if $next == null then . else .players += [{player:$next, mac:$mac, name:$name, connected:true}] end' \
             "$order_file" >"$tmp"
         fi
         mv "$tmp" "$order_file"
@@ -129,8 +136,25 @@ let
       chmod 0644 "$order_file" || true
     }
 
+    desired_led_rows() {
+      jq -r '
+        .players[]?
+        | select(.connected == true)
+        | select(((.player | tonumber? // 0) >= 1) and ((.player | tonumber? // 0) <= 4))
+        | select((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"))
+        | [.player, ((.mac // "") | ascii_upcase)]
+        | @tsv
+      ' "$order_file" 2>/dev/null || true
+    }
+
+    desired_led_state() {
+      desired_led_rows | sort
+    }
+
     apply_leds() {
+      force="''${1:-false}"
       found=0
+      changed=0
       while IFS=$'\t' read -r player mac; do
         [ -n "''${player:-}" ] || continue
         device_root=""
@@ -143,6 +167,9 @@ let
           break
         done
         [ -n "''${device_root:-}" ] || continue
+        trigger_led=""
+        trigger_value=""
+        controller_changed=0
         for led in "$device_root"/leds/*:green:player-[1-4]; do
           [ -e "$led/brightness" ] || continue
           led_name="$(basename "$led")"
@@ -151,17 +178,36 @@ let
             [1-4])
               found=1
               if [ "$led_index" -le "$player" ]; then
-                echo 1 >"$led/brightness" 2>/dev/null || true
+                desired=1
               else
-                echo 0 >"$led/brightness" 2>/dev/null || true
+                desired=0
+              fi
+              current="$(cat "$led/brightness" 2>/dev/null || echo unknown)"
+              if [ -z "$trigger_led" ]; then
+                trigger_led="$led/brightness"
+                trigger_value="$desired"
+              fi
+              if [ "$current" != "$desired" ]; then
+                echo "$desired" >"$led/brightness" 2>/dev/null || true
+                changed=1
+                controller_changed=1
+                sleep 0.08
               fi
               ;;
           esac
         done
-      done < <(jq -r '.players[]? | select(.connected == true) | [.player, .mac] | @tsv' "$order_file" 2>/dev/null || true)
+        if [ "$force" = true ] && [ "$controller_changed" = 0 ] && [ -n "$trigger_led" ]; then
+          echo "$trigger_value" >"$trigger_led" 2>/dev/null || true
+          changed=1
+          sleep 0.08
+        fi
+        sleep 0.12
+      done < <(desired_led_rows)
 
       if [ "$found" = 0 ]; then
         status="no supported controller LED sysfs entries found"
+      elif [ "$changed" = 0 ]; then
+        status="controller LED entries already match player order"
       else
         status="updated controller LED entries"
       fi
@@ -174,7 +220,7 @@ let
     run_once() {
       sanitize_known_bad_order
       record_connected_devices || true
-      apply_leds || true
+      apply_leds true || true
     }
 
     case "$mode" in
@@ -191,8 +237,16 @@ let
     esac
 
     while true; do
-      run_once
-      sleep 2
+      sanitize_known_bad_order
+      record_connected_devices || true
+      state="$(desired_led_state || true)"
+      previous="$(cat "$last_state_file" 2>/dev/null || true)"
+      if [ "$state" != "$previous" ]; then
+        apply_leds false || true
+        printf '%s\n' "$state" >"$last_state_file"
+        chown ${cfg.user}:${cfg.group} "$last_state_file" || true
+      fi
+      sleep 15
     done
   '';
 
@@ -207,37 +261,52 @@ let
       echo "$(date -u +%FT%TZ) $*" >>"$log_file"
     }
 
-    switch_pro_device() {
-      info="$1"
-      printf '%s\n' "$info" | grep -Eiq 'Modalias:.*v057E[pP]2009|Name: Pro Controller|Alias: Pro Controller|Name: Nintendo Switch Pro|Alias: Nintendo Switch Pro'
+    bluez_switch_pro_rows() {
+      busctl --system --json=short call org.bluez / org.freedesktop.DBus.ObjectManager GetManagedObjects 2>/dev/null \
+        | jq -r '
+            .data[0]
+            | to_entries[]
+            | select(.value["org.bluez.Device1"]?)
+            | .value["org.bluez.Device1"]
+            | [
+                (.Address.data // ""),
+                ((.Alias.data // .Name.data // "Switch Pro Controller") | gsub("[\t\r\n]"; " ")),
+                ((.Connected.data // false) | tostring),
+                ((.Paired.data // .Bonded.data // false) | tostring),
+                ((.Modalias.data // "") | ascii_downcase),
+                ((.Icon.data // "") | ascii_downcase)
+              ]
+            | select((.[3] == "true") and (((.[4] | test("v057ep2009")) or (.[1] | ascii_downcase | test("(^pro controller$|nintendo switch pro)")))))
+            | @tsv
+          '
     }
 
     connected_device() {
-      printf '%s\n' "$1" | grep -Eq 'Connected: yes|BREDR\.Connected: yes'
+      [ "''${1:-false}" = true ]
     }
 
     connect_once() {
       bluetoothctl power on >/dev/null 2>&1 || true
-      bluetoothctl devices Paired | awk '/^Device / {print $2}' | while read -r mac; do
+      did_connect=0
+      while IFS=$'\t' read -r mac name connected _paired _modalias _icon; do
         [ -n "''${mac:-}" ] || continue
-        info="$(bluetoothctl info "$mac" 2>/dev/null || true)"
-        [ -n "$info" ] || continue
-        switch_pro_device "$info" || continue
-        name="$(printf '%s\n' "$info" | awk -F': ' '/^\s*Name:/ {print $2; exit}')"
-        bluetoothctl trust "$mac" >/dev/null 2>&1 || true
-        bluetoothctl wake "$mac" on >/dev/null 2>&1 || true
-        if connected_device "$info"; then
+        if connected_device "$connected"; then
           continue
         fi
         log "connecting ''${name:-Switch Pro Controller} ($mac)"
+        bluetoothctl trust "$mac" >/dev/null 2>&1 || true
+        bluetoothctl wake "$mac" on >/dev/null 2>&1 || true
         if timeout 15s bluetoothctl connect "$mac" >>"$log_file" 2>&1; then
           log "connected ''${name:-Switch Pro Controller} ($mac)"
-          ${lib.getExe controllerLeds} apply || true
+          did_connect=1
         else
           log "connect failed ''${name:-Switch Pro Controller} ($mac)"
         fi
-        sleep 1
-      done
+        sleep 2
+      done < <(bluez_switch_pro_rows)
+      if [ "$did_connect" = 1 ]; then
+        ${lib.getExe controllerLeds} apply || true
+      fi
     }
 
     case "''${1:-loop}" in
@@ -247,7 +316,7 @@ let
       loop)
         while true; do
           connect_once
-          sleep 6
+          sleep 30
         done
         ;;
       *)
@@ -256,15 +325,90 @@ let
         ;;
     esac
   '';
+
+  controllerBluetoothHealth = pkgs.writeShellScriptBin "controller-bluetooth-health" ''
+    set -euo pipefail
+    export PATH=${emu.scriptPath}:$PATH
+    log_file="${cfg.dataRoot}/logs/controller-bluetooth-health.log"
+    mkdir -p "$(dirname "$log_file")"
+    touch "$log_file"
+
+    map_hid_roots() {
+      for event in /sys/class/input/event*; do
+        [ -r "$event/device/name" ] || continue
+        name="$(cat "$event/device/name" 2>/dev/null || true)"
+        case "$name" in
+          *"Pro Controller"*)
+            uniq="$(cat "$event/device/uniq" 2>/dev/null | tr '[:lower:]' '[:upper:]' || true)"
+            input_path="$(readlink -f "$event/device" 2>/dev/null || true)"
+            [ -n "$input_path" ] || continue
+            root="$(basename "$(dirname "$(dirname "$input_path")")")"
+            printf '%s=%s %s\n' "$root" "$uniq" "$name"
+            ;;
+        esac
+      done | sort -u
+    }
+
+    while true; do
+      warnings="$(journalctl -k --since '60 seconds ago' --no-pager 2>/dev/null | grep -Ec 'nintendo .*timeout waiting|joycon_enforce_subcmd_rate|compensating for .* dropped IMU reports' || true)"
+      if [ "''${warnings:-0}" -gt 0 ]; then
+        {
+          printf '%s recent_hid_warnings=%s\n' "$(date -u +%FT%TZ)" "$warnings"
+          map_hid_roots | sed 's/^/  /'
+          btmgmt con 2>/dev/null | sed 's/^/  /' || true
+        } >>"$log_file"
+      fi
+      sleep 60
+    done
+  '';
+
+  controllerBluetoothDiagnostics = pkgs.writeShellScriptBin "controller-bluetooth-diagnostics" ''
+    set -euo pipefail
+    export PATH=${emu.scriptPath}:$PATH
+    seconds="''${1:-20}"
+    case "$seconds" in
+      *[!0-9]*|"") seconds=20 ;;
+    esac
+    out_dir="${cfg.dataRoot}/logs/bluetooth-diagnostics/$(date -u +%Y%m%dT%H%M%SZ)"
+    mkdir -p "$out_dir"
+    {
+      date -u +%FT%TZ
+      echo "== btmgmt info =="
+      btmgmt info || true
+      echo
+      echo "== btmgmt expinfo =="
+      btmgmt expinfo || true
+      echo
+      echo "== btmgmt connections =="
+      btmgmt con || true
+      echo
+      echo "== paired devices =="
+      bluetoothctl devices Paired || true
+      echo
+      echo "== connected devices =="
+      bluetoothctl devices Connected || true
+      echo
+      echo "== controller player order =="
+      cat "${cfg.configRoot}/controllers/player-order.json" 2>/dev/null || true
+      echo
+      echo "== recent kernel bluetooth/hid log =="
+      journalctl -k --since '10 minutes ago' --no-pager | grep -Ei 'Bluetooth|btusb|btmtk|nintendo|hid' || true
+    } >"$out_dir/summary.txt"
+    timeout "$seconds" btmon -T -w "$out_dir/hci.btsnoop" >/dev/null 2>&1 || true
+    printf '%s\n' "$out_dir"
+  '';
 in
 {
   config = lib.mkIf cfg.enable {
     ghostship.emulation.internal.scripts.controllerLeds = controllerLeds;
     ghostship.emulation.internal.scripts.controllerAutoconnect = controllerAutoconnect;
+    ghostship.emulation.internal.scripts.controllerBluetoothHealth = controllerBluetoothHealth;
+    ghostship.emulation.internal.scripts.controllerBluetoothDiagnostics = controllerBluetoothDiagnostics;
 
     boot.kernelModules = [ "hid-nintendo" ];
     boot.extraModprobeConfig = ''
       options btusb enable_autosuspend=n
+      options mt7921e disable_aspm=Y
     '';
 
     hardware.bluetooth = {
@@ -275,7 +419,7 @@ in
         General = {
           Experimental = true;
           FastConnectable = true;
-          ControllerMode = "dual";
+          ControllerMode = "bredr";
           JustWorksRepairing = "always";
           Privacy = "off";
         };
@@ -283,7 +427,16 @@ in
           AutoEnable = true;
         };
       };
+      input = {
+        General = {
+          IdleTimeout = 0;
+          UserspaceHID = true;
+          ClassicBondedOnly = true;
+        };
+      };
     };
+
+    networking.networkmanager.wifi.powersave = false;
 
     services.udev.extraRules = ''
       # 8BitDo Ultimate 2C Bluetooth and Nintendo Switch Pro mode controller identities.
@@ -399,6 +552,7 @@ in
       after = [
         "bluetooth.service"
         "emulation-setup.service"
+        "controller-bluetooth-tuning.service"
       ];
       serviceConfig = {
         ExecStart = "${lib.getExe controllerLeds}";
@@ -412,6 +566,7 @@ in
       after = [
         "bluetooth.service"
         "emulation-setup.service"
+        "controller-bluetooth-tuning.service"
       ];
       serviceConfig = {
         Type = "oneshot";
@@ -433,24 +588,76 @@ in
       };
     };
 
-    systemd.services.joycond = lib.mkIf (pkgs ? joycond) {
-      description = "Joy-Con and Switch Pro controller userspace daemon";
+    systemd.services.bluetooth.serviceConfig.ExecStart = lib.mkForce [
+      ""
+      "${config.hardware.bluetooth.package}/libexec/bluetooth/bluetoothd -f /etc/bluetooth/main.conf --noplugin=bap -E --debug=*"
+    ];
+
+    systemd.services.controller-bluetooth-tuning = {
+      description = "Apply Bluetooth controller tuning for Boomer Switch Pro controllers";
       wantedBy = [ "multi-user.target" ];
       after = [ "bluetooth.service" ];
+      before = [
+        "controller-autoconnect.service"
+        "controller-leds.service"
+      ];
+      path = [
+        pkgs.bluez
+        pkgs.coreutils
+      ];
       serviceConfig = {
-        ExecStart = "${pkgs.joycond}/bin/joycond";
-        Restart = "on-failure";
+        Type = "oneshot";
+        RemainAfterExit = true;
       };
+      script = ''
+        echo N > /sys/module/btusb/parameters/enable_autosuspend 2>/dev/null || true
+        echo Y > /sys/module/mt7921e/parameters/disable_aspm 2>/dev/null || true
+        btmgmt power on || true
+        btmgmt bredr on || true
+        btmgmt connectable on || true
+        btmgmt bondable on || true
+        btmgmt fast-conn on || true
+        btmgmt ssp on || true
+        btmgmt sc on || true
+      '';
     };
 
-    systemd.services.joycond-cemuhook = lib.mkIf (pkgs ? joycond-cemuhook) {
-      description = "Joycond Cemuhook motion server";
+    systemd.services.controller-bluetooth-debug = {
+      description = "Enable focused Bluetooth and hid-nintendo debug logging";
       wantedBy = [ "multi-user.target" ];
-      after = [ "joycond.service" ];
-      path = [ pkgs.kmod ];
+      after = [ "systemd-modules-load.service" ];
       serviceConfig = {
-        ExecStart = "${pkgs.joycond-cemuhook}/bin/joycond-cemuhook";
-        Restart = "on-failure";
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        control=/sys/kernel/debug/dynamic_debug/control
+        [ -w "$control" ] || exit 0
+        for query in \
+          'func __joycon_hid_send +p' \
+          'func joycon_hid_send_sync +p' \
+          'func joycon_send_subcmd +p' \
+          'func joycon_set_player_leds +p' \
+          'func joycon_send_rumble_data +p' \
+          'file drivers/bluetooth/btusb.c +p' \
+          'file drivers/bluetooth/btmtk.c +p'
+        do
+          printf '%s\n' "$query" >"$control" 2>/dev/null || true
+        done
+      '';
+    };
+
+    systemd.services.controller-bluetooth-health = {
+      description = "Log Switch Pro Bluetooth HID health warnings";
+      wantedBy = [ "multi-user.target" ];
+      after = [
+        "bluetooth.service"
+        "controller-leds.service"
+      ];
+      serviceConfig = {
+        ExecStart = "${lib.getExe controllerBluetoothHealth}";
+        Restart = "always";
+        RestartSec = "5s";
       };
     };
   };

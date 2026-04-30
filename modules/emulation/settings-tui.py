@@ -19,9 +19,11 @@ from pathlib import Path
 
 
 CONFIG_ROOT = Path(os.environ.get("EMULATION_CONFIG_ROOT", "/srv/emulation/config"))
+DATA_ROOT = Path(os.environ.get("EMULATION_DATA_ROOT", "/srv/emulation"))
 AUDIO_PREF = CONFIG_ROOT / "audio" / "output.json"
 PLAYER_ORDER = CONFIG_ROOT / "controllers" / "player-order.json"
 WIFI_POLICY = CONFIG_ROOT / "network" / "wifi-policy.json"
+PAIRING_LOG = DATA_ROOT / "logs" / "tools" / "bluetooth-pairing.log"
 
 EV_KEY = 0x01
 EV_ABS = 0x03
@@ -47,6 +49,7 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 class InputEvent:
     action: str
     device: dict | None = None
+    source: str = "unknown"
 
 
 def run_cmd(args, timeout=20):
@@ -86,6 +89,19 @@ def write_json(path, data):
         json.dump(data, handle, indent=2, sort_keys=True)
         handle.write("\n")
     os.replace(tmp, path)
+
+
+def append_log(path, lines):
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + "\n")
+            for line in lines:
+                if line:
+                    handle.write(str(line) + "\n")
+            handle.write("\n")
+    except Exception:
+        pass
 
 
 def mac_key(value):
@@ -583,8 +599,8 @@ class ControllerReader(threading.Thread):
                 continue
             self.fds[path] = fd
 
-    def emit(self, action, path):
-        self.events.put(InputEvent(action=action, device=controller_device_info(path)))
+    def emit(self, action, path, source):
+        self.events.put(InputEvent(action=action, device=controller_device_info(path), source=source))
 
     def handle_event(self, path, ev_type, code, value):
         if ev_type == EV_KEY and value == 1:
@@ -610,7 +626,7 @@ class ControllerReader(threading.Thread):
             }
             action = key_map.get(code)
             if action:
-                self.emit(action, path)
+                self.emit(action, path, "key")
         elif ev_type == EV_ABS and code in (0, 1, 16, 17):
             threshold = 1 if code in (16, 17) else JOY_DEADZONE
             release = 0 if code in (16, 17) else JOY_RELEASE
@@ -628,7 +644,7 @@ class ControllerReader(threading.Thread):
             last_action = self.last_abs.get(key)
             last_emit = self.last_abs_emit.get(key, 0)
             if action and (last_action != action or now - last_emit >= JOY_REPEAT_SECONDS):
-                self.emit(action, path)
+                self.emit(action, path, "axis")
                 self.last_abs_emit[key] = now
             self.last_abs[key] = action
 
@@ -689,6 +705,17 @@ class Tui:
 
     def stop(self):
         self.controller.stop()
+
+    def clear_pending_input(self):
+        while True:
+            try:
+                self.queue.get_nowait()
+            except queue.Empty:
+                break
+        while self.stdscr.getch() != -1:
+            pass
+        self.controller.last_abs.clear()
+        self.controller.last_abs_emit.clear()
 
     def add(self, y, x, text, attr=0):
         height, width = self.stdscr.getmaxyx()
@@ -789,27 +816,27 @@ class Tui:
                 time.sleep(0.02)
                 continue
             if ch in (curses.KEY_UP, ord("w"), ord("W")):
-                return InputEvent(ACTION_UP)
+                return InputEvent(ACTION_UP, source="keyboard")
             if ch in (curses.KEY_DOWN, ord("s"), ord("S")):
-                return InputEvent(ACTION_DOWN)
+                return InputEvent(ACTION_DOWN, source="keyboard")
             if ch in (curses.KEY_LEFT, ord("a"), ord("A")):
-                return InputEvent(ACTION_LEFT)
+                return InputEvent(ACTION_LEFT, source="keyboard")
             if ch in (curses.KEY_RIGHT, ord("d"), ord("D")):
-                return InputEvent(ACTION_RIGHT)
+                return InputEvent(ACTION_RIGHT, source="keyboard")
             if ch in (10, 13, curses.KEY_ENTER):
-                return InputEvent(ACTION_SELECT)
+                return InputEvent(ACTION_SELECT, source="keyboard")
             if ch in (27,):
-                return InputEvent(ACTION_BACK)
+                return InputEvent(ACTION_BACK, source="keyboard")
             if ch in (curses.KEY_BACKSPACE, 127, 8):
-                return InputEvent("\b")
+                return InputEvent("\b", source="keyboard")
             if ch in (ord("r"), ord("R")):
-                return InputEvent(ACTION_REFRESH)
+                return InputEvent(ACTION_REFRESH, source="keyboard")
             if ch in (ord("y"), ord("Y"), ord("x"), ord("X")):
-                return InputEvent(ACTION_ALT if ch in (ord("y"), ord("Y")) else ACTION_REFRESH)
+                return InputEvent(ACTION_ALT if ch in (ord("y"), ord("Y")) else ACTION_REFRESH, source="keyboard")
             if ch in (ord("q"), ord("Q")):
-                return InputEvent(ACTION_QUIT)
+                return InputEvent(ACTION_QUIT, source="keyboard")
             if 32 <= ch <= 126:
-                return InputEvent(chr(ch))
+                return InputEvent(chr(ch), source="keyboard")
         return None
 
     def get_text_input(self, timeout=0.1):
@@ -825,21 +852,21 @@ class Tui:
                 time.sleep(0.02)
                 continue
             if ch == curses.KEY_UP:
-                return InputEvent(ACTION_UP)
+                return InputEvent(ACTION_UP, source="keyboard")
             if ch == curses.KEY_DOWN:
-                return InputEvent(ACTION_DOWN)
+                return InputEvent(ACTION_DOWN, source="keyboard")
             if ch == curses.KEY_LEFT:
-                return InputEvent(ACTION_LEFT)
+                return InputEvent(ACTION_LEFT, source="keyboard")
             if ch == curses.KEY_RIGHT:
-                return InputEvent(ACTION_RIGHT)
+                return InputEvent(ACTION_RIGHT, source="keyboard")
             if ch in (10, 13, curses.KEY_ENTER):
-                return InputEvent(ACTION_SELECT)
+                return InputEvent(ACTION_SELECT, source="keyboard")
             if ch == 27:
-                return InputEvent(ACTION_BACK)
+                return InputEvent(ACTION_BACK, source="keyboard")
             if ch in (curses.KEY_BACKSPACE, 127, 8):
-                return InputEvent("\b")
+                return InputEvent("\b", source="keyboard")
             if 32 <= ch <= 126:
-                return InputEvent(chr(ch))
+                return InputEvent(chr(ch), source="keyboard")
         return None
 
     def menu(self, title, items, details=None, selected=0):
@@ -1211,6 +1238,26 @@ class WifiBackend:
         return run_cmd(["nmcli", "connection", "delete", "uuid", uuid], timeout=20)
 
 
+def assign_player_order(order, mac, name, slot):
+    players = order.get("players", [])
+    for player in players:
+        player["player"] = int(player.get("player", 0) or 0)
+    existing = next((p for p in players if mac and mac_key(p.get("mac")) == mac), None)
+    target = next((p for p in players if p.get("player") == slot), None)
+    if existing and target and existing is not target:
+        existing["player"], target["player"] = target["player"], existing["player"]
+    elif existing:
+        existing["player"] = slot
+        existing["name"] = name
+    elif target:
+        target["player"] = len(players) + 1
+        players.append({"player": slot, "mac": mac, "name": name, "connected": True})
+    else:
+        players.append({"player": slot, "mac": mac, "name": name, "connected": True})
+    players.sort(key=lambda row: row.get("player", 99))
+    return {"players": players}
+
+
 class SettingsApp:
     def __init__(self, tui):
         self.tui = tui
@@ -1377,6 +1424,9 @@ class SettingsApp:
             return
         def action():
             output = []
+            def finish(code):
+                append_log(PAIRING_LOG, [f"pair target: {row.get('name')} ({row.get('mac')})", *output])
+                return code, "\n".join([line for line in output if line]), ""
             if not row.get("paired"):
                 code, out, err = self.bt.pair(row["mac"])
                 output.append(f"$ bluetoothctl pair {row['mac']}")
@@ -1385,13 +1435,13 @@ class SettingsApp:
                     if self.bt.paired_or_bonded(row["mac"]):
                         output.append("Pairing reported an error, but BlueZ now reports the device is paired. Continuing.")
                     else:
-                        return code, "\n".join([line for line in output if line]), ""
+                        return finish(code)
             for args in (("trust", row["mac"]), ("wake", row["mac"], "on")):
                 code, out, err = self.bt.action(*args, timeout=20)
                 output.append(f"$ bluetoothctl {' '.join(args)}")
                 output.extend([out, err])
                 if code != 0 and args[0] != "wake":
-                    return code, "\n".join([line for line in output if line]), ""
+                    return finish(code)
             code, out, err = self.bt.action("connect", row["mac"], timeout=35)
             output.append(f"$ bluetoothctl connect {row['mac']}")
             output.extend([out, err])
@@ -1399,9 +1449,9 @@ class SettingsApp:
                 if self.bt.connected_mac(row["mac"]):
                     output.append("Connect reported an error, but BlueZ now reports the device is connected.")
                 else:
-                    return code, "\n".join([line for line in output if line]), ""
-            run_cmd(["systemctl", "start", "controller-leds-apply.service"], timeout=15)
-            return 0, "\n".join([line for line in output if line]), ""
+                    return finish(code)
+            run_cmd(["systemctl", "start", "--no-block", "controller-leds-apply.service"], timeout=8)
+            return finish(0)
         self.run_and_show("Pair Device", action)
 
     def bluetooth_connect_paired(self):
@@ -1409,18 +1459,22 @@ class SettingsApp:
         if row:
             def action():
                 output = []
+                def finish(code):
+                    append_log(PAIRING_LOG, [f"connect target: {row.get('name')} ({row.get('mac')})", *output])
+                    return code, "\n".join([line for line in output if line]), ""
                 for args in (("trust", row["mac"]), ("wake", row["mac"], "on"), ("connect", row["mac"])):
                     code, out, err = self.bt.action(*args, timeout=25)
+                    output.append(f"$ bluetoothctl {' '.join(args)}")
                     output.extend([out, err])
                     if code != 0 and args[0] == "connect":
                         if self.bt.connected_mac(row["mac"]):
                             output.append("Connect reported an error, but BlueZ now reports the device is connected.")
                             break
-                        return code, "\n".join([line for line in output if line]), ""
+                        return finish(code)
                     if code != 0 and args[0] != "wake":
-                        return code, "\n".join([line for line in output if line]), ""
-                run_cmd(["systemctl", "start", "controller-leds-apply.service"], timeout=15)
-                return 0, "\n".join([line for line in output if line]), ""
+                        return finish(code)
+                run_cmd(["systemctl", "start", "--no-block", "controller-leds-apply.service"], timeout=8)
+                return finish(0)
             self.run_and_show("Connect Device", action)
 
     def bluetooth_disconnect(self):
@@ -1457,17 +1511,29 @@ class SettingsApp:
 
     def player_assignment(self):
         self.tui.progress("Player Assignment", ["Press any controller button or keyboard key.", "Press B/Esc to go back."])
+        self.tui.clear_pending_input()
+        time.sleep(0.25)
+        self.tui.clear_pending_input()
         detected = None
         end = time.time() + 30
         while time.time() < end and not detected:
             event = self.tui.get_input(0.2)
             if not event:
                 continue
+            if event.source == "axis":
+                continue
             if event.action in (ACTION_BACK, ACTION_QUIT):
                 return
-            if event.device and (is_mac(event.device.get("mac")) or event.device.get("name")):
+            if event.source == "key" and event.device and (is_mac(event.device.get("mac")) or event.device.get("name")):
                 detected = event.device
-            elif event.action != ACTION_REFRESH:
+            elif event.source == "keyboard" and event.action not in (
+                ACTION_UP,
+                ACTION_DOWN,
+                ACTION_LEFT,
+                ACTION_RIGHT,
+                ACTION_REFRESH,
+                ACTION_ALT,
+            ):
                 detected = {"event": "keyboard", "name": "Keyboard", "mac": "KEYBOARD"}
         if not detected:
             self.tui.show_output("Player Assignment", ["No input detected."])
@@ -1509,24 +1575,8 @@ class SettingsApp:
 
     def assign_player(self, mac, name, slot):
         order = read_json(PLAYER_ORDER, {"players": []})
-        players = order.get("players", [])
-        for player in players:
-            player["player"] = int(player.get("player", 0) or 0)
-        existing = next((p for p in players if mac and mac_key(p.get("mac")) == mac), None)
-        target = next((p for p in players if p.get("player") == slot), None)
-        if existing and target and existing is not target:
-            existing["player"], target["player"] = target["player"], existing["player"]
-        elif existing:
-            existing["player"] = slot
-            existing["name"] = name
-        elif target:
-            target["player"] = len(players) + 1
-            players.append({"player": slot, "mac": mac, "name": name, "connected": True})
-        else:
-            players.append({"player": slot, "mac": mac, "name": name, "connected": True})
-        players.sort(key=lambda row: row.get("player", 99))
-        write_json(PLAYER_ORDER, {"players": players})
-        run_cmd(["systemctl", "start", "controller-leds-apply.service"], timeout=15)
+        write_json(PLAYER_ORDER, assign_player_order(order, mac, name, slot))
+        run_cmd(["systemctl", "start", "--no-block", "controller-leds-apply.service"], timeout=8)
         self.tui.show_output("Player Assignment", [f"{name} assigned to Player {slot}.", "Controller LEDs updated."])
 
     def wifi_menu(self):
@@ -1719,15 +1769,26 @@ def smoke_test(mode):
         assert not looks_pairable_for_boomer({"name": "Living Room TV"}, "Icon: video-display\nPaired: no")
         reader = ControllerReader(queue.Queue())
         emitted = []
-        reader.emit = lambda action, path: emitted.append(action)
+        reader.emit = lambda action, path, source: emitted.append((action, source))
         reader.handle_event("/dev/input/event0", EV_KEY, 304, 1)
         reader.handle_event("/dev/input/event0", EV_KEY, 305, 1)
         reader.handle_event("/dev/input/event0", EV_KEY, 307, 1)
         reader.handle_event("/dev/input/event0", EV_KEY, 308, 1)
-        assert emitted == [ACTION_BACK, ACTION_SELECT, ACTION_REFRESH, ACTION_ALT]
+        assert emitted == [(ACTION_BACK, "key"), (ACTION_SELECT, "key"), (ACTION_REFRESH, "key"), (ACTION_ALT, "key")]
         emitted.clear()
         reader.handle_event("/dev/input/event0", EV_ABS, 1, 16000)
-        assert emitted == [ACTION_DOWN]
+        assert emitted == [(ACTION_DOWN, "axis")]
+        order = {
+            "players": [
+                {"player": 1, "mac": "AA:AA:AA:AA:AA:01", "name": "P1"},
+                {"player": 2, "mac": "AA:AA:AA:AA:AA:02", "name": "P2"},
+                {"player": 3, "mac": "AA:AA:AA:AA:AA:03", "name": "P3"},
+            ]
+        }
+        swapped = assign_player_order(order, "AA:AA:AA:AA:AA:02", "P2", 3)
+        by_mac = {row["mac"]: row["player"] for row in swapped["players"]}
+        assert by_mac["AA:AA:AA:AA:AA:02"] == 3
+        assert by_mac["AA:AA:AA:AA:AA:03"] == 2
         assert parse_bt_devices(scan_sample) == [
             {"mac": "22:33:44:55:66:77", "name": "8BitDo Ultimate Controller"}
         ]
