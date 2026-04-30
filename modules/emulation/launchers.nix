@@ -1344,159 +1344,159 @@ EOF
           gzdoom_ini="$user_home/.config/gzdoom/gzdoom.ini"
           install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$gzdoom_ini")"
           ${pkgs.python3}/bin/python3 - "$gzdoom_ini" <<'PY'
-    import sys
-    from pathlib import Path
+import sys
+from pathlib import Path
 
-    path = Path(sys.argv[1])
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True) if path.exists() else []
+path = Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True) if path.exists() else []
 
-    # GZDoom's Linux SDL joystick backend reads these per-device AxisNmap keys
-    # from [Joy:JS:N]. Values are EJoyAxis: -1 none, 0 yaw, 1 pitch,
-    # 2 forward, 3 strafe. SDL exposes Switch Pro as left X/Y, right X/Y,
-    # ZL/ZR trigger axes, then D-pad hat axes.
-    axis_settings = {
-        "Axis0deadzone": "0.20",
-        "Axis0map": "3",
-        "Axis1deadzone": "0.20",
-        "Axis1map": "2",
-        "Axis2deadzone": "0.20",
-        "Axis2map": "0",
-        "Axis3deadzone": "0.20",
-        "Axis3map": "1",
-        "Axis3scale": "0.25",
-        "Axis4deadzone": "0.25",
-        "Axis4map": "-1",
-        "Axis5deadzone": "0.25",
-        "Axis5map": "-1",
-        "Axis6deadzone": "0.10",
-        "Axis6map": "3",
-        "Axis7deadzone": "0.10",
-        "Axis7map": "2",
-    }
-    binding_settings = {
-        "Pad_A": "+use",
-        "Pad_B": "+jump",
-        "Pad_X": "togglemap",
-        "Pad_Y": "crouch",
-        "LTrigger": "+altattack",
-        "RTrigger": "+attack",
-        "Joy1": "+jump",
-        "Joy2": "+use",
-        "Joy3": "crouch",
-        "Joy4": "togglemap",
-        "Joy5": "weapprev",
-        "Joy6": "weapnext",
-        "Joy7": "+altattack",
-        "Joy8": "+attack",
-        "Joy9": None,
-        "Joy10": "menu_main",
-        "Joy11": None,
-        "Joy12": None,
-        "Joy13": None,
-        "Joy14": None,
-        "Joy15": None,
-        "Joy16": None,
-        "Pad_Back": None,
-        "Pad_Start": "menu_main",
-        "Axis1Minus": "+moveleft",
-        "Axis1Plus": "+moveright",
-        "Axis2Minus": "+forward",
-        "Axis2Plus": "+back",
-        "Axis3Minus": None,
-        "Axis3Plus": None,
-        "Axis4Minus": None,
-        "Axis4Plus": None,
-        "Axis5Minus": None,
-        "Axis5Plus": None,
-        "Axis6Minus": None,
-        "Axis6Plus": None,
-        "Axis7Minus": None,
-        "Axis7Plus": None,
-        "Axis8Minus": None,
-        "Axis8Plus": None,
-        "DPadUp": "+forward",
-        "DPadDown": "+back",
-        "DPadLeft": "+moveleft",
-        "DPadRight": "+moveright",
-        "POV1Up": "+forward",
-        "POV1Down": "+back",
-        "POV1Left": "+moveleft",
-        "POV1Right": "+moveright",
-    }
-    automap_settings = {
-        "Pad_A": "am_setmark",
-        "Joy2": "am_setmark",
-        "Pad_B": "am_clearmarks",
-        "Joy1": "am_clearmarks",
-        "Pad_X": "togglemap",
-        "Pad_Y": None,
-        "Joy3": None,
-        "Joy4": "togglemap",
-        "Axis1Minus": "+am_panleft",
-        "Axis1Plus": "+am_panright",
-        "Axis2Minus": "+am_panup",
-        "Axis2Plus": "+am_pandown",
-        "DPadUp": "+am_panup",
-        "DPadDown": "+am_pandown",
-        "DPadLeft": "+am_panleft",
-        "DPadRight": "+am_panright",
-        "POV1Up": "+am_panup",
-        "POV1Down": "+am_pandown",
-        "POV1Left": "+am_panleft",
-        "POV1Right": "+am_panright",
-    }
+# GZDoom's Linux SDL joystick backend reads these per-device AxisNmap keys
+# from [Joy:JS:N]. Values are EJoyAxis: -1 none, 0 yaw, 1 pitch,
+# 2 forward, 3 strafe. SDL exposes Switch Pro as left X/Y, right X/Y,
+# ZL/ZR trigger axes, then D-pad hat axes.
+axis_settings = {
+    "Axis0deadzone": "0.20",
+    "Axis0map": "3",
+    "Axis1deadzone": "0.20",
+    "Axis1map": "2",
+    "Axis2deadzone": "0.20",
+    "Axis2map": "0",
+    "Axis3deadzone": "0.20",
+    "Axis3map": "1",
+    "Axis3scale": "0.25",
+    "Axis4deadzone": "0.25",
+    "Axis4map": "-1",
+    "Axis5deadzone": "0.25",
+    "Axis5map": "-1",
+    "Axis6deadzone": "0.10",
+    "Axis6map": "3",
+    "Axis7deadzone": "0.10",
+    "Axis7map": "2",
+}
+binding_settings = {
+    "Pad_A": "+use",
+    "Pad_B": "+jump",
+    "Pad_X": "togglemap",
+    "Pad_Y": "crouch",
+    "LTrigger": "+altattack",
+    "RTrigger": "+attack",
+    "Joy1": "+jump",
+    "Joy2": "+use",
+    "Joy3": "crouch",
+    "Joy4": "togglemap",
+    "Joy5": "weapprev",
+    "Joy6": "weapnext",
+    "Joy7": "+altattack",
+    "Joy8": "+attack",
+    "Joy9": None,
+    "Joy10": "menu_main",
+    "Joy11": None,
+    "Joy12": None,
+    "Joy13": None,
+    "Joy14": None,
+    "Joy15": None,
+    "Joy16": None,
+    "Pad_Back": None,
+    "Pad_Start": "menu_main",
+    "Axis1Minus": "+moveleft",
+    "Axis1Plus": "+moveright",
+    "Axis2Minus": "+forward",
+    "Axis2Plus": "+back",
+    "Axis3Minus": None,
+    "Axis3Plus": None,
+    "Axis4Minus": None,
+    "Axis4Plus": None,
+    "Axis5Minus": None,
+    "Axis5Plus": None,
+    "Axis6Minus": None,
+    "Axis6Plus": None,
+    "Axis7Minus": None,
+    "Axis7Plus": None,
+    "Axis8Minus": None,
+    "Axis8Plus": None,
+    "DPadUp": "+forward",
+    "DPadDown": "+back",
+    "DPadLeft": "+moveleft",
+    "DPadRight": "+moveright",
+    "POV1Up": "+forward",
+    "POV1Down": "+back",
+    "POV1Left": "+moveleft",
+    "POV1Right": "+moveright",
+}
+automap_settings = {
+    "Pad_A": "am_setmark",
+    "Joy2": "am_setmark",
+    "Pad_B": "am_clearmarks",
+    "Joy1": "am_clearmarks",
+    "Pad_X": "togglemap",
+    "Pad_Y": None,
+    "Joy3": None,
+    "Joy4": "togglemap",
+    "Axis1Minus": "+am_panleft",
+    "Axis1Plus": "+am_panright",
+    "Axis2Minus": "+am_panup",
+    "Axis2Plus": "+am_pandown",
+    "DPadUp": "+am_panup",
+    "DPadDown": "+am_pandown",
+    "DPadLeft": "+am_panleft",
+    "DPadRight": "+am_panright",
+    "POV1Up": "+am_panup",
+    "POV1Down": "+am_pandown",
+    "POV1Left": "+am_panleft",
+    "POV1Right": "+am_panright",
+}
 
-    def upsert_section(input_lines, section, settings):
-        out = []
-        in_section = False
-        found_section = False
-        seen = set()
+def upsert_section(input_lines, section, settings):
+    out = []
+    in_section = False
+    found_section = False
+    seen = set()
 
-        def append_missing():
-            for key, value in settings.items():
-                if key not in seen and value is not None:
-                    out.append(f"{key}={value}\n")
-                    seen.add(key)
-
-        for line in input_lines:
-            stripped = line.strip()
-            starts_section = stripped.startswith("[") and stripped.endswith("]")
-            if starts_section:
-                if in_section:
-                    append_missing()
-                in_section = stripped == f"[{section}]"
-                if in_section:
-                    found_section = True
-                    seen = set()
-                out.append(line)
-                continue
-            if in_section and "=" in line:
-                key = line.split("=", 1)[0].strip()
-                if key in settings:
-                    if settings[key] is not None:
-                        out.append(f"{key}={settings[key]}\n")
-                    seen.add(key)
-                    continue
-            out.append(line)
-
-        if in_section:
-            append_missing()
-        if not found_section:
-            if out and not out[-1].endswith("\n"):
-                out[-1] += "\n"
-            if out and out[-1].strip():
-                out.append("\n")
-            out.append(f"[{section}]\n")
-            for key, value in settings.items():
+    def append_missing():
+        for key, value in settings.items():
+            if key not in seen and value is not None:
                 out.append(f"{key}={value}\n")
-        return out
+                seen.add(key)
 
-    for index in range(4):
-        lines = upsert_section(lines, f"Joy:JS:{index}", axis_settings)
-    lines = upsert_section(lines, "Doom.Bindings", binding_settings)
-    lines = upsert_section(lines, "Doom.AutomapBindings", automap_settings)
+    for line in input_lines:
+        stripped = line.strip()
+        starts_section = stripped.startswith("[") and stripped.endswith("]")
+        if starts_section:
+            if in_section:
+                append_missing()
+            in_section = stripped == f"[{section}]"
+            if in_section:
+                found_section = True
+                seen = set()
+            out.append(line)
+            continue
+        if in_section and "=" in line:
+            key = line.split("=", 1)[0].strip()
+            if key in settings:
+                if settings[key] is not None:
+                    out.append(f"{key}={settings[key]}\n")
+                seen.add(key)
+                continue
+        out.append(line)
 
-    path.write_text("".join(lines), encoding="utf-8")
+    if in_section:
+        append_missing()
+    if not found_section:
+        if out and not out[-1].endswith("\n"):
+            out[-1] += "\n"
+        if out and out[-1].strip():
+            out.append("\n")
+        out.append(f"[{section}]\n")
+        for key, value in settings.items():
+            out.append(f"{key}={value}\n")
+    return out
+
+for index in range(4):
+    lines = upsert_section(lines, f"Joy:JS:{index}", axis_settings)
+lines = upsert_section(lines, "Doom.Bindings", binding_settings)
+lines = upsert_section(lines, "Doom.AutomapBindings", automap_settings)
+
+path.write_text("".join(lines), encoding="utf-8")
 PY
           chown ${cfg.user}:${cfg.group} "$gzdoom_ini"
           chmod 0644 "$gzdoom_ini"
