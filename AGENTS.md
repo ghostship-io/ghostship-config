@@ -272,8 +272,9 @@ changelog.
   `/srv/emulation/xdg/share/xemu/xemu/xemu.toml`; keep Xbox machine paths in
   that config instead of relying on Xemu's implicit config discovery. Keep
   `general.show_welcome = false` there or Xemu suppresses the configured BIOS
-  and stops in the first-run machine wizard. ES-DE should only list Xbox
-  `.xiso.iso` images so full redump ISOs remain hidden.
+  and stops in the first-run machine wizard. ES-DE matches Xbox files by final
+  `.iso` suffix, so name launchable XISOs `.xiso.iso` and keep redump backups
+  from ending in `.iso`.
   Keep Boomer's ES-DE ROM folder names aligned exactly with
   `/mnt/z/Library/ROMs/roms`; Doom uses `Fantasy - GZDoom (2005)` with
   Batocera-style `.gzdoom` launchers at the ROM-folder top level and assets
@@ -303,6 +304,9 @@ changelog.
   Switch Pro axis 0/1 are strafe/forward, axis 2 is yaw, axis 3 is pitch with
   reduced scale, trigger axes 4/5 are action buttons only, D-pad hat axes can
   move/pan, and unused axes are disabled.
+  Boomer's probed kernel Switch Pro raw map is documented in
+  `docs/boomer-kuwanger-emulation.md`; use that table instead of inferring
+  physical labels from emulator names.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

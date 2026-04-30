@@ -10,11 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer PICO-8 ES-DE support**: Seed a small starter set of existing NAS
   PICO-8 carts into an empty ES-DE ROM folder and document the PICO-8 Switch
   controller map in the on-device Controller Maps TUI and generated policy.
+- **Boomer controller probe documentation**: Document the live Switch Pro
+  kernel event mapping from the Boomer raw input probe so emulator bindings can
+  be based on observed `EV_KEY`/`EV_ABS` codes instead of inferred labels.
 - **Boomer Xemu first-run setup**: Launch Xemu with the Nix-generated
   `xemu.toml` machine settings and disable Xemu's welcome wizard so Xbox games
   do not stop at the manual machine configuration prompt when the required BIOS
   and HDD files are present. Hide Xemu's menubar during gameplay, and have
-  ES-DE list only `.xiso.iso` Xbox images so redump ISOs stay hidden.
+  Xbox launchable images use the `.xiso.iso` naming convention while redump
+  backups stay outside ES-DE's `.iso` scan suffix.
 - **Boomer emulation setup rendering**: Keep the generated GZDoom config
   Python heredoc flush-left so `emulation-setup.service` can complete during
   deployment.
