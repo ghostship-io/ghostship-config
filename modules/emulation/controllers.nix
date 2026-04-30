@@ -98,13 +98,14 @@ let
       ensure_order_file
       before="$(jq -c '.players // []' "$order_file" 2>/dev/null || echo '[]')"
       tmp="$(mktemp)"
-      jq '
+      if ! jq '
         def switch_mac: ((.mac // "") | test("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
         def slot: (.player | tonumber? // 99);
         def pack($rows; $used):
           reduce ($rows[]) as $row
             ({players: [], used: $used};
-              ([1, 2, 3, 4] | map(select(. as $candidate | (.used | index($candidate) | not))) | .[0]) as $next
+              (.used) as $used_slots
+              | ([1, 2, 3, 4] | map(select(. as $candidate | ($used_slots | index($candidate) | not))) | .[0]) as $next
               | if $next == null then
                   .players += [$row + {player: ((.used | length) + 1)}]
                 else
@@ -121,7 +122,11 @@ let
         | (pack($connected; $reserved)) as $active
         | (pack($disconnected; $active.used)) as $inactive
         | .players = (($keyboard | sort_by(slot)) + $active.players + $inactive.players | sort_by(slot))
-      ' "$order_file" >"$tmp"
+      ' "$order_file" >"$tmp"; then
+        rm -f "$tmp"
+        echo "$(date -u +%FT%TZ) failed to compact controller player slots" >>"$log_file"
+        return 1
+      fi
       mv "$tmp" "$order_file"
       after="$(jq -c '.players // []' "$order_file" 2>/dev/null || echo '[]')"
       if [ "$before" != "$after" ]; then
