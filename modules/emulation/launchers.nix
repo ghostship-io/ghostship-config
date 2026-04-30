@@ -1289,7 +1289,7 @@ PY
     EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         chmod 0644 "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
-        user_home="$(getent passwd ${cfg.user} | cut -d: -f6)"
+        user_home="$(awk -F: -v user=${lib.escapeShellArg cfg.user} '$1 == user { print $6; exit }' /etc/passwd)"
         if [ -n "$user_home" ]; then
           gzdoom_ini="$user_home/.config/gzdoom/gzdoom.ini"
           install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$gzdoom_ini")"
