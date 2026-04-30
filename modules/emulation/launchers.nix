@@ -640,7 +640,7 @@ let
 
     No premium unlocks, bypasses, commercial game files, or third-party patch packs
     are managed by this module.
-    EOF
+EOF
           exit 69
         fi
         exec wine "$install_dir/TeknoParrotUi.exe" "$rom"
@@ -1079,7 +1079,7 @@ PY
       url = "$url";
       hash = "$hash_sri";
     }
-    EOF
+EOF
         mv "$tmp" "$pin_file"
         echo "Pinned Ryubing Canary $version"
         echo "$hash_sri"
@@ -1148,7 +1148,7 @@ XEMUTOML
     DSPThread = True
     Backend = Cubeb
     Volume = 100
-    EOF
+EOF
         cat >"$dolphin_config_dir/GFX.ini" <<'EOF'
     [Settings]
     BackendMultithreading = True
@@ -1162,7 +1162,7 @@ XEMUTOML
     VSync = False
     [Enhancements]
     MaxAnisotropy = 4
-    EOF
+EOF
         : >"$dolphin_config_dir/GCPadNew.ini"
         for slot in 1 2 3 4; do
           index=$((slot - 1))
@@ -1191,7 +1191,7 @@ XEMUTOML
     D-Pad/Down = \`Hat 0 S\`
     D-Pad/Left = \`Hat 0 W\`
     D-Pad/Right = \`Hat 0 E\`
-    EOF
+EOF
         done
         : >"$dolphin_config_dir/WiimoteNew.ini"
         for slot in 1 2 3 4; do
@@ -1226,18 +1226,18 @@ XEMUTOML
     Nunchuk/Stick/Left = \`Axis 0-\`
     Nunchuk/Stick/Right = \`Axis 0+\`
     Nunchuk/Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
-    EOF
+EOF
         done
         cat >>"$dolphin_config_dir/WiimoteNew.ini" <<'EOF'
     [BalanceBoard]
     Source = 0
-    EOF
+EOF
         cat >"$dolphin_config_dir/Logger.ini" <<'EOF'
     [Options]
     Verbosity = 1
     WriteToFile = False
     WriteToConsole = False
-    EOF
+EOF
         chown -R ${cfg.user}:${cfg.group} "$dolphin_config_dir"
         find "$dolphin_config_dir" -type f -exec chmod 0644 {} +
         cat >"${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg" <<'EOF'
@@ -1329,7 +1329,7 @@ XEMUTOML
     mapbind rshoulder +am_zoomin
     mapbind joy5 +am_zoomout
     mapbind joy6 +am_zoomin
-    EOF
+EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         chmod 0644 "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         user_home="$(awk -F: -v user=${lib.escapeShellArg cfg.user} '$1 == user { print $6; exit }' /etc/passwd)"
@@ -1490,7 +1490,7 @@ XEMUTOML
     lines = upsert_section(lines, "Doom.AutomapBindings", automap_settings)
 
     path.write_text("".join(lines), encoding="utf-8")
-    PY
+PY
           chown ${cfg.user}:${cfg.group} "$gzdoom_ini"
           chmod 0644 "$gzdoom_ini"
         fi
@@ -1517,7 +1517,7 @@ XEMUTOML
         "xemu": "use xemu internal resolution scale"
       }
     }
-    EOF
+EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/scaling-policy.json"
         chmod 0644 "${cfg.configRoot}/emulators/scaling-policy.json"
         cat >"${cfg.configRoot}/emulators/controller-policy.json" <<'EOF'
@@ -1552,7 +1552,7 @@ XEMUTOML
         "rumble": "hid_nintendo exposes force feedback through ff-memless; emulator support varies"
       }
     }
-    EOF
+EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/controller-policy.json"
         chmod 0644 "${cfg.configRoot}/emulators/controller-policy.json"
   '';
