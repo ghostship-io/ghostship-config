@@ -17,6 +17,9 @@ changelog.
   work when they are available.
 - Shared skills live under `home/config/skills/*` and are linked into
   `~/.agents/skills`.
+- `codex-queue` is for long manual-review queues only; its tooling may split,
+  launch, monitor, validate, and merge, but must not automate final item
+  judgments.
 - The shared local skill is named `skill-creator` and is vendored from the
   upstream `skill-creator` package in `vercel-labs/agent-browser` `v0.9.3`.
 - Managed `skills.sh` installs are separate from the repo-managed
