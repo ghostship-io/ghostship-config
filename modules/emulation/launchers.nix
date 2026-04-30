@@ -1336,10 +1336,10 @@ EOF
     bind joy1 +jump
     bind joy4 crouch
     unbind joy3
-    bind rtrigger +altattack
-    bind ltrigger +attack
-    bind joy7 +attack
-    bind joy8 +altattack
+    bind rtrigger weapnext
+    bind ltrigger weapnext
+    bind joy7 weapnext
+    bind joy8 weapnext
     bind lshoulder weapprev
     bind rshoulder weapnext
     bind joy5 weapprev
@@ -1354,6 +1354,8 @@ EOF
     bind axis1plus +moveright
     bind axis2minus +forward
     bind axis2plus +back
+    bind axis4plus +altattack
+    bind axis5plus +attack
     bind dpadup +forward
     bind dpaddown +back
     bind dpadleft +moveleft
@@ -1427,16 +1429,16 @@ binding_settings = {
     "Pad_B": "+jump",
     "Pad_X": "crouch",
     "Pad_Y": None,
-    "LTrigger": "+attack",
-    "RTrigger": "+altattack",
+    "LTrigger": "weapnext",
+    "RTrigger": "weapnext",
     "Joy1": "+jump",
     "Joy2": "+use",
     "Joy3": None,
     "Joy4": "crouch",
     "Joy5": "weapprev",
     "Joy6": "weapnext",
-    "Joy7": "+attack",
-    "Joy8": "+altattack",
+    "Joy7": "weapnext",
+    "Joy8": "weapnext",
     "Joy9": "menu_main",
     "Joy10": "togglemap",
     "Joy11": None,
@@ -1454,9 +1456,9 @@ binding_settings = {
     "Axis3Minus": None,
     "Axis3Plus": None,
     "Axis4Minus": None,
-    "Axis4Plus": None,
+    "Axis4Plus": "+altattack",
     "Axis5Minus": None,
-    "Axis5Plus": None,
+    "Axis5Plus": "+attack",
     "Axis6Minus": None,
     "Axis6Plus": None,
     "Axis7Minus": None,
