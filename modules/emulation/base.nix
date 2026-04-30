@@ -44,6 +44,35 @@ let
       export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
     fi
 
+    audio_pref="${cfg.configRoot}/audio/output.json"
+
+    choose_bluetooth_sink() {
+      preferred="''${1:-}"
+      pactl --format=json list sinks 2>/dev/null | jq -r --arg preferred "$preferred" '
+        [
+          .[]
+          | select(
+              if $preferred != "" then
+                .name == $preferred
+              else
+                ((.properties["device.bus"] // "") == "bluetooth")
+                or ((.name // "") | test("bluez"; "i"))
+                or ((.description // "") | test("bluetooth|headphone|headset"; "i"))
+              end
+            )
+          | {
+              name: .name,
+              description: .description,
+              preferred: (.name == $preferred)
+            }
+        ]
+        | sort_by(.preferred)
+        | reverse
+        | .[0] // empty
+        | if . == "" then empty else [.name, .description] | @tsv end
+      '
+    }
+
     choose_profile() {
       pactl --format=json list cards 2>/dev/null | jq -r '
         [
@@ -103,6 +132,28 @@ let
         | if . == "" then empty else [.name, .description] | @tsv end
       '
     }
+
+    preferred_bluetooth_sink=""
+    if [ -r "$audio_pref" ]; then
+      preferred_bluetooth_sink="$(jq -r 'select(.mode == "bluetooth") | .sink // empty' "$audio_pref" 2>/dev/null || true)"
+    fi
+    if [ -n "$preferred_bluetooth_sink" ]; then
+      for attempt in $(seq 1 10); do
+        sink_line="$(choose_bluetooth_sink "$preferred_bluetooth_sink" || true)"
+        if [ -n "$sink_line" ]; then
+          sink_name="$(printf '%s\n' "$sink_line" | awk -F '\t' '{print $1}')"
+          sink_description="$(printf '%s\n' "$sink_line" | awk -F '\t' '{print $2}')"
+          pactl set-default-sink "$sink_name"
+          pactl set-sink-mute "$sink_name" 0
+          wpctl set-volume @DEFAULT_AUDIO_SINK@ "$volume"
+          echo "Default audio sink set to $sink_name ($sink_description) at volume $volume"
+          wpctl status | sed -n '/Audio/,/Video/p'
+          exit 0
+        fi
+        sleep 1
+      done
+      echo "Preferred Bluetooth audio sink is unavailable; falling back to HDMI." >&2
+    fi
 
     sink_name=""
     sink_description=""

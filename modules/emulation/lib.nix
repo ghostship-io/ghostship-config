@@ -369,24 +369,12 @@ let
 
   tools = [
     {
-      file = "Controller Pair.sh";
-      target = "bluetooth-pair-controller";
+      file = "Bluetooth Settings.sh";
+      target = "bluetooth-settings";
     }
     {
-      file = "Controller Assignment.sh";
-      target = "player-assignment";
-    }
-    {
-      file = "Controller Connect.sh";
-      target = "bluetooth-reconnect-controllers";
-    }
-    {
-      file = "Wi-Fi Connect.sh";
-      target = "wifi-connect";
-    }
-    {
-      file = "Wi-Fi Status.sh";
-      target = "wifi-status";
+      file = "Wi-Fi Settings.sh";
+      target = "wifi-settings";
     }
     {
       file = "Restart ES-DE.sh";

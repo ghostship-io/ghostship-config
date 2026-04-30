@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **Boomer ES-DE tools menu**: Slim the visible Tools menu to Wi-Fi,
-  controller pairing/reconnect/assignment, restart, shutdown, and reboot while
-  keeping the removed helper scripts available outside the menu. Add a managed
-  Tools gamelist so ES-DE shows the utilities in the preferred order and launch
-  tool scripts through Bash.
+- **Boomer ES-DE tools menu**: Replace the individual controller and Wi-Fi
+  tools with large-font `Bluetooth Settings` and `Wi-Fi Settings` TUIs that
+  support keyboard and controller input, Bluetooth pairing/audio routing,
+  player assignment, Wi-Fi profile management, and the 2.4 GHz policy toggle
+  while keeping lower-level helper scripts available outside the visible menu.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

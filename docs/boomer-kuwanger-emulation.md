@@ -202,6 +202,8 @@ frontend session, emulator launcher, and user service to prefer the AMD
 Navi 21/23 HDMI/DP audio card over USB audio adapters. It does not hardcode one
 physical HDMI port; it asks PipeWire which AMD HDMI/DP profile is currently
 `available`, sets that card profile, and makes the matching HDMI sink default.
+If `Bluetooth Settings` selects a connected Bluetooth audio sink, `audio-route`
+honors that preference and falls back to HDMI when the Bluetooth sink is absent.
 
 Run `audio-route` from SSH to inspect and repair the route.
 
@@ -369,27 +371,31 @@ mode. The host enables BlueZ experimental behavior, `hid-nintendo`, joycond
 where available, Switch Pro/8BitDo udev access, and disables USB autosuspend
 for the known controller identities.
 
-Player assignment is connection-order based. Runtime state is stored at:
+Player assignment is managed by the ES-DE `Bluetooth Settings` TUI. Runtime
+state is stored at:
 
 ```text
 /srv/emulation/config/controllers/player-order.json
 ```
 
-`controller-leds` watches connected devices and tries to apply player LED
-state through sysfs. If a controller identity does not expose LED sysfs entries,
-logical assignment still remains stable.
+`controller-leds` watches connected devices and tries to apply player LED state
+through sysfs according to the saved player slots. If a controller identity does
+not expose LED sysfs entries, logical assignment still remains stable.
 
 Wi-Fi stays available for SSH, but NetworkManager Wi-Fi profiles are constrained
-to 5 GHz to avoid 2.4 GHz contention with Bluetooth. Do not blacklist shared
-Wi-Fi/Bluetooth kernel modules until live hardware confirms the adapter split.
+to 5 GHz by default to avoid 2.4 GHz contention with Bluetooth. The ES-DE
+`Wi-Fi Settings` TUI can allow 2.4 GHz after showing a Bluetooth performance
+warning. Do not blacklist shared Wi-Fi/Bluetooth kernel modules until live
+hardware confirms the adapter split.
 
 ## ES-DE Tools
 
-The ES-DE Tools system exposes controller-friendly terminal menus for
-controller pairing/assignment/connect, Wi-Fi, restart, reboot, and shutdown in a
-managed order. Helper scripts for audio, display, RetroArch, scraping, launch
-logs, ROM coverage, smoke tests, and performance tests remain available on disk
-for SSH or background use, but are not shown in the ES-DE menu.
+The ES-DE Tools system exposes large-font terminal TUIs for `Bluetooth Settings`
+and `Wi-Fi Settings`, plus restart, reboot, and shutdown. The settings TUIs
+support keyboard and controller navigation from the couch. Helper scripts for
+audio, display, RetroArch, scraping, launch logs, ROM coverage, smoke tests, and
+performance tests remain available on disk for SSH or background use, but are
+not shown in the ES-DE menu.
 
 These tools are exposed as an ES-DE `Tools` system. Upstream ES-DE does not
 provide a stable Batocera-style API for arbitrary native main-menu actions; that

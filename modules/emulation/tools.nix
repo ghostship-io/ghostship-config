@@ -3,6 +3,39 @@
 let
   cfg = config.ghostship.emulation;
   emu = config.ghostship.emulation.internal.lib;
+  settingsTuiSource = ./settings-tui.py;
+
+  settingsTui = pkgs.writeShellScriptBin "emulation-settings-tui" ''
+    set -euo pipefail
+    export PATH=${lib.makeBinPath [
+      config.ghostship.emulation.internal.scripts.audioRoute
+      pkgs.bluez
+      pkgs.coreutils
+      pkgs.findutils
+      pkgs.gnugrep
+      pkgs.iproute2
+      pkgs.jq
+      pkgs.networkmanager
+      pkgs.procps
+      pkgs.pulseaudio
+      pkgs.systemd
+      pkgs.util-linux
+      pkgs.wireplumber
+    ]}:$PATH
+    export EMULATION_CONFIG_ROOT=${lib.escapeShellArg cfg.configRoot}
+    export EMULATION_DATA_ROOT=${lib.escapeShellArg cfg.dataRoot}
+    exec ${pkgs.python3}/bin/python3 ${settingsTuiSource} "$@"
+  '';
+
+  mkSettingsTool = name: title: mode:
+    pkgs.writeShellScriptBin name ''
+      set -euo pipefail
+      export PATH=${lib.makeBinPath [ settingsTui pkgs.foot ]}:$PATH
+      if [ -n "''${WAYLAND_DISPLAY:-}" ] && command -v foot >/dev/null 2>&1; then
+        exec foot -T ${lib.escapeShellArg title} -f monospace:size=28 -- emulation-settings-tui ${mode}
+      fi
+      exec emulation-settings-tui ${mode}
+    '';
 
   terminalTool = pkgs.writeShellScriptBin "terminal-tool" ''
     set -euo pipefail
@@ -134,6 +167,8 @@ let
   '';
 
   toolScripts = {
+    bluetooth-settings = mkSettingsTool "bluetooth-settings" "Bluetooth Settings" "bluetooth";
+    wifi-settings = mkSettingsTool "wifi-settings" "Wi-Fi Settings" "wifi";
     wifi-status = mkMenuTool "wifi-status" "Wi-Fi Status" [
       { label = "Radio status"; command = "nmcli radio; echo; nmcli device status || true"; }
       { label = "Active connections"; command = "nmcli connection show --active"; }
@@ -255,8 +290,28 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
+    security.polkit.enable = true;
+    security.polkit.extraConfig = ''
+      polkit.addRule(function(action, subject) {
+        if (subject.user != "${cfg.user}") {
+          return;
+        }
+        if (action.id != "org.freedesktop.systemd1.manage-units") {
+          return;
+        }
+        var unit = action.lookup("unit");
+        var verb = action.lookup("verb");
+        if ((unit == "bluetooth.service" ||
+             unit == "NetworkManager.service" ||
+             unit == "wifi-5ghz-only.service" ||
+             unit == "controller-leds.service") &&
+            (verb == "start" || verb == "stop" || verb == "restart")) {
+          return polkit.Result.YES;
+        }
+      });
+    '';
     ghostship.emulation.internal.scripts = toolScripts // {
-      inherit terminalTool toolMenu syncEsdeTools;
+      inherit terminalTool toolMenu settingsTui syncEsdeTools;
     };
     ghostship.emulation.internal.setupScripts = [ syncEsdeTools ];
   };

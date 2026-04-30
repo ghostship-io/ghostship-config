@@ -77,7 +77,11 @@ let
             "$order_file" >"$tmp"
         else
           jq --arg mac "$mac" --arg name "$name" \
-            '.players += [{player:(.players | length) + 1, mac:$mac, name:$name, connected:true}]' \
+            'def next_player:
+              ([.players[]?.player] as $used
+               | ([1, 2, 3, 4] | map(select(. as $slot | ($used | index($slot) | not))) | .[0])
+               // ((.players | length) + 1));
+             .players += [{player:next_player, mac:$mac, name:$name, connected:true}]' \
             "$order_file" >"$tmp"
         fi
         mv "$tmp" "$order_file"
@@ -85,7 +89,7 @@ let
       rm -f "$connected_tmp"
 
       tmp="$(mktemp)"
-      jq '.players |= [to_entries[] | .value + {player:(.key + 1)}]' "$order_file" >"$tmp"
+      jq '.players |= sort_by(.player)' "$order_file" >"$tmp"
       mv "$tmp" "$order_file"
       chown ${cfg.user}:${cfg.group} "$order_file" || true
       chmod 0644 "$order_file" || true
@@ -93,24 +97,56 @@ let
 
     apply_leds() {
       found=0
-      player=1
-      for led in /sys/class/leds/*; do
-        [ -e "$led/brightness" ] || continue
-        name="$(basename "$led")"
-        case "$name" in
-          *player*|*pro_controller*|*8BitDo*|*nintendo*)
-            found=1
-            if [ "$player" -le 4 ]; then
-              echo 1 >"$led/brightness" 2>/dev/null || true
-              player=$((player + 1))
-            fi
-            ;;
-        esac
-      done
+      while IFS=$'\t' read -r player mac; do
+        [ -n "''${player:-}" ] || continue
+        input_name=""
+        for event in /sys/class/input/event*; do
+          [ -r "$event/device/uniq" ] || continue
+          uniq="$(tr '[:lower:]' '[:upper:]' <"$event/device/uniq" 2>/dev/null || true)"
+          [ "$uniq" = "$(printf '%s' "$mac" | tr '[:lower:]' '[:upper:]')" ] || continue
+          input_name="$(basename "$(readlink -f "$event/device")")"
+          break
+        done
+        [ -n "$input_name" ] || continue
+        for led in /sys/class/leds/"$input_name"::*; do
+          [ -e "$led/brightness" ] || continue
+          led_name="$(basename "$led")"
+          case "$led_name" in
+            *player*)
+              found=1
+              case "$led_name" in
+                *player"$player"*|*player_"$player"*|*player-"$player"*)
+                  echo 1 >"$led/brightness" 2>/dev/null || true
+                  ;;
+                *)
+                  echo 0 >"$led/brightness" 2>/dev/null || true
+                  ;;
+              esac
+              ;;
+          esac
+        done
+      done < <(jq -r '.players[]? | select(.connected == true) | [.player, .mac] | @tsv' "$order_file" 2>/dev/null || true)
+
+      if [ "$found" = 0 ]; then
+        player=1
+        for led in /sys/class/leds/*; do
+          [ -e "$led/brightness" ] || continue
+          name="$(basename "$led")"
+          case "$name" in
+            *player*|*pro_controller*|*8BitDo*|*nintendo*)
+              found=1
+              if [ "$player" -le 4 ]; then
+                echo 1 >"$led/brightness" 2>/dev/null || true
+                player=$((player + 1))
+              fi
+              ;;
+          esac
+        done
+      fi
       if [ "$found" = 0 ]; then
         status="no supported controller LED sysfs entries found"
       else
-        status="set $((player - 1)) controller LED entries"
+        status="updated controller LED entries"
       fi
       if [ "$status" != "$last_led_status" ]; then
         echo "$(date -u +%FT%TZ) $status" >>"$log_file"
@@ -174,11 +210,18 @@ in
         pkgs.networkmanager
         pkgs.util-linux
         pkgs.gawk
+        pkgs.jq
       ];
       script = ''
         log() {
           echo "wifi-5ghz-only: $*"
         }
+
+        policy_file="${cfg.configRoot}/network/wifi-policy.json"
+        allow_24ghz=false
+        if [ -r "$policy_file" ]; then
+          allow_24ghz="$(jq -r '.allow_24ghz // false' "$policy_file" 2>/dev/null || echo false)"
+        fi
 
         rfkill unblock wlan || true
         for attempt in $(seq 1 30); do
@@ -200,11 +243,19 @@ in
           sleep 1
         done
 
+        if [ "$allow_24ghz" = true ]; then
+          wifi_band=""
+          log "2.4 GHz Wi-Fi is allowed by runtime policy"
+        else
+          wifi_band="a"
+          log "constraining Wi-Fi profiles to 5 GHz"
+        fi
+
         nmcli -t -f UUID,TYPE connection show | while IFS=: read -r uuid type; do
           [ "$type" = "802-11-wireless" ] || continue
           nmcli connection modify "$uuid" \
             connection.interface-name "" \
-            802-11-wireless.band a \
+            802-11-wireless.band "$wifi_band" \
             connection.autoconnect yes \
             connection.autoconnect-priority 100 || true
         done

@@ -192,7 +192,11 @@ changelog.
   ES-DE AppImage package unless a source build is explicitly revisited. PipeWire may
   prefer USB audio adapters on Boomer; keep
   `audio-route` in the ES-DE session and emulator launcher so the current
-  available AMD HDMI/DP profile becomes the default sink. Smoke tests should
+  available AMD HDMI/DP profile becomes the default sink unless the Boomer
+  Bluetooth Settings TUI has selected a connected Bluetooth audio sink. Keep
+  visible Boomer ES-DE utilities collapsed to Bluetooth Settings, Wi-Fi
+  Settings, and system power/session actions; the settings entries should stay
+  large-font, keyboard-and-controller friendly TUIs. Smoke tests should
   not add runtime ROM extraction; manually extract only proven failing smoke
   copies and point `/srv/emulation/config/smoke/roms.json` at the launchable
   file. Keep Boomer's emulator defaults RetroAchievements-aligned where
