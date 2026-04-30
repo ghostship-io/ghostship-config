@@ -176,8 +176,8 @@ let
                     now = time.monotonic()
                     if BTN_SELECT in pressed[path]:
                         if now - last_select_start[path] <= DOUBLE_PRESS_SECONDS:
-                            log(args.log, "Select + Start double-press force kill")
-                            signal_group(args.pid, signal.SIGKILL)
+                            log(args.log, "Select + Start double-press graceful quit")
+                            signal_group(args.pid, signal.SIGTERM)
                             return 0
                         last_select_start[path] = now
                         continue
@@ -1112,7 +1112,7 @@ PY
         "quick_menu": "Star/Home",
         "preferred_modifier": "Square/Capture",
         "fallback_modifier": "Select/-",
-        "force_kill": "Select/- held plus Start/+ double-press"
+        "normal_exit": "Select/- held plus Start/+ double-press"
       },
       "managed_defaults": {
         "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels, Star/Home to quick menu, and Square/Capture as the preferred hotkey modifier",

@@ -67,8 +67,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plus system D-Bus conservative CPU scheduling weight boosts without enabling
   realtime scheduling or IRQ pinning. Add ROCKNIX-style Switch Pro hotkeys with
   Star/Home as quick menu, Square/Capture as the preferred modifier, Select as
-  fallback and force-kill modifier, a raw controller hotkey monitor for stuck
-  emulator exits, left-stick-as-D-pad overrides for D-pad-only RetroArch
+  fallback, a raw controller hotkey monitor for normal emulator exits,
+  left-stick-as-D-pad overrides for D-pad-only RetroArch
   systems, and detailed ASCII Controller Maps for every Boomer system family.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,

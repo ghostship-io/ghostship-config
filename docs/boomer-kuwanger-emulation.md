@@ -415,10 +415,10 @@ leaves headphones and other accessories alone.
 Controller shortcuts follow a ROCKNIX-style Switch Pro layout. Star/Home opens
 the emulator quick menu by default. Square/Capture is the preferred hotkey
 modifier, with Select as the fallback if Capture is not exposed. Select held
-plus a double Start press force-kills the active emulator process group, so a
-stuck game can always return to ES-DE. RetroArch maps Square/Capture hotkeys to
-save/load, reset, FPS, screenshot, and fast-forward actions, and D-pad-only
-RetroArch systems also accept left-stick D-pad input.
+plus a double Start press asks the active emulator process group to exit
+normally. RetroArch maps Square/Capture hotkeys to save/load, reset, FPS,
+screenshot, and fast-forward actions, and D-pad-only RetroArch systems also
+accept left-stick D-pad input.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices

@@ -269,7 +269,7 @@ changelog.
   audio devices or generic peripherals as players. Boomer's Switch Pro
   shortcuts should stay ROCKNIX-style:
   Star/Home is quick menu, Square/Capture is the preferred hotkey modifier,
-  Select is fallback and Select+Start double-press is the force-kill escape.
+  Select is fallback and Select+Start double-press is a normal emulator exit.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it
