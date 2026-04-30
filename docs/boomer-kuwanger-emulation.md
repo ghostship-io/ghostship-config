@@ -401,8 +401,9 @@ crowd the menu. Player assignment accepts keyboard input as a player device, and
 B/Esc backs out before any assignment is made. Under the ES-DE Gamescope session
 they launch through Xwayland `xterm`, with `foot` kept as a pure Wayland
 fallback. Bluetooth pairing uses a 10-second non-interactive BlueZ scan and
-parses newly discovered devices from the live scan output. Keyboard input is
-handled by the terminal, while the raw `/dev/input`
+parses newly discovered devices from the live scan output. The pair command
+registers a BlueZ agent for that command instead of relying on a stale
+interactive session. Keyboard input is handled by the terminal, while the raw `/dev/input`
 reader is limited to controller-like devices so navigation does not double-step.
 Launch diagnostics are written under `/srv/emulation/logs/tools/`. Helper
 scripts for audio, display, RetroArch, scraping, launch logs, ROM coverage,

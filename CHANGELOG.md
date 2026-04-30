@@ -22,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compact Bluetooth status for four controllers plus headphones, and allow
   keyboard player assignment with B/Esc cancel. Fix Bluetooth pairing scans to
   run a real 10-second BlueZ discovery and parse newly discovered devices from
-  the live scan output.
+  the live scan output, while registering the BlueZ pairing agent during the
+  pair command itself.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

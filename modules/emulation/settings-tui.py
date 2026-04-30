@@ -721,8 +721,12 @@ class BluetoothBackend:
         _, out, _ = run_cmd(["bluetoothctl", "--timeout", str(seconds), "scan", "on"], timeout=seconds + 5)
         run_cmd(["bluetoothctl", "scan", "off"], timeout=8)
         seen = {d["mac"]: d for d in parse_bt_devices(out)}
-        seen.update({d["mac"]: d for d in self.devices()})
+        for device in self.devices():
+            seen.setdefault(device["mac"], device)
         return sorted(seen.values(), key=lambda row: row["name"].lower())
+
+    def pair(self, mac):
+        return run_cmd(["bluetoothctl", "--agent", "KeyboardDisplay", "pair", mac], timeout=35)
 
     def action(self, *args, timeout=20):
         return run_cmd(["bluetoothctl", *args], timeout=timeout)
@@ -1043,7 +1047,10 @@ class SettingsApp:
         def action():
             output = []
             for args in (("pair", row["mac"]), ("trust", row["mac"]), ("connect", row["mac"])):
-                code, out, err = self.bt.action(*args, timeout=35)
+                if args[0] == "pair":
+                    code, out, err = self.bt.pair(row["mac"])
+                else:
+                    code, out, err = self.bt.action(*args, timeout=35)
                 output.append(f"$ bluetoothctl {' '.join(args)}")
                 output.extend([out, err])
                 if code != 0 and args[0] == "pair":

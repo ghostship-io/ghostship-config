@@ -209,7 +209,8 @@ changelog.
   Gamescope session these TUIs should launch through Xwayland `xterm`; `foot`
   fails there because Gamescope does not expose the Wayland subcompositor it
   needs. Bluetooth pairing scans should use `bluetoothctl --timeout` and parse
-  live `[NEW] Device` output, not rely only on the post-scan device cache. Smoke
+  live `[NEW] Device` output, not rely only on the post-scan device cache; pair
+  commands should register their own BlueZ agent. Smoke
   tests should not add runtime ROM extraction; manually extract only proven
   failing smoke copies and point `/srv/emulation/config/smoke/roms.json` at the
   launchable file. Keep Boomer's emulator defaults RetroAchievements-aligned where
