@@ -127,7 +127,7 @@ for example:
 through a shell, and launches GZDoom from the `.gzdoom` file's directory so
 relative asset paths work. Keep assets under the Doom ROM folder and put the
 human-facing launchers at the top level for cleaner ES-DE scraping.
-Every GZDoom launch also executes the managed
+Every GZDoom launch executes the managed
 `/srv/emulation/config/emulators/gzdoom/boomer-controls.cfg` file so joystick
 input is enabled and Switch-style controls are applied: left stick and D-pad
 move, right stick looks left/right and up/down, A is Use/Confirm, B is

@@ -318,8 +318,8 @@ let
     ABS_NAMES = {
         0: "Left Stick X",
         1: "Left Stick Y",
-        2: "Right Stick X",
-        3: "Right Stick Y",
+        3: "Right Stick X",
+        4: "Right Stick Y",
         16: "D-pad X",
         17: "D-pad Y",
     }
@@ -1241,16 +1241,23 @@ PY
     bind joy3 togglemap
     bind rtrigger +attack
     bind ltrigger +altattack
-    bind joy8 +attack
-    bind joy7 +altattack
+    unbind joy5
+    unbind joy6
+    bind joy7 menu_main
+    bind joy8 crouch
+    bind joy9 centerview
+    bind joy10 weapprev
+    bind joy11 weapnext
+    unbind joy12
+    unbind joy13
+    unbind joy14
+    unbind joy15
+    unbind joy16
     bind axis6plus +attack
     bind axis5plus +altattack
     bind lshoulder weapprev
     bind rshoulder weapnext
-    bind joy5 weapprev
-    bind joy6 weapnext
     bind pad_start menu_main
-    unbind joy10
     bind lthumb crouch
     bind rthumb centerview
     bind axis1minus +moveleft
@@ -1265,6 +1272,10 @@ PY
     bind pov1down +back
     bind pov1left +moveleft
     bind pov1right +moveright
+    bind axis7plus +moveleft
+    bind axis7minus +moveright
+    bind axis8minus +forward
+    bind axis8plus +back
 
     mapbind pad_y togglemap
     mapbind pad_a am_setmark
@@ -1276,6 +1287,10 @@ PY
     mapbind axis1plus +am_panright
     mapbind axis2minus +am_panup
     mapbind axis2plus +am_pandown
+    mapbind axis7plus +am_panleft
+    mapbind axis7minus +am_panright
+    mapbind axis8minus +am_panup
+    mapbind axis8plus +am_pandown
     mapbind dpadright +am_panright
     mapbind dpadleft +am_panleft
     mapbind dpadup +am_panup
@@ -1286,8 +1301,8 @@ PY
     mapbind pov1down +am_pandown
     mapbind lshoulder +am_zoomout
     mapbind rshoulder +am_zoomin
-    mapbind joy5 +am_zoomout
-    mapbind joy6 +am_zoomin
+    mapbind joy10 +am_zoomout
+    mapbind joy11 +am_zoomin
     EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         chmod 0644 "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
@@ -1304,7 +1319,8 @@ PY
 
     # GZDoom's Linux SDL joystick backend reads these per-device AxisNmap keys
     # from [Joy:JS:N]. Values are EJoyAxis: -1 none, 0 yaw, 1 pitch,
-    # 2 forward, 3 strafe. Switch Pro exposes left X/Y then right X/Y here.
+    # 2 forward, 3 strafe. SDL exposes Switch Pro as left X/Y, right X/Y,
+    # ZL/ZR trigger axes, then D-pad hat axes.
     axis_settings = {
         "Axis0deadzone": "0.20",
         "Axis0map": "3",
@@ -1315,9 +1331,9 @@ PY
         "Axis3deadzone": "0.20",
         "Axis3map": "1",
         "Axis3scale": "0.50",
-        "Axis4deadzone": "1.0",
+        "Axis4deadzone": "0.25",
         "Axis4map": "-1",
-        "Axis5deadzone": "1.0",
+        "Axis5deadzone": "0.25",
         "Axis5map": "-1",
         "Axis6deadzone": "0.10",
         "Axis6map": "3",
@@ -1333,13 +1349,18 @@ PY
         "Joy2": "+use",
         "Joy3": "togglemap",
         "Joy4": "weapnext",
-        "Joy5": "weapprev",
-        "Joy6": "weapnext",
-        "Joy7": "+altattack",
-        "Joy8": "+attack",
-        "Joy9": None,
-        "Joy10": None,
+        "Joy5": None,
+        "Joy6": None,
+        "Joy7": "menu_main",
+        "Joy8": "crouch",
+        "Joy9": "centerview",
+        "Joy10": "weapprev",
+        "Joy11": "weapnext",
+        "Joy12": None,
+        "Joy13": None,
         "Joy14": None,
+        "Joy15": None,
+        "Joy16": None,
         "Pad_Back": None,
         "Pad_Start": "menu_main",
         "Axis1Minus": "+moveleft",
@@ -1354,6 +1375,10 @@ PY
         "Axis5Plus": "+altattack",
         "Axis6Minus": None,
         "Axis6Plus": "+attack",
+        "Axis7Minus": "+moveright",
+        "Axis7Plus": "+moveleft",
+        "Axis8Minus": "+forward",
+        "Axis8Plus": "+back",
         "DPadUp": "+forward",
         "DPadDown": "+back",
         "DPadLeft": "+moveleft",
@@ -1375,6 +1400,10 @@ PY
         "Axis1Plus": "+am_panright",
         "Axis2Minus": "+am_panup",
         "Axis2Plus": "+am_pandown",
+        "Axis7Minus": "+am_panright",
+        "Axis7Plus": "+am_panleft",
+        "Axis8Minus": "+am_panup",
+        "Axis8Plus": "+am_pandown",
         "DPadUp": "+am_panup",
         "DPadDown": "+am_pandown",
         "DPadLeft": "+am_panleft",
