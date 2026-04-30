@@ -109,6 +109,32 @@ def parse_nmcli_rows(output):
     return rows
 
 
+def ellipsize(value, limit):
+    text = str(value or "")
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)] + "..."
+
+
+def wrap_lines(lines, width):
+    wrapped = []
+    for line in lines:
+        text = str(line)
+        if not text:
+            wrapped.append("")
+            continue
+        wrapped.extend(
+            textwrap.wrap(
+                text,
+                width=max(1, width),
+                break_long_words=True,
+                replace_whitespace=False,
+            )
+            or [""]
+        )
+    return wrapped
+
+
 def parse_bluetooth_power(output):
     for line in output.splitlines():
         if line.strip().startswith("Powered:"):
@@ -241,6 +267,31 @@ def controller_device_info(event_path):
 
 def is_controller_event_device(event_path):
     return is_controller_name(controller_device_info(event_path).get("name", ""))
+
+
+def format_bluetooth_status(adapter_lines, connected, paired, players, audio_output):
+    player_by_mac = {mac_key(player.get("mac")): player for player in players if player.get("mac")}
+    lines = []
+    power = next((line for line in adapter_lines if line.startswith("Power:")), "Power: Unknown")
+    scanning = next((line for line in adapter_lines if line.startswith("Scanning:")), "Scanning: Unknown")
+    lines.append(f"{power} | {scanning}")
+    lines.append(f"Audio: {ellipsize(audio_output, 48)}")
+    lines.append("")
+    lines.append(f"Connected ({len(connected)}):")
+    if connected:
+        for device in connected[:6]:
+            player = player_by_mac.get(mac_key(device.get("mac")))
+            prefix = f"P{player.get('player')}" if player else "Other"
+            lines.append(f"{prefix} {ellipsize(device.get('name'), 44)}")
+    else:
+        lines.append("None")
+    lines.append("")
+    lines.append("Player slots:")
+    for slot in range(1, 5):
+        player = next((row for row in players if int(row.get("player", 0) or 0) == slot), None)
+        lines.append(f"P{slot}: {ellipsize(player.get('name'), 42) if player else 'Unassigned'}")
+    lines.append(f"Paired: {len(paired)}")
+    return lines
 
 
 class ControllerReader(threading.Thread):
@@ -376,22 +427,7 @@ class Tui:
             pass
 
     def wrapped(self, lines, width):
-        wrapped = []
-        for line in lines:
-            text = str(line)
-            if not text:
-                wrapped.append("")
-                continue
-            wrapped.extend(
-                textwrap.wrap(
-                    text,
-                    width=max(1, width),
-                    break_long_words=True,
-                    replace_whitespace=False,
-                )
-                or [""]
-            )
-        return wrapped
+        return wrap_lines(lines, width)
 
     def draw_frame(self, title, subtitle=""):
         self.stdscr.erase()
@@ -408,14 +444,16 @@ class Tui:
     def item_detail_lines(self, item, details):
         lines = []
         if item:
-            lines.append(item.get("label", ""))
-            if item.get("desc"):
+            if not item.get("detail_only"):
+                lines.append(item.get("label", ""))
+            if item.get("desc") and not item.get("detail_only"):
                 lines.extend(["", item["desc"]])
             detail = item.get("detail")
             if callable(detail):
                 detail = detail()
             if detail:
-                lines.append("")
+                if lines:
+                    lines.append("")
                 lines.extend(detail)
         if details:
             if callable(details):
@@ -901,14 +939,14 @@ class SettingsApp:
             items = [
                 {
                     "label": "Status",
-                    "desc": "Bluetooth power, connected devices, paired devices, players, and audio.",
+                    "detail_only": True,
                     "detail": status,
                     "action": self.bluetooth_status,
                 },
                 {
                     "label": "Bluetooth Toggle",
                     "desc": f"Turn Bluetooth {toggle_target}.",
-                    "detail": [f"Current state: {'On' if powered else 'Off'}", f"Select to turn Bluetooth {toggle_target}.", "", *status],
+                    "detail": [f"Current state: {'On' if powered else 'Off'}", f"Select to turn Bluetooth {toggle_target}."],
                     "action": lambda: self.run_and_show("Bluetooth Toggle", lambda: self.bt.action("power", toggle_target)),
                 },
             ]
@@ -917,7 +955,7 @@ class SettingsApp:
                     {
                         "label": "Restart Bluetooth",
                         "desc": "Restart bluetooth.service without rebooting Boomer.",
-                        "detail": ["Available because Bluetooth is on.", "Use this if paired devices stop responding.", "", *status],
+                        "detail": ["Available because Bluetooth is on.", "Use this if paired devices stop responding."],
                         "action": lambda: self.run_and_show("Restart Bluetooth", self.bt.restart_service),
                     }
                 )
@@ -926,43 +964,43 @@ class SettingsApp:
                     {
                         "label": "Scan And Pair Device",
                         "desc": "Find and pair controllers, headphones, Wiimotes, keyboards, or accessories.",
-                        "detail": ["Starts a short scan for nearby devices.", "Put the device in pairing mode first.", "", *status],
+                        "detail": ["Starts a short scan for nearby devices.", "Put the device in pairing mode first."],
                         "action": self.bluetooth_scan_pair,
                     },
                     {
                         "label": "Connect Paired Device",
                         "desc": "Connect one saved Bluetooth device.",
-                        "detail": ["Use this for a controller or headset that is already paired.", "", *status],
+                        "detail": ["Use this for a controller or headset that is already paired."],
                         "action": self.bluetooth_connect_paired,
                     },
                     {
                         "label": "Disconnect Device",
                         "desc": "Disconnect one currently connected Bluetooth device.",
-                        "detail": ["Leaves the pairing saved for later reconnect.", "", *status],
+                        "detail": ["Leaves the pairing saved for later reconnect."],
                         "action": self.bluetooth_disconnect,
                     },
                     {
                         "label": "Reconnect All",
                         "desc": "Trust and reconnect every paired Bluetooth device.",
-                        "detail": ["Useful after waking controllers or headphones.", "", *status],
+                        "detail": ["Useful after waking controllers or headphones."],
                         "action": self.bluetooth_reconnect_all,
                     },
                     {
                         "label": "Unpair Device",
                         "desc": "Remove a saved Bluetooth pairing.",
-                        "detail": ["Use this before pairing a device from scratch again.", "", *status],
+                        "detail": ["Use this before pairing a device from scratch again."],
                         "action": self.bluetooth_unpair,
                     },
                     {
                         "label": "Player Assignment",
                         "desc": "Press a controller button, then move or swap its player slot.",
-                        "detail": ["Supports player 1-4 assignment and controller LEDs when available.", "", *status],
+                        "detail": ["Press any controller button or keyboard key.", "B/Esc backs out without changing assignments."],
                         "action": self.player_assignment,
                     },
                     {
                         "label": "Audio Output",
                         "desc": "Choose HDMI or connected Bluetooth headphones.",
-                        "detail": ["Bluetooth audio is used only when explicitly selected and available.", "", *status],
+                        "detail": ["Bluetooth audio is used only when explicitly selected and available."],
                         "action": self.audio_output,
                     },
                 ]
@@ -979,19 +1017,13 @@ class SettingsApp:
         order = read_json(PLAYER_ORDER, {"players": []})
         paired = self.bt.devices("Paired")
         connected = self.bt.devices("Connected")
-        lines = [*self.bt.adapter_summary(), f"Audio output: {pref.get('description') or pref.get('mode', 'hdmi')}"]
-        lines.extend(["", "Connected devices:"])
-        lines.extend([f"{d['name']}  {d['mac']}" for d in connected] or ["None"])
-        lines.extend(["", f"Paired devices: {len(paired)}"])
-        lines.extend([f"{d['name']}  {d['mac']}" for d in paired[:4]] or ["None"])
-        lines.extend(["", "Player assignment:"])
-        players = order.get("players", [])
-        if players:
-            for player in players[:4]:
-                lines.append(f"P{player.get('player')}: {player.get('name')} {player.get('mac')}")
-        else:
-            lines.append("No assigned controllers.")
-        return lines
+        return format_bluetooth_status(
+            self.bt.adapter_summary(),
+            connected,
+            paired,
+            order.get("players", []),
+            pref.get("description") or pref.get("mode", "hdmi"),
+        )
 
     def bluetooth_status(self):
         self.tui.show_output("Bluetooth Status", self.bluetooth_status_lines())
@@ -1055,15 +1087,21 @@ class SettingsApp:
             self.run_and_show("Audio Output", lambda: self.audio.set_bluetooth(row["sink"]))
 
     def player_assignment(self):
-        self.tui.progress("Player Assignment", ["Press any button on the controller you want to identify."])
+        self.tui.progress("Player Assignment", ["Press any controller button or keyboard key.", "Press B/Esc to go back."])
         detected = None
         end = time.time() + 30
         while time.time() < end and not detected:
             event = self.tui.get_input(0.2)
-            if event and event.device and (is_mac(event.device.get("mac")) or event.device.get("name")):
+            if not event:
+                continue
+            if event.action in (ACTION_BACK, ACTION_QUIT):
+                return
+            if event.device and (is_mac(event.device.get("mac")) or event.device.get("name")):
                 detected = event.device
+            elif event.action != ACTION_REFRESH:
+                detected = {"event": "keyboard", "name": "Keyboard", "mac": "KEYBOARD"}
         if not detected:
-            self.tui.show_output("Player Assignment", ["No controller input detected."])
+            self.tui.show_output("Player Assignment", ["No input detected."])
             return
         order = read_json(PLAYER_ORDER, {"players": []})
         mac = mac_key(detected.get("mac"))
@@ -1109,50 +1147,50 @@ class SettingsApp:
             items = [
                 {
                     "label": "Status",
-                    "desc": "Wi-Fi radio, active SSID, IP details, saved profiles, and band policy.",
+                    "detail_only": True,
                     "detail": status,
                     "action": self.wifi_status,
                 },
                 {
                     "label": "Wi-Fi On",
                     "desc": "Enable the Wi-Fi radio.",
-                    "detail": ["Turns the Wi-Fi radio on.", "", *status],
+                    "detail": ["Turns the Wi-Fi radio on."],
                     "action": lambda: self.run_and_show("Wi-Fi On", lambda: run_cmd(["nmcli", "radio", "wifi", "on"], timeout=12)),
                 },
                 {
                     "label": "Wi-Fi Off",
                     "desc": "Disable the Wi-Fi radio.",
-                    "detail": ["This can disconnect SSH if Wi-Fi is the active network.", "", *status],
+                    "detail": ["This can disconnect SSH if Wi-Fi is the active network."],
                     "action": self.wifi_off,
                 },
                 {
                     "label": "Restart Wi-Fi",
                     "desc": "Cycle Wi-Fi radio and reapply the 2.4/5 GHz policy.",
-                    "detail": ["Use this after changing networks or radio policy.", "", *status],
+                    "detail": ["Use this after changing networks or radio policy."],
                     "action": self.wifi_restart,
                 },
                 {
                     "label": "Connect Saved Network",
                     "desc": "Connect an existing NetworkManager Wi-Fi profile.",
-                    "detail": ["Uses a saved profile, then reapplies the band policy.", "", *status],
+                    "detail": ["Uses a saved profile, then reapplies the band policy."],
                     "action": self.wifi_connect_saved,
                 },
                 {
                     "label": "Connect New Network",
                     "desc": "Scan nearby networks and enter a password with keyboard or controller.",
-                    "detail": ["Starts a fresh scan, then saves the selected network.", "", *status],
+                    "detail": ["Starts a fresh scan, then saves the selected network."],
                     "action": self.wifi_connect_new,
                 },
                 {
                     "label": "Disconnect Network",
                     "desc": "Disconnect the active Wi-Fi device.",
-                    "detail": ["Leaves saved profiles intact.", "", *status],
+                    "detail": ["Leaves saved profiles intact."],
                     "action": self.wifi_disconnect,
                 },
                 {
                     "label": "Forget Network",
                     "desc": "Delete a saved Wi-Fi profile.",
-                    "detail": ["Use this to remove stale or unwanted saved networks.", "", *status],
+                    "detail": ["Use this to remove stale or unwanted saved networks."],
                     "action": self.wifi_forget,
                 },
                 {
@@ -1161,8 +1199,6 @@ class SettingsApp:
                     "detail": [
                         f"Current policy: {'2.4/5 GHz allowed' if allow_24 else '5 GHz only'}",
                         "2.4 GHz can reduce Bluetooth controller and headphone performance.",
-                        "",
-                        *status,
                     ],
                     "action": self.wifi_toggle_24,
                 },
@@ -1280,6 +1316,23 @@ def smoke_test(mode):
         assert not is_controller_name("AMIRA-KEYBOAR USB KEYBOARD")
         assert not is_controller_name("AMIRA-KEYBOAR USB KEYBOARD Mouse")
         metrics = pane_metrics(26, 92)
+        worst_connected = [
+            {"mac": f"AA:BB:CC:DD:EE:0{slot}", "name": f"Controller With A Long Friendly Name {slot}"}
+            for slot in range(1, 5)
+        ]
+        worst_connected.append({"mac": "11:22:33:44:55:66", "name": "Bluetooth Headphones With A Long Friendly Name"})
+        worst_players = [
+            {"player": slot, "mac": f"AA:BB:CC:DD:EE:0{slot}", "name": f"Controller With A Long Friendly Name {slot}"}
+            for slot in range(1, 5)
+        ]
+        worst_status = format_bluetooth_status(
+            adapter_lines,
+            worst_connected,
+            worst_connected,
+            worst_players,
+            "Bluetooth Headphones With A Long Friendly Name",
+        )
+        assert len(wrap_lines(worst_status, metrics["right_width"])) <= metrics["content_height"]
         start, end = menu_window(len(labels_on), len(labels_on) - 1, metrics["content_height"])
         assert 0 <= start < end <= len(labels_on)
         assert metrics["content_bottom"] < 26

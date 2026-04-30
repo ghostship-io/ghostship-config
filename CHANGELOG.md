@@ -18,7 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   right-pane hover status, a single Bluetooth toggle, and hidden BlueZ host
   discoverable/pairable fields while retaining the active scanning state. Limit
   the raw input-event reader to controller-like devices so keyboard arrow
-  presses are not handled twice.
+  presses are not handled twice, keep status blocks on the Status action only,
+  compact Bluetooth status for four controllers plus headphones, and allow
+  keyboard player assignment with B/Esc cancel.
 - **Boomer Dolphin defaults**: Seed Dolphin analytics opt-out, fullscreen
   Vulkan graphics, audio, and Switch Pro controller defaults so GameCube, Wii,
   and WiiWare launches do not block on first-run dialogs.

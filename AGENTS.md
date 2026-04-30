@@ -200,9 +200,12 @@ changelog.
   layout, left-side actions, and right-side selected-action status. Hide
   host-only BlueZ fields such as discoverable and pairable from the main
   Bluetooth status, but keep the discovering/scanning state visible because it
-  tells the user whether Boomer is actively looking for devices. Let the terminal
-  handle keyboard input and keep the raw `/dev/input` reader limited to
-  controller-like devices so arrow keys do not double-step. In the ES-DE
+  tells the user whether Boomer is actively looking for devices. Keep full
+  status blocks on the Status action only; other actions should show concise
+  help so the right pane stays contained. Player assignment should allow
+  keyboard as a player device, with B/Esc canceling before assignment. Let the
+  terminal handle keyboard input and keep the raw `/dev/input` reader limited
+  to controller-like devices so arrow keys do not double-step. In the ES-DE
   Gamescope session these TUIs should launch through Xwayland `xterm`; `foot`
   fails there because Gamescope does not expose the Wayland subcompositor it
   needs. Smoke
