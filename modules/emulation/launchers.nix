@@ -1270,9 +1270,10 @@ EOF
     freelook true
     lookstrafe false
 
-    unbind pad_back
     unbind joy9
+    unbind joy3
     unbind joy14
+    unbind pad_y
     unbind axis1plus
     unbind axis1minus
     unbind axis2plus
@@ -1300,22 +1301,24 @@ EOF
 
     bind pad_a +use
     bind pad_b +jump
-    bind pad_x togglemap
-    bind pad_y crouch
+    bind pad_x crouch
+    unbind pad_y
     bind joy2 +use
     bind joy1 +jump
-    bind joy4 togglemap
-    bind joy3 crouch
-    bind rtrigger +attack
-    bind ltrigger +altattack
-    bind joy7 +altattack
-    bind joy8 +attack
+    bind joy4 crouch
+    unbind joy3
+    bind rtrigger +altattack
+    bind ltrigger +attack
+    bind joy7 +attack
+    bind joy8 +altattack
     bind lshoulder weapprev
     bind rshoulder weapnext
     bind joy5 weapprev
     bind joy6 weapnext
-    bind pad_start menu_main
-    bind joy10 menu_main
+    bind pad_back menu_main
+    bind joy9 menu_main
+    bind pad_start togglemap
+    bind joy10 togglemap
     bind lthumb crouch
     bind rthumb centerview
     bind axis1minus +moveleft
@@ -1331,12 +1334,12 @@ EOF
     bind pov1left +moveleft
     bind pov1right +moveright
 
-    mapbind pad_x togglemap
     mapbind pad_a am_setmark
     mapbind pad_b am_clearmarks
-    mapbind joy4 togglemap
     mapbind joy2 am_setmark
     mapbind joy1 am_clearmarks
+    mapbind pad_start togglemap
+    mapbind joy10 togglemap
     mapbind axis1minus +am_panleft
     mapbind axis1plus +am_panright
     mapbind axis2minus +am_panup
@@ -1393,28 +1396,28 @@ axis_settings = {
 binding_settings = {
     "Pad_A": "+use",
     "Pad_B": "+jump",
-    "Pad_X": "togglemap",
-    "Pad_Y": "crouch",
-    "LTrigger": "+altattack",
-    "RTrigger": "+attack",
+    "Pad_X": "crouch",
+    "Pad_Y": None,
+    "LTrigger": "+attack",
+    "RTrigger": "+altattack",
     "Joy1": "+jump",
     "Joy2": "+use",
-    "Joy3": "crouch",
-    "Joy4": "togglemap",
+    "Joy3": None,
+    "Joy4": "crouch",
     "Joy5": "weapprev",
     "Joy6": "weapnext",
-    "Joy7": "+altattack",
-    "Joy8": "+attack",
-    "Joy9": None,
-    "Joy10": "menu_main",
+    "Joy7": "+attack",
+    "Joy8": "+altattack",
+    "Joy9": "menu_main",
+    "Joy10": "togglemap",
     "Joy11": None,
     "Joy12": None,
     "Joy13": None,
     "Joy14": None,
     "Joy15": None,
     "Joy16": None,
-    "Pad_Back": None,
-    "Pad_Start": "menu_main",
+    "Pad_Back": "menu_main",
+    "Pad_Start": "togglemap",
     "Axis1Minus": "+moveleft",
     "Axis1Plus": "+moveright",
     "Axis2Minus": "+forward",
@@ -1445,10 +1448,12 @@ automap_settings = {
     "Joy2": "am_setmark",
     "Pad_B": "am_clearmarks",
     "Joy1": "am_clearmarks",
-    "Pad_X": "togglemap",
+    "Pad_X": None,
     "Pad_Y": None,
     "Joy3": None,
-    "Joy4": "togglemap",
+    "Joy4": None,
+    "Pad_Start": "togglemap",
+    "Joy10": "togglemap",
     "Axis1Minus": "+am_panleft",
     "Axis1Plus": "+am_panright",
     "Axis2Minus": "+am_panup",
@@ -1565,7 +1570,7 @@ EOF
         "screenshot": "Select/- plus A/East",
         "fast_forward": "Select/- plus ZR",
         "normal_exit": "Select/- held plus Start/+ double-press sends SIGTERM, then SIGKILL after 5 seconds if needed",
-        "gzdoom_menu": "Start/+ opens the GZDoom menu; X toggles the map; Square/Capture is intentionally unbound"
+        "gzdoom_menu": "Start/+ opens the GZDoom menu; Select/- toggles the map; X and Square/Capture are intentionally unbound"
       },
       "managed_defaults": {
         "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels; Rocknix-style Select hotkeys are configured and Square/Capture has no stable Home binding",
@@ -1577,7 +1582,7 @@ EOF
         "xemu": "inherits SDL Switch label hints from run-emulator; Square/Capture has no stable Home binding",
         "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Square/Capture has no stable Home binding",
         "supermodel": "inherits SDL Switch label hints from run-emulator; Square/Capture has no stable Home binding",
-        "gzdoom": "run-emulator executes boomer-controls.cfg; A is Use/Confirm, B is Jump/Back, X toggles map, Y toggles crouch, L1/R1 select previous/next weapon, L2/R2 are alt fire/fire, Start/+ opens menu, and right stick controls look"
+        "gzdoom": "run-emulator executes boomer-controls.cfg; A is Use/Confirm, B is Jump/Back, Select/- toggles map, Y toggles crouch, X is unbound, L1/R1 select previous/next weapon, L2/R2 are alt fire/fire, Start/+ opens menu, and right stick controls look"
       },
       "known_gaps": {
         "motion": "hid_nintendo exposes a separate IMU device; emulator support varies",

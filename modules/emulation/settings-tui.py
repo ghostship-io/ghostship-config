@@ -765,8 +765,9 @@ CONTROLLER_MAPS = [
                 "Alt Fire -> L2",
                 "Use/Confirm -> A",
                 "Jump/Back -> B",
-                "Map Toggle -> X",
+                "Map Toggle -> -",
                 "Crouch Toggle -> Y",
+                "X -> No-op",
                 "Prev Weapon -> L1",
                 "Next Weapon -> R1",
                 "Map Pan -> Left Stick/D-pad",
@@ -776,7 +777,7 @@ CONTROLLER_MAPS = [
             ["Right stick uses native SDL axes for horizontal and vertical look."],
             [
                 "Menu: + / Start",
-                "Map: X toggles",
+                "Map: - toggles",
                 "Turbo: Star/Home (controller)",
                 "Hotkey: - / Select",
                 "Exit: Select + Start twice",
@@ -2246,8 +2247,9 @@ def smoke_test(mode):
         assert any("Use/Confirm -> A" in line for line in gzdoom["detail"])
         assert any("Move -> Left Stick/D-pad" in line for line in gzdoom["detail"])
         assert any("Look -> Right Stick" in line for line in gzdoom["detail"])
-        assert any("Map Toggle -> X" in line for line in gzdoom["detail"])
+        assert any("Map Toggle -> -" in line for line in gzdoom["detail"])
         assert any("Crouch Toggle -> Y" in line for line in gzdoom["detail"])
+        assert any("X -> No-op" in line for line in gzdoom["detail"])
         assert any("Map Pan -> Left Stick/D-pad" in line for line in gzdoom["detail"])
         assert any("Prev Weapon -> L1" in line for line in gzdoom["detail"])
         assert any("Next Weapon -> R1" in line for line in gzdoom["detail"])

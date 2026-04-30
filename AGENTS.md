@@ -270,7 +270,9 @@ changelog.
   `run-emulator` links that directory into Ryubing's emulated SD card at launch.
   Xemu launches with an explicit Nix-generated
   `/srv/emulation/xdg/share/xemu/xemu/xemu.toml`; keep Xbox machine paths in
-  that config instead of relying on Xemu's implicit config discovery.
+  that config instead of relying on Xemu's implicit config discovery. Keep
+  `general.show_welcome = false` there or Xemu suppresses the configured BIOS
+  and stops in the first-run machine wizard.
   Keep Boomer's ES-DE ROM folder names aligned exactly with
   `/mnt/z/Library/ROMs/roms`; Doom uses `Fantasy - GZDoom (2005)` with
   Batocera-style `.gzdoom` launchers at the ROM-folder top level and assets
@@ -293,8 +295,9 @@ changelog.
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
   Switch A/B, and launch GZDoom with the managed Boomer controls cfg so
   left stick/D-pad move, right stick looks, Use/Confirm is A, Jump/Back is B,
-  X toggles map, Y toggles crouch, L/R select previous/next weapon, ZL is alt
-  fire, ZR is fire, `+` opens menu, and Square/Capture is unbound. GZDoom's SDL
+  Select/Minus toggles map, Y toggles crouch, X is unbound, L/R select
+  previous/next weapon, ZL is alt fire, ZR is fire, `+` opens menu, and
+  Square/Capture is unbound. GZDoom's SDL
   `[Joy:JS:*]` axis map must be seeded so
   Switch Pro axis 0/1 are strafe/forward, axis 2 is yaw, axis 3 is pitch with
   reduced scale, trigger axes 4/5 are action buttons only, D-pad hat axes can
