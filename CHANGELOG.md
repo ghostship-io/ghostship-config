@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **WSL OpenCode server port**: Move the WSL `opencode-server` Home Manager
+  user service to `127.0.0.1:4096` for Windows desktop attachment.
 - **VueTorrent download paths**: Persist qBittorrent's default save path at
   `/downloads/Torrent`, keep incomplete torrent data under
   `/downloads/Torrent/.incomplete`, and create that directory before
@@ -239,7 +241,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **WSL OpenCode desktop service**: Restored a repo-managed
   `opencode-server` Home Manager user service on WSL develop hosts so the
-  Windows OpenCode desktop app can attach to `127.0.0.1:8421` over localhost
+  Windows OpenCode desktop app can attach to `127.0.0.1:4096` over localhost
   forwarding, and removed the repo-managed `ghostship-paseo` daemon startup
   path.
 
@@ -276,7 +278,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no-op `xdg-open` plus `xdg-debug` shims so the headless service does not try
   to launch a browser while starting OpenCode. The managed service now runs
   `opencode serve` instead of `opencode web` and binds only to
-  `127.0.0.1:8421`.
+  `127.0.0.1:4096`.
 - **WSL explicit Windows interop contract**: Kept `services.envfs` on WSL hosts for Linux/FHS paths such as `/usr/bin/bash`, disabled automatic Windows PATH import so `envfs` stops synthesizing accidental Windows executables under `/usr/bin`, wrapped `wsl-open` around the real Windows PowerShell path, added a repo-managed `win-powershell` entrypoint, and updated WSL docs to require explicit wrappers or `/mnt/c/...` paths for Windows tools.
 - **Dev shell export fix**: Reordered the default flake dev-shell packages to keep `git` before `age`, which avoids the current Nix `2.31.3` order-sensitive `get-env.sh failed to produce an environment` failure while preserving the existing tool set. Refresh `direnv` or start a new shell after pulling the change so the repaired environment export path is used.
 

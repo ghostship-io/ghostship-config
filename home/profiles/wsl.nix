@@ -10,7 +10,7 @@ let
     inherit pkgs;
   };
   windowsPowerShell = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
-  opencodePort = 8421;
+  opencodePort = 4096;
   ensureOpencodeInstalled = pkgs.writeShellScript "ghostship-ensure-opencode-installed" ''
     set -euo pipefail
 

@@ -113,7 +113,7 @@ notes.
   and every `4h`.
 - WSL hosts enable `opencode-server.service` as a Home Manager user service for
   `nixos`. The unit ensures the managed `opencode` CLI exists on first start
-  and binds `opencode serve` to `127.0.0.1:8421` so the Windows desktop app can
+  and binds `opencode serve` to `127.0.0.1:4096` so the Windows desktop app can
   attach over WSL localhost forwarding. Restart it with
   `systemctl --user restart opencode-server` after the relevant Home Manager
   switch if you need to pick up a config or binary refresh. `paseo` remains an
