@@ -48,6 +48,7 @@ let
       };
       nativeScaling = {
         xemu = "internal-resolution-scale";
+        xemu-hotkeys = "internal-resolution-scale";
         ryubing = "resolution-scale-and-native-filter";
         dolphin = "internal-resolution";
         pcsx2 = "hardware-renderer-internal-resolution";
@@ -59,31 +60,59 @@ let
     }
   );
 
-  controllerHotkeysPy = pkgs.writeText "controller-hotkeys.py" ''
+  standaloneHotkeyBrokerPy = pkgs.writeText "standalone-hotkey-broker.py" ''
     #!/usr/bin/env python3
     import argparse
-    import subprocess
     import glob
     import json
     import os
     import select
     import signal
+    import socket
     import struct
+    import subprocess
     import sys
     import time
     from pathlib import Path
 
     EVENT = struct.Struct("@llHHi")
     EV_KEY = 0x01
+    BTN_B = 304
+    BTN_A = 305
     BTN_CAPTURE = 309
+    BTN_L = 310
+    BTN_R = 311
+    BTN_ZR = 313
     BTN_X = 307
+    BTN_Y = 308
     BTN_SELECT = 314
-    BTN_START = 315
-    BTN_MODE = 316
-    DOUBLE_PRESS_SECONDS = 0.9
     FORCE_KILL_SECONDS = 5.0
+    YDOTOOL = "${lib.getExe pkgs.ydotool}"
 
-    def log(path, message, event="controller-hotkeys", system="", emulator=""):
+    KEY_COMMANDS = {
+        "f2": [YDOTOOL, "key", "60:1", "60:0"],
+        "f12": [YDOTOOL, "key", "88:1", "88:0"],
+        "grave": [YDOTOOL, "key", "41:1", "41:0"],
+        "ctrl-p": [YDOTOOL, "key", "29:1", "25:1", "25:0", "29:0"],
+    }
+
+    PROFILES = {
+        "xemu": {
+            "snapshot_tag": "esde-slot1",
+            "bindings": {
+                (BTN_SELECT, BTN_X): ("send-key", "f2", "Select + X opened Xemu quick actions"),
+                (BTN_SELECT, BTN_B): ("hmp-command", "system_reset", "Select + B reset Xemu"),
+                (BTN_SELECT, BTN_L): ("hmp-command", "loadvm {snapshot_tag}", "Select + L loaded Xemu save state"),
+                (BTN_SELECT, BTN_R): ("hmp-command", "savevm {snapshot_tag}", "Select + R saved Xemu state"),
+                (BTN_SELECT, BTN_A): ("send-key", "f12", "Select + A triggered Xemu screenshot"),
+                (BTN_SELECT, BTN_Y): ("send-key", "grave", "Select + Y toggled Xemu debug monitor"),
+                (BTN_SELECT, BTN_ZR): ("notify-none", "xemu fast-forward is not available", "Select + ZR has no Xemu action"),
+                (BTN_CAPTURE,): ("send-key", "ctrl-p", "Square toggled Xemu pause"),
+            },
+        },
+    }
+
+    def log(path, message, event="standalone-hotkey-broker", system="", emulator=""):
         if not path:
             return
         try:
@@ -128,18 +157,7 @@ let
                 continue
         return fds
 
-    def signal_group(pid, sig, pgid=None):
-        try:
-            if pgid is None:
-                pgid = os.getpgid(pid)
-            os.killpg(pgid, sig)
-            return True
-        except ProcessLookupError:
-            return False
-        except PermissionError:
-            return False
-
-    def alive(pid):
+    def process_alive(pid):
         try:
             os.kill(pid, 0)
             return True
@@ -153,23 +171,32 @@ let
         except OSError:
             return False
 
-    def terminate_group(pid, log_path, timeout=FORCE_KILL_SECONDS, system="", emulator=""):
+    def signal_group(pid, sig, pgid=None):
+        try:
+            if pgid is None:
+                pgid = os.getpgid(pid)
+            os.killpg(pgid, sig)
+            return True
+        except (ProcessLookupError, PermissionError):
+            return False
+
+    def terminate_process_group(pid, log_path, reason, timeout=FORCE_KILL_SECONDS, system="", emulator=""):
         try:
             pgid = os.getpgid(pid)
         except ProcessLookupError:
-            log(log_path, "Select + Start exit skipped; emulator process is already gone", "exit-request", system, emulator)
+            log(log_path, f"{reason} skipped; emulator process is already gone", "exit-request", system, emulator)
             return ["gone"]
         except PermissionError:
-            log(log_path, "Select + Start exit failed; could not inspect emulator process group", "exit-request", system, emulator)
+            log(log_path, f"{reason} failed; could not inspect emulator process group", "exit-request", system, emulator)
             return ["permission-denied"]
 
         actions = []
         if signal_group(pid, signal.SIGTERM, pgid=pgid):
             actions.append("sigterm")
-            log(log_path, "Select + Start double-press sent SIGTERM to emulator process group", "exit-request", system, emulator)
+            log(log_path, f"{reason} sent SIGTERM to emulator process group", "exit-request", system, emulator)
         else:
             actions.append("sigterm-failed")
-            log(log_path, "Select + Start SIGTERM failed; emulator process group is already gone or inaccessible", "exit-request", system, emulator)
+            log(log_path, f"{reason} SIGTERM failed; emulator process group is already gone or inaccessible", "exit-request", system, emulator)
             return actions
 
         deadline = time.monotonic() + timeout
@@ -181,20 +208,102 @@ let
 
         if signal_group(pid, signal.SIGKILL, pgid=pgid):
             actions.append("sigkill")
-            log(log_path, "emulator still alive after 5 seconds; sent SIGKILL to emulator process group", "force-kill", system, emulator)
+            log(log_path, f"{reason} still alive after 5 seconds; sent SIGKILL to emulator process group", "force-kill", system, emulator)
         else:
             actions.append("sigkill-skipped")
             log(log_path, "emulator exited before SIGKILL escalation", "exit-request", system, emulator)
         return actions
 
-    def rocknix_hotkey_action(code, pressed_codes):
-        if BTN_SELECT not in pressed_codes:
-            return ""
-        if code == BTN_X:
-            return "menu"
-        return ""
+    def hmp_command(socket_path, command):
+        if not socket_path:
+            raise RuntimeError("HMP socket is required for this action")
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(1.0)
+            client.connect(socket_path)
+            try:
+                client.recv(4096)
+            except socket.timeout:
+                pass
+            client.sendall((command + "\n").encode("utf-8"))
+            time.sleep(0.15)
+
+    def key_command(name):
+        try:
+            return KEY_COMMANDS[name]
+        except KeyError as exc:
+            raise RuntimeError(f"unknown key action: {name}") from exc
+
+    def send_key(name, dry_run=False):
+        command = key_command(name)
+        if dry_run:
+            return command
+        subprocess.run(command, check=True)
+        return command
+
+    def resolve_binding(profile, pressed_codes, code):
+        bindings = PROFILES[profile]["bindings"]
+        for chord, action in bindings.items():
+            if chord[-1] != code:
+                continue
+            if all(button in pressed_codes for button in chord):
+                return action
+        return None
+
+    def run_action(action, args):
+        kind, value, message = action
+        if kind == "send-key":
+            send_key(value, dry_run=args.dry_run)
+        elif kind == "hmp-command":
+            command = value.format(snapshot_tag=args.snapshot_tag)
+            if args.dry_run:
+                return message
+            hmp_command(args.hmp_socket, command)
+        elif kind == "terminate-process-group":
+            if not args.dry_run:
+                terminate_process_group(args.pid, args.log, message, system=args.system, emulator=args.emulator)
+        elif kind == "notify-none":
+            pass
+        else:
+            raise RuntimeError(f"unknown action kind: {kind}")
+        return message
 
     def self_test():
+        action = resolve_binding("xemu", {BTN_SELECT, BTN_X}, BTN_X)
+        if action[:2] != ("send-key", "f2"):
+            raise AssertionError(f"unexpected Select + X action: {action}")
+        action = resolve_binding("xemu", {BTN_SELECT, BTN_R}, BTN_R)
+        if action[:2] != ("hmp-command", "savevm {snapshot_tag}"):
+            raise AssertionError(f"unexpected Select + R action: {action}")
+        if resolve_binding("xemu", {BTN_X}, BTN_X) is not None:
+            raise AssertionError("Select-less X must not resolve to an action")
+        if key_command("f2") != [YDOTOOL, "key", "60:1", "60:0"]:
+            raise AssertionError("F2 command changed unexpectedly")
+
+        socket_path = None
+        received = []
+        import tempfile
+        import threading
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            socket_path = os.path.join(tmpdir, "hmp.sock")
+            server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            server.bind(socket_path)
+            server.listen(1)
+
+            def accept_once():
+                conn, _ = server.accept()
+                with conn:
+                    conn.sendall(b"(qemu) ")
+                    received.append(conn.recv(4096).decode("utf-8"))
+
+            thread = threading.Thread(target=accept_once)
+            thread.start()
+            hmp_command(socket_path, "system_reset")
+            thread.join(timeout=3)
+            server.close()
+        if received != ["system_reset\n"]:
+            raise AssertionError(f"unexpected HMP payload: {received!r}")
+
         proc = subprocess.Popen(
             [sys.executable, "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"],
             preexec_fn=os.setsid,
@@ -202,7 +311,7 @@ let
             stderr=subprocess.DEVNULL,
         )
         try:
-            actions = terminate_group(proc.pid, "", timeout=0.2)
+            actions = terminate_process_group(proc.pid, "", "self-test", timeout=0.2)
             if actions[:2] != ["sigterm", "sigkill"]:
                 raise AssertionError(f"unexpected termination actions: {actions}")
             for _ in range(30):
@@ -211,10 +320,6 @@ let
                 time.sleep(0.1)
             if proc.poll() is None:
                 raise AssertionError("self-test child survived SIGKILL")
-            if rocknix_hotkey_action(BTN_X, {BTN_SELECT, BTN_X}) != "menu":
-                raise AssertionError("Select + X did not resolve to menu")
-            if rocknix_hotkey_action(BTN_CAPTURE, {BTN_CAPTURE}) != "":
-                raise AssertionError("Square/Capture must not resolve to RetroArch menu")
         finally:
             if proc.poll() is None:
                 try:
@@ -222,32 +327,39 @@ let
                 except OSError:
                     pass
                 proc.wait(timeout=3)
-        print("controller-hotkeys self-test passed")
+        print("standalone-hotkey-broker self-test passed")
 
     def main():
         parser = argparse.ArgumentParser()
+        parser.add_argument("--profile", choices=sorted(PROFILES))
         parser.add_argument("--pid", type=int)
+        parser.add_argument("--hmp-socket", default="")
+        parser.add_argument("--snapshot-tag", default="")
         parser.add_argument("--log", default="")
         parser.add_argument("--system", default="")
         parser.add_argument("--emulator", default="")
+        parser.add_argument("--dry-run", action="store_true")
         parser.add_argument("--self-test", action="store_true")
         args = parser.parse_args()
         if args.self_test:
             self_test()
             return 0
+        if args.profile is None:
+            parser.error("--profile is required unless --self-test is used")
         if args.pid is None:
             parser.error("--pid is required unless --self-test is used")
+        if not args.snapshot_tag:
+            args.snapshot_tag = PROFILES[args.profile].get("snapshot_tag", "slot1")
 
         fds = open_events()
         if not fds:
-            log(args.log, "no Switch Pro controller input devices found", system=args.system, emulator=args.emulator)
+            log(args.log, f"no supported controller input devices found for {args.profile} hotkey broker", system=args.system, emulator=args.emulator)
             return 0
 
         pressed = {path: set() for path in fds}
-        last_select_start = {path: 0.0 for path in fds}
-        log(args.log, f"watching {len(fds)} Switch Pro controller(s) for {args.system}/{args.emulator}", system=args.system, emulator=args.emulator)
+        log(args.log, f"started {args.profile} hotkey broker on {len(fds)} controller(s)", system=args.system, emulator=args.emulator)
 
-        while alive(args.pid):
+        while process_alive(args.pid):
             try:
                 readable, _, _ = select.select(list(fds.values()), [], [], 0.2)
             except OSError:
@@ -270,61 +382,28 @@ let
                     else:
                         pressed[path].discard(code)
                         continue
-                    if code == BTN_MODE:
-                        log(args.log, "Star/Home pressed; treated as controller-local turbo when exposed", system=args.system, emulator=args.emulator)
-                    if code == BTN_CAPTURE:
-                        log(args.log, "Square/Capture pressed; emulator-native console Home binding may handle this", system=args.system, emulator=args.emulator)
-                    if rocknix_hotkey_action(code, pressed[path]) == "menu":
-                        log(args.log, "Select + X pressed; emulator quick menu binding should handle this", system=args.system, emulator=args.emulator)
-                    if code != BTN_START:
+                    action = resolve_binding(args.profile, pressed[path], code)
+                    if action is None:
                         continue
-                    now = time.monotonic()
-                    if BTN_SELECT in pressed[path]:
-                        if now - last_select_start[path] <= DOUBLE_PRESS_SECONDS:
-                            terminate_group(args.pid, args.log, system=args.system, emulator=args.emulator)
-                            release_deadline = time.monotonic() + 3.0
-                            while time.monotonic() < release_deadline:
-                                try:
-                                    r, _, _ = select.select(list(fds.values()), [], [], 0.2)
-                                except OSError:
-                                    break
-                                rev = {fd: p for p, fd in fds.items()}
-                                for fd in r:
-                                    p = rev.get(fd)
-                                    if not p:
-                                        continue
-                                    try:
-                                        d = os.read(fd, EVENT.size * 16)
-                                    except OSError:
-                                        continue
-                                    for off in range(0, len(d) - EVENT.size + 1, EVENT.size):
-                                        _, _, t, c, v = EVENT.unpack(d[off:off + EVENT.size])
-                                        if t != EV_KEY:
-                                            continue
-                                        if v:
-                                            pressed[p].add(c)
-                                        else:
-                                            pressed[p].discard(c)
-                                if not any(BTN_SELECT in s for s in pressed.values()):
-                                    log(args.log, "Select released after exit; safe for ES-DE to resume")
-                                    break
-                            return 0
-                        last_select_start[path] = now
-                        continue
+                    try:
+                        message = run_action(action, args)
+                        log(args.log, message, system=args.system, emulator=args.emulator)
+                    except Exception as exc:
+                        log(args.log, f"hotkey action failed: {exc}", "error", args.system, args.emulator)
         return 0
 
     if __name__ == "__main__":
         sys.exit(main())
   '';
 
-  controllerHotkeys = pkgs.writeShellScriptBin "controller-hotkeys" ''
+  standaloneHotkeyBroker = pkgs.writeShellScriptBin "standalone-hotkey-broker" ''
     set -euo pipefail
-    exec ${pkgs.python3}/bin/python3 ${controllerHotkeysPy} "$@"
+    exec ${pkgs.python3}/bin/python3 ${standaloneHotkeyBrokerPy} "$@"
   '';
 
-  controllerHotkeysSmokeTest = pkgs.writeShellScriptBin "controller-hotkeys-smoke-test" ''
+  standaloneHotkeyBrokerSmokeTest = pkgs.writeShellScriptBin "standalone-hotkey-broker-smoke-test" ''
     set -euo pipefail
-    exec ${lib.getExe controllerHotkeys} --self-test
+    exec ${lib.getExe standaloneHotkeyBroker} --self-test
   '';
 
   switchProButtonProbePy = pkgs.writeText "switch-pro-button-probe.py" ''
@@ -874,7 +953,7 @@ EOF
 
     heavy=0
     case "$emulator_id" in
-      azahar|dolphin|cemu|xemu|ryubing|lime3ds|pcsx2|ppsspp|supermodel|teknoparrot|retroarch-beetle-psx-hw|retroarch-beetle-saturn|retroarch-mupen64plus|retroarch-parallel-n64|retroarch-flycast) heavy=1 ;;
+      azahar|dolphin|cemu|xemu|xemu-hotkeys|ryubing|lime3ds|pcsx2|ppsspp|supermodel|teknoparrot|retroarch-beetle-psx-hw|retroarch-beetle-saturn|retroarch-mupen64plus|retroarch-parallel-n64|retroarch-flycast) heavy=1 ;;
     esac
     export EMULATION_EMULATOR_HEAVY="$heavy"
     profile_json="$(display-profile)"
@@ -888,8 +967,11 @@ EOF
     bootstrap_emulator_config() {
       emulator="$1"
       case "$emulator" in
-        azahar|cemu|dolphin|pcsx2|ppsspp|ryubing|supermodel|xemu)
-          dir="${cfg.configRoot}/emulators/$emulator"
+        azahar|cemu|dolphin|pcsx2|ppsspp|ryubing|supermodel|xemu|xemu-hotkeys)
+          case "$emulator" in
+            xemu-hotkeys) dir="${cfg.configRoot}/emulators/xemu" ;;
+            *) dir="${cfg.configRoot}/emulators/$emulator" ;;
+          esac
           mkdir -p "$dir"
           jq -n \
             --arg emulator "$emulator" \
@@ -947,6 +1029,10 @@ EOF
 
     cmd=()
     run_cwd=""
+    hotkey_profile=""
+    hotkey_snapshot_tag=""
+    hotkey_hmp_socket=""
+    hotkey_runtime_dir=""
     parse_gzdoom_launcher() {
       launcher="$1"
       launcher_line="$(grep -v -E '^[[:space:]]*(#|$)' "$launcher" | head -n 1 || true)"
@@ -1049,6 +1135,25 @@ PY
           -dvd_path "$rom_path"
         )
         ;;
+      xemu-hotkeys)
+        runtime_root="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+        if [ ! -d "$runtime_root" ]; then
+          runtime_root="${cfg.dataRoot}/tmp"
+        fi
+        hotkey_runtime_dir="$runtime_root/ghostship-emulation/xemu-$$"
+        install -d -m 0700 "$hotkey_runtime_dir"
+        hotkey_hmp_socket="$hotkey_runtime_dir/hmp.sock"
+        hotkey_profile="xemu"
+        hotkey_snapshot_tag="esde-slot1"
+        rm -f "$hotkey_hmp_socket"
+        cmd=(
+          xemu
+          -full-screen
+          -config_path "${cfg.dataRoot}/xdg/share/xemu/xemu/xemu.toml"
+          -dvd_path "$rom_path"
+          -monitor "unix:$hotkey_hmp_socket,server=on,wait=off"
+        )
+        ;;
       ryubing)
         prepare_ryubing_runtime
         cmd=(ryujinx "$rom_path")
@@ -1128,8 +1233,18 @@ PY
     fi
     setsid "''${run_cmd[@]}" &
     emulator_pid="$!"
-    ${lib.getExe controllerHotkeys} --pid "$emulator_pid" --system "$system_id" --emulator "$emulator_id" --log "$log_file" &
-    hotkey_pid="$!"
+    hotkey_pid=""
+    if [ -n "$hotkey_profile" ]; then
+      ${lib.getExe standaloneHotkeyBroker} \
+        --profile "$hotkey_profile" \
+        --pid "$emulator_pid" \
+        --hmp-socket "$hotkey_hmp_socket" \
+        --snapshot-tag "$hotkey_snapshot_tag" \
+        --system "$system_id" \
+        --emulator "$emulator_id" \
+        --log "$log_file" &
+      hotkey_pid="$!"
+    fi
 
     process_group_alive() {
       kill -0 -- "-$1" >/dev/null 2>&1
@@ -1151,16 +1266,26 @@ PY
     }
 
     cleanup() {
-      kill "$hotkey_pid" >/dev/null 2>&1 || true
+      if [ -n "$hotkey_pid" ]; then
+        kill "$hotkey_pid" >/dev/null 2>&1 || true
+      fi
       terminate_process_group "$emulator_pid" "run-emulator cleanup"
+      if [ -n "$hotkey_runtime_dir" ]; then
+        rm -rf "$hotkey_runtime_dir"
+      fi
     }
     trap cleanup INT TERM HUP
     set +e
     wait "$emulator_pid"
     status="$?"
     set -e
-    kill "$hotkey_pid" >/dev/null 2>&1 || true
-    wait "$hotkey_pid" >/dev/null 2>&1 || true
+    if [ -n "$hotkey_pid" ]; then
+      kill "$hotkey_pid" >/dev/null 2>&1 || true
+      wait "$hotkey_pid" >/dev/null 2>&1 || true
+    fi
+    if [ -n "$hotkey_runtime_dir" ]; then
+      rm -rf "$hotkey_runtime_dir"
+    fi
     exit "$status"
   '';
 
@@ -1649,7 +1774,8 @@ PY
         "ppsspp": "use Vulkan and PPSSPP rendering resolution",
         "ryubing": "use Vulkan, docked mode, 16x AF, and emulator-native scaling/filtering",
         "supermodel": "launch with -res=<output_width>,<output_height>",
-        "xemu": "use xemu internal resolution scale"
+        "xemu": "use xemu internal resolution scale",
+        "xemu-hotkeys": "use xemu internal resolution scale"
       }
     }
 EOF
@@ -1664,7 +1790,7 @@ EOF
         "SDL_GAMECONTROLLER_USE_BUTTON_LABELS": "1"
       },
       "hotkey_policy": {
-        "scheme": "Per-emulator hotkeys with a shared run-emulator exit chord",
+        "scheme": "Per-emulator hotkeys; standalone hotkey brokers are opt-in per emulator",
         "retroarch_menu": "RetroArch only: Select/- plus X/North opens the quick menu",
         "console_home": "Square/Capture opens emulated console Home only where a stable native binding is generated; currently Dolphin Wii Remote Home",
         "modifier": "Select/-",
@@ -1674,21 +1800,22 @@ EOF
         "retroarch_fps": "RetroArch only: Select/- plus Y/West",
         "retroarch_screenshot": "RetroArch only: Select/- plus A/East",
         "retroarch_fast_forward": "RetroArch only: Select/- plus ZR",
-        "normal_exit": "Select/- held plus Start/+ double-press sends SIGTERM, then SIGKILL after 5 seconds if needed",
+        "normal_exit": "No shared standalone exit chord is installed by default",
+        "xemu_hotkeys": "Opt-in xemu-hotkeys only: Select/- plus X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, Square/Capture toggles pause, and Select/- plus ZR is unbound",
         "gzdoom": "GZDoom only: Start/+ opens the menu, Select/- toggles the automap, and Square/Capture is intentionally unbound",
         "pico8": "PICO-8 only: Start/+ opens pause/menu"
       },
       "managed_defaults": {
         "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
         "dolphin": "GameCube and Wii profiles map physical A/B/X/Y to matching labels and use SDL slots 0-3; Wii Remote Home uses Square/Capture where Dolphin exposes it",
-        "ppsspp": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",
-        "pcsx2": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",
-        "azahar": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",
-        "cemu": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",
-        "xemu": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",
-        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; only the shared run-emulator exit chord is advertised",
-        "supermodel": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",
-        "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; only the shared run-emulator exit chord is advertised",
+        "ppsspp": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
+        "pcsx2": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
+        "azahar": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
+        "cemu": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
+        "xemu": "plain Xemu launch with native Select+Start quick actions only; use xemu-hotkeys for the opt-in standalone broker",
+        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; no shared raw-input hotkey broker is started",
+        "supermodel": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
+        "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; no shared raw-input hotkey broker is started",
         "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1/R1 are User 1/User 2, L2/R2 are alt fire/fire, Select/- toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
         "pico8": "run-emulator launches carts with PICO-8; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu"
       },
@@ -1706,11 +1833,11 @@ in
   config = lib.mkIf cfg.enable {
     ghostship.emulation.internal.scripts = {
       inherit
-        controllerHotkeys
-        controllerHotkeysSmokeTest
         displayProfile
         romCoverageCheck
         runEmulator
+        standaloneHotkeyBroker
+        standaloneHotkeyBrokerSmokeTest
         switchProButtonProbe
         syncEmulatorConfigs
         teknoparrotFree

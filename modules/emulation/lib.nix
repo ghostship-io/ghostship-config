@@ -89,6 +89,12 @@ let
       platform = "xbox";
       theme = "xbox";
       emulator = "xemu";
+      alternateEmulators = [
+        {
+          label = "xemu-hotkeys";
+          emulator = "xemu-hotkeys";
+        }
+      ];
       extensions = ".xiso .XISO";
       fixedAspect = "16:9";
     }
