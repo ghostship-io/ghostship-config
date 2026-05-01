@@ -92,11 +92,17 @@ let
     YDOTOOL = "${lib.getExe pkgs.ydotool}"
 
     KEY_COMMANDS = {
+        "escape": [YDOTOOL, "key", "-d", "50", "1:1", "1:0"],
+        "tab": [YDOTOOL, "key", "-d", "50", "15:1", "15:0"],
+        "f1": [YDOTOOL, "key", "-d", "50", "59:1", "59:0"],
         "f2": [YDOTOOL, "key", "-d", "50", "60:1", "60:0"],
+        "f9": [YDOTOOL, "key", "-d", "50", "67:1", "67:0"],
+        "f10": [YDOTOOL, "key", "-d", "50", "68:1", "68:0"],
         "f12": [YDOTOOL, "key", "-d", "50", "88:1", "88:0"],
         "grave": [YDOTOOL, "key", "-d", "50", "41:1", "41:0"],
         "ctrl-p": [YDOTOOL, "key", "-d", "50", "29:1", "25:1", "25:0", "29:0"],
         "enter": [YDOTOOL, "key", "-d", "50", "28:1", "28:0"],
+        "shift-f1": [YDOTOOL, "key", "-d", "50", "42:1", "59:1", "59:0", "42:0"],
         "ctrl-6": [YDOTOOL, "key", "-d", "50", "29:1", "7:1", "7:0", "29:0"],
         "ctrl-9": [YDOTOOL, "key", "-d", "50", "29:1", "10:1", "10:0", "29:0"],
         "ctrl-r": [YDOTOOL, "key", "-d", "50", "29:1", "19:1", "19:0", "29:0"],
@@ -105,6 +111,15 @@ let
     PROFILES = {
         "global": {
             "bindings": {},
+        },
+        "dolphin": {
+            "bindings": {
+                (BTN_SELECT, BTN_B): ("send-key", "ctrl-r", "Minus + B reset Dolphin"),
+                (BTN_SELECT, BTN_L): ("send-key", "f1", "Minus + L loaded Dolphin state slot 1"),
+                (BTN_SELECT, BTN_R): ("send-key", "shift-f1", "Minus + R saved Dolphin state slot 1"),
+                (BTN_SELECT, BTN_A): ("send-key", "f9", "Minus + A triggered Dolphin screenshot"),
+                (BTN_SELECT, BTN_R2): ("send-key", "tab", "Minus + R2 toggled Dolphin fast mode"),
+            },
         },
         "xemu": {
             "snapshot_tag": "esde-slot1",
@@ -307,6 +322,27 @@ let
             raise AssertionError(f"unexpected PICO-8 reset action: {action}")
         if resolve_binding("pico8", {BTN_CAPTURE}, BTN_CAPTURE) is not None:
             raise AssertionError("bare Square must not resolve to a PICO-8 hotkey")
+        action = resolve_binding("dolphin", {BTN_SELECT, BTN_B}, BTN_B)
+        if action[:2] != ("send-key", "ctrl-r"):
+            raise AssertionError(f"unexpected Dolphin reset action: {action}")
+        action = resolve_binding("dolphin", {BTN_SELECT, BTN_L}, BTN_L)
+        if action[:2] != ("send-key", "f1"):
+            raise AssertionError(f"unexpected Dolphin load action: {action}")
+        action = resolve_binding("dolphin", {BTN_SELECT, BTN_R}, BTN_R)
+        if action[:2] != ("send-key", "shift-f1"):
+            raise AssertionError(f"unexpected Dolphin save action: {action}")
+        action = resolve_binding("dolphin", {BTN_SELECT, BTN_A}, BTN_A)
+        if action[:2] != ("send-key", "f9"):
+            raise AssertionError(f"unexpected Dolphin screenshot action: {action}")
+        if resolve_binding("dolphin", {BTN_CAPTURE}, BTN_CAPTURE) is not None:
+            raise AssertionError("bare Square must not resolve to a Dolphin hotkey")
+        action = resolve_binding("dolphin", {BTN_SELECT, BTN_R2}, BTN_R2)
+        if action[:2] != ("send-key", "tab"):
+            raise AssertionError(f"unexpected Dolphin fast-mode action: {action}")
+        if resolve_binding("dolphin", {BTN_SELECT, BTN_X}, BTN_X) is not None:
+            raise AssertionError("Dolphin Minus + X must stay unbound")
+        if resolve_binding("dolphin", {BTN_SELECT, BTN_Y}, BTN_Y) is not None:
+            raise AssertionError("Dolphin Minus + Y must stay unbound")
 
         socket_path = None
         received = []
@@ -1097,6 +1133,25 @@ EOF
       log_event "runtime" "prepared PICO-8 home config at $pico8_home"
     }
 
+    prepare_dolphin_runtime() {
+      if [ "''${EMULATION_DOLPHIN_HOTKEY_FALLBACK:-0}" != "1" ]; then
+        return 0
+      fi
+      dolphin_config_dir="$XDG_CONFIG_HOME/dolphin-emu"
+      mkdir -p "$dolphin_config_dir"
+      cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
+    [Hotkeys1]
+    Device = Keyboard Mouse
+    Keys/Toggle Pause = F10
+    Keys/Reset = @(Ctrl+R)
+    Keys/Take Screenshot = F9
+    Keys/Disable Emulation Speed Limit = Tab
+    Keys/Load State Slot 1 = F1
+    Keys/Save State Slot 1 = @(Shift+F1)
+EOF
+      log_event "runtime" "prepared Dolphin keyboard fallback hotkeys"
+    }
+
     cmd=()
     run_cwd=""
     hotkey_profile="global"
@@ -1159,7 +1214,13 @@ PY
         fi
         cmd+=(-L "$core_path" "$rom_path")
         ;;
-      dolphin) cmd=(dolphin-emu -b -e "$rom_path") ;;
+      dolphin)
+        if [ "''${EMULATION_DOLPHIN_HOTKEY_FALLBACK:-0}" = "1" ]; then
+          hotkey_profile="dolphin"
+        fi
+        prepare_dolphin_runtime
+        cmd=(dolphin-emu -b -e "$rom_path")
+        ;;
       cemu) cmd=(cemu -f -g "$rom_path") ;;
       xemu)
         cmd=(
@@ -1519,6 +1580,8 @@ PY
     RenderWindowAutoSize = False
     [Interface]
     ConfirmStop = False
+    UsePanicHandlers = False
+    OnScreenDisplayMessages = True
     [DSP]
     DSPThread = True
     Backend = Cubeb
@@ -1537,6 +1600,16 @@ EOF
     VSync = False
     [Enhancements]
     MaxAnisotropy = 4
+EOF
+        cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
+    [Hotkeys1]
+    Device = SDL/0/Nintendo Switch Pro Controller
+    Keys/Toggle Pause = `Button 13`
+    Keys/Reset = `Button 8` & `Button 0`
+    Keys/Take Screenshot = `Button 8` & `Button 1`
+    Keys/Disable Emulation Speed Limit = `Button 8` & `Button 7`
+    Keys/Load State Slot 1 = `Button 8` & `Button 4`
+    Keys/Save State Slot 1 = `Button 8` & `Button 5`
 EOF
         : >"$dolphin_config_dir/GCPadNew.ini"
         for slot in 1 2 3 4; do
@@ -1861,6 +1934,7 @@ EOF
         "retroarch_screenshot": "RetroArch only: Minus + A/East",
         "retroarch_fast_forward": "RetroArch only: Minus + R2",
         "normal_exit": "Minus + Start/+ twice exits the active run-emulator process group",
+        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin hotkeys for Minus + B reset, Minus + L load state slot 1, Minus + R save state slot 1, Minus + A screenshot, and Minus + R2 fast mode; Minus + X quick actions and Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
         "xemu_hotkeys": "Default Xbox launch: Minus + X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, and Minus + R2 is unbound",
         "pico8_hotkeys": "Default PICO-8 launch: Minus + X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, and Minus + R2 is unbound",
         "gzdoom": "GZDoom button map: Start/+ opens the menu, Minus toggles the automap, and Square/Capture is intentionally unbound",
@@ -1868,7 +1942,7 @@ EOF
       },
       "managed_defaults": {
         "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Minus hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
-        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
+        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Dolphin launches fullscreen without analytics, panic, or stop-confirm prompts; GameCube native Dolphin hotkeys cover reset, save/load slot 1, screenshot, and fast mode, while Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
         "ppsspp": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
         "pcsx2": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
         "azahar": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",

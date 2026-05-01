@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer GameCube Dolphin hotkeys**: Configure Dolphin to launch GameCube
+  games without analytics, panic, or stop-confirm prompts, bind native
+  GameCube hotkeys for reset, save/load slot 1, screenshot, pause, and fast
+  mode, and keep unsupported quick-actions/debug-monitor chords explicitly
+  unbound.
 - **Boomer Controller Maps hotkey layout**: Render the same full hotkey combo
   list on every controller map with combo-first rows and `None` for unmapped
   actions. Use `L2`/`R2` for trigger rows, keep stick clicks on `L3`/`R3`, and

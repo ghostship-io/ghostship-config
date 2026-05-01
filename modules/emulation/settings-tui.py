@@ -355,6 +355,18 @@ RETROARCH_HOTKEYS = hotkey_rows(
 )
 
 
+DOLPHIN_GC_HOTKEYS = hotkey_rows(
+    {
+        "Minus + Start 2x": "Exit",
+        "Minus + R": "Save",
+        "Minus + L": "Load",
+        "Minus + B": "Reset",
+        "Minus + A": "Screenshot",
+        "Minus + R2": "Fast",
+    }
+)
+
+
 DOLPHIN_WII_HOTKEYS = hotkey_rows(
     {
         "Minus + Start 2x": "Exit",
@@ -700,6 +712,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             ["Dolphin GameCube has no Home button."],
+            DOLPHIN_GC_HOTKEYS,
         ),
     },
     {
@@ -2442,11 +2455,12 @@ def smoke_test(mode):
                 assert any("Minus + L -> Load" in line for line in row["detail"])
                 assert any("Minus + R2 -> Fast" in line for line in row["detail"])
             else:
-                if row["label"] != "Xbox":
+                if row["label"] not in {"GameCube", "Xbox"}:
                     assert not any("Minus + X -> Quick Menu" in line for line in row["detail"])
                     assert not any("Minus + R -> Save" in line for line in row["detail"])
                     assert not any("Minus + L -> Load" in line for line in row["detail"])
-                assert not any("Minus + R2 -> Fast" in line for line in row["detail"])
+                if row["label"] != "GameCube":
+                    assert not any("Minus + R2 -> Fast" in line for line in row["detail"])
             assert not any("Original Controller" in line or "+---" in line for line in row["detail"])
         n64 = next(row for row in CONTROLLER_MAPS if row["label"] == "Nintendo 64")
         assert any("A -> A" in line for line in n64["detail"])
@@ -2457,6 +2471,12 @@ def smoke_test(mode):
         assert any("R -> R" in line for line in gamecube["detail"])
         assert any("L2 -> None" in line for line in gamecube["detail"])
         assert any("R2 -> Z" in line for line in gamecube["detail"])
+        assert any("Minus + X -> None" in line for line in gamecube["detail"])
+        assert any("Minus + Y -> None" in line for line in gamecube["detail"])
+        assert any("Minus + R -> Save" in line for line in gamecube["detail"])
+        assert any("Minus + L -> Load" in line for line in gamecube["detail"])
+        assert any("Minus + R2 -> Fast" in line for line in gamecube["detail"])
+        assert any("Square -> None" in line for line in gamecube["detail"])
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
         assert any("Square -> Console Home" in line for line in wii["detail"])
         xbox = next(row for row in CONTROLLER_MAPS if row["label"] == "Xbox")
