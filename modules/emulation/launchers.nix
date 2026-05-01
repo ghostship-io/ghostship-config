@@ -1472,8 +1472,6 @@ EOF
     bind Joy10 togglemap
     bind Joy11 menu_main
     bind Joy12 menu_main
-    bind Joy13 +user2
-    bind Joy14 +attack
     bind Axis3Plus +user2
     bind Axis4Plus +user2
     bind Axis4Minus +user2
@@ -1513,6 +1511,8 @@ EOF
     mapbind pad_b am_clearmarks
     mapbind POV1Right +am_panright
     mapbind POV1Left +am_panleft
+    mapbind POV1Up +am_panup
+    mapbind POV1Down +am_pandown
     mapbind POV1Up +am_panup
     mapbind POV1Down +am_pandown
     mapbind dpadright +am_panright
