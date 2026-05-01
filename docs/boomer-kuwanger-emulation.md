@@ -233,9 +233,12 @@ whose first non-comment line is parsed as a raw argument string, matching the
 `.gzdoom` launcher style. If the first argument names a payload beside the
 launcher, `run-emulator` runs it from that payload directory through a
 32-bit Linux FHS compatibility runtime with the legacy loader, graphics
-libraries, libstdc++5, and a small `libsegaapi.so` audio shim; otherwise the
-arguments are passed to TeknoParrotUi. Keep copied game payloads under hidden
-`.assets/` directories beside those launchers.
+libraries, libstdc++5, and a small `libsegaapi.so` audio shim with targeted
+legacy semaphore compatibility; otherwise the arguments are passed to
+TeknoParrotUi. Keep copied game payloads under hidden `.assets/` directories
+beside those launchers. The runtime does not provide proprietary game assets,
+premium unlocks, dongle bypasses, or patch packs; if a native payload reaches
+an in-game security error, that is operator-managed content.
 
 ## Display And Aspect Scaling
 

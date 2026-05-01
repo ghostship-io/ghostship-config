@@ -27,8 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer TeknoParrot native runtime**: Run local native `.teknoparrot`
   payloads through a 32-bit FHS compatibility runtime so After Burner Climax
   can find its Linux loader and legacy arcade dependencies on NixOS. Include a
-  small `libsegaapi.so` audio shim for Lindbergh payloads that otherwise fail
-  before opening a display window.
+  small `libsegaapi.so` audio shim and targeted legacy semaphore compatibility
+  for Lindbergh payloads that otherwise fail before rendering a window.
 - **Boomer TeknoParrot artwork**: Apply Art Book Next's diagonal system-art
   mask to the TeknoParrot Star Wars artwork so it matches stock system panels.
 - **Boomer TeknoParrot logo**: Use the supplied path-based TeknoParrot SVG for
