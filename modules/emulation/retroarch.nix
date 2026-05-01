@@ -45,6 +45,22 @@ let
     auto_remaps_enable = "true"
     remap_directory = "${cfg.configRoot}/retroarch/remaps"
     core_options_path = "${cfg.configRoot}/retroarch/core-options/default.opt"
+    cheevos_enable = "true"
+    cheevos_hardcore_mode_enable = "false"
+    cheevos_verbose_enable = "true"
+    cheevos_start_active = "true"
+    cheevos_auto_screenshot = "true"
+    cheevos_badges_enable = "true"
+    cheevos_challenge_indicators = "true"
+    cheevos_richpresence_enable = "true"
+    cheevos_visibility_account = "true"
+    cheevos_visibility_unlock = "true"
+    cheevos_visibility_mastery = "true"
+    cheevos_visibility_lboard_start = "true"
+    cheevos_visibility_lboard_submit = "true"
+    cheevos_visibility_lboard_trackers = "false"
+    cheevos_unlock_sound_enable = "true"
+    cheevos_test_unofficial = "false"
   '';
 
   globalShaderPreset = pkgs.writeText "emulation-global.slangp" ''
