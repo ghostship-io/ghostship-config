@@ -1051,15 +1051,12 @@ in
 
     systemd.services.controller-bluetooth-health = {
       description = "Log Switch Pro Bluetooth HID health warnings";
-      wantedBy = [ "multi-user.target" ];
       after = [
         "bluetooth.service"
         "controller-leds.service"
       ];
       serviceConfig = {
         ExecStart = "${lib.getExe controllerBluetoothHealth}";
-        Restart = "always";
-        RestartSec = "5s";
       };
       bindsTo = [ "bluetooth.service" ];
       partOf = [ "bluetooth.service" ];

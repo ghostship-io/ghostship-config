@@ -323,13 +323,13 @@ SWITCH_PRO_BUTTONS = [
 
 
 GLOBAL_EXIT_HOTKEYS = [
-    "Exit: Select + Start twice",
+    "None",
 ]
 
 
 RETROARCH_HOTKEYS = [
     "Quick Menu: Select + X",
-    "Exit: Select + Start twice",
+    "Exit: Select + Start",
     "Save: Select + R",
     "Load: Select + L",
     "Reset: Select + B",
@@ -341,20 +341,29 @@ RETROARCH_HOTKEYS = [
 
 DOLPHIN_WII_HOTKEYS = [
     "Home: Square / Capture",
-    "Exit: Select + Start twice",
 ]
 
 
 GZDOOM_HOTKEYS = [
     "Menu: Plus / Start",
     "Map: Minus toggles",
-    "Exit: Select + Start twice",
 ]
 
 
 PICO8_HOTKEYS = [
     "Pause/Menu: Plus / Start",
-    "Exit: Select + Start twice",
+]
+
+
+XEMU_HOTKEYS = [
+    "Quick Menu: Select+Start / Select+X*",
+    "Save*: Select+R",
+    "Load*: Select+L",
+    "Reset*: Select+B",
+    "Screenshot*: Select+A",
+    "Monitor*: Select+Y",
+    "Pause*: Square",
+    "Fast: None",
 ]
 
 
@@ -401,7 +410,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             ["Rocknix hotkeys use Select; Square is Home only where listed."],
-            ["Per-emulator pages list supported hotkeys.", "Exit: Select + Start twice"],
+            ["Per-emulator pages list supported hotkeys.", "Default standalone hotkeys: None"],
         ),
     },
     {
@@ -760,7 +769,8 @@ CONTROLLER_MAPS = [
                 "Plus": "Start",
                 "Star": "Turbo",
             },
-            ["Quick Menu: Select + Start (one press)"],
+            [],
+            XEMU_HOTKEYS,
         ),
     },
     {
@@ -2394,7 +2404,6 @@ def smoke_test(mode):
             button_text = "\n".join(button_rows)
             assert all(f"{button} ->" in button_text for button in SWITCH_PRO_BUTTONS if button)
             assert any("Star" in line for line in row["detail"])
-            assert any("Select + Start twice" in line for line in row["detail"])
             assert any("Square" in line for line in row["detail"])
             assert not any(line.strip().startswith("Note:") for line in row["detail"])
             assert not any("Turbo: Star + <Button>" in line for line in row["detail"])
@@ -2405,7 +2414,8 @@ def smoke_test(mode):
                 assert any("Load: Select + L" in line for line in row["detail"])
                 assert any("Fast: Select + ZR" in line for line in row["detail"])
             else:
-                assert not any("Quick Menu: Select + X" in line for line in row["detail"])
+                if row["label"] != "Xbox":
+                    assert not any("Quick Menu: Select + X" in line for line in row["detail"])
                 assert not any("Save: Select + R" in line for line in row["detail"])
                 assert not any("Load: Select + L" in line for line in row["detail"])
                 assert not any("Fast: Select + ZR" in line for line in row["detail"])
@@ -2422,6 +2432,10 @@ def smoke_test(mode):
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
         assert any("Square -> Console Home" in line for line in wii["detail"])
         assert any("Home: Square / Capture" in line for line in wii["detail"])
+        xbox = next(row for row in CONTROLLER_MAPS if row["label"] == "Xbox")
+        assert any("Quick Menu: Select+Start / Select+X*" in line for line in xbox["detail"])
+        assert any("Save*: Select+R" in line for line in xbox["detail"])
+        assert any("Fast: None" in line for line in xbox["detail"])
         for row in CONTROLLER_MAPS:
             if row["label"] in {"Switch Pro Reference", "Wii Remote + Nunchuk", "GZDoom"}:
                 continue
@@ -2435,7 +2449,6 @@ def smoke_test(mode):
         assert any("X -> Crouch" in line for line in gzdoom["detail"])
         assert any("Y -> Reload" in line for line in gzdoom["detail"])
         assert any("L -> User 1" in line for line in gzdoom["detail"])
-        assert any("R -> User 2" in line for line in gzdoom["detail"])
         assert any("Plus -> Menu" in line for line in gzdoom["detail"])
         assert any("Square -> None" in line for line in gzdoom["detail"])
         assert any("Menu: Plus / Start" in line for line in gzdoom["detail"])

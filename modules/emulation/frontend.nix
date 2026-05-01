@@ -9,6 +9,9 @@ let
   emu = config.ghostship.emulation.internal.lib;
   packages = config.ghostship.emulation.internal.packages;
 
+  mkAlternateCommand = system: alternate: ''
+      <command label="${emu.xmlEscape alternate.label}">run-emulator ${emu.xmlEscape system.id} ${emu.xmlEscape alternate.emulator} %ROM%</command>'';
+
   mkSystemXml = system: ''
     <system>
       <name>${emu.xmlEscape system.id}</name>
@@ -16,6 +19,7 @@ let
       <path>${emu.xmlEscape "${cfg.romRoot}/${system.folder}"}</path>
       <extension>${emu.xmlEscape system.extensions}</extension>
       <command>run-emulator ${emu.xmlEscape system.id} ${emu.xmlEscape system.emulator} %ROM%</command>
+${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmulators or [ ])}
       <platform>${emu.xmlEscape system.platform}</platform>
       <theme>${emu.xmlEscape system.theme}</theme>
     </system>'';
