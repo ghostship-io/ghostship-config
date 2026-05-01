@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer hotkey regression fix**: Restore the per-launch Select+Start
   double-press exit broker and move RetroArch hotkey button bindings into the
   managed Switch Pro and 8BitDo autoconfigs so each controller uses its own
-  physical button numbers.
+  physical button numbers. Make `xemu-hotkeys` the default Xbox launcher so
+  Xbox hotkeys work without selecting an alternate emulator.
 - **Boomer PICO-8 hotkey launcher**: Keep plain PICO-8 as the default, add an
   opt-in `pico8-hotkeys` ES-DE alternate, launch PICO-8 with a managed
   `-home` directory, seed its config/controller mapping before launch, and map

@@ -88,11 +88,11 @@ let
       fullname = "Microsoft Xbox";
       platform = "xbox";
       theme = "xbox";
-      emulator = "xemu";
+      emulator = "xemu-hotkeys";
       alternateEmulators = [
         {
-          label = "xemu-hotkeys";
-          emulator = "xemu-hotkeys";
+          label = "xemu";
+          emulator = "xemu";
         }
       ];
       extensions = ".xiso .XISO";

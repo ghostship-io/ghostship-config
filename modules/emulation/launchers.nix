@@ -1858,7 +1858,7 @@ EOF
         "retroarch_screenshot": "RetroArch only: Select/- plus A/East",
         "retroarch_fast_forward": "RetroArch only: Select/- plus ZR",
         "normal_exit": "Select/- plus Start/+ twice exits the active run-emulator process group",
-        "xemu_hotkeys": "Opt-in xemu-hotkeys only: Select/- plus X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, Square/Capture toggles pause, and Select/- plus ZR is unbound",
+        "xemu_hotkeys": "Default Xbox launch: Select/- plus X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, Square/Capture toggles pause, and Select/- plus ZR is unbound",
         "pico8_hotkeys": "Opt-in pico8-hotkeys only: Select/- plus X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, Square/Capture opens pause/menu, and Select/- plus ZR is unbound",
         "gzdoom": "GZDoom only: Start/+ opens the menu, Select/- toggles the automap, and Square/Capture is intentionally unbound",
         "pico8": "PICO-8 default: Start/+ opens pause/menu; PICO-8 uses an explicit managed -home config directory"
@@ -1870,7 +1870,8 @@ EOF
         "pcsx2": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
         "azahar": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
         "cemu": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
-        "xemu": "plain Xemu launch with native Select+Start quick actions and per-launch Select+Start twice exit; use xemu-hotkeys for the opt-in standalone broker",
+        "xemu": "fallback plain Xemu launch with native Select+Start quick actions and per-launch Select+Start twice exit",
+        "xemu-hotkeys": "default Xbox launch with the standalone broker for quick actions, save/load, reset, screenshots, debug monitor, and pause",
         "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Select+Start twice exits through the per-launch broker",
         "supermodel": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
         "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; Select+Start twice exits through the per-launch broker",

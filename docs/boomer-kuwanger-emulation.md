@@ -529,12 +529,11 @@ mode supports it, and Star/Home is treated as a controller-local turbo button
 when the firmware exposes it at all. Square/Capture opens native console Home
 screens only where that binding is explicitly configured, such as Dolphin's Wii
 profile, and otherwise does nothing. Every `run-emulator` launch starts a
-lightweight per-process exit broker for Select+Start twice; expanded standalone
-hotkey brokers are opt-in per-emulator launch modes. Plain Xbox uses Xemu's
-native Select+Start quick-actions chord; the selectable `xemu-hotkeys` launch
-mode starts a per-process broker and HMP socket for Select+X quick actions,
-Select+B reset, Select+L load `esde-slot1`, Select+R save `esde-slot1`,
-Select+A screenshot, Select+Y debug monitor, and Square/Capture pause.
+lightweight per-process exit broker for Select+Start twice. Xbox defaults to
+`xemu-hotkeys`, which starts a per-process broker and HMP socket for Select+X
+quick actions, Select+B reset, Select+L load `esde-slot1`, Select+R save
+`esde-slot1`, Select+A screenshot, Select+Y debug monitor, and Square/Capture
+pause. Plain `xemu` remains available as a fallback alternate.
 Select+ZR is intentionally unmapped for Xemu because there is no reliable
 fast-forward command. RetroArch maps Select/Minus hotkeys to save/load, reset,
 FPS, screenshot, and fast-forward actions, exits on Select+Start twice through
