@@ -166,6 +166,37 @@ let
       cp -R . "$theme_dir/"
       find "$theme_dir" -maxdepth 1 -name 'aspect-ratio*.xml' -exec \
         sed -i '/<clock name="clock">/a\         <format>%H:%M</format>' {} +
+      cp "$theme_dir/_inc/systems/artwork/pcarcade.png" "$theme_dir/_inc/systems/artwork/teknoparrot.png"
+      cp "$theme_dir/_inc/systems/artwork-screenshots/pcarcade.png" "$theme_dir/_inc/systems/artwork-screenshots/teknoparrot.png"
+      cp "$theme_dir/_inc/systems/artwork-outline/pcarcade.png" "$theme_dir/_inc/systems/artwork-outline/teknoparrot.png"
+      cat >"$theme_dir/_inc/systems/logos/teknoparrot.svg" <<'EOF'
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 240">
+  <title>TeknoParrot</title>
+  <text x="600" y="152" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="132" font-weight="900" letter-spacing="2" fill="#ffffff">TeknoParrot</text>
+  <rect x="152" y="178" width="896" height="12" rx="6" fill="#f15a24"/>
+</svg>
+EOF
+      cat >"$theme_dir/_inc/systems/_metadata-global/teknoparrot.xml" <<'EOF'
+<theme>
+    <variables>
+        <systemName>TeknoParrot</systemName>
+        <systemDescription>TeknoParrot arcade launchers for PC-based arcade games.</systemDescription>
+        <systemManufacturer>Various</systemManufacturer>
+        <systemReleaseYear>Various</systemReleaseYear>
+        <systemReleaseDate>Various</systemReleaseDate>
+        <systemReleaseDateFormated>Various</systemReleaseDateFormated>
+        <systemHardwareType>Collection</systemHardwareType>
+        <systemCoverSize>3-4</systemCoverSize>
+        <systemCoverSizeType>portrait</systemCoverSizeType>
+        <systemColor>5B60B7</systemColor>
+        <systemColorPalette1>F15A24</systemColorPalette1>
+        <systemColorPalette2>F6DD08</systemColorPalette2>
+        <systemColorPalette3>303030</systemColorPalette3>
+        <systemColorPalette4>FFFFFF</systemColorPalette4>
+        <systemCartSize>1-1</systemCartSize>
+    </variables>
+</theme>
+EOF
       runHook postInstall
     '';
   };
