@@ -1665,7 +1665,7 @@ EOF
         "face_east": "physical A / right face / secondary or cancel where applicable",
         "face_north": "physical X / upper face",
         "face_west": "physical Y / left face",
-        "digital_movement": "D-pad plus left stick for players 1-5 where the emulator exposes stable digital direction bindings",
+        "digital_movement": "D-pad plus left-stick digital movement where stable: RetroArch uses analog-to-D-pad mode for players 1-5, Dolphin keeps analog movement on analog sticks, and standalone SDL emulators keep their native left-stick mappings",
         "player_slots": "map every stable declarative player slot exposed by the emulator"
       },
       "global_sdl_hints": {
@@ -1687,8 +1687,8 @@ EOF
         "pico8": "PICO-8 only: Start/+ opens pause/menu"
       },
       "managed_defaults": {
-        "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; players 1-5 map D-pad and left stick to digital movement; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
-        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Wii Remote Home uses Square/Capture where Dolphin exposes it; Wii D-pad stays on physical D-pad and Nunchuk movement stays on left stick",
+        "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; players 1-5 use RetroArch analog-to-D-pad mode for left-stick digital movement; PC Engine-family cores default to 6-button pads for all five players; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
+        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
         "ppsspp": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",
         "pcsx2": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",
         "azahar": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",

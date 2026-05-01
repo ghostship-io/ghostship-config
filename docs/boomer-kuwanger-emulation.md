@@ -545,13 +545,14 @@ otherwise does nothing. Select held plus a double Start press asks the active
 emulator process group to exit normally, then force-kills that process group
 after 5 seconds if it does not close. RetroArch maps Select/Minus hotkeys to
 save/load, reset, FPS, screenshot, and fast-forward actions, and D-pad-only
-RetroArch systems also accept left-stick D-pad input for players 1-5. PC Engine
-CD and SuperGrafx cores default all five players to 6-button pads. Dolphin
-enables all four GameCube controller ports and keeps Wii slots 1-4 on the same
-SDL controller order; Wii D-pad input stays on physical D-pad while Nunchuk
-movement uses left stick. The N64 RetroArch override remaps Mupen64Plus so
-physical Switch A sends N64 A, physical Switch B sends N64 B, and physical
-Switch X/Y stay unbound.
+RetroArch systems also accept left-stick D-pad input for players 1-5 through
+RetroArch analog-to-D-pad mode rather than direct axis aliases. PC Engine CD
+and SuperGrafx default all five players to 6-button pads. Dolphin enables all
+four GameCube controller ports and keeps Wii slots 1-4 on the same SDL
+controller order; D-pad stays on physical D-pad and analog movement stays on
+analog sticks. Standalone SDL emulators keep their native left-stick mappings.
+The N64 RetroArch override remaps Mupen64Plus so physical Switch A sends N64 A,
+physical Switch B sends N64 B, and physical Switch X/Y stay unbound.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices
