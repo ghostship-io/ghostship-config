@@ -92,14 +92,14 @@ let
     YDOTOOL = "${lib.getExe pkgs.ydotool}"
 
     KEY_COMMANDS = {
-        "f2": [YDOTOOL, "key", "60:1", "60:0"],
-        "f12": [YDOTOOL, "key", "88:1", "88:0"],
-        "grave": [YDOTOOL, "key", "41:1", "41:0"],
-        "ctrl-p": [YDOTOOL, "key", "29:1", "25:1", "25:0", "29:0"],
-        "enter": [YDOTOOL, "key", "28:1", "28:0"],
-        "ctrl-6": [YDOTOOL, "key", "29:1", "7:1", "7:0", "29:0"],
-        "ctrl-9": [YDOTOOL, "key", "29:1", "10:1", "10:0", "29:0"],
-        "ctrl-r": [YDOTOOL, "key", "29:1", "19:1", "19:0", "29:0"],
+        "f2": [YDOTOOL, "key", "-d", "50", "60:1", "60:0"],
+        "f12": [YDOTOOL, "key", "-d", "50", "88:1", "88:0"],
+        "grave": [YDOTOOL, "key", "-d", "50", "41:1", "41:0"],
+        "ctrl-p": [YDOTOOL, "key", "-d", "50", "29:1", "25:1", "25:0", "29:0"],
+        "enter": [YDOTOOL, "key", "-d", "50", "28:1", "28:0"],
+        "ctrl-6": [YDOTOOL, "key", "-d", "50", "29:1", "7:1", "7:0", "29:0"],
+        "ctrl-9": [YDOTOOL, "key", "-d", "50", "29:1", "10:1", "10:0", "29:0"],
+        "ctrl-r": [YDOTOOL, "key", "-d", "50", "29:1", "19:1", "19:0", "29:0"],
     }
 
     PROFILES = {
@@ -299,7 +299,7 @@ let
             raise AssertionError("Select-less X must not resolve to an action")
         if resolve_binding("global", {BTN_SELECT, BTN_X}, BTN_X) is not None:
             raise AssertionError("global profile must not resolve emulator actions")
-        if key_command("f2") != [YDOTOOL, "key", "60:1", "60:0"]:
+        if key_command("f2") != [YDOTOOL, "key", "-d", "50", "60:1", "60:0"]:
             raise AssertionError("F2 command changed unexpectedly")
         action = resolve_binding("pico8", {BTN_SELECT, BTN_A}, BTN_A)
         if action[:2] != ("send-key", "ctrl-6"):
@@ -409,6 +409,8 @@ let
                 for offset in range(0, len(data) - EVENT.size + 1, EVENT.size):
                     _sec, _usec, ev_type, code, value = EVENT.unpack(data[offset : offset + EVENT.size])
                     if ev_type != EV_KEY:
+                        continue
+                    if value == 2:
                         continue
                     if value:
                         pressed[path].add(code)
