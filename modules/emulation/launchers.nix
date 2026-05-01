@@ -1328,7 +1328,7 @@ EOF
 EOF
         chown -R ${cfg.user}:${cfg.group} "$dolphin_config_dir"
         find "$dolphin_config_dir" -type f -exec chmod 0644 {} +
-        cat >"${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg" <<'EOF'
+        sed 's/^    //' >"${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg" <<'EOF'
     // Boomer controller defaults. Managed by Nix.
     use_joystick true
     freelook true
@@ -1406,62 +1406,28 @@ EOF
     bind Joy14 +attack
     bind Joy5 togglemap
     bind Joy7 menu_main
-    bind LStickLeft +moveleft
-    bind LStickRight +moveright
-    bind LStickUp +forward
-    bind LStickDown +back
     bind Axis1Minus +moveleft
     bind Axis1Plus +moveright
     bind Axis2Minus +forward
     bind Axis2Plus +back
-    bind Axis5Plus +altattack
-    bind Axis6Plus +attack
-    bind DPadUp +forward
-    bind DPadDown +back
-    bind DPadLeft +moveleft
-    bind DPadRight +moveright
     bind POV1Up +forward
     bind POV1Down +back
     bind POV1Left +moveleft
     bind POV1Right +moveright
 
-    // Some SDL layers expose controller aliases instead of raw joystick names.
-    bind Pad_A +use
-    bind Pad_B +jump
-    bind Pad_Y crouch
-    bind Pad_Back togglemap
-    bind Pad_Start menu_main
-    bind LShoulder weapprev
-    bind RShoulder weapnext
-    bind LTrigger +altattack
-    bind RTrigger +attack
-
     mapbind Joy2 am_setmark
     mapbind Joy1 am_clearmarks
     mapbind Joy5 togglemap
-    mapbind LStickLeft +am_panleft
-    mapbind LStickRight +am_panright
-    mapbind LStickUp +am_panup
-    mapbind LStickDown +am_pandown
     mapbind Axis1Minus +am_panleft
     mapbind Axis1Plus +am_panright
     mapbind Axis2Minus +am_panup
     mapbind Axis2Plus +am_pandown
-    mapbind DPadRight +am_panright
-    mapbind DPadLeft +am_panleft
-    mapbind DPadUp +am_panup
-    mapbind DPadDown +am_pandown
     mapbind POV1Right +am_panright
     mapbind POV1Left +am_panleft
     mapbind POV1Up +am_panup
     mapbind POV1Down +am_pandown
     mapbind Joy10 +am_zoomout
     mapbind Joy11 +am_zoomin
-    mapbind Pad_A am_setmark
-    mapbind Pad_B am_clearmarks
-    mapbind Pad_Back togglemap
-    mapbind LShoulder +am_zoomout
-    mapbind RShoulder +am_zoomin
 EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         chmod 0644 "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
@@ -1500,14 +1466,14 @@ axis_settings = {
     "Axis7map": "2",
 }
 binding_settings = {
-    "Pad_A": "+use",
-    "Pad_B": "+jump",
+    "Pad_A": None,
+    "Pad_B": None,
     "Pad_X": None,
-    "Pad_Y": "crouch",
-    "LShoulder": "weapprev",
-    "RShoulder": "weapnext",
-    "LTrigger": "+altattack",
-    "RTrigger": "+attack",
+    "Pad_Y": None,
+    "LShoulder": None,
+    "RShoulder": None,
+    "LTrigger": None,
+    "RTrigger": None,
     "LThumb": None,
     "RThumb": None,
     "Joy1": "+jump",
@@ -1526,12 +1492,12 @@ binding_settings = {
     "Joy14": "+attack",
     "Joy15": None,
     "Joy16": None,
-    "Pad_Back": "togglemap",
-    "Pad_Start": "menu_main",
-    "LStickLeft": "+moveleft",
-    "LStickRight": "+moveright",
-    "LStickUp": "+forward",
-    "LStickDown": "+back",
+    "Pad_Back": None,
+    "Pad_Start": None,
+    "LStickLeft": None,
+    "LStickRight": None,
+    "LStickUp": None,
+    "LStickDown": None,
     "RStickLeft": None,
     "RStickRight": None,
     "RStickUp": None,
@@ -1545,26 +1511,26 @@ binding_settings = {
     "Axis4Minus": None,
     "Axis4Plus": None,
     "Axis5Minus": None,
-    "Axis5Plus": "+altattack",
+    "Axis5Plus": None,
     "Axis6Minus": None,
-    "Axis6Plus": "+attack",
+    "Axis6Plus": None,
     "Axis7Minus": None,
     "Axis7Plus": None,
     "Axis8Minus": None,
     "Axis8Plus": None,
-    "DPadUp": "+forward",
-    "DPadDown": "+back",
-    "DPadLeft": "+moveleft",
-    "DPadRight": "+moveright",
+    "DPadUp": None,
+    "DPadDown": None,
+    "DPadLeft": None,
+    "DPadRight": None,
     "POV1Up": "+forward",
     "POV1Down": "+back",
     "POV1Left": "+moveleft",
     "POV1Right": "+moveright",
 }
 automap_settings = {
-    "Pad_A": "am_setmark",
+    "Pad_A": None,
     "Joy2": "am_setmark",
-    "Pad_B": "am_clearmarks",
+    "Pad_B": None,
     "Joy1": "am_clearmarks",
     "Pad_X": None,
     "Pad_Y": None,
@@ -1574,14 +1540,14 @@ automap_settings = {
     "Joy6": None,
     "Joy10": "+am_zoomout",
     "Joy11": "+am_zoomin",
-    "Pad_Back": "togglemap",
+    "Pad_Back": None,
     "Pad_Start": None,
-    "LShoulder": "+am_zoomout",
-    "RShoulder": "+am_zoomin",
-    "LStickLeft": "+am_panleft",
-    "LStickRight": "+am_panright",
-    "LStickUp": "+am_panup",
-    "LStickDown": "+am_pandown",
+    "LShoulder": None,
+    "RShoulder": None,
+    "LStickLeft": None,
+    "LStickRight": None,
+    "LStickUp": None,
+    "LStickDown": None,
     "RStickLeft": None,
     "RStickRight": None,
     "RStickUp": None,
@@ -1598,10 +1564,10 @@ automap_settings = {
     "Axis7Plus": None,
     "Axis8Minus": None,
     "Axis8Plus": None,
-    "DPadUp": "+am_panup",
-    "DPadDown": "+am_pandown",
-    "DPadLeft": "+am_panleft",
-    "DPadRight": "+am_panright",
+    "DPadUp": None,
+    "DPadDown": None,
+    "DPadLeft": None,
+    "DPadRight": None,
     "POV1Up": "+am_panup",
     "POV1Down": "+am_pandown",
     "POV1Left": "+am_panleft",
