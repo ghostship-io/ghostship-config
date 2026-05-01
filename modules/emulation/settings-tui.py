@@ -326,7 +326,7 @@ def two_column_button_lines(entries):
 
 def controller_map(title, mappings, notes=(), hotkeys=(), square="None"):
     mappings = [*mappings, f"Square -> {square}", "Star -> Turbo"]
-    lines = [title, "Button Map"]
+    lines = [title, "Button Map (Original -> Switch Pro)"]
     lines.extend(f"  {line}" for line in two_column_button_lines(mappings))
     lines.append("Hotkeys")
     lines.extend(f"  {line}" for line in (hotkeys or COMMON_HOTKEYS))
@@ -2220,7 +2220,7 @@ def smoke_test(mode):
             assert wrapped
             assert len(wrapped) <= metrics["content_height"]
             assert all(len(line) <= metrics["right_width"] for line in wrapped)
-            assert "Button Map" in row["detail"]
+            assert "Button Map (Original -> Switch Pro)" in row["detail"]
             assert "Hotkeys" in row["detail"]
             assert any("Star" in line for line in row["detail"])
             assert any("Select + Start twice" in line for line in row["detail"])
