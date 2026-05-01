@@ -8,6 +8,7 @@ let
     video_driver = "vulkan"
     audio_driver = "pipewire"
     input_driver = "udev"
+    vulkan_gpu_index = "1"
     menu_driver = "ozone"
     menu_swap_ok_cancel = "false"
     video_fullscreen = "true"
