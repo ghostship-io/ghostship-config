@@ -79,7 +79,7 @@ let
       platform = "xbox";
       theme = "xbox";
       emulator = "xemu";
-      extensions = ".iso .ISO";
+      extensions = ".xiso .XISO";
       fixedAspect = "16:9";
     }
     {
@@ -362,7 +362,7 @@ let
       platform = "pico8";
       theme = "pico8";
       emulator = "pico8";
-      extensions = ".p8.png .P8.PNG";
+      extensions = ".png .PNG";
       fixedAspect = "4:3";
     }
   ];

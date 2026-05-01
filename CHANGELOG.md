@@ -10,7 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer PICO-8 ES-DE support**: Seed a small starter set of existing NAS
   PICO-8 carts into an empty ES-DE ROM folder and document the PICO-8 Switch
   controller map in the on-device Controller Maps TUI and generated policy.
-  Keep ES-DE's launchable PICO-8 extensions limited to `.p8.png` carts.
+  Use clean `.png` PICO-8 cart names for ES-DE scanning.
+- **Boomer ES-DE gamelists**: Stop generating ES-DE gamelists from Nix; let
+  ES-DE own gamelist creation and updates.
 - **Boomer controller probe documentation**: Document the live Switch Pro
   kernel event mapping from the Boomer raw input probe so emulator bindings can
   be based on observed `EV_KEY`/`EV_ABS` codes instead of inferred labels.
@@ -18,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `xemu.toml` machine settings and disable Xemu's welcome wizard so Xbox games
   do not stop at the manual machine configuration prompt when the required BIOS
   and HDD files are present. Hide Xemu's menubar during gameplay, and have
-  Xbox launchable images use the `.xiso.iso` naming convention while redump
+  Xbox launchable images use the `.xiso` naming convention while redump
   backups stay outside ES-DE's `.iso` scan suffix.
 - **Boomer emulation setup rendering**: Keep the generated GZDoom config
   Python heredoc flush-left so `emulation-setup.service` can complete during
@@ -195,7 +197,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Cleared transient smoke/perf test capability sets so `steam-run`/bubblewrap
   emulators launch without the unexpected-capabilities failure seen during
   PICO-8 testing, and classified PICO-8 performance tests as 30 FPS by default
-  because many carts, including the `POOM.p8.png` smoke cart, target that rate.
+  because many carts, including the `POOM.png` smoke cart, target that rate.
   Replaced nixpkgs' stable Ryubing package with a pinned official Ryubing
   Canary binary package and added `update-ryubing-canary` so the pin can be
   advanced from the official latest redirect before Boomer rebuilds. Added
@@ -203,7 +205,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list curated launch files while GZDoom receives the referenced WAD/PK3 assets,
   and aligned Boomer's ES-DE ROM folder names exactly with the source
   `/mnt/z/Library/ROMs/roms` library.
-  Added `POOM.p8.png` as the PICO-8 smoke cart and made PICO-8 launches request
+  Added `POOM.png` as the PICO-8 smoke cart and made PICO-8 launches request
   an explicit Gamescope Xwayland server so SDL can initialize on the TV path.
   Forced ES-DE's live theme setting to Art Book Next during setup and changed
   frontend-launched games to reuse the existing ES-DE Gamescope session instead

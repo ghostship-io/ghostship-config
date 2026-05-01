@@ -190,7 +190,7 @@ The Nix module creates Xemu's machine settings at
 `/srv/emulation/xdg/share/xemu/xemu/xemu.toml`, disables Xemu's welcome wizard
 and menubar, and launches Xemu with that config explicitly. Keep
 `mcpx_1.0.bin`, `Complex_4627.bin`, and `xbox_hdd.qcow2` under
-`/srv/emulation/bios/xbox`. Name launchable Xbox images with the `.xiso.iso`
+`/srv/emulation/bios/xbox`. Name launchable Xbox images with the `.xiso`
 suffix and keep redump backups from ending in `.iso` so ES-DE does not list
 the unbootable video partition dumps.
 Current smoke coverage has confirmed these BIOS-gated files are still needed
@@ -209,7 +209,7 @@ NixOS without committing proprietary files.
 
 PICO-8 uses SDL's X11 video path on Boomer, so `run-emulator` adds an explicit
 Gamescope Xwayland server for PICO-8 launches. Current smoke coverage uses
-`POOM.p8.png` from the PICO-8 library as the heavier test cart.
+`POOM.png` from the PICO-8 library as the heavier test cart.
 
 ## TeknoParrot Free
 

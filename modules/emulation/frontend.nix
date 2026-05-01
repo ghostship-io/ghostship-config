@@ -57,20 +57,6 @@ let
     </ruleList>
   '';
 
-  mkToolGamelistEntry = index: tool: ''
-    <game>
-      <path>./${emu.xmlEscape tool.file}</path>
-      <name>${emu.xmlEscape (lib.removeSuffix ".sh" tool.file)}</name>
-      <sortname>${lib.fixedWidthNumber 2 (index + 1)}</sortname>
-    </game>'';
-
-  toolsGamelistXml = pkgs.writeText "emulation-tools-gamelist.xml" ''
-    <?xml version="1.0"?>
-    <gameList>
-    ${lib.concatStringsSep "\n" (lib.imap0 mkToolGamelistEntry emu.tools)}
-    </gameList>
-  '';
-
   esSettingsXml = pkgs.writeText "emulation-es-settings.xml" ''
     <?xml version="1.0"?>
     <settings>
@@ -139,14 +125,12 @@ let
       "${cfg.dataRoot}/tools" \
       "${cfg.esde.appDataDir}" \
       "${cfg.esde.appDataDir}/custom_systems" \
-      "${cfg.esde.appDataDir}/gamelists/tools" \
       "${cfg.esde.appDataDir}/settings" \
       "${cfg.esde.appDataDir}/themes" \
       "${cfg.esde.appDataDir}/scripts"
 
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${esSystemsXml} "${cfg.esde.appDataDir}/custom_systems/es_systems.xml"
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${esFindRulesXml} "${cfg.esde.appDataDir}/custom_systems/es_find_rules.xml"
-    install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${toolsGamelistXml} "${cfg.esde.appDataDir}/gamelists/tools/gamelist.xml"
     if [ ! -e "${cfg.esde.appDataDir}/settings/es_settings.xml" ]; then
       install -D -m 0640 -o ${cfg.user} -g ${cfg.group} ${esSettingsXml} "${cfg.esde.appDataDir}/settings/es_settings.xml"
     fi
@@ -222,14 +206,14 @@ let
     pico8_source="/mnt/z/Library/ROMs/roms/$pico8_folder"
     pico8_target="${cfg.romRoot}/$pico8_folder"
     if [ -d "$pico8_source" ] && [ -d "$pico8_target" ]; then
-      if ! find -L "$pico8_target" -maxdepth 1 -type f \( -name '*.p8.png' -o -name '*.P8.PNG' \) -print -quit | grep -q .; then
+      if ! find -L "$pico8_target" -maxdepth 1 -type f \( -name '*.png' -o -name '*.PNG' \) -print -quit | grep -q .; then
         printf '%s\n' \
-          "Celeste Classic.p8.png|Celeste Classic.p8.png" \
-          "Celeste Classic 2 - Lani's Trek.p8.png|Celeste Classic 2 - Lani's Trek.p8.png" \
-          "Just One Boss.p8.png|Just One Boss.p8.png" \
-          "PICOHOT.p8.png|PICOHOT.p8.png" \
-          "POOM.p8.png|POOM.p8.png" \
-          "Pico Tetris.p8.png|Pico Tetris.p8.png" \
+          "Celeste Classic.p8.png|Celeste Classic.png" \
+          "Celeste Classic 2 - Lani's Trek.p8.png|Celeste Classic 2 - Lani's Trek.png" \
+          "Just One Boss.p8.png|Just One Boss.png" \
+          "PICOHOT.p8.png|PICOHOT.png" \
+          "POOM.p8.png|POOM.png" \
+          "Pico Tetris.p8.png|Pico Tetris.png" \
           | while IFS='|' read -r source_cart target_cart; do
           if [ -f "$pico8_source/$source_cart" ] && [ ! -e "$pico8_target/$target_cart" ]; then
             ln -s "$pico8_source/$source_cart" "$pico8_target/$target_cart"
