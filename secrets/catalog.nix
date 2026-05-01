@@ -247,7 +247,7 @@
       recipients = recipients.groups.emulation-runtime;
       mode = "0400";
       format = "env";
-      exports = [ "RETROACHIEVEMENTS_USER" "RETROACHIEVEMENTS_PASS" ];
+      exports = [ "RETROACHIEVEMENTS_USER" "RETROACHIEVEMENTS_PASS" "RETROACHIEVEMENTS_TOKEN" ];
     };
   };
 
@@ -381,6 +381,7 @@
       fields = {
         RETROACHIEVEMENTS_USER = { unit = "emulation-retroachievements-secrets"; key = "RETROACHIEVEMENTS_USER"; };
         RETROACHIEVEMENTS_PASS = { unit = "emulation-retroachievements-secrets"; key = "RETROACHIEVEMENTS_PASS"; };
+        RETROACHIEVEMENTS_TOKEN = { unit = "emulation-retroachievements-secrets"; key = "RETROACHIEVEMENTS_TOKEN"; };
       };
     };
   };
