@@ -334,6 +334,9 @@ changelog.
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it
   contains save/NAND state.
+  Ryubing firmware installs must use its native
+  `bis/system/Contents/registered/<nca>.nca/00` layout; flat `.nca` files in
+  `registered` are ignored by Ryubing's content scan.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
 - Homepage `services.yaml` updates can leave stale entries behind when keys are

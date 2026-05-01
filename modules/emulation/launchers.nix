@@ -1324,7 +1324,13 @@ if not archives:
 source = archives[-1]
 resolved = source.resolve()
 sha256 = hashlib.sha256(resolved.read_bytes()).hexdigest()
-registered_count = len([path for path in registered_dir.glob("*.nca") if path.is_file()])
+registered_count = len(
+    [
+        path
+        for path in registered_dir.glob("*.nca")
+        if path.is_dir() and (path / "00").is_file()
+    ]
+)
 marker = {}
 if marker_path.exists():
     try:
@@ -1333,7 +1339,7 @@ if marker_path.exists():
         marker = {}
 
 if marker.get("sha256") == sha256 and registered_count > 0:
-    print(f"Ryubing firmware already installed from {source} ({registered_count} NCA files)")
+    print(f"Ryubing firmware already installed from {source} ({registered_count} NCA entries)")
     raise SystemExit(0)
 
 with zipfile.ZipFile(source) as archive:
@@ -1353,7 +1359,9 @@ with zipfile.ZipFile(source) as archive:
             child.unlink()
 
     for name in names:
-        target = registered_dir / Path(name).name
+        nca_name = Path(name.replace(".cnmt", "")).name
+        target = registered_dir / nca_name / "00"
+        target.parent.mkdir(parents=True, exist_ok=True)
         with archive.open(name) as src, target.open("wb") as dst:
             shutil.copyfileobj(src, dst)
 
