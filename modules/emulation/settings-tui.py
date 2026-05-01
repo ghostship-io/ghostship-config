@@ -364,6 +364,7 @@ DOLPHIN_GC_HOTKEYS = hotkey_rows(
         "Minus + B": "Reset",
         "Minus + A": "Screenshot",
         "Minus + R2": "Fast",
+        "Square": "Pause if exposed",
     }
 )
 
@@ -416,6 +417,15 @@ PCSX2_HOTKEYS = hotkey_rows(
         "Minus + A": "Screenshot",
         "Minus + Y": "OSD/FPS",
         "Minus + R2": "Fast",
+    }
+)
+
+
+RYUBING_HOTKEYS = hotkey_rows(
+    {
+        "Minus + X": "UI",
+        "Minus + Plus 2x": "Exit",
+        "Minus + A": "Screenshot",
     }
 )
 
@@ -724,9 +734,13 @@ CONTROLLER_MAPS = [
                 "R1": "R",
                 "R2": "Z",
                 "Plus": "Start",
+                "Square": "Pause if exposed",
                 "Star": "Turbo",
             },
-            ["Dolphin GameCube has no Home button."],
+            [
+                "Dolphin GameCube has no Home button.",
+                "Hotkeys are native Dolphin SDL bindings.",
+            ],
             DOLPHIN_GC_HOTKEYS,
         ),
     },
@@ -939,9 +953,11 @@ CONTROLLER_MAPS = [
                 "R2": "ZR",
                 "Minus": "Minus",
                 "Plus": "Plus",
+                "Square": "Pause",
                 "Star": "Turbo",
             },
             [],
+            RYUBING_HOTKEYS,
         ),
     },
     {
@@ -2517,7 +2533,7 @@ def smoke_test(mode):
         assert any("Minus + R1 -> Save" in line for line in gamecube["detail"])
         assert any("Minus + L1 -> Load" in line for line in gamecube["detail"])
         assert any("Minus + R2 -> Fast" in line for line in gamecube["detail"])
-        assert any("Square -> None" in line for line in gamecube["detail"])
+        assert any("Square -> Pause if exposed" in line for line in gamecube["detail"])
         ps2 = next(row for row in CONTROLLER_MAPS if row["label"] == "PlayStation 2")
         assert any("Minus + X -> Pause Menu" in line for line in ps2["detail"])
         assert any("Minus + B -> Reset" in line for line in ps2["detail"])
@@ -2537,8 +2553,12 @@ def smoke_test(mode):
         assert any("Minus + X -> Pause/Menu" in line for line in pico8["detail"])
         assert any("Minus + Y -> Save GIF" in line for line in pico8["detail"])
         assert any("Minus + R2 -> None" in line for line in pico8["detail"])
+        switch = next(row for row in CONTROLLER_MAPS if row["label"] == "Switch")
+        assert any("Minus + X -> UI" in line for line in switch["detail"])
+        assert any("Minus + A -> Screenshot" in line for line in switch["detail"])
+        assert any("Square -> Pause" in line for line in switch["detail"])
         for row in CONTROLLER_MAPS:
-            if row["label"] in {"Switch Pro Reference", "Wii Remote + Nunchuk", "GZDoom"}:
+            if row["label"] in {"Switch Pro Reference", "GameCube", "Wii Remote + Nunchuk", "Switch", "GZDoom"}:
                 continue
             assert any("Square -> None" in line for line in row["detail"])
         gzdoom = next(row for row in CONTROLLER_MAPS if row["label"] == "GZDoom")

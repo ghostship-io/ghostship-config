@@ -96,6 +96,9 @@ let
         "tab": [YDOTOOL, "key", "-d", "50", "15:1", "15:0"],
         "f1": [YDOTOOL, "key", "-d", "50", "59:1", "59:0"],
         "f2": [YDOTOOL, "key", "-d", "50", "60:1", "60:0"],
+        "f4": [YDOTOOL, "key", "-d", "50", "62:1", "62:0"],
+        "f5": [YDOTOOL, "key", "-d", "50", "63:1", "63:0"],
+        "f8": [YDOTOOL, "key", "-d", "50", "66:1", "66:0"],
         "f9": [YDOTOOL, "key", "-d", "50", "67:1", "67:0"],
         "f10": [YDOTOOL, "key", "-d", "50", "68:1", "68:0"],
         "f12": [YDOTOOL, "key", "-d", "50", "88:1", "88:0"],
@@ -140,6 +143,13 @@ let
                 (BTN_SELECT, BTN_A): ("send-key", "ctrl-6", "Minus + A saved PICO-8 screenshot"),
                 (BTN_SELECT, BTN_Y): ("send-key", "ctrl-9", "Minus + Y saved PICO-8 GIF"),
                 (BTN_SELECT, BTN_R2): ("notify-none", "pico8 fast-forward is not available", "Minus + R2 has no PICO-8 action"),
+            },
+        },
+        "ryubing": {
+            "bindings": {
+                (BTN_SELECT, BTN_X): ("send-key", "f4", "Minus + X toggled Ryubing UI"),
+                (BTN_SELECT, BTN_A): ("send-key", "f8", "Minus + A triggered Ryubing screenshot"),
+                (BTN_CAPTURE,): ("send-key", "f5", "Square toggled Ryubing pause"),
             },
         },
     }
@@ -343,6 +353,15 @@ let
             raise AssertionError("Dolphin Minus + X must stay unbound")
         if resolve_binding("dolphin", {BTN_SELECT, BTN_Y}, BTN_Y) is not None:
             raise AssertionError("Dolphin Minus + Y must stay unbound")
+        action = resolve_binding("ryubing", {BTN_SELECT, BTN_X}, BTN_X)
+        if action[:2] != ("send-key", "f4"):
+            raise AssertionError(f"unexpected Ryubing Minus + X action: {action}")
+        action = resolve_binding("ryubing", {BTN_SELECT, BTN_A}, BTN_A)
+        if action[:2] != ("send-key", "f8"):
+            raise AssertionError(f"unexpected Ryubing Minus + A action: {action}")
+        action = resolve_binding("ryubing", {BTN_CAPTURE}, BTN_CAPTURE)
+        if action[:2] != ("send-key", "f5"):
+            raise AssertionError(f"unexpected Ryubing Square action: {action}")
 
         socket_path = None
         received = []
@@ -1079,13 +1098,289 @@ EOF
       ryujinx_config_dir="$XDG_CONFIG_HOME/Ryujinx"
       ryujinx_system_dir="$ryujinx_config_dir/system"
       ryujinx_sdcard_dir="$ryujinx_config_dir/sdcard"
-      mkdir -p "$ryujinx_system_dir" "$ryujinx_sdcard_dir"
+      ryujinx_firmware_dir="$ryujinx_config_dir/bis/system/Contents/registered"
+      ryujinx_firmware_marker="$ryujinx_config_dir/bis/system/Contents/firmware-installed.json"
+      mkdir -p "$ryujinx_system_dir" "$ryujinx_sdcard_dir" "$ryujinx_firmware_dir" "$(dirname "$ryujinx_firmware_marker")"
+      ryujinx_config_file="$ryujinx_config_dir/Config.json"
+
+      ${pkgs.python3}/bin/python3 - "$ryujinx_config_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if path.exists():
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        raise SystemExit(f"Refusing to rewrite invalid Ryubing config: {path}")
+else:
+    config = {
+        "version": 71,
+        "enable_file_log": True,
+        "backend_threading": "Auto",
+        "res_scale": 1,
+        "res_scale_custom": 1,
+        "max_anisotropy": -1,
+        "aspect_ratio": "Fixed16x9",
+        "anti_aliasing": "None",
+        "scaling_filter": "Bilinear",
+        "scaling_filter_level": 80,
+        "graphics_shaders_dump_path": "",
+        "logging_enable_debug": False,
+        "logging_enable_stub": True,
+        "logging_enable_info": True,
+        "logging_enable_warn": True,
+        "logging_enable_error": True,
+        "logging_enable_trace": False,
+        "logging_enable_guest": True,
+        "logging_enable_fs_access_log": False,
+        "logging_enable_avalonia": False,
+        "logging_filtered_classes": [],
+        "logging_graphics_debug_level": "None",
+        "system_language": "AmericanEnglish",
+        "system_region": "USA",
+        "system_time_zone": "UTC",
+        "system_time_offset": 0,
+        "match_system_time": False,
+        "use_input_global_config": False,
+        "docked_mode": True,
+        "enable_discord_integration": False,
+        "check_updates_on_start": False,
+        "update_checker_type": "PromptAtStartup",
+        "focus_lost_action_type": "DoNothing",
+        "show_confirm_exit": False,
+        "ignore_applet": False,
+        "skip_user_profiles": False,
+        "remember_window_state": True,
+        "show_title_bar": True,
+        "enable_hardware_acceleration": True,
+        "hide_cursor": 1,
+        "enable_vsync": True,
+        "vsync_mode": 0,
+        "enable_custom_vsync_interval": False,
+        "custom_vsync_interval": 120,
+        "enable_shader_cache": True,
+        "enable_texture_recompression": False,
+        "enable_macro_hle": True,
+        "enable_color_space_passthrough": False,
+        "enable_ptc": True,
+        "enable_low_power_ptc": False,
+        "tick_scalar": 50,
+        "enable_internet_access": False,
+        "enable_fs_integrity_checks": True,
+        "fs_global_access_log_mode": 0,
+        "audio_backend": "SDL3",
+        "audio_volume": 1,
+        "memory_manager_mode": "HostMappedUnsafe",
+        "dram_size": 0,
+        "ignore_missing_services": False,
+        "gui_columns": {
+            "fav_column": True,
+            "icon_column": True,
+            "app_column": True,
+            "dev_column": True,
+            "version_column": True,
+            "ldn_info_column": False,
+            "time_played_column": True,
+            "last_played_column": True,
+            "file_ext_column": True,
+            "file_size_column": True,
+            "path_column": True,
+        },
+        "column_sort": {"sort_column_id": 0, "sort_ascending": False},
+        "game_dirs": [],
+        "autoload_dirs": [],
+        "shown_file_types": {"nsp": True, "pfs0": True, "xci": True, "nca": True, "nro": True, "nso": True},
+        "window_startup": {
+            "window_size_width": 1280,
+            "window_size_height": 760,
+            "window_position_x": 0,
+            "window_position_y": 0,
+            "window_maximized": False,
+        },
+        "language_code": "en_US",
+        "base_style": "Dark",
+        "game_list_view_mode": 0,
+        "show_names": True,
+        "grid_size": 2,
+        "application_sort": 0,
+        "is_ascending_order": True,
+        "start_fullscreen": True,
+        "start_no_ui": False,
+        "show_console": False,
+        "enable_keyboard": False,
+        "enable_mouse": False,
+        "disable_input_when_out_of_focus": False,
+        "hotkeys": {
+            "toggle_vsync_mode": "F1",
+            "screenshot": "F8",
+            "show_ui": "F4",
+            "pause": "F5",
+            "toggle_mute": "F2",
+            "res_scale_up": "Unbound",
+            "res_scale_down": "Unbound",
+            "volume_up": "Unbound",
+            "volume_down": "Unbound",
+            "custom_vsync_interval_increment": "Unbound",
+            "custom_vsync_interval_decrement": "Unbound",
+            "turbo_mode": "Unbound",
+            "turbo_mode_while_held": False,
+        },
+        "input_config": [],
+        "rainbow_speed": 1,
+        "graphics_backend": "Vulkan",
+        "preferred_gpu": "",
+        "multiplayer_mode": 0,
+        "multiplayer_lan_interface_id": "0",
+        "multiplayer_disable_p2p": False,
+        "multiplayer_ldn_passphrase": "",
+        "ldn_server": "",
+        "use_hypervisor": True,
+        "enable_gdb_stub": False,
+        "gdb_stub_port": 55555,
+        "debugger_suspend_on_start": False,
+        "show_dirty_hacks": False,
+        "dirty_hacks": [],
+    }
+
+for key in (
+    "Version",
+    "BackendThreading",
+    "ResScale",
+    "ResScaleCustom",
+    "MaxAnisotropy",
+    "DockedMode",
+    "AudioBackend",
+    "GraphicsBackend",
+    "StartFullscreen",
+    "ShowConsole",
+    "EnableKeyboard",
+    "EnableMouse",
+    "Hotkeys",
+):
+    config.pop(key, None)
+
+config.update(
+    {
+        "backend_threading": "Auto",
+        "res_scale": 1,
+        "res_scale_custom": 1,
+        "max_anisotropy": 16,
+        "aspect_ratio": "Fixed16x9",
+        "anti_aliasing": "None",
+        "scaling_filter": "Bilinear",
+        "scaling_filter_level": 80,
+        "docked_mode": True,
+        "check_updates_on_start": False,
+        "show_confirm_exit": False,
+        "hide_cursor": 1,
+        "enable_vsync": True,
+        "enable_shader_cache": True,
+        "enable_texture_recompression": False,
+        "enable_macro_hle": True,
+        "enable_ptc": True,
+        "audio_backend": "SDL3",
+        "audio_volume": 1,
+        "start_fullscreen": True,
+        "show_console": False,
+        "enable_keyboard": False,
+        "enable_mouse": False,
+        "graphics_backend": "Vulkan",
+    }
+)
+hotkeys = config.setdefault("hotkeys", {})
+hotkeys.update({"show_ui": "F4", "screenshot": "F8", "pause": "F5"})
+
+tmp = path.with_suffix(".json.tmp")
+tmp.write_text(json.dumps(config, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+tmp.replace(path)
+PY
+
+      ${pkgs.python3}/bin/python3 - "${cfg.biosRoot}/switch" "$ryujinx_firmware_dir" "$ryujinx_firmware_marker" <<'PY'
+import hashlib
+import json
+import re
+import shutil
+import sys
+import zipfile
+from pathlib import Path
+
+bios_dir = Path(sys.argv[1])
+registered_dir = Path(sys.argv[2])
+marker_path = Path(sys.argv[3])
+
+def version_key(path):
+    return [int(part) for part in re.findall(r"\d+", path.name)]
+
+archives = sorted(
+    [path for path in bios_dir.glob("Firmware*.zip") if path.is_file()],
+    key=version_key,
+)
+if not archives:
+    print(f"WARNING: no Ryubing firmware archive found under {bios_dir}", file=sys.stderr)
+    raise SystemExit(0)
+
+source = archives[-1]
+resolved = source.resolve()
+sha256 = hashlib.sha256(resolved.read_bytes()).hexdigest()
+registered_count = len([path for path in registered_dir.glob("*.nca") if path.is_file()])
+marker = {}
+if marker_path.exists():
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        marker = {}
+
+if marker.get("sha256") == sha256 and registered_count > 0:
+    print(f"Ryubing firmware already installed from {source} ({registered_count} NCA files)")
+    raise SystemExit(0)
+
+with zipfile.ZipFile(source) as archive:
+    names = [
+        name
+        for name in archive.namelist()
+        if not name.endswith("/") and Path(name).name.lower().endswith(".nca")
+    ]
+    if not names:
+        raise SystemExit(f"Firmware archive contains no NCA files: {source}")
+
+    registered_dir.mkdir(parents=True, exist_ok=True)
+    for child in registered_dir.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+
+    for name in names:
+        target = registered_dir / Path(name).name
+        with archive.open(name) as src, target.open("wb") as dst:
+            shutil.copyfileobj(src, dst)
+
+marker_path.write_text(
+    json.dumps(
+        {
+            "source": str(source),
+            "resolved": str(resolved),
+            "sha256": sha256,
+            "file_count": len(names),
+        },
+        indent=2,
+        sort_keys=True,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+print(f"Installed Ryubing firmware from {source} ({len(names)} NCA files)")
+PY
 
       for key_name in prod.keys title.keys; do
         key_source="${cfg.biosRoot}/switch/$key_name"
         key_target="$ryujinx_system_dir/$key_name"
         if [ -r "$key_source" ] && { [ ! -e "$key_target" ] || [ -L "$key_target" ]; }; then
           ln -sfn "$key_source" "$key_target"
+        elif [ ! -r "$key_source" ]; then
+          log_event "warning" "missing Ryubing key: $key_source"
         fi
       done
 
@@ -1466,6 +1761,7 @@ PY
         ;;
       ryubing)
         prepare_ryubing_runtime
+        hotkey_profile="ryubing"
         cmd=(ryujinx "$rom_path")
         ;;
       azahar)
@@ -1821,11 +2117,11 @@ EOF
 [Hotkeys1]
 Device = SDL/0/Nintendo Switch Pro Controller
 Keys/Toggle Pause = `Button 13`
-Keys/Reset = `Button 8` & `Button 0`
-Keys/Take Screenshot = `Button 8` & `Button 1`
-Keys/Disable Emulation Speed Limit = `Button 8` & `Button 7`
-Keys/Load State Slot 1 = `Button 8` & `Button 4`
-Keys/Save State Slot 1 = `Button 8` & `Button 5`
+Keys/Reset = `Button 4` & `Button 1`
+Keys/Take Screenshot = `Button 4` & `Button 0`
+Keys/Disable Emulation Speed Limit = `Button 4` & `Axis 5+`
+Keys/Load State Slot 1 = `Button 4` & `Button 9`
+Keys/Save State Slot 1 = `Button 4` & `Button 10`
 EOF
         : >"$dolphin_config_dir/GCPadNew.ini"
         for slot in 1 2 3 4; do
@@ -1833,12 +2129,12 @@ EOF
           cat >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
 [GCPad$slot]
 Device = SDL/$index/Nintendo Switch Pro Controller
-Buttons/A = \`Button 1\`
-Buttons/B = \`Button 0\`
-Buttons/X = \`Button 3\`
-Buttons/Y = \`Button 2\`
-Buttons/Z = \`Button 7\`
-Buttons/Start = \`Button 9\`
+Buttons/A = \`Button 0\`
+Buttons/B = \`Button 1\`
+Buttons/X = \`Button 2\`
+Buttons/Y = \`Button 3\`
+Buttons/Z = \`Axis 5+\`
+Buttons/Start = \`Button 6\`
 Main Stick/Up = \`Axis 1-\`
 Main Stick/Down = \`Axis 1+\`
 Main Stick/Left = \`Axis 0-\`
@@ -1849,8 +2145,8 @@ C-Stick/Down = \`Axis 3+\`
 C-Stick/Left = \`Axis 2-\`
 C-Stick/Right = \`Axis 2+\`
 C-Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
-Triggers/L = \`Button 4\`
-Triggers/R = \`Button 5\`
+Triggers/L = \`Button 9\`
+Triggers/R = \`Button 10\`
 D-Pad/Up = \`Hat 0 N\`
 D-Pad/Down = \`Hat 0 S\`
 D-Pad/Left = \`Hat 0 W\`
@@ -1868,8 +2164,8 @@ Buttons/A = \`Button 1\`
 Buttons/B = \`Button 7\`
 Buttons/1 = \`Button 0\`
 Buttons/2 = \`Button 2\`
-Buttons/- = \`Button 8\`
-Buttons/+ = \`Button 9\`
+Buttons/- = \`Button 4\`
+Buttons/+ = \`Button 6\`
 Buttons/Home = \`Button 13\`
 D-Pad/Up = \`Hat 0 N\`
 D-Pad/Down = \`Hat 0 S\`
@@ -2150,23 +2446,24 @@ EOF
         "retroarch_screenshot": "RetroArch only: Minus + A",
         "retroarch_fast_forward": "RetroArch only: Minus + R2",
         "normal_exit": "Minus + Plus twice exits the active run-emulator process group",
-        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin hotkeys for Minus + B reset, Minus + L1 load state slot 1, Minus + R1 save state slot 1, Minus + A screenshot, and Minus + R2 fast mode; Minus + X quick actions and Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
+        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin SDL hotkeys with Minus/Select on Button 4 and Plus/Start on Button 6: Minus + B resets, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A screenshots, Minus + R2 toggles fast mode, and Square/Capture pauses only if Dolphin exposes the existing Button 13 binding; Minus + X quick actions and Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
         "pcsx2_hotkeys": "PCSX2 uses native PCSX2 hotkey bindings: Minus + X opens the pause menu, Minus + B resets the VM, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A saves a screenshot, Minus + Y toggles the OSD/FPS overlay, and Minus + R2 holds turbo/fast-forward",
         "xemu_hotkeys": "Default Xbox launch: Minus + X opens quick actions, B resets, L1 loads esde-slot1, R1 saves esde-slot1, A screenshots, Y toggles the debug monitor, and Minus + R2 is unbound",
         "pico8_hotkeys": "Default PICO-8 launch: Minus + X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, and Minus + R2 is unbound",
+        "ryubing_hotkeys": "Default Switch launch: Minus + X sends F4 for Ryubing UI, Minus + A sends F8 for screenshot, Square/Capture sends F5 for pause, and Minus + Plus twice exits",
         "gzdoom": "GZDoom button map: Start/+ opens the menu, Minus toggles the automap, and Square/Capture is intentionally unbound",
         "pico8": "fallback plain PICO-8 launch: Start/+ opens pause/menu; PICO-8 uses an explicit managed -home config directory"
       },
       "managed_defaults": {
         "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Minus hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
-        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Dolphin launches fullscreen without analytics, panic, or stop-confirm prompts; GameCube native Dolphin hotkeys cover reset, save/load slot 1, screenshot, and fast mode, while Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
+        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Dolphin launches fullscreen without analytics, panic, or stop-confirm prompts; GameCube native Dolphin hotkeys cover reset, save/load slot 1, screenshot, and fast mode with Minus as Select/hotkey modifier and Plus as Start; Square/Capture pauses or opens Wii Remote Home only where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
         "ppsspp": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "pcsx2": "launches through standalone PCSX2 with managed no-wizard config, Vulkan 3x internal resolution, native PCSX2 hotkey chords for pause menu/reset/save/load/screenshot/OSD/turbo, and Minus + Plus twice exits through the per-launch broker; Square/Capture is intentionally unbound until a stable Boomer SDL guide binding is proven",
         "azahar": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "cemu": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "xemu": "fallback plain Xemu launch with native Minus + Plus quick actions and per-launch Minus + Plus twice exit",
         "xemu-hotkeys": "default Xbox launch with the standalone broker for quick actions, save/load, reset, screenshots, debug monitor, and pause",
-        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Minus + Plus twice exits through the per-launch broker",
+        "ryubing": "inherits SDL Switch label hints from run-emulator, installs the newest local firmware archive into Ryubing's registered firmware store, uses managed Vulkan/docked/fullscreen Ryubing settings, and maps Minus + X to F4, Minus + A to F8, Square/Capture to F5, and Minus + Plus twice to exit through the per-launch broker",
         "supermodel": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; Minus + Plus twice exits through the per-launch broker",
         "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1/R1 are User 1/User 2, L2/R2 are alt fire/fire, Minus toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",

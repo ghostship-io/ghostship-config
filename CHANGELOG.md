@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paths, direct `-batch -fullscreen` launches, SDL controller mappings, and
   native PCSX2 hotkey chords for pause menu, reset, save/load slot 1,
   screenshot, OSD/FPS, and hold-turbo.
+- **Boomer Switch Ryubing setup**: Manage Ryubing's current lower-case config
+  schema before Switch launches, install the newest local firmware archive into
+  Ryubing's registered firmware store, keep the Canary pin current, and add
+  Switch hotkeys for Minus + X -> F4, Minus + A -> F8, and
+  Square/Capture -> F5 while preserving Minus + Plus twice exit.
 - **Boomer Dolphin prompt fix**: Reassert Dolphin analytics opt-out and
   stop-confirm settings immediately before each launch with valid INI syntax
   plus Dolphin `-C` overrides, so GameCube kiosk launches do not ask to report
@@ -21,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   GameCube hotkeys for reset, save/load slot 1, screenshot, and fast mode, and
   keep unsupported quick-actions/debug-monitor and bare Square chords
   explicitly unbound.
+- **Boomer Dolphin native button map**: Correct Dolphin's generated SDL
+  bindings so GameCube uses Minus as Select/hotkey modifier, Plus as Start,
+  Boomer's documented A/B/X/Y button numbers, L1/R1 shoulder buttons, and R2
+  axis for native Dolphin hotkeys.
 - **Boomer Controller Maps hotkey layout**: Render the same full hotkey combo
   list on every controller map with combo-first rows and `None` for unmapped
   actions. Use `L1`/`R1` for shoulder rows, `L2`/`R2` for trigger rows, keep

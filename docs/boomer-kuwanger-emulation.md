@@ -110,7 +110,16 @@ directory into Ryubing's emulated SD card at
 `/srv/emulation/xdg/config/Ryujinx/sdcard/data`, replacing only an existing
 symlink. Proprietary keys stay operator-managed under
 `/srv/emulation/bios/switch` and are exposed to Ryubing's runtime system
-directory at launch.
+directory at launch. Firmware also stays operator-managed in that BIOS folder:
+`run-emulator` selects the newest local `Firmware*.zip`, extracts its NCA files
+into Ryubing's `bis/system/Contents/registered` directory when needed, and
+writes a marker recording the source path, resolved path, hash, and file count.
+
+`run-emulator` also converges Ryubing's `Config.json` before each Switch launch
+so Boomer uses Vulkan, docked mode, fullscreen launch, 16x anisotropic
+filtering, shader cache, SDL2 audio, and Ryubing's native scaling/filtering.
+The Switch hotkey broker maps Minus+X to `F4` for Ryubing UI, Minus+A to `F8`
+for screenshot, and Square/Capture to `F5` for pause.
 
 ## GZDoom
 
@@ -553,13 +562,16 @@ CD and SuperGrafx default all five players to 6-button pads. Dolphin enables
 all four GameCube controller ports and keeps Wii slots 1-4 on the same SDL
 controller order; GameCube binds Dolphin-native hotkeys for Minus + B reset,
 Minus + L1 load slot 1, Minus + R1 save slot 1, Minus + A screenshot, and
-Minus + R2 fast mode. Minus + X quick actions and Minus + Y debug
-monitor stay unbound for GameCube because Dolphin does not expose equivalent
-normal runtime actions. D-pad stays on physical D-pad and analog movement stays
-on analog sticks. PCSX2 uses native PCSX2 hotkey bindings instead of an
-external hotkey broker: Minus + X opens the pause menu, Minus + B resets the
-VM, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A
-saves a screenshot, Minus + Y toggles the OSD/FPS overlay, and Minus + R2 holds
+Minus + R2 fast mode. These are native Dolphin SDL bindings: Minus/Select is
+`Button 4`, Plus/Start is `Button 6`, L1/R1 are `Button 9`/`Button 10`, and R2
+is `Axis 5+`. Square/Capture pauses only if Dolphin exposes the current
+`Button 13` binding. Minus + X quick actions and Minus + Y debug monitor stay
+unbound for GameCube because Dolphin does not expose equivalent normal runtime
+actions. D-pad stays on physical D-pad and analog movement stays on analog
+sticks. PCSX2 uses native PCSX2 hotkey bindings instead of an external hotkey
+broker: Minus + X opens the pause menu, Minus + B resets the VM, Minus + L1
+loads state slot 1, Minus + R1 saves state slot 1, Minus + A saves a
+screenshot, Minus + Y toggles the OSD/FPS overlay, and Minus + R2 holds
 turbo/fast-forward. Square/Capture stays unbound for PCSX2 until Boomer has a
 proven stable SDL guide-style binding. Standalone SDL emulators keep their
 native left-stick mappings. Mupen64Plus-Next defaults all four N64 controller
