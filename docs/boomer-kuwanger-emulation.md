@@ -140,17 +140,16 @@ The setup script also writes GZDoom's `[Joy:JS:*]` SDL axis map so left X/Y are
 strafe/forward, right X/Y are yaw/pitch with reduced vertical sensitivity,
 D-pad hat axes can also move/pan, and unused/phantom axes cannot drive the view
 upward on launch.
-On Boomer, SDL's joystick backend reports the Switch Pro as 6 axes, 16
-buttons, and one hat. The managed GZDoom package translates the probed SDL
-button path to native GZDoom gamepad keys: physical B/A/X/Y become
-`Pad_B`/`Pad_A`/`Pad_X`/`Pad_Y`, Select/Minus is `Pad_Back`, Start/Plus is
-`Pad_Start`, L1/R1 are `LShoulder`/`RShoulder`, and ZL/ZR are
-`LTrigger`/`RTrigger`. Left-stick movement is also emitted as `LStick*`, and
-the first SDL hat is emitted as `DPad*`. The generated config keeps raw
-fallbacks aligned with the same physical controls: `Joy1`/`Joy2` are physical
-B/A, `Joy3`/`Joy4` are physical X/Y, `Joy5` is Select/Minus, `Joy7` is
-Start/Plus, `Joy10`/`Joy11` are L1/R1, `Joy13`/`Joy14` are ZL/ZR, and `POV1*`
-is the D-pad.
+On Boomer, GZDoom's live SDL joystick path is configured with raw GZDoom names
+only. Do not use translated aliases such as `Pad_*`, `LStick*`, or `DPad*`
+unless a future live GZDoom probe proves those aliases work. The current raw
+map is: `Joy1`/`Joy2` are physical B/A, `Joy3`/`Joy4` are physical X/Y,
+`Joy5` is Select/Minus, `Joy6` is Square/Capture, `Joy7` is Start/Plus,
+`Joy10`/`Joy11` are L1/R1, `Joy13`/`Joy14` are ZL/ZR, `Axis1`/`Axis2` are
+left-stick movement, `Axis3`/`Axis4` are right-stick look through the SDL axis
+map, and `POV1*` is the D-pad. The live GZDoom event probe that established
+this is saved on Boomer at
+`/srv/emulation/logs/gzdoom-input-20260501T003827Z.log`.
 
 ### Switch Pro Raw Input Probe
 
