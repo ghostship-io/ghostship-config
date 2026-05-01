@@ -918,131 +918,6 @@ PY
       fi
     }
 
-    prepare_gzdoom_controls() {
-      gzdoom_ini="$HOME/.config/gzdoom/gzdoom.ini"
-      mkdir -p "$(dirname "$gzdoom_ini")"
-      ${pkgs.python3}/bin/python3 - "$gzdoom_ini" <<'PY'
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-lines = path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True) if path.exists() else []
-
-binding_settings = {
-    "Joy1": "+jump",
-    "Joy2": "+use",
-    "Joy3": None,
-    "Joy4": "crouch",
-    "Joy5": "togglemap",
-    "Joy6": None,
-    "Joy7": "menu_main",
-    "Joy8": None,
-    "Joy9": None,
-    "Joy10": "weapprev",
-    "Joy11": "weapnext",
-    "Joy12": None,
-    "Joy13": "+altattack",
-    "Joy14": "+attack",
-    "Joy15": None,
-    "Joy16": None,
-    "Axis1Minus": "+moveleft",
-    "Axis1Plus": "+moveright",
-    "Axis2Minus": "+forward",
-    "Axis2Plus": "+back",
-    "Axis3Minus": None,
-    "Axis3Plus": None,
-    "Axis4Minus": None,
-    "Axis4Plus": None,
-    "Axis5Minus": None,
-    "Axis5Plus": None,
-    "Axis6Minus": None,
-    "Axis6Plus": None,
-    "Axis7Minus": None,
-    "Axis7Plus": None,
-    "Axis8Minus": None,
-    "Axis8Plus": None,
-    "POV1Up": "+forward",
-    "POV1Down": "+back",
-    "POV1Left": "+moveleft",
-    "POV1Right": "+moveright",
-    "Pad_A": None,
-    "Pad_B": None,
-    "Pad_X": None,
-    "Pad_Y": None,
-    "Pad_Back": None,
-    "Pad_Start": None,
-    "LShoulder": None,
-    "RShoulder": None,
-    "LTrigger": None,
-    "RTrigger": None,
-    "LThumb": None,
-    "RThumb": None,
-    "LStickLeft": None,
-    "LStickRight": None,
-    "LStickUp": None,
-    "LStickDown": None,
-    "RStickLeft": None,
-    "RStickRight": None,
-    "RStickUp": None,
-    "RStickDown": None,
-    "DPadUp": None,
-    "DPadDown": None,
-    "DPadLeft": None,
-    "DPadRight": None,
-}
-
-def upsert_section(input_lines, section, settings):
-    out = []
-    in_section = False
-    found_section = False
-    seen = set()
-
-    def append_missing():
-        for key, value in settings.items():
-            if key not in seen and value is not None:
-                out.append(f"{key}={value}\n")
-                seen.add(key)
-
-    for line in input_lines:
-        stripped = line.strip()
-        starts_section = stripped.startswith("[") and stripped.endswith("]")
-        if starts_section:
-            if in_section:
-                append_missing()
-            in_section = stripped == f"[{section}]"
-            if in_section:
-                found_section = True
-                seen = set()
-            out.append(line)
-            continue
-        if in_section and "=" in line:
-            key = line.split("=", 1)[0].strip()
-            if key in settings:
-                if settings[key] is not None:
-                    out.append(f"{key}={settings[key]}\n")
-                seen.add(key)
-                continue
-        out.append(line)
-
-    if in_section:
-        append_missing()
-    if not found_section:
-        if out and not out[-1].endswith("\n"):
-            out[-1] += "\n"
-        if out and out[-1].strip():
-            out.append("\n")
-        out.append(f"[{section}]\n")
-        for key, value in settings.items():
-            if value is not None:
-                out.append(f"{key}={value}\n")
-    return out
-
-lines = upsert_section(lines, "Doom.Bindings", binding_settings)
-path.write_text("".join(lines), encoding="utf-8")
-PY
-      log_event "runtime" "seeded raw GZDoom game bindings immediately before launch"
-    }
-
     case "$emulator_id" in
       retroarch-*)
         core_file="$(core_file_for "$emulator_id")"
@@ -1127,7 +1002,6 @@ PY
         ;;
       supermodel) cmd=(supermodel "$rom_path" -res="$output_width","$output_height" -fullscreen) ;;
       gzdoom)
-        prepare_gzdoom_controls
         run_cwd="$(dirname "$rom_path")"
         gzdoom_controls="${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         gzdoom_common_args=()
@@ -1454,7 +1328,7 @@ EOF
 EOF
         chown -R ${cfg.user}:${cfg.group} "$dolphin_config_dir"
         find "$dolphin_config_dir" -type f -exec chmod 0644 {} +
-        sed 's/^    //' >"${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg" <<'EOF'
+        cat >"${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg" <<'EOF'
     // Boomer controller defaults. Managed by Nix.
     use_joystick true
     freelook true
