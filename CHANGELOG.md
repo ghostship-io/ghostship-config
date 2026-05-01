@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ES-DE own gamelist creation and updates.
 - **Boomer TeknoParrot launchers**: Use TeknoParrot `.xml` profile files in
   ES-DE and launch them through `TeknoParrotUi.exe --profile` under Wine.
+- **Boomer TeknoParrot Wine Mono**: Package WineHQ's Wine Mono 11.1 MSI and
+  install it into TeknoParrot's Wine prefix before starting TeknoParrotUi.
 - **Boomer TeknoParrot ES-DE identity**: Show TeknoParrot as its own ES-DE
   system instead of reusing the generic Arcade theme label.
 - **Boomer TeknoParrot theme**: Add TeknoParrot metadata, logo, and system

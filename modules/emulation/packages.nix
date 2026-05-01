@@ -17,6 +17,24 @@ let
     else
       pkgs.wine;
 
+  wineMono = pkgs.stdenvNoCC.mkDerivation {
+    pname = "wine-mono";
+    version = "11.1.0";
+
+    src = pkgs.fetchurl {
+      url = "https://dl.winehq.org/wine/wine-mono/11.1.0/wine-mono-11.1.0-x86.msi";
+      hash = "sha256-3rA0FDH4Jgsgn/9rx53cxUFLl/jpI2q5+9ykzlngqbk=";
+    };
+
+    dontUnpack = true;
+
+    installPhase = ''
+      runHook preInstall
+      install -D -m 0644 "$src" "$out/share/wine/mono/wine-mono-11.1.0-x86.msi"
+      runHook postInstall
+    '';
+  };
+
   supermodelPackage =
     if pkgs ? supermodel then
       pkgs.supermodel.overrideAttrs (old: {
@@ -399,6 +417,7 @@ in
         shaderGlsl
         shaderSlang
         supermodelPackage
+        wineMono
         winePackage
         ;
     };

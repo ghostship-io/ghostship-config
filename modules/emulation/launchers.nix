@@ -635,6 +635,7 @@ let
         export PATH=${emu.scriptPath}:${
           lib.makeBinPath [
             packages.winePackage
+            packages.wineMono
             pkgs.curl
             pkgs.unzip
           ]
@@ -645,6 +646,7 @@ let
         mkdir -p "$prefix" "${cfg.dataRoot}/logs/teknoparrot"
         export WINEPREFIX="$prefix/prefix"
         export WINEARCH=win64
+        export WINE_MONO_CACHE_DIR="${packages.wineMono}/share/wine/mono"
         if [ ! -e "$install_dir/TeknoParrotUi.exe" ]; then
           cat >&2 <<EOF
     TeknoParrot free is scaffolded but not installed yet.
@@ -673,9 +675,15 @@ EOF
           mkdir -p "$install_dir/UserProfiles"
           cp -f "$rom" "$install_dir/UserProfiles/$profile"
           cd "$install_dir"
+          if [ ! -e "$WINEPREFIX/drive_c/windows/Microsoft.NET/Framework/v4.0.30319/mscorlib.dll" ]; then
+            wine msiexec /i "${packages.wineMono}/share/wine/mono/wine-mono-11.1.0-x86.msi"
+          fi
           exec wine TeknoParrotUi.exe --profile="$profile"
         fi
         cd "$install_dir"
+        if [ ! -e "$WINEPREFIX/drive_c/windows/Microsoft.NET/Framework/v4.0.30319/mscorlib.dll" ]; then
+          wine msiexec /i "${packages.wineMono}/share/wine/mono/wine-mono-11.1.0-x86.msi"
+        fi
         exec wine "$install_dir/TeknoParrotUi.exe"
   '';
 

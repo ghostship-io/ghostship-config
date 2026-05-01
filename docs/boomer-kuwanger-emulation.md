@@ -248,6 +248,10 @@ The wrapper uses a dedicated Wine prefix at:
 /srv/emulation/config/teknoparrot/prefix
 ```
 
+The wrapper seeds that prefix with Wine Mono from WineHQ's matching Wine 11.1
+MSI before launching `TeknoParrotUi.exe`, because TeknoParrotUi is a .NET
+application.
+
 ES-DE lists `.xml` TeknoParrot profile files. `run-emulator` copies the selected
 profile into TeknoParrot's `UserProfiles` directory, switches to the
 TeknoParrot install directory, and launches `TeknoParrotUi.exe --profile` under
