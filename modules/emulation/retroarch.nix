@@ -45,6 +45,22 @@ let
     auto_remaps_enable = "true"
     remap_directory = "${cfg.configRoot}/retroarch/remaps"
     core_options_path = "${cfg.configRoot}/retroarch/core-options/default.opt"
+    cheevos_enable = "true"
+    cheevos_hardcore_mode_enable = "false"
+    cheevos_verbose_enable = "true"
+    cheevos_start_active = "true"
+    cheevos_auto_screenshot = "true"
+    cheevos_badges_enable = "true"
+    cheevos_challenge_indicators = "true"
+    cheevos_richpresence_enable = "true"
+    cheevos_visibility_account = "true"
+    cheevos_visibility_unlock = "true"
+    cheevos_visibility_mastery = "true"
+    cheevos_visibility_lboard_start = "true"
+    cheevos_visibility_lboard_submit = "true"
+    cheevos_visibility_lboard_trackers = "false"
+    cheevos_unlock_sound_enable = "true"
+    cheevos_test_unofficial = "false"
   '';
 
   globalShaderPreset = pkgs.writeText "emulation-global.slangp" ''
@@ -52,14 +68,14 @@ let
   '';
 
   coreOptions = {
-    "retroarch-fbneo.opt" = ''
+    "FinalBurn Neo" = ''
       fbneo-allow-patched-romsets = "enabled"
     '';
-    "retroarch-fceumm.opt" = ''
+    "FCEUmm" = ''
       fceumm_region = "Auto"
       fceumm_ramstate = "enabled"
     '';
-    "retroarch-beetle-supergrafx.opt" = ''
+    "Beetle SuperGrafx" = ''
       sgx_cdimagecache = "enabled"
       sgx_cdbios = "System Card 3"
       sgx_default_joypad_type_p1 = "6 Buttons"
@@ -69,36 +85,36 @@ let
       sgx_default_joypad_type_p5 = "6 Buttons"
       sgx_multitap = "enabled"
     '';
-    "retroarch-beetle-pce-fast.opt" = ''
+    "Beetle PCE Fast" = ''
       pce_fast_cdimagecache = "enabled"
       pce_fast_cdbios = "System Card 3"
     '';
-    "retroarch-beetle-psx-hw.opt" = ''
+    "Beetle PSX HW" = ''
       beetle_psx_hw_renderer = "hardware_vk"
       beetle_psx_hw_pgxp_mode = "memory + CPU"
       beetle_psx_hw_internal_resolution = "4x"
     '';
-    "retroarch-beetle-saturn.opt" = ''
+    "Beetle Saturn" = ''
       beetle_saturn_virtuagun_crosshair = "Cross"
     '';
-    "retroarch-mupen64plus.opt" = ''
+    "Mupen64Plus-Next" = ''
       mupen64plus-rdp-plugin = "parallel"
       mupen64plus-cpucore = "dynamic_recompiler"
     '';
-    "retroarch-parallel-n64.opt" = ''
+    "ParaLLEl N64" = ''
       parallel-n64-gfxplugin = "parallel"
     '';
-    "retroarch-melonds.opt" = ''
+    "melonDS" = ''
       melonds_boot_directly = "enabled"
     '';
-    "retroarch-ppsspp.opt" = ''
+    "PPSSPP" = ''
       ppsspp_internal_resolution = "4"
     '';
-    "retroarch-pcsx2.opt" = ''
+    "LRPS2" = ''
       pcsx2_renderer = "Vulkan"
       pcsx2_upscale_multiplier = "3"
     '';
-    "retroarch-flycast.opt" = ''
+    "Flycast" = ''
       flycast_renderer = "vulkan"
       reicast_threaded_rendering = "disabled"
     '';
@@ -323,9 +339,9 @@ let
     profiles;
 
   coreOptionFiles = lib.mapAttrsToList
-    (name: text: {
-      inherit name;
-      file = pkgs.writeText "emulation-${name}" text;
+    (corename: text: {
+      inherit corename;
+      file = pkgs.writeText "emulation-${corename}.opt" text;
     })
     coreOptions;
 
@@ -364,8 +380,10 @@ let
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${autoconfigSwitchPro} "${cfg.configRoot}/retroarch/autoconfig/udev/Nintendo Switch Pro Controller.cfg"
 
     install -m 0644 -o ${cfg.user} -g ${cfg.group} /dev/null "${cfg.configRoot}/retroarch/core-options/default.opt"
+    find "${cfg.configRoot}/retroarch/core-options" -maxdepth 1 -type f -name '*.opt' ! -name 'default.opt' -exec rm -f {} +
     ${lib.concatMapStringsSep "\n" (entry: ''
-      install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${entry.file} "${cfg.configRoot}/retroarch/core-options/${entry.name}"
+      install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "${cfg.dataRoot}/xdg/config/retroarch/config/${entry.corename}"
+      install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${entry.file} "${cfg.dataRoot}/xdg/config/retroarch/config/${entry.corename}/${entry.corename}.opt"
     '') coreOptionFiles}
     ${lib.concatMapStringsSep "\n" (entry: ''
       install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${entry.file} "${cfg.configRoot}/retroarch/profiles/${entry.name}"

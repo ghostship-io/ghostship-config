@@ -405,6 +405,13 @@ PC Engine/SuperGrafx, PlayStation, Saturn, Dreamcast, N64, DS, PSP/PS2
 fallback coverage, and 3DS fallback coverage. Managed config is written under
 `/srv/emulation/config/retroarch`.
 
+RetroAchievements are enabled by default for RetroArch cores when the
+`emulation-retroachievements-secrets` credentials are present. The default
+profile keeps hardcore mode off, leaves verbose achievement messages on,
+starts sessions with all achievements active locally, and enables badges,
+unlock/mastery visibility, rich presence, automatic unlock screenshots, and
+unlock sounds.
+
 Default ES-DE mappings now use RetroAchievements-aligned cores where practical:
 
 - NES/FDS: FCEUmm.

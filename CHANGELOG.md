@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer PC Engine CD launch fix**: Launch PC Engine CD games with Beetle PCE
   Fast, keep SuperGrafx for HuCard/SuperGrafx games, and sync libretro core
   info from `libretro-core-info` so RetroArch sees the managed metadata.
+- **Boomer RetroAchievements defaults**: Enable RetroAchievements by default
+  for RetroArch cores when credentials are present, with visible notifications,
+  encore/start-active behavior, badges, rich presence, unlock screenshots, and
+  unlock sounds while keeping hardcore mode off.
 - **Boomer Beetle SuperGrafx config**: Manage the core's CD BIOS/cache settings,
   enable six-button joypads for all five controller ports, and keep multitap
   enabled.
