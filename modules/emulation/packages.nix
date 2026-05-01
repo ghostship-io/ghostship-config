@@ -203,6 +203,7 @@ let
       sha256 = "0ndf4fgy046qndhl5dzryl1m0zndyq5n3cla3ydnzdrrb1mwn9zp";
     };
     teknoparrotArtwork = ./assets/teknoparrot-starwars.png;
+    teknoparrotLogo = ./assets/teknoparrot.svg;
     installPhase = ''
       runHook preInstall
       theme_dir="$out/share/es-de/themes/art-book-next-es-de"
@@ -320,13 +321,7 @@ for rel in [
 ]:
     write_rgba_png(theme_dir / rel, width, height, pixels)
 PY
-      cat >"$theme_dir/_inc/systems/logos/teknoparrot.svg" <<'EOF'
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 240">
-  <title>TeknoParrot</title>
-  <text x="600" y="154" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="128" font-weight="900" letter-spacing="1" fill="#ffffff">TeknoParrot</text>
-  <rect x="174" y="182" width="852" height="12" rx="6" fill="#f15a24"/>
-</svg>
-EOF
+      install -m 0644 "$teknoparrotLogo" "$theme_dir/_inc/systems/logos/teknoparrot.svg"
       cat >"$theme_dir/_inc/systems/_metadata-global/teknoparrot.xml" <<'EOF'
 <theme>
     <variables>
