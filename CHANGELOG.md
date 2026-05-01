@@ -7,19 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer Switch Ryubing setup**: Manage Ryubing's current lower-case config
+  schema before Switch launches, install the newest local firmware archive into
+  Ryubing's registered firmware store, keep the Canary pin current, and add
+  Switch hotkeys for Minus + X -> F4, Minus + A -> F8, and
+  Square/Capture -> F5 while preserving Minus + Plus twice exit.
+- **Boomer Dolphin prompt fix**: Reassert Dolphin analytics opt-out and
+  stop-confirm settings immediately before each launch with valid INI syntax
+  plus Dolphin `-C` overrides, so GameCube kiosk launches do not ask to report
+  usage data or confirm quit/stop.
 - **Boomer GameCube Dolphin hotkeys**: Configure Dolphin to launch GameCube
   games without analytics, panic, or stop-confirm prompts, bind native
-  GameCube hotkeys for reset, save/load slot 1, screenshot, pause, and fast
-  mode, and keep unsupported quick-actions/debug-monitor chords explicitly
-  unbound.
+  GameCube hotkeys for reset, save/load slot 1, screenshot, and fast mode, and
+  keep unsupported quick-actions/debug-monitor and bare Square chords
+  explicitly unbound.
 - **Boomer Dolphin native button map**: Correct Dolphin's generated SDL
   bindings so GameCube uses Minus as Select/hotkey modifier, Plus as Start,
-  Boomer's documented A/B/X/Y button numbers, L/R shoulder buttons, and ZR
+  Boomer's documented A/B/X/Y button numbers, L1/R1 shoulder buttons, and R2
   axis for native Dolphin hotkeys.
 - **Boomer Controller Maps hotkey layout**: Render the same full hotkey combo
   list on every controller map with combo-first rows and `None` for unmapped
-  actions. Rename displayed stick-click rows from `L3`/`R3` to `L4`/`R4` to
-  match Boomer controller terminology.
+  actions. Use `L1`/`R1` for shoulder rows, `L2`/`R2` for trigger rows, keep
+  stick clicks on `L3`/`R3`, and label hotkeys with spaced `Minus + ...`
+  chords starting with `Minus + Plus 2x`.
 - **Boomer hotkey and RetroAchievements regression fix**: Restore the
   per-launch Select+Start double-press exit broker, keep RetroArch hotkeys in
   the managed base config plus controller autoconfigs, add 8BitDo udev
