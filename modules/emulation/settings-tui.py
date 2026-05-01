@@ -303,15 +303,15 @@ BUTTON_MAP_COLUMN_WIDTH = 27
 
 
 COMMON_HOTKEYS = [
-    "Quick Menu: Select plus X",
-    "Turbo: Star plus <Button>",
-    "Exit: Select plus Start twice",
-    "Save: Select plus R",
-    "Load: Select plus L",
-    "Reset: Select plus B",
-    "FPS: Select plus Y",
-    "Screenshot: Select plus A",
-    "Fast: Select plus ZR",
+    "Quick Menu: Select + X",
+    "Turbo: Star + <Button>",
+    "Exit: Select + Start twice",
+    "Save: Select + R",
+    "Load: Select + L",
+    "Reset: Select + B",
+    "FPS: Select + Y",
+    "Screenshot: Select + A",
+    "Fast: Select + ZR",
 ]
 
 
@@ -777,8 +777,8 @@ CONTROLLER_MAPS = [
             [
                 "Menu: Plus / Start",
                 "Map: Minus toggles",
-                "Turbo: Star plus <Button>",
-                "Exit: Select plus Start twice",
+                "Turbo: Star + <Button>",
+                "Exit: Select + Start twice",
             ],
         ),
     },
@@ -2224,11 +2224,11 @@ def smoke_test(mode):
             assert "Button Map" in row["detail"]
             assert "Hotkeys" in row["detail"]
             assert any("Star" in line for line in row["detail"])
-            assert any("Select plus Start twice" in line for line in row["detail"])
+            assert any("Select + Start twice" in line for line in row["detail"])
             assert any("Square" in line for line in row["detail"])
             assert not any("opens RetroArch quick menu" in line for line in row["detail"])
             if row["label"] != "GZDoom":
-                assert any("Quick Menu: Select plus X" in line for line in row["detail"])
+                assert any("Quick Menu: Select + X" in line for line in row["detail"])
             assert not any("Original Controller" in line or "+---" in line for line in row["detail"])
         n64 = next(row for row in CONTROLLER_MAPS if row["label"] == "Nintendo 64")
         assert any("A -> A" in line for line in n64["detail"])
