@@ -2435,10 +2435,18 @@ EOF
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "${cfg.configRoot}/teknoparrot/TeknoParrot/UserProfiles"
         install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${displayPolicy} "${cfg.configRoot}/display/policy.json"
         ps2_rom_dir="${cfg.romRoot}/Sony - PlayStation 2 (2000)"
-        ps2_soulcalibur_disc="$ps2_rom_dir/Soulcalibur III (USA).chd"
+        ps2_disc_dir="$ps2_rom_dir/.discs"
+        ps2_soulcalibur_top_disc="$ps2_rom_dir/Soulcalibur III (USA).chd"
+        ps2_soulcalibur_disc="$ps2_disc_dir/Soulcalibur III (USA).chd"
         ps2_soulcalibur_playlist="$ps2_rom_dir/Soulcalibur III (USA).m3u"
+        install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$ps2_disc_dir"
+        if [ -f "$ps2_soulcalibur_top_disc" ] && [ ! -e "$ps2_soulcalibur_disc" ]; then
+          mv "$ps2_soulcalibur_top_disc" "$ps2_soulcalibur_disc"
+        fi
         if [ -f "$ps2_soulcalibur_disc" ]; then
-          printf '%s\n' "Soulcalibur III (USA).chd" >"$ps2_soulcalibur_playlist.tmp"
+          chown ${cfg.user}:${cfg.group} "$ps2_soulcalibur_disc"
+          chmod 0644 "$ps2_soulcalibur_disc"
+          printf '%s\n' ".discs/Soulcalibur III (USA).chd" >"$ps2_soulcalibur_playlist.tmp"
           chown ${cfg.user}:${cfg.group} "$ps2_soulcalibur_playlist.tmp"
           chmod 0644 "$ps2_soulcalibur_playlist.tmp"
           mv "$ps2_soulcalibur_playlist.tmp" "$ps2_soulcalibur_playlist"
