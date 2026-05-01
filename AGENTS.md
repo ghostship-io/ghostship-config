@@ -263,10 +263,10 @@ changelog.
   practical: Beetle SuperGrafx for PCE/PCE CD, FCEUmm for NES/FDS, Azahar for
   3DS, standalone PCSX2 for PS2, standalone PPSSPP for PSP, and no Gamescope
   FSR; use emulator-native scaling plus the managed RetroArch `global.slangp`
-  shader preset. RetroArch should use only the managed base `retroarch.cfg`,
-  XDG `global.slangp`, and XDG per-core `.opt` files; do not add append config,
-  system override, or per-core `.cfg` layers unless that contract is explicitly
-  changed. Keep
+  shader preset. RetroArch should use the managed base `retroarch.cfg`, generated
+  `retroachievements.cfg` append config for credentials, XDG `global.slangp`,
+  and XDG per-core `.opt` files; do not add system override or per-core `.cfg`
+  layers unless that contract is explicitly changed. Keep
   N64 on RetroArch Mupen64Plus-Next with GLideN64 3x native resolution and the
   global shader preset; ParaLLEl N64 stays installed only as a fallback core.
   perf tests in `modules/emulation/perf.nix`, launch through `run-emulator`,

@@ -24,6 +24,15 @@ let
     input_autodetect_enable = "true"
     joypad_autoconfig_dir = "${cfg.configRoot}/retroarch/autoconfig"
     input_menu_toggle_gamepad_combo = "0"
+    input_enable_hotkey_btn = "9"
+    input_menu_toggle_btn = "2"
+    input_exit_emulator_btn = "10"
+    input_save_state_btn = "6"
+    input_load_state_btn = "5"
+    input_reset_btn = "1"
+    input_fps_toggle_btn = "3"
+    input_screenshot_btn = "0"
+    input_hold_fast_forward_btn = "8"
     config_save_on_exit = "false"
     log_verbosity = "true"
     log_to_file = "true"
@@ -276,12 +285,14 @@ let
       cp -R --no-preserve=mode,ownership "${packages.joypadAutoconfig}/share/libretro/autoconfig/." "${cfg.configRoot}/retroarch/autoconfig/" || true
     fi
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${autoconfig8BitDo} "${cfg.configRoot}/retroarch/autoconfig/8BitDo Ultimate 2C Wireless Controller.cfg"
+    install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${autoconfig8BitDo} "${cfg.configRoot}/retroarch/autoconfig/udev/8BitDo Ultimate 2C Wireless Controller.cfg"
+    install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${autoconfig8BitDo} "${cfg.configRoot}/retroarch/autoconfig/udev/8BitDo_Ultimate_2C_Wireless_Controller_BT.cfg"
+    install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${autoconfig8BitDo} "${cfg.configRoot}/retroarch/autoconfig/udev/8BitDo_Ultimate_2C_Wireless_Controller_USB.cfg"
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${autoconfigSwitchPro} "${cfg.configRoot}/retroarch/autoconfig/Nintendo Switch Pro Controller.cfg"
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${autoconfigSwitchPro} "${cfg.configRoot}/retroarch/autoconfig/udev/Nintendo Switch Pro Controller.cfg"
 
     rm -rf "${cfg.configRoot}/retroarch/core-options"
     rm -rf "${cfg.configRoot}/retroarch/profiles" "${cfg.configRoot}/retroarch/system-overrides"
-    rm -f "${cfg.configRoot}/retroarch/retroachievements.cfg"
     find "${cfg.dataRoot}/xdg/config/retroarch/config" -mindepth 1 -maxdepth 2 -type f ! -name '*.opt' ! -name 'global.slangp' -delete
     rm -f "${cfg.dataRoot}/xdg/config/retroarch/config/ParaLLEl N64/ParaLLEl N64.opt"
     ${lib.concatMapStringsSep "\n" (entry: ''
