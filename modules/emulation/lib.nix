@@ -13,6 +13,54 @@ let
     if builtins.hasAttr "azahar" pkgs then "azahar"
     else if builtins.hasAttr "lime3ds" pkgs then "lime3ds"
     else "retroarch-citra";
+  systemMetadata = {
+    fbneo.hardwareType = "arcade";
+    model3.hardwareType = "arcade";
+    teknoparrot.hardwareType = "arcade";
+    xbox.hardwareType = "console";
+    pcengine.hardwareType = "console";
+    pcenginecd.hardwareType = "add-on";
+    gb.hardwareType = "handheld";
+    gba.hardwareType = "handheld";
+    gbc.hardwareType = "handheld";
+    gc.hardwareType = "console";
+    n3ds.hardwareType = "handheld";
+    n64.hardwareType = "console";
+    nds.hardwareType = "handheld";
+    nes.hardwareType = "console";
+    snes.hardwareType = "console";
+    switch.hardwareType = "console";
+    virtualboy.hardwareType = "handheld";
+    wii.hardwareType = "console";
+    wiiu.hardwareType = "console";
+    neogeocd.hardwareType = "add-on";
+    ngpc.hardwareType = "handheld";
+    dreamcast.hardwareType = "console";
+    gamegear.hardwareType = "handheld";
+    genesis.hardwareType = "console";
+    mastersystem.hardwareType = "console";
+    saturn.hardwareType = "console";
+    segacd.hardwareType = "add-on";
+    psx.hardwareType = "console";
+    ps2.hardwareType = "console";
+    psp.hardwareType = "handheld";
+    doom.hardwareType = "fantasy";
+    pico8.hardwareType = "fantasy";
+  };
+  enrichSystem = system:
+    let
+      parts = builtins.match "(.+) - (.+) \\(([0-9]+)\\)" system.folder;
+      parsed =
+        if parts == null
+        then { manufacturer = system.folder; releaseYear = 9999; }
+        else {
+          manufacturer = builtins.elemAt parts 0;
+          releaseYear = lib.toInt (builtins.elemAt parts 2);
+        };
+    in
+    system // parsed // {
+      hardwareType = systemMetadata.${system.id}.hardwareType or "other";
+    };
 
   xmlEscape =
     value:
@@ -51,7 +99,7 @@ let
   commonRetroExtensions = ".7z .7Z .zip .ZIP .rar .RAR";
   discExtensions = ".bin .BIN .cue .CUE .iso .ISO .chd .CHD .m3u .M3U";
 
-  romSystems = [
+  rawRomSystems = [
     {
       id = "fbneo";
       folder = "Arcade - Final Burn Neo (2019)";
@@ -360,7 +408,7 @@ let
     }
   ];
 
-  optionalSystems = [
+  rawOptionalSystems = [
     {
       id = "doom";
       folder = "Fantasy - GZDoom (2005)";
@@ -388,6 +436,9 @@ let
       fixedAspect = "4:3";
     }
   ];
+
+  romSystems = map enrichSystem rawRomSystems;
+  optionalSystems = map enrichSystem rawOptionalSystems;
 
   tools = [
     {
