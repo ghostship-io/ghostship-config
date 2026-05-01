@@ -261,8 +261,8 @@ let
 
   systemShaderDefaults = {
     fbneo = "nnedi3-clean";
-    pcengine = "nnedi3-fast";
-    pcenginecd = "nnedi3-fast";
+    pcengine = "xbrz-freescale";
+    pcenginecd = "xbrz-freescale";
     gb = "nnedi3-fast";
     gbc = "nnedi3-fast";
     gba = "nnedi3-clean";
