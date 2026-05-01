@@ -260,8 +260,8 @@ def menu_window(item_count, selected, visible_rows):
 
 
 def pane_metrics(height, width):
-    content_top = 3
-    content_bottom = max(content_top, height - 4)
+    content_top = 2
+    content_bottom = max(content_top, height - 2)
     content_height = max(1, content_bottom - content_top + 1)
     if width < 78:
         left_width = max(22, min(width // 2 - 2, 32))
@@ -304,8 +304,6 @@ SWITCH_PRO_BUTTONS = [
     "D-pad",
     "Left Stick",
     "Right Stick",
-    "L3",
-    "R3",
     "",
     "A",
     "B",
@@ -315,6 +313,8 @@ SWITCH_PRO_BUTTONS = [
     "R",
     "ZL",
     "ZR",
+    "L4",
+    "R4",
     "Minus",
     "Plus",
     "Square",
@@ -322,49 +322,84 @@ SWITCH_PRO_BUTTONS = [
 ]
 
 
-GLOBAL_EXIT_HOTKEYS = [
-    "None",
+HOTKEY_COMBOS = [
+    "Select+X",
+    "Select+Start 2x",
+    "Select+R",
+    "Select+L",
+    "Select+B",
+    "Select+A",
+    "Select+Y",
+    "Select+ZR",
+    "Square",
+    "Plus",
+    "Minus",
 ]
 
 
-RETROARCH_HOTKEYS = [
-    "Quick Menu: Select + X",
-    "Exit: Select + Start",
-    "Save: Select + R",
-    "Load: Select + L",
-    "Reset: Select + B",
-    "FPS: Select + Y",
-    "Screenshot: Select + A",
-    "Fast: Select + ZR",
-]
+def hotkey_rows(actions=()):
+    return [f"{combo} -> {dict(actions).get(combo, 'None')}" for combo in HOTKEY_COMBOS]
 
 
-DOLPHIN_WII_HOTKEYS = [
-    "Home: Square / Capture",
-]
+GLOBAL_EXIT_HOTKEYS = hotkey_rows({"Select+Start 2x": "Exit"})
 
 
-GZDOOM_HOTKEYS = [
-    "Menu: Plus / Start",
-    "Map: Minus toggles",
-]
+RETROARCH_HOTKEYS = hotkey_rows(
+    {
+        "Select+X": "Quick Menu",
+        "Select+Start 2x": "Exit",
+        "Select+R": "Save",
+        "Select+L": "Load",
+        "Select+B": "Reset",
+        "Select+A": "Screenshot",
+        "Select+Y": "FPS",
+        "Select+ZR": "Fast",
+    }
+)
 
 
-PICO8_HOTKEYS = [
-    "Pause/Menu: Plus / Start",
-]
+DOLPHIN_WII_HOTKEYS = hotkey_rows(
+    {
+        "Select+Start 2x": "Exit",
+        "Square": "Home",
+    }
+)
 
 
-XEMU_HOTKEYS = [
-    "Quick Menu: Select+Start / Select+X*",
-    "Save*: Select+R",
-    "Load*: Select+L",
-    "Reset*: Select+B",
-    "Screenshot*: Select+A",
-    "Monitor*: Select+Y",
-    "Pause*: Square",
-    "Fast: None",
-]
+GZDOOM_HOTKEYS = hotkey_rows(
+    {
+        "Select+Start 2x": "Exit",
+        "Plus": "Menu",
+        "Minus": "Map",
+    }
+)
+
+
+PICO8_HOTKEYS = hotkey_rows(
+    {
+        "Select+X": "Pause/Menu",
+        "Select+Start 2x": "Exit",
+        "Select+B": "Reset",
+        "Select+A": "Screenshot",
+        "Select+Y": "Save GIF",
+        "Square": "Pause/Menu",
+        "Plus": "Pause/Menu",
+    }
+)
+
+
+XEMU_HOTKEYS = hotkey_rows(
+    {
+        "Select+X": "Quick Menu",
+        "Select+Start 2x": "Exit",
+        "Select+R": "Save",
+        "Select+L": "Load",
+        "Select+B": "Reset",
+        "Select+A": "Screenshot",
+        "Select+Y": "Debug Monitor",
+        "Square": "Pause",
+    }
+)
 
 
 def two_column_button_lines(entries):
@@ -394,8 +429,8 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Left Stick",
                 "Right Stick": "Right Stick",
-                "L3": "L3 / Left Stick Press",
-                "R3": "R3 / Right Stick Press",
+                "L4": "L4 / Left Stick Press",
+                "R4": "R4 / Right Stick Press",
                 "A": "A / confirm",
                 "B": "B / back",
                 "X": "X / refresh",
@@ -410,7 +445,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             ["Rocknix hotkeys use Select; Square is Home only where listed."],
-            ["Per-emulator pages list supported hotkeys.", "Default standalone hotkeys: None"],
+            GLOBAL_EXIT_HOTKEYS,
         ),
     },
     {
@@ -616,8 +651,8 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Left Stick",
                 "Right Stick": "Right Stick",
-                "L3": "L3",
-                "R3": "R3",
+                "L4": "L4",
+                "R4": "R4",
                 "A": "PS Cross",
                 "B": "PS Circle",
                 "X": "PS Triangle",
@@ -730,8 +765,8 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Left Stick",
                 "Right Stick": "Right Stick",
-                "L3": "L3",
-                "R3": "R3",
+                "L4": "L4",
+                "R4": "R4",
                 "A": "A",
                 "B": "B",
                 "X": "X",
@@ -755,8 +790,8 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Left Stick",
                 "Right Stick": "Right Stick",
-                "L3": "Left Stick Press",
-                "R3": "Right Stick Press",
+                "L4": "Left Stick Press",
+                "R4": "Right Stick Press",
                 "A": "A",
                 "B": "B",
                 "X": "X",
@@ -847,8 +882,8 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Left Stick",
                 "Right Stick": "Right Stick",
-                "L3": "L3",
-                "R3": "R3",
+                "L4": "L4",
+                "R4": "R4",
                 "A": "A",
                 "B": "B",
                 "X": "X",
@@ -894,8 +929,8 @@ CONTROLLER_MAPS = [
             {
                 "D-pad": "Stick",
                 "Left Stick": "Stick",
-                "L3": "Service",
-                "R3": "Test",
+                "L4": "Service",
+                "R4": "Test",
                 "A": "B1",
                 "B": "B2",
                 "X": "B3",
@@ -919,8 +954,8 @@ CONTROLLER_MAPS = [
                 "D-pad": "WeaponLR InvUp UseDn",
                 "Left Stick": "Move",
                 "Right Stick": "Look 25% V",
-                "L3": "Speed",
-                "R3": "Quick Turn",
+                "L4": "Speed",
+                "R4": "Quick Turn",
                 "A": "Use/Confirm",
                 "B": "Jump/Back",
                 "X": "Crouch",
@@ -2403,22 +2438,24 @@ def smoke_test(mode):
             button_rows = row["detail"][2 : 2 + ((len(SWITCH_PRO_BUTTONS) + 1) // 2)]
             button_text = "\n".join(button_rows)
             assert all(f"{button} ->" in button_text for button in SWITCH_PRO_BUTTONS if button)
+            hotkey_text = "\n".join(row["detail"][row["detail"].index("Hotkeys") + 1 :])
+            assert all(f"{combo} ->" in hotkey_text for combo in HOTKEY_COMBOS)
             assert any("Star" in line for line in row["detail"])
             assert any("Square" in line for line in row["detail"])
             assert not any(line.strip().startswith("Note:") for line in row["detail"])
             assert not any("Turbo: Star + <Button>" in line for line in row["detail"])
             assert not any("opens RetroArch quick menu" in line for line in row["detail"])
             if row["label"] in retroarch_labels:
-                assert any("Quick Menu: Select + X" in line for line in row["detail"])
-                assert any("Save: Select + R" in line for line in row["detail"])
-                assert any("Load: Select + L" in line for line in row["detail"])
-                assert any("Fast: Select + ZR" in line for line in row["detail"])
+                assert any("Select+X -> Quick Menu" in line for line in row["detail"])
+                assert any("Select+R -> Save" in line for line in row["detail"])
+                assert any("Select+L -> Load" in line for line in row["detail"])
+                assert any("Select+ZR -> Fast" in line for line in row["detail"])
             else:
                 if row["label"] != "Xbox":
-                    assert not any("Quick Menu: Select + X" in line for line in row["detail"])
-                assert not any("Save: Select + R" in line for line in row["detail"])
-                assert not any("Load: Select + L" in line for line in row["detail"])
-                assert not any("Fast: Select + ZR" in line for line in row["detail"])
+                    assert not any("Select+X -> Quick Menu" in line for line in row["detail"])
+                    assert not any("Select+R -> Save" in line for line in row["detail"])
+                    assert not any("Select+L -> Load" in line for line in row["detail"])
+                assert not any("Select+ZR -> Fast" in line for line in row["detail"])
             assert not any("Original Controller" in line or "+---" in line for line in row["detail"])
         n64 = next(row for row in CONTROLLER_MAPS if row["label"] == "Nintendo 64")
         assert any("A -> A" in line for line in n64["detail"])
@@ -2431,11 +2468,15 @@ def smoke_test(mode):
         assert any("ZR -> Z" in line for line in gamecube["detail"])
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
         assert any("Square -> Console Home" in line for line in wii["detail"])
-        assert any("Home: Square / Capture" in line for line in wii["detail"])
+        assert any("Square -> Home" in line for line in wii["detail"])
         xbox = next(row for row in CONTROLLER_MAPS if row["label"] == "Xbox")
-        assert any("Quick Menu: Select+Start / Select+X*" in line for line in xbox["detail"])
-        assert any("Save*: Select+R" in line for line in xbox["detail"])
-        assert any("Fast: None" in line for line in xbox["detail"])
+        assert any("Select+X -> Quick Menu" in line for line in xbox["detail"])
+        assert any("Select+R -> Save" in line for line in xbox["detail"])
+        assert any("Select+ZR -> None" in line for line in xbox["detail"])
+        pico8 = next(row for row in CONTROLLER_MAPS if row["label"] == "PICO-8")
+        assert any("Select+X -> Pause/Menu" in line for line in pico8["detail"])
+        assert any("Select+Y -> Save GIF" in line for line in pico8["detail"])
+        assert any("Select+ZR -> None" in line for line in pico8["detail"])
         for row in CONTROLLER_MAPS:
             if row["label"] in {"Switch Pro Reference", "Wii Remote + Nunchuk", "GZDoom"}:
                 continue
@@ -2443,6 +2484,8 @@ def smoke_test(mode):
         gzdoom = next(row for row in CONTROLLER_MAPS if row["label"] == "GZDoom")
         assert any("A -> Use/Confirm" in line for line in gzdoom["detail"])
         assert any("D-pad -> WeaponLR InvUp" in line for line in gzdoom["detail"])
+        assert any("Plus -> Menu" in line for line in gzdoom["detail"])
+        assert any("Minus -> Map" in line for line in gzdoom["detail"])
         assert any("Left Stick -> Move" in line for line in gzdoom["detail"])
         assert any("Right Stick -> Look 25% V" in line for line in gzdoom["detail"])
         assert any("Minus -> Automap" in line for line in gzdoom["detail"])
@@ -2451,8 +2494,6 @@ def smoke_test(mode):
         assert any("L -> User 1" in line for line in gzdoom["detail"])
         assert any("Plus -> Menu" in line for line in gzdoom["detail"])
         assert any("Square -> None" in line for line in gzdoom["detail"])
-        assert any("Menu: Plus / Start" in line for line in gzdoom["detail"])
-        assert any("Map: Minus toggles" in line for line in gzdoom["detail"])
         assert metrics["right_x"] + metrics["right_width"] < 92
         print(json.dumps({"maps": [row["label"] for row in CONTROLLER_MAPS], "layout": metrics}, indent=2))
 

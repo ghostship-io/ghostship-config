@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer Controller Maps hotkey layout**: Render the same full hotkey combo
+  list on every controller map with combo-first rows and `None` for unmapped
+  actions. Rename displayed stick-click rows from `L3`/`R3` to `L4`/`R4` to
+  match Boomer controller terminology.
 - **Boomer standalone hotkey broker**: Replaced the always-on controller
   hotkey watcher with an opt-in generic standalone broker. Xbox keeps plain
   `xemu` as the default and adds selectable `xemu-hotkeys` for Xemu save/load,
