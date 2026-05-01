@@ -2180,8 +2180,12 @@ PY
         ;;
       lime3ds) cmd=(lime3ds "$rom_path") ;;
       pcsx2)
-        pcsx2_bin="$(first_command pcsx2-qt pcsx2)"
         prepare_pcsx2_runtime
+        if [ "''${PCSX2_CONFIG_ONLY:-0}" = "1" ]; then
+          log_event "runtime" "prepared PCSX2 managed config only"
+          exit 0
+        fi
+        pcsx2_bin="$(first_command pcsx2-qt pcsx2)"
         pcsx2_rom_path="$rom_path"
         case "$rom_path" in
           *.m3u|*.M3U)
@@ -2431,6 +2435,7 @@ EOF
           chmod 0644 "$ps2_soulcalibur_playlist.tmp"
           mv "$ps2_soulcalibur_playlist.tmp" "$ps2_soulcalibur_playlist"
         fi
+        runuser -u ${cfg.user} -- env PCSX2_CONFIG_ONLY=1 run-emulator ps2 pcsx2 "$ps2_soulcalibur_disc"
         xemu_data_dir="${cfg.dataRoot}/xdg/share/xemu/xemu"
         xemu_bios_dir="${cfg.biosRoot}/xbox"
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$xemu_data_dir"
