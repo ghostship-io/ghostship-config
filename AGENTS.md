@@ -302,8 +302,9 @@ changelog.
   defaults, then override the current 8BitDo Ultimate 2C probe in
   `boomer-controls.cfg`: B/Joy1 jump, A/Joy2 use, X/Joy3 crouch, Y/Joy4 reload,
   L1/Joy6 User 1, R1/Joy7 User 2, L2/Joy8 alt-fire, Minus/Joy10 automap,
-  D-pad/POV1 left-right weapons and up-down inventory, R2 Joy9/Joy14/axis
-  trigger fallbacks fire, and axis 3 pitch scale `0.25`. Keep only the GZDoom
+  Plus Joy11/Joy12 menu candidates, D-pad/POV1 left-right weapons and up-down
+  inventory, R2 Joy9/Joy14/axis trigger fallbacks fire, L4/Joy15 run toggle,
+  R4/Joy16 quick turn, and axis 3 pitch scale `0.25`. Keep only the GZDoom
   menu A/B package patch unless a future live probe proves another package
   patch is required.
   After Burner Climax should launch through TeknoParrot XML profiles under

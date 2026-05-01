@@ -1426,8 +1426,9 @@ EOF
     // R1 -> Joy7 -> zoom/grenade/dash / user2 (observed as pause)
     // L2 -> Joy8 -> alt-fire (observed as menu)
     // Minus -> Joy10 -> automap (observed as crouch)
-    // R2 -> Joy9 or trigger axis -> fire candidates
-    // Plus -> Pad_Start alias for now; raw Joy key needs the next press-test
+    // R2 -> Joy9/Joy14 or trigger axis -> fire candidates
+    // Plus -> Joy11/Joy12 -> menu candidates
+    // L4/R4 -> Joy15/Joy16 -> run toggle / quick turn guesses
     bind Joy1 +jump
     bind Joy2 +use
     bind Joy3 crouch
@@ -1438,8 +1439,12 @@ EOF
     bind Joy8 +altattack
     bind Joy9 +attack
     bind Joy10 togglemap
-    bind Joy14 +attack
+    bind Joy11 menu_main
+    bind Joy12 menu_main
     bind Joy13 +altattack
+    bind Joy14 +attack
+    bind Joy15 "toggle cl_run"
+    bind Joy16 turn180
     bind Axis3Plus +altattack
     bind Axis4Plus +altattack
     bind Axis4Minus +altattack
