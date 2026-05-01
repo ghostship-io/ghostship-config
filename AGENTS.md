@@ -310,6 +310,8 @@ changelog.
   Boomer's live SDL joystick path maps GZDoom physical B/A/Y/X to
   Joy1/Joy2/Joy3/Joy4, `-` to Joy5, `+` to Joy7, L1/R1 to Joy10/Joy11,
   ZL/ZR to Axis5Plus/Axis6Plus, and the D-pad to POV1.
+  Keep matching Pad_A/Pad_B/Pad_Y, Pad_Back/Pad_Start, shoulder, and trigger
+  aliases bound as fallbacks; do not unbind that family without a live probe.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

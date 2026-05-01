@@ -144,7 +144,9 @@ On Boomer, SDL's joystick backend reports the Switch Pro as 6 axes, 16
 buttons, and one hat. GZDoom bindings use SDL joystick names directly:
 `Joy1`/`Joy2` are physical B/A, `Joy3`/`Joy4` are physical Y/X, `Joy5` is
 Select/Minus, `Joy7` is Start/Plus, `Joy10`/`Joy11` are L1/R1, `Axis5Plus` is
-ZL, `Axis6Plus` is ZR, and the D-pad is `POV1*`.
+ZL, `Axis6Plus` is ZR, and the D-pad is `POV1*`. The generated config also
+keeps matching `Pad_*`, shoulder, and trigger aliases bound to the same actions
+so GZDoom still works if SDL reports the controller through that key family.
 
 ### Switch Pro Raw Input Probe
 
