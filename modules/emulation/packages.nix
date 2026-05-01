@@ -50,6 +50,49 @@ let
     mkdir -p $out/share/libretro/autoconfig
   '';
 
+  libstdcxx5i386 = pkgs.stdenvNoCC.mkDerivation {
+    pname = "libstdc++5-i386";
+    version = "3.3.6-32";
+
+    src = pkgs.fetchurl {
+      url = "https://deb.debian.org/debian/pool/main/g/gcc-3.3/libstdc++5_3.3.6-32_i386.deb";
+      hash = "sha256-6lIy8C5wjsGHbVU5rJW2QHrqCJVPWRSqVI31xm+mIpQ=";
+    };
+
+    nativeBuildInputs = [ pkgs.dpkg ];
+
+    unpackPhase = ''
+      runHook preUnpack
+      dpkg-deb -x "$src" .
+      runHook postUnpack
+    '';
+
+    installPhase = ''
+      runHook preInstall
+      mkdir -p "$out/lib"
+      cp -P usr/lib/i386-linux-gnu/libstdc++.so.5* "$out/lib/"
+      runHook postInstall
+    '';
+  };
+
+  teknoparrotNativeRuntime = pkgs.buildFHSEnv {
+    pname = "teknoparrot-native-runtime";
+    version = "1";
+    runScript = "env";
+    multiArch = true;
+    multiPkgs = pkgs32: [
+      pkgs32.freeglut
+      pkgs32.glibc
+      pkgs32.libGL
+      pkgs32.libGLU
+      pkgs32.libx11
+      pkgs32.libxext
+      pkgs32.libxmu
+      pkgs32.stdenv.cc.cc.lib
+      libstdcxx5i386
+    ];
+  };
+
   ryubingCanaryPin = import ./ryubing-canary-pin.nix;
 
   ryubingCanaryRuntimeLibs = [
@@ -402,6 +445,7 @@ in
         shaderGlsl
         shaderSlang
         supermodelPackage
+        teknoparrotNativeRuntime
         winePackage
         ;
     };
