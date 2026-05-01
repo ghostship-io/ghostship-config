@@ -93,7 +93,7 @@ let
   profiles = {
     "nnedi3-clean.cfg" = ''
       video_shader_enable = "true"
-      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/edge-smoothing/nnedi3/nnedi3-nns16-2x-rgb.slangp"
+      video_shader = "${cfg.configRoot}/retroarch/shaders/shaders_slang/stock.slang"
       video_smooth = "false"
       video_scale_integer = "false"
     '';
