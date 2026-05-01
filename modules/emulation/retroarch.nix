@@ -60,8 +60,8 @@ let
       fceumm_ramstate = "enabled"
     '';
     "retroarch-beetle-supergrafx.opt" = ''
-      pce_fast_cdimagecache = "enabled"
-      pce_fast_cdbios = "System Card 3"
+      sgx_cdimagecache = "enabled"
+      sgx_cdbios = "System Card 3"
       sgx_default_joypad_type_p1 = "6 Buttons"
       sgx_default_joypad_type_p2 = "6 Buttons"
       sgx_default_joypad_type_p3 = "6 Buttons"
