@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer TeknoParrot artwork**: Apply Art Book Next's diagonal system-art
   mask to the TeknoParrot After Burner artwork so it matches stock system
   panels, and remove the temporary Model 3/Supermodel theme artwork.
+- **Boomer Model 3 library**: Add `Arcade - Model 3 (1996)` to ES-DE as a
+  Supermodel-backed arcade library using the stock `model3` theme slot.
 - **Boomer TeknoParrot logo**: Use the supplied path-based TeknoParrot SVG for
   the ES-DE system text logo.
 - **Boomer controller probe documentation**: Document the live Switch Pro

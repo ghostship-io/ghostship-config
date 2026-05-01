@@ -63,6 +63,16 @@ let
       fixedAspect = "4:3";
     }
     {
+      id = "model3";
+      folder = "Arcade - Model 3 (1996)";
+      fullname = "Sega Model 3";
+      platform = "arcade";
+      theme = "model3";
+      emulator = "supermodel";
+      extensions = ".zip .ZIP";
+      fixedAspect = "4:3";
+    }
+    {
       id = "teknoparrot";
       folder = "Arcade - TeknoParrot (2017)";
       fullname = "TeknoParrot";
