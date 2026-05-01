@@ -14,7 +14,6 @@ let
     video_fullscreen = "true"
     video_vsync = "true"
     video_shader_enable = "true"
-    video_shader = "shaders_slang/edge-smoothing/nnedi3/nnedi3-nns16-2x-rgb.slangp"
     video_shader_dir = "${cfg.configRoot}/retroarch/shaders"
     libretro_directory = "${packages.retroarchPackage}/lib/retroarch/cores"
     libretro_info_path = "${cfg.configRoot}/retroarch/info"
