@@ -339,6 +339,8 @@ changelog.
   Ryubing firmware installs must use its native
   `bis/system/Contents/registered/<nca>.nca/00` layout; flat `.nca` files in
   `registered` are ignored by Ryubing's content scan.
+  Ryubing `dlc.json` NCA paths must use PFS full paths with a leading `/`;
+  bare `*.nca` child paths fail at runtime with `ResultFsPathNotFound`.
 - For INI rewrites in activation or startup hooks, use `pkgs.yq-go` with
   `-p ini -o ini` and `pkgs.gnused` for follow-up `sed` fixes.
 - Homepage `services.yaml` updates can leave stale entries behind when keys are

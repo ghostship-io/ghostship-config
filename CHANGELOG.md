@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   schema before Switch launches, install the newest local firmware archive into
   Ryubing's native `registered/<nca>.nca/00` firmware store layout, keep the
   Canary pin current, and add hidden `.updates`/`.dlc` auto-registration for
-  Ryubing title updates and DLC.
+  Ryubing title updates and DLC, including native `/...nca` DLC PFS paths.
   Add Switch hotkeys for Minus + X -> F4, Minus + A -> F8, and Square/Capture
   -> F5 while preserving Minus + Plus twice exit.
 - **Boomer Dolphin prompt fix**: Reassert Dolphin analytics opt-out and

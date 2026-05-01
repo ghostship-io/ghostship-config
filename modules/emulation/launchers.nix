@@ -1462,6 +1462,24 @@ def cached_metadata(path):
         return metadata if isinstance(metadata, dict) else None
     return None
 
+def ryubing_pfs_path(path):
+    return path if path.startswith("/") else f"/{path}"
+
+def normalize_dlc_ncas(dlc_ncas):
+    if not isinstance(dlc_ncas, list):
+        return []
+    normalized = []
+    for dlc_nca in dlc_ncas:
+        if not isinstance(dlc_nca, dict):
+            continue
+        nca_path = dlc_nca.get("path")
+        if not isinstance(nca_path, str) or not nca_path:
+            continue
+        row = dict(dlc_nca)
+        row["path"] = ryubing_pfs_path(nca_path)
+        normalized.append(row)
+    return normalized
+
 def save_cache(path, metadata):
     key = cache_key(path)
     if key is None:
@@ -1541,7 +1559,7 @@ def inspect_package(path, expected_kind):
                 if content_id:
                     full_path = f"{content_id}.nca"
                     if full_path in names:
-                        dlc_ncas.append({"title_id": int(title_id, 16), "path": full_path, "is_enabled": True})
+                        dlc_ncas.append({"title_id": int(title_id, 16), "path": ryubing_pfs_path(full_path), "is_enabled": True})
         if title_id:
             break
 
@@ -1556,7 +1574,7 @@ def inspect_package(path, expected_kind):
     if content_type == "dlc" and title_id and not dlc_ncas:
         nca_names = [name for name in names if name.lower().endswith(".nca") and ".cnmt." not in name.lower()]
         if len(nca_names) == 1:
-            dlc_ncas.append({"title_id": int(title_id, 16), "path": nca_names[0], "is_enabled": True})
+            dlc_ncas.append({"title_id": int(title_id, 16), "path": ryubing_pfs_path(nca_names[0]), "is_enabled": True})
 
     if title_id and not original_id:
         original_id = base_id(title_id)
@@ -1575,6 +1593,7 @@ def metadata_for(path, expected_kind):
     cached = cached_metadata(path)
     if cached is not None:
         metadata = dict(cached)
+        metadata["dlc_ncas"] = normalize_dlc_ncas(metadata.get("dlc_ncas"))
         if filename_ids:
             metadata["title_id"] = filename_ids[0]
             metadata["base_id"] = base_id(filename_ids[0])
@@ -1658,6 +1677,8 @@ if isinstance(existing_dlc, list):
             continue
         container_path = container.get("path")
         if isinstance(container_path, str) and Path(container_path).is_file():
+            container = dict(container)
+            container["dlc_nca_list"] = normalize_dlc_ncas(container.get("dlc_nca_list"))
             dlc_by_path[container_path] = container
 
 for dlc in dlcs:
