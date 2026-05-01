@@ -1134,22 +1134,50 @@ EOF
     }
 
     prepare_dolphin_runtime() {
-      if [ "''${EMULATION_DOLPHIN_HOTKEY_FALLBACK:-0}" != "1" ]; then
-        return 0
-      fi
       dolphin_config_dir="$XDG_CONFIG_HOME/dolphin-emu"
       mkdir -p "$dolphin_config_dir"
-      cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
-    [Hotkeys1]
-    Device = Keyboard Mouse
-    Keys/Toggle Pause = F10
-    Keys/Reset = @(Ctrl+R)
-    Keys/Take Screenshot = F9
-    Keys/Disable Emulation Speed Limit = Tab
-    Keys/Load State Slot 1 = F1
-    Keys/Save State Slot 1 = @(Shift+F1)
+      cat >"$dolphin_config_dir/Dolphin.ini" <<'EOF'
+[Analytics]
+PermissionAsked = True
+Enabled = False
+[Core]
+CPUThread = True
+SkipIPL = True
+GFXBackend = Vulkan
+SIDevice0 = 6
+SIDevice1 = 6
+SIDevice2 = 6
+SIDevice3 = 6
+WiimoteContinuousScanning = True
+WiimoteEnableSpeaker = False
+[Display]
+Fullscreen = True
+RenderWindowWidth = 1920
+RenderWindowHeight = 1080
+RenderWindowAutoSize = False
+[Interface]
+ConfirmStop = False
+UsePanicHandlers = False
+OnScreenDisplayMessages = True
+[DSP]
+DSPThread = True
+Backend = Cubeb
+Volume = 100
 EOF
-      log_event "runtime" "prepared Dolphin keyboard fallback hotkeys"
+      if [ "''${EMULATION_DOLPHIN_HOTKEY_FALLBACK:-0}" = "1" ]; then
+        cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
+[Hotkeys1]
+Device = Keyboard Mouse
+Keys/Toggle Pause = F10
+Keys/Reset = @(Ctrl+R)
+Keys/Take Screenshot = F9
+Keys/Disable Emulation Speed Limit = Tab
+Keys/Load State Slot 1 = F1
+Keys/Save State Slot 1 = @(Shift+F1)
+EOF
+        log_event "runtime" "prepared Dolphin keyboard fallback hotkeys"
+      fi
+      log_event "runtime" "prepared Dolphin kiosk config"
     }
 
     cmd=()
@@ -1219,7 +1247,16 @@ PY
           hotkey_profile="dolphin"
         fi
         prepare_dolphin_runtime
-        cmd=(dolphin-emu -b -e "$rom_path")
+        cmd=(
+          dolphin-emu
+          -b
+          -e "$rom_path"
+          -C Main.Analytics.PermissionAsked=True
+          -C Main.Analytics.Enabled=False
+          -C Main.Interface.ConfirmStop=False
+          -C Main.Interface.UsePanicHandlers=False
+          -C Main.Interface.OnScreenDisplayMessages=True
+        )
         ;;
       cemu) cmd=(cemu -f -g "$rom_path") ;;
       xemu)
@@ -1560,131 +1597,131 @@ PY
         dolphin_config_dir="${cfg.dataRoot}/xdg/config/dolphin-emu"
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$dolphin_config_dir"
         cat >"$dolphin_config_dir/Dolphin.ini" <<'EOF'
-    [Analytics]
-    PermissionAsked = True
-    Enabled = False
-    [Core]
-    CPUThread = True
-    SkipIPL = True
-    GFXBackend = Vulkan
-    SIDevice0 = 6
-    SIDevice1 = 6
-    SIDevice2 = 6
-    SIDevice3 = 6
-    WiimoteContinuousScanning = True
-    WiimoteEnableSpeaker = False
-    [Display]
-    Fullscreen = True
-    RenderWindowWidth = 1920
-    RenderWindowHeight = 1080
-    RenderWindowAutoSize = False
-    [Interface]
-    ConfirmStop = False
-    UsePanicHandlers = False
-    OnScreenDisplayMessages = True
-    [DSP]
-    DSPThread = True
-    Backend = Cubeb
-    Volume = 100
+[Analytics]
+PermissionAsked = True
+Enabled = False
+[Core]
+CPUThread = True
+SkipIPL = True
+GFXBackend = Vulkan
+SIDevice0 = 6
+SIDevice1 = 6
+SIDevice2 = 6
+SIDevice3 = 6
+WiimoteContinuousScanning = True
+WiimoteEnableSpeaker = False
+[Display]
+Fullscreen = True
+RenderWindowWidth = 1920
+RenderWindowHeight = 1080
+RenderWindowAutoSize = False
+[Interface]
+ConfirmStop = False
+UsePanicHandlers = False
+OnScreenDisplayMessages = True
+[DSP]
+DSPThread = True
+Backend = Cubeb
+Volume = 100
 EOF
         cat >"$dolphin_config_dir/GFX.ini" <<'EOF'
-    [Settings]
-    BackendMultithreading = True
-    InternalResolution = 3
-    AspectRatio = 0
-    ShaderCompilationMode = 2
-    ShaderCache = True
-    WaitForShadersBeforeStarting = False
-    BorderlessFullscreen = True
-    [Hardware]
-    VSync = False
-    [Enhancements]
-    MaxAnisotropy = 4
+[Settings]
+BackendMultithreading = True
+InternalResolution = 3
+AspectRatio = 0
+ShaderCompilationMode = 2
+ShaderCache = True
+WaitForShadersBeforeStarting = False
+BorderlessFullscreen = True
+[Hardware]
+VSync = False
+[Enhancements]
+MaxAnisotropy = 4
 EOF
         cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
-    [Hotkeys1]
-    Device = SDL/0/Nintendo Switch Pro Controller
-    Keys/Toggle Pause = `Button 13`
-    Keys/Reset = `Button 8` & `Button 0`
-    Keys/Take Screenshot = `Button 8` & `Button 1`
-    Keys/Disable Emulation Speed Limit = `Button 8` & `Button 7`
-    Keys/Load State Slot 1 = `Button 8` & `Button 4`
-    Keys/Save State Slot 1 = `Button 8` & `Button 5`
+[Hotkeys1]
+Device = SDL/0/Nintendo Switch Pro Controller
+Keys/Toggle Pause = `Button 13`
+Keys/Reset = `Button 8` & `Button 0`
+Keys/Take Screenshot = `Button 8` & `Button 1`
+Keys/Disable Emulation Speed Limit = `Button 8` & `Button 7`
+Keys/Load State Slot 1 = `Button 8` & `Button 4`
+Keys/Save State Slot 1 = `Button 8` & `Button 5`
 EOF
         : >"$dolphin_config_dir/GCPadNew.ini"
         for slot in 1 2 3 4; do
           index=$((slot - 1))
           cat >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
-    [GCPad$slot]
-    Device = SDL/$index/Nintendo Switch Pro Controller
-    Buttons/A = \`Button 1\`
-    Buttons/B = \`Button 0\`
-    Buttons/X = \`Button 3\`
-    Buttons/Y = \`Button 2\`
-    Buttons/Z = \`Button 7\`
-    Buttons/Start = \`Button 9\`
-    Main Stick/Up = \`Axis 1-\`
-    Main Stick/Down = \`Axis 1+\`
-    Main Stick/Left = \`Axis 0-\`
-    Main Stick/Right = \`Axis 0+\`
-    Main Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
-    C-Stick/Up = \`Axis 3-\`
-    C-Stick/Down = \`Axis 3+\`
-    C-Stick/Left = \`Axis 2-\`
-    C-Stick/Right = \`Axis 2+\`
-    C-Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
-    Triggers/L = \`Button 4\`
-    Triggers/R = \`Button 5\`
-    D-Pad/Up = \`Hat 0 N\`
-    D-Pad/Down = \`Hat 0 S\`
-    D-Pad/Left = \`Hat 0 W\`
-    D-Pad/Right = \`Hat 0 E\`
+[GCPad$slot]
+Device = SDL/$index/Nintendo Switch Pro Controller
+Buttons/A = \`Button 1\`
+Buttons/B = \`Button 0\`
+Buttons/X = \`Button 3\`
+Buttons/Y = \`Button 2\`
+Buttons/Z = \`Button 7\`
+Buttons/Start = \`Button 9\`
+Main Stick/Up = \`Axis 1-\`
+Main Stick/Down = \`Axis 1+\`
+Main Stick/Left = \`Axis 0-\`
+Main Stick/Right = \`Axis 0+\`
+Main Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
+C-Stick/Up = \`Axis 3-\`
+C-Stick/Down = \`Axis 3+\`
+C-Stick/Left = \`Axis 2-\`
+C-Stick/Right = \`Axis 2+\`
+C-Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
+Triggers/L = \`Button 4\`
+Triggers/R = \`Button 5\`
+D-Pad/Up = \`Hat 0 N\`
+D-Pad/Down = \`Hat 0 S\`
+D-Pad/Left = \`Hat 0 W\`
+D-Pad/Right = \`Hat 0 E\`
 EOF
         done
         : >"$dolphin_config_dir/WiimoteNew.ini"
         for slot in 1 2 3 4; do
           index=$((slot - 1))
           cat >>"$dolphin_config_dir/WiimoteNew.ini" <<EOF
-    [Wiimote$slot]
-    Source = 1
-    Device = SDL/$index/Nintendo Switch Pro Controller
-    Buttons/A = \`Button 1\`
-    Buttons/B = \`Button 7\`
-    Buttons/1 = \`Button 0\`
-    Buttons/2 = \`Button 2\`
-    Buttons/- = \`Button 8\`
-    Buttons/+ = \`Button 9\`
-    Buttons/Home = \`Button 13\`
-    D-Pad/Up = \`Hat 0 N\`
-    D-Pad/Down = \`Hat 0 S\`
-    D-Pad/Left = \`Hat 0 W\`
-    D-Pad/Right = \`Hat 0 E\`
-    IR/Up = \`Axis 3-\`
-    IR/Down = \`Axis 3+\`
-    IR/Left = \`Axis 2-\`
-    IR/Right = \`Axis 2+\`
-    Shake/X = \`Button 10\`
-    Shake/Y = \`Button 10\`
-    Shake/Z = \`Button 10\`
-    Extension = Nunchuk
-    Nunchuk/Buttons/C = \`Button 4\`
-    Nunchuk/Buttons/Z = \`Button 5\`
-    Nunchuk/Stick/Up = \`Axis 1-\`
-    Nunchuk/Stick/Down = \`Axis 1+\`
-    Nunchuk/Stick/Left = \`Axis 0-\`
-    Nunchuk/Stick/Right = \`Axis 0+\`
-    Nunchuk/Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
+[Wiimote$slot]
+Source = 1
+Device = SDL/$index/Nintendo Switch Pro Controller
+Buttons/A = \`Button 1\`
+Buttons/B = \`Button 7\`
+Buttons/1 = \`Button 0\`
+Buttons/2 = \`Button 2\`
+Buttons/- = \`Button 8\`
+Buttons/+ = \`Button 9\`
+Buttons/Home = \`Button 13\`
+D-Pad/Up = \`Hat 0 N\`
+D-Pad/Down = \`Hat 0 S\`
+D-Pad/Left = \`Hat 0 W\`
+D-Pad/Right = \`Hat 0 E\`
+IR/Up = \`Axis 3-\`
+IR/Down = \`Axis 3+\`
+IR/Left = \`Axis 2-\`
+IR/Right = \`Axis 2+\`
+Shake/X = \`Button 10\`
+Shake/Y = \`Button 10\`
+Shake/Z = \`Button 10\`
+Extension = Nunchuk
+Nunchuk/Buttons/C = \`Button 4\`
+Nunchuk/Buttons/Z = \`Button 5\`
+Nunchuk/Stick/Up = \`Axis 1-\`
+Nunchuk/Stick/Down = \`Axis 1+\`
+Nunchuk/Stick/Left = \`Axis 0-\`
+Nunchuk/Stick/Right = \`Axis 0+\`
+Nunchuk/Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
 EOF
         done
         cat >>"$dolphin_config_dir/WiimoteNew.ini" <<'EOF'
-    [BalanceBoard]
-    Source = 0
+[BalanceBoard]
+Source = 0
 EOF
         cat >"$dolphin_config_dir/Logger.ini" <<'EOF'
-    [Options]
-    Verbosity = 1
-    WriteToFile = False
-    WriteToConsole = False
+[Options]
+Verbosity = 1
+WriteToFile = False
+WriteToConsole = False
 EOF
         chown -R ${cfg.user}:${cfg.group} "$dolphin_config_dir"
         find "$dolphin_config_dir" -type f -exec chmod 0644 {} +

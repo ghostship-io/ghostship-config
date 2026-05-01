@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer Dolphin prompt fix**: Reassert Dolphin analytics opt-out and
+  stop-confirm settings immediately before each launch with valid INI syntax
+  plus Dolphin `-C` overrides, so GameCube kiosk launches do not ask to report
+  usage data or confirm quit/stop.
 - **Boomer GameCube Dolphin hotkeys**: Configure Dolphin to launch GameCube
   games without analytics, panic, or stop-confirm prompts, bind native
   GameCube hotkeys for reset, save/load slot 1, screenshot, and fast mode, and
