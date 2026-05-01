@@ -1273,100 +1273,116 @@ EOF
     freelook true
     lookstrafe false
 
-    unbind joy1
-    unbind joy2
-    unbind joy3
-    unbind joy4
-    unbind joy5
-    unbind joy6
-    unbind joy7
-    unbind joy8
-    unbind joy9
-    unbind joy10
-    unbind joy11
-    unbind joy12
-    unbind joy13
-    unbind joy14
-    unbind joy15
-    unbind joy16
-    unbind pad_a
-    unbind pad_b
-    unbind pad_x
-    unbind pad_y
-    unbind pad_back
-    unbind pad_start
-    unbind lshoulder
-    unbind rshoulder
-    unbind ltrigger
-    unbind rtrigger
-    unbind lthumb
-    unbind rthumb
-    unbind axis1plus
-    unbind axis1minus
-    unbind axis2plus
-    unbind axis2minus
-    unbind axis3plus
-    unbind axis3minus
-    unbind axis4plus
-    unbind axis4minus
-    unbind axis5plus
-    unbind axis5minus
-    unbind axis6plus
-    unbind axis6minus
-    unbind axis7plus
-    unbind axis7minus
-    unbind axis8plus
-    unbind axis8minus
-    unbind dpadup
-    unbind dpaddown
-    unbind dpadleft
-    unbind dpadright
-    unbind pov1up
-    unbind pov1down
-    unbind pov1left
-    unbind pov1right
+    unbind Joy1
+    unbind Joy2
+    unbind Joy3
+    unbind Joy4
+    unbind Joy5
+    unbind Joy6
+    unbind Joy7
+    unbind Joy8
+    unbind Joy9
+    unbind Joy10
+    unbind Joy11
+    unbind Joy12
+    unbind Joy13
+    unbind Joy14
+    unbind Joy15
+    unbind Joy16
+    unbind Pad_A
+    unbind Pad_B
+    unbind Pad_X
+    unbind Pad_Y
+    unbind Pad_Back
+    unbind Pad_Start
+    unbind LShoulder
+    unbind RShoulder
+    unbind LTrigger
+    unbind RTrigger
+    unbind LThumb
+    unbind RThumb
+    unbind Axis1Plus
+    unbind Axis1Minus
+    unbind Axis2Plus
+    unbind Axis2Minus
+    unbind Axis3Plus
+    unbind Axis3Minus
+    unbind Axis4Plus
+    unbind Axis4Minus
+    unbind Axis5Plus
+    unbind Axis5Minus
+    unbind Axis6Plus
+    unbind Axis6Minus
+    unbind Axis7Plus
+    unbind Axis7Minus
+    unbind Axis8Plus
+    unbind Axis8Minus
+    unbind DPadUp
+    unbind DPadDown
+    unbind DPadLeft
+    unbind DPadRight
+    unbind POV1Up
+    unbind POV1Down
+    unbind POV1Left
+    unbind POV1Right
 
     // SDL exposes Switch Pro face buttons to GZDoom's joystick backend as:
     // Joy1=B, Joy2=A, Joy3=Y, Joy4=X.
-    bind joy2 +use
-    bind joy1 +jump
-    bind joy3 crouch
-    bind joy10 weapprev
-    bind joy11 weapnext
-    bind joy5 togglemap
-    bind joy7 menu_main
-    bind axis1minus +moveleft
-    bind axis1plus +moveright
-    bind axis2minus +forward
-    bind axis2plus +back
-    bind axis5plus +altattack
-    bind axis6plus +attack
-    bind dpadup +forward
-    bind dpaddown +back
-    bind dpadleft +moveleft
-    bind dpadright +moveright
-    bind pov1up +forward
-    bind pov1down +back
-    bind pov1left +moveleft
-    bind pov1right +moveright
+    bind Joy2 +use
+    bind Joy1 +jump
+    bind Joy3 crouch
+    bind Joy10 weapprev
+    bind Joy11 weapnext
+    bind Joy5 togglemap
+    bind Joy7 menu_main
+    bind Axis1Minus +moveleft
+    bind Axis1Plus +moveright
+    bind Axis2Minus +forward
+    bind Axis2Plus +back
+    bind Axis5Plus +altattack
+    bind Axis6Plus +attack
+    bind DPadUp +forward
+    bind DPadDown +back
+    bind DPadLeft +moveleft
+    bind DPadRight +moveright
+    bind POV1Up +forward
+    bind POV1Down +back
+    bind POV1Left +moveleft
+    bind POV1Right +moveright
 
-    mapbind joy2 am_setmark
-    mapbind joy1 am_clearmarks
-    mapbind joy5 togglemap
-    mapbind axis1minus +am_panleft
-    mapbind axis1plus +am_panright
-    mapbind axis2minus +am_panup
-    mapbind axis2plus +am_pandown
-    mapbind dpadright +am_panright
-    mapbind dpadleft +am_panleft
-    mapbind dpadup +am_panup
-    mapbind dpaddown +am_pandown
-    mapbind pov1right +am_panright
-    mapbind pov1left +am_panleft
-    mapbind pov1up +am_panup
-    mapbind pov1down +am_pandown
-    mapbind joy10 +am_zoomout
-    mapbind joy11 +am_zoomin
+    // Some SDL layers expose controller aliases instead of raw joystick names.
+    bind Pad_A +use
+    bind Pad_B +jump
+    bind Pad_Y crouch
+    bind Pad_Back togglemap
+    bind Pad_Start menu_main
+    bind LShoulder weapprev
+    bind RShoulder weapnext
+    bind LTrigger +altattack
+    bind RTrigger +attack
+
+    mapbind Joy2 am_setmark
+    mapbind Joy1 am_clearmarks
+    mapbind Joy5 togglemap
+    mapbind Axis1Minus +am_panleft
+    mapbind Axis1Plus +am_panright
+    mapbind Axis2Minus +am_panup
+    mapbind Axis2Plus +am_pandown
+    mapbind DPadRight +am_panright
+    mapbind DPadLeft +am_panleft
+    mapbind DPadUp +am_panup
+    mapbind DPadDown +am_pandown
+    mapbind POV1Right +am_panright
+    mapbind POV1Left +am_panleft
+    mapbind POV1Up +am_panup
+    mapbind POV1Down +am_pandown
+    mapbind Joy10 +am_zoomout
+    mapbind Joy11 +am_zoomin
+    mapbind Pad_A am_setmark
+    mapbind Pad_B am_clearmarks
+    mapbind Pad_Back togglemap
+    mapbind LShoulder +am_zoomout
+    mapbind RShoulder +am_zoomin
 EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         chmod 0644 "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
@@ -1405,14 +1421,14 @@ axis_settings = {
     "Axis7map": "2",
 }
 binding_settings = {
-    "Pad_A": None,
-    "Pad_B": None,
+    "Pad_A": "+use",
+    "Pad_B": "+jump",
     "Pad_X": None,
-    "Pad_Y": None,
-    "LShoulder": None,
-    "RShoulder": None,
-    "LTrigger": None,
-    "RTrigger": None,
+    "Pad_Y": "crouch",
+    "LShoulder": "weapprev",
+    "RShoulder": "weapnext",
+    "LTrigger": "+altattack",
+    "RTrigger": "+attack",
     "LThumb": None,
     "RThumb": None,
     "Joy1": "+jump",
@@ -1431,8 +1447,8 @@ binding_settings = {
     "Joy14": None,
     "Joy15": None,
     "Joy16": None,
-    "Pad_Back": None,
-    "Pad_Start": None,
+    "Pad_Back": "togglemap",
+    "Pad_Start": "menu_main",
     "Axis1Minus": "+moveleft",
     "Axis1Plus": "+moveright",
     "Axis2Minus": "+forward",
@@ -1459,18 +1475,22 @@ binding_settings = {
     "POV1Right": "+moveright",
 }
 automap_settings = {
-    "Pad_A": None,
+    "Pad_A": "am_setmark",
     "Joy2": "am_setmark",
-    "Pad_B": None,
+    "Pad_B": "am_clearmarks",
     "Joy1": "am_clearmarks",
     "Pad_X": None,
     "Pad_Y": None,
     "Joy3": None,
     "Joy4": None,
     "Joy5": "togglemap",
+    "Joy6": None,
     "Joy10": "+am_zoomout",
     "Joy11": "+am_zoomin",
+    "Pad_Back": "togglemap",
     "Pad_Start": None,
+    "LShoulder": "+am_zoomout",
+    "RShoulder": "+am_zoomin",
     "Axis1Minus": "+am_panleft",
     "Axis1Plus": "+am_panright",
     "Axis2Minus": "+am_panup",
@@ -1481,6 +1501,8 @@ automap_settings = {
     "Axis6Plus": None,
     "Axis7Minus": None,
     "Axis7Plus": None,
+    "Axis8Minus": None,
+    "Axis8Plus": None,
     "DPadUp": "+am_panup",
     "DPadDown": "+am_pandown",
     "DPadLeft": "+am_panleft",
