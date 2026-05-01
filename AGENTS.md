@@ -302,16 +302,16 @@ changelog.
   Square/Capture is unbound. GZDoom's SDL
   `[Joy:JS:*]` axis map must be seeded so
   Switch Pro axis 0/1 are strafe/forward, axis 2 is yaw, axis 3 is pitch with
-  reduced scale, D-pad hat axes can move/pan, and unused axes are disabled.
+  reduced scale, trigger axes 4/5 are action buttons only, D-pad hat axes can
+  move/pan, and unused axes are disabled.
   Boomer's probed kernel Switch Pro raw map is documented in
   `docs/boomer-kuwanger-emulation.md`; use that table instead of inferring
   physical labels from emulator names.
   Boomer's live SDL joystick path maps GZDoom physical B/A/X/Y to
-  Joy1/Joy2/Joy3/Joy4, `-` to Joy5, Square/Capture to Joy6, `+` to Joy7,
-  L1/R1 to Joy10/Joy11, ZL/ZR to Joy13/Joy14, left stick to Axis1/Axis2,
-  right stick to Axis3/Axis4, and the D-pad to POV1. Use those raw
-  Joy/Axis/POV names directly; do not use Pad_*/LStick*/DPad* translated
-  aliases for GZDoom unless a future live GZDoom probe proves they work.
+  Joy1/Joy2/Joy3/Joy4, `-` to Joy5, `+` to Joy7, L1/R1 to Joy10/Joy11,
+  ZL/ZR to Joy13/Joy14, and the D-pad to POV1. The managed GZDoom package
+  translates that SDL path into Pad_*/LStick*/DPad* native gamepad keys; keep
+  the matching raw Joy/POV fallbacks aligned unless a live probe says otherwise.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

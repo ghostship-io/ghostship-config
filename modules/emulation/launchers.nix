@@ -1395,8 +1395,9 @@ EOF
     unbind RStickDown
     unbind RStickUp
 
-    // Boomer's live GZDoom probe reports Switch Pro controls through raw SDL
-    // joystick names. Keep bindings on Joy*/Axis*/POV* only.
+    // SDL exposes Switch Pro face buttons to GZDoom's joystick backend as:
+    // Joy1=B, Joy2=A, Joy3=X, Joy4=Y on the raw path. The managed package
+    // translates Boomer's probed SDL buttons to Pad_* for the primary path.
     bind Joy2 +use
     bind Joy1 +jump
     bind Joy4 crouch
@@ -1406,28 +1407,62 @@ EOF
     bind Joy14 +attack
     bind Joy5 togglemap
     bind Joy7 menu_main
+    bind LStickLeft +moveleft
+    bind LStickRight +moveright
+    bind LStickUp +forward
+    bind LStickDown +back
     bind Axis1Minus +moveleft
     bind Axis1Plus +moveright
     bind Axis2Minus +forward
     bind Axis2Plus +back
+    bind Axis5Plus +altattack
+    bind Axis6Plus +attack
+    bind DPadUp +forward
+    bind DPadDown +back
+    bind DPadLeft +moveleft
+    bind DPadRight +moveright
     bind POV1Up +forward
     bind POV1Down +back
     bind POV1Left +moveleft
     bind POV1Right +moveright
 
+    // Some SDL layers expose controller aliases instead of raw joystick names.
+    bind Pad_A +use
+    bind Pad_B +jump
+    bind Pad_Y crouch
+    bind Pad_Back togglemap
+    bind Pad_Start menu_main
+    bind LShoulder weapprev
+    bind RShoulder weapnext
+    bind LTrigger +altattack
+    bind RTrigger +attack
+
     mapbind Joy2 am_setmark
     mapbind Joy1 am_clearmarks
     mapbind Joy5 togglemap
+    mapbind LStickLeft +am_panleft
+    mapbind LStickRight +am_panright
+    mapbind LStickUp +am_panup
+    mapbind LStickDown +am_pandown
     mapbind Axis1Minus +am_panleft
     mapbind Axis1Plus +am_panright
     mapbind Axis2Minus +am_panup
     mapbind Axis2Plus +am_pandown
+    mapbind DPadRight +am_panright
+    mapbind DPadLeft +am_panleft
+    mapbind DPadUp +am_panup
+    mapbind DPadDown +am_pandown
     mapbind POV1Right +am_panright
     mapbind POV1Left +am_panleft
     mapbind POV1Up +am_panup
     mapbind POV1Down +am_pandown
     mapbind Joy10 +am_zoomout
     mapbind Joy11 +am_zoomin
+    mapbind Pad_A am_setmark
+    mapbind Pad_B am_clearmarks
+    mapbind Pad_Back togglemap
+    mapbind LShoulder +am_zoomout
+    mapbind RShoulder +am_zoomin
 EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         chmod 0644 "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
@@ -1444,8 +1479,8 @@ lines = path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=T
 
 # GZDoom's Linux SDL joystick backend reads these per-device AxisNmap keys
 # from [Joy:JS:N]. Values are EJoyAxis: -1 none, 0 yaw, 1 pitch,
-# 2 forward, 3 strafe. Boomer's live GZDoom probe exposes the left stick
-# as axes 0/1, the right stick as axes 2/3, and the D-pad hat as axes 6/7.
+# 2 forward, 3 strafe. SDL exposes Switch Pro as left X/Y, right X/Y,
+# ZL/ZR trigger axes, then D-pad hat axes.
 axis_settings = {
     "Axis0deadzone": "0.20",
     "Axis0map": "3",
@@ -1466,14 +1501,14 @@ axis_settings = {
     "Axis7map": "2",
 }
 binding_settings = {
-    "Pad_A": None,
-    "Pad_B": None,
+    "Pad_A": "+use",
+    "Pad_B": "+jump",
     "Pad_X": None,
-    "Pad_Y": None,
-    "LShoulder": None,
-    "RShoulder": None,
-    "LTrigger": None,
-    "RTrigger": None,
+    "Pad_Y": "crouch",
+    "LShoulder": "weapprev",
+    "RShoulder": "weapnext",
+    "LTrigger": "+altattack",
+    "RTrigger": "+attack",
     "LThumb": None,
     "RThumb": None,
     "Joy1": "+jump",
@@ -1492,12 +1527,12 @@ binding_settings = {
     "Joy14": "+attack",
     "Joy15": None,
     "Joy16": None,
-    "Pad_Back": None,
-    "Pad_Start": None,
-    "LStickLeft": None,
-    "LStickRight": None,
-    "LStickUp": None,
-    "LStickDown": None,
+    "Pad_Back": "togglemap",
+    "Pad_Start": "menu_main",
+    "LStickLeft": "+moveleft",
+    "LStickRight": "+moveright",
+    "LStickUp": "+forward",
+    "LStickDown": "+back",
     "RStickLeft": None,
     "RStickRight": None,
     "RStickUp": None,
@@ -1511,26 +1546,26 @@ binding_settings = {
     "Axis4Minus": None,
     "Axis4Plus": None,
     "Axis5Minus": None,
-    "Axis5Plus": None,
+    "Axis5Plus": "+altattack",
     "Axis6Minus": None,
-    "Axis6Plus": None,
+    "Axis6Plus": "+attack",
     "Axis7Minus": None,
     "Axis7Plus": None,
     "Axis8Minus": None,
     "Axis8Plus": None,
-    "DPadUp": None,
-    "DPadDown": None,
-    "DPadLeft": None,
-    "DPadRight": None,
+    "DPadUp": "+forward",
+    "DPadDown": "+back",
+    "DPadLeft": "+moveleft",
+    "DPadRight": "+moveright",
     "POV1Up": "+forward",
     "POV1Down": "+back",
     "POV1Left": "+moveleft",
     "POV1Right": "+moveright",
 }
 automap_settings = {
-    "Pad_A": None,
+    "Pad_A": "am_setmark",
     "Joy2": "am_setmark",
-    "Pad_B": None,
+    "Pad_B": "am_clearmarks",
     "Joy1": "am_clearmarks",
     "Pad_X": None,
     "Pad_Y": None,
@@ -1538,26 +1573,16 @@ automap_settings = {
     "Joy4": None,
     "Joy5": "togglemap",
     "Joy6": None,
-    "Joy7": None,
-    "Joy8": None,
-    "Joy9": None,
     "Joy10": "+am_zoomout",
     "Joy11": "+am_zoomin",
-    "Joy12": None,
-    "Joy13": None,
-    "Joy14": None,
-    "Joy15": None,
-    "Joy16": None,
-    "Pad_Back": None,
+    "Pad_Back": "togglemap",
     "Pad_Start": None,
-    "LShoulder": None,
-    "RShoulder": None,
-    "LTrigger": None,
-    "RTrigger": None,
-    "LStickLeft": None,
-    "LStickRight": None,
-    "LStickUp": None,
-    "LStickDown": None,
+    "LShoulder": "+am_zoomout",
+    "RShoulder": "+am_zoomin",
+    "LStickLeft": "+am_panleft",
+    "LStickRight": "+am_panright",
+    "LStickUp": "+am_panup",
+    "LStickDown": "+am_pandown",
     "RStickLeft": None,
     "RStickRight": None,
     "RStickUp": None,
@@ -1574,10 +1599,10 @@ automap_settings = {
     "Axis7Plus": None,
     "Axis8Minus": None,
     "Axis8Plus": None,
-    "DPadUp": None,
-    "DPadDown": None,
-    "DPadLeft": None,
-    "DPadRight": None,
+    "DPadUp": "+am_panup",
+    "DPadDown": "+am_pandown",
+    "DPadLeft": "+am_panleft",
+    "DPadRight": "+am_panright",
     "POV1Up": "+am_panup",
     "POV1Down": "+am_pandown",
     "POV1Left": "+am_panleft",
@@ -1626,8 +1651,7 @@ def upsert_section(input_lines, section, settings):
             out.append("\n")
         out.append(f"[{section}]\n")
         for key, value in settings.items():
-            if value is not None:
-                out.append(f"{key}={value}\n")
+            out.append(f"{key}={value}\n")
     return out
 
 for index in range(4):
