@@ -139,7 +139,6 @@ let
       "${cfg.dataRoot}/tools" \
       "${cfg.esde.appDataDir}" \
       "${cfg.esde.appDataDir}/custom_systems" \
-      "${cfg.esde.appDataDir}/gamelists/pico8" \
       "${cfg.esde.appDataDir}/gamelists/tools" \
       "${cfg.esde.appDataDir}/settings" \
       "${cfg.esde.appDataDir}/themes" \
@@ -224,61 +223,20 @@ let
     pico8_target="${cfg.romRoot}/$pico8_folder"
     if [ -d "$pico8_source" ] && [ -d "$pico8_target" ]; then
       if ! find -L "$pico8_target" -maxdepth 1 -type f \( -name '*.p8' -o -name '*.P8' -o -name '*.p8.png' -o -name '*.P8.PNG' \) -print -quit | grep -q .; then
-        for cart in \
-          "Celeste Classic.p8.png" \
-          "Celeste Classic 2 - Lani's Trek.p8.png" \
-          "Just One Boss.p8.png" \
-          "PICOHOT.p8.png" \
-          "POOM.p8.png" \
-          "Pico Tetris.p8.png"; do
-          if [ -f "$pico8_source/$cart" ] && [ ! -e "$pico8_target/$cart" ]; then
-            ln -s "$pico8_source/$cart" "$pico8_target/$cart"
+        printf '%s\n' \
+          "Celeste Classic.p8.png|Celeste Classic.png" \
+          "Celeste Classic 2 - Lani's Trek.p8.png|Celeste Classic 2 - Lani's Trek.png" \
+          "Just One Boss.p8.png|Just One Boss.png" \
+          "PICOHOT.p8.png|PICOHOT.png" \
+          "POOM.p8.png|POOM.png" \
+          "Pico Tetris.p8.png|Pico Tetris.png" \
+          | while IFS='|' read -r source_cart target_cart; do
+          if [ -f "$pico8_source/$source_cart" ] && [ ! -e "$pico8_target/$target_cart" ]; then
+            ln -s "$pico8_source/$source_cart" "$pico8_target/$target_cart"
           fi
         done
       fi
     fi
-
-    python3 - "$pico8_target" "${cfg.esde.appDataDir}/gamelists/pico8/gamelist.xml" <<'PY'
-    import os
-    import sys
-    import tempfile
-    import xml.etree.ElementTree as ET
-    from pathlib import Path
-
-    rom_dir = Path(sys.argv[1])
-    gamelist_path = Path(sys.argv[2])
-    suffixes = (".p8.png", ".P8.PNG", ".p8", ".P8", ".png", ".PNG")
-
-    def clean_name(path):
-        name = path.name
-        for suffix in suffixes:
-            if name.endswith(suffix):
-                return name[: -len(suffix)]
-        return path.stem
-
-    root = ET.Element("gameList")
-    if rom_dir.is_dir():
-        files = [
-            path
-            for path in rom_dir.iterdir()
-            if path.is_file()
-            and any(path.name.endswith(suffix) for suffix in suffixes)
-        ]
-        for path in sorted(files, key=lambda item: item.name.lower()):
-            game = ET.SubElement(root, "game")
-            ET.SubElement(game, "path").text = f"./{path.name}"
-            ET.SubElement(game, "name").text = clean_name(path)
-
-    fd, tmp = tempfile.mkstemp(prefix="pico8_gamelist.", dir=str(gamelist_path.parent))
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write('<?xml version="1.0"?>\n')
-        handle.write(ET.tostring(root, encoding="unicode"))
-        handle.write("\n")
-    os.chmod(tmp, 0o644)
-    Path(tmp).replace(gamelist_path)
-    PY
-    chown ${cfg.user}:${cfg.group} "${cfg.esde.appDataDir}/gamelists/pico8/gamelist.xml"
-    chmod 0644 "${cfg.esde.appDataDir}/gamelists/pico8/gamelist.xml"
 
     ln -sfn "${cfg.dataRoot}" /home/${cfg.user}/Emulation
     chown -h ${cfg.user}:${cfg.group} /home/${cfg.user}/Emulation || true

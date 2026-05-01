@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PICO-8 carts into an empty ES-DE ROM folder and document the PICO-8 Switch
   controller map in the on-device Controller Maps TUI and generated policy.
   Include plain `.png` as a launchable PICO-8 extension so ES-DE indexes
-  PNG-format carts instead of treating the system as empty, and generate a
-  PICO-8 gamelist so `.p8.png` carts display without filename suffixes.
+  PNG-format carts instead of treating the system as empty, and seed clean
+  `.png` symlink names so rescans display cart titles without `.p8` suffixes.
 - **Boomer controller probe documentation**: Document the live Switch Pro
   kernel event mapping from the Boomer raw input probe so emulator bindings can
   be based on observed `EV_KEY`/`EV_ABS` codes instead of inferred labels.
