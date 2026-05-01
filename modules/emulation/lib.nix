@@ -65,9 +65,9 @@ let
     {
       id = "teknoparrot";
       folder = "Arcade - TeknoParrot (2017)";
-      fullname = "Arcade - TeknoParrot";
+      fullname = "TeknoParrot";
       platform = "arcade";
-      theme = "arcade";
+      theme = "teknoparrot";
       emulator = "teknoparrot";
       extensions = ".teknoparrot .TEKNOPARROT";
       fixedAspect = "native";

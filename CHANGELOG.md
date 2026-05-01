@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer TeknoParrot launchers**: Use `.teknoparrot` launcher files in ES-DE
   and parse their first non-comment line as a raw argument string, matching the
   `.gzdoom` launcher style.
+- **Boomer TeknoParrot ES-DE identity**: Show TeknoParrot as its own ES-DE
+  system instead of reusing the generic Arcade theme label.
 - **Boomer controller probe documentation**: Document the live Switch Pro
   kernel event mapping from the Boomer raw input probe so emulator bindings can
   be based on observed `EV_KEY`/`EV_ABS` codes instead of inferred labels.
