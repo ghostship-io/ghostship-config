@@ -435,7 +435,7 @@ Defaults:
 - Config save on exit disabled.
 - Upstream joypad autoconfig installed when available.
 - Per-core option files live under
-  `/srv/emulation/config/retroarch/core-options`.
+  `/srv/emulation/xdg/config/retroarch/config/<Core>/<Core>.opt`.
 - Per-system override files live under
   `/srv/emulation/config/retroarch/system-overrides`.
 
@@ -545,9 +545,13 @@ otherwise does nothing. Select held plus a double Start press asks the active
 emulator process group to exit normally, then force-kills that process group
 after 5 seconds if it does not close. RetroArch maps Select/Minus hotkeys to
 save/load, reset, FPS, screenshot, and fast-forward actions, and D-pad-only
-RetroArch systems also accept left-stick D-pad input. The N64 RetroArch
-override remaps Mupen64Plus so physical Switch A sends N64 A, physical Switch
-B sends N64 B, and physical Switch X/Y stay unbound.
+RetroArch systems also accept left-stick D-pad input for players 1-5. PC Engine
+CD and SuperGrafx cores default all five players to 6-button pads. Dolphin
+enables all four GameCube controller ports and keeps Wii slots 1-4 on the same
+SDL controller order; Wii D-pad input stays on physical D-pad while Nunchuk
+movement uses left stick. The N64 RetroArch override remaps Mupen64Plus so
+physical Switch A sends N64 A, physical Switch B sends N64 B, and physical
+Switch X/Y stay unbound.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices
@@ -675,7 +679,7 @@ After SSH access exists:
 4. Run `audio-route` and confirm HDMI audio on each physical HDMI port you
    intend to use.
 5. Pair all four controllers in Switch mode and verify connection-order player
-   assignment.
+   assignment plus matching player-slot mappings in RetroArch and Dolphin.
 6. Run `retroarch-shader-smoke-test`.
 7. Launch one game per emulator family and inspect
    `/srv/emulation/logs/launches`.

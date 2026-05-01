@@ -1332,9 +1332,9 @@ PY
     SkipIPL = True
     GFXBackend = Vulkan
     SIDevice0 = 6
-    SIDevice1 = 0
-    SIDevice2 = 0
-    SIDevice3 = 0
+    SIDevice1 = 6
+    SIDevice2 = 6
+    SIDevice3 = 6
     WiimoteContinuousScanning = True
     WiimoteEnableSpeaker = False
     [Display]
@@ -1660,6 +1660,14 @@ EOF
       "primary_controller": "Nintendo Switch Pro Controller",
       "vendor_product": "057e:2009",
       "button_policy": "physical_switch_labels",
+      "shared_layout": {
+        "face_south": "physical B / lower face / primary or confirm where applicable",
+        "face_east": "physical A / right face / secondary or cancel where applicable",
+        "face_north": "physical X / upper face",
+        "face_west": "physical Y / left face",
+        "digital_movement": "D-pad plus left stick for players 1-5 where the emulator exposes stable digital direction bindings",
+        "player_slots": "map every stable declarative player slot exposed by the emulator"
+      },
       "global_sdl_hints": {
         "SDL_GAMECONTROLLER_USE_BUTTON_LABELS": "1"
       },
@@ -1679,8 +1687,8 @@ EOF
         "pico8": "PICO-8 only: Start/+ opens pause/menu"
       },
       "managed_defaults": {
-        "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
-        "dolphin": "GameCube and Wii profiles map physical A/B/X/Y to matching labels and use SDL slots 0-3; Wii Remote Home uses Square/Capture where Dolphin exposes it",
+        "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; players 1-5 map D-pad and left stick to digital movement; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
+        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Wii Remote Home uses Square/Capture where Dolphin exposes it; Wii D-pad stays on physical D-pad and Nunchuk movement stays on left stick",
         "ppsspp": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",
         "pcsx2": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",
         "azahar": "inherits SDL Switch label hints from run-emulator; only the shared run-emulator exit chord is advertised",

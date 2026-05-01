@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer controller mapping standardization**: Map RetroArch players 1-5 to
+  D-pad plus left-stick digital movement, force Beetle PCE Fast to 6-button
+  pads for all five players, and enable all four generated Dolphin GameCube
+  controller ports.
 - **Boomer PC Engine CD launch fix**: Launch PC Engine CD games with Beetle PCE
   Fast, keep SuperGrafx for HuCard/SuperGrafx games, and sync libretro core
   info from `libretro-core-info` so RetroArch sees the managed metadata.
