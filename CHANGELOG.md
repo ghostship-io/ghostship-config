@@ -53,7 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Select/Minus toggles map, X toggles crouch, Y reloads, D-pad left/right
   selects previous/next weapon, D-pad up/down selects and uses inventory,
   L1/R1 are User1/User2, ZL is alt fire, ZR is fire, `+` opens the menu, and
-  Square/Capture is unbound. Seed GZDoom's SDL
+  Square/Capture is unbound. Use Boomer's live GZDoom SDL button path instead
+  of the older historical Joy table. Seed GZDoom's SDL
   `[Joy:JS:*]` axis map so the right stick uses yaw/pitch instead of the Linux
   defaults that can look at the ceiling or treat vertical stick motion as
   left/right turning, with reduced vertical look sensitivity and D-pad hat axes

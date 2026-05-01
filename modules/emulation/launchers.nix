@@ -1396,21 +1396,20 @@ EOF
     unbind RStickDown
     unbind RStickUp
 
-    // Restored from the older working raw GZDoom layout for 8BitDo
-    // Ultimate 2C in Switch Pro mode. L4/R4 stay unbound until a live
-    // probe shows unique events for them.
+    // Live GZDoom SDL joystick path for 8BitDo Ultimate 2C in Switch Pro
+    // mode. L4/R4 stay unbound until a live probe shows unique events.
     bind Joy2 +use
     bind Joy1 +jump
-    bind Joy4 crouch
-    bind Joy3 +reload
-    bind Joy7 +attack
-    bind Joy8 +altattack
-    bind Joy5 +user1
-    bind Joy6 +user2
-    bind Joy9 menu_main
-    bind Joy10 togglemap
-    bind Axis4Plus +attack
-    bind Axis5Plus +altattack
+    bind Joy3 crouch
+    bind Joy4 +reload
+    bind Joy14 +attack
+    bind Joy13 +altattack
+    bind Joy10 +user1
+    bind Joy11 +user2
+    bind Joy7 menu_main
+    bind Joy5 togglemap
+    bind Axis4Plus +altattack
+    bind Axis5Plus +attack
     bind DPadLeft weapprev
     bind DPadRight weapnext
     bind DPadUp invprev
@@ -1420,7 +1419,7 @@ EOF
     bind POV1Up invprev
     bind POV1Down invuse
 
-    mapbind Joy10 togglemap
+    mapbind Joy5 togglemap
     mapbind Axis1Minus +am_panleft
     mapbind Axis1Plus +am_panright
     mapbind Axis2Minus +am_panup
@@ -1483,18 +1482,18 @@ binding_settings = {
     "RThumb": None,
     "Joy1": "+jump",
     "Joy2": "+use",
-    "Joy3": "+reload",
-    "Joy4": "crouch",
-    "Joy5": "+user1",
-    "Joy6": "+user2",
-    "Joy7": "+attack",
-    "Joy8": "+altattack",
-    "Joy9": "menu_main",
-    "Joy10": "togglemap",
-    "Joy11": None,
+    "Joy3": "crouch",
+    "Joy4": "+reload",
+    "Joy5": "togglemap",
+    "Joy6": None,
+    "Joy7": "menu_main",
+    "Joy8": None,
+    "Joy9": None,
+    "Joy10": "+user1",
+    "Joy11": "+user2",
     "Joy12": None,
-    "Joy13": None,
-    "Joy14": None,
+    "Joy13": "+altattack",
+    "Joy14": "+attack",
     "Joy15": None,
     "Joy16": None,
     "Pad_Back": None,
@@ -1514,9 +1513,9 @@ binding_settings = {
     "Axis3Minus": None,
     "Axis3Plus": None,
     "Axis4Minus": None,
-    "Axis4Plus": "+attack",
+    "Axis4Plus": "+altattack",
     "Axis5Minus": None,
-    "Axis5Plus": "+altattack",
+    "Axis5Plus": "+attack",
     "Axis6Minus": None,
     "Axis6Plus": None,
     "Axis7Minus": None,
@@ -1541,12 +1540,12 @@ automap_settings = {
     "Pad_Y": None,
     "Joy3": None,
     "Joy4": None,
-    "Joy5": None,
+    "Joy5": "togglemap",
     "Joy6": None,
     "Joy7": None,
     "Joy8": None,
     "Joy9": None,
-    "Joy10": "togglemap",
+    "Joy10": None,
     "Joy11": None,
     "Joy12": None,
     "Joy13": None,

@@ -308,11 +308,11 @@ changelog.
   Boomer's probed kernel Switch Pro raw map is documented in
   `docs/boomer-kuwanger-emulation.md`; use that table instead of inferring
   physical labels from emulator names.
-  Boomer's reset GZDoom raw baseline maps physical B/A/Y/X to
-  Joy1/Joy2/Joy3/Joy4, L1/R1 to Joy5/Joy6, R2/L2 to Joy7/Joy8, `+` to Joy9,
-  `-` to Joy10, and the D-pad to POV1; keep L4/R4 unbound until a live probe
-  proves unique events. Keep only the GZDoom menu A/B package patch unless a
-  future live probe proves another package patch is required.
+  Boomer's live GZDoom SDL joystick path maps physical B/A/X/Y to
+  Joy1/Joy2/Joy3/Joy4, `-` to Joy5, `+` to Joy7, L1/R1 to Joy10/Joy11,
+  L2/R2 to Joy13/Joy14, and the D-pad to POV1; keep L4/R4 unbound until a live
+  probe proves unique events. Keep only the GZDoom menu A/B package patch
+  unless a future live probe proves another package patch is required.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

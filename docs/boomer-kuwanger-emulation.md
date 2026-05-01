@@ -144,10 +144,11 @@ The setup script also writes GZDoom's `[Joy:JS:*]` SDL axis map so left X/Y are
 strafe/forward, right X/Y are yaw/pitch, `Axis3scale` is `0.25`, trigger axes
 are used only as fire/alt-fire button fallbacks, and unused/phantom axes cannot
 drive the view upward on launch.
-The reset GZDoom raw binding baseline is the older working layout:
-`Joy1`/`Joy2` are physical B/A, `Joy3`/`Joy4` are physical Y/X,
-`Joy5`/`Joy6` are L1/R1, `Joy7`/`Joy8` are R2/L2, `Joy9` is Start/Plus,
-`Joy10` is Select/Minus, and `POV1*` is the D-pad.
+The reset GZDoom raw binding baseline follows Boomer's live SDL joystick path:
+`Joy1`/`Joy2` are physical B/A, `Joy3`/`Joy4` are physical X/Y,
+`Joy5` is Select/Minus, `Joy7` is Start/Plus, `Joy10`/`Joy11` are L1/R1,
+`Joy13`/`Joy14` are L2/R2, and `POV1*` is the D-pad. Trigger axis fallbacks
+use `Axis4Plus` for L2 and `Axis5Plus` for R2.
 
 ### Switch Pro Raw Input Probe
 
