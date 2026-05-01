@@ -1247,6 +1247,10 @@ EOF
           "${cfg.configRoot}/emulators/pico8" \
           "${cfg.configRoot}/emulators/teknoparrot" \
           "${cfg.configRoot}/teknoparrot"
+        if [ -d "${cfg.configRoot}/teknoparrot/TeknoParrot" ]; then
+          chgrp ${cfg.group} "${cfg.configRoot}/teknoparrot/TeknoParrot"
+          chmod 0775 "${cfg.configRoot}/teknoparrot/TeknoParrot"
+        fi
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "${cfg.configRoot}/teknoparrot/TeknoParrot/UserProfiles"
         install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${displayPolicy} "${cfg.configRoot}/display/policy.json"
         xemu_data_dir="${cfg.dataRoot}/xdg/share/xemu/xemu"
