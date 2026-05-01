@@ -304,7 +304,6 @@ BUTTON_MAP_COLUMN_WIDTH = 27
 
 COMMON_HOTKEYS = [
     "Quick Menu: Select + X",
-    "Turbo: Star + <Button>",
     "Exit: Select + Start twice",
     "Save: Select + R",
     "Load: Select + L",
@@ -312,6 +311,7 @@ COMMON_HOTKEYS = [
     "FPS: Select + Y",
     "Screenshot: Select + A",
     "Fast: Select + ZR",
+    "Turbo: Star + <Button>",
 ]
 
 
@@ -330,7 +330,6 @@ def controller_map(title, mappings, notes=(), hotkeys=(), square="None"):
     lines.extend(f"  {line}" for line in two_column_button_lines(mappings))
     lines.append("Hotkeys")
     lines.extend(f"  {line}" for line in (hotkeys or COMMON_HOTKEYS))
-    lines.extend(f"  Note: {line}" for line in notes)
     return lines
 
 
@@ -777,8 +776,8 @@ CONTROLLER_MAPS = [
             [
                 "Menu: Plus / Start",
                 "Map: Minus toggles",
-                "Turbo: Star + <Button>",
                 "Exit: Select + Start twice",
+                "Turbo: Star + <Button>",
             ],
         ),
     },
@@ -2226,6 +2225,8 @@ def smoke_test(mode):
             assert any("Star" in line for line in row["detail"])
             assert any("Select + Start twice" in line for line in row["detail"])
             assert any("Square" in line for line in row["detail"])
+            assert not any(line.strip().startswith("Note:") for line in row["detail"])
+            assert row["detail"][-1] == "  Turbo: Star + <Button>"
             assert not any("opens RetroArch quick menu" in line for line in row["detail"])
             if row["label"] != "GZDoom":
                 assert any("Quick Menu: Select + X" in line for line in row["detail"])
