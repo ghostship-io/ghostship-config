@@ -1278,13 +1278,18 @@ EOF
         chmod 0644 "$xemu_data_dir/xemu.toml"
         ${lib.optionalString (packages.supermodelPackage != null) ''
           supermodel_config_dir="${cfg.dataRoot}/xdg/config/supermodel/Config"
+          supermodel_assets_dir="${cfg.dataRoot}/xdg/share/supermodel/Assets"
           install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$supermodel_config_dir"
+          install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$supermodel_assets_dir"
           install -m 0644 -o ${cfg.user} -g ${cfg.group} \
             ${packages.supermodelPackage}/share/supermodel/Config/Games.xml \
             "$supermodel_config_dir/Games.xml"
           install -m 0644 -o ${cfg.user} -g ${cfg.group} \
             ${packages.supermodelPackage}/share/supermodel/Config/Music.xml \
             "$supermodel_config_dir/Music.xml"
+          install -m 0644 -o ${cfg.user} -g ${cfg.group} \
+            ${packages.supermodelPackage}/share/supermodel/Assets/* \
+            "$supermodel_assets_dir/"
         ''}
         dolphin_config_dir="${cfg.dataRoot}/xdg/config/dolphin-emu"
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$dolphin_config_dir"
