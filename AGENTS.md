@@ -305,6 +305,9 @@ changelog.
   Switch Pro axis 0/1 are strafe/forward, axis 2 is yaw, axis 3 is pitch with
   scale `0.25`, trigger axes 4/5 are action buttons only, and unused axes are
   disabled.
+  After Burner Climax native TeknoParrot payloads need the operator-managed
+  `libsegaapi.so` beside the `abc` binary; the repo only supplies the 32-bit
+  FHS runtime dependencies.
   Boomer's probed kernel Switch Pro raw map is documented in
   `docs/boomer-kuwanger-emulation.md`; use that table instead of inferring
   physical labels from emulator names.
