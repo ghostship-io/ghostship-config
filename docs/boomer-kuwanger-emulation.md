@@ -147,17 +147,17 @@ GZDoom key -> target binding.
 
 | Physical control | Current/probed key | Target binding |
 | --- | --- | --- |
-| B | `Joy1` | `+jump` |
-| A | `Joy2` | `+use` |
-| X | `Joy3` | `crouch` |
-| Y | `Joy4` (was jump) | `+reload` |
-| L1 / L | `Joy5` (was weapon switch) | `+user1` |
+| B | `Joy1` (confirmed) | `+jump` |
+| A | `Joy2` (confirmed) | `+use` |
+| X | `Joy3` (confirmed) | `crouch` |
+| Y | `Joy4` (was jump; vanilla Doom may show no reload action) | `+reload` |
+| L1 / L | `Joy6` (was still weapon switch) | `+user1` |
 | R1 / R | `Joy7` (was pause) | `+user2` |
 | L2 / ZL | `Joy8` (was menu) | `+altattack` |
-| R2 / ZR | `Joy14` or trigger axis fallback | `+attack` |
-| Select / `-` | `Joy10` (was crouch) | `togglemap` |
+| R2 / ZR | `Joy9` / `Joy14` or trigger axis fallback | `+attack` |
+| Select / `-` | `Joy10` (confirmed; was crouch) | `togglemap` |
 | Start / `+` | `Pad_Start` alias fallback | `menu_main`; raw key still needs the next press-test |
-| D-pad left/right | `POV1Left` / `POV1Right` | `weapprev` / `weapnext` |
+| D-pad left/right | `POV1Left` / `POV1Right` (confirmed) | `weapprev` / `weapnext` |
 | D-pad up/down | `POV1Up` (was map) / `POV1Down` | `invprev` / `invuse` |
 | L4 / R4 | not yet observed as unique events | unbound until proven |
 

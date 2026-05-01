@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of jumping, R1/L1 become User 2/User 1, L2 becomes alt-fire, Minus
   toggles automap, D-pad left/right change weapons, and D-pad up/down handle
   inventory.
+- **Boomer GZDoom controller correction pass 2**: Keep the confirmed A/B/X,
+  Minus, and D-pad mappings, move L1's remaining weapon-switch event from
+  `Joy6` to User 1, and add config-only R2 fire candidates for `Joy9` plus
+  trigger-axis directions.
 - **Boomer smoke-test kiosk restore**: Restore `greetd` instead of
   `getty@tty1` after root-run smoke tests on kiosk-mode hosts so Boomer returns
   to ES-DE instead of a console login prompt.

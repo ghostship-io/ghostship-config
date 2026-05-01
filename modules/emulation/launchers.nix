@@ -1413,26 +1413,31 @@ EOF
     // A -> Joy2 -> use/open
     // X -> Joy3 -> crouch
     // Y -> Joy4 -> reload (observed as jump before this override)
-    // L1 -> Joy5 -> mod special / user1 (observed as weapon switch)
+    // L1 -> Joy6 -> mod special / user1 (Joy6 was still weapon switch)
     // R1 -> Joy7 -> zoom/grenade/dash / user2 (observed as pause)
     // L2 -> Joy8 -> alt-fire (observed as menu)
     // Minus -> Joy10 -> automap (observed as crouch)
-    // R2 -> Joy14 or trigger axis -> fire
+    // R2 -> Joy9 or trigger axis -> fire candidates
     // Plus -> Pad_Start alias for now; raw Joy key needs the next press-test
     bind Joy1 +jump
     bind Joy2 +use
     bind Joy3 crouch
     bind Joy4 +reload
     bind Joy5 +user1
+    bind Joy6 +user1
     bind Joy7 +user2
     bind Joy8 +altattack
+    bind Joy9 +attack
     bind Joy10 togglemap
     bind Joy14 +attack
     bind Joy13 +altattack
     bind Axis3Plus +altattack
     bind Axis4Plus +altattack
+    bind Axis4Minus +altattack
     bind Axis5Plus +attack
+    bind Axis5Minus +attack
     bind Axis6Plus +attack
+    bind Axis6Minus +attack
     // D-pad left/right -> previous/next weapon; up/down -> inventory prev/use.
     bind POV1Left weapprev
     bind POV1Right weapnext

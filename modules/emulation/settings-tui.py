@@ -908,7 +908,7 @@ CONTROLLER_MAPS = [
                 "Square": "None",
                 "Star": "Turbo",
             },
-            ["Current pass maps observed Joy*/POV1* keys; vertical look is 25%."],
+            ["Observed Joy*/POV1* corrections; vertical look is 25%."],
             GZDOOM_HOTKEYS,
         ),
     },
