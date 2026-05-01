@@ -86,8 +86,10 @@ let
     set -euo pipefail
     export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.python3 ]}:$PATH
     secret_env="/run/ghostship-secrets/emulation-retroachievements.env"
-    retroarch_cfg="${cfg.configRoot}/retroarch/retroachievements.cfg"
+    retroarch_cfg="${cfg.configRoot}/retroarch/retroarch.cfg"
+    stale_retroarch_cfg="${cfg.configRoot}/retroarch/retroachievements.cfg"
     status_json="${cfg.configRoot}/retroachievements/status.json"
+    rm -f "$stale_retroarch_cfg"
     [ -r "$secret_env" ] || {
       install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$status_json")"
       jq -n --arg checked_at "$(date -u +%FT%TZ)" '{checked_at:$checked_at, retroarch:"missing-secret-projection", standalone:"manual-login-required"}' >"$status_json.tmp"
@@ -129,29 +131,56 @@ let
         return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
     retroarch_path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix="retroachievements.", dir=str(retroarch_path.parent))
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        if configured:
-            handle.write('cheevos_enable = "true"\n')
-            handle.write('cheevos_hardcore_mode_enable = "false"\n')
-            handle.write('cheevos_verbose_enable = "true"\n')
-            handle.write('cheevos_start_active = "true"\n')
-            handle.write('cheevos_auto_screenshot = "true"\n')
-            handle.write('cheevos_badges_enable = "true"\n')
-            handle.write('cheevos_challenge_indicators = "true"\n')
-            handle.write('cheevos_richpresence_enable = "true"\n')
-            handle.write('cheevos_visibility_account = "true"\n')
-            handle.write('cheevos_visibility_unlock = "true"\n')
-            handle.write('cheevos_visibility_mastery = "true"\n')
-            handle.write('cheevos_visibility_lboard_start = "true"\n')
-            handle.write('cheevos_visibility_lboard_submit = "true"\n')
-            handle.write('cheevos_visibility_lboard_trackers = "false"\n')
-            handle.write('cheevos_unlock_sound_enable = "true"\n')
-            handle.write('cheevos_test_unofficial = "false"\n')
-            handle.write(f"cheevos_username = {retroarch_quote(user)}\n")
-            handle.write(f"cheevos_password = {retroarch_quote(password)}\n")
+    existing = retroarch_path.read_text(encoding="utf-8").splitlines() if retroarch_path.exists() else []
+    updates = {
+        "cheevos_enable": retroarch_quote("true" if configured else "false"),
+    }
+    if configured:
+        updates.update({
+            "cheevos_hardcore_mode_enable": retroarch_quote("false"),
+            "cheevos_verbose_enable": retroarch_quote("true"),
+            "cheevos_start_active": retroarch_quote("true"),
+            "cheevos_auto_screenshot": retroarch_quote("true"),
+            "cheevos_badges_enable": retroarch_quote("true"),
+            "cheevos_challenge_indicators": retroarch_quote("true"),
+            "cheevos_richpresence_enable": retroarch_quote("true"),
+            "cheevos_visibility_account": retroarch_quote("true"),
+            "cheevos_visibility_unlock": retroarch_quote("true"),
+            "cheevos_visibility_mastery": retroarch_quote("true"),
+            "cheevos_visibility_lboard_start": retroarch_quote("true"),
+            "cheevos_visibility_lboard_submit": retroarch_quote("true"),
+            "cheevos_visibility_lboard_trackers": retroarch_quote("false"),
+            "cheevos_unlock_sound_enable": retroarch_quote("true"),
+            "cheevos_test_unofficial": retroarch_quote("false"),
+            "cheevos_username": retroarch_quote(user),
+            "cheevos_password": retroarch_quote(password),
+        })
+    else:
+        updates.update({
+            "cheevos_username": None,
+            "cheevos_password": None,
+        })
+
+    seen = set()
+    output = []
+    for line in existing:
+        stripped = line.strip()
+        key = stripped.split("=", 1)[0].strip() if "=" in stripped else ""
+        if key in updates:
+            seen.add(key)
+            value = updates[key]
+            if value is not None:
+                output.append(f"{key} = {value}")
         else:
-            handle.write('cheevos_enable = "false"\n')
+            output.append(line)
+    for key, value in updates.items():
+        if key not in seen and value is not None:
+            output.append(f"{key} = {value}")
+
+    fd, tmp = tempfile.mkstemp(prefix="retroarch.", dir=str(retroarch_path.parent))
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(output))
+        handle.write("\n")
     os.chmod(tmp, 0o640)
     Path(tmp).replace(retroarch_path)
 

@@ -21,11 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `xemu` as the default and adds selectable `xemu-hotkeys` for Xemu save/load,
   reset, screenshot, pause, debug-monitor, and quick-action chords through a
   per-launch HMP socket plus host key injection.
-- **Boomer controller mapping standardization**: Use RetroArch analog-to-D-pad
-  mode for players 1-5 only on no-analog systems, force PC Engine-family cores
-  to 6-button pads for all five players, and enable all four generated Dolphin
-  GameCube controller ports while leaving analog-capable systems on analog
-  stick input.
+- **Boomer controller mapping standardization**: Keep RetroArch on the managed
+  base config, XDG `global.slangp`, and XDG per-core `.opt` files, force PC
+  Engine-family cores to 6-button pads for all five players, and enable all
+  four generated Dolphin GameCube controller ports while leaving analog-capable
+  systems on analog stick input.
 - **Boomer PC Engine CD launch fix**: Launch PC Engine CD games with Beetle PCE
   Fast, keep SuperGrafx for HuCard/SuperGrafx games, and sync libretro core
   info from `libretro-core-info` so RetroArch sees the managed metadata.
