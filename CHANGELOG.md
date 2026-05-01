@@ -11,11 +11,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list on every controller map with combo-first rows and `None` for unmapped
   actions. Rename displayed stick-click rows from `L3`/`R3` to `L4`/`R4` to
   match Boomer controller terminology.
-- **Boomer standalone hotkey broker**: Replaced the always-on controller
-  hotkey watcher with an opt-in generic standalone broker. Xbox keeps plain
-  `xemu` as the default and adds selectable `xemu-hotkeys` for Xemu save/load,
-  reset, screenshot, pause, debug-monitor, and quick-action chords through a
-  per-launch HMP socket plus host key injection.
+- **Boomer hotkey and RetroAchievements regression fix**: Restore the
+  per-launch Select+Start double-press exit broker, keep RetroArch hotkeys in
+  the managed base config plus controller autoconfigs, add 8BitDo udev
+  autoconfig aliases, and load generated RetroAchievements credentials as an
+  explicit append config so RetroArch sync no longer strips them. Make
+  `xemu-hotkeys` the default Xbox launcher so Xbox hotkeys work without
+  selecting an alternate emulator.
+- **Boomer PICO-8 hotkey launcher**: Make `pico8-hotkeys` the default, keep
+  plain PICO-8 as the fallback alternate, launch PICO-8 with a managed
+  `-home` directory, seed its config/controller mapping before launch, and map
+  supported PICO-8 keyboard shortcuts through the standalone hotkey broker.
+- **Boomer N64 Mupen64Plus-Next tuning**: Keep N64 on RetroArch
+  Mupen64Plus-Next, switch the managed core options to GLideN64 with 3x native
+  resolution, keep shaders on the global `global.slangp` preset, default all
+  four N64 controller paks to rumble, and stop generating ParaLLEl N64 and
+  shader-profile runtime option files.
+- **Boomer standalone hotkey broker**: Replaced the old controller hotkey
+  watcher with a generic broker. The shared per-launch broker handles
+  Select+Start twice exit, while expanded standalone profiles stay opt-in. Xbox
+  keeps plain `xemu` as the default and adds selectable `xemu-hotkeys` for Xemu
+  save/load, reset, screenshot, pause, debug-monitor, and quick-action chords
+  through a per-launch HMP socket plus host key injection.
+- **Boomer controller mapping standardization**: Keep RetroArch on the managed
+  base config, XDG `global.slangp`, and XDG per-core `.opt` files, force PC
+  Engine-family cores to 6-button pads for all five players, and enable all
+  four generated Dolphin GameCube controller ports while leaving analog-capable
+  systems on analog stick input.
+- **Boomer PC Engine CD launch fix**: Launch PC Engine CD games with Beetle PCE
+  Fast, keep SuperGrafx for HuCard/SuperGrafx games, and sync libretro core
+  info from `libretro-core-info` so RetroArch sees the managed metadata.
+- **Boomer RetroArch core options**: Write managed core options to RetroArch's
+  native XDG per-core layout so each core loads its defaults directly.
+- **Boomer RetroAchievements defaults**: Enable RetroAchievements by default
+  for RetroArch cores when credentials are present, with visible notifications,
+  encore/start-active behavior, badges, rich presence, unlock screenshots, and
+  unlock sounds while keeping hardcore mode off.
 - **Boomer Beetle SuperGrafx config**: Manage the core's CD BIOS/cache settings,
   enable six-button joypads for all five controller ports, and keep multitap
   enabled.

@@ -132,28 +132,14 @@ let
       exec terminal-tool ${lib.escapeShellArg title} ${lib.escapeShellArg (mkMenuCommand title items)}
     '';
 
-  profileMenuCommand = ''
-    profile_dir="${cfg.configRoot}/retroarch/profiles"
-    current="$profile_dir/current.cfg"
-    mkdir -p "$profile_dir"
-    echo "Current profile:"
-    readlink "$current" 2>/dev/null || echo "custom or missing"
-    echo
-    echo "Available profiles:"
-    find "$profile_dir" -maxdepth 1 -type f -name "*.cfg" -printf "%f\n" | sort
-    echo
-    printf "Profile name to activate, or blank to keep current: "
-    read -r profile
-    [ -n "$profile" ] || exit 0
-    case "$profile" in *.cfg) ;; *) profile="$profile.cfg" ;; esac
-    if [ ! -r "$profile_dir/$profile" ]; then
-      echo "Unknown profile: $profile"
-      exit 1
+  globalShaderCommand = ''
+    preset="${cfg.dataRoot}/xdg/config/retroarch/config/global.slangp"
+    echo "Global RetroArch shader preset:"
+    if [ -r "$preset" ]; then
+      cat "$preset"
+    else
+      echo "Missing $preset"
     fi
-    backup="$profile_dir/current.cfg.$(date -u +%Y%m%dT%H%M%SZ).bak"
-    [ -e "$current" ] && cp -P "$current" "$backup" || true
-    ln -sfn "$profile" "$current"
-    echo "Activated $profile"
   '';
 
   playerAssignmentCommand = ''
@@ -258,19 +244,18 @@ let
       { label = "Shader smoke test"; command = "retroarch-shader-smoke-test || true"; }
       { label = "Update workflow"; command = "echo 'RetroArch cores are Nix-managed. Rebuild the host with: nix build .#nixosConfigurations.boomer-kuwanger.config.system.build.toplevel -L'"; }
     ];
-    retroarch-graphics-profiles = mkMenuTool "retroarch-graphics-profiles" "RetroArch Graphics Profiles" [
-      { label = "Show/switch profile"; command = profileMenuCommand; }
-      { label = "System overrides"; command = "find ${cfg.configRoot}/retroarch/system-overrides -maxdepth 1 -type f -printf '%f\\n' | sort"; }
+    retroarch-graphics-profiles = mkMenuTool "retroarch-graphics-profiles" "RetroArch Graphics" [
+      { label = "Global shader preset"; command = globalShaderCommand; }
+      { label = "Per-core option files"; command = "find ${cfg.dataRoot}/xdg/config/retroarch/config -mindepth 2 -maxdepth 2 -type f -name '*.opt' -printf '%P\\n' | sort"; }
     ];
-    retroarch-shader-profiles = mkMenuTool "retroarch-shader-profiles" "RetroArch Shader Profiles" [
-      { label = "Show/switch profile"; command = profileMenuCommand; }
-      { label = "Shader policy"; command = "jq . ${cfg.configRoot}/retroarch/shader-policy.json"; }
+    retroarch-shader-profiles = mkMenuTool "retroarch-shader-profiles" "RetroArch Shader" [
+      { label = "Global shader preset"; command = globalShaderCommand; }
       { label = "Shader smoke test"; command = "retroarch-shader-smoke-test || true"; }
     ];
     retroachievements-status = mkMenuTool "retroachievements-status" "RetroAchievements Status" [
       { label = "Secret projection"; command = "ls -l /run/ghostship-secrets/emulation-retroachievements.env 2>/dev/null || echo 'No decrypted RetroAchievements projection.'"; }
       { label = "Rendered settings"; command = "render-retroachievements-settings || true; [ -r ${cfg.configRoot}/retroachievements/status.json ] && jq . ${cfg.configRoot}/retroachievements/status.json || true"; }
-      { label = "RetroArch config present"; command = "if [ -r ${cfg.configRoot}/retroarch/retroachievements.cfg ]; then grep -E 'cheevos_(enable|hardcore_mode_enable|username)' ${cfg.configRoot}/retroarch/retroachievements.cfg || true; else echo 'No RetroArch RetroAchievements config rendered.'; fi"; }
+      { label = "RetroArch base config"; command = "grep -E 'cheevos_(enable|hardcore_mode_enable|username)' ${cfg.configRoot}/retroarch/retroarch.cfg || true"; }
     ];
     esde-scraper-status = mkMenuTool "esde-scraper-status" "ES-DE Scraper Status" [
       { label = "Secret projection"; command = "ls -l /run/ghostship-secrets/emulation-scraper.env 2>/dev/null || echo 'No decrypted scraper projection.'"; }

@@ -88,11 +88,11 @@ let
       fullname = "Microsoft Xbox";
       platform = "xbox";
       theme = "xbox";
-      emulator = "xemu";
+      emulator = "xemu-hotkeys";
       alternateEmulators = [
         {
-          label = "xemu-hotkeys";
-          emulator = "xemu-hotkeys";
+          label = "xemu";
+          emulator = "xemu";
         }
       ];
       extensions = ".xiso .XISO";
@@ -114,7 +114,7 @@ let
       fullname = "NEC PC Engine CD";
       platform = "pcenginecd";
       theme = "pcenginecd";
-      emulator = "retroarch-beetle-supergrafx";
+      emulator = "retroarch-beetle-pce-fast";
       extensions = "${commonRetroExtensions} ${discExtensions}";
       fixedAspect = "4:3";
     }
@@ -377,7 +377,13 @@ let
       fullname = "PICO-8";
       platform = "pico8";
       theme = "pico8";
-      emulator = "pico8";
+      emulator = "pico8-hotkeys";
+      alternateEmulators = [
+        {
+          label = "PICO-8";
+          emulator = "pico8";
+        }
+      ];
       extensions = ".png .PNG";
       fixedAspect = "4:3";
     }

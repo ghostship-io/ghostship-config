@@ -14,8 +14,8 @@ launch helper for maintenance sessions. It keeps writable emulator state under
 - `/srv/emulation/bios`: BIOS, firmware, keys, and other user-provided files.
 - `/srv/emulation/saves`, `/srv/emulation/states`, `/srv/emulation/screenshots`:
   runtime output outside ROM folders.
-- `/srv/emulation/config`: emulator overrides, display policy, RetroArch
-  profiles, per-core options, controller state, and TeknoParrot prefix state.
+- `/srv/emulation/config`: emulator overrides, display policy, RetroArch base
+  config, controller state, and TeknoParrot prefix state.
 - `/srv/emulation/es-de`: ES-DE appdata, settings, themes, custom systems, and
   scraped media.
 - `/srv/emulation/logs`: launch, RetroArch, controller, and tool logs.
@@ -229,8 +229,19 @@ The package wraps the Linux PICO-8 binary with `steam-run` so it can launch on
 NixOS without committing proprietary files.
 
 PICO-8 uses SDL's X11 video path on Boomer, so `run-emulator` adds an explicit
-Gamescope Xwayland server for PICO-8 launches. Current smoke coverage uses
-`POOM.png` from the PICO-8 library as the heavier test cart.
+Gamescope Xwayland server for PICO-8 launches. The launcher also passes an
+explicit `-home /srv/emulation/config/emulators/pico8` path and rewrites
+`config.txt` plus `sdl_controllers.txt` before each launch so controller
+mapping, cart data, screenshots, and GIF output stay in managed emulation
+paths.
+
+`pico8-hotkeys` is the default ES-DE launcher. It starts the standalone hotkey
+broker and injects PICO-8's own keyboard shortcuts: Select+X or Square opens
+the pause menu, Select+B sends `CTRL-R`, Select+A sends `CTRL-6`, Select+Y
+sends `CTRL-9`, and Select+ZR is logged as unavailable because PICO-8 has no
+fast-forward hotkey. Plain `pico8` remains available as a fallback alternate.
+Current smoke coverage uses `POOM.png` from the PICO-8 library as the heavier
+test cart.
 
 ## TeknoParrot Free
 
@@ -342,13 +353,13 @@ shape expected by the target emulator.
 
 Performance tooling builds on the smoke ROM manifest and always launches
 through `run-emulator`, so Gamescope, GameMode, HDMI audio routing, display
-policy, RetroArch profile selection, and emulator logging follow the same path
-as normal play. Gamescope FSR remains disabled for every run.
+policy, RetroArch global shader preset, and emulator logging follow the same
+path as normal play. Gamescope FSR remains disabled for every run.
 
 Runtime state:
 
-- `/srv/emulation/config/perf/policy.json`: mode defaults, thresholds, shader
-  profiles, scaling profiles, and tuning notes.
+- `/srv/emulation/config/perf/policy.json`: mode defaults, thresholds, the
+  global shader baseline, scaling profiles, and tuning notes.
 - `/srv/emulation/logs/perf/<run-id>/context.json`: package versions, kernel,
   display profile, audio summary, Vulkan summary, and mapped systems.
 - `/srv/emulation/logs/perf/<run-id>/results.jsonl`: one JSON result per ROM
@@ -363,8 +374,8 @@ Commands:
   15-second warmup.
 - `perf-test --overnight`: up to three ROMs per mapped system, 180 seconds each
   with a 30-second warmup.
-- `perf-test --shader-matrix`: RetroArch systems only, comparing default,
-  `nnedi3-fast`, `nnedi3-clean`, `sharp-bilinear-prescale`, and `no-shader`.
+- `perf-test --shader-matrix`: RetroArch systems only, validating the global
+  shader preset path.
 - `perf-test --scaling-matrix`: standalone systems only, recording baseline,
   quality, and performance scaling profiles for emulator-native tuning.
 - `perf-test --single <system> <rom>`: focused debug run for one ROM.
@@ -375,7 +386,7 @@ Commands:
 - Root-run performance tests use the same capability-cleared tty re-exec path
   as the smoke harness so fullscreen Gamescope launches match the production
   kiosk session.
-- `perf-profile current`: shows the active RetroArch profile and current
+- `perf-profile current`: shows the global RetroArch shader preset and current
   standalone runtime scaling policy files.
 
 Use `--duration`, `--warmup`, and `--systems` for short validation loops, for
@@ -389,14 +400,13 @@ perf-test --scaling-matrix --systems psp,gc --duration 12 --warmup 2
 Statuses distinguish launch failures from tuning failures. Missing BIOS,
 firmware, keys, or proprietary emulator runtime files are reported as
 `blocked-missing-runtime`; frame pacing failures are reported as
-`fail-performance` with a recommendation such as lowering NNEDI3 quality,
-falling back to sharp-bilinear, or lowering emulator-native internal
+`fail-performance` with a recommendation to inspect core-specific
+dynarec/internal-resolution options or lower emulator-native internal
 resolution. FBNeo logs many harmless `No romset found` search-path probes
 before finding an arcade set; those probes are not treated as missing runtime
 files once FBNeo reports a found romset or `No missing files, proceeding`.
-For fast-scrolling FBNeo games such as OutRun, keep NNEDI3 as the default 2D
-arcade policy and use per-content fallbacks in this order:
-`nnedi3-balanced`, `nnedi3-fast`, `sharp-bilinear-prescale`, then `no-shader`.
+For RetroArch shader changes, edit the single managed `global.slangp` preset
+instead of adding generated shader profile configs.
 
 ## RetroArch
 
@@ -405,6 +415,13 @@ PC Engine/SuperGrafx, PlayStation, Saturn, Dreamcast, N64, DS, PSP/PS2
 fallback coverage, and 3DS fallback coverage. Managed config is written under
 `/srv/emulation/config/retroarch`.
 
+RetroAchievements are enabled by default for RetroArch cores when the
+`emulation-retroachievements-secrets` credentials are present. The default
+profile keeps hardcore mode off, leaves verbose achievement messages on,
+starts sessions with all achievements active locally, and enables badges,
+unlock/mastery visibility, rich presence, automatic unlock screenshots, and
+unlock sounds.
+
 Default ES-DE mappings now use RetroAchievements-aligned cores where practical:
 
 - NES/FDS: FCEUmm.
@@ -412,7 +429,8 @@ Default ES-DE mappings now use RetroAchievements-aligned cores where practical:
 - GB/GBC: Gambatte.
 - GBA: mGBA.
 - SNES: Snes9x.
-- N64: Mupen64Plus-Next.
+- N64: Mupen64Plus-Next with GLideN64, 3x native resolution, and the global
+  RetroArch shader preset.
 - DS: DeSmuME.
 - Dreamcast: Flycast.
 - PlayStation: Beetle PSX HW.
@@ -428,9 +446,9 @@ Defaults:
 - Config save on exit disabled.
 - Upstream joypad autoconfig installed when available.
 - Per-core option files live under
-  `/srv/emulation/config/retroarch/core-options`.
-- Per-system override files live under
-  `/srv/emulation/config/retroarch/system-overrides`.
+  `/srv/emulation/xdg/config/retroarch/config/<Core>/<Core>.opt`.
+- The global shader preset lives at
+  `/srv/emulation/xdg/config/retroarch/config/global.slangp`.
 
 ## Shaders
 
@@ -442,33 +460,10 @@ RetroArch's expected layout:
 - `shaders_glsl`
 - `shaders_cg`
 
-Default shader profile is `nnedi3-clean`. The installed runtime profiles are:
-
-- `nnedi3-clean`
-- `nnedi3-quality`
-- `nnedi3-balanced`
-- `nnedi3-fast`
-- `sharp-bilinear-prescale`
-- `sharp-bilinear-simple`
-- `pixel-aa-fast`
-- `scalefx-aa-fast`
-- `xbrz-freescale`
-- `no-shader`
-- `megabezel-auto`
-- `megabezel-standard`
-- `megabezel-potato`
-- `megabezel-passthrough`
-- `sharp-clean`
-- `integer-raw`
-- `performance`
-
-NNEDI3 is used for clean 2D upscaling by default. Handheld systems use lighter
-NNEDI3 where appropriate, 3D-heavy RetroArch systems default to no shader or a
-light sharp-bilinear profile, and Mega Bezel remains installed and selectable
-but is no longer the default. `retroarch-shader-smoke-test` writes
-`/srv/emulation/config/retroarch/shader-status.json`; the launcher uses that
-marker to fall back from missing NNEDI3/Mega Bezel paths to sharp or no-shader
-profiles.
+RetroArch uses one managed global preset:
+`/srv/emulation/xdg/config/retroarch/config/global.slangp`. The module does
+not generate shader profile `.cfg` files, per-system shader overrides, or a
+shader policy file.
 
 ## Controllers And Bluetooth
 
@@ -534,18 +529,22 @@ hotkey modifier, Select+X opens emulator quick menus where the active launch
 mode supports it, and Star/Home is treated as a controller-local turbo button
 when the firmware exposes it at all. Square/Capture opens native console Home
 screens only where that binding is explicitly configured, such as Dolphin's Wii
-profile, and otherwise does nothing. Standalone raw hotkey brokers are opt-in
-per-emulator launch modes, not a global background watcher. Plain Xbox uses
-Xemu's native Select+Start quick-actions chord; the selectable `xemu-hotkeys`
-launch mode starts a per-process broker and HMP socket for Select+X quick
-actions, Select+B reset, Select+L load `esde-slot1`, Select+R save
+profile, and otherwise does nothing. Every `run-emulator` launch starts a
+lightweight per-process exit broker for Select+Start twice. Xbox defaults to
+`xemu-hotkeys`, which starts a per-process broker and HMP socket for Select+X
+quick actions, Select+B reset, Select+L load `esde-slot1`, Select+R save
 `esde-slot1`, Select+A screenshot, Select+Y debug monitor, and Square/Capture
-pause. Select+ZR is intentionally unmapped for Xemu because there is no reliable
+pause. Plain `xemu` remains available as a fallback alternate.
+Select+ZR is intentionally unmapped for Xemu because there is no reliable
 fast-forward command. RetroArch maps Select/Minus hotkeys to save/load, reset,
-FPS, screenshot, and fast-forward actions, and D-pad-only RetroArch systems
-also accept left-stick D-pad input. The N64 RetroArch override remaps
-Mupen64Plus so physical Switch A sends N64 A, physical Switch B sends N64 B,
-and physical Switch X/Y stay unbound.
+FPS, screenshot, and fast-forward actions, exits on Select+Start twice through
+the per-process broker, and uses only the managed base
+`retroarch.cfg`, XDG `global.slangp`, and XDG per-core `.opt` files. PC Engine
+CD and SuperGrafx default all five players to 6-button pads. Dolphin enables
+all four GameCube controller ports and keeps Wii slots 1-4 on the same SDL
+controller order; D-pad stays on physical D-pad and analog movement stays on
+analog sticks. Standalone SDL emulators keep their native left-stick mappings.
+Mupen64Plus-Next defaults all four N64 controller paks to Rumble Pak.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices
@@ -649,16 +648,16 @@ The generated projection is:
 /run/ghostship-secrets/emulation-retroachievements.env
 ```
 
-`render-retroachievements-settings` writes RetroArch's runtime
-`cheevos_*` settings to:
+`render-retroachievements-settings` writes RetroArch's runtime `cheevos_*`
+secret settings into the managed base RetroArch config:
 
 ```text
-/srv/emulation/config/retroarch/retroachievements.cfg
+/srv/emulation/config/retroarch/retroarch.cfg
 ```
 
-RetroArch receives that file through `run-emulator` append config. Standalone
-emulator achievement login remains `manual-login-required` until each live
-config format is confirmed on Boomer; the status file records that deliberately
+No RetroArch append config is used. Standalone emulator achievement login
+remains `manual-login-required` until each live config format is confirmed on
+Boomer; the status file records that deliberately
 instead of guessing at credential keys.
 
 ## Verification On Hardware
@@ -674,7 +673,7 @@ After SSH access exists:
 4. Run `audio-route` and confirm HDMI audio on each physical HDMI port you
    intend to use.
 5. Pair all four controllers in Switch mode and verify connection-order player
-   assignment.
+   assignment plus matching player-slot mappings in RetroArch and Dolphin.
 6. Run `retroarch-shader-smoke-test`.
 7. Launch one game per emulator family and inspect
    `/srv/emulation/logs/launches`.

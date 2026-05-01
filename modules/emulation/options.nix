@@ -52,29 +52,6 @@ in
       default = "/srv/emulation/es-de";
       description = "ES-DE application data directory.";
     };
-    visuals.defaultProfile = mkOption {
-      type = types.enum [
-        "nnedi3-clean"
-        "nnedi3-quality"
-        "nnedi3-balanced"
-        "nnedi3-fast"
-        "sharp-bilinear-prescale"
-        "sharp-bilinear-simple"
-        "pixel-aa-fast"
-        "scalefx-aa-fast"
-        "xbrz-freescale"
-        "megabezel-auto"
-        "megabezel-standard"
-        "megabezel-potato"
-        "megabezel-passthrough"
-        "sharp-clean"
-        "no-shader"
-        "integer-raw"
-        "performance"
-      ];
-      default = "nnedi3-clean";
-      description = "Default RetroArch shader/profile policy.";
-    };
     visuals.upscaler = mkOption {
       type = types.enum [ "none" ];
       default = "none";

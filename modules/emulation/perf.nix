@@ -39,11 +39,7 @@ let
       };
     };
     shaderProfiles = [
-      "default"
-      "nnedi3-fast"
-      "nnedi3-clean"
-      "sharp-bilinear-prescale"
-      "no-shader"
+      "global"
     ];
     scalingProfiles = [
       "baseline"
@@ -60,9 +56,7 @@ let
         "threaded_video disabled except performance fallback"
       ];
       retroarch2d = [
-        "NNEDI3 clean default"
-        "NNEDI3 fast handheld fallback"
-        "sharp-bilinear-prescale performance fallback"
+        "Global slangp preset"
         "run-ahead 1 frame only after baseline stability passes"
       ];
       standalone = [
@@ -279,8 +273,12 @@ let
         jq . "${cfg.configRoot}/perf/policy.json"
         ;;
       current)
-        echo "RetroArch current profile:"
-        readlink "${cfg.configRoot}/retroarch/profiles/current.cfg" 2>/dev/null || echo "custom or missing"
+        echo "RetroArch global shader preset:"
+        if [ -r "${cfg.dataRoot}/xdg/config/retroarch/config/global.slangp" ]; then
+          cat "${cfg.dataRoot}/xdg/config/retroarch/config/global.slangp"
+        else
+          echo "missing global.slangp"
+        fi
         echo
         echo "Standalone runtime scaling policies:"
         find "${cfg.configRoot}/emulators" -maxdepth 2 -name runtime-scaling-policy.json -print 2>/dev/null | sort | while read -r policy; do
@@ -442,7 +440,7 @@ let
             jq -c --argjson current "$current_systems" --arg systems_filter "$systems_filter" '
               def selected($id): ($systems_filter == "" or (($systems_filter | split(",")) | index($id) != null));
               def current_system($id): (($current[] | select(.id == $id)) // empty);
-              ["default","nnedi3-fast","nnedi3-clean","sharp-bilinear-prescale","no-shader"] as $profiles
+              ["global"] as $profiles
               | .systems[] as $system
               | select(selected($system.id))
               | (current_system($system.id) // $system) as $cur
@@ -630,11 +628,7 @@ let
         gpu = (metrics or {}).get("avg_gpu_load")
         cpu = (metrics or {}).get("avg_cpu_load")
         if emulator.startswith("retroarch-"):
-            if shader_profile.startswith("nnedi3"):
-                return "Try nnedi3-fast, then sharp-bilinear-prescale. If it still misses frame budget, test the performance profile with threaded_video."
-            if shader_profile in {"sharp-bilinear-prescale", "sharp-bilinear-simple"}:
-                return "Try no-shader, then the performance profile. Keep Gamescope FSR off."
-            return "Try the RetroArch performance profile and inspect core-specific dynarec/internal-resolution options."
+            return "Inspect core-specific dynarec/internal-resolution options; RetroArch shaders use the global slangp preset."
         if gpu is not None and gpu >= 90:
             return "GPU-bound: lower emulator-native internal resolution or expensive AA/filtering before changing Gamescope."
         if cpu is not None and cpu >= 80:
@@ -748,7 +742,6 @@ let
             fi
             set +e
             EMULATION_MANGOHUD=1 \
-            EMULATION_RETROARCH_PROFILE="$shader_profile" \
             EMULATION_PERF_SCALING_PROFILE="$scaling_profile" \
             MANGOHUD_CONFIG="autostart_log=1,output_folder=$perf_dir,log_duration=$duration" \
             timeout --kill-after=5s "$duration" run-emulator "$system_id" "$emulator" "$rom_path" >"$stdout" 2>"$stderr"

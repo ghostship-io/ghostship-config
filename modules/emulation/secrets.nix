@@ -89,7 +89,12 @@ let
     retroarch_cfg="${cfg.configRoot}/retroarch/retroachievements.cfg"
     status_json="${cfg.configRoot}/retroachievements/status.json"
     [ -r "$secret_env" ] || {
+      install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$retroarch_cfg")"
       install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$status_json")"
+      printf 'cheevos_enable = "false"\n' >"$retroarch_cfg.tmp"
+      chown ${cfg.user}:${cfg.group} "$retroarch_cfg.tmp"
+      chmod 0640 "$retroarch_cfg.tmp"
+      mv "$retroarch_cfg.tmp" "$retroarch_cfg"
       jq -n --arg checked_at "$(date -u +%FT%TZ)" '{checked_at:$checked_at, retroarch:"missing-secret-projection", standalone:"manual-login-required"}' >"$status_json.tmp"
       chown ${cfg.user}:${cfg.group} "$status_json.tmp"
       chmod 0644 "$status_json.tmp"
@@ -129,17 +134,32 @@ let
         return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
     retroarch_path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix="retroachievements.", dir=str(retroarch_path.parent))
+    output = [f"cheevos_enable = {retroarch_quote('true' if configured else 'false')}"]
+    if configured:
+        output.extend([
+            f"cheevos_hardcore_mode_enable = {retroarch_quote('false')}",
+            f"cheevos_verbose_enable = {retroarch_quote('true')}",
+            f"cheevos_start_active = {retroarch_quote('true')}",
+            f"cheevos_auto_screenshot = {retroarch_quote('true')}",
+            f"cheevos_badges_enable = {retroarch_quote('true')}",
+            f"cheevos_challenge_indicators = {retroarch_quote('true')}",
+            f"cheevos_richpresence_enable = {retroarch_quote('true')}",
+            f"cheevos_visibility_account = {retroarch_quote('true')}",
+            f"cheevos_visibility_unlock = {retroarch_quote('true')}",
+            f"cheevos_visibility_mastery = {retroarch_quote('true')}",
+            f"cheevos_visibility_lboard_start = {retroarch_quote('true')}",
+            f"cheevos_visibility_lboard_submit = {retroarch_quote('true')}",
+            f"cheevos_visibility_lboard_trackers = {retroarch_quote('false')}",
+            f"cheevos_unlock_sound_enable = {retroarch_quote('true')}",
+            f"cheevos_test_unofficial = {retroarch_quote('false')}",
+            f"cheevos_username = {retroarch_quote(user)}",
+            f"cheevos_password = {retroarch_quote(password)}",
+        ])
+
+    fd, tmp = tempfile.mkstemp(prefix="retroarch.", dir=str(retroarch_path.parent))
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        if configured:
-            handle.write('cheevos_enable = "true"\n')
-            handle.write('cheevos_hardcore_mode_enable = "false"\n')
-            handle.write('cheevos_verbose_enable = "true"\n')
-            handle.write('cheevos_auto_screenshot = "true"\n')
-            handle.write(f"cheevos_username = {retroarch_quote(user)}\n")
-            handle.write(f"cheevos_password = {retroarch_quote(password)}\n")
-        else:
-            handle.write('cheevos_enable = "false"\n')
+        handle.write("\n".join(output))
+        handle.write("\n")
     os.chmod(tmp, 0o640)
     Path(tmp).replace(retroarch_path)
 

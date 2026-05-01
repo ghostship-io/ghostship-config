@@ -86,17 +86,26 @@ let
     BTN_X = 307
     BTN_Y = 308
     BTN_SELECT = 314
+    BTN_START = 315
+    DOUBLE_PRESS_SECONDS = 0.9
     FORCE_KILL_SECONDS = 5.0
     YDOTOOL = "${lib.getExe pkgs.ydotool}"
 
     KEY_COMMANDS = {
-        "f2": [YDOTOOL, "key", "60:1", "60:0"],
-        "f12": [YDOTOOL, "key", "88:1", "88:0"],
-        "grave": [YDOTOOL, "key", "41:1", "41:0"],
-        "ctrl-p": [YDOTOOL, "key", "29:1", "25:1", "25:0", "29:0"],
+        "f2": [YDOTOOL, "key", "-d", "50", "60:1", "60:0"],
+        "f12": [YDOTOOL, "key", "-d", "50", "88:1", "88:0"],
+        "grave": [YDOTOOL, "key", "-d", "50", "41:1", "41:0"],
+        "ctrl-p": [YDOTOOL, "key", "-d", "50", "29:1", "25:1", "25:0", "29:0"],
+        "enter": [YDOTOOL, "key", "-d", "50", "28:1", "28:0"],
+        "ctrl-6": [YDOTOOL, "key", "-d", "50", "29:1", "7:1", "7:0", "29:0"],
+        "ctrl-9": [YDOTOOL, "key", "-d", "50", "29:1", "10:1", "10:0", "29:0"],
+        "ctrl-r": [YDOTOOL, "key", "-d", "50", "29:1", "19:1", "19:0", "29:0"],
     }
 
     PROFILES = {
+        "global": {
+            "bindings": {},
+        },
         "xemu": {
             "snapshot_tag": "esde-slot1",
             "bindings": {
@@ -108,6 +117,16 @@ let
                 (BTN_SELECT, BTN_Y): ("send-key", "grave", "Select + Y toggled Xemu debug monitor"),
                 (BTN_SELECT, BTN_ZR): ("notify-none", "xemu fast-forward is not available", "Select + ZR has no Xemu action"),
                 (BTN_CAPTURE,): ("send-key", "ctrl-p", "Square toggled Xemu pause"),
+            },
+        },
+        "pico8": {
+            "bindings": {
+                (BTN_SELECT, BTN_X): ("send-key", "enter", "Select + X opened PICO-8 pause menu"),
+                (BTN_SELECT, BTN_B): ("send-key", "ctrl-r", "Select + B reset PICO-8 cart"),
+                (BTN_SELECT, BTN_A): ("send-key", "ctrl-6", "Select + A saved PICO-8 screenshot"),
+                (BTN_SELECT, BTN_Y): ("send-key", "ctrl-9", "Select + Y saved PICO-8 GIF"),
+                (BTN_SELECT, BTN_ZR): ("notify-none", "pico8 fast-forward is not available", "Select + ZR has no PICO-8 action"),
+                (BTN_CAPTURE,): ("send-key", "enter", "Square opened PICO-8 pause menu"),
             },
         },
     }
@@ -144,7 +163,9 @@ let
 
     def supported_event(event_path):
         name = input_name(event_path).lower()
-        return "pro controller" in name and "imu" not in name
+        if "imu" in name:
+            return False
+        return "pro controller" in name or "8bitdo" in name or "ultimate 2c" in name
 
     def open_events():
         fds = {}
@@ -276,8 +297,19 @@ let
             raise AssertionError(f"unexpected Select + R action: {action}")
         if resolve_binding("xemu", {BTN_X}, BTN_X) is not None:
             raise AssertionError("Select-less X must not resolve to an action")
-        if key_command("f2") != [YDOTOOL, "key", "60:1", "60:0"]:
+        if resolve_binding("global", {BTN_SELECT, BTN_X}, BTN_X) is not None:
+            raise AssertionError("global profile must not resolve emulator actions")
+        if key_command("f2") != [YDOTOOL, "key", "-d", "50", "60:1", "60:0"]:
             raise AssertionError("F2 command changed unexpectedly")
+        action = resolve_binding("pico8", {BTN_SELECT, BTN_A}, BTN_A)
+        if action[:2] != ("send-key", "ctrl-6"):
+            raise AssertionError(f"unexpected PICO-8 screenshot action: {action}")
+        action = resolve_binding("pico8", {BTN_SELECT, BTN_B}, BTN_B)
+        if action[:2] != ("send-key", "ctrl-r"):
+            raise AssertionError(f"unexpected PICO-8 reset action: {action}")
+        action = resolve_binding("pico8", {BTN_CAPTURE}, BTN_CAPTURE)
+        if action[:2] != ("send-key", "enter"):
+            raise AssertionError(f"unexpected PICO-8 Square action: {action}")
 
         socket_path = None
         received = []
@@ -357,6 +389,7 @@ let
             return 0
 
         pressed = {path: set() for path in fds}
+        last_select_start = {path: 0.0 for path in fds}
         log(args.log, f"started {args.profile} hotkey broker on {len(fds)} controller(s)", system=args.system, emulator=args.emulator)
 
         while process_alive(args.pid):
@@ -377,10 +410,25 @@ let
                     _sec, _usec, ev_type, code, value = EVENT.unpack(data[offset : offset + EVENT.size])
                     if ev_type != EV_KEY:
                         continue
+                    if value == 2:
+                        continue
                     if value:
                         pressed[path].add(code)
                     else:
                         pressed[path].discard(code)
+                        continue
+                    if code == BTN_START and BTN_SELECT in pressed[path]:
+                        now = time.monotonic()
+                        if now - last_select_start[path] <= DOUBLE_PRESS_SECONDS:
+                            terminate_process_group(
+                                args.pid,
+                                args.log,
+                                "Select + Start double-press",
+                                system=args.system,
+                                emulator=args.emulator,
+                            )
+                            return 0
+                        last_select_start[path] = now
                         continue
                     action = resolve_binding(args.profile, pressed[path], code)
                     if action is None:
@@ -1027,9 +1075,34 @@ EOF
       esac
     }
 
+    prepare_pico8_runtime() {
+      pico8_home="${cfg.configRoot}/emulators/pico8"
+      pico8_root="${cfg.romRoot}/Fantasy - PICO-8 (2015)"
+      pico8_cdata="${cfg.dataRoot}/saves/pico8"
+      pico8_desktop="${cfg.dataRoot}/screenshots/pico8"
+      mkdir -p "$pico8_home" "$pico8_root" "$pico8_cdata" "$pico8_desktop"
+      ${pkgs.gnused}/bin/sed 's/^    //' >"$pico8_home/config.txt" <<EOF
+    // Managed by Nix/run-emulator before each PICO-8 launch.
+    root_path $pico8_root
+    cdata_path $pico8_cdata
+    desktop_path $pico8_desktop
+    joystick_index 0
+    button_keys 0 0 0 0 0 0 0 0 0 0 0 0
+    gif_len 8
+    screenshot_scale 3
+    gif_scale 3
+EOF
+      if [ -r "${cfg.configRoot}/controllers/gamecontrollerdb.txt" ]; then
+        cp -f "${cfg.configRoot}/controllers/gamecontrollerdb.txt" "$pico8_home/sdl_controllers.txt"
+      elif [ ! -e "$pico8_home/sdl_controllers.txt" ]; then
+        : >"$pico8_home/sdl_controllers.txt"
+      fi
+      log_event "runtime" "prepared PICO-8 home config at $pico8_home"
+    }
+
     cmd=()
     run_cwd=""
-    hotkey_profile=""
+    hotkey_profile="global"
     hotkey_snapshot_tag=""
     hotkey_hmp_socket=""
     hotkey_runtime_dir=""
@@ -1082,48 +1155,12 @@ PY
           echo "Missing RetroArch core for $emulator_id" >&2
           exit 66
         fi
-        profile="${cfg.configRoot}/retroarch/profiles/current.cfg"
-        profile_override="''${EMULATION_RETROARCH_PROFILE:-}"
-        if [ -n "$profile_override" ] && [ "$profile_override" != "default" ]; then
-          case "$profile_override" in *.cfg) ;; *) profile_override="$profile_override.cfg" ;; esac
-          if [ ! -r "${cfg.configRoot}/retroarch/profiles/$profile_override" ]; then
-            log_event "error" "unknown RetroArch profile $profile_override"
-            echo "Unknown RetroArch profile: $profile_override" >&2
-            exit 64
-          fi
-          profile="${cfg.configRoot}/retroarch/profiles/$profile_override"
-          profile_name="$profile_override"
-        else
-          if [ ! -r "$profile" ]; then
-            profile="${cfg.configRoot}/retroarch/profiles/${cfg.visuals.defaultProfile}.cfg"
-          fi
-          profile_name="$(readlink "$profile" 2>/dev/null || basename "$profile")"
-          if [ "$profile_name" = "${cfg.visuals.defaultProfile}.cfg" ] && [ -r "${cfg.configRoot}/retroarch/shader-policy.json" ]; then
-            system_profile="$(jq -r --arg system "$system_id" '.systemDefaults[$system] // empty' "${cfg.configRoot}/retroarch/shader-policy.json")"
-            if [ -n "$system_profile" ] && [ -r "${cfg.configRoot}/retroarch/profiles/$system_profile.cfg" ]; then
-              profile="${cfg.configRoot}/retroarch/profiles/$system_profile.cfg"
-              profile_name="$system_profile.cfg"
-            fi
-          fi
-        fi
-        shader_status="${cfg.configRoot}/retroarch/shader-status.json"
-        if [ -r "$shader_status" ]; then
-          case "$profile_name" in
-            nnedi3*) jq -e '.nnedi3 == true' "$shader_status" >/dev/null 2>&1 || profile="${cfg.configRoot}/retroarch/profiles/sharp-bilinear-prescale.cfg" ;;
-            sharp*|pixel-aa-fast.cfg|scalefx-aa-fast.cfg|xbrz-freescale.cfg) jq -e '.sharp == true' "$shader_status" >/dev/null 2>&1 || profile="${cfg.configRoot}/retroarch/profiles/no-shader.cfg" ;;
-            megabezel*) jq -e '.megabezel == true' "$shader_status" >/dev/null 2>&1 || profile="${cfg.configRoot}/retroarch/profiles/sharp-bilinear-prescale.cfg" ;;
-          esac
-        fi
-        system_override="${cfg.configRoot}/retroarch/system-overrides/$system_id.cfg"
-        append_config="$profile"
-        if [ -r "$system_override" ]; then
-          append_config="$append_config|$system_override"
-        fi
+        cmd=(retroarch --config "${cfg.configRoot}/retroarch/retroarch.cfg")
         retroachievements_config="${cfg.configRoot}/retroarch/retroachievements.cfg"
         if [ -r "$retroachievements_config" ]; then
-          append_config="$append_config|$retroachievements_config"
+          cmd+=(--appendconfig "$retroachievements_config")
         fi
-        cmd=(retroarch --config "${cfg.configRoot}/retroarch/retroarch.cfg" --appendconfig "$append_config" -L "$core_path" "$rom_path")
+        cmd+=(-L "$core_path" "$rom_path")
         ;;
       dolphin) cmd=(dolphin-emu -b -e "$rom_path") ;;
       cemu) cmd=(cemu -f -g "$rom_path") ;;
@@ -1187,7 +1224,23 @@ PY
           *) cmd=(gzdoom "''${gzdoom_common_args[@]}" -iwad "$rom_path") ;;
         esac
         ;;
-      pico8) cmd=(pico8 -run "$rom_path") ;;
+      pico8|pico8-hotkeys)
+        prepare_pico8_runtime
+        if [ "$emulator_id" = "pico8-hotkeys" ]; then
+          hotkey_profile="pico8"
+        fi
+        cmd=(
+          pico8
+          -home "${cfg.configRoot}/emulators/pico8"
+          -root_path "${cfg.romRoot}/Fantasy - PICO-8 (2015)"
+          -desktop "${cfg.dataRoot}/screenshots/pico8"
+          -screenshot_scale 3
+          -gif_scale 3
+          -gif_len 8
+          -joystick 0
+          -run "$rom_path"
+        )
+        ;;
       teknoparrot) cmd=(teknoparrot-free "$rom_path") ;;
       *)
         log_event "error" "unknown emulator"
@@ -1220,7 +1273,7 @@ PY
       else
         mapfile -t gamescope_args < <(jq -r '.gamescope_args[]' <<<"$profile_json")
       fi
-      if [ "$emulator_id" = "pico8" ]; then
+      if [ "$emulator_id" = "pico8" ] || [ "$emulator_id" = "pico8-hotkeys" ]; then
         gamescope_args+=("--xwayland-count" "1")
       fi
       run_cmd=(gamescope "''${gamescope_args[@]}" -- "''${run_cmd[@]}")
@@ -1457,9 +1510,9 @@ PY
     SkipIPL = True
     GFXBackend = Vulkan
     SIDevice0 = 6
-    SIDevice1 = 0
-    SIDevice2 = 0
-    SIDevice3 = 0
+    SIDevice1 = 6
+    SIDevice2 = 6
+    SIDevice3 = 6
     WiimoteContinuousScanning = True
     WiimoteEnableSpeaker = False
     [Display]
@@ -1769,13 +1822,15 @@ PY
       "standalone_defaults": {
         "azahar": "use emulator internal resolution scaling",
         "cemu": "use Vulkan and graphics packs/internal resolution",
-        "dolphin": "use standalone internal resolution; RA profile keeps dual core disabled",
+        "dolphin": "use standalone internal resolution",
         "pcsx2": "use Vulkan hardware renderer and internal resolution",
         "ppsspp": "use Vulkan and PPSSPP rendering resolution",
         "ryubing": "use Vulkan, docked mode, 16x AF, and emulator-native scaling/filtering",
         "supermodel": "launch with -res=<output_width>,<output_height>",
         "xemu": "use xemu internal resolution scale",
-        "xemu-hotkeys": "use xemu internal resolution scale"
+        "xemu-hotkeys": "use xemu internal resolution scale",
+        "pico8": "use PICO-8 native 4:3 output through Gamescope",
+        "pico8-hotkeys": "use PICO-8 native 4:3 output through Gamescope"
       }
     }
 EOF
@@ -1786,11 +1841,19 @@ EOF
       "primary_controller": "Nintendo Switch Pro Controller",
       "vendor_product": "057e:2009",
       "button_policy": "physical_switch_labels",
+      "shared_layout": {
+        "face_south": "physical B / lower face / primary or confirm where applicable",
+        "face_east": "physical A / right face / secondary or cancel where applicable",
+        "face_north": "physical X / upper face",
+        "face_west": "physical Y / left face",
+        "digital_movement": "RetroArch no longer uses analog-to-D-pad config layers; D-pad stays on D-pad, analog-capable systems keep analog sticks as analog input, and standalone SDL emulators keep their native mappings",
+        "player_slots": "map every stable declarative player slot exposed by the emulator"
+      },
       "global_sdl_hints": {
         "SDL_GAMECONTROLLER_USE_BUTTON_LABELS": "1"
       },
       "hotkey_policy": {
-        "scheme": "Per-emulator hotkeys; standalone hotkey brokers are opt-in per emulator",
+        "scheme": "Per-emulator hotkeys with a shared per-launch Select+Start double-press exit broker; expanded standalone hotkey brokers are opt-in per emulator",
         "retroarch_menu": "RetroArch only: Select/- plus X/North opens the quick menu",
         "console_home": "Square/Capture opens emulated console Home only where a stable native binding is generated; currently Dolphin Wii Remote Home",
         "modifier": "Select/-",
@@ -1800,24 +1863,27 @@ EOF
         "retroarch_fps": "RetroArch only: Select/- plus Y/West",
         "retroarch_screenshot": "RetroArch only: Select/- plus A/East",
         "retroarch_fast_forward": "RetroArch only: Select/- plus ZR",
-        "normal_exit": "No shared standalone exit chord is installed by default",
-        "xemu_hotkeys": "Opt-in xemu-hotkeys only: Select/- plus X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, Square/Capture toggles pause, and Select/- plus ZR is unbound",
+        "normal_exit": "Select/- plus Start/+ twice exits the active run-emulator process group",
+        "xemu_hotkeys": "Default Xbox launch: Select/- plus X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, Square/Capture toggles pause, and Select/- plus ZR is unbound",
+        "pico8_hotkeys": "Default PICO-8 launch: Select/- plus X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, Square/Capture opens pause/menu, and Select/- plus ZR is unbound",
         "gzdoom": "GZDoom only: Start/+ opens the menu, Select/- toggles the automap, and Square/Capture is intentionally unbound",
-        "pico8": "PICO-8 only: Start/+ opens pause/menu"
+        "pico8": "fallback plain PICO-8 launch: Start/+ opens pause/menu; PICO-8 uses an explicit managed -home config directory"
       },
       "managed_defaults": {
-        "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
-        "dolphin": "GameCube and Wii profiles map physical A/B/X/Y to matching labels and use SDL slots 0-3; Wii Remote Home uses Square/Capture where Dolphin exposes it",
-        "ppsspp": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
-        "pcsx2": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
-        "azahar": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
-        "cemu": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
-        "xemu": "plain Xemu launch with native Select+Start quick actions only; use xemu-hotkeys for the opt-in standalone broker",
-        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; no shared raw-input hotkey broker is started",
-        "supermodel": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
-        "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; no shared raw-input hotkey broker is started",
+        "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
+        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
+        "ppsspp": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
+        "pcsx2": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
+        "azahar": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
+        "cemu": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
+        "xemu": "fallback plain Xemu launch with native Select+Start quick actions and per-launch Select+Start twice exit",
+        "xemu-hotkeys": "default Xbox launch with the standalone broker for quick actions, save/load, reset, screenshots, debug monitor, and pause",
+        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Select+Start twice exits through the per-launch broker",
+        "supermodel": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
+        "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; Select+Start twice exits through the per-launch broker",
         "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1/R1 are User 1/User 2, L2/R2 are alt fire/fire, Select/- toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
-        "pico8": "run-emulator launches carts with PICO-8; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu"
+        "pico8": "fallback plain PICO-8 launch using an explicit managed -home directory; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu",
+        "pico8-hotkeys": "default PICO-8 launch with the standalone broker for screenshot, GIF save, cart reset, and pause/menu chords"
       },
       "known_gaps": {
         "motion": "hid_nintendo exposes a separate IMU device; emulator support varies",

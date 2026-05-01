@@ -262,7 +262,13 @@ changelog.
   of a login prompt. Keep Boomer's emulator defaults RetroAchievements-aligned where
   practical: Beetle SuperGrafx for PCE/PCE CD, FCEUmm for NES/FDS, Azahar for
   3DS, standalone PCSX2 for PS2, standalone PPSSPP for PSP, and no Gamescope
-  FSR; use emulator-native scaling plus NNEDI3/sharp RetroArch shaders. Keep
+  FSR; use emulator-native scaling plus the managed RetroArch `global.slangp`
+  shader preset. RetroArch should use the managed base `retroarch.cfg`, generated
+  `retroachievements.cfg` append config for credentials, XDG `global.slangp`,
+  and XDG per-core `.opt` files; do not add system override or per-core `.cfg`
+  layers unless that contract is explicitly changed. Keep
+  N64 on RetroArch Mupen64Plus-Next with GLideN64 3x native resolution and the
+  global shader preset; ParaLLEl N64 stays installed only as a fallback core.
   perf tests in `modules/emulation/perf.nix`, launch through `run-emulator`,
   and write recommendations instead of auto-mutating runtime profiles. Use the
   repo-pinned official Ryubing Canary package from
@@ -281,7 +287,12 @@ changelog.
   `/mnt/z/Library/ROMs/roms`; Doom uses `Fantasy - GZDoom (2005)` with
   Batocera-style `.gzdoom` launchers at the ROM-folder top level and assets
   underneath that folder. PICO-8 needs an explicit Gamescope Xwayland server on
-  Boomer because its SDL path uses X11. Boomer's managed ES-DE UI defaults are
+  Boomer because its SDL path uses X11; keep `pico8-hotkeys` as the default and
+  plain `pico8` as the fallback alternate with the managed PICO-8 `-home` path.
+  Every `run-emulator` launch should keep the
+  lightweight per-process Select+Start double-press exit broker; expanded
+  standalone hotkeys stay opt-in per-emulator launch modes. Boomer's managed
+  ES-DE UI defaults are
   manufacturer/type/year systems sorting, visible clock, Switch Pro
   controller prompts, all-controller ES-DE menu input, Hawaii standard time, and
   a visible clock using ES-DE-supported `%H:%M` formatting; true 12-hour clock
@@ -293,8 +304,7 @@ changelog.
   Select+X is the quick-menu chord, Square/Capture is native console Home only
   where explicitly configured and otherwise no-op, Select/Minus is the hotkey
   modifier, Star/Home is a controller-local turbo button when exposed, and
-  standalone raw hotkey brokers must be opt-in per-emulator launch modes, not
-  global watchers.
+  expanded standalone raw hotkey brokers must be opt-in per-emulator launch modes.
   Controller Maps should stay text-only with a compact two-column button map
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
   Switch A/B, and launch GZDoom with the managed Boomer controls cfg. Reset
