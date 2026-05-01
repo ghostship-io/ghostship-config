@@ -11,8 +11,10 @@ changelog.
   repo-specific guidance. Keep it concise, imperative, and high-signal.
 - The shared workflow preferences require verified work to be committed before
   task completion.
-- Do feature work in a worktree. When the feature is ready to deploy, merge
-  current `main` into the worktree and reconcile it there, then merge the
+- Agents must do feature and fix work in their assigned git worktree, not in
+  local `main`. When the worktree is ready to commit and push for a host to
+  consume, use the `merge-worktree` skill: inspect the worktree, merge current
+  local `main` into the worktree and reconcile it there, then finish the
   worktree back into local `main`, push `main`, and deploy from the target
   machine's `main` checkout.
 - If a change needs a plan, implement it in a git worktree.
