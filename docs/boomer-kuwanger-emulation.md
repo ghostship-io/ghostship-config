@@ -265,6 +265,16 @@ use Wine-visible game paths, for example a `Z:\srv\...` path generated with
 `winepath -w`. The runtime does not provide proprietary game assets, premium
 unlocks, dongle bypasses, or patch packs.
 
+Current After Burner Climax status: the launcher now reaches TeknoParrotUi's
+game-running handoff with the official `abcELF2.xml` profile id, but the
+remaining live blocker is `ElfLdr2/BudgieLoader.exe` exiting before it starts
+the native `abc` process. Wine staging 11.1 reproduced that as a loader stack
+crash; GE-Proton 10-33 inside `steam-run`, with Xalia disabled and 32-bit plus
+64-bit FreeType exposed, avoided the stack crash but still exited before
+spawning `abc`. The operator-managed live ROM folder was removed from Boomer
+while this work is paused, so ES-DE should not list an After Burner Climax
+TeknoParrot game until ROM content is restored.
+
 ## Display And Aspect Scaling
 
 `display-profile` discovers connected DRM outputs first, prefers the RX 6650M,

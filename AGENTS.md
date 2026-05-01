@@ -311,7 +311,11 @@ changelog.
   `TeknoParrotUi.exe --profile`, not by direct native ELF execution; test on
   Boomer's active kiosk `DISPLAY=:0`, not only via SSH. TeknoParrotUi requires
   the `--profile` argument to name an existing official `GameProfiles/*.xml`
-  file even when the launch profile itself is copied from ES-DE.
+  file even when the launch profile itself is copied from ES-DE. The live
+  After Burner Climax ROM folder was removed while TeknoParrot debugging is
+  paused; the last blocker was `ElfLdr2/BudgieLoader.exe` exiting before
+  spawning `abc` even though GE-Proton with Xalia disabled avoided Wine's
+  loader stack crash.
   Boomer's probed kernel Switch Pro raw map is documented in
   `docs/boomer-kuwanger-emulation.md`.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
