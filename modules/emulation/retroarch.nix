@@ -187,11 +187,11 @@ let
     input_driver = "udev"
     input_vendor_id = "11720"
     input_product_id = "12555"
-    input_b_btn = "0"
+    input_b_btn = "1"
     input_y_btn = "3"
     input_select_btn = "8"
     input_start_btn = "9"
-    input_a_btn = "1"
+    input_a_btn = "0"
     input_x_btn = "2"
     input_l_btn = "4"
     input_r_btn = "5"
@@ -216,7 +216,7 @@ let
     input_driver = "udev"
     input_vendor_id = "1406"
     input_product_id = "8201"
-    input_b_btn = "0"
+    input_b_btn = "1"
     input_y_btn = "3"
     input_select_btn = "9"
     input_start_btn = "10"
@@ -224,7 +224,7 @@ let
     input_down_btn = "h0down"
     input_left_btn = "h0left"
     input_right_btn = "h0right"
-    input_a_btn = "1"
+    input_a_btn = "0"
     input_x_btn = "2"
     input_l_btn = "5"
     input_r_btn = "6"
@@ -260,8 +260,8 @@ let
 
   systemShaderDefaults = {
     fbneo = "nnedi3-clean";
-    pcengine = "nnedi3-clean";
-    pcenginecd = "nnedi3-clean";
+    pcengine = "sharp-bilinear-prescale";
+    pcenginecd = "sharp-bilinear-prescale";
     gb = "nnedi3-fast";
     gbc = "nnedi3-fast";
     gba = "nnedi3-clean";
