@@ -692,7 +692,8 @@ PY
               esac
               if [ -e "$launcher_target" ]; then
                 launcher_cwd="$(dirname "$launcher_target")"
-                launcher_args[0]="$(basename "$launcher_target")"
+                launcher_args[0]="$launcher_target"
+                export LD_LIBRARY_PATH="$launcher_cwd''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
                 cd "$launcher_cwd"
                 exec "''${launcher_args[@]}"
               fi

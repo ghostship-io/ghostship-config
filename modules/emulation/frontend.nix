@@ -36,6 +36,23 @@ let
     </systemList>
   '';
 
+  mkSystemSortingXml = index: system: ''
+    <system>
+      <name>${emu.xmlEscape system.id}</name>
+      <systemsortname>${toString (1000 + index)}</systemsortname>
+    </system>'';
+
+  esSystemsSortingXml = pkgs.writeText "emulation-es-systems-sorting.xml" ''
+    <?xml version="1.0"?>
+    <systemList>
+    ${lib.concatStringsSep "\n" (lib.imap0 mkSystemSortingXml emu.allSystems)}
+      <system>
+        <name>tools</name>
+        <systemsortname>9999</systemsortname>
+      </system>
+    </systemList>
+  '';
+
   esFindRulesXml = pkgs.writeText "emulation-es-find-rules.xml" ''
     <?xml version="1.0"?>
     <ruleList>
@@ -63,7 +80,7 @@ let
       <string name="Theme" value="art-book-next-es-de" />
       <string name="ThemeSet" value="art-book-next-es-de" />
       <string name="ThemeAspectRatio" value="automatic" />
-      <string name="SystemsSorting" value="manufacturer_hwtype_year" />
+      <string name="SystemsSorting" value="systemsortname" />
       <string name="InputControllerType" value="switchpro" />
       <string name="Scraper" value="screenscraper" />
       <string name="ScraperRegion" value="na" />
@@ -130,6 +147,7 @@ let
       "${cfg.esde.appDataDir}/scripts"
 
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${esSystemsXml} "${cfg.esde.appDataDir}/custom_systems/es_systems.xml"
+    install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${esSystemsSortingXml} "${cfg.esde.appDataDir}/custom_systems/es_systems_sorting.xml"
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${esFindRulesXml} "${cfg.esde.appDataDir}/custom_systems/es_find_rules.xml"
     if [ ! -e "${cfg.esde.appDataDir}/settings/es_settings.xml" ]; then
       install -D -m 0640 -o ${cfg.user} -g ${cfg.group} ${esSettingsXml} "${cfg.esde.appDataDir}/settings/es_settings.xml"
@@ -174,7 +192,7 @@ let
     set_string("Theme", "art-book-next-es-de")
     set_string("ThemeSet", "art-book-next-es-de")
     set_string("ThemeAspectRatio", "automatic")
-    set_string("SystemsSorting", "manufacturer_hwtype_year")
+    set_string("SystemsSorting", "systemsortname")
     set_string("InputControllerType", "switchpro")
     set_bool("DisplayClock", True)
     set_bool("InputOnlyFirstController", False)
