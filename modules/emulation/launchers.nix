@@ -93,6 +93,9 @@ let
 
     KEY_COMMANDS = {
         "f2": [YDOTOOL, "key", "-d", "50", "60:1", "60:0"],
+        "f4": [YDOTOOL, "key", "-d", "50", "62:1", "62:0"],
+        "f5": [YDOTOOL, "key", "-d", "50", "63:1", "63:0"],
+        "f8": [YDOTOOL, "key", "-d", "50", "66:1", "66:0"],
         "f12": [YDOTOOL, "key", "-d", "50", "88:1", "88:0"],
         "grave": [YDOTOOL, "key", "-d", "50", "41:1", "41:0"],
         "ctrl-p": [YDOTOOL, "key", "-d", "50", "29:1", "25:1", "25:0", "29:0"],
@@ -127,6 +130,13 @@ let
                 (BTN_SELECT, BTN_Y): ("send-key", "ctrl-9", "Select + Y saved PICO-8 GIF"),
                 (BTN_SELECT, BTN_ZR): ("notify-none", "pico8 fast-forward is not available", "Select + ZR has no PICO-8 action"),
                 (BTN_CAPTURE,): ("send-key", "enter", "Square opened PICO-8 pause menu"),
+            },
+        },
+        "ryubing": {
+            "bindings": {
+                (BTN_SELECT, BTN_X): ("send-key", "f4", "Select + X toggled Ryubing UI"),
+                (BTN_SELECT, BTN_A): ("send-key", "f8", "Select + A triggered Ryubing screenshot"),
+                (BTN_CAPTURE,): ("send-key", "f5", "Square toggled Ryubing pause"),
             },
         },
     }
@@ -310,6 +320,15 @@ let
         action = resolve_binding("pico8", {BTN_CAPTURE}, BTN_CAPTURE)
         if action[:2] != ("send-key", "enter"):
             raise AssertionError(f"unexpected PICO-8 Square action: {action}")
+        action = resolve_binding("ryubing", {BTN_SELECT, BTN_X}, BTN_X)
+        if action[:2] != ("send-key", "f4"):
+            raise AssertionError(f"unexpected Ryubing Select + X action: {action}")
+        action = resolve_binding("ryubing", {BTN_SELECT, BTN_A}, BTN_A)
+        if action[:2] != ("send-key", "f8"):
+            raise AssertionError(f"unexpected Ryubing Select + A action: {action}")
+        action = resolve_binding("ryubing", {BTN_CAPTURE}, BTN_CAPTURE)
+        if action[:2] != ("send-key", "f5"):
+            raise AssertionError(f"unexpected Ryubing Square action: {action}")
 
         socket_path = None
         received = []
@@ -1047,6 +1066,154 @@ EOF
       ryujinx_system_dir="$ryujinx_config_dir/system"
       ryujinx_sdcard_dir="$ryujinx_config_dir/sdcard"
       mkdir -p "$ryujinx_system_dir" "$ryujinx_sdcard_dir"
+      ryujinx_config_file="$ryujinx_config_dir/Config.json"
+
+      ${pkgs.python3}/bin/python3 - "$ryujinx_config_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if path.exists():
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        raise SystemExit(f"Refusing to rewrite invalid Ryubing config: {path}")
+else:
+    config = {
+        "Version": 47,
+        "EnableFileLog": True,
+        "BackendThreading": "Auto",
+        "ResScale": 1,
+        "ResScaleCustom": 1.0,
+        "MaxAnisotropy": -1.0,
+        "AspectRatio": "Fixed16x9",
+        "AntiAliasing": "None",
+        "ScalingFilter": "Bilinear",
+        "ScalingFilterLevel": 80,
+        "GraphicsShadersDumpPath": "",
+        "LoggingEnableDebug": False,
+        "LoggingEnableStub": False,
+        "LoggingEnableInfo": False,
+        "LoggingEnableWarn": True,
+        "LoggingEnableError": True,
+        "LoggingEnableTrace": False,
+        "LoggingEnableGuest": False,
+        "LoggingEnableFsAccessLog": False,
+        "LoggingFilteredClasses": [],
+        "LoggingGraphicsDebugLevel": "None",
+        "SystemLanguage": "AmericanEnglish",
+        "SystemRegion": "USA",
+        "SystemTimeZone": "UTC",
+        "SystemTimeOffset": 0,
+        "DockedMode": True,
+        "EnableDiscordIntegration": False,
+        "CheckUpdatesOnStart": False,
+        "ShowConfirmExit": False,
+        "HideCursor": "OnIdle",
+        "EnableVsync": True,
+        "EnableShaderCache": True,
+        "EnableTextureRecompression": False,
+        "EnableMacroHLE": True,
+        "EnablePtc": True,
+        "EnableInternetAccess": False,
+        "EnableFsIntegrityChecks": True,
+        "FsGlobalAccessLogMode": 0,
+        "AudioBackend": "SDL2",
+        "AudioVolume": 1.0,
+        "MemoryManagerMode": "HostMappedUnsafe",
+        "ExpandRam": False,
+        "IgnoreMissingServices": False,
+        "GuiColumns": {
+            "FavColumn": True,
+            "IconColumn": True,
+            "AppColumn": True,
+            "DevColumn": True,
+            "VersionColumn": True,
+            "TimePlayedColumn": True,
+            "LastPlayedColumn": True,
+            "FileExtColumn": True,
+            "FileSizeColumn": True,
+            "PathColumn": True,
+        },
+        "ColumnSort": {"SortColumnId": 0, "SortAscending": False},
+        "GameDirs": [],
+        "ShownFileTypes": {"NSP": True, "PFS0": True, "XCI": True, "NCA": True, "NRO": True, "NSO": True},
+        "WindowStartup": {
+            "WindowSizeWidth": 1280,
+            "WindowSizeHeight": 720,
+            "WindowPositionX": 0,
+            "WindowPositionY": 0,
+            "WindowMaximized": False,
+        },
+        "LanguageCode": "en_US",
+        "EnableCustomTheme": True,
+        "CustomThemePath": "",
+        "BaseStyle": "Dark",
+        "GameListViewMode": 0,
+        "ShowNames": True,
+        "GridSize": 2,
+        "ApplicationSort": 0,
+        "IsAscendingOrder": True,
+        "StartFullscreen": True,
+        "ShowConsole": False,
+        "EnableKeyboard": False,
+        "EnableMouse": False,
+        "Hotkeys": {
+            "ToggleVsync": "F1",
+            "ToggleMute": "F2",
+            "Screenshot": "F8",
+            "ShowUi": "F4",
+            "Pause": "F5",
+            "ResScaleUp": "Unbound",
+            "ResScaleDown": "Unbound",
+            "VolumeUp": "Unbound",
+            "VolumeDown": "Unbound",
+        },
+        "KeyboardConfig": [],
+        "ControllerConfig": [],
+        "InputConfig": [],
+        "GraphicsBackend": "Vulkan",
+        "PreferredGpu": "",
+        "MultiplayerLanInterfaceId": "0",
+        "UseHypervisor": True,
+    }
+
+config.update(
+    {
+        "BackendThreading": "Auto",
+        "ResScale": 1,
+        "ResScaleCustom": 1.0,
+        "MaxAnisotropy": 16.0,
+        "AspectRatio": "Fixed16x9",
+        "AntiAliasing": "None",
+        "ScalingFilter": "Bilinear",
+        "ScalingFilterLevel": 80,
+        "DockedMode": True,
+        "CheckUpdatesOnStart": False,
+        "ShowConfirmExit": False,
+        "HideCursor": "OnIdle",
+        "EnableVsync": True,
+        "EnableShaderCache": True,
+        "EnableTextureRecompression": False,
+        "EnableMacroHLE": True,
+        "EnablePtc": True,
+        "AudioBackend": "SDL2",
+        "AudioVolume": 1.0,
+        "StartFullscreen": True,
+        "ShowConsole": False,
+        "EnableKeyboard": False,
+        "EnableMouse": False,
+        "GraphicsBackend": "Vulkan",
+    }
+)
+hotkeys = config.setdefault("Hotkeys", {})
+hotkeys.update({"ShowUi": "F4", "Screenshot": "F8", "Pause": "F5"})
+
+tmp = path.with_suffix(".json.tmp")
+tmp.write_text(json.dumps(config, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+tmp.replace(path)
+PY
 
       for key_name in prod.keys title.keys; do
         key_source="${cfg.biosRoot}/switch/$key_name"
@@ -1193,6 +1360,7 @@ PY
         ;;
       ryubing)
         prepare_ryubing_runtime
+        hotkey_profile="ryubing"
         cmd=(ryujinx "$rom_path")
         ;;
       azahar)
@@ -1866,6 +2034,7 @@ EOF
         "normal_exit": "Select/- plus Start/+ twice exits the active run-emulator process group",
         "xemu_hotkeys": "Default Xbox launch: Select/- plus X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, Square/Capture toggles pause, and Select/- plus ZR is unbound",
         "pico8_hotkeys": "Default PICO-8 launch: Select/- plus X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, Square/Capture opens pause/menu, and Select/- plus ZR is unbound",
+        "ryubing_hotkeys": "Default Switch launch: Select/- plus X sends F4 for Ryubing UI, Select/- plus A sends F8 for screenshot, Square/Capture sends F5 for pause, and Select/- plus Start/+ twice exits",
         "gzdoom": "GZDoom only: Start/+ opens the menu, Select/- toggles the automap, and Square/Capture is intentionally unbound",
         "pico8": "fallback plain PICO-8 launch: Start/+ opens pause/menu; PICO-8 uses an explicit managed -home config directory"
       },
@@ -1878,7 +2047,7 @@ EOF
         "cemu": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
         "xemu": "fallback plain Xemu launch with native Select+Start quick actions and per-launch Select+Start twice exit",
         "xemu-hotkeys": "default Xbox launch with the standalone broker for quick actions, save/load, reset, screenshots, debug monitor, and pause",
-        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Select+Start twice exits through the per-launch broker",
+        "ryubing": "inherits SDL Switch label hints from run-emulator, uses managed Vulkan/docked/fullscreen Ryubing settings, and maps Select+X to F4, Select+A to F8, Square/Capture to F5, and Select+Start twice to exit through the per-launch broker",
         "supermodel": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
         "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; Select+Start twice exits through the per-launch broker",
         "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1/R1 are User 1/User 2, L2/R2 are alt fire/fire, Select/- toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",

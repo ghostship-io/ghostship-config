@@ -112,6 +112,12 @@ symlink. Proprietary keys stay operator-managed under
 `/srv/emulation/bios/switch` and are exposed to Ryubing's runtime system
 directory at launch.
 
+`run-emulator` also converges Ryubing's `Config.json` before each Switch launch
+so Boomer uses Vulkan, docked mode, fullscreen launch, 16x anisotropic
+filtering, shader cache, SDL2 audio, and Ryubing's native scaling/filtering.
+The Switch hotkey broker maps Select+X to `F4` for Ryubing UI, Select+A to
+`F8` for screenshot, and Square/Capture to `F5` for pause.
+
 ## GZDoom
 
 The Doom system uses the source library folder `Fantasy - GZDoom (2005)` in

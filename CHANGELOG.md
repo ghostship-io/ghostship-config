@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer Switch Ryubing hotkeys**: Manage Ryubing's core runtime settings
+  before Switch launches, keep the Canary pin current, and add Switch hotkeys
+  for Select+X -> F4, Select+A -> F8, and Square/Capture -> F5 while preserving
+  Select+Start twice exit.
 - **Boomer hotkey and RetroAchievements regression fix**: Restore the
   per-launch Select+Start double-press exit broker, keep RetroArch hotkeys in
   the managed base config plus controller autoconfigs, add 8BitDo udev

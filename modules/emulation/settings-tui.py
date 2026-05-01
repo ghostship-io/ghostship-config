@@ -867,9 +867,16 @@ CONTROLLER_MAPS = [
                 "ZR": "ZR",
                 "Minus": "Minus",
                 "Plus": "Plus",
+                "Square": "Pause",
                 "Star": "Turbo",
             },
             [],
+            [
+                "UI: Select+X",
+                "Screenshot: Select+A",
+                "Pause: Square",
+                "Exit: Select + Start twice",
+            ],
         ),
     },
     {
@@ -2448,8 +2455,12 @@ def smoke_test(mode):
         assert any("Quick Menu*: Select+X" in line for line in pico8["detail"])
         assert any("Save GIF*: Select+Y" in line for line in pico8["detail"])
         assert any("Fast: None" in line for line in pico8["detail"])
+        switch = next(row for row in CONTROLLER_MAPS if row["label"] == "Switch")
+        assert any("UI: Select+X" in line for line in switch["detail"])
+        assert any("Screenshot: Select+A" in line for line in switch["detail"])
+        assert any("Pause: Square" in line for line in switch["detail"])
         for row in CONTROLLER_MAPS:
-            if row["label"] in {"Switch Pro Reference", "Wii Remote + Nunchuk", "GZDoom"}:
+            if row["label"] in {"Switch Pro Reference", "Wii Remote + Nunchuk", "Switch", "GZDoom"}:
                 continue
             assert any("Square -> None" in line for line in row["detail"])
         gzdoom = next(row for row in CONTROLLER_MAPS if row["label"] == "GZDoom")
