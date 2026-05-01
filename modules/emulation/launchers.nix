@@ -1493,8 +1493,8 @@ EOF
     bind rshoulder +user2
     bind pad_start menu_main
     bind pad_back togglemap
-    bind lthumb togglemap
-    bind rthumb centerview
+    bind lthumb +user3
+    bind rthumb +user4
     bind dpadleft weapprev
     bind dpadright weapnext
     bind dpadup invprev
