@@ -498,8 +498,8 @@ emulator process group to exit normally, then force-kills that process group
 after 5 seconds if it does not close. RetroArch maps Select/Minus hotkeys to
 save/load, reset, FPS, screenshot, and fast-forward actions, and D-pad-only
 RetroArch systems also accept left-stick D-pad input. The N64 RetroArch
-override remaps Mupen64Plus so physical Switch A sends N64 A and physical
-Switch B sends N64 B.
+override remaps Mupen64Plus so physical Switch A sends N64 A, physical Switch
+B sends N64 B, and physical Switch X/Y stay unbound.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices
