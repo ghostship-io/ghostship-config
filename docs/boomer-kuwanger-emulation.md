@@ -232,9 +232,10 @@ ES-DE lists `.teknoparrot` launcher files. Each launcher is a small text file
 whose first non-comment line is parsed as a raw argument string, matching the
 `.gzdoom` launcher style. If the first argument names a payload beside the
 launcher, `run-emulator` runs it from that payload directory through a
-32-bit Linux FHS compatibility runtime; otherwise the arguments are passed to
-TeknoParrotUi. Keep copied game payloads under hidden `.assets/` directories
-beside those launchers.
+32-bit Linux FHS compatibility runtime with the legacy loader, graphics
+libraries, libstdc++5, and a small `libsegaapi.so` audio shim; otherwise the
+arguments are passed to TeknoParrotUi. Keep copied game payloads under hidden
+`.assets/` directories beside those launchers.
 
 ## Display And Aspect Scaling
 

@@ -304,6 +304,9 @@ changelog.
   axis map must be seeded so
   Switch Pro axis 0/1 are strafe/forward, axis 2 is yaw, axis 3 is pitch with
   scale `0.25`, and unused axes are disabled.
+  After Burner Climax native TeknoParrot payloads need the repo-managed 32-bit
+  FHS runtime plus `libsegaapi.so` audio shim; test by launching on Boomer's
+  active kiosk `DISPLAY=:0`, not only via SSH.
   Boomer's probed kernel Switch Pro raw map is documented in
   `docs/boomer-kuwanger-emulation.md`; do not use it as the authoritative
   GZDoom binding source unless a fresh live GZDoom probe proves the named

@@ -75,6 +75,105 @@ let
     '';
   };
 
+  teknoparrotSegaApiShim = pkgs.pkgsi686Linux.stdenv.mkDerivation {
+    pname = "teknoparrot-segaapi-shim";
+    version = "1";
+    dontUnpack = true;
+    buildPhase = ''
+      runHook preBuild
+      cat >libsegaapi.c <<'EOF'
+      #include <stdint.h>
+      #include <stdlib.h>
+
+      typedef struct Buffer {
+        uint32_t magic;
+        void *user_data;
+        uint32_t status;
+        uint32_t position;
+      } Buffer;
+
+      static uintptr_t ok(void) { return 0; }
+      static Buffer *as_buffer(uintptr_t handle) {
+        Buffer *buffer = (Buffer *)handle;
+        if (!buffer || buffer->magic != 0x53454741u) return NULL;
+        return buffer;
+      }
+
+      uintptr_t SEGAAPI_Init() { return ok(); }
+      uintptr_t SEGAAPI_Exit() { return ok(); }
+      uintptr_t SEGAAPI_Reset() { return ok(); }
+      uintptr_t SEGAAPI_CreateBuffer() {
+        Buffer *buffer = (Buffer *)calloc(1, sizeof(Buffer));
+        if (!buffer) return 0;
+        buffer->magic = 0x53454741u;
+        return (uintptr_t)buffer;
+      }
+      uintptr_t SEGAAPI_DestroyBuffer(uintptr_t handle) {
+        Buffer *buffer = as_buffer(handle);
+        if (buffer) free(buffer);
+        return ok();
+      }
+      uintptr_t SEGAAPI_Play(uintptr_t handle) {
+        Buffer *buffer = as_buffer(handle);
+        if (buffer) buffer->status = 1;
+        return ok();
+      }
+      uintptr_t SEGAAPI_Stop(uintptr_t handle) {
+        Buffer *buffer = as_buffer(handle);
+        if (buffer) buffer->status = 0;
+        return ok();
+      }
+      uintptr_t SEGAAPI_Pause(uintptr_t handle) {
+        Buffer *buffer = as_buffer(handle);
+        if (buffer) buffer->status = 2;
+        return ok();
+      }
+      uintptr_t SEGAAPI_GetPlaybackStatus(uintptr_t handle) {
+        Buffer *buffer = as_buffer(handle);
+        return buffer ? buffer->status : 0;
+      }
+      uintptr_t SEGAAPI_SetPlaybackPosition(uintptr_t handle, uintptr_t position) {
+        Buffer *buffer = as_buffer(handle);
+        if (buffer) buffer->position = position;
+        return ok();
+      }
+      uintptr_t SEGAAPI_GetPlaybackPosition(uintptr_t handle) {
+        Buffer *buffer = as_buffer(handle);
+        return buffer ? buffer->position : 0;
+      }
+      uintptr_t SEGAAPI_SetUserData(uintptr_t handle, void *user_data) {
+        Buffer *buffer = as_buffer(handle);
+        if (buffer) buffer->user_data = user_data;
+        return ok();
+      }
+      void *SEGAAPI_GetUserData(uintptr_t handle) {
+        Buffer *buffer = as_buffer(handle);
+        return buffer ? buffer->user_data : NULL;
+      }
+      uintptr_t SEGAAPI_UpdateBuffer() { return ok(); }
+      uintptr_t SEGAAPI_SetSampleRate() { return ok(); }
+      uintptr_t SEGAAPI_SetIOVolume() { return ok(); }
+      uintptr_t SEGAAPI_SetLoopState() { return ok(); }
+      uintptr_t SEGAAPI_SetEndOffset() { return ok(); }
+      uintptr_t SEGAAPI_SetSynthParam() { return ok(); }
+      uintptr_t SEGAAPI_SetSendLevel() { return ok(); }
+      uintptr_t SEGAAPI_SetSendRouting() { return ok(); }
+      uintptr_t SEGAAPI_SetEndLoopOffset() { return ok(); }
+      uintptr_t SEGAAPI_SetStartLoopOffset() { return ok(); }
+      uintptr_t SEGAAPI_SetChannelVolume() { return ok(); }
+      uintptr_t SEGAAPI_SetReleaseState() { return ok(); }
+EOF
+      $CC -shared -fPIC -Wl,-soname,libsegaapi.so -o libsegaapi.so libsegaapi.c
+      runHook postBuild
+    '';
+    installPhase = ''
+      runHook preInstall
+      mkdir -p "$out/lib"
+      cp libsegaapi.so "$out/lib/"
+      runHook postInstall
+    '';
+  };
+
   teknoparrotNativeRuntime = pkgs.buildFHSEnv {
     pname = "teknoparrot-native-runtime";
     version = "1";
@@ -90,6 +189,7 @@ let
       pkgs32.libxmu
       pkgs32.stdenv.cc.cc.lib
       libstdcxx5i386
+      teknoparrotSegaApiShim
     ];
   };
 
@@ -203,6 +303,7 @@ let
       sha256 = "0ndf4fgy046qndhl5dzryl1m0zndyq5n3cla3ydnzdrrb1mwn9zp";
     };
     teknoparrotArtwork = ./assets/teknoparrot-starwars.png;
+    teknoparrotLogo = ./assets/teknoparrot.svg;
     installPhase = ''
       runHook preInstall
       theme_dir="$out/share/es-de/themes/art-book-next-es-de"
@@ -320,13 +421,7 @@ for rel in [
 ]:
     write_rgba_png(theme_dir / rel, width, height, pixels)
 PY
-      cat >"$theme_dir/_inc/systems/logos/teknoparrot.svg" <<'EOF'
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 240">
-  <title>TeknoParrot</title>
-  <text x="600" y="154" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-size="128" font-weight="900" letter-spacing="1" fill="#ffffff">TeknoParrot</text>
-  <rect x="174" y="182" width="852" height="12" rx="6" fill="#f15a24"/>
-</svg>
-EOF
+      install -m 0644 "$teknoparrotLogo" "$theme_dir/_inc/systems/logos/teknoparrot.svg"
       cat >"$theme_dir/_inc/systems/_metadata-global/teknoparrot.xml" <<'EOF'
 <theme>
     <variables>
