@@ -309,7 +309,7 @@ COMMON_HOTKEYS = [
     "Load: Select + L",
     "Reset: Select + B",
     "FPS: Select + Y",
-    "Shot: Select + A",
+    "Screenshot: Select + A",
     "Fast: Select + ZR",
 ]
 
@@ -324,7 +324,7 @@ def two_column_button_lines(entries):
 
 
 def controller_map(title, mappings, notes=(), hotkeys=(), square="None"):
-    mappings = [*mappings, f"Square -> {square}", "Star/Home -> Turbo"]
+    mappings = [*mappings, f"Square -> {square}", "Star -> Turbo"]
     lines = [title, "", "Button Map"]
     lines.extend(f"  {line}" for line in two_column_button_lines(mappings))
     lines.append("Hotkeys")
@@ -2221,7 +2221,7 @@ def smoke_test(mode):
             assert all(len(line) <= metrics["right_width"] for line in wrapped)
             assert "Button Map" in row["detail"]
             assert "Hotkeys" in row["detail"]
-            assert any("Star/Home" in line for line in row["detail"])
+            assert any("Star" in line for line in row["detail"])
             assert any("Select + Start twice" in line for line in row["detail"])
             assert any("Square" in line for line in row["detail"])
             assert not any("opens RetroArch quick menu" in line for line in row["detail"])
