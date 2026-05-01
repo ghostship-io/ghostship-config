@@ -41,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer emulation setup rendering**: Keep the generated GZDoom config
   Python heredoc flush-left so `emulation-setup.service` can complete during
   deployment.
+- **Boomer GZDoom controller reset**: Reset GZDoom button bindings to the first
+  Boomer named-alias baseline from `e0e6880` instead of the later raw `JoyN`
+  table, while keeping the managed right-stick axis map and 25% vertical look
+  scale. The baseline maps A/B to use/jump, X/Y to inventory use/map toggle,
+  L/R to previous/next weapon, ZL/ZR to alt fire/fire, Plus to menu, Minus to
+  pause, and the D-pad to inventory/map actions.
 - **Boomer smoke-test kiosk restore**: Restore `greetd` instead of
   `getty@tty1` after root-run smoke tests on kiosk-mode hosts so Boomer returns
   to ES-DE instead of a console login prompt.
@@ -51,18 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Home only where explicitly configured, and unsupported Square/Capture actions
   are no-op. Make Select+Start double-press send SIGTERM to the emulator
   process group and escalate to SIGKILL after 5 seconds if it stays alive.
-  Rework GZDoom controls so left stick moves,
-  right stick looks up/down and left/right with 25% vertical sensitivity,
-  Select/Minus toggles map, X toggles crouch, Y reloads, D-pad left/right
-  selects previous/next weapon, D-pad up/down selects and uses inventory,
-  L1/R1 are User1/User2, ZL is alt fire, ZR is fire, `+` opens the menu, and
-  Square/Capture is unbound. Use Boomer's live GZDoom SDL button path instead
-  of the older historical Joy table. Seed GZDoom's SDL
+  Seed GZDoom's SDL
   `[Joy:JS:*]` axis map so the right stick uses yaw/pitch instead of the Linux
   defaults that can look at the ceiling or treat vertical stick motion as
-  left/right turning, with reduced vertical look sensitivity and D-pad hat axes
-  mapped to movement. Use raw SDL GZDoom button names on Linux so `+`, bumpers,
-  triggers, and D-pad movement match the physical Switch Pro layout.
+  left/right turning, with reduced vertical look sensitivity.
 - **WSL OpenCode server port**: Move the WSL `opencode-server` Home Manager
   user service to `127.0.0.1:4096` for Windows desktop attachment.
 - **VueTorrent download paths**: Persist qBittorrent's default save path at

@@ -129,26 +129,20 @@ relative asset paths work. Keep assets under the Doom ROM folder and put the
 human-facing launchers at the top level for cleaner ES-DE scraping.
 Every GZDoom launch executes the managed
 `/srv/emulation/config/emulators/gzdoom/boomer-controls.cfg` file so joystick
-input is enabled and the 8BitDo Ultimate 2C Switch Pro-mode controls are
-applied: left stick moves, right stick looks left/right and up/down with
-vertical look scaled to 25%, R2/ZR is Fire, L2/ZL is Alt Fire, A is
-Use/Confirm, B is Jump/Back, X toggles crouch, Y reloads, D-pad left/right
-selects previous/next weapon, D-pad up selects the previous inventory item,
-D-pad down uses the selected inventory item, Select/Minus toggles the map, and
-Start/Plus opens the menu. L1/R1 are mapped to User 1/User 2 for mod actions.
-L4/R4 are intentionally unbound until a live probe shows unique events for
-those buttons; do not invent `JoyN` bindings for them. Square/Capture is also
-unbound for GZDoom. The managed GZDoom package also patches joystick menu
-handling so physical Switch A advances menus and physical Switch B backs out.
+input is enabled. The current reset uses the first Boomer GZDoom named-alias
+button baseline from `e0e6880`, not the later raw `JoyN` table: A is
+Use/Confirm, B is Jump/Back, X uses the selected inventory item, Y toggles the
+map, R2/ZR is Fire, L2/ZL is Alt Fire, L1/R1 select previous/next weapon,
+Start/Plus opens the menu, Select/Minus pauses, left thumb toggles crouch,
+right thumb centers view, D-pad left/right select previous/next inventory item,
+D-pad up toggles the map, and D-pad down uses the selected inventory item.
+Square/Capture is unbound for GZDoom. The managed GZDoom package also patches
+joystick menu handling so physical Switch A advances menus and physical Switch
+B backs out.
 The setup script also writes GZDoom's `[Joy:JS:*]` SDL axis map so left X/Y are
-strafe/forward, right X/Y are yaw/pitch, `Axis3scale` is `0.25`, trigger axes
-are used only as fire/alt-fire button fallbacks, and unused/phantom axes cannot
-drive the view upward on launch.
-The reset GZDoom raw binding baseline follows Boomer's live SDL joystick path:
-`Joy1`/`Joy2` are physical B/A, `Joy3`/`Joy4` are physical X/Y,
-`Joy5` is Select/Minus, `Joy7` is Start/Plus, `Joy10`/`Joy11` are L1/R1,
-`Joy13`/`Joy14` are L2/R2, and `POV1*` is the D-pad. Trigger axis fallbacks
-use `Axis4Plus` for L2 and `Axis5Plus` for R2.
+strafe/forward, right X/Y are yaw/pitch, `Axis3scale` is `0.25`, and
+unused/phantom axes cannot drive the view upward on launch. Do not use the
+raw `JoyN` table as the authoritative GZDoom binding source for this reset.
 
 ### Switch Pro Raw Input Probe
 
