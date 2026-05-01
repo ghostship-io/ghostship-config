@@ -1270,10 +1270,11 @@ EOF
           "renderer = 'VULKAN'" \
           "" \
           '[display.quality]' \
-          'surface_scale = 2' \
+          'surface_scale = 3' \
           "" \
           '[display.ui]' \
           'show_menubar = false' \
+          "fit = 'scale'" \
           "" \
           '[sys.files]' \
           "bootrom_path = '$xemu_bios_dir/mcpx_1.0.bin'" \
