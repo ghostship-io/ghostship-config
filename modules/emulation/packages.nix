@@ -302,7 +302,8 @@ EOF
       rev = "d772d07109701d9bd7c9fda305bfef6601105ab8";
       sha256 = "0ndf4fgy046qndhl5dzryl1m0zndyq5n3cla3ydnzdrrb1mwn9zp";
     };
-    teknoparrotArtwork = ./assets/teknoparrot-starwars.png;
+    model3Artwork = ./assets/teknoparrot-starwars.png;
+    teknoparrotArtwork = ./assets/teknoparrot-afterburner.png;
     teknoparrotLogo = ./assets/teknoparrot.svg;
     installPhase = ''
       runHook preInstall
@@ -311,14 +312,14 @@ EOF
       cp -R . "$theme_dir/"
       find "$theme_dir" -maxdepth 1 -name 'aspect-ratio*.xml' -exec \
         sed -i '/<clock name="clock">/a\         <format>%H:%M</format>' {} +
-      ${pkgs.python3}/bin/python3 - "$teknoparrotArtwork" "$theme_dir" <<'PY'
+      ${pkgs.python3}/bin/python3 - "$theme_dir" model3 "$model3Artwork" supermodel "$model3Artwork" teknoparrot "$teknoparrotArtwork" <<'PY'
 import struct
 import sys
 import zlib
 from pathlib import Path
 
-source = Path(sys.argv[1])
-theme_dir = Path(sys.argv[2])
+theme_dir = Path(sys.argv[1])
+artwork_args = sys.argv[2:]
 
 
 def read_png(path):
@@ -398,28 +399,30 @@ def write_rgba_png(path, width, height, pixels):
     path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"".join(chunks))
 
 
-width, height, channels, rows = read_png(source)
-if (width, height) != (454, 1080):
-    raise SystemExit(f"TeknoParrot artwork must be 454x1080, got {width}x{height}")
+for system_id, source_arg in zip(artwork_args[0::2], artwork_args[1::2]):
+    source = Path(source_arg)
+    width, height, channels, rows = read_png(source)
+    if (width, height) != (454, 1080):
+        raise SystemExit(f"{system_id} artwork must be 454x1080, got {width}x{height}")
 
-pixels = bytearray(width * height * 4)
-for y, row in enumerate(rows):
-    for x in range(width):
-        src = x * channels
-        dst = (y * width + x) * 4
-        pixels[dst:dst + 3] = bytes(row[src:src + 3])
-        # Match Art Book Next's diagonal system-art mask:
-        # polygon points are (112.4,0), (452.25,0), (339.8,1080), (0,1080).
-        left = 112.424625 * (1 - y / 1079)
-        right = 452.25 - 112.424625 * (y / 1079)
-        pixels[dst + 3] = 255 if left <= x <= right else 0
+    pixels = bytearray(width * height * 4)
+    for y, row in enumerate(rows):
+        for x in range(width):
+            src = x * channels
+            dst = (y * width + x) * 4
+            pixels[dst:dst + 3] = bytes(row[src:src + 3])
+            # Match Art Book Next's diagonal system-art mask:
+            # polygon points are (112.4,0), (452.25,0), (339.8,1080), (0,1080).
+            left = 112.424625 * (1 - y / 1079)
+            right = 452.25 - 112.424625 * (y / 1079)
+            pixels[dst + 3] = 255 if left <= x <= right else 0
 
-for rel in [
-    "_inc/systems/artwork/teknoparrot.png",
-    "_inc/systems/artwork-screenshots/teknoparrot.png",
-    "_inc/systems/artwork-outline/teknoparrot.png",
-]:
-    write_rgba_png(theme_dir / rel, width, height, pixels)
+    for rel in [
+        f"_inc/systems/artwork/{system_id}.png",
+        f"_inc/systems/artwork-screenshots/{system_id}.png",
+        f"_inc/systems/artwork-outline/{system_id}.png",
+    ]:
+        write_rgba_png(theme_dir / rel, width, height, pixels)
 PY
       install -m 0644 "$teknoparrotLogo" "$theme_dir/_inc/systems/logos/teknoparrot.svg"
       cat >"$theme_dir/_inc/systems/_metadata-global/teknoparrot.xml" <<'EOF'
