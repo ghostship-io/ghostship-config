@@ -82,7 +82,10 @@ let
     buildPhase = ''
       runHook preBuild
       cat >libsegaapi.c <<'EOF'
+      #define _GNU_SOURCE
+      #include <dlfcn.h>
       #include <stdint.h>
+      #include <semaphore.h>
       #include <stdlib.h>
 
       typedef struct Buffer {
@@ -93,10 +96,25 @@ let
       } Buffer;
 
       static uintptr_t ok(void) { return 0; }
+      static int (*real_sem_wait)(sem_t *sem);
+      static int (*real_sem_post)(sem_t *sem);
       static Buffer *as_buffer(uintptr_t handle) {
         Buffer *buffer = (Buffer *)handle;
         if (!buffer || buffer->magic != 0x53454741u) return NULL;
         return buffer;
+      }
+      static int is_abc_credit_sem(sem_t *sem) {
+        return (uintptr_t)sem == 0x0a0a0f88u;
+      }
+      int sem_wait(sem_t *sem) {
+        if (is_abc_credit_sem(sem)) return 0;
+        if (!real_sem_wait) real_sem_wait = dlsym(RTLD_NEXT, "sem_wait");
+        return real_sem_wait(sem);
+      }
+      int sem_post(sem_t *sem) {
+        if (is_abc_credit_sem(sem)) return 0;
+        if (!real_sem_post) real_sem_post = dlsym(RTLD_NEXT, "sem_post");
+        return real_sem_post(sem);
       }
 
       uintptr_t SEGAAPI_Init() { return ok(); }
