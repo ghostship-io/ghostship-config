@@ -2156,9 +2156,8 @@ PY
         cmd+=(-L "$core_path" "$rom_path")
         ;;
       dolphin)
-        if [ "''${EMULATION_DOLPHIN_HOTKEY_FALLBACK:-0}" = "1" ]; then
-          hotkey_profile="dolphin"
-        fi
+        hotkey_profile="dolphin"
+        export EMULATION_DOLPHIN_HOTKEY_FALLBACK=1
         prepare_dolphin_runtime
         cmd=(
           dolphin-emu
@@ -2457,10 +2456,18 @@ EOF
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "${cfg.configRoot}/teknoparrot/TeknoParrot/UserProfiles"
         install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${displayPolicy} "${cfg.configRoot}/display/policy.json"
         ps2_rom_dir="${cfg.romRoot}/Sony - PlayStation 2 (2000)"
-        ps2_soulcalibur_disc="$ps2_rom_dir/Soulcalibur III (USA).chd"
+        ps2_disc_dir="$ps2_rom_dir/.discs"
+        ps2_soulcalibur_top_disc="$ps2_rom_dir/Soulcalibur III (USA).chd"
+        ps2_soulcalibur_disc="$ps2_disc_dir/Soulcalibur III (USA).chd"
         ps2_soulcalibur_playlist="$ps2_rom_dir/Soulcalibur III (USA).m3u"
+        install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$ps2_disc_dir"
+        if [ -f "$ps2_soulcalibur_top_disc" ] && [ ! -e "$ps2_soulcalibur_disc" ]; then
+          mv "$ps2_soulcalibur_top_disc" "$ps2_soulcalibur_disc"
+        fi
         if [ -f "$ps2_soulcalibur_disc" ]; then
-          printf '%s\n' "Soulcalibur III (USA).chd" >"$ps2_soulcalibur_playlist.tmp"
+          chown ${cfg.user}:${cfg.group} "$ps2_soulcalibur_disc"
+          chmod 0644 "$ps2_soulcalibur_disc"
+          printf '%s\n' ".discs/Soulcalibur III (USA).chd" >"$ps2_soulcalibur_playlist.tmp"
           chown ${cfg.user}:${cfg.group} "$ps2_soulcalibur_playlist.tmp"
           chmod 0644 "$ps2_soulcalibur_playlist.tmp"
           mv "$ps2_soulcalibur_playlist.tmp" "$ps2_soulcalibur_playlist"
@@ -2578,8 +2585,8 @@ EOF
 [Hotkeys1]
 Device = SDL/0/Nintendo Switch Pro Controller
 Keys/Toggle Pause = `Misc 1`
-Keys/Reset = `Back` & `Button S`
-Keys/Take Screenshot = `Back` & `Button E`
+Keys/Reset = `Back` & `Button A`
+Keys/Take Screenshot = `Back` & `Button B`
 Keys/Disable Emulation Speed Limit = `Back` & `Trigger R`
 Keys/Load State Slot 1 = `Back` & `Shoulder L`
 Keys/Save State Slot 1 = `Back` & `Shoulder R`
@@ -2590,10 +2597,10 @@ EOF
           cat >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
 [GCPad$slot]
 Device = SDL/$index/Nintendo Switch Pro Controller
-Buttons/A = \`Button E\`
-Buttons/B = \`Button S\`
-Buttons/X = \`Button N\`
-Buttons/Y = \`Button W\`
+Buttons/A = \`Button B\`
+Buttons/B = \`Button A\`
+Buttons/X = \`Button Y\`
+Buttons/Y = \`Button X\`
 Buttons/Z = \`Trigger R\`
 Buttons/Start = \`Start\`
 Main Stick/Up = \`Axis 1-\`
@@ -2621,10 +2628,10 @@ EOF
 [Wiimote$slot]
 Source = 1
 Device = SDL/$index/Nintendo Switch Pro Controller
-Buttons/A = \`Button 1\`
-Buttons/B = \`Button 7\`
-Buttons/1 = \`Button 0\`
-Buttons/2 = \`Button 2\`
+Buttons/A = \`Button B\`
+Buttons/B = \`Trigger L\`
+Buttons/1 = \`Button A\`
+Buttons/2 = \`Button X\`
 Buttons/- = \`Back\`
 Buttons/+ = \`Start\`
 Buttons/Home = \`Misc 1\`
@@ -2636,12 +2643,12 @@ IR/Up = \`Axis 3-\`
 IR/Down = \`Axis 3+\`
 IR/Left = \`Axis 2-\`
 IR/Right = \`Axis 2+\`
-Shake/X = \`Button 10\`
-Shake/Y = \`Button 10\`
-Shake/Z = \`Button 10\`
+Shake/X = \`Shoulder R\`
+Shake/Y = \`Shoulder R\`
+Shake/Z = \`Shoulder R\`
 Extension = Nunchuk
-Nunchuk/Buttons/C = \`Button 4\`
-Nunchuk/Buttons/Z = \`Button 5\`
+Nunchuk/Buttons/C = \`Back\`
+Nunchuk/Buttons/Z = \`Guide\`
 Nunchuk/Stick/Up = \`Axis 1-\`
 Nunchuk/Stick/Down = \`Axis 1+\`
 Nunchuk/Stick/Left = \`Axis 0-\`
@@ -2907,7 +2914,7 @@ EOF
         "retroarch_screenshot": "RetroArch only: Minus + A",
         "retroarch_fast_forward": "RetroArch only: Minus + R2",
         "normal_exit": "Minus + Plus twice exits the active run-emulator process group",
-        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin SDL hotkeys with Minus/Select as Back and Plus/Start as Start: Minus + B resets, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A screenshots, Minus + R2 toggles fast mode, and Square/Capture pauses only if Dolphin exposes the Misc 1 binding; Minus + X quick actions and Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
+        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses the raw standalone hotkey broker, matching the Xemu approach: Minus + B resets, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A screenshots, Minus + R2 toggles fast mode, and Minus + X quick actions plus Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
         "pcsx2_hotkeys": "PCSX2 uses native PCSX2 hotkey bindings: Minus + X opens the pause menu, Minus + B resets the VM, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A saves a screenshot, Minus + Y toggles the OSD/FPS overlay, and Minus + R2 holds turbo/fast-forward",
         "xemu_hotkeys": "Default Xbox launch: Minus + X opens quick actions, B resets, L1 loads esde-slot1, R1 saves esde-slot1, A screenshots, Y toggles the debug monitor, and Minus + R2 is unbound",
         "pico8_hotkeys": "Default PICO-8 launch: Minus + X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, and Minus + R2 is unbound",
@@ -2917,7 +2924,7 @@ EOF
       },
       "managed_defaults": {
         "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Minus hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
-        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Dolphin launches fullscreen without analytics, panic, or stop-confirm prompts; GameCube native Dolphin hotkeys cover reset, save/load slot 1, screenshot, and fast mode with Minus as Select/hotkey modifier and Plus as Start; Square/Capture pauses or opens Wii Remote Home only where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
+        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 use SDL slots 0-3; GameCube maps Dolphin label aliases with A/B and X/Y swapped for Boomer's Switch Pro controller, enables all four ports, launches fullscreen without analytics, panic, or stop-confirm prompts, and uses the raw hotkey broker for reset, save/load slot 1, screenshot, and fast mode; Square/Capture opens Wii Remote Home only where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
         "ppsspp": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "pcsx2": "launches through standalone PCSX2 with managed no-wizard config, launcher-side m3u first-disc resolution, Vulkan 3x internal resolution, native PCSX2 hotkey chords for pause menu/reset/save/load/screenshot/OSD/turbo, port 1 multitap for players 1-4, token-backed RetroAchievements when RETROACHIEVEMENTS_TOKEN is projected, and Minus + Plus twice exits through the per-launch broker; Square/Capture is intentionally unbound until a stable Boomer SDL guide binding is proven",
         "azahar": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
