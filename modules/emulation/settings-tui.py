@@ -739,7 +739,7 @@ CONTROLLER_MAPS = [
             },
             [
                 "Dolphin GameCube has no Home button.",
-                "Dolphin SDL: A/B/X/Y use label aliases.",
+                "Hotkeys use the raw broker keyboard fallback.",
             ],
             DOLPHIN_GC_HOTKEYS,
         ),

@@ -29,14 +29,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plus Dolphin `-C` overrides, so GameCube kiosk launches do not ask to report
   usage data or confirm quit/stop.
 - **Boomer GameCube Dolphin hotkeys**: Configure Dolphin to launch GameCube
-  games without analytics, panic, or stop-confirm prompts, bind native
-  GameCube hotkeys for reset, save/load slot 1, screenshot, and fast mode, and
-  keep unsupported quick-actions/debug-monitor and bare Square chords
-  explicitly unbound.
+  games without analytics, panic, or stop-confirm prompts, use the raw hotkey
+  broker for reset, save/load slot 1, screenshot, and fast mode, and keep
+  unsupported quick-actions/debug-monitor and bare Square chords explicitly
+  unbound.
 - **Boomer Dolphin native button map**: Correct Dolphin's generated SDL
-  bindings so GameCube uses Dolphin's native semantic names for Minus/Back,
-  Plus/Start, labeled A/B/X/Y, L1/R1 shoulders, R2/Trigger R, and
-  Square/Misc 1.
+  bindings so GameCube uses label aliases with A/B and X/Y swapped for
+  Boomer's Switch Pro controller, Plus as Start, L1/R1 shoulder labels, and R2
+  as the right trigger.
 - **Boomer Controller Maps hotkey layout**: Render the same full hotkey combo
   list on every controller map with combo-first rows and `None` for unmapped
   actions. Use `L1`/`R1` for shoulder rows, `L2`/`R2` for trigger rows, keep
