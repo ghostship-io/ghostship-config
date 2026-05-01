@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer Supermodel setup**: Seed Supermodel's bundled `Games.xml` and
   `Music.xml` into the managed XDG config and its `Assets` into XDG data so
   Model 3 ROM sets and crosshair textures are detected.
+- **Boomer Model 3 launch fix**: Launch Supermodel with force feedback enabled
+  so Star Wars Trilogy Arcade clears its feedback-lever setup check.
 - **Boomer TeknoParrot logo**: Use the supplied path-based TeknoParrot SVG for
   the ES-DE system text logo.
 - **Boomer controller probe documentation**: Document the live Switch Pro

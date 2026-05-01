@@ -1062,7 +1062,7 @@ PY
         ppsspp_bin="$(first_command PPSSPPSDL ppsspp ppsspp-sdl)"
         cmd=("$ppsspp_bin" "$rom_path")
         ;;
-      supermodel) cmd=(supermodel "$rom_path" -res="$output_width","$output_height" -fullscreen) ;;
+      supermodel) cmd=(supermodel "$rom_path" -res="$output_width","$output_height" -fullscreen -force-feedback) ;;
       gzdoom)
         run_cwd="$(dirname "$rom_path")"
         gzdoom_controls="${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
