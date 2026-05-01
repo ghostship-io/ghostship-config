@@ -57,7 +57,8 @@ modifier, Select+X opens emulator quick menus where the active launch mode
 supports it, Star/Home is left as the controller turbo/local button, and
 Square/Capture is used only where an emulator profile explicitly configures it.
 Standalone raw hotkey brokers are opt-in launch modes, such as Xbox's
-`xemu-hotkeys`; plain standalone launches do not start a global watcher.
+`xemu-hotkeys` and PICO-8's `pico8-hotkeys`; plain standalone launches do not
+start a global watcher.
 Switch emulation uses the repo-pinned official Ryubing Canary release; refresh
 `modules/emulation/ryubing-canary-pin.nix` with `scripts/update-ryubing-canary`
 before rebuilding when upstream publishes a newer Canary.

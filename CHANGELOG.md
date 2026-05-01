@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer PICO-8 hotkey launcher**: Keep plain PICO-8 as the default, add an
+  opt-in `pico8-hotkeys` ES-DE alternate, launch PICO-8 with a managed
+  `-home` directory, seed its config/controller mapping before launch, and map
+  supported PICO-8 keyboard shortcuts through the standalone hotkey broker.
 - **Boomer N64 Mupen64Plus-Next tuning**: Keep N64 on RetroArch
   Mupen64Plus-Next, switch the managed core options to GLideN64 with 3x native
   resolution, keep shaders on the global `global.slangp` preset, default all

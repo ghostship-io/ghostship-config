@@ -229,8 +229,18 @@ The package wraps the Linux PICO-8 binary with `steam-run` so it can launch on
 NixOS without committing proprietary files.
 
 PICO-8 uses SDL's X11 video path on Boomer, so `run-emulator` adds an explicit
-Gamescope Xwayland server for PICO-8 launches. Current smoke coverage uses
-`POOM.png` from the PICO-8 library as the heavier test cart.
+Gamescope Xwayland server for PICO-8 launches. The launcher also passes an
+explicit `-home /srv/emulation/config/emulators/pico8` path and rewrites
+`config.txt` plus `sdl_controllers.txt` before each launch so controller
+mapping, cart data, screenshots, and GIF output stay in managed emulation
+paths.
+
+Plain `pico8` remains the default ES-DE launcher. The optional `pico8-hotkeys`
+launcher starts the standalone hotkey broker and injects PICO-8's own keyboard
+shortcuts: Select+X or Square opens the pause menu, Select+B sends `CTRL-R`,
+Select+A sends `CTRL-6`, Select+Y sends `CTRL-9`, and Select+ZR is logged as
+unavailable because PICO-8 has no fast-forward hotkey. Current smoke coverage
+uses `POOM.png` from the PICO-8 library as the heavier test cart.
 
 ## TeknoParrot Free
 

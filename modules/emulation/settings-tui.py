@@ -352,6 +352,12 @@ GZDOOM_HOTKEYS = [
 
 PICO8_HOTKEYS = [
     "Pause/Menu: Plus / Start",
+    "Quick Menu*: Select+X",
+    "Reset*: Select+B",
+    "Screenshot*: Select+A",
+    "Save GIF*: Select+Y",
+    "Pause*: Square",
+    "Fast: None",
 ]
 
 
@@ -2414,7 +2420,7 @@ def smoke_test(mode):
                 assert any("Load: Select + L" in line for line in row["detail"])
                 assert any("Fast: Select + ZR" in line for line in row["detail"])
             else:
-                if row["label"] != "Xbox":
+                if row["label"] not in {"Xbox", "PICO-8"}:
                     assert not any("Quick Menu: Select + X" in line for line in row["detail"])
                 assert not any("Save: Select + R" in line for line in row["detail"])
                 assert not any("Load: Select + L" in line for line in row["detail"])
@@ -2436,6 +2442,10 @@ def smoke_test(mode):
         assert any("Quick Menu: Select+Start / Select+X*" in line for line in xbox["detail"])
         assert any("Save*: Select+R" in line for line in xbox["detail"])
         assert any("Fast: None" in line for line in xbox["detail"])
+        pico8 = next(row for row in CONTROLLER_MAPS if row["label"] == "PICO-8")
+        assert any("Quick Menu*: Select+X" in line for line in pico8["detail"])
+        assert any("Save GIF*: Select+Y" in line for line in pico8["detail"])
+        assert any("Fast: None" in line for line in pico8["detail"])
         for row in CONTROLLER_MAPS:
             if row["label"] in {"Switch Pro Reference", "Wii Remote + Nunchuk", "GZDoom"}:
                 continue

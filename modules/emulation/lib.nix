@@ -378,6 +378,12 @@ let
       platform = "pico8";
       theme = "pico8";
       emulator = "pico8";
+      alternateEmulators = [
+        {
+          label = "PICO-8 Hotkeys";
+          emulator = "pico8-hotkeys";
+        }
+      ];
       extensions = ".png .PNG";
       fixedAspect = "4:3";
     }

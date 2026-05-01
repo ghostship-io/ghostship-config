@@ -94,6 +94,10 @@ let
         "f12": [YDOTOOL, "key", "88:1", "88:0"],
         "grave": [YDOTOOL, "key", "41:1", "41:0"],
         "ctrl-p": [YDOTOOL, "key", "29:1", "25:1", "25:0", "29:0"],
+        "enter": [YDOTOOL, "key", "28:1", "28:0"],
+        "ctrl-6": [YDOTOOL, "key", "29:1", "7:1", "7:0", "29:0"],
+        "ctrl-9": [YDOTOOL, "key", "29:1", "10:1", "10:0", "29:0"],
+        "ctrl-r": [YDOTOOL, "key", "29:1", "19:1", "19:0", "29:0"],
     }
 
     PROFILES = {
@@ -108,6 +112,16 @@ let
                 (BTN_SELECT, BTN_Y): ("send-key", "grave", "Select + Y toggled Xemu debug monitor"),
                 (BTN_SELECT, BTN_ZR): ("notify-none", "xemu fast-forward is not available", "Select + ZR has no Xemu action"),
                 (BTN_CAPTURE,): ("send-key", "ctrl-p", "Square toggled Xemu pause"),
+            },
+        },
+        "pico8": {
+            "bindings": {
+                (BTN_SELECT, BTN_X): ("send-key", "enter", "Select + X opened PICO-8 pause menu"),
+                (BTN_SELECT, BTN_B): ("send-key", "ctrl-r", "Select + B reset PICO-8 cart"),
+                (BTN_SELECT, BTN_A): ("send-key", "ctrl-6", "Select + A saved PICO-8 screenshot"),
+                (BTN_SELECT, BTN_Y): ("send-key", "ctrl-9", "Select + Y saved PICO-8 GIF"),
+                (BTN_SELECT, BTN_ZR): ("notify-none", "pico8 fast-forward is not available", "Select + ZR has no PICO-8 action"),
+                (BTN_CAPTURE,): ("send-key", "enter", "Square opened PICO-8 pause menu"),
             },
         },
     }
@@ -278,6 +292,15 @@ let
             raise AssertionError("Select-less X must not resolve to an action")
         if key_command("f2") != [YDOTOOL, "key", "60:1", "60:0"]:
             raise AssertionError("F2 command changed unexpectedly")
+        action = resolve_binding("pico8", {BTN_SELECT, BTN_A}, BTN_A)
+        if action[:2] != ("send-key", "ctrl-6"):
+            raise AssertionError(f"unexpected PICO-8 screenshot action: {action}")
+        action = resolve_binding("pico8", {BTN_SELECT, BTN_B}, BTN_B)
+        if action[:2] != ("send-key", "ctrl-r"):
+            raise AssertionError(f"unexpected PICO-8 reset action: {action}")
+        action = resolve_binding("pico8", {BTN_CAPTURE}, BTN_CAPTURE)
+        if action[:2] != ("send-key", "enter"):
+            raise AssertionError(f"unexpected PICO-8 Square action: {action}")
 
         socket_path = None
         received = []
@@ -1027,6 +1050,31 @@ EOF
       esac
     }
 
+    prepare_pico8_runtime() {
+      pico8_home="${cfg.configRoot}/emulators/pico8"
+      pico8_root="${cfg.romRoot}/Fantasy - PICO-8 (2015)"
+      pico8_cdata="${cfg.dataRoot}/saves/pico8"
+      pico8_desktop="${cfg.dataRoot}/screenshots/pico8"
+      mkdir -p "$pico8_home" "$pico8_root" "$pico8_cdata" "$pico8_desktop"
+      ${pkgs.gnused}/bin/sed 's/^    //' >"$pico8_home/config.txt" <<EOF
+    // Managed by Nix/run-emulator before each PICO-8 launch.
+    root_path $pico8_root
+    cdata_path $pico8_cdata
+    desktop_path $pico8_desktop
+    joystick_index 0
+    button_keys 0 0 0 0 0 0 0 0 0 0 0 0
+    gif_len 8
+    screenshot_scale 3
+    gif_scale 3
+EOF
+      if [ -r "${cfg.configRoot}/controllers/gamecontrollerdb.txt" ]; then
+        cp -f "${cfg.configRoot}/controllers/gamecontrollerdb.txt" "$pico8_home/sdl_controllers.txt"
+      elif [ ! -e "$pico8_home/sdl_controllers.txt" ]; then
+        : >"$pico8_home/sdl_controllers.txt"
+      fi
+      log_event "runtime" "prepared PICO-8 home config at $pico8_home"
+    }
+
     cmd=()
     run_cwd=""
     hotkey_profile=""
@@ -1156,7 +1204,23 @@ PY
           *) cmd=(gzdoom "''${gzdoom_common_args[@]}" -iwad "$rom_path") ;;
         esac
         ;;
-      pico8) cmd=(pico8 -run "$rom_path") ;;
+      pico8|pico8-hotkeys)
+        prepare_pico8_runtime
+        if [ "$emulator_id" = "pico8-hotkeys" ]; then
+          hotkey_profile="pico8"
+        fi
+        cmd=(
+          pico8
+          -home "${cfg.configRoot}/emulators/pico8"
+          -root_path "${cfg.romRoot}/Fantasy - PICO-8 (2015)"
+          -desktop "${cfg.dataRoot}/screenshots/pico8"
+          -screenshot_scale 3
+          -gif_scale 3
+          -gif_len 8
+          -joystick 0
+          -run "$rom_path"
+        )
+        ;;
       teknoparrot) cmd=(teknoparrot-free "$rom_path") ;;
       *)
         log_event "error" "unknown emulator"
@@ -1189,7 +1253,7 @@ PY
       else
         mapfile -t gamescope_args < <(jq -r '.gamescope_args[]' <<<"$profile_json")
       fi
-      if [ "$emulator_id" = "pico8" ]; then
+      if [ "$emulator_id" = "pico8" ] || [ "$emulator_id" = "pico8-hotkeys" ]; then
         gamescope_args+=("--xwayland-count" "1")
       fi
       run_cmd=(gamescope "''${gamescope_args[@]}" -- "''${run_cmd[@]}")
@@ -1744,7 +1808,9 @@ PY
         "ryubing": "use Vulkan, docked mode, 16x AF, and emulator-native scaling/filtering",
         "supermodel": "launch with -res=<output_width>,<output_height>",
         "xemu": "use xemu internal resolution scale",
-        "xemu-hotkeys": "use xemu internal resolution scale"
+        "xemu-hotkeys": "use xemu internal resolution scale",
+        "pico8": "use PICO-8 native 4:3 output through Gamescope",
+        "pico8-hotkeys": "use PICO-8 native 4:3 output through Gamescope"
       }
     }
 EOF
@@ -1779,8 +1845,9 @@ EOF
         "retroarch_fast_forward": "RetroArch only: Select/- plus ZR",
         "normal_exit": "No shared standalone exit chord is installed by default",
         "xemu_hotkeys": "Opt-in xemu-hotkeys only: Select/- plus X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, Square/Capture toggles pause, and Select/- plus ZR is unbound",
+        "pico8_hotkeys": "Opt-in pico8-hotkeys only: Select/- plus X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, Square/Capture opens pause/menu, and Select/- plus ZR is unbound",
         "gzdoom": "GZDoom only: Start/+ opens the menu, Select/- toggles the automap, and Square/Capture is intentionally unbound",
-        "pico8": "PICO-8 only: Start/+ opens pause/menu"
+        "pico8": "PICO-8 default: Start/+ opens pause/menu; PICO-8 uses an explicit managed -home config directory"
       },
       "managed_defaults": {
         "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; no-analog systems use RetroArch analog-to-D-pad mode for players 1-5; analog-capable systems do not get analog-to-D-pad overrides; PC Engine-family cores default to 6-button pads for all five players; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
@@ -1794,7 +1861,8 @@ EOF
         "supermodel": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
         "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; no shared raw-input hotkey broker is started",
         "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1/R1 are User 1/User 2, L2/R2 are alt fire/fire, Select/- toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
-        "pico8": "run-emulator launches carts with PICO-8; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu"
+        "pico8": "run-emulator launches carts with PICO-8 using an explicit managed -home directory; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu",
+        "pico8-hotkeys": "opt-in PICO-8 launch with the standalone broker for screenshot, GIF save, cart reset, and pause/menu chords"
       },
       "known_gaps": {
         "motion": "hid_nintendo exposes a separate IMU device; emulator support varies",
