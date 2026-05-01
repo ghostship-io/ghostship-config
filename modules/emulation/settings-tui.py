@@ -811,26 +811,26 @@ CONTROLLER_MAPS = [
         "detail": controller_map(
             "GZDoom",
             {
-                "D-pad": "L/R Wpn, Up/Dn Inv",
+                "D-pad": "InvLR MapUp UseDn",
                 "Left Stick": "Move",
                 "Right Stick": "Look 25% V",
                 "A": "Use/Confirm",
                 "B": "Jump/Back",
-                "X": "Crouch Toggle",
-                "Y": "Reload",
-                "L": "User 1",
-                "R": "User 2",
+                "X": "Inventory Use",
+                "Y": "Map Toggle",
+                "L": "Prev Weapon",
+                "R": "Next Weapon",
                 "ZL": "Alt Fire",
                 "ZR": "Fire",
-                "Minus": "Map Toggle",
+                "Minus": "Pause",
                 "Plus": "Menu",
                 "Square": "None",
                 "Star": "Turbo",
             },
-            ["Uses raw GZDoom JoyN/POV events; vertical look is scaled to 25%."],
+            ["Restored first Boomer GZDoom cfg from e0e6880; vertical look is 25%."],
             [
                 "Menu: Plus / Start",
-                "Map: Minus toggles",
+                "Map: Y / D-pad Up toggles",
                 "Exit: Select + Start twice",
                 "L4/R4: unbound until a live probe shows unique events",
                 "Turbo: Star + <Button>",
@@ -2309,14 +2309,14 @@ def smoke_test(mode):
             assert any("Square -> None" in line for line in row["detail"])
         gzdoom = next(row for row in CONTROLLER_MAPS if row["label"] == "GZDoom")
         assert any("A -> Use/Confirm" in line for line in gzdoom["detail"])
-        assert any("D-pad -> L/R Wpn, Up/Dn Inv" in line for line in gzdoom["detail"])
+        assert any("D-pad -> InvLR MapUp UseDn" in line for line in gzdoom["detail"])
         assert any("Left Stick -> Move" in line for line in gzdoom["detail"])
         assert any("Right Stick -> Look 25% V" in line for line in gzdoom["detail"])
-        assert any("Minus -> Map Toggle" in line for line in gzdoom["detail"])
-        assert any("X -> Crouch Toggle" in line for line in gzdoom["detail"])
-        assert any("Y -> Reload" in line for line in gzdoom["detail"])
-        assert any("L -> User 1" in line for line in gzdoom["detail"])
-        assert any("R -> User 2" in line for line in gzdoom["detail"])
+        assert any("Minus -> Pause" in line for line in gzdoom["detail"])
+        assert any("X -> Inventory Use" in line for line in gzdoom["detail"])
+        assert any("Y -> Map Toggle" in line for line in gzdoom["detail"])
+        assert any("L -> Prev Weapon" in line for line in gzdoom["detail"])
+        assert any("R -> Next Weapon" in line for line in gzdoom["detail"])
         assert any("Plus -> Menu" in line for line in gzdoom["detail"])
         assert any("Square -> None" in line for line in gzdoom["detail"])
         assert any("L4/R4: unbound until a live probe shows unique events" in line for line in gzdoom["detail"])

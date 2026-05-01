@@ -297,15 +297,13 @@ changelog.
   force-kill fallback.
   Controller Maps should stay text-only with a compact two-column button map
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
-  Switch A/B, and launch GZDoom with the managed Boomer controls cfg using
-  config-only raw GZDoom events, not named `Pad_*` aliases unless the input
-  translation package patch is deliberately restored. The active map is Joy1
-  B/jump, Joy2 A/use, Joy3 X/crouch, Joy4 Y/reload, Joy5 Select/map, Joy7
-  Plus/menu, Joy10/Joy11 L1/R1 User1/User2, Joy13/Joy14 ZL/ZR alt fire/fire,
-  Axis5Plus/Axis6Plus trigger fallbacks, and `POV1*` for D-pad weapon and
-  inventory actions. GZDoom's SDL `[Joy:JS:*]` axis map must be seeded so
-  Switch Pro axis 0/1 are strafe/forward, axis 2 is yaw, axis 3 is pitch with
-  scale `0.25`, and unused axes are disabled.
+  Switch A/B, and launch GZDoom with the first Boomer controls cfg from
+  `e0e6880`: named `Pad_*` aliases for A/B/X/Y, shoulders, triggers, Start,
+  Back, thumbs, and D-pad, with no broad button unbind block. Reset stale
+  `Doom.Bindings` and automap sections so GZDoom regenerates its generic
+  defaults, then keep only the `[Joy:JS:*]` axis seed: Switch Pro axis 0/1 are
+  strafe/forward, axis 2 is yaw, axis 3 is pitch with scale `0.25`, and unused
+  axes are disabled.
   After Burner Climax native TeknoParrot payloads need the repo-managed 32-bit
   FHS runtime plus `libsegaapi.so` audio and legacy semaphore shims; test by
   launching on Boomer's active kiosk `DISPLAY=:0`, not only via SSH, and treat

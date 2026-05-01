@@ -45,12 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer emulation setup rendering**: Keep the generated GZDoom config
   Python heredoc flush-left so `emulation-setup.service` can complete during
   deployment.
-- **Boomer GZDoom controller reset**: Reset GZDoom button bindings to
-  config-only raw `JoyN`/`POV1*` events because the named `Pad_*` aliases only
-  worked with the removed input translation patch. Keep the managed right-stick
-  axis map and 25% vertical look scale, with B/A on jump/use, X/Y on
-  crouch/reload, L1/R1 on User1/User2, ZL/ZR on alt fire/fire, Plus on menu,
-  Minus on map, and the D-pad on weapon and inventory actions.
+- **Boomer GZDoom controller reset**: Restore the first Boomer GZDoom controls
+  cfg from `e0e6880`, using named `Pad_*` controller aliases and no broad
+  button unbind block. Reset stale `Doom.Bindings` and automap sections so
+  GZDoom regenerates its generic defaults, while keeping the managed right-stick
+  axis map and 25% vertical look scale.
 - **Boomer smoke-test kiosk restore**: Restore `greetd` instead of
   `getty@tty1` after root-run smoke tests on kiosk-mode hosts so Boomer returns
   to ES-DE instead of a console login prompt.
