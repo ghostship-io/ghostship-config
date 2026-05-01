@@ -304,6 +304,7 @@ BUTTON_MAP_COLUMN_WIDTH = 27
 
 COMMON_HOTKEYS = [
     "Quick Menu: Select plus X",
+    "Turbo: Star plus <Button>",
     "Exit: Select plus Start twice",
     "Save: Select plus R",
     "Load: Select plus L",
@@ -325,7 +326,7 @@ def two_column_button_lines(entries):
 
 def controller_map(title, mappings, notes=(), hotkeys=(), square="None"):
     mappings = [*mappings, f"Square -> {square}", "Star -> Turbo"]
-    lines = [title, "", "Button Map"]
+    lines = [title, "Button Map"]
     lines.extend(f"  {line}" for line in two_column_button_lines(mappings))
     lines.append("Hotkeys")
     lines.extend(f"  {line}" for line in (hotkeys or COMMON_HOTKEYS))
@@ -776,6 +777,7 @@ CONTROLLER_MAPS = [
             [
                 "Menu: Plus / Start",
                 "Map: Minus toggles",
+                "Turbo: Star plus <Button>",
                 "Exit: Select plus Start twice",
             ],
         ),
