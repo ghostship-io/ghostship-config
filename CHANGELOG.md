@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Boomer Controller Maps hotkey layout**: Render the same full hotkey combo
   list on every controller map with combo-first rows and `None` for unmapped
-  actions. Rename displayed stick-click rows from `L3`/`R3` to `L4`/`R4` to
-  match Boomer controller terminology.
+  actions. Use `L2`/`R2` for trigger rows, keep stick clicks on `L3`/`R3`, and
+  label hotkeys with spaced `Minus + ...` chords.
 - **Boomer hotkey and RetroAchievements regression fix**: Restore the
   per-launch Select+Start double-press exit broker, keep RetroArch hotkeys in
   the managed base config plus controller autoconfigs, add 8BitDo udev

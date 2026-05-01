@@ -82,7 +82,7 @@ let
     BTN_CAPTURE = 309
     BTN_L = 310
     BTN_R = 311
-    BTN_ZR = 313
+    BTN_R2 = 313
     BTN_X = 307
     BTN_Y = 308
     BTN_SELECT = 314
@@ -109,24 +109,22 @@ let
         "xemu": {
             "snapshot_tag": "esde-slot1",
             "bindings": {
-                (BTN_SELECT, BTN_X): ("send-key", "f2", "Select + X opened Xemu quick actions"),
-                (BTN_SELECT, BTN_B): ("hmp-command", "system_reset", "Select + B reset Xemu"),
-                (BTN_SELECT, BTN_L): ("hmp-command", "loadvm {snapshot_tag}", "Select + L loaded Xemu save state"),
-                (BTN_SELECT, BTN_R): ("hmp-command", "savevm {snapshot_tag}", "Select + R saved Xemu state"),
-                (BTN_SELECT, BTN_A): ("send-key", "f12", "Select + A triggered Xemu screenshot"),
-                (BTN_SELECT, BTN_Y): ("send-key", "grave", "Select + Y toggled Xemu debug monitor"),
-                (BTN_SELECT, BTN_ZR): ("notify-none", "xemu fast-forward is not available", "Select + ZR has no Xemu action"),
-                (BTN_CAPTURE,): ("send-key", "ctrl-p", "Square toggled Xemu pause"),
+                (BTN_SELECT, BTN_X): ("send-key", "f2", "Minus + X opened Xemu quick actions"),
+                (BTN_SELECT, BTN_B): ("hmp-command", "system_reset", "Minus + B reset Xemu"),
+                (BTN_SELECT, BTN_L): ("hmp-command", "loadvm {snapshot_tag}", "Minus + L loaded Xemu save state"),
+                (BTN_SELECT, BTN_R): ("hmp-command", "savevm {snapshot_tag}", "Minus + R saved Xemu state"),
+                (BTN_SELECT, BTN_A): ("send-key", "f12", "Minus + A triggered Xemu screenshot"),
+                (BTN_SELECT, BTN_Y): ("send-key", "grave", "Minus + Y toggled Xemu debug monitor"),
+                (BTN_SELECT, BTN_R2): ("notify-none", "xemu fast-forward is not available", "Minus + R2 has no Xemu action"),
             },
         },
         "pico8": {
             "bindings": {
-                (BTN_SELECT, BTN_X): ("send-key", "enter", "Select + X opened PICO-8 pause menu"),
-                (BTN_SELECT, BTN_B): ("send-key", "ctrl-r", "Select + B reset PICO-8 cart"),
-                (BTN_SELECT, BTN_A): ("send-key", "ctrl-6", "Select + A saved PICO-8 screenshot"),
-                (BTN_SELECT, BTN_Y): ("send-key", "ctrl-9", "Select + Y saved PICO-8 GIF"),
-                (BTN_SELECT, BTN_ZR): ("notify-none", "pico8 fast-forward is not available", "Select + ZR has no PICO-8 action"),
-                (BTN_CAPTURE,): ("send-key", "enter", "Square opened PICO-8 pause menu"),
+                (BTN_SELECT, BTN_X): ("send-key", "enter", "Minus + X opened PICO-8 pause menu"),
+                (BTN_SELECT, BTN_B): ("send-key", "ctrl-r", "Minus + B reset PICO-8 cart"),
+                (BTN_SELECT, BTN_A): ("send-key", "ctrl-6", "Minus + A saved PICO-8 screenshot"),
+                (BTN_SELECT, BTN_Y): ("send-key", "ctrl-9", "Minus + Y saved PICO-8 GIF"),
+                (BTN_SELECT, BTN_R2): ("notify-none", "pico8 fast-forward is not available", "Minus + R2 has no PICO-8 action"),
             },
         },
     }
@@ -291,12 +289,12 @@ let
     def self_test():
         action = resolve_binding("xemu", {BTN_SELECT, BTN_X}, BTN_X)
         if action[:2] != ("send-key", "f2"):
-            raise AssertionError(f"unexpected Select + X action: {action}")
+            raise AssertionError(f"unexpected Minus + X action: {action}")
         action = resolve_binding("xemu", {BTN_SELECT, BTN_R}, BTN_R)
         if action[:2] != ("hmp-command", "savevm {snapshot_tag}"):
-            raise AssertionError(f"unexpected Select + R action: {action}")
+            raise AssertionError(f"unexpected Minus + R action: {action}")
         if resolve_binding("xemu", {BTN_X}, BTN_X) is not None:
-            raise AssertionError("Select-less X must not resolve to an action")
+            raise AssertionError("Minus-less X must not resolve to an action")
         if resolve_binding("global", {BTN_SELECT, BTN_X}, BTN_X) is not None:
             raise AssertionError("global profile must not resolve emulator actions")
         if key_command("f2") != [YDOTOOL, "key", "-d", "50", "60:1", "60:0"]:
@@ -307,9 +305,8 @@ let
         action = resolve_binding("pico8", {BTN_SELECT, BTN_B}, BTN_B)
         if action[:2] != ("send-key", "ctrl-r"):
             raise AssertionError(f"unexpected PICO-8 reset action: {action}")
-        action = resolve_binding("pico8", {BTN_CAPTURE}, BTN_CAPTURE)
-        if action[:2] != ("send-key", "enter"):
-            raise AssertionError(f"unexpected PICO-8 Square action: {action}")
+        if resolve_binding("pico8", {BTN_CAPTURE}, BTN_CAPTURE) is not None:
+            raise AssertionError("bare Square must not resolve to a PICO-8 hotkey")
 
         socket_path = None
         received = []
@@ -423,7 +420,7 @@ let
                             terminate_process_group(
                                 args.pid,
                                 args.log,
-                                "Select + Start double-press",
+                                "Minus + Start double-press",
                                 system=args.system,
                                 emulator=args.emulator,
                             )
@@ -474,9 +471,9 @@ let
         309: "Square/Capture",
         310: "L1",
         311: "R1",
-        312: "ZL",
-        313: "ZR",
-        314: "Select/-",
+        312: "L2",
+        313: "R2",
+        314: "Minus",
         315: "Start/+",
         316: "Star/Home",
         317: "Left Stick Press",
@@ -1853,35 +1850,35 @@ EOF
         "SDL_GAMECONTROLLER_USE_BUTTON_LABELS": "1"
       },
       "hotkey_policy": {
-        "scheme": "Per-emulator hotkeys with a shared per-launch Select+Start double-press exit broker; expanded standalone hotkey brokers are opt-in per emulator",
-        "retroarch_menu": "RetroArch only: Select/- plus X/North opens the quick menu",
+        "scheme": "Per-emulator hotkeys with a shared per-launch Minus + Start double-press exit broker; expanded standalone hotkey brokers are opt-in per emulator",
+        "retroarch_menu": "RetroArch only: Minus + X/North opens the quick menu",
         "console_home": "Square/Capture opens emulated console Home only where a stable native binding is generated; currently Dolphin Wii Remote Home",
-        "modifier": "Select/-",
-        "retroarch_save_state": "RetroArch only: Select/- plus R",
-        "retroarch_load_state": "RetroArch only: Select/- plus L",
-        "retroarch_reset": "RetroArch only: Select/- plus B/South",
-        "retroarch_fps": "RetroArch only: Select/- plus Y/West",
-        "retroarch_screenshot": "RetroArch only: Select/- plus A/East",
-        "retroarch_fast_forward": "RetroArch only: Select/- plus ZR",
-        "normal_exit": "Select/- plus Start/+ twice exits the active run-emulator process group",
-        "xemu_hotkeys": "Default Xbox launch: Select/- plus X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, Square/Capture toggles pause, and Select/- plus ZR is unbound",
-        "pico8_hotkeys": "Default PICO-8 launch: Select/- plus X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, Square/Capture opens pause/menu, and Select/- plus ZR is unbound",
-        "gzdoom": "GZDoom only: Start/+ opens the menu, Select/- toggles the automap, and Square/Capture is intentionally unbound",
+        "modifier": "Minus",
+        "retroarch_save_state": "RetroArch only: Minus + R",
+        "retroarch_load_state": "RetroArch only: Minus + L",
+        "retroarch_reset": "RetroArch only: Minus + B/South",
+        "retroarch_fps": "RetroArch only: Minus + Y/West",
+        "retroarch_screenshot": "RetroArch only: Minus + A/East",
+        "retroarch_fast_forward": "RetroArch only: Minus + R2",
+        "normal_exit": "Minus + Start/+ twice exits the active run-emulator process group",
+        "xemu_hotkeys": "Default Xbox launch: Minus + X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, and Minus + R2 is unbound",
+        "pico8_hotkeys": "Default PICO-8 launch: Minus + X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, and Minus + R2 is unbound",
+        "gzdoom": "GZDoom button map: Start/+ opens the menu, Minus toggles the automap, and Square/Capture is intentionally unbound",
         "pico8": "fallback plain PICO-8 launch: Start/+ opens pause/menu; PICO-8 uses an explicit managed -home config directory"
       },
       "managed_defaults": {
-        "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
+        "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Minus hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
         "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
-        "ppsspp": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
-        "pcsx2": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
-        "azahar": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
-        "cemu": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
-        "xemu": "fallback plain Xemu launch with native Select+Start quick actions and per-launch Select+Start twice exit",
+        "ppsspp": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
+        "pcsx2": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
+        "azahar": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
+        "cemu": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
+        "xemu": "fallback plain Xemu launch with native Minus + Start quick actions and per-launch Minus + Start twice exit",
         "xemu-hotkeys": "default Xbox launch with the standalone broker for quick actions, save/load, reset, screenshots, debug monitor, and pause",
-        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Select+Start twice exits through the per-launch broker",
-        "supermodel": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
-        "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; Select+Start twice exits through the per-launch broker",
-        "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1/R1 are User 1/User 2, L2/R2 are alt fire/fire, Select/- toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
+        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Minus + Start twice exits through the per-launch broker",
+        "supermodel": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
+        "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; Minus + Start twice exits through the per-launch broker",
+        "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1/R1 are User 1/User 2, L2/R2 are alt fire/fire, Minus toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
         "pico8": "fallback plain PICO-8 launch using an explicit managed -home directory; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu",
         "pico8-hotkeys": "default PICO-8 launch with the standalone broker for screenshot, GIF save, cart reset, and pause/menu chords"
       },

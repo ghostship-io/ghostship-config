@@ -236,9 +236,9 @@ mapping, cart data, screenshots, and GIF output stay in managed emulation
 paths.
 
 `pico8-hotkeys` is the default ES-DE launcher. It starts the standalone hotkey
-broker and injects PICO-8's own keyboard shortcuts: Select+X or Square opens
-the pause menu, Select+B sends `CTRL-R`, Select+A sends `CTRL-6`, Select+Y
-sends `CTRL-9`, and Select+ZR is logged as unavailable because PICO-8 has no
+broker and injects PICO-8's own keyboard shortcuts: Minus + X opens the pause
+menu, Minus + B sends `CTRL-R`, Minus + A sends `CTRL-6`, Minus + Y sends
+`CTRL-9`, and Minus + R2 is logged as unavailable because PICO-8 has no
 fast-forward hotkey. Plain `pico8` remains available as a fallback alternate.
 Current smoke coverage uses `POOM.png` from the PICO-8 library as the heavier
 test cart.
@@ -524,20 +524,20 @@ attempts, uses BlueZ D-Bus state for discovery, reconnects paired Switch Pro
 controllers serially, re-checks live connected state before each attempt, and
 leaves headphones and other accessories alone.
 
-Controller shortcuts follow a Rocknix-style Switch layout. Select/Minus is the
-hotkey modifier, Select+X opens emulator quick menus where the active launch
+Controller shortcuts follow a Rocknix-style Switch layout. Minus is the hotkey
+modifier, Minus + X opens emulator quick menus where the active launch
 mode supports it, and Star/Home is treated as a controller-local turbo button
 when the firmware exposes it at all. Square/Capture opens native console Home
 screens only where that binding is explicitly configured, such as Dolphin's Wii
 profile, and otherwise does nothing. Every `run-emulator` launch starts a
-lightweight per-process exit broker for Select+Start twice. Xbox defaults to
-`xemu-hotkeys`, which starts a per-process broker and HMP socket for Select+X
-quick actions, Select+B reset, Select+L load `esde-slot1`, Select+R save
-`esde-slot1`, Select+A screenshot, Select+Y debug monitor, and Square/Capture
-pause. Plain `xemu` remains available as a fallback alternate.
-Select+ZR is intentionally unmapped for Xemu because there is no reliable
-fast-forward command. RetroArch maps Select/Minus hotkeys to save/load, reset,
-FPS, screenshot, and fast-forward actions, exits on Select+Start twice through
+lightweight per-process exit broker for Minus + Start twice. Xbox defaults to
+`xemu-hotkeys`, which starts a per-process broker and HMP socket for Minus + X
+quick actions, Minus + B reset, Minus + L load `esde-slot1`, Minus + R save
+`esde-slot1`, Minus + A screenshot, and Minus + Y debug monitor. Plain `xemu`
+remains available as a fallback alternate.
+Minus + R2 is intentionally unmapped for Xemu because there is no reliable
+fast-forward command. RetroArch maps Minus hotkeys to save/load, reset,
+FPS, screenshot, and fast-forward actions, exits on Minus + Start twice through
 the per-process broker, and uses only the managed base
 `retroarch.cfg`, XDG `global.slangp`, and XDG per-core `.opt` files. PC Engine
 CD and SuperGrafx default all five players to 6-button pads. Dolphin enables

@@ -52,12 +52,12 @@ bundled shader packs, controller tooling, smoke-test tooling, dynamic display
 discovery, performance-test tooling, and ScreenScraper/RetroAchievements secret
 wiring. Gamescope FSR is disabled; scaling is handled by RetroArch shaders or
 emulator-native internal resolution controls while preserving aspect ratio.
-Controller shortcuts use Switch Pro labels: Select/Minus is the hotkey
-modifier, Select+X opens emulator quick menus where the active launch mode
+Controller shortcuts use Switch Pro labels: Minus is the hotkey modifier,
+Minus + X opens emulator quick menus where the active launch mode
 supports it, Star/Home is left as the controller turbo/local button, and
 Square/Capture is used only where an emulator profile explicitly configures it.
 Every `run-emulator` launch starts the lightweight per-process exit broker for
-Select+Start twice. Xbox defaults to `xemu-hotkeys`, and PICO-8 defaults to
+Minus + Start twice. Xbox defaults to `xemu-hotkeys`, and PICO-8 defaults to
 `pico8-hotkeys`.
 Switch emulation uses the repo-pinned official Ryubing Canary release; refresh
 `modules/emulation/ryubing-canary-pin.nix` with `scripts/update-ryubing-canary`

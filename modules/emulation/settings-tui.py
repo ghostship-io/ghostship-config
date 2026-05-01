@@ -311,10 +311,10 @@ SWITCH_PRO_BUTTONS = [
     "Y",
     "L",
     "R",
-    "ZL",
-    "ZR",
-    "L4",
-    "R4",
+    "L2",
+    "R2",
+    "L3",
+    "R3",
     "Minus",
     "Plus",
     "Square",
@@ -323,17 +323,14 @@ SWITCH_PRO_BUTTONS = [
 
 
 HOTKEY_COMBOS = [
-    "Select+X",
-    "Select+Start 2x",
-    "Select+R",
-    "Select+L",
-    "Select+B",
-    "Select+A",
-    "Select+Y",
-    "Select+ZR",
-    "Square",
-    "Plus",
-    "Minus",
+    "Minus + X",
+    "Minus + Start 2x",
+    "Minus + R",
+    "Minus + L",
+    "Minus + B",
+    "Minus + A",
+    "Minus + Y",
+    "Minus + R2",
 ]
 
 
@@ -341,63 +338,57 @@ def hotkey_rows(actions=()):
     return [f"{combo} -> {dict(actions).get(combo, 'None')}" for combo in HOTKEY_COMBOS]
 
 
-GLOBAL_EXIT_HOTKEYS = hotkey_rows({"Select+Start 2x": "Exit"})
+GLOBAL_EXIT_HOTKEYS = hotkey_rows({"Minus + Start 2x": "Exit"})
 
 
 RETROARCH_HOTKEYS = hotkey_rows(
     {
-        "Select+X": "Quick Menu",
-        "Select+Start 2x": "Exit",
-        "Select+R": "Save",
-        "Select+L": "Load",
-        "Select+B": "Reset",
-        "Select+A": "Screenshot",
-        "Select+Y": "FPS",
-        "Select+ZR": "Fast",
+        "Minus + X": "Quick Menu",
+        "Minus + Start 2x": "Exit",
+        "Minus + R": "Save",
+        "Minus + L": "Load",
+        "Minus + B": "Reset",
+        "Minus + A": "Screenshot",
+        "Minus + Y": "FPS",
+        "Minus + R2": "Fast",
     }
 )
 
 
 DOLPHIN_WII_HOTKEYS = hotkey_rows(
     {
-        "Select+Start 2x": "Exit",
-        "Square": "Home",
+        "Minus + Start 2x": "Exit",
     }
 )
 
 
 GZDOOM_HOTKEYS = hotkey_rows(
     {
-        "Select+Start 2x": "Exit",
-        "Plus": "Menu",
-        "Minus": "Map",
+        "Minus + Start 2x": "Exit",
     }
 )
 
 
 PICO8_HOTKEYS = hotkey_rows(
     {
-        "Select+X": "Pause/Menu",
-        "Select+Start 2x": "Exit",
-        "Select+B": "Reset",
-        "Select+A": "Screenshot",
-        "Select+Y": "Save GIF",
-        "Square": "Pause/Menu",
-        "Plus": "Pause/Menu",
+        "Minus + X": "Pause/Menu",
+        "Minus + Start 2x": "Exit",
+        "Minus + B": "Reset",
+        "Minus + A": "Screenshot",
+        "Minus + Y": "Save GIF",
     }
 )
 
 
 XEMU_HOTKEYS = hotkey_rows(
     {
-        "Select+X": "Quick Menu",
-        "Select+Start 2x": "Exit",
-        "Select+R": "Save",
-        "Select+L": "Load",
-        "Select+B": "Reset",
-        "Select+A": "Screenshot",
-        "Select+Y": "Debug Monitor",
-        "Square": "Pause",
+        "Minus + X": "Quick Menu",
+        "Minus + Start 2x": "Exit",
+        "Minus + R": "Save",
+        "Minus + L": "Load",
+        "Minus + B": "Reset",
+        "Minus + A": "Screenshot",
+        "Minus + Y": "Debug Monitor",
     }
 )
 
@@ -429,22 +420,22 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Left Stick",
                 "Right Stick": "Right Stick",
-                "L4": "L4 / Left Stick Press",
-                "R4": "R4 / Right Stick Press",
+                "L3": "L3 / Left Stick Press",
+                "R3": "R3 / Right Stick Press",
                 "A": "A / confirm",
                 "B": "B / back",
                 "X": "X / refresh",
                 "Y": "Y / action",
                 "L": "L",
                 "R": "R",
-                "ZL": "ZL",
-                "ZR": "ZR",
+                "L2": "L2",
+                "R2": "R2",
                 "Minus": "Minus / Select",
                 "Plus": "Plus / Start",
                 "Square": "Console Home*",
                 "Star": "Turbo",
             },
-            ["Rocknix hotkeys use Select; Square is Home only where listed."],
+            ["Rocknix hotkeys use Minus; Square is Home only where listed."],
             GLOBAL_EXIT_HOTKEYS,
         ),
     },
@@ -478,8 +469,8 @@ CONTROLLER_MAPS = [
                 "Y": "Y",
                 "L": "L",
                 "R": "R",
-                "ZL": "L",
-                "ZR": "R",
+                "L2": "L",
+                "R2": "R",
                 "Minus": "Select",
                 "Plus": "Start",
                 "Star": "Turbo",
@@ -516,8 +507,8 @@ CONTROLLER_MAPS = [
                 "B": "B",
                 "L": "L",
                 "R": "R",
-                "ZL": "L",
-                "ZR": "R",
+                "L2": "L",
+                "R2": "R",
                 "Minus": "Select",
                 "Plus": "Start",
                 "Star": "Turbo",
@@ -538,8 +529,8 @@ CONTROLLER_MAPS = [
                 "B": "B",
                 "L": "L",
                 "R": "R",
-                "ZL": "L",
-                "ZR": "R",
+                "L2": "L",
+                "R2": "R",
                 "Minus": "Select",
                 "Plus": "Start",
                 "Star": "Turbo",
@@ -560,7 +551,7 @@ CONTROLLER_MAPS = [
                 "X": "X",
                 "Y": "Y",
                 "R": "C",
-                "ZR": "Z",
+                "R2": "Z",
                 "Minus": "Mode",
                 "Plus": "Start",
                 "Star": "Turbo",
@@ -598,8 +589,8 @@ CONTROLLER_MAPS = [
                 "Y": "Y",
                 "L": "L Trigger",
                 "R": "R Trigger",
-                "ZL": "L Trigger",
-                "ZR": "R Trigger",
+                "L2": "L Trigger",
+                "R2": "R Trigger",
                 "Plus": "Start",
                 "Star": "Turbo",
             },
@@ -651,16 +642,16 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Left Stick",
                 "Right Stick": "Right Stick",
-                "L4": "L4",
-                "R4": "R4",
+                "L3": "L3",
+                "R3": "R3",
                 "A": "PS Cross",
                 "B": "PS Circle",
                 "X": "PS Triangle",
                 "Y": "PS Square",
                 "L": "L1",
                 "R": "R1",
-                "ZL": "L2",
-                "ZR": "R2",
+                "L2": "L2",
+                "R2": "R2",
                 "Minus": "Select",
                 "Plus": "Start",
                 "Star": "Turbo",
@@ -681,8 +672,8 @@ CONTROLLER_MAPS = [
                 "B": "B",
                 "L": "L",
                 "R": "R",
-                "ZL": "Z",
-                "ZR": "R",
+                "L2": "Z",
+                "R2": "R",
                 "Plus": "Start",
                 "Star": "Turbo",
             },
@@ -704,7 +695,7 @@ CONTROLLER_MAPS = [
                 "Y": "Y",
                 "L": "L",
                 "R": "R",
-                "ZR": "Z",
+                "R2": "Z",
                 "Plus": "Start",
                 "Star": "Turbo",
             },
@@ -724,7 +715,7 @@ CONTROLLER_MAPS = [
                 "Y": "2",
                 "L": "C",
                 "R": "Z",
-                "ZR": "B Trigger",
+                "R2": "B Trigger",
                 "Minus": "Minus",
                 "Plus": "Plus",
                 "Square": "Console Home",
@@ -748,8 +739,8 @@ CONTROLLER_MAPS = [
                 "Y": "Y",
                 "L": "L",
                 "R": "R",
-                "ZL": "ZL",
-                "ZR": "ZR",
+                "L2": "ZL",
+                "R2": "ZR",
                 "Minus": "Minus",
                 "Plus": "Plus",
                 "Star": "Turbo",
@@ -765,16 +756,16 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Left Stick",
                 "Right Stick": "Right Stick",
-                "L4": "L4",
-                "R4": "R4",
+                "L3": "L3",
+                "R3": "R3",
                 "A": "A",
                 "B": "B",
                 "X": "X",
                 "Y": "Y",
                 "L": "L",
                 "R": "R",
-                "ZL": "ZL",
-                "ZR": "ZR",
+                "L2": "ZL",
+                "R2": "ZR",
                 "Minus": "Minus",
                 "Plus": "Plus",
                 "Star": "Turbo",
@@ -790,16 +781,16 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Left Stick",
                 "Right Stick": "Right Stick",
-                "L4": "Left Stick Press",
-                "R4": "Right Stick Press",
+                "L3": "Left Stick Press",
+                "R3": "Right Stick Press",
                 "A": "A",
                 "B": "B",
                 "X": "X",
                 "Y": "Y",
                 "L": "White",
                 "R": "Black",
-                "ZL": "Left Trigger",
-                "ZR": "Right Trigger",
+                "L2": "Left Trigger",
+                "R2": "Right Trigger",
                 "Minus": "Back",
                 "Plus": "Start",
                 "Star": "Turbo",
@@ -821,8 +812,8 @@ CONTROLLER_MAPS = [
                 "Y": "PSP Square",
                 "L": "L",
                 "R": "R",
-                "ZL": "L",
-                "ZR": "R",
+                "L2": "L",
+                "R2": "R",
                 "Minus": "Select",
                 "Plus": "Start",
                 "Star": "Turbo",
@@ -865,8 +856,8 @@ CONTROLLER_MAPS = [
                 "Y": "Y",
                 "L": "L",
                 "R": "R",
-                "ZL": "ZL",
-                "ZR": "ZR",
+                "L2": "ZL",
+                "R2": "ZR",
                 "Minus": "Select",
                 "Plus": "Start",
                 "Star": "Turbo",
@@ -882,16 +873,16 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Left Stick",
                 "Right Stick": "Right Stick",
-                "L4": "L4",
-                "R4": "R4",
+                "L3": "L3",
+                "R3": "R3",
                 "A": "A",
                 "B": "B",
                 "X": "X",
                 "Y": "Y",
                 "L": "L",
                 "R": "R",
-                "ZL": "ZL",
-                "ZR": "ZR",
+                "L2": "ZL",
+                "R2": "ZR",
                 "Minus": "Minus",
                 "Plus": "Plus",
                 "Star": "Turbo",
@@ -912,8 +903,8 @@ CONTROLLER_MAPS = [
                 "Y": "B4",
                 "L": "B5",
                 "R": "B6",
-                "ZL": "B5 / B7",
-                "ZR": "B6 / B8",
+                "L2": "B5 / B7",
+                "R2": "B6 / B8",
                 "Minus": "Coin",
                 "Plus": "Start",
                 "Star": "Turbo",
@@ -929,16 +920,16 @@ CONTROLLER_MAPS = [
             {
                 "D-pad": "Stick",
                 "Left Stick": "Stick",
-                "L4": "Service",
-                "R4": "Test",
+                "L3": "Service",
+                "R3": "Test",
                 "A": "B1",
                 "B": "B2",
                 "X": "B3",
                 "Y": "B4",
                 "L": "B5",
                 "R": "B6",
-                "ZL": "B5 / B7",
-                "ZR": "B6 / B8",
+                "L2": "B5 / B7",
+                "R2": "B6 / B8",
                 "Minus": "Coin",
                 "Plus": "Start",
                 "Star": "Turbo",
@@ -954,16 +945,16 @@ CONTROLLER_MAPS = [
                 "D-pad": "WeaponLR InvUp UseDn",
                 "Left Stick": "Move",
                 "Right Stick": "Look 25% V",
-                "L4": "Speed",
-                "R4": "Quick Turn",
+                "L3": "Speed",
+                "R3": "Quick Turn",
                 "A": "Use/Confirm",
                 "B": "Jump/Back",
                 "X": "Crouch",
                 "Y": "Reload",
                 "L": "User 1",
                 "R": "Alt-Fire",
-                "ZL": "User 2",
-                "ZR": "Fire",
+                "L2": "User 2",
+                "R2": "Fire",
                 "Minus": "Automap",
                 "Plus": "Menu",
                 "Square": "None",
@@ -2446,16 +2437,16 @@ def smoke_test(mode):
             assert not any("Turbo: Star + <Button>" in line for line in row["detail"])
             assert not any("opens RetroArch quick menu" in line for line in row["detail"])
             if row["label"] in retroarch_labels:
-                assert any("Select+X -> Quick Menu" in line for line in row["detail"])
-                assert any("Select+R -> Save" in line for line in row["detail"])
-                assert any("Select+L -> Load" in line for line in row["detail"])
-                assert any("Select+ZR -> Fast" in line for line in row["detail"])
+                assert any("Minus + X -> Quick Menu" in line for line in row["detail"])
+                assert any("Minus + R -> Save" in line for line in row["detail"])
+                assert any("Minus + L -> Load" in line for line in row["detail"])
+                assert any("Minus + R2 -> Fast" in line for line in row["detail"])
             else:
                 if row["label"] != "Xbox":
-                    assert not any("Select+X -> Quick Menu" in line for line in row["detail"])
-                    assert not any("Select+R -> Save" in line for line in row["detail"])
-                    assert not any("Select+L -> Load" in line for line in row["detail"])
-                assert not any("Select+ZR -> Fast" in line for line in row["detail"])
+                    assert not any("Minus + X -> Quick Menu" in line for line in row["detail"])
+                    assert not any("Minus + R -> Save" in line for line in row["detail"])
+                    assert not any("Minus + L -> Load" in line for line in row["detail"])
+                assert not any("Minus + R2 -> Fast" in line for line in row["detail"])
             assert not any("Original Controller" in line or "+---" in line for line in row["detail"])
         n64 = next(row for row in CONTROLLER_MAPS if row["label"] == "Nintendo 64")
         assert any("A -> A" in line for line in n64["detail"])
@@ -2464,19 +2455,18 @@ def smoke_test(mode):
         assert any("Y -> None" in line for line in n64["detail"])
         gamecube = next(row for row in CONTROLLER_MAPS if row["label"] == "GameCube")
         assert any("R -> R" in line for line in gamecube["detail"])
-        assert any("ZL -> None" in line for line in gamecube["detail"])
-        assert any("ZR -> Z" in line for line in gamecube["detail"])
+        assert any("L2 -> None" in line for line in gamecube["detail"])
+        assert any("R2 -> Z" in line for line in gamecube["detail"])
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
         assert any("Square -> Console Home" in line for line in wii["detail"])
-        assert any("Square -> Home" in line for line in wii["detail"])
         xbox = next(row for row in CONTROLLER_MAPS if row["label"] == "Xbox")
-        assert any("Select+X -> Quick Menu" in line for line in xbox["detail"])
-        assert any("Select+R -> Save" in line for line in xbox["detail"])
-        assert any("Select+ZR -> None" in line for line in xbox["detail"])
+        assert any("Minus + X -> Quick Menu" in line for line in xbox["detail"])
+        assert any("Minus + R -> Save" in line for line in xbox["detail"])
+        assert any("Minus + R2 -> None" in line for line in xbox["detail"])
         pico8 = next(row for row in CONTROLLER_MAPS if row["label"] == "PICO-8")
-        assert any("Select+X -> Pause/Menu" in line for line in pico8["detail"])
-        assert any("Select+Y -> Save GIF" in line for line in pico8["detail"])
-        assert any("Select+ZR -> None" in line for line in pico8["detail"])
+        assert any("Minus + X -> Pause/Menu" in line for line in pico8["detail"])
+        assert any("Minus + Y -> Save GIF" in line for line in pico8["detail"])
+        assert any("Minus + R2 -> None" in line for line in pico8["detail"])
         for row in CONTROLLER_MAPS:
             if row["label"] in {"Switch Pro Reference", "Wii Remote + Nunchuk", "GZDoom"}:
                 continue
@@ -2484,8 +2474,6 @@ def smoke_test(mode):
         gzdoom = next(row for row in CONTROLLER_MAPS if row["label"] == "GZDoom")
         assert any("A -> Use/Confirm" in line for line in gzdoom["detail"])
         assert any("D-pad -> WeaponLR InvUp" in line for line in gzdoom["detail"])
-        assert any("Plus -> Menu" in line for line in gzdoom["detail"])
-        assert any("Minus -> Map" in line for line in gzdoom["detail"])
         assert any("Left Stick -> Move" in line for line in gzdoom["detail"])
         assert any("Right Stick -> Look 25% V" in line for line in gzdoom["detail"])
         assert any("Minus -> Automap" in line for line in gzdoom["detail"])
