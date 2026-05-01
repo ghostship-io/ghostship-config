@@ -102,11 +102,15 @@ let
       uintptr_t SEGAAPI_Init() { return ok(); }
       uintptr_t SEGAAPI_Exit() { return ok(); }
       uintptr_t SEGAAPI_Reset() { return ok(); }
-      uintptr_t SEGAAPI_CreateBuffer() {
+      uintptr_t SEGAAPI_CreateBuffer(void *config, uintptr_t flags, uintptr_t channels, Buffer **out) {
+        (void)config;
+        (void)flags;
+        (void)channels;
         Buffer *buffer = (Buffer *)calloc(1, sizeof(Buffer));
-        if (!buffer) return 0;
+        if (!buffer) return 1;
         buffer->magic = 0x53454741u;
-        return (uintptr_t)buffer;
+        if (out) *out = buffer;
+        return ok();
       }
       uintptr_t SEGAAPI_DestroyBuffer(uintptr_t handle) {
         Buffer *buffer = as_buffer(handle);
