@@ -1447,31 +1447,33 @@ EOF
     lookstrafe false
 
     // GZDoom regenerates generic Joy*/POV1* defaults before this cfg runs.
-    // Use the same physical -> GZDoom key -> target format for each fix:
-    // B -> Joy1 -> jump
+    // Standard Linux evdev/SDL layout (1-indexed Joy):
+    // Joy5=LB, Joy6=RB, Joy7=LT, Joy8=RT, Joy9=Back, Joy10=Start, Joy11=L3, Joy12=R3
+    //
     // A -> Joy2 -> use/open
+    // B -> Joy1 -> jump
     // X -> Joy3 -> crouch
     // Y -> Joy4 -> reload
-    // L1 -> Joy6 -> mod special / user1
-    // R1 -> Joy7 -> alt-fire
-    // L2 -> Joy8 -> zoom/grenade / user2
-    // R2 -> Joy9 -> primary fire
-    // Minus -> Joy10 -> automap
-    // Plus -> Joy11/12 -> menu
-    // L3 -> lthumb -> speed/run toggle
-    // R3 -> rthumb -> quick turn / user4
+    // LB -> Joy5 -> User 1 (Mod special)
+    // RB -> Joy6 -> Alt-Fire (ADS)
+    // LT -> Joy7 -> User 2 (Zoom/Grenade)
+    // RT -> Joy8 -> Primary Fire
+    // Minus -> Joy9 -> Automap
+    // Plus -> Joy10 -> Menu
+    // L3 -> Joy11 -> Speed/Run toggle
+    // R3 -> Joy12 -> Quick turn / User 4
     bind Joy1 +jump
     bind Joy2 +use
     bind Joy3 crouch
     bind Joy4 +reload
     bind Joy5 +user1
-    bind Joy6 +user1
-    bind Joy7 +altattack
-    bind Joy8 +user2
-    bind Joy9 +attack
-    bind Joy10 togglemap
-    bind Joy11 menu_main
-    bind Joy12 menu_main
+    bind Joy6 +altattack
+    bind Joy7 +user2
+    bind Joy8 +attack
+    bind Joy9 togglemap
+    bind Joy10 menu_main
+    bind Joy11 +speed
+    bind Joy12 +user4
     bind Axis3Plus +user2
     bind Axis4Plus +user2
     bind Axis4Minus +user2
@@ -1485,8 +1487,7 @@ EOF
     bind POV1Up invprev
     bind POV1Down invuse
 
-    // Alias fallbacks keep the intended physical Switch-label map if GZDoom
-    // routes a future controller through its game-controller names.
+    // Alias fallbacks for standard SDL GameController naming.
     bind pad_a +use
     bind pad_b +jump
     bind pad_x crouch
@@ -1504,7 +1505,7 @@ EOF
     bind dpadup invprev
     bind dpaddown invuse
 
-    mapbind Joy10 togglemap
+    mapbind Joy9 togglemap
     mapbind pad_back togglemap
     mapbind pad_y am_togglefollow
     mapbind pad_a am_setmark
