@@ -334,7 +334,7 @@ EOF
       cp -R . "$theme_dir/"
       find "$theme_dir" -maxdepth 1 -name 'aspect-ratio*.xml' -exec \
         sed -i '/<clock name="clock">/a\         <format>%H:%M</format>' {} +
-      ${pkgs.python3}/bin/python3 - "$theme_dir" model3 "$model3Artwork" supermodel "$model3Artwork" teknoparrot "$teknoparrotArtwork" <<'PY'
+      ${pkgs.python3}/bin/python3 - "$theme_dir" model3 "$model3Artwork" teknoparrot "$teknoparrotArtwork" <<'PY'
 import struct
 import sys
 import zlib
