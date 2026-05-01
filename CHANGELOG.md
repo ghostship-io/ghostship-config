@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Develop agent maintenance fix**: Fixed a failure in `ghostship-agent-maintenance` where a stale patch for `agent-deck` caused the script to exit before updating `gemini`, `codex`, and `opencode`. Removed the stale web-mutations patch for `agent-deck` (now upstreamed in `v1.7.75`) and made the build process non-fatal so it no longer blocks other agent updates.
 - **Boomer Controller Maps hotkey audit**: Show emulator hotkeys only where
   they are actually configured, keeping RetroArch save-state controls off
   standalone emulator maps while preserving the shared Select+Start exit chord.

@@ -205,33 +205,11 @@ let
         return 0
       fi
 
-      log_info "building patched agent-deck ''${version}"
+      log_info "building agent-deck ''${version}"
       if ! ${pkgs.git}/bin/git clone --depth 1 --branch "$version" https://github.com/asheshgoplani/agent-deck "$source_dir/repo" >/dev/null 2>&1; then
         log_warn "agent-deck source checkout failed, continuing"
         return 0
       fi
-
-      ${pkgs.python3}/bin/python - "$source_dir/repo/cmd/agent-deck/web_cmd.go" "$source_dir/repo/cmd/agent-deck/main.go" <<'PY'
-import pathlib
-import sys
-
-web_cmd = pathlib.Path(sys.argv[1])
-main_go = pathlib.Path(sys.argv[2])
-
-web_text = web_cmd.read_text()
-old_web = """\tserver := web.NewServer(web.Config{\n\t\tListenAddr:          *listenAddr,\n\t\tProfile:             effectiveProfile,\n\t\tReadOnly:            *readOnly,\n\t\tToken:               *token,\n"""
-new_web = """\tserver := web.NewServer(web.Config{\n\t\tListenAddr:          *listenAddr,\n\t\tProfile:             effectiveProfile,\n\t\tReadOnly:            *readOnly,\n\t\tWebMutations:        !*readOnly,\n\t\tToken:               *token,\n"""
-if old_web not in web_text:
-    raise SystemExit("expected web server config block not found")
-web_cmd.write_text(web_text.replace(old_web, new_web, 1))
-
-main_text = main_go.read_text()
-old_main = """\t\tif costStore != nil {\n\t\t\tserver.SetCostStore(costStore)\n\t\t}\n"""
-new_main = """\t\tif costStore != nil {\n\t\t\tserver.SetCostStore(costStore)\n\t\t}\n\t\tserver.SetMutator(ui.NewWebMutator(homeModel))\n"""
-if old_main not in main_text:
-    raise SystemExit("expected main web server setup block not found")
-main_go.write_text(main_text.replace(old_main, new_main, 1))
-PY
 
       if ! (
         cd "$source_dir/repo"
@@ -241,7 +219,7 @@ PY
         trap 'rm -rf "$GOCACHE" "$GOPATH"' EXIT
         ${pkgs.go}/bin/go build -ldflags "-s -w -X main.Version=$desired_version" -o agent-deck ./cmd/agent-deck
       ); then
-        log_warn "agent-deck patched build failed, continuing"
+        log_warn "agent-deck build failed, continuing"
         return 0
       fi
 
