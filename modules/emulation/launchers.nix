@@ -878,6 +878,10 @@ EOF
     esac
     export EMULATION_EMULATOR_HEAVY="$heavy"
     profile_json="$(display-profile)"
+    preferred_vk_device="$(jq -r '.preferred_vk_device // empty' <<<"$profile_json")"
+    if [ -n "$preferred_vk_device" ]; then
+      export MESA_VK_DEVICE_SELECT="$preferred_vk_device"
+    fi
     output_width="$(jq -r '.output_width' <<<"$profile_json")"
     output_height="$(jq -r '.output_height' <<<"$profile_json")"
 
