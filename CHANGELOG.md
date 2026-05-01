@@ -71,8 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer GZDoom controller correction pass 2**: Keep the confirmed A/B/X,
   Minus, and D-pad mappings, move L1's remaining weapon-switch event from
   `Joy6` to User 1, add config-only R2 fire candidates for `Joy9` plus
-  trigger-axis directions, and guess `Joy11`/`Joy12` for Plus/menu plus
-  `Joy15`/`Joy16` for L4/R4.
+  trigger-axis directions, and guess `Joy11`/`Joy12` for Plus/menu while
+  leaving L4/R4 documented but unmapped until unique events are proven.
 - **Boomer smoke-test kiosk restore**: Restore `greetd` instead of
   `getty@tty1` after root-run smoke tests on kiosk-mode hosts so Boomer returns
   to ES-DE instead of a console login prompt.

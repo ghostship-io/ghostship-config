@@ -159,7 +159,7 @@ GZDoom key -> target binding.
 | Start / `+` | `Joy11` / `Joy12` or `Pad_Start` alias fallback | `menu_main` |
 | D-pad left/right | `POV1Left` / `POV1Right` (confirmed) | `weapprev` / `weapnext` |
 | D-pad up/down | `POV1Up` (was map) / `POV1Down` | `invprev` / `invuse` |
-| L4 / R4 | `Joy15` / `Joy16` guesses | `toggle cl_run` / `turn180` |
+| L4 / R4 | not yet observed as unique events | unbound until proven |
 
 The cfg also keeps physical-label `Pad_*`, shoulder, trigger, and D-pad alias
 fallbacks with the same target layout in case GZDoom routes a future controller
