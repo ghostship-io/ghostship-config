@@ -304,11 +304,9 @@ changelog.
   defaults, then keep only the `[Joy:JS:*]` axis seed: Switch Pro axis 0/1 are
   strafe/forward, axis 2 is yaw, axis 3 is pitch with scale `0.25`, and unused
   axes are disabled.
-  After Burner Climax native TeknoParrot payloads need the repo-managed 32-bit
-  FHS runtime plus `libsegaapi.so` audio and legacy semaphore shims; test by
-  launching on Boomer's active kiosk `DISPLAY=:0`, not only via SSH, and treat
-  any in-game dongle/security error as operator-managed content rather than a
-  repo-managed bypass.
+  After Burner Climax should launch through TeknoParrot XML profiles under
+  `TeknoParrotUi.exe --profile`, not by direct native ELF execution; test on
+  Boomer's active kiosk `DISPLAY=:0`, not only via SSH.
   Boomer's probed kernel Switch Pro raw map is documented in
   `docs/boomer-kuwanger-emulation.md`. Keep only the GZDoom menu A/B package
   patch unless a future live probe proves another package patch is required.

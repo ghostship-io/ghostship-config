@@ -248,17 +248,13 @@ The wrapper uses a dedicated Wine prefix at:
 /srv/emulation/config/teknoparrot/prefix
 ```
 
-ES-DE lists `.teknoparrot` launcher files. Each launcher is a small text file
-whose first non-comment line is parsed as a raw argument string, matching the
-`.gzdoom` launcher style. If the first argument names a payload beside the
-launcher, `run-emulator` runs it from that payload directory through a
-32-bit Linux FHS compatibility runtime with the legacy loader, graphics
-libraries, libstdc++5, and a small `libsegaapi.so` audio shim with targeted
-legacy semaphore compatibility; otherwise the arguments are passed to
-TeknoParrotUi. Keep copied game payloads under hidden `.assets/` directories
-beside those launchers. The runtime does not provide proprietary game assets,
-premium unlocks, dongle bypasses, or patch packs; if a native payload reaches
-an in-game security error, that is operator-managed content.
+ES-DE lists `.xml` TeknoParrot profile files. `run-emulator` copies the selected
+profile into TeknoParrot's `UserProfiles` directory, switches to the
+TeknoParrot install directory, and launches `TeknoParrotUi.exe --profile` under
+Wine. Keep copied game payloads under hidden `.assets/` directories beside
+those XML profiles. Profiles should use Wine-visible game paths, for example a
+`Z:\srv\...` path generated with `winepath -w`. The runtime does not provide
+proprietary game assets, premium unlocks, dongle bypasses, or patch packs.
 
 ## Display And Aspect Scaling
 

@@ -13,24 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Use clean `.png` PICO-8 cart names for ES-DE scanning.
 - **Boomer ES-DE gamelists**: Stop generating ES-DE gamelists from Nix; let
   ES-DE own gamelist creation and updates.
-- **Boomer TeknoParrot launchers**: Use `.teknoparrot` launcher files in ES-DE
-  and parse their first non-comment line as a raw argument string, matching the
-  `.gzdoom` launcher style.
+- **Boomer TeknoParrot launchers**: Use TeknoParrot `.xml` profile files in
+  ES-DE and launch them through `TeknoParrotUi.exe --profile` under Wine.
 - **Boomer TeknoParrot ES-DE identity**: Show TeknoParrot as its own ES-DE
   system instead of reusing the generic Arcade theme label.
 - **Boomer TeknoParrot theme**: Add TeknoParrot metadata, logo, and system
   artwork to the managed Art Book Next ES-DE theme so it does not render blank.
-- **Boomer TeknoParrot polish**: Use Star Wars Trilogy Arcade artwork for the
-  TeknoParrot system background, force ES-DE's custom systems order, and run
-  native `.teknoparrot` payloads by absolute path so filenames with spaces
-  launch correctly.
-- **Boomer TeknoParrot native runtime**: Run local native `.teknoparrot`
-  payloads through a 32-bit FHS compatibility runtime so After Burner Climax
-  can find its Linux loader and legacy arcade dependencies on NixOS. Include a
-  small `libsegaapi.so` audio shim and targeted legacy semaphore compatibility
-  for Lindbergh payloads that otherwise fail before rendering a window.
+- **Boomer TeknoParrot polish**: Force ES-DE's custom systems order and copy
+  selected XML profiles into TeknoParrot's `UserProfiles` directory before
+  launching them.
 - **Boomer TeknoParrot artwork**: Apply Art Book Next's diagonal system-art
-  mask to the TeknoParrot Star Wars artwork so it matches stock system panels.
+  mask to the TeknoParrot After Burner artwork so it matches stock system
+  panels, and remove the temporary Model 3/Supermodel theme artwork.
 - **Boomer TeknoParrot logo**: Use the supplied path-based TeknoParrot SVG for
   the ES-DE system text logo.
 - **Boomer controller probe documentation**: Document the live Switch Pro
