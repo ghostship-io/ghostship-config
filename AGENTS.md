@@ -289,7 +289,10 @@ changelog.
   underneath that folder. PICO-8 needs an explicit Gamescope Xwayland server on
   Boomer because its SDL path uses X11; keep plain `pico8` as the default and
   expose expanded shortcuts through the opt-in `pico8-hotkeys` launcher with
-  the managed PICO-8 `-home` path. Boomer's managed ES-DE UI defaults are
+  the managed PICO-8 `-home` path. Every `run-emulator` launch should keep the
+  lightweight per-process Select+Start double-press exit broker; expanded
+  standalone hotkeys stay opt-in per-emulator launch modes. Boomer's managed
+  ES-DE UI defaults are
   manufacturer/type/year systems sorting, visible clock, Switch Pro
   controller prompts, all-controller ES-DE menu input, Hawaii standard time, and
   a visible clock using ES-DE-supported `%H:%M` formatting; true 12-hour clock
@@ -301,8 +304,7 @@ changelog.
   Select+X is the quick-menu chord, Square/Capture is native console Home only
   where explicitly configured and otherwise no-op, Select/Minus is the hotkey
   modifier, Star/Home is a controller-local turbo button when exposed, and
-  standalone raw hotkey brokers must be opt-in per-emulator launch modes, not
-  global watchers.
+  expanded standalone raw hotkey brokers must be opt-in per-emulator launch modes.
   Controller Maps should stay text-only with a compact two-column button map
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
   Switch A/B, and launch GZDoom with the managed Boomer controls cfg. Reset

@@ -528,15 +528,17 @@ hotkey modifier, Select+X opens emulator quick menus where the active launch
 mode supports it, and Star/Home is treated as a controller-local turbo button
 when the firmware exposes it at all. Square/Capture opens native console Home
 screens only where that binding is explicitly configured, such as Dolphin's Wii
-profile, and otherwise does nothing. Standalone raw hotkey brokers are opt-in
-per-emulator launch modes, not a global background watcher. Plain Xbox uses
-Xemu's native Select+Start quick-actions chord; the selectable `xemu-hotkeys`
-launch mode starts a per-process broker and HMP socket for Select+X quick
-actions, Select+B reset, Select+L load `esde-slot1`, Select+R save
-`esde-slot1`, Select+A screenshot, Select+Y debug monitor, and Square/Capture
-pause. Select+ZR is intentionally unmapped for Xemu because there is no reliable
+profile, and otherwise does nothing. Every `run-emulator` launch starts a
+lightweight per-process exit broker for Select+Start twice; expanded standalone
+hotkey brokers are opt-in per-emulator launch modes. Plain Xbox uses Xemu's
+native Select+Start quick-actions chord; the selectable `xemu-hotkeys` launch
+mode starts a per-process broker and HMP socket for Select+X quick actions,
+Select+B reset, Select+L load `esde-slot1`, Select+R save `esde-slot1`,
+Select+A screenshot, Select+Y debug monitor, and Square/Capture pause.
+Select+ZR is intentionally unmapped for Xemu because there is no reliable
 fast-forward command. RetroArch maps Select/Minus hotkeys to save/load, reset,
-FPS, screenshot, and fast-forward actions, and uses only the managed base
+FPS, screenshot, and fast-forward actions, exits on Select+Start twice through
+the per-process broker, and uses only the managed base
 `retroarch.cfg`, XDG `global.slangp`, and XDG per-core `.opt` files. PC Engine
 CD and SuperGrafx default all five players to 6-button pads. Dolphin enables
 all four GameCube controller ports and keeps Wii slots 1-4 on the same SDL

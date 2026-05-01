@@ -323,13 +323,13 @@ SWITCH_PRO_BUTTONS = [
 
 
 GLOBAL_EXIT_HOTKEYS = [
-    "None",
+    "Exit: Select + Start twice",
 ]
 
 
 RETROARCH_HOTKEYS = [
     "Quick Menu: Select + X",
-    "Exit: Select + Start",
+    "Exit: Select + Start twice",
     "Save: Select + R",
     "Load: Select + L",
     "Reset: Select + B",
@@ -341,12 +341,14 @@ RETROARCH_HOTKEYS = [
 
 DOLPHIN_WII_HOTKEYS = [
     "Home: Square / Capture",
+    "Exit: Select + Start twice",
 ]
 
 
 GZDOOM_HOTKEYS = [
     "Menu: Plus / Start",
     "Map: Minus toggles",
+    "Exit: Select + Start twice",
 ]
 
 
@@ -357,7 +359,7 @@ PICO8_HOTKEYS = [
     "Screenshot*: Select+A",
     "Save GIF*: Select+Y",
     "Pause*: Square",
-    "Fast: None",
+    "Fast: None; Exit: Select+Start 2x",
 ]
 
 
@@ -369,7 +371,7 @@ XEMU_HOTKEYS = [
     "Screenshot*: Select+A",
     "Monitor*: Select+Y",
     "Pause*: Square",
-    "Fast: None",
+    "Fast: None; Exit: Select+Start 2x",
 ]
 
 
@@ -416,7 +418,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             ["Rocknix hotkeys use Select; Square is Home only where listed."],
-            ["Per-emulator pages list supported hotkeys.", "Default standalone hotkeys: None"],
+            ["Per-emulator pages list supported hotkeys.", "Exit: Select + Start twice"],
         ),
     },
     {

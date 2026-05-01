@@ -86,6 +86,8 @@ let
     BTN_X = 307
     BTN_Y = 308
     BTN_SELECT = 314
+    BTN_START = 315
+    DOUBLE_PRESS_SECONDS = 0.9
     FORCE_KILL_SECONDS = 5.0
     YDOTOOL = "${lib.getExe pkgs.ydotool}"
 
@@ -101,6 +103,9 @@ let
     }
 
     PROFILES = {
+        "global": {
+            "bindings": {},
+        },
         "xemu": {
             "snapshot_tag": "esde-slot1",
             "bindings": {
@@ -158,7 +163,9 @@ let
 
     def supported_event(event_path):
         name = input_name(event_path).lower()
-        return "pro controller" in name and "imu" not in name
+        if "imu" in name:
+            return False
+        return "pro controller" in name or "8bitdo" in name or "ultimate 2c" in name
 
     def open_events():
         fds = {}
@@ -290,6 +297,8 @@ let
             raise AssertionError(f"unexpected Select + R action: {action}")
         if resolve_binding("xemu", {BTN_X}, BTN_X) is not None:
             raise AssertionError("Select-less X must not resolve to an action")
+        if resolve_binding("global", {BTN_SELECT, BTN_X}, BTN_X) is not None:
+            raise AssertionError("global profile must not resolve emulator actions")
         if key_command("f2") != [YDOTOOL, "key", "60:1", "60:0"]:
             raise AssertionError("F2 command changed unexpectedly")
         action = resolve_binding("pico8", {BTN_SELECT, BTN_A}, BTN_A)
@@ -380,6 +389,7 @@ let
             return 0
 
         pressed = {path: set() for path in fds}
+        last_select_start = {path: 0.0 for path in fds}
         log(args.log, f"started {args.profile} hotkey broker on {len(fds)} controller(s)", system=args.system, emulator=args.emulator)
 
         while process_alive(args.pid):
@@ -404,6 +414,19 @@ let
                         pressed[path].add(code)
                     else:
                         pressed[path].discard(code)
+                        continue
+                    if code == BTN_START and BTN_SELECT in pressed[path]:
+                        now = time.monotonic()
+                        if now - last_select_start[path] <= DOUBLE_PRESS_SECONDS:
+                            terminate_process_group(
+                                args.pid,
+                                args.log,
+                                "Select + Start double-press",
+                                system=args.system,
+                                emulator=args.emulator,
+                            )
+                            return 0
+                        last_select_start[path] = now
                         continue
                     action = resolve_binding(args.profile, pressed[path], code)
                     if action is None:
@@ -1077,7 +1100,7 @@ EOF
 
     cmd=()
     run_cwd=""
-    hotkey_profile=""
+    hotkey_profile="global"
     hotkey_snapshot_tag=""
     hotkey_hmp_socket=""
     hotkey_runtime_dir=""
@@ -1824,7 +1847,7 @@ EOF
         "SDL_GAMECONTROLLER_USE_BUTTON_LABELS": "1"
       },
       "hotkey_policy": {
-        "scheme": "Per-emulator hotkeys; standalone hotkey brokers are opt-in per emulator",
+        "scheme": "Per-emulator hotkeys with a shared per-launch Select+Start double-press exit broker; expanded standalone hotkey brokers are opt-in per emulator",
         "retroarch_menu": "RetroArch only: Select/- plus X/North opens the quick menu",
         "console_home": "Square/Capture opens emulated console Home only where a stable native binding is generated; currently Dolphin Wii Remote Home",
         "modifier": "Select/-",
@@ -1834,7 +1857,7 @@ EOF
         "retroarch_fps": "RetroArch only: Select/- plus Y/West",
         "retroarch_screenshot": "RetroArch only: Select/- plus A/East",
         "retroarch_fast_forward": "RetroArch only: Select/- plus ZR",
-        "normal_exit": "No shared standalone exit chord is installed by default",
+        "normal_exit": "Select/- plus Start/+ twice exits the active run-emulator process group",
         "xemu_hotkeys": "Opt-in xemu-hotkeys only: Select/- plus X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, Square/Capture toggles pause, and Select/- plus ZR is unbound",
         "pico8_hotkeys": "Opt-in pico8-hotkeys only: Select/- plus X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, Square/Capture opens pause/menu, and Select/- plus ZR is unbound",
         "gzdoom": "GZDoom only: Start/+ opens the menu, Select/- toggles the automap, and Square/Capture is intentionally unbound",
@@ -1843,14 +1866,14 @@ EOF
       "managed_defaults": {
         "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses only the managed base retroarch.cfg, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
         "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
-        "ppsspp": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
-        "pcsx2": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
-        "azahar": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
-        "cemu": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
-        "xemu": "plain Xemu launch with native Select+Start quick actions only; use xemu-hotkeys for the opt-in standalone broker",
-        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; no shared raw-input hotkey broker is started",
-        "supermodel": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
-        "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; no shared raw-input hotkey broker is started",
+        "ppsspp": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
+        "pcsx2": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
+        "azahar": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
+        "cemu": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
+        "xemu": "plain Xemu launch with native Select+Start quick actions and per-launch Select+Start twice exit; use xemu-hotkeys for the opt-in standalone broker",
+        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Select+Start twice exits through the per-launch broker",
+        "supermodel": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
+        "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; Select+Start twice exits through the per-launch broker",
         "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1/R1 are User 1/User 2, L2/R2 are alt fire/fire, Select/- toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
         "pico8": "run-emulator launches carts with PICO-8 using an explicit managed -home directory; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu",
         "pico8-hotkeys": "opt-in PICO-8 launch with the standalone broker for screenshot, GIF save, cart reset, and pause/menu chords"

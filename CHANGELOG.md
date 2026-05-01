@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer hotkey regression fix**: Restore the per-launch Select+Start
+  double-press exit broker and move RetroArch hotkey button bindings into the
+  managed Switch Pro and 8BitDo autoconfigs so each controller uses its own
+  physical button numbers.
 - **Boomer PICO-8 hotkey launcher**: Keep plain PICO-8 as the default, add an
   opt-in `pico8-hotkeys` ES-DE alternate, launch PICO-8 with a managed
   `-home` directory, seed its config/controller mapping before launch, and map
@@ -16,11 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resolution, keep shaders on the global `global.slangp` preset, default all
   four N64 controller paks to rumble, and stop generating ParaLLEl N64 and
   shader-profile runtime option files.
-- **Boomer standalone hotkey broker**: Replaced the always-on controller
-  hotkey watcher with an opt-in generic standalone broker. Xbox keeps plain
-  `xemu` as the default and adds selectable `xemu-hotkeys` for Xemu save/load,
-  reset, screenshot, pause, debug-monitor, and quick-action chords through a
-  per-launch HMP socket plus host key injection.
+- **Boomer standalone hotkey broker**: Replaced the old controller hotkey
+  watcher with a generic broker. The shared per-launch broker handles
+  Select+Start twice exit, while expanded standalone profiles stay opt-in. Xbox
+  keeps plain `xemu` as the default and adds selectable `xemu-hotkeys` for Xemu
+  save/load, reset, screenshot, pause, debug-monitor, and quick-action chords
+  through a per-launch HMP socket plus host key injection.
 - **Boomer controller mapping standardization**: Keep RetroArch on the managed
   base config, XDG `global.slangp`, and XDG per-core `.opt` files, force PC
   Engine-family cores to 6-button pads for all five players, and enable all
