@@ -235,12 +235,13 @@ explicit `-home /srv/emulation/config/emulators/pico8` path and rewrites
 mapping, cart data, screenshots, and GIF output stay in managed emulation
 paths.
 
-Plain `pico8` remains the default ES-DE launcher. The optional `pico8-hotkeys`
-launcher starts the standalone hotkey broker and injects PICO-8's own keyboard
-shortcuts: Select+X or Square opens the pause menu, Select+B sends `CTRL-R`,
-Select+A sends `CTRL-6`, Select+Y sends `CTRL-9`, and Select+ZR is logged as
-unavailable because PICO-8 has no fast-forward hotkey. Current smoke coverage
-uses `POOM.png` from the PICO-8 library as the heavier test cart.
+`pico8-hotkeys` is the default ES-DE launcher. It starts the standalone hotkey
+broker and injects PICO-8's own keyboard shortcuts: Select+X or Square opens
+the pause menu, Select+B sends `CTRL-R`, Select+A sends `CTRL-6`, Select+Y
+sends `CTRL-9`, and Select+ZR is logged as unavailable because PICO-8 has no
+fast-forward hotkey. Plain `pico8` remains available as a fallback alternate.
+Current smoke coverage uses `POOM.png` from the PICO-8 library as the heavier
+test cart.
 
 ## TeknoParrot Free
 

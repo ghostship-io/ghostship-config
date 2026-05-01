@@ -287,9 +287,9 @@ changelog.
   `/mnt/z/Library/ROMs/roms`; Doom uses `Fantasy - GZDoom (2005)` with
   Batocera-style `.gzdoom` launchers at the ROM-folder top level and assets
   underneath that folder. PICO-8 needs an explicit Gamescope Xwayland server on
-  Boomer because its SDL path uses X11; keep plain `pico8` as the default and
-  expose expanded shortcuts through the opt-in `pico8-hotkeys` launcher with
-  the managed PICO-8 `-home` path. Every `run-emulator` launch should keep the
+  Boomer because its SDL path uses X11; keep `pico8-hotkeys` as the default and
+  plain `pico8` as the fallback alternate with the managed PICO-8 `-home` path.
+  Every `run-emulator` launch should keep the
   lightweight per-process Select+Start double-press exit broker; expanded
   standalone hotkeys stay opt-in per-emulator launch modes. Boomer's managed
   ES-DE UI defaults are
