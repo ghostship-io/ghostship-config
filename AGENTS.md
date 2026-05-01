@@ -13,6 +13,8 @@ changelog.
   task completion.
 - After finishing work in a Codex worktree, merge the result into local `main`,
   push `main`, and deploy Boomer when reachable.
+- Always merge to local `main` and run Boomer deploys from that `main`
+  checkout, not from detached or temporary worktrees.
 - If a change needs a plan, implement it in a git worktree.
 - For repo research, use `brainstorming` when it is available.
 - Use the `nix` skill for Nix-platform work and the `python` skill for Python
