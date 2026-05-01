@@ -360,31 +360,8 @@ let
       id="$(jq -r '.id' <<<"$system")"
       emulator="$(jq -r '.emulator' <<<"$system")"
       override="${cfg.configRoot}/retroarch/system-overrides/$id.cfg"
-      if printf '%s' "$emulator" | grep -q '^retroarch-'; then
-        option_file="${cfg.configRoot}/retroarch/core-options/$emulator.opt"
-        [ -e "$option_file" ] || option_file="${cfg.configRoot}/retroarch/core-options/default.opt"
-        {
-          printf 'core_options_path = "%s"\n' "$option_file"
-          printf 'video_smooth = "false"\n'
-          printf 'video_aspect_ratio_auto = "true"\n'
-          case "$id" in
-            fbneo|pcengine|pcenginecd|gb|gbc|gba|nds|nes|snes|virtualboy|neogeocd|ngpc|gamegear|genesis|mastersystem|saturn|segacd)
-              for player in 1 2 3 4; do
-                printf 'input_player%s_analog_dpad_mode = "1"\n' "$player"
-              done
-              ;;
-            n64)
-              for player in 1 2 3 4; do
-                printf 'input_player%s_b_btn = "1"\n' "$player"
-                printf 'input_player%s_y_btn = "0"\n' "$player"
-                printf 'input_player%s_a_btn = "nul"\n' "$player"
-                printf 'input_player%s_x_btn = "nul"\n' "$player"
-              done
-              ;;
-          esac
-        } >"$override"
-        chown ${cfg.user}:${cfg.group} "$override"
-        chmod 0644 "$override"
+      if [ -e "$override" ]; then
+        rm "$override"
       fi
     done
 
