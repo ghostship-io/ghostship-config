@@ -159,6 +159,10 @@ let
       rev = "d772d07109701d9bd7c9fda305bfef6601105ab8";
       sha256 = "0ndf4fgy046qndhl5dzryl1m0zndyq5n3cla3ydnzdrrb1mwn9zp";
     };
+    teknoparrotLogo = pkgs.fetchurl {
+      url = "https://teknoparrot.com/img/teknoparrot-logo-new.png";
+      hash = "sha256-q9Myb8WqPGM74fkOJy3Z16NOqAqaRCppCvpWlZsShXE=";
+    };
     installPhase = ''
       runHook preInstall
       theme_dir="$out/share/es-de/themes/art-book-next-es-de"
@@ -166,14 +170,14 @@ let
       cp -R . "$theme_dir/"
       find "$theme_dir" -maxdepth 1 -name 'aspect-ratio*.xml' -exec \
         sed -i '/<clock name="clock">/a\         <format>%H:%M</format>' {} +
-      cp "$theme_dir/_inc/systems/artwork/pcarcade.png" "$theme_dir/_inc/systems/artwork/teknoparrot.png"
-      cp "$theme_dir/_inc/systems/artwork-screenshots/pcarcade.png" "$theme_dir/_inc/systems/artwork-screenshots/teknoparrot.png"
-      cp "$theme_dir/_inc/systems/artwork-outline/pcarcade.png" "$theme_dir/_inc/systems/artwork-outline/teknoparrot.png"
-      cat >"$theme_dir/_inc/systems/logos/teknoparrot.svg" <<'EOF'
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 240">
+      install -m 0644 "$teknoparrotLogo" "$theme_dir/_inc/systems/artwork/teknoparrot.png"
+      install -m 0644 "$teknoparrotLogo" "$theme_dir/_inc/systems/artwork-screenshots/teknoparrot.png"
+      install -m 0644 "$teknoparrotLogo" "$theme_dir/_inc/systems/artwork-outline/teknoparrot.png"
+      teknoparrot_logo_b64="$(base64 -w0 "$teknoparrotLogo")"
+      cat >"$theme_dir/_inc/systems/logos/teknoparrot.svg" <<EOF
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1523">
   <title>TeknoParrot</title>
-  <text x="600" y="152" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="132" font-weight="900" letter-spacing="2" fill="#ffffff">TeknoParrot</text>
-  <rect x="152" y="178" width="896" height="12" rx="6" fill="#f15a24"/>
+  <image width="1280" height="1523" href="data:image/png;base64,$teknoparrot_logo_b64"/>
 </svg>
 EOF
       cat >"$theme_dir/_inc/systems/_metadata-global/teknoparrot.xml" <<'EOF'
@@ -185,7 +189,7 @@ EOF
         <systemReleaseYear>Various</systemReleaseYear>
         <systemReleaseDate>Various</systemReleaseDate>
         <systemReleaseDateFormated>Various</systemReleaseDateFormated>
-        <systemHardwareType>Collection</systemHardwareType>
+        <systemHardwareType>Arcade</systemHardwareType>
         <systemCoverSize>3-4</systemCoverSize>
         <systemCoverSizeType>portrait</systemCoverSizeType>
         <systemColor>5B60B7</systemColor>
