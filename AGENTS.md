@@ -296,22 +296,23 @@ changelog.
   Controller Maps should stay text-only with a compact two-column button map
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
   Switch A/B, and launch GZDoom with the managed Boomer controls cfg so
-  left stick/D-pad move, right stick looks, Use/Confirm is A, Jump/Back is B,
-  Select/Minus toggles map, Y toggles crouch, X is unbound, L/R select
-  previous/next weapon, ZL is alt fire, ZR is fire, `+` opens menu, and
-  Square/Capture is unbound. GZDoom's SDL
+  left stick moves, right stick looks with vertical look sensitivity at 25%,
+  Use/Confirm is A, Jump/Back is B, X toggles crouch, Y reloads, D-pad
+  left/right selects previous/next weapon, D-pad up/down selects and uses
+  inventory, Select/Minus toggles map, L1/R1 are User1/User2, ZL is alt fire,
+  ZR is fire, `+` opens menu, and Square/Capture is unbound. GZDoom's SDL
   `[Joy:JS:*]` axis map must be seeded so
   Switch Pro axis 0/1 are strafe/forward, axis 2 is yaw, axis 3 is pitch with
-  reduced scale, trigger axes 4/5 are action buttons only, D-pad hat axes can
-  move/pan, and unused axes are disabled.
+  scale `0.25`, trigger axes 4/5 are action buttons only, and unused axes are
+  disabled.
   Boomer's probed kernel Switch Pro raw map is documented in
   `docs/boomer-kuwanger-emulation.md`; use that table instead of inferring
   physical labels from emulator names.
-  Boomer's live SDL joystick path maps GZDoom physical B/A/X/Y to
-  Joy1/Joy2/Joy3/Joy4, `-` to Joy5, `+` to Joy7, L1/R1 to Joy10/Joy11,
-  ZL/ZR to Joy13/Joy14, and the D-pad to POV1. Keep only the GZDoom menu A/B
-  package patch unless a future live probe proves another package patch is
-  required.
+  Boomer's reset GZDoom raw baseline maps physical B/A/Y/X to
+  Joy1/Joy2/Joy3/Joy4, L1/R1 to Joy5/Joy6, R2/L2 to Joy7/Joy8, `+` to Joy9,
+  `-` to Joy10, and the D-pad to POV1; keep L4/R4 unbound until a live probe
+  proves unique events. Keep only the GZDoom menu A/B package patch unless a
+  future live probe proves another package patch is required.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

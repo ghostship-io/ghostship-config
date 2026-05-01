@@ -129,24 +129,25 @@ relative asset paths work. Keep assets under the Doom ROM folder and put the
 human-facing launchers at the top level for cleaner ES-DE scraping.
 Every GZDoom launch executes the managed
 `/srv/emulation/config/emulators/gzdoom/boomer-controls.cfg` file so joystick
-input is enabled and Switch-style controls are applied: left stick and D-pad
-move, right stick looks left/right and up/down, A is Use/Confirm, B is
-Jump/Back, ZR is Fire, ZL is Alt Fire, Select/Minus toggles the map,
-Y toggles crouch, L/R change weapons, and `+` opens the menu. X and
-Square/Capture are intentionally unbound for GZDoom. The managed GZDoom package
-also patches joystick menu
+input is enabled and the 8BitDo Ultimate 2C Switch Pro-mode controls are
+applied: left stick moves, right stick looks left/right and up/down with
+vertical look scaled to 25%, R2/ZR is Fire, L2/ZL is Alt Fire, A is
+Use/Confirm, B is Jump/Back, X toggles crouch, Y reloads, D-pad left/right
+selects previous/next weapon, D-pad up selects the previous inventory item,
+D-pad down uses the selected inventory item, Select/Minus toggles the map, and
+Start/Plus opens the menu. L1/R1 are mapped to User 1/User 2 for mod actions.
+L4/R4 are intentionally unbound until a live probe shows unique events for
+those buttons; do not invent `JoyN` bindings for them. Square/Capture is also
+unbound for GZDoom. The managed GZDoom package also patches joystick menu
 handling so physical Switch A advances menus and physical Switch B backs out.
 The setup script also writes GZDoom's `[Joy:JS:*]` SDL axis map so left X/Y are
-strafe/forward, right X/Y are yaw/pitch with reduced vertical sensitivity,
-D-pad hat axes can also move/pan, and unused/phantom axes cannot drive the view
-upward on launch.
-On Boomer, SDL's joystick backend reports the Switch Pro as 6 axes, 16
-buttons, and one hat. The generated GZDoom config keeps raw bindings aligned
-with the probed physical controls: `Joy1`/`Joy2` are physical B/A,
-`Joy3`/`Joy4` are physical X/Y, `Joy5` is Select/Minus, `Joy7` is Start/Plus,
-`Joy10`/`Joy11` are L1/R1, `Joy13`/`Joy14` are ZL/ZR, and `POV1*` is the
-D-pad. The only retained Boomer GZDoom package patch changes joystick menu
-handling so physical Switch A advances menus and physical Switch B backs out.
+strafe/forward, right X/Y are yaw/pitch, `Axis3scale` is `0.25`, trigger axes
+are used only as fire/alt-fire button fallbacks, and unused/phantom axes cannot
+drive the view upward on launch.
+The reset GZDoom raw binding baseline is the older working layout:
+`Joy1`/`Joy2` are physical B/A, `Joy3`/`Joy4` are physical Y/X,
+`Joy5`/`Joy6` are L1/R1, `Joy7`/`Joy8` are R2/L2, `Joy9` is Start/Plus,
+`Joy10` is Select/Minus, and `POV1*` is the D-pad.
 
 ### Switch Pro Raw Input Probe
 
@@ -156,6 +157,8 @@ The current Boomer controller baseline was probed on April 30, 2026 from
 SDL's live controller mapping was also probed at
 `/srv/emulation/logs/controller-probes/sdl-20260430-140039.log`; it reported
 `a:b0,b:b1,x:b2,y:b3,back:b4,start:b6,leftshoulder:b9,rightshoulder:b10,lefttrigger:a4,righttrigger:a5,dp*:h0`.
+This table is the kernel event layer, not the authoritative GZDoom `JoyN`
+binding map. The available probe did not show unique L4/R4 events.
 
 | Physical control | Linux event |
 | --- | --- |
