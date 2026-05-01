@@ -55,11 +55,13 @@ Additional setup scripts sync RetroArch, ES-DE tools, and standalone emulator
 config scaffolds before the frontend starts. Existing ES-DE settings are
 preserved after first creation so runtime UI changes can survive rebuilds,
 except for managed defaults such as theme, systems sorting, display clock, and
-controller UI hints. ES-DE menu input is available from all connected
-controllers, not only player 1. Boomer runs in Hawaii standard time and the
-managed Art Book Next theme package uses ES-DE's supported `%H:%M` clock
-format so the hour renders reliably. True 12-hour time needs ES-DE formatter
-support beyond the official AppImage's theme tokens.
+controller UI hints. Systems are sorted by manufacturer, hardware type, and
+release year, and hidden files/games are disabled so staging folders such as
+Switch `.updates` and `.dlc` stay out of the game list. ES-DE menu input is
+available from all connected controllers, not only player 1. Boomer runs in
+Hawaii standard time and the managed Art Book Next theme package uses ES-DE's
+supported `%H:%M` clock format so the hour renders reliably. True 12-hour time
+needs ES-DE formatter support beyond the official AppImage's theme tokens.
 
 During bootstrap, use:
 
@@ -117,9 +119,32 @@ writes a marker recording the source path, resolved path, hash, and file count.
 
 `run-emulator` also converges Ryubing's `Config.json` before each Switch launch
 so Boomer uses Vulkan, docked mode, fullscreen launch, 16x anisotropic
-filtering, shader cache, SDL2 audio, and Ryubing's native scaling/filtering.
+filtering, shader cache, SDL3 audio, and Ryubing's native scaling/filtering.
 The Switch hotkey broker maps Minus+X to `F4` for Ryubing UI, Minus+A to `F8`
 for screenshot, and Square/Capture to `F5` for pause.
+
+Ryubing update and DLC packages stay as operator-managed NSP files beside the
+Switch ROM folder, but under hidden staging directories so ES-DE does not list
+them as games:
+
+```text
+Nintendo - Switch (2017)/
+  Game [0100000000000000].xci
+  .updates/
+    Game Update [0100000000000800] [v123].nsp
+  .dlc/
+    Game DLC [0100000000001001].nsp
+```
+
+Before each Ryubing launch, `run-emulator` matches the launched base title ID to
+direct NSP files in sibling `.updates/` and `.dlc/` directories. Filename title
+IDs and `[v...]` versions are the fast path. If a package filename does not
+include a title ID, the launcher inspects its NSP metadata with `nstool` and
+caches the result under Ryubing's config directory. Matching updates are written
+to `games/<base-title-id>/updates.json` with the highest version selected;
+matching DLC is written to `games/<base-title-id>/dlc.json` with all content
+enabled. Existing manual Ryubing entries are preserved while their files still
+exist.
 
 ## GZDoom
 
@@ -569,12 +594,13 @@ all four GameCube controller ports and keeps Wii slots 1-4 on the same SDL
 controller order; GameCube binds Dolphin-native hotkeys for Minus + B reset,
 Minus + L1 load slot 1, Minus + R1 save slot 1, Minus + A screenshot, and
 Minus + R2 fast mode. These are native Dolphin SDL bindings: Minus/Select is
-`Button 4`, Plus/Start is `Button 6`, L1/R1 are `Button 9`/`Button 10`, and R2
-is `Axis 5+`. Square/Capture pauses only if Dolphin exposes the current
-`Button 13` binding. Minus + X quick actions and Minus + Y debug monitor stay
-unbound for GameCube because Dolphin does not expose equivalent normal runtime
-actions. D-pad stays on physical D-pad and analog movement stays on analog
-sticks. PCSX2 uses native PCSX2 hotkey bindings instead of an external hotkey
+`Back`, Plus/Start is `Start`, A/B/X/Y use Dolphin's label aliases
+`Button A`/`Button B`/`Button X`/`Button Y`, L1/R1 are
+`Shoulder L`/`Shoulder R`, R2 is `Trigger R`, and Square/Capture is `Misc 1`
+when Dolphin exposes it. Minus + X
+quick actions and Minus + Y debug monitor stay unbound for GameCube because
+Dolphin does not expose equivalent normal runtime actions. D-pad stays on
+physical D-pad and analog movement stays on analog sticks. PCSX2 uses native PCSX2 hotkey bindings instead of an external hotkey
 broker: Minus + X opens the pause menu, Minus + B resets the VM, Minus + L1
 loads state slot 1, Minus + R1 saves state slot 1, Minus + A saves a
 screenshot, Minus + Y toggles the OSD/FPS overlay, and Minus + R2 holds

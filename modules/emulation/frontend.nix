@@ -40,13 +40,21 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
     </systemList>
   '';
 
-  systemSortParts = system:
-    let
-      parts = builtins.match "(.+) - (.+) \\(([0-9]+)\\)" system.folder;
-    in
-    if parts == null then [ system.folder system.id "9999" ] else parts;
-
-  systemSortKey = system: lib.concatStringsSep "\t" (systemSortParts system);
+  hardwareTypeRank = {
+    arcade = "0";
+    console = "1";
+    handheld = "2";
+    add-on = "3";
+    fantasy = "4";
+    other = "8";
+  };
+  systemSortKey = system: lib.concatStringsSep "\t" [
+    (system.manufacturer or system.folder)
+    (hardwareTypeRank.${system.hardwareType or "other"} or hardwareTypeRank.other)
+    (toString (system.releaseYear or 9999))
+    system.fullname
+    system.id
+  ];
   sortedSystems = lib.sort (a: b: systemSortKey a < systemSortKey b) emu.allSystems;
 
   mkSystemSortingXml = index: system: ''
@@ -119,6 +127,8 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
       <bool name="ScraperRegionFallback" value="true" />
       <bool name="Debug" value="false" />
       <bool name="CheckForUpdates" value="false" />
+      <bool name="ShowHiddenFiles" value="false" />
+      <bool name="ShowHiddenGames" value="false" />
     </settings>
   '';
 
@@ -209,6 +219,8 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
     set_string("InputControllerType", "switchpro")
     set_bool("DisplayClock", True)
     set_bool("InputOnlyFirstController", False)
+    set_bool("ShowHiddenFiles", False)
+    set_bool("ShowHiddenGames", False)
 
     fd, tmp = tempfile.mkstemp(prefix="es_settings.", dir=str(settings_path.parent))
     with os.fdopen(fd, "w", encoding="utf-8") as handle:

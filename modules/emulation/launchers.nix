@@ -1384,6 +1384,291 @@ PY
         fi
       done
 
+      ${pkgs.python3}/bin/python3 - "$rom_path" "$ryujinx_config_dir" "${cfg.biosRoot}/switch/prod.keys" "${pkgs.nstool}/bin/nstool" <<'PY'
+import json
+import re
+import subprocess
+import sys
+import tempfile
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+rom_path = Path(sys.argv[1])
+ryujinx_config_dir = Path(sys.argv[2])
+key_path = Path(sys.argv[3])
+nstool = sys.argv[4]
+cache_path = ryujinx_config_dir / "package-metadata-cache.json"
+
+TITLE_RE = re.compile(r"(?i)(?<![0-9a-f])([0-9a-f]{16})(?![0-9a-f])")
+VERSION_RE = re.compile(r"(?i)\[v([0-9]+)\]")
+
+def title_ids_from_name(path):
+    return [match.lower() for match in TITLE_RE.findall(path.name)]
+
+def version_from_name(path):
+    match = VERSION_RE.search(path.name)
+    return int(match.group(1)) if match else 0
+
+def base_id(title_id):
+    return f"{(int(title_id, 16) & ~0x1fff):016x}"
+
+base_ids = title_ids_from_name(rom_path)
+if not base_ids:
+    raise SystemExit(0)
+
+application_id_base = base_id(base_ids[0])
+game_dir = ryujinx_config_dir / "games" / application_id_base
+game_dir.mkdir(parents=True, exist_ok=True)
+
+def load_json(path, fallback):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return fallback
+
+cache = load_json(cache_path, {})
+if not isinstance(cache, dict):
+    cache = {}
+
+def cache_key(path):
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    return {
+        "path": str(path),
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+    }
+
+def cached_metadata(path):
+    key = cache_key(path)
+    if key is None:
+        return None
+    row = cache.get(str(path))
+    if not isinstance(row, dict):
+        return None
+    if row.get("size") == key["size"] and row.get("mtime_ns") == key["mtime_ns"]:
+        metadata = row.get("metadata")
+        return metadata if isinstance(metadata, dict) else None
+    return None
+
+def save_cache(path, metadata):
+    key = cache_key(path)
+    if key is None:
+        return
+    cache[str(path)] = {
+        "size": key["size"],
+        "mtime_ns": key["mtime_ns"],
+        "metadata": metadata,
+    }
+
+def nstool_output(args, timeout=20):
+    command = [nstool]
+    if key_path.is_file():
+        command += ["-k", str(key_path)]
+    command += args
+    return subprocess.run(
+        command,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout,
+    ).stdout
+
+def package_tree(path):
+    output = nstool_output(["--fstree", str(path)])
+    names = []
+    for line in output.splitlines():
+        stripped = line.strip()
+        if re.match(r"^[0-9a-f]{32}\.(?:nca|cnmt\.nca|cnmt\.xml)$", stripped, re.I):
+            names.append(stripped)
+        elif re.match(r"^[0-9a-f]{16}[0-9a-f]{16}\.(?:tik|cert)$", stripped, re.I):
+            names.append(stripped)
+    return names
+
+def extract_cnmt_xml(package_path, cnmt_name):
+    with tempfile.TemporaryDirectory(prefix="ryubing-cnmt.") as tmpdir:
+        target = Path(tmpdir) / "content.cnmt.xml"
+        nstool_output(["-x", f"/{cnmt_name}", str(target), str(package_path)])
+        if not target.is_file():
+            return None
+        try:
+            return ET.fromstring(target.read_text(encoding="utf-8"))
+        except ET.ParseError:
+            return None
+
+def inspect_package(path, expected_kind):
+    names = package_tree(path)
+    filename_ids = title_ids_from_name(path)
+    title_id = filename_ids[0] if filename_ids else None
+    version = version_from_name(path)
+    content_type = "update" if expected_kind == "update" else "dlc"
+    original_id = base_id(title_id) if title_id else None
+    dlc_ncas = []
+
+    for cnmt_name in [name for name in names if name.lower().endswith(".cnmt.xml")]:
+        root = extract_cnmt_xml(path, cnmt_name)
+        if root is None:
+            continue
+        cnmt_type = (root.findtext("Type") or "").strip()
+        cnmt_id = (root.findtext("Id") or "").strip().removeprefix("0x").lower()
+        cnmt_version = root.findtext("Version")
+        if cnmt_id:
+            title_id = cnmt_id
+        if cnmt_version and cnmt_version.isdigit():
+            version = int(cnmt_version)
+        if cnmt_type == "Patch":
+            content_type = "update"
+            original_id = (root.findtext("OriginalId") or "").strip().removeprefix("0x").lower()
+        elif cnmt_type == "AddOnContent":
+            content_type = "dlc"
+            original_id = (root.findtext("ApplicationId") or "").strip().removeprefix("0x").lower()
+            for content in root.findall("Content"):
+                if (content.findtext("Type") or "").strip() != "Data":
+                    continue
+                content_id = (content.findtext("Id") or "").strip().lower()
+                if content_id:
+                    full_path = f"{content_id}.nca"
+                    if full_path in names:
+                        dlc_ncas.append({"title_id": int(title_id, 16), "path": full_path, "is_enabled": True})
+        if title_id:
+            break
+
+    if not title_id:
+        for name in names:
+            match = re.match(r"^([0-9a-f]{16})[0-9a-f]{16}\.tik$", name, re.I)
+            if match:
+                title_id = match.group(1).lower()
+                original_id = base_id(title_id)
+                break
+
+    if content_type == "dlc" and title_id and not dlc_ncas:
+        nca_names = [name for name in names if name.lower().endswith(".nca") and ".cnmt." not in name.lower()]
+        if len(nca_names) == 1:
+            dlc_ncas.append({"title_id": int(title_id, 16), "path": nca_names[0], "is_enabled": True})
+
+    if title_id and not original_id:
+        original_id = base_id(title_id)
+
+    return {
+        "path": str(path),
+        "title_id": title_id,
+        "base_id": original_id,
+        "version": version,
+        "content_type": content_type,
+        "dlc_ncas": dlc_ncas,
+    }
+
+def metadata_for(path, expected_kind):
+    filename_ids = title_ids_from_name(path)
+    cached = cached_metadata(path)
+    if cached is not None:
+        metadata = dict(cached)
+        if filename_ids:
+            metadata["title_id"] = filename_ids[0]
+            metadata["base_id"] = base_id(filename_ids[0])
+        if version_from_name(path):
+            metadata["version"] = version_from_name(path)
+        return metadata
+
+    if expected_kind == "update" and filename_ids and version_from_name(path):
+        return {
+            "path": str(path),
+            "title_id": filename_ids[0],
+            "base_id": base_id(filename_ids[0]),
+            "version": version_from_name(path),
+            "content_type": "update",
+            "dlc_ncas": [],
+        }
+
+    try:
+        metadata = inspect_package(path, expected_kind)
+    except Exception as exc:
+        print(f"WARNING: failed to inspect Switch package {path}: {exc}", file=sys.stderr)
+        if not filename_ids:
+            return None
+        metadata = {
+            "path": str(path),
+            "title_id": filename_ids[0],
+            "base_id": base_id(filename_ids[0]),
+            "version": version_from_name(path),
+            "content_type": expected_kind,
+            "dlc_ncas": [],
+        }
+    save_cache(path, metadata)
+    return metadata
+
+def direct_nsp_files(directory):
+    if not directory.is_dir():
+        return []
+    return sorted(path for path in directory.iterdir() if path.is_file() and path.suffix.lower() == ".nsp")
+
+rom_dir = rom_path.parent
+updates = []
+for path in direct_nsp_files(rom_dir / ".updates"):
+    metadata = metadata_for(path, "update")
+    if metadata and metadata.get("content_type") == "update" and metadata.get("base_id") == application_id_base:
+        updates.append(metadata)
+    elif metadata:
+        print(f"WARNING: ignoring non-matching Ryubing update package: {path}", file=sys.stderr)
+
+dlcs = []
+for path in direct_nsp_files(rom_dir / ".dlc"):
+    metadata = metadata_for(path, "dlc")
+    if metadata and metadata.get("content_type") == "dlc" and metadata.get("base_id") == application_id_base:
+        dlcs.append(metadata)
+    elif metadata:
+        print(f"WARNING: ignoring non-matching Ryubing DLC package: {path}", file=sys.stderr)
+
+existing_updates_path = game_dir / "updates.json"
+existing_updates = load_json(existing_updates_path, {})
+existing_update_paths = []
+if isinstance(existing_updates, dict):
+    existing_update_paths = existing_updates.get("paths") or existing_updates.get("Paths") or []
+existing_update_paths = [path for path in existing_update_paths if isinstance(path, str) and Path(path).is_file()]
+
+update_by_path = {path: {"path": path, "version": version_from_name(Path(path))} for path in existing_update_paths}
+for update in updates:
+    update_by_path[update["path"]] = update
+
+if update_by_path:
+    selected = max(update_by_path.values(), key=lambda row: int(row.get("version") or 0))["path"]
+    existing_updates_path.write_text(
+        json.dumps({"selected": selected, "paths": sorted(update_by_path)}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+existing_dlc_path = game_dir / "dlc.json"
+existing_dlc = load_json(existing_dlc_path, [])
+dlc_by_path = {}
+if isinstance(existing_dlc, list):
+    for container in existing_dlc:
+        if not isinstance(container, dict):
+            continue
+        container_path = container.get("path")
+        if isinstance(container_path, str) and Path(container_path).is_file():
+            dlc_by_path[container_path] = container
+
+for dlc in dlcs:
+    if not dlc.get("dlc_ncas"):
+        print(f"WARNING: no DLC NCA path found for {dlc['path']}", file=sys.stderr)
+        continue
+    dlc_by_path[dlc["path"]] = {
+        "path": dlc["path"],
+        "dlc_nca_list": dlc["dlc_ncas"],
+    }
+
+if dlc_by_path:
+    existing_dlc_path.write_text(
+        json.dumps([dlc_by_path[path] for path in sorted(dlc_by_path)], indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+cache_path.write_text(json.dumps(cache, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+
       case "$system_id:$emulator_id:$rom_path" in
         switch:ryubing:*.nro|switch:ryubing:*.NRO)
           rom_dir="$(dirname "$rom_path")"
@@ -2257,12 +2542,12 @@ EOF
         cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
 [Hotkeys1]
 Device = SDL/0/Nintendo Switch Pro Controller
-Keys/Toggle Pause = `Button 13`
-Keys/Reset = `Button 4` & `Button 1`
-Keys/Take Screenshot = `Button 4` & `Button 0`
-Keys/Disable Emulation Speed Limit = `Button 4` & `Axis 5+`
-Keys/Load State Slot 1 = `Button 4` & `Button 9`
-Keys/Save State Slot 1 = `Button 4` & `Button 10`
+Keys/Toggle Pause = `Misc 1`
+Keys/Reset = `Back` & `Button B`
+Keys/Take Screenshot = `Back` & `Button A`
+Keys/Disable Emulation Speed Limit = `Back` & `Trigger R`
+Keys/Load State Slot 1 = `Back` & `Shoulder L`
+Keys/Save State Slot 1 = `Back` & `Shoulder R`
 EOF
         : >"$dolphin_config_dir/GCPadNew.ini"
         for slot in 1 2 3 4; do
@@ -2270,12 +2555,12 @@ EOF
           cat >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
 [GCPad$slot]
 Device = SDL/$index/Nintendo Switch Pro Controller
-Buttons/A = \`Button 0\`
-Buttons/B = \`Button 1\`
-Buttons/X = \`Button 2\`
-Buttons/Y = \`Button 3\`
-Buttons/Z = \`Axis 5+\`
-Buttons/Start = \`Button 6\`
+Buttons/A = \`Button A\`
+Buttons/B = \`Button B\`
+Buttons/X = \`Button X\`
+Buttons/Y = \`Button Y\`
+Buttons/Z = \`Trigger R\`
+Buttons/Start = \`Start\`
 Main Stick/Up = \`Axis 1-\`
 Main Stick/Down = \`Axis 1+\`
 Main Stick/Left = \`Axis 0-\`
@@ -2286,8 +2571,8 @@ C-Stick/Down = \`Axis 3+\`
 C-Stick/Left = \`Axis 2-\`
 C-Stick/Right = \`Axis 2+\`
 C-Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
-Triggers/L = \`Button 9\`
-Triggers/R = \`Button 10\`
+Triggers/L = \`Shoulder L\`
+Triggers/R = \`Shoulder R\`
 D-Pad/Up = \`Hat 0 N\`
 D-Pad/Down = \`Hat 0 S\`
 D-Pad/Left = \`Hat 0 W\`
@@ -2305,9 +2590,9 @@ Buttons/A = \`Button 1\`
 Buttons/B = \`Button 7\`
 Buttons/1 = \`Button 0\`
 Buttons/2 = \`Button 2\`
-Buttons/- = \`Button 4\`
-Buttons/+ = \`Button 6\`
-Buttons/Home = \`Button 13\`
+Buttons/- = \`Back\`
+Buttons/+ = \`Start\`
+Buttons/Home = \`Misc 1\`
 D-Pad/Up = \`Hat 0 N\`
 D-Pad/Down = \`Hat 0 S\`
 D-Pad/Left = \`Hat 0 W\`
@@ -2587,7 +2872,7 @@ EOF
         "retroarch_screenshot": "RetroArch only: Minus + A",
         "retroarch_fast_forward": "RetroArch only: Minus + R2",
         "normal_exit": "Minus + Plus twice exits the active run-emulator process group",
-        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin SDL hotkeys with Minus/Select on Button 4 and Plus/Start on Button 6: Minus + B resets, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A screenshots, Minus + R2 toggles fast mode, and Square/Capture pauses only if Dolphin exposes the existing Button 13 binding; Minus + X quick actions and Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
+        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin SDL hotkeys with Minus/Select as Back and Plus/Start as Start: Minus + B resets, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A screenshots, Minus + R2 toggles fast mode, and Square/Capture pauses only if Dolphin exposes the Misc 1 binding; Minus + X quick actions and Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
         "pcsx2_hotkeys": "PCSX2 uses native PCSX2 hotkey bindings: Minus + X opens the pause menu, Minus + B resets the VM, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A saves a screenshot, Minus + Y toggles the OSD/FPS overlay, and Minus + R2 holds turbo/fast-forward",
         "xemu_hotkeys": "Default Xbox launch: Minus + X opens quick actions, B resets, L1 loads esde-slot1, R1 saves esde-slot1, A screenshots, Y toggles the debug monitor, and Minus + R2 is unbound",
         "pico8_hotkeys": "Default PICO-8 launch: Minus + X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, and Minus + R2 is unbound",
