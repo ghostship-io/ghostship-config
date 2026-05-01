@@ -259,25 +259,25 @@ let
   '';
 
   systemShaderDefaults = {
-    fbneo = "nnedi3-clean";
-    pcengine = "nnedi3-clean";
-    pcenginecd = "nnedi3-clean";
-    gb = "nnedi3-clean";
-    gbc = "nnedi3-clean";
-    gba = "nnedi3-clean";
+    fbneo = "nnedi3-clean.cfg";
+    pcengine = "nnedi3-clean.cfg";
+    pcenginecd = "nnedi3-clean.cfg";
+    gb = "nnedi3-clean.cfg";
+    gbc = "nnedi3-clean.cfg";
+    gba = "nnedi3-clean.cfg";
     n64 = "no-shader";
-    nds = "nnedi3-clean";
-    nes = "nnedi3-clean";
-    snes = "nnedi3-clean";
+    nds = "nnedi3-clean.cfg";
+    nes = "nnedi3-clean.cfg";
+    snes = "nnedi3-clean.cfg";
     virtualboy = "sharp-bilinear-prescale";
-    neogeocd = "nnedi3-clean";
-    ngpc = "nnedi3-clean";
+    neogeocd = "nnedi3-clean.cfg";
+    ngpc = "nnedi3-clean.cfg";
     dreamcast = "no-shader";
-    gamegear = "nnedi3-fast";
-    genesis = "nnedi3-clean";
-    mastersystem = "nnedi3-clean";
+    gamegear = "nnedi3-clean.cfg";
+    genesis = "nnedi3-clean.cfg";
+    mastersystem = "nnedi3-clean.cfg";
     saturn = "sharp-bilinear-simple";
-    segacd = "nnedi3-clean";
+    segacd = "nnedi3-clean.cfg";
     psx = "sharp-bilinear-simple";
   };
 
