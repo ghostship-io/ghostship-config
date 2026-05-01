@@ -11,8 +11,9 @@ changelog.
   repo-specific guidance. Keep it concise, imperative, and high-signal.
 - The shared workflow preferences require verified work to be committed before
   task completion.
-- After finishing work in a Codex worktree, merge the result into local `main`,
-  push `main`, and deploy Boomer when reachable.
+- Do feature and fix work in a git worktree. When the feature is done, merge
+  local `main` into the worktree first, verify, then merge the worktree into
+  local `main`, push `main`, and deploy Boomer when reachable.
 - Always merge to local `main` and run Boomer deploys from that `main`
   checkout, not from detached or temporary worktrees.
 - If a change needs a plan, implement it in a git worktree.
