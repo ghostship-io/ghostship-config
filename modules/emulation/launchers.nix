@@ -1446,22 +1446,43 @@ EOF
     freelook true
     lookstrafe false
 
-    // GZDoom regenerates generic Joy*/POV1* defaults before this cfg runs.
-    // Standard Linux evdev/SDL layout (1-indexed Joy):
-    // Joy5=LB, Joy6=RB, Joy7=LT, Joy8=RT, Joy9=Back, Joy10=Start, Joy11=L3, Joy12=R3
-    //
-    // A -> Joy2 -> use/open
-    // B -> Joy1 -> jump
-    // X -> Joy3 -> crouch
-    // Y -> Joy4 -> reload
-    // LB -> Joy5 -> User 1 (Mod special)
-    // RB -> Joy6 -> Alt-Fire (ADS)
-    // LT -> Joy7 -> User 2 (Zoom/Grenade)
-    // RT -> Joy8 -> Primary Fire
-    // Minus -> Joy9 -> Automap
-    // Plus -> Joy10 -> Menu
-    // L3 -> Joy11 -> Speed/Run toggle
-    // R3 -> Joy12 -> Quick turn / User 4
+    // Pure SDL-based bindings for cross-controller consistency.
+    // Relies on SDL_GAMECONTROLLERCONFIG_FILE being correctly set.
+    
+    bind pad_a +use
+    bind pad_b +jump
+    bind pad_x crouch
+    bind pad_y +reload
+    
+    bind rtrigger +attack
+    bind rshoulder +altattack
+    bind ltrigger +user2
+    bind lshoulder +user1
+    
+    bind pad_start menu_main
+    bind pad_back togglemap
+    
+    bind lthumb +speed
+    bind rthumb +user4
+    
+    bind dpadleft weapprev
+    bind dpadright weapnext
+    bind dpadup invprev
+    bind dpaddown invuse
+
+    mapbind pad_back togglemap
+    mapbind pad_y am_togglefollow
+    mapbind pad_a am_setmark
+    mapbind pad_b am_clearmarks
+    mapbind dpadright +am_panright
+    mapbind dpadleft +am_panleft
+    mapbind dpadup +am_panup
+    mapbind dpaddown +am_pandown
+    mapbind lshoulder +am_zoomout
+    mapbind rshoulder +am_zoomin
+
+    // Generic Joy fallbacks for legacy/unrecognized controllers (Standard layout)
+    // Joy1=B, Joy2=A, Joy3=X, Joy4=Y, Joy5=L1, Joy6=R1, Joy7=L2, Joy8=R2
     bind Joy1 +jump
     bind Joy2 +use
     bind Joy3 crouch
@@ -1474,45 +1495,6 @@ EOF
     bind Joy10 menu_main
     bind Joy11 +speed
     bind Joy12 +user4
-    bind Axis3Plus +user2
-    bind Axis4Plus +user2
-    bind Axis4Minus +user2
-    bind Axis5Plus +attack
-    bind Axis5Minus +attack
-    bind Axis6Plus +attack
-    bind Axis6Minus +attack
-    // D-pad left/right -> previous/next weapon; up/down -> inventory prev/use.
-    bind POV1Left weapprev
-    bind POV1Right weapnext
-    bind POV1Up invprev
-    bind POV1Down invuse
-
-    // Alias fallbacks for standard SDL GameController naming.
-    bind pad_a +use
-    bind pad_b +jump
-    bind pad_x crouch
-    bind pad_y +reload
-    bind rtrigger +attack
-    bind ltrigger +user2
-    bind rshoulder +altattack
-    bind lshoulder +user1
-    bind pad_start menu_main
-    bind pad_back togglemap
-    bind lthumb +speed
-    bind rthumb +user4
-    bind dpadleft weapprev
-    bind dpadright weapnext
-    bind dpadup invprev
-    bind dpaddown invuse
-
-    mapbind Joy9 togglemap
-    mapbind pad_back togglemap
-    mapbind pad_y am_togglefollow
-    mapbind pad_a am_setmark
-    mapbind pad_b am_clearmarks
-    mapbind POV1Right +am_panright
-    mapbind POV1Left +am_panleft
-    mapbind POV1Up +am_panup
     mapbind POV1Down +am_pandown
     mapbind POV1Up +am_panup
     mapbind POV1Down +am_pandown
