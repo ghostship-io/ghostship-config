@@ -1264,6 +1264,13 @@ EOF
         printf '%s\n' \
           '[general]' \
           'show_welcome = false' \
+          'skip_boot_anim = true' \
+          "" \
+          '[display]' \
+          "renderer = 'vulkan'" \
+          "" \
+          '[display.quality]' \
+          'surface_scale = 2' \
           "" \
           '[display.ui]' \
           'show_menubar = false' \
