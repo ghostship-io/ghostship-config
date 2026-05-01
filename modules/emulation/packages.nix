@@ -167,9 +167,116 @@ let
       cp -R . "$theme_dir/"
       find "$theme_dir" -maxdepth 1 -name 'aspect-ratio*.xml' -exec \
         sed -i '/<clock name="clock">/a\         <format>%H:%M</format>' {} +
-      install -m 0644 "$teknoparrotArtwork" "$theme_dir/_inc/systems/artwork/teknoparrot.png"
-      install -m 0644 "$teknoparrotArtwork" "$theme_dir/_inc/systems/artwork-screenshots/teknoparrot.png"
-      install -m 0644 "$teknoparrotArtwork" "$theme_dir/_inc/systems/artwork-outline/teknoparrot.png"
+      ${pkgs.python3}/bin/python3 - "$teknoparrotArtwork" "$theme_dir" <<'PY'
+import struct
+import sys
+import zlib
+from pathlib import Path
+
+source = Path(sys.argv[1])
+theme_dir = Path(sys.argv[2])
+
+
+def read_png(path):
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise SystemExit(f"not a PNG: {path}")
+    offset = 8
+    width = height = None
+    color_type = None
+    compressed = bytearray()
+    while offset < len(data):
+        length = struct.unpack(">I", data[offset:offset + 4])[0]
+        chunk_type = data[offset + 4:offset + 8]
+        chunk = data[offset + 8:offset + 8 + length]
+        offset += 12 + length
+        if chunk_type == b"IHDR":
+            width, height, bit_depth, color_type, _, _, _ = struct.unpack(">IIBBBBB", chunk)
+            if bit_depth != 8 or color_type not in (2, 6):
+                raise SystemExit(f"unsupported PNG format: {path}")
+        elif chunk_type == b"IDAT":
+            compressed.extend(chunk)
+        elif chunk_type == b"IEND":
+            break
+    raw = zlib.decompress(bytes(compressed))
+    channels = 4 if color_type == 6 else 3
+    stride = width * channels
+    rows = []
+    previous = [0] * stride
+    pos = 0
+    for _ in range(height):
+        filter_type = raw[pos]
+        pos += 1
+        row = list(raw[pos:pos + stride])
+        pos += stride
+        for i, value in enumerate(row):
+            left = row[i - channels] if i >= channels else 0
+            up = previous[i]
+            up_left = previous[i - channels] if i >= channels else 0
+            if filter_type == 1:
+                row[i] = (value + left) & 255
+            elif filter_type == 2:
+                row[i] = (value + up) & 255
+            elif filter_type == 3:
+                row[i] = (value + ((left + up) // 2)) & 255
+            elif filter_type == 4:
+                p = left + up - up_left
+                pa = abs(p - left)
+                pb = abs(p - up)
+                pc = abs(p - up_left)
+                predictor = left if pa <= pb and pa <= pc else up if pb <= pc else up_left
+                row[i] = (value + predictor) & 255
+            elif filter_type != 0:
+                raise SystemExit(f"unsupported PNG filter {filter_type}: {path}")
+        rows.append(row)
+        previous = row
+    return width, height, channels, rows
+
+
+def write_rgba_png(path, width, height, pixels):
+    raw = bytearray()
+    stride = width * 4
+    for y in range(height):
+        raw.append(0)
+        start = y * stride
+        raw.extend(pixels[start:start + stride])
+    chunks = []
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    for chunk_type, chunk in (
+        (b"IHDR", ihdr),
+        (b"IDAT", zlib.compress(bytes(raw), 9)),
+        (b"IEND", b""),
+    ):
+        chunks.append(struct.pack(">I", len(chunk)))
+        chunks.append(chunk_type)
+        chunks.append(chunk)
+        chunks.append(struct.pack(">I", zlib.crc32(chunk_type + chunk) & 0xFFFFFFFF))
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"".join(chunks))
+
+
+width, height, channels, rows = read_png(source)
+if (width, height) != (454, 1080):
+    raise SystemExit(f"TeknoParrot artwork must be 454x1080, got {width}x{height}")
+
+pixels = bytearray(width * height * 4)
+for y, row in enumerate(rows):
+    for x in range(width):
+        src = x * channels
+        dst = (y * width + x) * 4
+        pixels[dst:dst + 3] = bytes(row[src:src + 3])
+        # Match Art Book Next's diagonal system-art mask:
+        # polygon points are (112.4,0), (452.25,0), (339.8,1080), (0,1080).
+        left = 112.424625 * (1 - y / 1079)
+        right = 452.25 - 112.424625 * (y / 1079)
+        pixels[dst + 3] = 255 if left <= x <= right else 0
+
+for rel in [
+    "_inc/systems/artwork/teknoparrot.png",
+    "_inc/systems/artwork-screenshots/teknoparrot.png",
+    "_inc/systems/artwork-outline/teknoparrot.png",
+]:
+    write_rgba_png(theme_dir / rel, width, height, pixels)
+PY
       cat >"$theme_dir/_inc/systems/logos/teknoparrot.svg" <<'EOF'
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 240">
   <title>TeknoParrot</title>
