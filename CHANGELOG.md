@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   panels, and remove the temporary Model 3/Supermodel theme artwork.
 - **Boomer Model 3 library**: Add `Arcade - Model 3 (1996)` to ES-DE as a
   Supermodel-backed arcade library using the stock `model3` theme slot.
+- **Boomer Supermodel setup**: Seed Supermodel's bundled `Games.xml` and
+  `Music.xml` into the managed XDG config so Model 3 ROM sets are detected.
 - **Boomer TeknoParrot logo**: Use the supplied path-based TeknoParrot SVG for
   the ES-DE system text logo.
 - **Boomer controller probe documentation**: Document the live Switch Pro

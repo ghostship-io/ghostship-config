@@ -1176,6 +1176,16 @@ EOF
           >"$xemu_data_dir/xemu.toml"
         chown ${cfg.user}:${cfg.group} "$xemu_data_dir/xemu.toml"
         chmod 0644 "$xemu_data_dir/xemu.toml"
+        ${lib.optionalString (packages.supermodelPackage != null) ''
+          supermodel_config_dir="${cfg.dataRoot}/xdg/config/supermodel/Config"
+          install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$supermodel_config_dir"
+          install -m 0644 -o ${cfg.user} -g ${cfg.group} \
+            ${packages.supermodelPackage}/share/supermodel/Config/Games.xml \
+            "$supermodel_config_dir/Games.xml"
+          install -m 0644 -o ${cfg.user} -g ${cfg.group} \
+            ${packages.supermodelPackage}/share/supermodel/Config/Music.xml \
+            "$supermodel_config_dir/Music.xml"
+        ''}
         dolphin_config_dir="${cfg.dataRoot}/xdg/config/dolphin-emu"
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$dolphin_config_dir"
         cat >"$dolphin_config_dir/Dolphin.ini" <<'EOF'
