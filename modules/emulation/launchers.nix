@@ -638,6 +638,7 @@ let
             packages.wineMono
             pkgs.curl
             pkgs.unzip
+            pkgs.xmlstarlet
           ]
         }:$PATH
         prefix="${cfg.configRoot}/teknoparrot"
@@ -647,6 +648,103 @@ let
         export WINEPREFIX="$prefix/prefix"
         export WINEARCH=win64
         export WINE_MONO_CACHE_DIR="${packages.wineMono}/share/wine/mono"
+        ensure_wine_mono() {
+          if [ -e "$WINEPREFIX/drive_c/windows/mono/mono-2.0/lib/mono/4.5/mscorlib.dll" ]; then
+            return
+          fi
+          WINEDLLOVERRIDES=mscoree=d wineboot -u
+          wine msiexec /i "${packages.wineMono}/share/wine/mono/wine-mono-10.4.1-x86.msi"
+        }
+        set_parrot_data_value() {
+          local name="$1"
+          local value="$2"
+          if [ "$(xmlstarlet sel -t -v "count(/ParrotData/$name)" ParrotData.xml 2>/dev/null || echo 0)" != "0" ]; then
+            xmlstarlet ed -L -u "/ParrotData/$name" -v "$value" ParrotData.xml
+          else
+            xmlstarlet ed -L -s /ParrotData -t elem -n "$name" -v "$value" ParrotData.xml
+          fi
+        }
+        ensure_parrot_data() {
+          if [ ! -s ParrotData.xml ]; then
+            cat >ParrotData.xml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<ParrotData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <UseSto0ZDrivingHack>false</UseSto0ZDrivingHack>
+  <StoozPercent>0</StoozPercent>
+  <FullAxisGas>false</FullAxisGas>
+  <FullAxisBrake>false</FullAxisBrake>
+  <ReverseAxisGas>false</ReverseAxisGas>
+  <ReverseAxisBrake>false</ReverseAxisBrake>
+  <LastPlayed />
+  <ExitGameKey>0x1B</ExitGameKey>
+  <PauseGameKey>0x13</PauseGameKey>
+  <ScoreSubmissionID />
+  <ScoreCollapseGUIKey>0x79</ScoreCollapseGUIKey>
+  <SaveLastPlayed>false</SaveLastPlayed>
+  <UseDiscordRPC>false</UseDiscordRPC>
+  <SilentMode>true</SilentMode>
+  <CheckForUpdates>false</CheckForUpdates>
+  <ConfirmExit>false</ConfirmExit>
+  <DownloadIcons>false</DownloadIcons>
+  <UiDisableHardwareAcceleration>true</UiDisableHardwareAcceleration>
+  <HideVanguardWarning>false</HideVanguardWarning>
+  <UiColour>lightblue</UiColour>
+  <UiDarkMode>false</UiDarkMode>
+  <UiHolidayThemes>false</UiHolidayThemes>
+  <Elfldr2NetworkAdapterName />
+  <HasReadPolicies>true</HasReadPolicies>
+  <DisableAnalytics>false</DisableAnalytics>
+  <Elfldr2LogToFile>false</Elfldr2LogToFile>
+  <DatXmlLocation />
+  <FirstTimeSetupComplete>true</FirstTimeSetupComplete>
+  <IsLoggedIn>false</IsLoggedIn>
+  <SegaId />
+  <NamcoId />
+  <MarioKartId />
+  <Language>en</Language>
+  <HideDolphinGUI>true</HideDolphinGUI>
+  <ConfirmGameDeletion>false</ConfirmGameDeletion>
+</ParrotData>
+EOF
+          fi
+          set_parrot_data_value FirstTimeSetupComplete true
+          set_parrot_data_value HasReadPolicies true
+          set_parrot_data_value CheckForUpdates false
+          set_parrot_data_value DownloadIcons false
+          set_parrot_data_value SilentMode true
+          set_parrot_data_value ConfirmExit false
+          set_parrot_data_value UiDisableHardwareAcceleration true
+          set_parrot_data_value UiHolidayThemes false
+        }
+        profile_value() {
+          xmlstarlet sel -t -v "/GameProfile/$1" "$2" 2>/dev/null || true
+        }
+        resolve_profile_arg() {
+          local selected="$1"
+          local selected_base
+          local selected_emulation
+          local selected_executable
+          local selected_emulator
+          local candidate
+          selected_base="$(basename "$selected")"
+          if [ -f "$install_dir/GameProfiles/$selected_base" ]; then
+            printf '%s\n' "$selected_base"
+            return
+          fi
+          selected_emulation="$(profile_value EmulationProfile "$selected")"
+          selected_executable="$(profile_value ExecutableName "$selected")"
+          selected_emulator="$(profile_value EmulatorType "$selected")"
+          while IFS= read -r candidate; do
+            if [ "$(profile_value EmulationProfile "$candidate")" = "$selected_emulation" ] \
+              && [ "$(profile_value ExecutableName "$candidate")" = "$selected_executable" ] \
+              && [ "$(profile_value EmulatorType "$candidate")" = "$selected_emulator" ]; then
+              basename "$candidate"
+              return
+            fi
+          done < <(find "$install_dir/GameProfiles" -maxdepth 1 -type f -name "*.xml" | sort)
+          echo "No official TeknoParrot GameProfiles entry matches $selected_base ($selected_emulation/$selected_executable/$selected_emulator)" >&2
+          exit 66
+        }
         if [ ! -e "$install_dir/TeknoParrotUi.exe" ]; then
           cat >&2 <<EOF
     TeknoParrot free is scaffolded but not installed yet.
@@ -671,19 +769,17 @@ EOF
             echo "TeknoParrot XML profile not found: $rom" >&2
             exit 66
           fi
-          profile="$(basename "$rom")"
+          profile="$(resolve_profile_arg "$rom")"
           mkdir -p "$install_dir/UserProfiles"
           cp -f "$rom" "$install_dir/UserProfiles/$profile"
           cd "$install_dir"
-          if [ ! -e "$WINEPREFIX/drive_c/windows/Microsoft.NET/Framework/v4.0.30319/mscorlib.dll" ]; then
-            wine msiexec /i "${packages.wineMono}/share/wine/mono/wine-mono-10.4.1-x86.msi"
-          fi
+          ensure_parrot_data
+          ensure_wine_mono
           exec wine TeknoParrotUi.exe --profile="$profile"
         fi
         cd "$install_dir"
-        if [ ! -e "$WINEPREFIX/drive_c/windows/Microsoft.NET/Framework/v4.0.30319/mscorlib.dll" ]; then
-          wine msiexec /i "${packages.wineMono}/share/wine/mono/wine-mono-10.4.1-x86.msi"
-        fi
+        ensure_parrot_data
+        ensure_wine_mono
         exec wine "$install_dir/TeknoParrotUi.exe"
   '';
 
@@ -1151,6 +1247,10 @@ EOF
           "${cfg.configRoot}/emulators/pico8" \
           "${cfg.configRoot}/emulators/teknoparrot" \
           "${cfg.configRoot}/teknoparrot"
+        if [ -d "${cfg.configRoot}/teknoparrot/TeknoParrot" ]; then
+          chgrp ${cfg.group} "${cfg.configRoot}/teknoparrot/TeknoParrot"
+          chmod 0775 "${cfg.configRoot}/teknoparrot/TeknoParrot"
+        fi
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "${cfg.configRoot}/teknoparrot/TeknoParrot/UserProfiles"
         install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${displayPolicy} "${cfg.configRoot}/display/policy.json"
         xemu_data_dir="${cfg.dataRoot}/xdg/share/xemu/xemu"
