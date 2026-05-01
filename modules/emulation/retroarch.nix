@@ -47,6 +47,10 @@ let
     core_options_path = "${cfg.configRoot}/retroarch/core-options/default.opt"
   '';
 
+  globalShaderPreset = pkgs.writeText "emulation-global.slangp" ''
+    #reference "${cfg.configRoot}/retroarch/shaders/shaders_slang/edge-smoothing/nnedi3/nnedi3-nns16-2x-rgb.slangp"
+  '';
+
   coreOptions = {
     "retroarch-fbneo.opt" = ''
       fbneo-allow-patched-romsets = "enabled"
@@ -329,9 +333,11 @@ let
       "${cfg.configRoot}/retroarch/shaders" \
       "${cfg.configRoot}/retroarch/shaders-user" \
       "${cfg.configRoot}/retroarch/system-overrides" \
+      "${cfg.dataRoot}/xdg/config/retroarch/config" \
       "${cfg.dataRoot}/logs/retroarch"
 
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${retroarchCfg} "${cfg.configRoot}/retroarch/retroarch.cfg"
+    install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${globalShaderPreset} "${cfg.dataRoot}/xdg/config/retroarch/config/global.slangp"
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${shaderPolicy} "${cfg.configRoot}/retroarch/shader-policy.json"
     if [ -d "${packages.retroarchPackage}/share/libretro/info" ]; then
       cp -R --no-preserve=mode,ownership "${packages.retroarchPackage}/share/libretro/info/." "${cfg.configRoot}/retroarch/info/" || true
