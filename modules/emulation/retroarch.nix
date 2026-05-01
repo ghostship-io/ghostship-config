@@ -275,6 +275,7 @@ let
     rm -rf "${cfg.configRoot}/retroarch/core-options"
     rm -rf "${cfg.configRoot}/retroarch/profiles" "${cfg.configRoot}/retroarch/system-overrides"
     rm -f "${cfg.configRoot}/retroarch/retroachievements.cfg"
+    find "${cfg.dataRoot}/xdg/config/retroarch/config" -mindepth 1 -maxdepth 2 -type f ! -name '*.opt' ! -name 'global.slangp' -delete
     rm -f "${cfg.dataRoot}/xdg/config/retroarch/config/ParaLLEl N64/ParaLLEl N64.opt"
     ${lib.concatMapStringsSep "\n" (entry: ''
       install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "${cfg.dataRoot}/xdg/config/retroarch/config/${entry.corename}"
