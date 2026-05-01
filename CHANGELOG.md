@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer PS2 m3u and multiplayer support**: Resolve PS2 `.m3u` playlists in
+  `run-emulator` before launching PCSX2, seed a Soulcalibur III playlist when
+  the CHD exists, enable PCSX2 port 1 multitap with four SDL controller slots,
+  turn on MTVU with neutral cycle settings, and add token-backed PCSX2
+  RetroAchievements projection.
 - **Boomer PS2 PCSX2 setup**: Manage standalone PCSX2 `2.6.3` before each PS2
   launch with no setup wizard, Vulkan 3x graphics, managed BIOS/ROM/data
   paths, direct `-batch -fullscreen` launches, SDL controller mappings, and

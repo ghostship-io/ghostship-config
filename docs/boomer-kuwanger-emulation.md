@@ -478,8 +478,14 @@ disabled, the BIOS search directory is `/srv/emulation/bios`, the PS2 ROM
 folder is indexed, and saves, states, screenshots, logs, cache, patches,
 cheats, textures, and game settings stay under the managed emulation roots.
 The Boomer default uses PCSX2's Vulkan renderer at 3x native resolution and
-launches games with `-batch -fullscreen` so ES-DE starts directly into the
-game without manual config prompts.
+launches games with `-batch -fullscreen` so ES-DE starts directly into the game
+without manual config prompts. PCSX2 does not boot `.m3u` playlists directly on
+Boomer, so `run-emulator` resolves a PS2 `.m3u` to its first non-comment disc
+entry and passes that real disc path to PCSX2. `sync-emulator-configs` seeds
+`Soulcalibur III (USA).m3u` beside the existing CHD when that ROM is present.
+PCSX2 port 1 multitap is enabled by default for four-player games, with Pad1-4
+mapped to SDL controller slots 0-3. MTVU is enabled while EE cycle rate and
+cycle skip stay neutral for compatibility.
 
 Defaults:
 
@@ -698,6 +704,7 @@ The RetroAchievements secret unit is `emulation-retroachievements-secrets` with:
 
 - `RETROACHIEVEMENTS_USER`
 - `RETROACHIEVEMENTS_PASS`
+- `RETROACHIEVEMENTS_TOKEN`
 
 The generated projection is:
 
@@ -706,16 +713,17 @@ The generated projection is:
 ```
 
 `render-retroachievements-settings` writes RetroArch's runtime `cheevos_*`
-secret settings into the managed base RetroArch config:
+secret settings into the managed RetroArch append config:
 
 ```text
-/srv/emulation/config/retroarch/retroarch.cfg
+/srv/emulation/config/retroarch/retroachievements.cfg
 ```
 
-No RetroArch append config is used. Standalone emulator achievement login
-remains `manual-login-required` until each live config format is confirmed on
-Boomer; the status file records that deliberately
-instead of guessing at credential keys.
+For PCSX2 it writes `RETROACHIEVEMENTS_TOKEN` into PCSX2's native secrets layer
+at `/srv/emulation/xdg/config/PCSX2/inis/secrets.ini`, while `run-emulator`
+writes the matching non-secret `[Achievements]` settings into `PCSX2.ini`.
+If the token is absent, PCSX2 achievements stay disabled and the status file
+reports `pcsx2: missing-token`.
 
 ## Verification On Hardware
 

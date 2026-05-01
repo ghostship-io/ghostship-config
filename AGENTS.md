@@ -288,7 +288,9 @@ changelog.
   Keep Boomer's ES-DE ROM folder names aligned exactly with
   `/mnt/z/Library/ROMs/roms`; Doom uses `Fantasy - GZDoom (2005)` with
   Batocera-style `.gzdoom` launchers at the ROM-folder top level and assets
-  underneath that folder. PICO-8 needs an explicit Gamescope Xwayland server on
+  underneath that folder. PCSX2 2.6.3 does not boot `.m3u` directly on Boomer;
+  keep PS2 playlist support in `run-emulator` by resolving the first listed
+  disc before launching PCSX2. PICO-8 needs an explicit Gamescope Xwayland server on
   Boomer because its SDL path uses X11; keep `pico8-hotkeys` as the default and
   plain `pico8` as the fallback alternate with the managed PICO-8 `-home` path.
   Every `run-emulator` launch should keep the

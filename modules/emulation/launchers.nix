@@ -23,6 +23,7 @@ let
       packages.ryubingCanaryPackage
       packages.winePackage
       config.ghostship.emulation.internal.scripts.audioRoute
+      displayProfile
     ]
     ++ emu.optionalPackages [
       "azahar"
@@ -1781,6 +1782,20 @@ EOF
       pcsx2_textures_dir="${cfg.configRoot}/emulators/pcsx2/textures"
       pcsx2_gamesettings_dir="${cfg.configRoot}/emulators/pcsx2/gamesettings"
       ps2_rom_dir="${cfg.romRoot}/Sony - PlayStation 2 (2000)"
+      retroachievements_env="/run/ghostship-secrets/emulation-retroachievements.env"
+      pcsx2_achievements_enabled="false"
+      pcsx2_achievements_user=""
+
+      if [ -r "$retroachievements_env" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        . "$retroachievements_env"
+        set +a
+        pcsx2_achievements_user="''${RETROACHIEVEMENTS_USER:-}"
+        if [ -n "''${RETROACHIEVEMENTS_USER:-}" ] && [ -n "''${RETROACHIEVEMENTS_TOKEN:-}" ]; then
+          pcsx2_achievements_enabled="true"
+        fi
+      fi
 
       mkdir -p \
         "$pcsx2_ini_dir" \
@@ -1839,6 +1854,12 @@ McdFolderAutoManage = true
 UseSavestateSelector = true
 SaveStateOnShutdown = false
 
+[EmuCore/Speedhacks]
+EECycleRate = 0
+EECycleSkip = 0
+vuThread = true
+fastCDVD = false
+
 [EmuCore/GS]
 Renderer = 14
 UpscaleMultiplier = 3.0
@@ -1867,7 +1888,7 @@ SDL = true
 SDLControllerEnhancedMode = true
 
 [Pad]
-MultitapPort1 = false
+MultitapPort1 = true
 MultitapPort2 = false
 
 [Pad1]
@@ -1928,6 +1949,82 @@ RLeft = SDL-1/-RightX
 SmallMotor = SDL-1/SmallMotor
 LargeMotor = SDL-1/LargeMotor
 
+[Pad3]
+Type = DualShock2
+Up = SDL-2/DPadUp
+Right = SDL-2/DPadRight
+Down = SDL-2/DPadDown
+Left = SDL-2/DPadLeft
+Triangle = SDL-2/FaceNorth
+Circle = SDL-2/FaceEast
+Cross = SDL-2/FaceSouth
+Square = SDL-2/FaceWest
+Select = SDL-2/Back
+Start = SDL-2/Start
+L1 = SDL-2/LeftShoulder
+L2 = SDL-2/+LeftTrigger
+R1 = SDL-2/RightShoulder
+R2 = SDL-2/+RightTrigger
+L3 = SDL-2/LeftStick
+R3 = SDL-2/RightStick
+LUp = SDL-2/-LeftY
+LRight = SDL-2/+LeftX
+LDown = SDL-2/+LeftY
+LLeft = SDL-2/-LeftX
+RUp = SDL-2/-RightY
+RRight = SDL-2/+RightX
+RDown = SDL-2/+RightY
+RLeft = SDL-2/-RightX
+SmallMotor = SDL-2/SmallMotor
+LargeMotor = SDL-2/LargeMotor
+
+[Pad4]
+Type = DualShock2
+Up = SDL-3/DPadUp
+Right = SDL-3/DPadRight
+Down = SDL-3/DPadDown
+Left = SDL-3/DPadLeft
+Triangle = SDL-3/FaceNorth
+Circle = SDL-3/FaceEast
+Cross = SDL-3/FaceSouth
+Square = SDL-3/FaceWest
+Select = SDL-3/Back
+Start = SDL-3/Start
+L1 = SDL-3/LeftShoulder
+L2 = SDL-3/+LeftTrigger
+R1 = SDL-3/RightShoulder
+R2 = SDL-3/+RightTrigger
+L3 = SDL-3/LeftStick
+R3 = SDL-3/RightStick
+LUp = SDL-3/-LeftY
+LRight = SDL-3/+LeftX
+LDown = SDL-3/+LeftY
+LLeft = SDL-3/-LeftX
+RUp = SDL-3/-RightY
+RRight = SDL-3/+RightX
+RDown = SDL-3/+RightY
+RLeft = SDL-3/-RightX
+SmallMotor = SDL-3/SmallMotor
+LargeMotor = SDL-3/LargeMotor
+
+[Achievements]
+Enabled = $pcsx2_achievements_enabled
+ChallengeMode = false
+EncoreMode = false
+SpectatorMode = false
+UnofficialTestMode = false
+Notifications = true
+LeaderboardNotifications = true
+SoundEffects = true
+InfoSound = true
+UnlockSound = true
+LBSubmitSound = true
+Overlays = true
+LBOverlays = true
+OverlayPosition = 8
+NotificationPosition = 2
+Username = $pcsx2_achievements_user
+
 [Hotkeys]
 ToggleFullscreen = Keyboard/Alt & Keyboard/Return
 OpenPauseMenu = Keyboard/Escape
@@ -1944,6 +2041,35 @@ ToggleTurbo = Keyboard/Tab
 TogglePause = Keyboard/Space
 EOF
       log_event "runtime" "prepared PCSX2 managed config at $pcsx2_ini"
+    }
+
+    resolve_first_m3u_entry() {
+      playlist="$1"
+      playlist_dir="$(dirname "$playlist")"
+      entry="$(${pkgs.gawk}/bin/awk '
+        /^[[:space:]]*($|#)/ { next }
+        {
+          sub(/^[[:space:]]+/, "")
+          sub(/[[:space:]]+$/, "")
+          print
+          exit
+        }
+      ' "$playlist")"
+      if [ -z "$entry" ]; then
+        log_event "error" "empty m3u playlist: $playlist"
+        echo "Empty m3u playlist: $playlist" >&2
+        exit 64
+      fi
+      case "$entry" in
+        /*) resolved="$entry" ;;
+        *) resolved="$playlist_dir/$entry" ;;
+      esac
+      if [ ! -f "$resolved" ]; then
+        log_event "error" "m3u first disc missing: $playlist -> $resolved"
+        echo "M3U first disc does not exist: $resolved" >&2
+        exit 66
+      fi
+      printf '%s\n' "$resolved"
     }
 
     cmd=()
@@ -2063,9 +2189,20 @@ PY
         ;;
       lime3ds) cmd=(lime3ds "$rom_path") ;;
       pcsx2)
-        pcsx2_bin="$(first_command pcsx2-qt pcsx2)"
         prepare_pcsx2_runtime
-        cmd=("$pcsx2_bin" -batch -fullscreen -- "$rom_path")
+        if [ "''${PCSX2_CONFIG_ONLY:-0}" = "1" ]; then
+          log_event "runtime" "prepared PCSX2 managed config only"
+          exit 0
+        fi
+        pcsx2_bin="$(first_command pcsx2-qt pcsx2)"
+        pcsx2_rom_path="$rom_path"
+        case "$rom_path" in
+          *.m3u|*.M3U)
+            pcsx2_rom_path="$(resolve_first_m3u_entry "$rom_path")"
+            log_event "runtime" "resolved PCSX2 m3u playlist to first disc: $pcsx2_rom_path"
+            ;;
+        esac
+        cmd=("$pcsx2_bin" -batch -fullscreen -- "$pcsx2_rom_path")
         ;;
       ppsspp)
         ppsspp_bin="$(first_command PPSSPPSDL ppsspp ppsspp-sdl)"
@@ -2298,6 +2435,16 @@ EOF
         fi
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "${cfg.configRoot}/teknoparrot/TeknoParrot/UserProfiles"
         install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${displayPolicy} "${cfg.configRoot}/display/policy.json"
+        ps2_rom_dir="${cfg.romRoot}/Sony - PlayStation 2 (2000)"
+        ps2_soulcalibur_disc="$ps2_rom_dir/Soulcalibur III (USA).chd"
+        ps2_soulcalibur_playlist="$ps2_rom_dir/Soulcalibur III (USA).m3u"
+        if [ -f "$ps2_soulcalibur_disc" ]; then
+          printf '%s\n' "Soulcalibur III (USA).chd" >"$ps2_soulcalibur_playlist.tmp"
+          chown ${cfg.user}:${cfg.group} "$ps2_soulcalibur_playlist.tmp"
+          chmod 0644 "$ps2_soulcalibur_playlist.tmp"
+          mv "$ps2_soulcalibur_playlist.tmp" "$ps2_soulcalibur_playlist"
+        fi
+        runuser -u ${cfg.user} -- env PCSX2_CONFIG_ONLY=1 ${runEmulator}/bin/run-emulator ps2 pcsx2 "$ps2_soulcalibur_disc"
         xemu_data_dir="${cfg.dataRoot}/xdg/share/xemu/xemu"
         xemu_bios_dir="${cfg.biosRoot}/xbox"
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$xemu_data_dir"
@@ -2410,8 +2557,8 @@ EOF
 [Hotkeys1]
 Device = SDL/0/Nintendo Switch Pro Controller
 Keys/Toggle Pause = `Misc 1`
-Keys/Reset = `Back` & `Button B`
-Keys/Take Screenshot = `Back` & `Button A`
+Keys/Reset = `Back` & `Button S`
+Keys/Take Screenshot = `Back` & `Button E`
 Keys/Disable Emulation Speed Limit = `Back` & `Trigger R`
 Keys/Load State Slot 1 = `Back` & `Shoulder L`
 Keys/Save State Slot 1 = `Back` & `Shoulder R`
@@ -2422,10 +2569,10 @@ EOF
           cat >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
 [GCPad$slot]
 Device = SDL/$index/Nintendo Switch Pro Controller
-Buttons/A = \`Button A\`
-Buttons/B = \`Button B\`
-Buttons/X = \`Button X\`
-Buttons/Y = \`Button Y\`
+Buttons/A = \`Button E\`
+Buttons/B = \`Button S\`
+Buttons/X = \`Button N\`
+Buttons/Y = \`Button W\`
 Buttons/Z = \`Trigger R\`
 Buttons/Start = \`Start\`
 Main Stick/Up = \`Axis 1-\`
@@ -2751,7 +2898,7 @@ EOF
         "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Minus hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
         "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Dolphin launches fullscreen without analytics, panic, or stop-confirm prompts; GameCube native Dolphin hotkeys cover reset, save/load slot 1, screenshot, and fast mode with Minus as Select/hotkey modifier and Plus as Start; Square/Capture pauses or opens Wii Remote Home only where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
         "ppsspp": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
-        "pcsx2": "launches through standalone PCSX2 with managed no-wizard config, Vulkan 3x internal resolution, native PCSX2 hotkey chords for pause menu/reset/save/load/screenshot/OSD/turbo, and Minus + Plus twice exits through the per-launch broker; Square/Capture is intentionally unbound until a stable Boomer SDL guide binding is proven",
+        "pcsx2": "launches through standalone PCSX2 with managed no-wizard config, launcher-side m3u first-disc resolution, Vulkan 3x internal resolution, native PCSX2 hotkey chords for pause menu/reset/save/load/screenshot/OSD/turbo, port 1 multitap for players 1-4, token-backed RetroAchievements when RETROACHIEVEMENTS_TOKEN is projected, and Minus + Plus twice exits through the per-launch broker; Square/Capture is intentionally unbound until a stable Boomer SDL guide binding is proven",
         "azahar": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "cemu": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "xemu": "fallback plain Xemu launch with native Minus + Plus quick actions and per-launch Minus + Plus twice exit",
