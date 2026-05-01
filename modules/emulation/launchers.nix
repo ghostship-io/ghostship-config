@@ -2435,7 +2435,7 @@ EOF
           chmod 0644 "$ps2_soulcalibur_playlist.tmp"
           mv "$ps2_soulcalibur_playlist.tmp" "$ps2_soulcalibur_playlist"
         fi
-        runuser -u ${cfg.user} -- env PCSX2_CONFIG_ONLY=1 run-emulator ps2 pcsx2 "$ps2_soulcalibur_disc"
+        runuser -u ${cfg.user} -- env PCSX2_CONFIG_ONLY=1 ${runEmulator}/bin/run-emulator ps2 pcsx2 "$ps2_soulcalibur_disc"
         xemu_data_dir="${cfg.dataRoot}/xdg/share/xemu/xemu"
         xemu_bios_dir="${cfg.biosRoot}/xbox"
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$xemu_data_dir"
