@@ -10,8 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer Switch Ryubing setup**: Manage Ryubing's current lower-case config
   schema before Switch launches, install the newest local firmware archive into
   Ryubing's registered firmware store, keep the Canary pin current, and add
-  Switch hotkeys for Select+X -> F4, Select+A -> F8, and Square/Capture -> F5
-  while preserving Select+Start twice exit.
+  Switch hotkeys for Minus + X -> F4, Minus + A -> F8, and
+  Square/Capture -> F5 while preserving Minus + Plus twice exit.
+- **Boomer Dolphin prompt fix**: Reassert Dolphin analytics opt-out and
+  stop-confirm settings immediately before each launch with valid INI syntax
+  plus Dolphin `-C` overrides, so GameCube kiosk launches do not ask to report
+  usage data or confirm quit/stop.
+- **Boomer GameCube Dolphin hotkeys**: Configure Dolphin to launch GameCube
+  games without analytics, panic, or stop-confirm prompts, bind native
+  GameCube hotkeys for reset, save/load slot 1, screenshot, and fast mode, and
+  keep unsupported quick-actions/debug-monitor and bare Square chords
+  explicitly unbound.
+- **Boomer Controller Maps hotkey layout**: Render the same full hotkey combo
+  list on every controller map with combo-first rows and `None` for unmapped
+  actions. Use `L1`/`R1` for shoulder rows, `L2`/`R2` for trigger rows, keep
+  stick clicks on `L3`/`R3`, and label hotkeys with spaced `Minus + ...`
+  chords starting with `Minus + Plus 2x`.
 - **Boomer hotkey and RetroAchievements regression fix**: Restore the
   per-launch Select+Start double-press exit broker, keep RetroArch hotkeys in
   the managed base config plus controller autoconfigs, add 8BitDo udev
