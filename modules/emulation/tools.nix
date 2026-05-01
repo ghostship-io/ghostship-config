@@ -255,7 +255,7 @@ let
     retroachievements-status = mkMenuTool "retroachievements-status" "RetroAchievements Status" [
       { label = "Secret projection"; command = "ls -l /run/ghostship-secrets/emulation-retroachievements.env 2>/dev/null || echo 'No decrypted RetroAchievements projection.'"; }
       { label = "Rendered settings"; command = "render-retroachievements-settings || true; [ -r ${cfg.configRoot}/retroachievements/status.json ] && jq . ${cfg.configRoot}/retroachievements/status.json || true"; }
-      { label = "RetroArch config present"; command = "if [ -r ${cfg.configRoot}/retroarch/retroachievements.cfg ]; then grep -E 'cheevos_(enable|hardcore_mode_enable|username)' ${cfg.configRoot}/retroarch/retroachievements.cfg || true; else echo 'No RetroArch RetroAchievements config rendered.'; fi"; }
+      { label = "RetroArch base config"; command = "grep -E 'cheevos_(enable|hardcore_mode_enable|username)' ${cfg.configRoot}/retroarch/retroarch.cfg || true"; }
     ];
     esde-scraper-status = mkMenuTool "esde-scraper-status" "ES-DE Scraper Status" [
       { label = "Secret projection"; command = "ls -l /run/ghostship-secrets/emulation-scraper.env 2>/dev/null || echo 'No decrypted scraper projection.'"; }

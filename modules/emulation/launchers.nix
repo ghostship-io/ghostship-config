@@ -1082,16 +1082,7 @@ PY
           echo "Missing RetroArch core for $emulator_id" >&2
           exit 66
         fi
-        append_configs=()
-        retroachievements_config="${cfg.configRoot}/retroarch/retroachievements.cfg"
-        if [ -r "$retroachievements_config" ]; then
-          append_configs+=("$retroachievements_config")
-        fi
         cmd=(retroarch --config "${cfg.configRoot}/retroarch/retroarch.cfg")
-        if [ "''${#append_configs[@]}" -gt 0 ]; then
-          append_config="$(IFS='|'; echo "''${append_configs[*]}")"
-          cmd+=(--appendconfig "$append_config")
-        fi
         cmd+=(-L "$core_path" "$rom_path")
         ;;
       dolphin) cmd=(dolphin-emu -b -e "$rom_path") ;;
@@ -1760,7 +1751,7 @@ EOF
         "face_east": "physical A / right face / secondary or cancel where applicable",
         "face_north": "physical X / upper face",
         "face_west": "physical Y / left face",
-        "digital_movement": "D-pad plus left-stick digital movement only for managed no-analog RetroArch systems; analog-capable systems keep analog sticks as analog input",
+        "digital_movement": "RetroArch no longer uses analog-to-D-pad config layers; D-pad stays on D-pad, analog-capable systems keep analog sticks as analog input, and standalone SDL emulators keep their native mappings",
         "player_slots": "map every stable declarative player slot exposed by the emulator"
       },
       "global_sdl_hints": {
@@ -1783,7 +1774,7 @@ EOF
         "pico8": "PICO-8 only: Start/+ opens pause/menu"
       },
       "managed_defaults": {
-        "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; no-analog systems use RetroArch analog-to-D-pad mode for players 1-5; analog-capable systems do not get analog-to-D-pad overrides; PC Engine-family cores default to 6-button pads for all five players; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
+        "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses only the managed base retroarch.cfg, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
         "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
         "ppsspp": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",
         "pcsx2": "inherits SDL Switch label hints from run-emulator; no shared raw-input hotkey broker is started",

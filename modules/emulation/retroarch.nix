@@ -23,11 +23,6 @@ let
     screenshot_directory = "${cfg.dataRoot}/screenshots"
     input_autodetect_enable = "true"
     joypad_autoconfig_dir = "${cfg.configRoot}/retroarch/autoconfig"
-    input_player1_analog_dpad_mode = "1"
-    input_player2_analog_dpad_mode = "1"
-    input_player3_analog_dpad_mode = "1"
-    input_player4_analog_dpad_mode = "1"
-    input_player5_analog_dpad_mode = "1"
     input_menu_toggle_gamepad_combo = "0"
     input_enable_hotkey_btn = "9"
     input_menu_toggle_btn = "2"
@@ -279,6 +274,7 @@ let
 
     rm -rf "${cfg.configRoot}/retroarch/core-options"
     rm -rf "${cfg.configRoot}/retroarch/profiles" "${cfg.configRoot}/retroarch/system-overrides"
+    rm -f "${cfg.configRoot}/retroarch/retroachievements.cfg"
     rm -f "${cfg.dataRoot}/xdg/config/retroarch/config/ParaLLEl N64/ParaLLEl N64.opt"
     ${lib.concatMapStringsSep "\n" (entry: ''
       install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "${cfg.dataRoot}/xdg/config/retroarch/config/${entry.corename}"

@@ -526,15 +526,13 @@ actions, Select+B reset, Select+L load `esde-slot1`, Select+R save
 `esde-slot1`, Select+A screenshot, Select+Y debug monitor, and Square/Capture
 pause. Select+ZR is intentionally unmapped for Xemu because there is no reliable
 fast-forward command. RetroArch maps Select/Minus hotkeys to save/load, reset,
-FPS, screenshot, and fast-forward actions. No-analog RetroArch systems accept
-left-stick D-pad input for players 1-5 through per-system RetroArch
-analog-to-D-pad overrides rather than global direct axis aliases. Analog-capable
-systems keep analog sticks as analog input. PC Engine CD and SuperGrafx default
-all five players to 6-button pads. Dolphin enables all four GameCube controller
-ports and keeps Wii slots 1-4 on the same SDL controller order; D-pad stays on
-physical D-pad and analog movement stays on analog sticks. Standalone SDL
-emulators keep their native left-stick mappings. Mupen64Plus-Next defaults all
-four N64 controller paks to Rumble Pak.
+FPS, screenshot, and fast-forward actions, and uses only the managed base
+`retroarch.cfg`, XDG `global.slangp`, and XDG per-core `.opt` files. PC Engine
+CD and SuperGrafx default all five players to 6-button pads. Dolphin enables
+all four GameCube controller ports and keeps Wii slots 1-4 on the same SDL
+controller order; D-pad stays on physical D-pad and analog movement stays on
+analog sticks. Standalone SDL emulators keep their native left-stick mappings.
+Mupen64Plus-Next defaults all four N64 controller paks to Rumble Pak.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices
@@ -638,16 +636,16 @@ The generated projection is:
 /run/ghostship-secrets/emulation-retroachievements.env
 ```
 
-`render-retroachievements-settings` writes RetroArch's runtime
-`cheevos_*` settings to:
+`render-retroachievements-settings` writes RetroArch's runtime `cheevos_*`
+secret settings into the managed base RetroArch config:
 
 ```text
-/srv/emulation/config/retroarch/retroachievements.cfg
+/srv/emulation/config/retroarch/retroarch.cfg
 ```
 
-RetroArch receives that file through `run-emulator` append config. Standalone
-emulator achievement login remains `manual-login-required` until each live
-config format is confirmed on Boomer; the status file records that deliberately
+No RetroArch append config is used. Standalone emulator achievement login
+remains `manual-login-required` until each live config format is confirmed on
+Boomer; the status file records that deliberately
 instead of guessing at credential keys.
 
 ## Verification On Hardware
