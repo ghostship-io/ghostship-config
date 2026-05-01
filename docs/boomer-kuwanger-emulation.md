@@ -110,7 +110,10 @@ directory into Ryubing's emulated SD card at
 `/srv/emulation/xdg/config/Ryujinx/sdcard/data`, replacing only an existing
 symlink. Proprietary keys stay operator-managed under
 `/srv/emulation/bios/switch` and are exposed to Ryubing's runtime system
-directory at launch.
+directory at launch. Firmware also stays operator-managed in that BIOS folder:
+`run-emulator` selects the newest local `Firmware*.zip`, extracts its NCA files
+into Ryubing's `bis/system/Contents/registered` directory when needed, and
+writes a marker recording the source path, resolved path, hash, and file count.
 
 `run-emulator` also converges Ryubing's `Config.json` before each Switch launch
 so Boomer uses Vulkan, docked mode, fullscreen launch, 16x anisotropic

@@ -1065,7 +1065,9 @@ EOF
       ryujinx_config_dir="$XDG_CONFIG_HOME/Ryujinx"
       ryujinx_system_dir="$ryujinx_config_dir/system"
       ryujinx_sdcard_dir="$ryujinx_config_dir/sdcard"
-      mkdir -p "$ryujinx_system_dir" "$ryujinx_sdcard_dir"
+      ryujinx_firmware_dir="$ryujinx_config_dir/bis/system/Contents/registered"
+      ryujinx_firmware_marker="$ryujinx_config_dir/bis/system/Contents/firmware-installed.json"
+      mkdir -p "$ryujinx_system_dir" "$ryujinx_sdcard_dir" "$ryujinx_firmware_dir" "$(dirname "$ryujinx_firmware_marker")"
       ryujinx_config_file="$ryujinx_config_dir/Config.json"
 
       ${pkgs.python3}/bin/python3 - "$ryujinx_config_file" <<'PY'
@@ -1081,138 +1083,262 @@ if path.exists():
         raise SystemExit(f"Refusing to rewrite invalid Ryubing config: {path}")
 else:
     config = {
-        "Version": 47,
-        "EnableFileLog": True,
-        "BackendThreading": "Auto",
-        "ResScale": 1,
-        "ResScaleCustom": 1.0,
-        "MaxAnisotropy": -1.0,
-        "AspectRatio": "Fixed16x9",
-        "AntiAliasing": "None",
-        "ScalingFilter": "Bilinear",
-        "ScalingFilterLevel": 80,
-        "GraphicsShadersDumpPath": "",
-        "LoggingEnableDebug": False,
-        "LoggingEnableStub": False,
-        "LoggingEnableInfo": False,
-        "LoggingEnableWarn": True,
-        "LoggingEnableError": True,
-        "LoggingEnableTrace": False,
-        "LoggingEnableGuest": False,
-        "LoggingEnableFsAccessLog": False,
-        "LoggingFilteredClasses": [],
-        "LoggingGraphicsDebugLevel": "None",
-        "SystemLanguage": "AmericanEnglish",
-        "SystemRegion": "USA",
-        "SystemTimeZone": "UTC",
-        "SystemTimeOffset": 0,
-        "DockedMode": True,
-        "EnableDiscordIntegration": False,
-        "CheckUpdatesOnStart": False,
-        "ShowConfirmExit": False,
-        "HideCursor": "OnIdle",
-        "EnableVsync": True,
-        "EnableShaderCache": True,
-        "EnableTextureRecompression": False,
-        "EnableMacroHLE": True,
-        "EnablePtc": True,
-        "EnableInternetAccess": False,
-        "EnableFsIntegrityChecks": True,
-        "FsGlobalAccessLogMode": 0,
-        "AudioBackend": "SDL2",
-        "AudioVolume": 1.0,
-        "MemoryManagerMode": "HostMappedUnsafe",
-        "ExpandRam": False,
-        "IgnoreMissingServices": False,
-        "GuiColumns": {
-            "FavColumn": True,
-            "IconColumn": True,
-            "AppColumn": True,
-            "DevColumn": True,
-            "VersionColumn": True,
-            "TimePlayedColumn": True,
-            "LastPlayedColumn": True,
-            "FileExtColumn": True,
-            "FileSizeColumn": True,
-            "PathColumn": True,
+        "version": 71,
+        "enable_file_log": True,
+        "backend_threading": "Auto",
+        "res_scale": 1,
+        "res_scale_custom": 1,
+        "max_anisotropy": -1,
+        "aspect_ratio": "Fixed16x9",
+        "anti_aliasing": "None",
+        "scaling_filter": "Bilinear",
+        "scaling_filter_level": 80,
+        "graphics_shaders_dump_path": "",
+        "logging_enable_debug": False,
+        "logging_enable_stub": True,
+        "logging_enable_info": True,
+        "logging_enable_warn": True,
+        "logging_enable_error": True,
+        "logging_enable_trace": False,
+        "logging_enable_guest": True,
+        "logging_enable_fs_access_log": False,
+        "logging_enable_avalonia": False,
+        "logging_filtered_classes": [],
+        "logging_graphics_debug_level": "None",
+        "system_language": "AmericanEnglish",
+        "system_region": "USA",
+        "system_time_zone": "UTC",
+        "system_time_offset": 0,
+        "match_system_time": False,
+        "use_input_global_config": False,
+        "docked_mode": True,
+        "enable_discord_integration": False,
+        "check_updates_on_start": False,
+        "update_checker_type": "PromptAtStartup",
+        "focus_lost_action_type": "DoNothing",
+        "show_confirm_exit": False,
+        "ignore_applet": False,
+        "skip_user_profiles": False,
+        "remember_window_state": True,
+        "show_title_bar": True,
+        "enable_hardware_acceleration": True,
+        "hide_cursor": 1,
+        "enable_vsync": True,
+        "vsync_mode": 0,
+        "enable_custom_vsync_interval": False,
+        "custom_vsync_interval": 120,
+        "enable_shader_cache": True,
+        "enable_texture_recompression": False,
+        "enable_macro_hle": True,
+        "enable_color_space_passthrough": False,
+        "enable_ptc": True,
+        "enable_low_power_ptc": False,
+        "tick_scalar": 50,
+        "enable_internet_access": False,
+        "enable_fs_integrity_checks": True,
+        "fs_global_access_log_mode": 0,
+        "audio_backend": "SDL3",
+        "audio_volume": 1,
+        "memory_manager_mode": "HostMappedUnsafe",
+        "dram_size": 0,
+        "ignore_missing_services": False,
+        "gui_columns": {
+            "fav_column": True,
+            "icon_column": True,
+            "app_column": True,
+            "dev_column": True,
+            "version_column": True,
+            "ldn_info_column": False,
+            "time_played_column": True,
+            "last_played_column": True,
+            "file_ext_column": True,
+            "file_size_column": True,
+            "path_column": True,
         },
-        "ColumnSort": {"SortColumnId": 0, "SortAscending": False},
-        "GameDirs": [],
-        "ShownFileTypes": {"NSP": True, "PFS0": True, "XCI": True, "NCA": True, "NRO": True, "NSO": True},
-        "WindowStartup": {
-            "WindowSizeWidth": 1280,
-            "WindowSizeHeight": 720,
-            "WindowPositionX": 0,
-            "WindowPositionY": 0,
-            "WindowMaximized": False,
+        "column_sort": {"sort_column_id": 0, "sort_ascending": False},
+        "game_dirs": [],
+        "autoload_dirs": [],
+        "shown_file_types": {"nsp": True, "pfs0": True, "xci": True, "nca": True, "nro": True, "nso": True},
+        "window_startup": {
+            "window_size_width": 1280,
+            "window_size_height": 760,
+            "window_position_x": 0,
+            "window_position_y": 0,
+            "window_maximized": False,
         },
-        "LanguageCode": "en_US",
-        "EnableCustomTheme": True,
-        "CustomThemePath": "",
-        "BaseStyle": "Dark",
-        "GameListViewMode": 0,
-        "ShowNames": True,
-        "GridSize": 2,
-        "ApplicationSort": 0,
-        "IsAscendingOrder": True,
-        "StartFullscreen": True,
-        "ShowConsole": False,
-        "EnableKeyboard": False,
-        "EnableMouse": False,
-        "Hotkeys": {
-            "ToggleVsync": "F1",
-            "ToggleMute": "F2",
-            "Screenshot": "F8",
-            "ShowUi": "F4",
-            "Pause": "F5",
-            "ResScaleUp": "Unbound",
-            "ResScaleDown": "Unbound",
-            "VolumeUp": "Unbound",
-            "VolumeDown": "Unbound",
+        "language_code": "en_US",
+        "base_style": "Dark",
+        "game_list_view_mode": 0,
+        "show_names": True,
+        "grid_size": 2,
+        "application_sort": 0,
+        "is_ascending_order": True,
+        "start_fullscreen": True,
+        "start_no_ui": False,
+        "show_console": False,
+        "enable_keyboard": False,
+        "enable_mouse": False,
+        "disable_input_when_out_of_focus": False,
+        "hotkeys": {
+            "toggle_vsync_mode": "F1",
+            "screenshot": "F8",
+            "show_ui": "F4",
+            "pause": "F5",
+            "toggle_mute": "F2",
+            "res_scale_up": "Unbound",
+            "res_scale_down": "Unbound",
+            "volume_up": "Unbound",
+            "volume_down": "Unbound",
+            "custom_vsync_interval_increment": "Unbound",
+            "custom_vsync_interval_decrement": "Unbound",
+            "turbo_mode": "Unbound",
+            "turbo_mode_while_held": False,
         },
-        "KeyboardConfig": [],
-        "ControllerConfig": [],
-        "InputConfig": [],
-        "GraphicsBackend": "Vulkan",
-        "PreferredGpu": "",
-        "MultiplayerLanInterfaceId": "0",
-        "UseHypervisor": True,
+        "input_config": [],
+        "rainbow_speed": 1,
+        "graphics_backend": "Vulkan",
+        "preferred_gpu": "",
+        "multiplayer_mode": 0,
+        "multiplayer_lan_interface_id": "0",
+        "multiplayer_disable_p2p": False,
+        "multiplayer_ldn_passphrase": "",
+        "ldn_server": "",
+        "use_hypervisor": True,
+        "enable_gdb_stub": False,
+        "gdb_stub_port": 55555,
+        "debugger_suspend_on_start": False,
+        "show_dirty_hacks": False,
+        "dirty_hacks": [],
     }
+
+for key in (
+    "Version",
+    "BackendThreading",
+    "ResScale",
+    "ResScaleCustom",
+    "MaxAnisotropy",
+    "DockedMode",
+    "AudioBackend",
+    "GraphicsBackend",
+    "StartFullscreen",
+    "ShowConsole",
+    "EnableKeyboard",
+    "EnableMouse",
+    "Hotkeys",
+):
+    config.pop(key, None)
 
 config.update(
     {
-        "BackendThreading": "Auto",
-        "ResScale": 1,
-        "ResScaleCustom": 1.0,
-        "MaxAnisotropy": 16.0,
-        "AspectRatio": "Fixed16x9",
-        "AntiAliasing": "None",
-        "ScalingFilter": "Bilinear",
-        "ScalingFilterLevel": 80,
-        "DockedMode": True,
-        "CheckUpdatesOnStart": False,
-        "ShowConfirmExit": False,
-        "HideCursor": "OnIdle",
-        "EnableVsync": True,
-        "EnableShaderCache": True,
-        "EnableTextureRecompression": False,
-        "EnableMacroHLE": True,
-        "EnablePtc": True,
-        "AudioBackend": "SDL2",
-        "AudioVolume": 1.0,
-        "StartFullscreen": True,
-        "ShowConsole": False,
-        "EnableKeyboard": False,
-        "EnableMouse": False,
-        "GraphicsBackend": "Vulkan",
+        "backend_threading": "Auto",
+        "res_scale": 1,
+        "res_scale_custom": 1,
+        "max_anisotropy": 16,
+        "aspect_ratio": "Fixed16x9",
+        "anti_aliasing": "None",
+        "scaling_filter": "Bilinear",
+        "scaling_filter_level": 80,
+        "docked_mode": True,
+        "check_updates_on_start": False,
+        "show_confirm_exit": False,
+        "hide_cursor": 1,
+        "enable_vsync": True,
+        "enable_shader_cache": True,
+        "enable_texture_recompression": False,
+        "enable_macro_hle": True,
+        "enable_ptc": True,
+        "audio_backend": "SDL3",
+        "audio_volume": 1,
+        "start_fullscreen": True,
+        "show_console": False,
+        "enable_keyboard": False,
+        "enable_mouse": False,
+        "graphics_backend": "Vulkan",
     }
 )
-hotkeys = config.setdefault("Hotkeys", {})
-hotkeys.update({"ShowUi": "F4", "Screenshot": "F8", "Pause": "F5"})
+hotkeys = config.setdefault("hotkeys", {})
+hotkeys.update({"show_ui": "F4", "screenshot": "F8", "pause": "F5"})
 
 tmp = path.with_suffix(".json.tmp")
 tmp.write_text(json.dumps(config, indent=2, sort_keys=False) + "\n", encoding="utf-8")
 tmp.replace(path)
+PY
+
+      ${pkgs.python3}/bin/python3 - "${cfg.biosRoot}/switch" "$ryujinx_firmware_dir" "$ryujinx_firmware_marker" <<'PY'
+import hashlib
+import json
+import re
+import shutil
+import sys
+import zipfile
+from pathlib import Path
+
+bios_dir = Path(sys.argv[1])
+registered_dir = Path(sys.argv[2])
+marker_path = Path(sys.argv[3])
+
+def version_key(path):
+    return [int(part) for part in re.findall(r"\d+", path.name)]
+
+archives = sorted(
+    [path for path in bios_dir.glob("Firmware*.zip") if path.is_file()],
+    key=version_key,
+)
+if not archives:
+    print(f"WARNING: no Ryubing firmware archive found under {bios_dir}", file=sys.stderr)
+    raise SystemExit(0)
+
+source = archives[-1]
+resolved = source.resolve()
+sha256 = hashlib.sha256(resolved.read_bytes()).hexdigest()
+registered_count = len([path for path in registered_dir.glob("*.nca") if path.is_file()])
+marker = {}
+if marker_path.exists():
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        marker = {}
+
+if marker.get("sha256") == sha256 and registered_count > 0:
+    print(f"Ryubing firmware already installed from {source} ({registered_count} NCA files)")
+    raise SystemExit(0)
+
+with zipfile.ZipFile(source) as archive:
+    names = [
+        name
+        for name in archive.namelist()
+        if not name.endswith("/") and Path(name).name.lower().endswith(".nca")
+    ]
+    if not names:
+        raise SystemExit(f"Firmware archive contains no NCA files: {source}")
+
+    registered_dir.mkdir(parents=True, exist_ok=True)
+    for child in registered_dir.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+
+    for name in names:
+        target = registered_dir / Path(name).name
+        with archive.open(name) as src, target.open("wb") as dst:
+            shutil.copyfileobj(src, dst)
+
+marker_path.write_text(
+    json.dumps(
+        {
+            "source": str(source),
+            "resolved": str(resolved),
+            "sha256": sha256,
+            "file_count": len(names),
+        },
+        indent=2,
+        sort_keys=True,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+print(f"Installed Ryubing firmware from {source} ({len(names)} NCA files)")
 PY
 
       for key_name in prod.keys title.keys; do
@@ -1220,6 +1346,8 @@ PY
         key_target="$ryujinx_system_dir/$key_name"
         if [ -r "$key_source" ] && { [ ! -e "$key_target" ] || [ -L "$key_target" ]; }; then
           ln -sfn "$key_source" "$key_target"
+        elif [ ! -r "$key_source" ]; then
+          log_event "warning" "missing Ryubing key: $key_source"
         fi
       done
 
