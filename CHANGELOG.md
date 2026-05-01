@@ -27,9 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keep unsupported quick-actions/debug-monitor and bare Square chords
   explicitly unbound.
 - **Boomer Dolphin native button map**: Correct Dolphin's generated SDL
-  bindings so GameCube uses Minus as Select/hotkey modifier, Plus as Start,
-  Boomer's documented A/B/X/Y button numbers, L1/R1 shoulder buttons, and R2
-  axis for native Dolphin hotkeys.
+  bindings so GameCube uses Dolphin's native semantic names for Minus/Back,
+  Plus/Start, A/B/X/Y, L1/R1 shoulders, R2/Trigger R, and Square/Misc 1.
 - **Boomer Controller Maps hotkey layout**: Render the same full hotkey combo
   list on every controller map with combo-first rows and `None` for unmapped
   actions. Use `L1`/`R1` for shoulder rows, `L2`/`R2` for trigger rows, keep

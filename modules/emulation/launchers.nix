@@ -2116,12 +2116,12 @@ EOF
         cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
 [Hotkeys1]
 Device = SDL/0/Nintendo Switch Pro Controller
-Keys/Toggle Pause = `Button 13`
-Keys/Reset = `Button 4` & `Button 1`
-Keys/Take Screenshot = `Button 4` & `Button 0`
-Keys/Disable Emulation Speed Limit = `Button 4` & `Axis 5+`
-Keys/Load State Slot 1 = `Button 4` & `Button 9`
-Keys/Save State Slot 1 = `Button 4` & `Button 10`
+Keys/Toggle Pause = `Misc 1`
+Keys/Reset = `Back` & `Button S`
+Keys/Take Screenshot = `Back` & `Button E`
+Keys/Disable Emulation Speed Limit = `Back` & `Trigger R`
+Keys/Load State Slot 1 = `Back` & `Shoulder L`
+Keys/Save State Slot 1 = `Back` & `Shoulder R`
 EOF
         : >"$dolphin_config_dir/GCPadNew.ini"
         for slot in 1 2 3 4; do
@@ -2129,12 +2129,12 @@ EOF
           cat >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
 [GCPad$slot]
 Device = SDL/$index/Nintendo Switch Pro Controller
-Buttons/A = \`Button 0\`
-Buttons/B = \`Button 1\`
-Buttons/X = \`Button 2\`
-Buttons/Y = \`Button 3\`
-Buttons/Z = \`Axis 5+\`
-Buttons/Start = \`Button 6\`
+Buttons/A = \`Button E\`
+Buttons/B = \`Button S\`
+Buttons/X = \`Button N\`
+Buttons/Y = \`Button W\`
+Buttons/Z = \`Trigger R\`
+Buttons/Start = \`Start\`
 Main Stick/Up = \`Axis 1-\`
 Main Stick/Down = \`Axis 1+\`
 Main Stick/Left = \`Axis 0-\`
@@ -2145,8 +2145,8 @@ C-Stick/Down = \`Axis 3+\`
 C-Stick/Left = \`Axis 2-\`
 C-Stick/Right = \`Axis 2+\`
 C-Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
-Triggers/L = \`Button 9\`
-Triggers/R = \`Button 10\`
+Triggers/L = \`Shoulder L\`
+Triggers/R = \`Shoulder R\`
 D-Pad/Up = \`Hat 0 N\`
 D-Pad/Down = \`Hat 0 S\`
 D-Pad/Left = \`Hat 0 W\`
@@ -2164,9 +2164,9 @@ Buttons/A = \`Button 1\`
 Buttons/B = \`Button 7\`
 Buttons/1 = \`Button 0\`
 Buttons/2 = \`Button 2\`
-Buttons/- = \`Button 4\`
-Buttons/+ = \`Button 6\`
-Buttons/Home = \`Button 13\`
+Buttons/- = \`Back\`
+Buttons/+ = \`Start\`
+Buttons/Home = \`Misc 1\`
 D-Pad/Up = \`Hat 0 N\`
 D-Pad/Down = \`Hat 0 S\`
 D-Pad/Left = \`Hat 0 W\`
@@ -2446,7 +2446,7 @@ EOF
         "retroarch_screenshot": "RetroArch only: Minus + A",
         "retroarch_fast_forward": "RetroArch only: Minus + R2",
         "normal_exit": "Minus + Plus twice exits the active run-emulator process group",
-        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin SDL hotkeys with Minus/Select on Button 4 and Plus/Start on Button 6: Minus + B resets, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A screenshots, Minus + R2 toggles fast mode, and Square/Capture pauses only if Dolphin exposes the existing Button 13 binding; Minus + X quick actions and Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
+        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin SDL hotkeys with Minus/Select as Back and Plus/Start as Start: Minus + B resets, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A screenshots, Minus + R2 toggles fast mode, and Square/Capture pauses only if Dolphin exposes the Misc 1 binding; Minus + X quick actions and Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
         "pcsx2_hotkeys": "PCSX2 uses native PCSX2 hotkey bindings: Minus + X opens the pause menu, Minus + B resets the VM, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A saves a screenshot, Minus + Y toggles the OSD/FPS overlay, and Minus + R2 holds turbo/fast-forward",
         "xemu_hotkeys": "Default Xbox launch: Minus + X opens quick actions, B resets, L1 loads esde-slot1, R1 saves esde-slot1, A screenshots, Y toggles the debug monitor, and Minus + R2 is unbound",
         "pico8_hotkeys": "Default PICO-8 launch: Minus + X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, and Minus + R2 is unbound",
