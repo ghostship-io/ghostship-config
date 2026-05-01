@@ -36,6 +36,15 @@ let
     </systemList>
   '';
 
+  systemSortParts = system:
+    let
+      parts = builtins.match "(.+) - (.+) \\(([0-9]+)\\)" system.folder;
+    in
+    if parts == null then [ system.folder system.id "9999" ] else parts;
+
+  systemSortKey = system: lib.concatStringsSep "\t" (systemSortParts system);
+  sortedSystems = lib.sort (a: b: systemSortKey a < systemSortKey b) emu.allSystems;
+
   mkSystemSortingXml = index: system: ''
     <system>
       <name>${emu.xmlEscape system.id}</name>
@@ -45,7 +54,7 @@ let
   esSystemsSortingXml = pkgs.writeText "emulation-es-systems-sorting.xml" ''
     <?xml version="1.0"?>
     <systemList>
-    ${lib.concatStringsSep "\n" (lib.imap0 mkSystemSortingXml emu.allSystems)}
+    ${lib.concatStringsSep "\n" (lib.imap0 mkSystemSortingXml sortedSystems)}
       <system>
         <name>tools</name>
         <systemsortname>9999</systemsortname>

@@ -282,7 +282,7 @@ changelog.
   Batocera-style `.gzdoom` launchers at the ROM-folder top level and assets
   underneath that folder. PICO-8 needs an explicit Gamescope Xwayland server on
   Boomer because its SDL path uses X11. Boomer's managed ES-DE UI defaults are
-  manufacturer/hardware/release systems sorting, visible clock, Switch Pro
+  manufacturer/type/year systems sorting, visible clock, Switch Pro
   controller prompts, all-controller ES-DE menu input, Hawaii standard time, and
   a visible clock using ES-DE-supported `%H:%M` formatting; true 12-hour clock
   text needs a source-level ES-DE formatter patch. Boomer's controller
