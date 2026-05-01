@@ -297,13 +297,13 @@ changelog.
   force-kill fallback.
   Controller Maps should stay text-only with a compact two-column button map
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
-  Switch A/B, and launch GZDoom with the managed Boomer controls cfg reset to
-  the first named-alias baseline from `e0e6880`: A uses, B jumps, X uses
-  inventory, Y toggles map, L/R select previous/next weapon, ZL/ZR are alt
-  fire/fire, `+` opens menu, Select/Minus pauses, left thumb crouches, right
-  thumb centers view, and D-pad left/right/up/down are inventory previous,
-  inventory next, map toggle, and inventory use. GZDoom's SDL `[Joy:JS:*]`
-  axis map must be seeded so
+  Switch A/B, and launch GZDoom with the managed Boomer controls cfg using
+  config-only raw GZDoom events, not named `Pad_*` aliases unless the input
+  translation package patch is deliberately restored. The active map is Joy1
+  B/jump, Joy2 A/use, Joy3 X/crouch, Joy4 Y/reload, Joy5 Select/map, Joy7
+  Plus/menu, Joy10/Joy11 L1/R1 User1/User2, Joy13/Joy14 ZL/ZR alt fire/fire,
+  Axis5Plus/Axis6Plus trigger fallbacks, and `POV1*` for D-pad weapon and
+  inventory actions. GZDoom's SDL `[Joy:JS:*]` axis map must be seeded so
   Switch Pro axis 0/1 are strafe/forward, axis 2 is yaw, axis 3 is pitch with
   scale `0.25`, and unused axes are disabled.
   After Burner Climax native TeknoParrot payloads need the repo-managed 32-bit
@@ -312,10 +312,8 @@ changelog.
   any in-game dongle/security error as operator-managed content rather than a
   repo-managed bypass.
   Boomer's probed kernel Switch Pro raw map is documented in
-  `docs/boomer-kuwanger-emulation.md`; do not use it as the authoritative
-  GZDoom binding source unless a fresh live GZDoom probe proves the named
-  aliases unusable. Keep only the GZDoom menu A/B package patch unless a future
-  live probe proves another package patch is required.
+  `docs/boomer-kuwanger-emulation.md`. Keep only the GZDoom menu A/B package
+  patch unless a future live probe proves another package patch is required.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

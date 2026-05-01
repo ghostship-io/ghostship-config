@@ -1396,34 +1396,30 @@ EOF
     unbind RStickDown
     unbind RStickUp
 
-    // Reset to the first Boomer GZDoom controller baseline from e0e6880.
-    // Use GZDoom's named controller aliases, not the later raw JoyN map.
-    bind pad_a +use
-    bind pad_b +jump
-    bind pad_x invuse
-    bind pad_y togglemap
-    bind rtrigger +attack
-    bind ltrigger +altattack
-    bind lshoulder weapprev
-    bind rshoulder weapnext
-    bind pad_start menu_main
-    bind pad_back pause
-    bind lthumb crouch
-    bind rthumb centerview
-    bind dpadleft invprev
-    bind dpadright invnext
-    bind dpadup togglemap
-    bind dpaddown invuse
+    // Config-only raw GZDoom events. Without the removed input translation
+    // patch, SDL joystick buttons arrive as JoyN and the D-pad arrives as POV1.
+    bind joy2 +use
+    bind joy1 +jump
+    bind joy3 crouch
+    bind joy4 +reload
+    bind joy14 +attack
+    bind joy13 +altattack
+    bind axis6plus +attack
+    bind axis5plus +altattack
+    bind joy10 +user1
+    bind joy11 +user2
+    bind joy7 menu_main
+    bind joy5 togglemap
+    bind pov1left weapprev
+    bind pov1right weapnext
+    bind pov1up invprev
+    bind pov1down invuse
 
-    mapbind pad_y am_togglefollow
-    mapbind pad_a am_setmark
-    mapbind pad_b am_clearmarks
-    mapbind dpadright +am_panright
-    mapbind dpadleft +am_panleft
-    mapbind dpadup +am_panup
-    mapbind dpaddown +am_pandown
-    mapbind lshoulder +am_zoomout
-    mapbind rshoulder +am_zoomin
+    mapbind joy5 togglemap
+    mapbind pov1right +am_panright
+    mapbind pov1left +am_panleft
+    mapbind pov1up +am_panup
+    mapbind pov1down +am_pandown
 EOF
         chown ${cfg.user}:${cfg.group} "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         chmod 0644 "${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
@@ -1441,7 +1437,7 @@ lines = path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=T
 # GZDoom's Linux SDL joystick backend reads these per-device AxisNmap keys
 # from [Joy:JS:N]. Values are EJoyAxis: -1 none, 0 yaw, 1 pitch,
 # 2 forward, 3 strafe. SDL exposes Switch Pro as left X/Y and right X/Y;
-# later axes stay disabled so buttons and hats use named controller aliases.
+# later axes stay disabled except trigger-axis button fallbacks.
 axis_settings = {
     "Axis0deadzone": "0.20",
     "Axis0map": "3",
@@ -1462,34 +1458,34 @@ axis_settings = {
     "Axis7map": "-1",
 }
 binding_settings = {
-    "Pad_A": "+use",
-    "Pad_B": "+jump",
-    "Pad_X": "invuse",
-    "Pad_Y": "togglemap",
-    "LShoulder": "weapprev",
-    "RShoulder": "weapnext",
-    "LTrigger": "+altattack",
-    "RTrigger": "+attack",
-    "LThumb": "crouch",
-    "RThumb": "centerview",
-    "Joy1": None,
-    "Joy2": None,
-    "Joy3": None,
-    "Joy4": None,
-    "Joy5": None,
+    "Pad_A": None,
+    "Pad_B": None,
+    "Pad_X": None,
+    "Pad_Y": None,
+    "LShoulder": None,
+    "RShoulder": None,
+    "LTrigger": None,
+    "RTrigger": None,
+    "LThumb": None,
+    "RThumb": None,
+    "Joy1": "+jump",
+    "Joy2": "+use",
+    "Joy3": "crouch",
+    "Joy4": "+reload",
+    "Joy5": "togglemap",
     "Joy6": None,
-    "Joy7": None,
+    "Joy7": "menu_main",
     "Joy8": None,
     "Joy9": None,
-    "Joy10": None,
-    "Joy11": None,
+    "Joy10": "+user1",
+    "Joy11": "+user2",
     "Joy12": None,
-    "Joy13": None,
-    "Joy14": None,
+    "Joy13": "+altattack",
+    "Joy14": "+attack",
     "Joy15": None,
     "Joy16": None,
-    "Pad_Back": "pause",
-    "Pad_Start": "menu_main",
+    "Pad_Back": None,
+    "Pad_Start": None,
     "LStickLeft": None,
     "LStickRight": None,
     "LStickUp": None,
@@ -1507,32 +1503,32 @@ binding_settings = {
     "Axis4Minus": None,
     "Axis4Plus": None,
     "Axis5Minus": None,
-    "Axis5Plus": None,
+    "Axis5Plus": "+altattack",
     "Axis6Minus": None,
-    "Axis6Plus": None,
+    "Axis6Plus": "+attack",
     "Axis7Minus": None,
     "Axis7Plus": None,
     "Axis8Minus": None,
     "Axis8Plus": None,
-    "DPadUp": "togglemap",
-    "DPadDown": "invuse",
-    "DPadLeft": "invprev",
-    "DPadRight": "invnext",
-    "POV1Up": None,
-    "POV1Down": None,
-    "POV1Left": None,
-    "POV1Right": None,
+    "DPadUp": None,
+    "DPadDown": None,
+    "DPadLeft": None,
+    "DPadRight": None,
+    "POV1Up": "invprev",
+    "POV1Down": "invuse",
+    "POV1Left": "weapprev",
+    "POV1Right": "weapnext",
 }
 automap_settings = {
-    "Pad_A": "am_setmark",
+    "Pad_A": None,
     "Joy2": None,
-    "Pad_B": "am_clearmarks",
+    "Pad_B": None,
     "Joy1": None,
     "Pad_X": None,
-    "Pad_Y": "am_togglefollow",
+    "Pad_Y": None,
     "Joy3": None,
     "Joy4": None,
-    "Joy5": None,
+    "Joy5": "togglemap",
     "Joy6": None,
     "Joy7": None,
     "Joy8": None,
@@ -1546,8 +1542,8 @@ automap_settings = {
     "Joy16": None,
     "Pad_Back": None,
     "Pad_Start": None,
-    "LShoulder": "+am_zoomout",
-    "RShoulder": "+am_zoomin",
+    "LShoulder": None,
+    "RShoulder": None,
     "LStickLeft": None,
     "LStickRight": None,
     "LStickUp": None,
@@ -1570,14 +1566,14 @@ automap_settings = {
     "Axis7Plus": None,
     "Axis8Minus": None,
     "Axis8Plus": None,
-    "DPadUp": "+am_panup",
-    "DPadDown": "+am_pandown",
-    "DPadLeft": "+am_panleft",
-    "DPadRight": "+am_panright",
-    "POV1Up": None,
-    "POV1Down": None,
-    "POV1Left": None,
-    "POV1Right": None,
+    "DPadUp": None,
+    "DPadDown": None,
+    "DPadLeft": None,
+    "DPadRight": None,
+    "POV1Up": "+am_panup",
+    "POV1Down": "+am_pandown",
+    "POV1Left": "+am_panleft",
+    "POV1Right": "+am_panright",
 }
 
 def upsert_section(input_lines, section, settings):
@@ -1683,7 +1679,7 @@ EOF
         "screenshot": "Select/- plus A/East",
         "fast_forward": "Select/- plus ZR",
         "normal_exit": "Select/- held plus Start/+ double-press sends SIGTERM, then SIGKILL after 5 seconds if needed",
-        "gzdoom_menu": "Start/+ opens the GZDoom menu; Y/West toggles the map; Select/- pauses; Square/Capture is intentionally unbound"
+        "gzdoom_menu": "Start/+ opens the GZDoom menu; Select/- toggles the map; X crouches, Y reloads, and Square/Capture is intentionally unbound"
       },
       "managed_defaults": {
         "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels; Rocknix-style Select hotkeys are configured and Square/Capture has no stable Home binding",
@@ -1695,7 +1691,7 @@ EOF
         "xemu": "inherits SDL Switch label hints from run-emulator; Square/Capture has no stable Home binding",
         "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Square/Capture has no stable Home binding",
         "supermodel": "inherits SDL Switch label hints from run-emulator; Square/Capture has no stable Home binding",
-        "gzdoom": "run-emulator executes boomer-controls.cfg using the first Boomer named-alias baseline: A is Use/Confirm, B is Jump/Back, X uses inventory, Y toggles map, L1/R1 select previous/next weapon, L2/R2 are alt fire/fire, Select/- pauses, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
+        "gzdoom": "run-emulator executes boomer-controls.cfg using unpatched raw GZDoom events: A is Use/Confirm, B is Jump/Back, X toggles crouch, Y reloads, D-pad left/right selects weapons, D-pad up/down selects and uses inventory, L1/R1 are User1/User2, L2/R2 are alt fire/fire, Select/- toggles map, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
         "pico8": "run-emulator launches carts with PICO-8; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu"
       },
       "known_gaps": {
