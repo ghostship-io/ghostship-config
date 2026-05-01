@@ -8,7 +8,6 @@ let
     video_driver = "vulkan"
     audio_driver = "pipewire"
     input_driver = "udev"
-    vulkan_gpu_index = "1"
     menu_driver = "ozone"
     menu_swap_ok_cancel = "false"
     video_fullscreen = "true"
@@ -261,8 +260,8 @@ let
 
   systemShaderDefaults = {
     fbneo = "nnedi3-clean";
-    pcengine = "xbrz-freescale";
-    pcenginecd = "xbrz-freescale";
+    pcengine = "nnedi3-clean";
+    pcenginecd = "nnedi3-clean";
     gb = "nnedi3-fast";
     gbc = "nnedi3-fast";
     gba = "nnedi3-clean";
