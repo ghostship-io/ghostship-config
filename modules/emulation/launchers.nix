@@ -1396,8 +1396,7 @@ EOF
     unbind RStickUp
 
     // SDL exposes Switch Pro face buttons to GZDoom's joystick backend as:
-    // Joy1=B, Joy2=A, Joy3=X, Joy4=Y on the raw path. The managed package
-    // translates Boomer's probed SDL buttons to Pad_* for the primary path.
+    // Joy1=B, Joy2=A, Joy3=X, Joy4=Y on the raw path.
     bind Joy2 +use
     bind Joy1 +jump
     bind Joy4 crouch

@@ -141,16 +141,12 @@ strafe/forward, right X/Y are yaw/pitch with reduced vertical sensitivity,
 D-pad hat axes can also move/pan, and unused/phantom axes cannot drive the view
 upward on launch.
 On Boomer, SDL's joystick backend reports the Switch Pro as 6 axes, 16
-buttons, and one hat. The managed GZDoom package translates the probed SDL
-button path to native GZDoom gamepad keys: physical B/A/X/Y become
-`Pad_B`/`Pad_A`/`Pad_X`/`Pad_Y`, Select/Minus is `Pad_Back`, Start/Plus is
-`Pad_Start`, L1/R1 are `LShoulder`/`RShoulder`, and ZL/ZR are
-`LTrigger`/`RTrigger`. Left-stick movement is also emitted as `LStick*`, and
-the first SDL hat is emitted as `DPad*`. The generated config keeps raw
-fallbacks aligned with the same physical controls: `Joy1`/`Joy2` are physical
-B/A, `Joy3`/`Joy4` are physical X/Y, `Joy5` is Select/Minus, `Joy7` is
-Start/Plus, `Joy10`/`Joy11` are L1/R1, `Joy13`/`Joy14` are ZL/ZR, and `POV1*`
-is the D-pad.
+buttons, and one hat. The generated GZDoom config keeps raw bindings aligned
+with the probed physical controls: `Joy1`/`Joy2` are physical B/A,
+`Joy3`/`Joy4` are physical X/Y, `Joy5` is Select/Minus, `Joy7` is Start/Plus,
+`Joy10`/`Joy11` are L1/R1, `Joy13`/`Joy14` are ZL/ZR, and `POV1*` is the
+D-pad. The only retained Boomer GZDoom package patch changes joystick menu
+handling so physical Switch A advances menus and physical Switch B backs out.
 
 ### Switch Pro Raw Input Probe
 
