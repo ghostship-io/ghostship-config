@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   TeknoParrot system background, force ES-DE's custom systems order, and run
   native `.teknoparrot` payloads by absolute path so filenames with spaces
   launch correctly.
+- **Boomer TeknoParrot native runtime**: Run local native `.teknoparrot`
+  payloads through a 32-bit FHS compatibility runtime so After Burner Climax
+  can find its Linux loader and legacy arcade dependencies on NixOS.
 - **Boomer TeknoParrot artwork**: Apply Art Book Next's diagonal system-art
   mask to the TeknoParrot Star Wars artwork so it matches stock system panels.
 - **Boomer controller probe documentation**: Document the live Switch Pro

@@ -695,7 +695,7 @@ PY
                 launcher_args[0]="$launcher_target"
                 export LD_LIBRARY_PATH="$launcher_cwd''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
                 cd "$launcher_cwd"
-                exec "''${launcher_args[@]}"
+                exec ${packages.teknoparrotNativeRuntime}/bin/teknoparrot-native-runtime "''${launcher_args[@]}"
               fi
               ;;
             *) profile="$rom" ;;
