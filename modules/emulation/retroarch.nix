@@ -261,18 +261,18 @@ let
 
   systemShaderDefaults = {
     fbneo = "nnedi3-clean";
-    pcengine = "xbrz-freescale";
-    pcenginecd = "xbrz-freescale";
-    gb = "nnedi3-fast";
-    gbc = "nnedi3-fast";
+    pcengine = "nnedi3-clean";
+    pcenginecd = "nnedi3-clean";
+    gb = "nnedi3-clean";
+    gbc = "nnedi3-clean";
     gba = "nnedi3-clean";
     n64 = "no-shader";
-    nds = "nnedi3-fast";
+    nds = "nnedi3-clean";
     nes = "nnedi3-clean";
     snes = "nnedi3-clean";
     virtualboy = "sharp-bilinear-prescale";
     neogeocd = "nnedi3-clean";
-    ngpc = "nnedi3-fast";
+    ngpc = "nnedi3-clean";
     dreamcast = "no-shader";
     gamegear = "nnedi3-fast";
     genesis = "nnedi3-clean";
