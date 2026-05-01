@@ -1353,16 +1353,31 @@ EOF
     unbind POV1Down
     unbind POV1Left
     unbind POV1Right
+    unbind LStickRight
+    unbind LStickLeft
+    unbind LStickDown
+    unbind LStickUp
+    unbind RStickRight
+    unbind RStickLeft
+    unbind RStickDown
+    unbind RStickUp
 
     // SDL exposes Switch Pro face buttons to GZDoom's joystick backend as:
-    // Joy1=B, Joy2=A, Joy3=Y, Joy4=X.
+    // Joy1=B, Joy2=A, Joy3=X, Joy4=Y on the raw path. The managed package
+    // translates Boomer's probed SDL buttons to Pad_* for the primary path.
     bind Joy2 +use
     bind Joy1 +jump
-    bind Joy3 crouch
+    bind Joy4 crouch
     bind Joy10 weapprev
     bind Joy11 weapnext
+    bind Joy13 +altattack
+    bind Joy14 +attack
     bind Joy5 togglemap
     bind Joy7 menu_main
+    bind LStickLeft +moveleft
+    bind LStickRight +moveright
+    bind LStickUp +forward
+    bind LStickDown +back
     bind Axis1Minus +moveleft
     bind Axis1Plus +moveright
     bind Axis2Minus +forward
@@ -1392,6 +1407,10 @@ EOF
     mapbind Joy2 am_setmark
     mapbind Joy1 am_clearmarks
     mapbind Joy5 togglemap
+    mapbind LStickLeft +am_panleft
+    mapbind LStickRight +am_panright
+    mapbind LStickUp +am_panup
+    mapbind LStickDown +am_pandown
     mapbind Axis1Minus +am_panleft
     mapbind Axis1Plus +am_panright
     mapbind Axis2Minus +am_panup
@@ -1461,8 +1480,8 @@ binding_settings = {
     "RThumb": None,
     "Joy1": "+jump",
     "Joy2": "+use",
-    "Joy3": "crouch",
-    "Joy4": None,
+    "Joy3": None,
+    "Joy4": "crouch",
     "Joy5": "togglemap",
     "Joy6": None,
     "Joy7": "menu_main",
@@ -1471,12 +1490,20 @@ binding_settings = {
     "Joy10": "weapprev",
     "Joy11": "weapnext",
     "Joy12": None,
-    "Joy13": None,
-    "Joy14": None,
+    "Joy13": "+altattack",
+    "Joy14": "+attack",
     "Joy15": None,
     "Joy16": None,
     "Pad_Back": "togglemap",
     "Pad_Start": "menu_main",
+    "LStickLeft": "+moveleft",
+    "LStickRight": "+moveright",
+    "LStickUp": "+forward",
+    "LStickDown": "+back",
+    "RStickLeft": None,
+    "RStickRight": None,
+    "RStickUp": None,
+    "RStickDown": None,
     "Axis1Minus": "+moveleft",
     "Axis1Plus": "+moveright",
     "Axis2Minus": "+forward",
@@ -1519,6 +1546,14 @@ automap_settings = {
     "Pad_Start": None,
     "LShoulder": "+am_zoomout",
     "RShoulder": "+am_zoomin",
+    "LStickLeft": "+am_panleft",
+    "LStickRight": "+am_panright",
+    "LStickUp": "+am_panup",
+    "LStickDown": "+am_pandown",
+    "RStickLeft": None,
+    "RStickRight": None,
+    "RStickUp": None,
+    "RStickDown": None,
     "Axis1Minus": "+am_panleft",
     "Axis1Plus": "+am_panright",
     "Axis2Minus": "+am_panup",

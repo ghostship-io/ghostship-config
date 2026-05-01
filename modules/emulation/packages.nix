@@ -37,6 +37,53 @@ let
             --replace-fail "case KEY_JOY1:" "case GHOSTSHIP_KEY_JOY1:" \
             --replace-fail "case KEY_JOY2:" "case KEY_JOY1:" \
             --replace-fail "case GHOSTSHIP_KEY_JOY1:" "case KEY_JOY2:"
+
+          substituteInPlace src/common/platform/posix/sdl/i_input.cpp \
+            --replace-fail '#include "i_interface.h"
+
+
+static void I_CheckGUICapture ();' '#include "i_interface.h"
+
+static int GhostshipSwitchProButtonKey(int button)
+{
+	switch (button)
+	{
+	case 0: return KEY_PAD_B;
+	case 1: return KEY_PAD_A;
+	case 2: return KEY_PAD_X;
+	case 3: return KEY_PAD_Y;
+	case 4: return KEY_PAD_BACK;
+	case 6: return KEY_PAD_START;
+	case 7: return KEY_PAD_LTHUMB;
+	case 8: return KEY_PAD_RTHUMB;
+	case 9: return KEY_PAD_LSHOULDER;
+	case 10: return KEY_PAD_RSHOULDER;
+	case 12: return KEY_PAD_LTRIGGER;
+	case 13: return KEY_PAD_RTRIGGER;
+	default: return KEY_FIRSTJOYBUTTON + button;
+	}
+}
+
+static void I_CheckGUICapture ();'
+
+          substituteInPlace src/common/platform/posix/sdl/i_input.cpp \
+            --replace-fail 'event.data1 = KEY_FIRSTJOYBUTTON + sev.jbutton.button;
+		if(event.data1 != 0)
+			D_PostEvent(&event);' 'event.data1 = GhostshipSwitchProButtonKey(sev.jbutton.button);
+		if(event.data1 != 0)
+			D_PostEvent(&event);'
+
+          substituteInPlace src/common/platform/posix/sdl/i_joystick.cpp \
+            --replace-fail 'Joy_GenerateButtonEvents(Axes[0].ButtonValue, buttonstate, 4, KEY_JOYAXIS1PLUS);' 'Joy_GenerateButtonEvents(Axes[0].ButtonValue, buttonstate, 4, KEY_PAD_LTHUMB_RIGHT);' \
+            --replace-fail 'Joy_GenerateButtonEvents(x.ButtonValue, buttonstate, 4, KEY_JOYPOV1_UP + i*4);' 'if (i == 0)
+				{
+					static const int GhostshipDPadKeys[4] = { KEY_PAD_DPAD_UP, KEY_PAD_DPAD_RIGHT, KEY_PAD_DPAD_DOWN, KEY_PAD_DPAD_LEFT };
+					Joy_GenerateButtonEvents(x.ButtonValue, buttonstate, 4, GhostshipDPadKeys);
+				}
+				else
+				{
+					Joy_GenerateButtonEvents(x.ButtonValue, buttonstate, 4, KEY_JOYPOV1_UP + i*4);
+				}'
         '';
       })
     else

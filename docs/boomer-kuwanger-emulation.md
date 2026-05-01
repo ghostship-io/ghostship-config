@@ -141,12 +141,16 @@ strafe/forward, right X/Y are yaw/pitch with reduced vertical sensitivity,
 D-pad hat axes can also move/pan, and unused/phantom axes cannot drive the view
 upward on launch.
 On Boomer, SDL's joystick backend reports the Switch Pro as 6 axes, 16
-buttons, and one hat. GZDoom bindings use SDL joystick names directly:
-`Joy1`/`Joy2` are physical B/A, `Joy3`/`Joy4` are physical Y/X, `Joy5` is
-Select/Minus, `Joy7` is Start/Plus, `Joy10`/`Joy11` are L1/R1, `Axis5Plus` is
-ZL, `Axis6Plus` is ZR, and the D-pad is `POV1*`. The generated config also
-keeps matching `Pad_*`, shoulder, and trigger aliases bound to the same actions
-so GZDoom still works if SDL reports the controller through that key family.
+buttons, and one hat. The managed GZDoom package translates the probed SDL
+button path to native GZDoom gamepad keys: physical B/A/X/Y become
+`Pad_B`/`Pad_A`/`Pad_X`/`Pad_Y`, Select/Minus is `Pad_Back`, Start/Plus is
+`Pad_Start`, L1/R1 are `LShoulder`/`RShoulder`, and ZL/ZR are
+`LTrigger`/`RTrigger`. Left-stick movement is also emitted as `LStick*`, and
+the first SDL hat is emitted as `DPad*`. The generated config keeps raw
+fallbacks aligned with the same physical controls: `Joy1`/`Joy2` are physical
+B/A, `Joy3`/`Joy4` are physical X/Y, `Joy5` is Select/Minus, `Joy7` is
+Start/Plus, `Joy10`/`Joy11` are L1/R1, `Joy13`/`Joy14` are ZL/ZR, and `POV1*`
+is the D-pad.
 
 ### Switch Pro Raw Input Probe
 
@@ -499,8 +503,8 @@ emulator process group to exit normally, then force-kills that process group
 after 5 seconds if it does not close. RetroArch maps Select/Minus hotkeys to
 save/load, reset, FPS, screenshot, and fast-forward actions, and D-pad-only
 RetroArch systems also accept left-stick D-pad input. The N64 RetroArch
-override remaps Mupen64Plus so physical Switch A sends N64 A and physical
-Switch B sends N64 B.
+override remaps Mupen64Plus so physical Switch A sends N64 A, physical Switch
+B sends N64 B, and physical Switch X/Y stay unbound.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices
