@@ -64,6 +64,8 @@ let
     cores: lib.filter (core: core != null) (map (name: cores.${name} or null) emu.coreNames)
   );
 
+  libretroCoreInfo = pkgs.libretro-core-info;
+
   emptyJoypadAutoconfig = pkgs.runCommand "empty-retroarch-joypad-autoconfig" { } ''
     mkdir -p $out/share/libretro/autoconfig
   '';
@@ -410,6 +412,7 @@ in
         esdePackage
         gzdoomPackage
         joypadAutoconfig
+        libretroCoreInfo
         pico8Package
         retroarchPackage
         ryubingCanaryPackage

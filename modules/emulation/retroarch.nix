@@ -69,6 +69,10 @@ let
       sgx_default_joypad_type_p5 = "6 Buttons"
       sgx_multitap = "enabled"
     '';
+    "retroarch-beetle-pce-fast.opt" = ''
+      pce_fast_cdimagecache = "enabled"
+      pce_fast_cdbios = "System Card 3"
+    '';
     "retroarch-beetle-psx-hw.opt" = ''
       beetle_psx_hw_renderer = "hardware_vk"
       beetle_psx_hw_pgxp_mode = "memory + CPU"
@@ -345,8 +349,8 @@ let
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${retroarchCfg} "${cfg.configRoot}/retroarch/retroarch.cfg"
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${globalShaderPreset} "${cfg.dataRoot}/xdg/config/retroarch/config/global.slangp"
     install -D -m 0644 -o ${cfg.user} -g ${cfg.group} ${shaderPolicy} "${cfg.configRoot}/retroarch/shader-policy.json"
-    if [ -d "${packages.retroarchPackage}/share/libretro/info" ]; then
-      cp -R --no-preserve=mode,ownership "${packages.retroarchPackage}/share/libretro/info/." "${cfg.configRoot}/retroarch/info/" || true
+    if [ -d "${packages.libretroCoreInfo}/share/retroarch/cores" ]; then
+      cp -R --no-preserve=mode,ownership "${packages.libretroCoreInfo}/share/retroarch/cores/." "${cfg.configRoot}/retroarch/info/" || true
     fi
     chown -R ${cfg.user}:${cfg.group} "${cfg.configRoot}/retroarch/info" "${cfg.dataRoot}/logs/retroarch"
     touch "${cfg.dataRoot}/logs/retroarch/retroarch.log"

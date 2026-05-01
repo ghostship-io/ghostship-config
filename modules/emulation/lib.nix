@@ -108,7 +108,7 @@ let
       fullname = "NEC PC Engine CD";
       platform = "pcenginecd";
       theme = "pcenginecd";
-      emulator = "retroarch-beetle-supergrafx";
+      emulator = "retroarch-beetle-pce-fast";
       extensions = "${commonRetroExtensions} ${discExtensions}";
       fixedAspect = "4:3";
     }
