@@ -642,9 +642,34 @@ let
         prefix="${cfg.configRoot}/teknoparrot"
         install_dir="$prefix/TeknoParrot"
         rom="''${1:-}"
+        profile=""
         mkdir -p "$prefix" "${cfg.dataRoot}/logs/teknoparrot"
         export WINEPREFIX="$prefix/prefix"
         export WINEARCH=win64
+        if [ -n "$rom" ]; then
+          case "$rom" in
+            *.teknoparrot|*.TEKNOPARROT)
+              while IFS='=' read -r key value; do
+                key="$(printf '%s' "$key" | tr -d '[:space:]')"
+                value="$(printf '%s' "$value" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/\r$//')"
+                case "$key" in
+                  ""|\#*) ;;
+                  profile)
+                    case "$value" in
+                      /*) profile="$value" ;;
+                      *) profile="$(dirname "$rom")/$value" ;;
+                    esac
+                    ;;
+                esac
+              done < "$rom"
+              if [ -z "$profile" ]; then
+                echo "TeknoParrot launcher is missing profile=: $rom" >&2
+                exit 65
+              fi
+              ;;
+            *) profile="$rom" ;;
+          esac
+        fi
         if [ ! -e "$install_dir/TeknoParrotUi.exe" ]; then
           cat >&2 <<EOF
     TeknoParrot free is scaffolded but not installed yet.
@@ -657,7 +682,10 @@ let
 EOF
           exit 69
         fi
-        exec wine "$install_dir/TeknoParrotUi.exe" "$rom"
+        if [ -n "$profile" ]; then
+          exec wine "$install_dir/TeknoParrotUi.exe" --profile="$profile"
+        fi
+        exec wine "$install_dir/TeknoParrotUi.exe"
   '';
 
   runEmulator = pkgs.writeShellScriptBin "run-emulator" ''

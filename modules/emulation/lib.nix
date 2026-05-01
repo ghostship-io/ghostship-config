@@ -69,7 +69,7 @@ let
       platform = "arcade";
       theme = "arcade";
       emulator = "teknoparrot";
-      extensions = ".xml .XML .lnk .LNK .exe .EXE .bat .BAT .cmd .CMD .tp .TP";
+      extensions = ".teknoparrot .TEKNOPARROT";
       fixedAspect = "native";
     }
     {

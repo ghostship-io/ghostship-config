@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Use clean `.png` PICO-8 cart names for ES-DE scanning.
 - **Boomer ES-DE gamelists**: Stop generating ES-DE gamelists from Nix; let
   ES-DE own gamelist creation and updates.
+- **Boomer TeknoParrot launchers**: Use `.teknoparrot` launcher files in ES-DE
+  and translate `profile=<path>` entries to TeknoParrot's `--profile` CLI.
 - **Boomer controller probe documentation**: Document the live Switch Pro
   kernel event mapping from the Boomer raw input probe so emulator bindings can
   be based on observed `EV_KEY`/`EV_ABS` codes instead of inferred labels.

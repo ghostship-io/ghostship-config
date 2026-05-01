@@ -230,6 +230,11 @@ The wrapper uses a dedicated Wine prefix at:
 /srv/emulation/config/teknoparrot/prefix
 ```
 
+ES-DE lists `.teknoparrot` launcher files. Each launcher is a small text file
+with a `profile=<path>` entry, and `run-emulator` passes that profile to
+TeknoParrot as `--profile=<path>`. Keep copied game payloads under hidden
+`.assets/` directories beside those launchers.
+
 ## Display And Aspect Scaling
 
 `display-profile` discovers connected DRM outputs first, prefers the RX 6650M,
