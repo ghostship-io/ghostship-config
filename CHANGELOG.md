@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer GameCube Dolphin hotkeys**: Configure Dolphin to launch GameCube
+  games without analytics, panic, or stop-confirm prompts, bind native
+  GameCube hotkeys for reset, save/load slot 1, screenshot, pause, and fast
+  mode, and keep unsupported quick-actions/debug-monitor chords explicitly
+  unbound.
 - **Boomer hotkey regression fix**: Restore the per-launch Select+Start
   double-press exit broker and move RetroArch hotkey button bindings into the
   managed Switch Pro and 8BitDo autoconfigs so each controller uses its own

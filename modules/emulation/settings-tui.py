@@ -345,6 +345,15 @@ DOLPHIN_WII_HOTKEYS = [
 ]
 
 
+DOLPHIN_GC_HOTKEYS = [
+    "Reset: Select+B",
+    "Save/Load: Select+R / Select+L",
+    "Screenshot: Select+A",
+    "Pause: Square; Fast: Select+ZR",
+    "Menu/Monitor: None; Exit: Select+Start 2x",
+]
+
+
 GZDOOM_HOTKEYS = [
     "Menu: Plus / Start",
     "Map: Minus toggles",
@@ -682,6 +691,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             ["Dolphin GameCube has no Home button."],
+            DOLPHIN_GC_HOTKEYS,
         ),
     },
     {
@@ -2437,6 +2447,8 @@ def smoke_test(mode):
         assert any("R -> R" in line for line in gamecube["detail"])
         assert any("ZL -> None" in line for line in gamecube["detail"])
         assert any("ZR -> Z" in line for line in gamecube["detail"])
+        assert any("Save/Load: Select+R / Select+L" in line for line in gamecube["detail"])
+        assert any("Menu/Monitor: None" in line for line in gamecube["detail"])
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
         assert any("Square -> Console Home" in line for line in wii["detail"])
         assert any("Home: Square / Capture" in line for line in wii["detail"])
