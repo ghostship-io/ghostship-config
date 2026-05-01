@@ -588,8 +588,10 @@ all four GameCube controller ports and keeps Wii slots 1-4 on the same SDL
 controller order; GameCube binds Dolphin-native hotkeys for Minus + B reset,
 Minus + L1 load slot 1, Minus + R1 save slot 1, Minus + A screenshot, and
 Minus + R2 fast mode. These are native Dolphin SDL bindings: Minus/Select is
-`Back`, Plus/Start is `Start`, L1/R1 are `Shoulder L`/`Shoulder R`, R2 is
-`Trigger R`, and Square/Capture is `Misc 1` when Dolphin exposes it. Minus + X
+`Back`, Plus/Start is `Start`, A/B/X/Y use Dolphin's label aliases
+`Button A`/`Button B`/`Button X`/`Button Y`, L1/R1 are
+`Shoulder L`/`Shoulder R`, R2 is `Trigger R`, and Square/Capture is `Misc 1`
+when Dolphin exposes it. Minus + X
 quick actions and Minus + Y debug monitor stay unbound for GameCube because
 Dolphin does not expose equivalent normal runtime actions. D-pad stays on
 physical D-pad and analog movement stays on analog sticks. PCSX2 uses native PCSX2 hotkey bindings instead of an external hotkey
