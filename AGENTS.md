@@ -11,11 +11,10 @@ changelog.
   repo-specific guidance. Keep it concise, imperative, and high-signal.
 - The shared workflow preferences require verified work to be committed before
   task completion.
-- Do feature and fix work in a git worktree. When the feature is done, merge
-  local `main` into the worktree first, verify, then merge the worktree into
-  local `main`, push `main`, and deploy Boomer when reachable.
-- Always merge to local `main` and run Boomer deploys from that `main`
-  checkout, not from detached or temporary worktrees.
+- Do feature work in a worktree. When the feature is ready to deploy, merge
+  current `main` into the worktree and reconcile it there, then merge the
+  worktree back into local `main`, push `main`, and deploy from the target
+  machine's `main` checkout.
 - If a change needs a plan, implement it in a git worktree.
 - For repo research, use `brainstorming` when it is available.
 - Use the `nix` skill for Nix-platform work and the `python` skill for Python
