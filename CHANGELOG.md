@@ -12,10 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resolution, keep shaders on the global `global.slangp` preset, default all
   four N64 controller paks to rumble, and stop generating ParaLLEl N64 and
   shader-profile runtime option files.
-- **Boomer controller mapping standardization**: Map RetroArch players 1-5 to
-  D-pad plus left-stick digital movement, force Beetle PCE Fast to 6-button
-  pads for all five players, and enable all four generated Dolphin GameCube
-  controller ports.
+- **Boomer standalone hotkey broker**: Replaced the always-on controller
+  hotkey watcher with an opt-in generic standalone broker. Xbox keeps plain
+  `xemu` as the default and adds selectable `xemu-hotkeys` for Xemu save/load,
+  reset, screenshot, pause, debug-monitor, and quick-action chords through a
+  per-launch HMP socket plus host key injection.
+- **Boomer controller mapping standardization**: Use RetroArch analog-to-D-pad
+  mode for players 1-5 only on no-analog systems, force PC Engine-family cores
+  to 6-button pads for all five players, and enable all four generated Dolphin
+  GameCube controller ports while leaving analog-capable systems on analog
+  stick input.
 - **Boomer PC Engine CD launch fix**: Launch PC Engine CD games with Beetle PCE
   Fast, keep SuperGrafx for HuCard/SuperGrafx games, and sync libretro core
   info from `libretro-core-info` so RetroArch sees the managed metadata.
@@ -31,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Develop agent maintenance fix**: Fixed a failure in `ghostship-agent-maintenance` where a stale patch for `agent-deck` caused the script to exit before updating `gemini`, `codex`, and `opencode`. Removed the stale web-mutations patch for `agent-deck` (now upstreamed in `v1.7.75`) and made the build process non-fatal so it no longer blocks other agent updates.
 - **Boomer Controller Maps hotkey audit**: Show emulator hotkeys only where
   they are actually configured, keeping RetroArch save-state controls off
-  standalone emulator maps while preserving the shared Select+Start exit chord.
+  standalone emulator maps.
 - **Boomer PICO-8 ES-DE support**: Seed a small starter set of existing NAS
   PICO-8 carts into an empty ES-DE ROM folder and document the PICO-8 Switch
   controller map in the on-device Controller Maps TUI and generated policy.
@@ -103,8 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   controller-local turbo, Select/Minus is the hotkey modifier, Select+X opens
   emulator quick menus where supported, Square/Capture opens native console
   Home only where explicitly configured, and unsupported Square/Capture actions
-  are no-op. Make Select+Start double-press send SIGTERM to the emulator
-  process group and escalate to SIGKILL after 5 seconds if it stays alive.
+  are no-op.
   Seed GZDoom's SDL
   `[Joy:JS:*]` axis map so the right stick uses yaw/pitch instead of the Linux
   defaults that can look at the ceiling or treat vertical stick motion as

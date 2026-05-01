@@ -514,21 +514,27 @@ controllers serially, re-checks live connected state before each attempt, and
 leaves headphones and other accessories alone.
 
 Controller shortcuts follow a Rocknix-style Switch layout. Select/Minus is the
-hotkey modifier, Select+X opens emulator quick menus where supported, and
-Star/Home is treated as a controller-local turbo button when the firmware
-exposes it at all. Square/Capture opens native console Home screens only where
-that binding is explicitly configured, such as Dolphin's Wii profile, and
-otherwise does nothing. Select held plus a double Start press asks the active
-emulator process group to exit normally, then force-kills that process group
-after 5 seconds if it does not close. RetroArch maps Select/Minus hotkeys to
-save/load, reset, FPS, screenshot, and fast-forward actions, and D-pad-only
-RetroArch systems also accept left-stick D-pad input for players 1-5. PC Engine
-CD and SuperGrafx cores default all five players to 6-button pads. Dolphin
-enables all four GameCube controller ports and keeps Wii slots 1-4 on the same
-SDL controller order; Wii D-pad input stays on physical D-pad while Nunchuk
-movement uses left stick. The N64 RetroArch override keeps players 1-4 on
-normal libretro controller devices, while Mupen64Plus-Next defaults all four
-N64 controller paks to Rumble Pak.
+hotkey modifier, Select+X opens emulator quick menus where the active launch
+mode supports it, and Star/Home is treated as a controller-local turbo button
+when the firmware exposes it at all. Square/Capture opens native console Home
+screens only where that binding is explicitly configured, such as Dolphin's Wii
+profile, and otherwise does nothing. Standalone raw hotkey brokers are opt-in
+per-emulator launch modes, not a global background watcher. Plain Xbox uses
+Xemu's native Select+Start quick-actions chord; the selectable `xemu-hotkeys`
+launch mode starts a per-process broker and HMP socket for Select+X quick
+actions, Select+B reset, Select+L load `esde-slot1`, Select+R save
+`esde-slot1`, Select+A screenshot, Select+Y debug monitor, and Square/Capture
+pause. Select+ZR is intentionally unmapped for Xemu because there is no reliable
+fast-forward command. RetroArch maps Select/Minus hotkeys to save/load, reset,
+FPS, screenshot, and fast-forward actions. No-analog RetroArch systems accept
+left-stick D-pad input for players 1-5 through per-system RetroArch
+analog-to-D-pad overrides rather than global direct axis aliases. Analog-capable
+systems keep analog sticks as analog input. PC Engine CD and SuperGrafx default
+all five players to 6-button pads. Dolphin enables all four GameCube controller
+ports and keeps Wii slots 1-4 on the same SDL controller order; D-pad stays on
+physical D-pad and analog movement stays on analog sticks. Standalone SDL
+emulators keep their native left-stick mappings. Mupen64Plus-Next defaults all
+four N64 controller paks to Rumble Pak.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices
@@ -545,10 +551,11 @@ controller-bluetooth-diagnostics 20
 ```
 
 The diagnostics command writes a timestamped summary plus a short `btmon`
-capture under `/srv/emulation/logs/bluetooth-diagnostics/`. Full BlueZ and
-`hid-nintendo` debug logging is kept as an on-demand diagnostic path only,
-because continuously logging every controller HID report creates unnecessary
-load during normal four-controller play.
+capture under `/srv/emulation/logs/bluetooth-diagnostics/`.
+`controller-bluetooth-health` and full BlueZ/`hid-nintendo` debug logging are
+kept as on-demand diagnostic paths only, because continuously logging every
+controller HID report creates unnecessary load during normal four-controller
+play.
 `bluetoothd` runs with a small safe CPU scheduling boost, and system D-Bus gets
 a smaller CPU weight bump because BlueZ control events use D-Bus. Do not enable
 realtime scheduling or IRQ pinning by default; the live kernel already gives

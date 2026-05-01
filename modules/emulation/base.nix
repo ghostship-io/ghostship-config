@@ -292,6 +292,10 @@ in
 
         networking.networkmanager.enable = lib.mkDefault true;
         programs.gamemode.enable = true;
+        programs.ydotool = {
+          enable = true;
+          group = cfg.group;
+        };
         services.libinput.enable = true;
 
         environment.sessionVariables = {
@@ -328,6 +332,7 @@ in
           pkgs.vulkan-tools
           pkgs.wireplumber
           pkgs.winetricks
+          pkgs.ydotool
           packages.winePackage
         ]
         ++ builtins.attrValues config.ghostship.emulation.internal.scripts

@@ -296,8 +296,8 @@ changelog.
   Select+X is the quick-menu chord, Square/Capture is native console Home only
   where explicitly configured and otherwise no-op, Select/Minus is the hotkey
   modifier, Star/Home is a controller-local turbo button when exposed, and
-  Select+Start double-press is a normal emulator exit with a 5-second
-  force-kill fallback.
+  standalone raw hotkey brokers must be opt-in per-emulator launch modes, not
+  global watchers.
   Controller Maps should stay text-only with a compact two-column button map
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
   Switch A/B, and launch GZDoom with the managed Boomer controls cfg. Reset
