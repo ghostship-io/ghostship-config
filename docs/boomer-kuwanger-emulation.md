@@ -140,12 +140,20 @@ The setup script also writes GZDoom's `[Joy:JS:*]` SDL axis map so left X/Y are
 strafe/forward, right X/Y are yaw/pitch with reduced vertical sensitivity,
 D-pad hat axes can also move/pan, and unused/phantom axes cannot drive the view
 upward on launch.
+On Boomer, SDL's joystick backend reports the Switch Pro as 6 axes, 16
+buttons, and one hat. GZDoom bindings use SDL joystick names directly:
+`Joy1`/`Joy2` are physical B/A, `Joy3`/`Joy4` are physical Y/X, `Joy5` is
+Select/Minus, `Joy7` is Start/Plus, `Joy10`/`Joy11` are L1/R1, `Axis5Plus` is
+ZL, `Axis6Plus` is ZR, and the D-pad is `POV1*`.
 
 ### Switch Pro Raw Input Probe
 
 The current Boomer controller baseline was probed on April 30, 2026 from
 `/dev/input/event16` (`Pro Controller`) with the raw log saved on Boomer at
 `/srv/emulation/logs/controller-probes/raw-20260430-135115.log`.
+SDL's live controller mapping was also probed at
+`/srv/emulation/logs/controller-probes/sdl-20260430-140039.log`; it reported
+`a:b0,b:b1,x:b2,y:b3,back:b4,start:b6,leftshoulder:b9,rightshoulder:b10,lefttrigger:a4,righttrigger:a5,dp*:h0`.
 
 | Physical control | Linux event |
 | --- | --- |
