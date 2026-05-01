@@ -139,6 +139,7 @@ let
       "${cfg.dataRoot}/tools" \
       "${cfg.esde.appDataDir}" \
       "${cfg.esde.appDataDir}/custom_systems" \
+      "${cfg.esde.appDataDir}/gamelists/pico8" \
       "${cfg.esde.appDataDir}/gamelists/tools" \
       "${cfg.esde.appDataDir}/settings" \
       "${cfg.esde.appDataDir}/themes" \
@@ -236,6 +237,48 @@ let
         done
       fi
     fi
+
+    python3 - "$pico8_target" "${cfg.esde.appDataDir}/gamelists/pico8/gamelist.xml" <<'PY'
+    import os
+    import sys
+    import tempfile
+    import xml.etree.ElementTree as ET
+    from pathlib import Path
+
+    rom_dir = Path(sys.argv[1])
+    gamelist_path = Path(sys.argv[2])
+    suffixes = (".p8.png", ".P8.PNG", ".p8", ".P8", ".png", ".PNG")
+
+    def clean_name(path):
+        name = path.name
+        for suffix in suffixes:
+            if name.endswith(suffix):
+                return name[: -len(suffix)]
+        return path.stem
+
+    root = ET.Element("gameList")
+    if rom_dir.is_dir():
+        files = [
+            path
+            for path in rom_dir.iterdir()
+            if path.is_file()
+            and any(path.name.endswith(suffix) for suffix in suffixes)
+        ]
+        for path in sorted(files, key=lambda item: item.name.lower()):
+            game = ET.SubElement(root, "game")
+            ET.SubElement(game, "path").text = f"./{path.name}"
+            ET.SubElement(game, "name").text = clean_name(path)
+
+    fd, tmp = tempfile.mkstemp(prefix="pico8_gamelist.", dir=str(gamelist_path.parent))
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write('<?xml version="1.0"?>\n')
+        handle.write(ET.tostring(root, encoding="unicode"))
+        handle.write("\n")
+    os.chmod(tmp, 0o644)
+    Path(tmp).replace(gamelist_path)
+    PY
+    chown ${cfg.user}:${cfg.group} "${cfg.esde.appDataDir}/gamelists/pico8/gamelist.xml"
+    chmod 0644 "${cfg.esde.appDataDir}/gamelists/pico8/gamelist.xml"
 
     ln -sfn "${cfg.dataRoot}" /home/${cfg.user}/Emulation
     chown -h ${cfg.user}:${cfg.group} /home/${cfg.user}/Emulation || true
