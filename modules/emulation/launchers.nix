@@ -80,8 +80,8 @@ let
     BTN_B = 304
     BTN_A = 305
     BTN_CAPTURE = 309
-    BTN_L = 310
-    BTN_R = 311
+    BTN_L1 = 310
+    BTN_R1 = 311
     BTN_R2 = 313
     BTN_X = 307
     BTN_Y = 308
@@ -115,8 +115,8 @@ let
         "dolphin": {
             "bindings": {
                 (BTN_SELECT, BTN_B): ("send-key", "ctrl-r", "Minus + B reset Dolphin"),
-                (BTN_SELECT, BTN_L): ("send-key", "f1", "Minus + L loaded Dolphin state slot 1"),
-                (BTN_SELECT, BTN_R): ("send-key", "shift-f1", "Minus + R saved Dolphin state slot 1"),
+                (BTN_SELECT, BTN_L1): ("send-key", "f1", "Minus + L1 loaded Dolphin state slot 1"),
+                (BTN_SELECT, BTN_R1): ("send-key", "shift-f1", "Minus + R1 saved Dolphin state slot 1"),
                 (BTN_SELECT, BTN_A): ("send-key", "f9", "Minus + A triggered Dolphin screenshot"),
                 (BTN_SELECT, BTN_R2): ("send-key", "tab", "Minus + R2 toggled Dolphin fast mode"),
             },
@@ -126,8 +126,8 @@ let
             "bindings": {
                 (BTN_SELECT, BTN_X): ("send-key", "f2", "Minus + X opened Xemu quick actions"),
                 (BTN_SELECT, BTN_B): ("hmp-command", "system_reset", "Minus + B reset Xemu"),
-                (BTN_SELECT, BTN_L): ("hmp-command", "loadvm {snapshot_tag}", "Minus + L loaded Xemu save state"),
-                (BTN_SELECT, BTN_R): ("hmp-command", "savevm {snapshot_tag}", "Minus + R saved Xemu state"),
+                (BTN_SELECT, BTN_L1): ("hmp-command", "loadvm {snapshot_tag}", "Minus + L1 loaded Xemu save state"),
+                (BTN_SELECT, BTN_R1): ("hmp-command", "savevm {snapshot_tag}", "Minus + R1 saved Xemu state"),
                 (BTN_SELECT, BTN_A): ("send-key", "f12", "Minus + A triggered Xemu screenshot"),
                 (BTN_SELECT, BTN_Y): ("send-key", "grave", "Minus + Y toggled Xemu debug monitor"),
                 (BTN_SELECT, BTN_R2): ("notify-none", "xemu fast-forward is not available", "Minus + R2 has no Xemu action"),
@@ -305,9 +305,9 @@ let
         action = resolve_binding("xemu", {BTN_SELECT, BTN_X}, BTN_X)
         if action[:2] != ("send-key", "f2"):
             raise AssertionError(f"unexpected Minus + X action: {action}")
-        action = resolve_binding("xemu", {BTN_SELECT, BTN_R}, BTN_R)
+        action = resolve_binding("xemu", {BTN_SELECT, BTN_R1}, BTN_R1)
         if action[:2] != ("hmp-command", "savevm {snapshot_tag}"):
-            raise AssertionError(f"unexpected Minus + R action: {action}")
+            raise AssertionError(f"unexpected Minus + R1 action: {action}")
         if resolve_binding("xemu", {BTN_X}, BTN_X) is not None:
             raise AssertionError("Minus-less X must not resolve to an action")
         if resolve_binding("global", {BTN_SELECT, BTN_X}, BTN_X) is not None:
@@ -325,10 +325,10 @@ let
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_B}, BTN_B)
         if action[:2] != ("send-key", "ctrl-r"):
             raise AssertionError(f"unexpected Dolphin reset action: {action}")
-        action = resolve_binding("dolphin", {BTN_SELECT, BTN_L}, BTN_L)
+        action = resolve_binding("dolphin", {BTN_SELECT, BTN_L1}, BTN_L1)
         if action[:2] != ("send-key", "f1"):
             raise AssertionError(f"unexpected Dolphin load action: {action}")
-        action = resolve_binding("dolphin", {BTN_SELECT, BTN_R}, BTN_R)
+        action = resolve_binding("dolphin", {BTN_SELECT, BTN_R1}, BTN_R1)
         if action[:2] != ("send-key", "shift-f1"):
             raise AssertionError(f"unexpected Dolphin save action: {action}")
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_A}, BTN_A)
@@ -456,7 +456,7 @@ let
                             terminate_process_group(
                                 args.pid,
                                 args.log,
-                                "Minus + Start double-press",
+                                "Minus + Plus double-press",
                                 system=args.system,
                                 emulator=args.emulator,
                             )
@@ -1923,19 +1923,19 @@ EOF
         "SDL_GAMECONTROLLER_USE_BUTTON_LABELS": "1"
       },
       "hotkey_policy": {
-        "scheme": "Per-emulator hotkeys with a shared per-launch Minus + Start double-press exit broker; expanded standalone hotkey brokers are opt-in per emulator",
-        "retroarch_menu": "RetroArch only: Minus + X/North opens the quick menu",
+        "scheme": "Per-emulator hotkeys with a shared per-launch Minus + Plus double-press exit broker; expanded standalone hotkey brokers are opt-in per emulator",
+        "retroarch_menu": "RetroArch only: Minus + X opens the quick menu",
         "console_home": "Square/Capture opens emulated console Home only where a stable native binding is generated; currently Dolphin Wii Remote Home",
         "modifier": "Minus",
-        "retroarch_save_state": "RetroArch only: Minus + R",
-        "retroarch_load_state": "RetroArch only: Minus + L",
-        "retroarch_reset": "RetroArch only: Minus + B/South",
-        "retroarch_fps": "RetroArch only: Minus + Y/West",
-        "retroarch_screenshot": "RetroArch only: Minus + A/East",
+        "retroarch_save_state": "RetroArch only: Minus + R1",
+        "retroarch_load_state": "RetroArch only: Minus + L1",
+        "retroarch_reset": "RetroArch only: Minus + B",
+        "retroarch_fps": "RetroArch only: Minus + Y",
+        "retroarch_screenshot": "RetroArch only: Minus + A",
         "retroarch_fast_forward": "RetroArch only: Minus + R2",
-        "normal_exit": "Minus + Start/+ twice exits the active run-emulator process group",
-        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin hotkeys for Minus + B reset, Minus + L load state slot 1, Minus + R save state slot 1, Minus + A screenshot, and Minus + R2 fast mode; Minus + X quick actions and Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
-        "xemu_hotkeys": "Default Xbox launch: Minus + X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, and Minus + R2 is unbound",
+        "normal_exit": "Minus + Plus twice exits the active run-emulator process group",
+        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin hotkeys for Minus + B reset, Minus + L1 load state slot 1, Minus + R1 save state slot 1, Minus + A screenshot, and Minus + R2 fast mode; Minus + X quick actions and Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
+        "xemu_hotkeys": "Default Xbox launch: Minus + X opens quick actions, B resets, L1 loads esde-slot1, R1 saves esde-slot1, A screenshots, Y toggles the debug monitor, and Minus + R2 is unbound",
         "pico8_hotkeys": "Default PICO-8 launch: Minus + X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, and Minus + R2 is unbound",
         "gzdoom": "GZDoom button map: Start/+ opens the menu, Minus toggles the automap, and Square/Capture is intentionally unbound",
         "pico8": "fallback plain PICO-8 launch: Start/+ opens pause/menu; PICO-8 uses an explicit managed -home config directory"
@@ -1943,15 +1943,15 @@ EOF
       "managed_defaults": {
         "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Minus hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
         "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Dolphin launches fullscreen without analytics, panic, or stop-confirm prompts; GameCube native Dolphin hotkeys cover reset, save/load slot 1, screenshot, and fast mode, while Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
-        "ppsspp": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
-        "pcsx2": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
-        "azahar": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
-        "cemu": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
-        "xemu": "fallback plain Xemu launch with native Minus + Start quick actions and per-launch Minus + Start twice exit",
+        "ppsspp": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
+        "pcsx2": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
+        "azahar": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
+        "cemu": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
+        "xemu": "fallback plain Xemu launch with native Minus + Plus quick actions and per-launch Minus + Plus twice exit",
         "xemu-hotkeys": "default Xbox launch with the standalone broker for quick actions, save/load, reset, screenshots, debug monitor, and pause",
-        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Minus + Start twice exits through the per-launch broker",
-        "supermodel": "inherits SDL Switch label hints from run-emulator; Minus + Start twice exits through the per-launch broker",
-        "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; Minus + Start twice exits through the per-launch broker",
+        "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Minus + Plus twice exits through the per-launch broker",
+        "supermodel": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
+        "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; Minus + Plus twice exits through the per-launch broker",
         "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1/R1 are User 1/User 2, L2/R2 are alt fire/fire, Minus toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
         "pico8": "fallback plain PICO-8 launch using an explicit managed -home directory; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu",
         "pico8-hotkeys": "default PICO-8 launch with the standalone broker for screenshot, GIF save, cart reset, and pause/menu chords"

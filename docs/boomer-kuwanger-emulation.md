@@ -530,20 +530,20 @@ mode supports it, and Star/Home is treated as a controller-local turbo button
 when the firmware exposes it at all. Square/Capture opens native console Home
 screens only where that binding is explicitly configured, such as Dolphin's Wii
 profile, and otherwise does nothing. Every `run-emulator` launch starts a
-lightweight per-process exit broker for Minus + Start twice. Xbox defaults to
+lightweight per-process exit broker for Minus + Plus twice. Xbox defaults to
 `xemu-hotkeys`, which starts a per-process broker and HMP socket for Minus + X
-quick actions, Minus + B reset, Minus + L load `esde-slot1`, Minus + R save
+quick actions, Minus + B reset, Minus + L1 load `esde-slot1`, Minus + R1 save
 `esde-slot1`, Minus + A screenshot, and Minus + Y debug monitor. Plain `xemu`
 remains available as a fallback alternate.
 Minus + R2 is intentionally unmapped for Xemu because there is no reliable
 fast-forward command. RetroArch maps Minus hotkeys to save/load, reset,
-FPS, screenshot, and fast-forward actions, exits on Minus + Start twice through
+FPS, screenshot, and fast-forward actions, exits on Minus + Plus twice through
 the per-process broker, and uses only the managed base
 `retroarch.cfg`, XDG `global.slangp`, and XDG per-core `.opt` files. PC Engine
 CD and SuperGrafx default all five players to 6-button pads. Dolphin enables
 all four GameCube controller ports and keeps Wii slots 1-4 on the same SDL
 controller order; GameCube binds Dolphin-native hotkeys for Minus + B reset,
-Minus + L load slot 1, Minus + R save slot 1, Minus + A screenshot, and
+Minus + L1 load slot 1, Minus + R1 save slot 1, Minus + A screenshot, and
 Minus + R2 fast mode. Minus + X quick actions and Minus + Y debug
 monitor stay unbound for GameCube because Dolphin does not expose equivalent
 normal runtime actions. D-pad stays on physical D-pad and analog movement stays
