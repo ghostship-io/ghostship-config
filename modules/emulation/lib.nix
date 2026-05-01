@@ -362,7 +362,7 @@ let
       platform = "pico8";
       theme = "pico8";
       emulator = "pico8";
-      extensions = ".p8 .P8 .p8.png .P8.PNG .png .PNG";
+      extensions = ".p8.png .P8.PNG";
       fixedAspect = "4:3";
     }
   ];

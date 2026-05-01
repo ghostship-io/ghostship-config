@@ -10,9 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer PICO-8 ES-DE support**: Seed a small starter set of existing NAS
   PICO-8 carts into an empty ES-DE ROM folder and document the PICO-8 Switch
   controller map in the on-device Controller Maps TUI and generated policy.
-  Include plain `.png` as a launchable PICO-8 extension so ES-DE indexes
-  PNG-format carts instead of treating the system as empty, and seed clean
-  `.png` symlink names so rescans display cart titles without `.p8` suffixes.
+  Keep ES-DE's launchable PICO-8 extensions limited to `.p8.png` carts.
 - **Boomer controller probe documentation**: Document the live Switch Pro
   kernel event mapping from the Boomer raw input probe so emulator bindings can
   be based on observed `EV_KEY`/`EV_ABS` codes instead of inferred labels.
