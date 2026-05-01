@@ -1180,6 +1180,184 @@ EOF
       log_event "runtime" "prepared Dolphin kiosk config"
     }
 
+    prepare_pcsx2_runtime() {
+      pcsx2_data_dir="$XDG_CONFIG_HOME/PCSX2"
+      pcsx2_ini_dir="$pcsx2_data_dir/inis"
+      pcsx2_memcards_dir="${cfg.dataRoot}/saves/pcsx2/memcards"
+      pcsx2_savestates_dir="${cfg.dataRoot}/states/pcsx2"
+      pcsx2_snapshots_dir="${cfg.dataRoot}/screenshots/pcsx2"
+      pcsx2_logs_dir="${cfg.dataRoot}/logs/pcsx2"
+      pcsx2_cache_dir="${cfg.dataRoot}/cache/pcsx2"
+      pcsx2_cheats_dir="${cfg.configRoot}/emulators/pcsx2/cheats"
+      pcsx2_patches_dir="${cfg.configRoot}/emulators/pcsx2/patches"
+      pcsx2_textures_dir="${cfg.configRoot}/emulators/pcsx2/textures"
+      pcsx2_gamesettings_dir="${cfg.configRoot}/emulators/pcsx2/gamesettings"
+      ps2_rom_dir="${cfg.romRoot}/Sony - PlayStation 2 (2000)"
+
+      mkdir -p \
+        "$pcsx2_ini_dir" \
+        "$pcsx2_memcards_dir" \
+        "$pcsx2_savestates_dir" \
+        "$pcsx2_snapshots_dir" \
+        "$pcsx2_logs_dir" \
+        "$pcsx2_cache_dir" \
+        "$pcsx2_cheats_dir" \
+        "$pcsx2_patches_dir" \
+        "$pcsx2_textures_dir" \
+        "$pcsx2_gamesettings_dir"
+
+      bios_name="$(find "${cfg.biosRoot}" -maxdepth 1 -type f \( -iname 'scph*.bin' -o -iname 'ps2*.bin' \) -size +1M -printf '%f\n' 2>/dev/null | sort | head -n 1 || true)"
+      pcsx2_ini="$pcsx2_ini_dir/PCSX2.ini"
+      cat >"$pcsx2_ini" <<EOF
+[UI]
+SettingsVersion = 1
+SetupWizardIncomplete = false
+InhibitScreensaver = true
+ConfirmShutdown = false
+StartPaused = false
+PauseOnFocusLoss = false
+StartFullscreen = true
+HideMouseCursor = true
+HideMainWindowWhenRunning = true
+RenderToSeparateWindow = false
+
+[Folders]
+Bios = ${cfg.biosRoot}
+Snapshots = $pcsx2_snapshots_dir
+Savestates = $pcsx2_savestates_dir
+SaveStates = $pcsx2_savestates_dir
+MemoryCards = $pcsx2_memcards_dir
+Logs = $pcsx2_logs_dir
+Cheats = $pcsx2_cheats_dir
+Patches = $pcsx2_patches_dir
+GameSettings = $pcsx2_gamesettings_dir
+Cache = $pcsx2_cache_dir
+Textures = $pcsx2_textures_dir
+InputProfiles = $pcsx2_data_dir/inputprofiles
+Videos = ${cfg.dataRoot}/videos/pcsx2
+
+[Filenames]
+BIOS = $bios_name
+
+[GameList]
+RecursivePaths = $ps2_rom_dir
+
+[EmuCore]
+EnablePatches = true
+EnableCheats = false
+EnableWideScreenPatches = false
+EnableNoInterlacingPatches = false
+McdFolderAutoManage = true
+UseSavestateSelector = true
+SaveStateOnShutdown = false
+
+[EmuCore/GS]
+Renderer = 14
+UpscaleMultiplier = 3.0
+VsyncQueueSize = 2
+AspectRatio = 0
+FMVAspectRatioSwitch = 0
+TextureFiltering = 2
+MaxAnisotropy = 0
+OsdShowMessages = true
+OsdShowSpeed = false
+OsdShowFPS = true
+OsdShowResolution = false
+OsdShowCPU = false
+OsdShowGPU = false
+OsdShowGSStats = false
+OsdShowSettings = false
+
+[MemoryCards]
+Slot1_Enable = true
+Slot1_Filename = Mcd001.ps2
+Slot2_Enable = true
+Slot2_Filename = Mcd002.ps2
+
+[InputSources]
+SDL = true
+SDLControllerEnhancedMode = true
+
+[Pad]
+MultitapPort1 = false
+MultitapPort2 = false
+
+[Pad1]
+Type = DualShock2
+Up = SDL-0/DPadUp
+Right = SDL-0/DPadRight
+Down = SDL-0/DPadDown
+Left = SDL-0/DPadLeft
+Triangle = SDL-0/FaceNorth
+Circle = SDL-0/FaceEast
+Cross = SDL-0/FaceSouth
+Square = SDL-0/FaceWest
+Select = SDL-0/Back
+Start = SDL-0/Start
+L1 = SDL-0/LeftShoulder
+L2 = SDL-0/+LeftTrigger
+R1 = SDL-0/RightShoulder
+R2 = SDL-0/+RightTrigger
+L3 = SDL-0/LeftStick
+R3 = SDL-0/RightStick
+LUp = SDL-0/-LeftY
+LRight = SDL-0/+LeftX
+LDown = SDL-0/+LeftY
+LLeft = SDL-0/-LeftX
+RUp = SDL-0/-RightY
+RRight = SDL-0/+RightX
+RDown = SDL-0/+RightY
+RLeft = SDL-0/-RightX
+SmallMotor = SDL-0/SmallMotor
+LargeMotor = SDL-0/LargeMotor
+
+[Pad2]
+Type = DualShock2
+Up = SDL-1/DPadUp
+Right = SDL-1/DPadRight
+Down = SDL-1/DPadDown
+Left = SDL-1/DPadLeft
+Triangle = SDL-1/FaceNorth
+Circle = SDL-1/FaceEast
+Cross = SDL-1/FaceSouth
+Square = SDL-1/FaceWest
+Select = SDL-1/Back
+Start = SDL-1/Start
+L1 = SDL-1/LeftShoulder
+L2 = SDL-1/+LeftTrigger
+R1 = SDL-1/RightShoulder
+R2 = SDL-1/+RightTrigger
+L3 = SDL-1/LeftStick
+R3 = SDL-1/RightStick
+LUp = SDL-1/-LeftY
+LRight = SDL-1/+LeftX
+LDown = SDL-1/+LeftY
+LLeft = SDL-1/-LeftX
+RUp = SDL-1/-RightY
+RRight = SDL-1/+RightX
+RDown = SDL-1/+RightY
+RLeft = SDL-1/-RightX
+SmallMotor = SDL-1/SmallMotor
+LargeMotor = SDL-1/LargeMotor
+
+[Hotkeys]
+ToggleFullscreen = Keyboard/Alt & Keyboard/Return
+OpenPauseMenu = Keyboard/Escape
+OpenPauseMenu = SDL-0/Back & SDL-0/FaceNorth
+ResetVM = SDL-0/Back & SDL-0/FaceEast
+LoadStateFromSlot1 = SDL-0/Back & SDL-0/LeftShoulder
+SaveStateToSlot1 = SDL-0/Back & SDL-0/RightShoulder
+Screenshot = Keyboard/F8
+Screenshot = SDL-0/Back & SDL-0/FaceSouth
+ToggleOSD = SDL-0/Back & SDL-0/FaceWest
+HoldTurbo = Keyboard/Period
+HoldTurbo = SDL-0/Back & SDL-0/+RightTrigger
+ToggleTurbo = Keyboard/Tab
+TogglePause = Keyboard/Space
+EOF
+      log_event "runtime" "prepared PCSX2 managed config at $pcsx2_ini"
+    }
+
     cmd=()
     run_cwd=""
     hotkey_profile="global"
@@ -1297,7 +1475,8 @@ PY
       lime3ds) cmd=(lime3ds "$rom_path") ;;
       pcsx2)
         pcsx2_bin="$(first_command pcsx2-qt pcsx2)"
-        cmd=("$pcsx2_bin" -fullscreen "$rom_path")
+        prepare_pcsx2_runtime
+        cmd=("$pcsx2_bin" -batch -fullscreen -- "$rom_path")
         ;;
       ppsspp)
         ppsspp_bin="$(first_command PPSSPPSDL ppsspp ppsspp-sdl)"
@@ -1972,6 +2151,7 @@ EOF
         "retroarch_fast_forward": "RetroArch only: Minus + R2",
         "normal_exit": "Minus + Plus twice exits the active run-emulator process group",
         "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin hotkeys for Minus + B reset, Minus + L1 load state slot 1, Minus + R1 save state slot 1, Minus + A screenshot, and Minus + R2 fast mode; Minus + X quick actions and Minus + Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
+        "pcsx2_hotkeys": "PCSX2 uses native PCSX2 hotkey bindings: Minus + X opens the pause menu, Minus + B resets the VM, Minus + L1 loads state slot 1, Minus + R1 saves state slot 1, Minus + A saves a screenshot, Minus + Y toggles the OSD/FPS overlay, and Minus + R2 holds turbo/fast-forward",
         "xemu_hotkeys": "Default Xbox launch: Minus + X opens quick actions, B resets, L1 loads esde-slot1, R1 saves esde-slot1, A screenshots, Y toggles the debug monitor, and Minus + R2 is unbound",
         "pico8_hotkeys": "Default PICO-8 launch: Minus + X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, and Minus + R2 is unbound",
         "gzdoom": "GZDoom button map: Start/+ opens the menu, Minus toggles the automap, and Square/Capture is intentionally unbound",
@@ -1981,7 +2161,7 @@ EOF
         "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Minus hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
         "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Dolphin launches fullscreen without analytics, panic, or stop-confirm prompts; GameCube native Dolphin hotkeys cover reset, save/load slot 1, screenshot, and fast mode, while Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
         "ppsspp": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
-        "pcsx2": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
+        "pcsx2": "launches through standalone PCSX2 with managed no-wizard config, Vulkan 3x internal resolution, native PCSX2 hotkey chords for pause menu/reset/save/load/screenshot/OSD/turbo, and Minus + Plus twice exits through the per-launch broker; Square/Capture is intentionally unbound until a stable Boomer SDL guide binding is proven",
         "azahar": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "cemu": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "xemu": "fallback plain Xemu launch with native Minus + Plus quick actions and per-launch Minus + Plus twice exit",

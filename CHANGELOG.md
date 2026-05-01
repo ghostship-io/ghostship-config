@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer PS2 PCSX2 setup**: Manage standalone PCSX2 `2.6.3` before each PS2
+  launch with no setup wizard, Vulkan 3x graphics, managed BIOS/ROM/data
+  paths, direct `-batch -fullscreen` launches, SDL controller mappings, and
+  native PCSX2 hotkey chords for pause menu, reset, save/load slot 1,
+  screenshot, OSD/FPS, and hold-turbo.
 - **Boomer Dolphin prompt fix**: Reassert Dolphin analytics opt-out and
   stop-confirm settings immediately before each launch with valid INI syntax
   plus Dolphin `-C` overrides, so GameCube kiosk launches do not ask to report
