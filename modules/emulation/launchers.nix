@@ -676,13 +676,13 @@ EOF
           cp -f "$rom" "$install_dir/UserProfiles/$profile"
           cd "$install_dir"
           if [ ! -e "$WINEPREFIX/drive_c/windows/Microsoft.NET/Framework/v4.0.30319/mscorlib.dll" ]; then
-            wine msiexec /i "${packages.wineMono}/share/wine/mono/wine-mono-11.1.0-x86.msi"
+            wine msiexec /i "${packages.wineMono}/share/wine/mono/wine-mono-10.4.1-x86.msi"
           fi
           exec wine TeknoParrotUi.exe --profile="$profile"
         fi
         cd "$install_dir"
         if [ ! -e "$WINEPREFIX/drive_c/windows/Microsoft.NET/Framework/v4.0.30319/mscorlib.dll" ]; then
-          wine msiexec /i "${packages.wineMono}/share/wine/mono/wine-mono-11.1.0-x86.msi"
+          wine msiexec /i "${packages.wineMono}/share/wine/mono/wine-mono-10.4.1-x86.msi"
         fi
         exec wine "$install_dir/TeknoParrotUi.exe"
   '';

@@ -19,18 +19,18 @@ let
 
   wineMono = pkgs.stdenvNoCC.mkDerivation {
     pname = "wine-mono";
-    version = "11.1.0";
+    version = "10.4.1";
 
     src = pkgs.fetchurl {
-      url = "https://dl.winehq.org/wine/wine-mono/11.1.0/wine-mono-11.1.0-x86.msi";
-      hash = "sha256-3rA0FDH4Jgsgn/9rx53cxUFLl/jpI2q5+9ykzlngqbk=";
+      url = "https://dl.winehq.org/wine/wine-mono/10.4.1/wine-mono-10.4.1-x86.msi";
+      hash = "sha256-Bx9LKIfhyXoR15H/PWW+lCnu1t7EwnCIiL/VRro1jiM=";
     };
 
     dontUnpack = true;
 
     installPhase = ''
       runHook preInstall
-      install -D -m 0644 "$src" "$out/share/wine/mono/wine-mono-11.1.0-x86.msi"
+      install -D -m 0644 "$src" "$out/share/wine/mono/wine-mono-10.4.1-x86.msi"
       runHook postInstall
     '';
   };
