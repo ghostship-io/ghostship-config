@@ -366,7 +366,7 @@ DOLPHIN_GC_HOTKEYS = hotkey_rows(
         "Select+B": "Reset",
         "Select+A": "Screenshot",
         "Select+ZR": "Fast",
-        "Square": "Pause",
+        "Square": "Pause if exposed",
     }
 )
 
@@ -721,7 +721,10 @@ CONTROLLER_MAPS = [
                 "Plus": "Start",
                 "Star": "Turbo",
             },
-            ["Dolphin GameCube has no Home button."],
+            [
+                "Dolphin GameCube has no Home button.",
+                "Hotkeys are native Dolphin SDL bindings.",
+            ],
             DOLPHIN_GC_HOTKEYS,
         ),
     },
@@ -2486,7 +2489,7 @@ def smoke_test(mode):
         assert any("Select+R -> Save" in line for line in gamecube["detail"])
         assert any("Select+L -> Load" in line for line in gamecube["detail"])
         assert any("Select+ZR -> Fast" in line for line in gamecube["detail"])
-        assert any("Square -> Pause" in line for line in gamecube["detail"])
+        assert any("Square -> Pause if exposed" in line for line in gamecube["detail"])
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
         assert any("Square -> Console Home" in line for line in wii["detail"])
         assert any("Square -> Home" in line for line in wii["detail"])

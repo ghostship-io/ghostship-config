@@ -543,12 +543,15 @@ the per-process broker, and uses only the managed base
 CD and SuperGrafx default all five players to 6-button pads. Dolphin enables
 all four GameCube controller ports and keeps Wii slots 1-4 on the same SDL
 controller order; GameCube binds Dolphin-native hotkeys for Select+B reset,
-Select+L load slot 1, Select+R save slot 1, Select+A screenshot, Square/Capture
-pause, and Select+ZR fast mode. Select+X quick actions and Select+Y debug
-monitor stay unbound for GameCube because Dolphin does not expose equivalent
-normal runtime actions. D-pad stays on physical D-pad and analog movement stays
-on analog sticks. Standalone SDL emulators keep their native left-stick
-mappings. Mupen64Plus-Next defaults all four N64 controller paks to Rumble Pak.
+Select+L load slot 1, Select+R save slot 1, Select+A screenshot, and Select+ZR
+fast mode. These are native Dolphin SDL bindings: Minus/Select is `Button 4`,
+Plus/Start is `Button 6`, L/R are `Button 9`/`Button 10`, and ZR is
+`Axis 5+`. Square/Capture pauses only if Dolphin exposes the current
+`Button 13` binding. Select+X quick actions and Select+Y debug monitor stay
+unbound for GameCube because Dolphin does not expose equivalent normal runtime
+actions. D-pad stays on physical D-pad and analog movement stays on analog
+sticks. Standalone SDL emulators keep their native left-stick mappings.
+Mupen64Plus-Next defaults all four N64 controller paks to Rumble Pak.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices

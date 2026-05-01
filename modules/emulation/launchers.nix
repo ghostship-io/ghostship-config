@@ -1139,12 +1139,41 @@ EOF
     }
 
     prepare_dolphin_runtime() {
+      dolphin_config_dir="$XDG_CONFIG_HOME/dolphin-emu"
+      mkdir -p "$dolphin_config_dir"
+      ${pkgs.gnused}/bin/sed 's/^    //' >"$dolphin_config_dir/Dolphin.ini" <<'EOF'
+    [Analytics]
+    PermissionAsked = True
+    Enabled = False
+    [Core]
+    CPUThread = True
+    SkipIPL = True
+    GFXBackend = Vulkan
+    SIDevice0 = 6
+    SIDevice1 = 6
+    SIDevice2 = 6
+    SIDevice3 = 6
+    WiimoteContinuousScanning = True
+    WiimoteEnableSpeaker = False
+    [Display]
+    Fullscreen = True
+    RenderWindowWidth = 1920
+    RenderWindowHeight = 1080
+    RenderWindowAutoSize = False
+    [Interface]
+    ConfirmStop = False
+    UsePanicHandlers = False
+    OnScreenDisplayMessages = True
+    [DSP]
+    DSPThread = True
+    Backend = Cubeb
+    Volume = 100
+EOF
+      log_event "runtime" "prepared Dolphin prompt-free runtime config"
       if [ "''${EMULATION_DOLPHIN_HOTKEY_FALLBACK:-0}" != "1" ]; then
         return 0
       fi
-      dolphin_config_dir="$XDG_CONFIG_HOME/dolphin-emu"
-      mkdir -p "$dolphin_config_dir"
-      cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
+      ${pkgs.gnused}/bin/sed 's/^    //' >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
     [Hotkeys1]
     Device = Keyboard Mouse
     Keys/Toggle Pause = F10
@@ -1224,7 +1253,16 @@ PY
           hotkey_profile="dolphin"
         fi
         prepare_dolphin_runtime
-        cmd=(dolphin-emu -b -e "$rom_path")
+        cmd=(
+          dolphin-emu
+          -b
+          -e "$rom_path"
+          -C Main.Analytics.PermissionAsked=True
+          -C Main.Analytics.Enabled=False
+          -C Main.Interface.ConfirmStop=False
+          -C Main.Interface.UsePanicHandlers=False
+          -C Main.Interface.OnScreenDisplayMessages=True
+        )
         ;;
       cemu) cmd=(cemu -f -g "$rom_path") ;;
       xemu)
@@ -1564,7 +1602,7 @@ PY
         ''}
         dolphin_config_dir="${cfg.dataRoot}/xdg/config/dolphin-emu"
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$dolphin_config_dir"
-        cat >"$dolphin_config_dir/Dolphin.ini" <<'EOF'
+        ${pkgs.gnused}/bin/sed 's/^    //' >"$dolphin_config_dir/Dolphin.ini" <<'EOF'
     [Analytics]
     PermissionAsked = True
     Enabled = False
@@ -1592,7 +1630,7 @@ PY
     Backend = Cubeb
     Volume = 100
 EOF
-        cat >"$dolphin_config_dir/GFX.ini" <<'EOF'
+        ${pkgs.gnused}/bin/sed 's/^    //' >"$dolphin_config_dir/GFX.ini" <<'EOF'
     [Settings]
     BackendMultithreading = True
     InternalResolution = 3
@@ -1606,28 +1644,28 @@ EOF
     [Enhancements]
     MaxAnisotropy = 4
 EOF
-        cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
+        ${pkgs.gnused}/bin/sed 's/^    //' >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
     [Hotkeys1]
     Device = SDL/0/Nintendo Switch Pro Controller
     Keys/Toggle Pause = `Button 13`
-    Keys/Reset = `Button 8` & `Button 0`
-    Keys/Take Screenshot = `Button 8` & `Button 1`
-    Keys/Disable Emulation Speed Limit = `Button 8` & `Button 7`
-    Keys/Load State Slot 1 = `Button 8` & `Button 4`
-    Keys/Save State Slot 1 = `Button 8` & `Button 5`
+    Keys/Reset = `Button 4` & `Button 1`
+    Keys/Take Screenshot = `Button 4` & `Button 0`
+    Keys/Disable Emulation Speed Limit = `Button 4` & `Axis 5+`
+    Keys/Load State Slot 1 = `Button 4` & `Button 9`
+    Keys/Save State Slot 1 = `Button 4` & `Button 10`
 EOF
         : >"$dolphin_config_dir/GCPadNew.ini"
         for slot in 1 2 3 4; do
           index=$((slot - 1))
-          cat >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
+          ${pkgs.gnused}/bin/sed 's/^    //' >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
     [GCPad$slot]
     Device = SDL/$index/Nintendo Switch Pro Controller
-    Buttons/A = \`Button 1\`
-    Buttons/B = \`Button 0\`
-    Buttons/X = \`Button 3\`
-    Buttons/Y = \`Button 2\`
-    Buttons/Z = \`Button 7\`
-    Buttons/Start = \`Button 9\`
+    Buttons/A = \`Button 0\`
+    Buttons/B = \`Button 1\`
+    Buttons/X = \`Button 2\`
+    Buttons/Y = \`Button 3\`
+    Buttons/Z = \`Axis 5+\`
+    Buttons/Start = \`Button 6\`
     Main Stick/Up = \`Axis 1-\`
     Main Stick/Down = \`Axis 1+\`
     Main Stick/Left = \`Axis 0-\`
@@ -1638,8 +1676,8 @@ EOF
     C-Stick/Left = \`Axis 2-\`
     C-Stick/Right = \`Axis 2+\`
     C-Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
-    Triggers/L = \`Button 4\`
-    Triggers/R = \`Button 5\`
+    Triggers/L = \`Button 9\`
+    Triggers/R = \`Button 10\`
     D-Pad/Up = \`Hat 0 N\`
     D-Pad/Down = \`Hat 0 S\`
     D-Pad/Left = \`Hat 0 W\`
@@ -1649,7 +1687,7 @@ EOF
         : >"$dolphin_config_dir/WiimoteNew.ini"
         for slot in 1 2 3 4; do
           index=$((slot - 1))
-          cat >>"$dolphin_config_dir/WiimoteNew.ini" <<EOF
+          ${pkgs.gnused}/bin/sed 's/^    //' >>"$dolphin_config_dir/WiimoteNew.ini" <<EOF
     [Wiimote$slot]
     Source = 1
     Device = SDL/$index/Nintendo Switch Pro Controller
@@ -1657,8 +1695,8 @@ EOF
     Buttons/B = \`Button 7\`
     Buttons/1 = \`Button 0\`
     Buttons/2 = \`Button 2\`
-    Buttons/- = \`Button 8\`
-    Buttons/+ = \`Button 9\`
+    Buttons/- = \`Button 4\`
+    Buttons/+ = \`Button 6\`
     Buttons/Home = \`Button 13\`
     D-Pad/Up = \`Hat 0 N\`
     D-Pad/Down = \`Hat 0 S\`
@@ -1681,11 +1719,11 @@ EOF
     Nunchuk/Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
 EOF
         done
-        cat >>"$dolphin_config_dir/WiimoteNew.ini" <<'EOF'
+        ${pkgs.gnused}/bin/sed 's/^    //' >>"$dolphin_config_dir/WiimoteNew.ini" <<'EOF'
     [BalanceBoard]
     Source = 0
 EOF
-        cat >"$dolphin_config_dir/Logger.ini" <<'EOF'
+        ${pkgs.gnused}/bin/sed 's/^    //' >"$dolphin_config_dir/Logger.ini" <<'EOF'
     [Options]
     Verbosity = 1
     WriteToFile = False
@@ -1939,7 +1977,7 @@ EOF
         "retroarch_screenshot": "RetroArch only: Select/- plus A/East",
         "retroarch_fast_forward": "RetroArch only: Select/- plus ZR",
         "normal_exit": "Select/- plus Start/+ twice exits the active run-emulator process group",
-        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin hotkeys for Select/- plus B reset, Select/- plus L load state slot 1, Select/- plus R save state slot 1, Select/- plus A screenshot, Square/Capture pause, and Select/- plus ZR fast mode; Select/- plus X quick actions and Select/- plus Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
+        "dolphin_gamecube_hotkeys": "Dolphin GameCube uses native Dolphin SDL hotkeys with Select/- on Button 4 and Start/+ on Button 6: Select/- plus B resets, Select/- plus L loads state slot 1, Select/- plus R saves state slot 1, Select/- plus A screenshots, Select/- plus ZR toggles fast mode, and Square/Capture pauses only if Dolphin exposes the existing Button 13 binding; Select/- plus X quick actions and Select/- plus Y debug monitor are intentionally unbound because Dolphin has no equivalent normal runtime actions",
         "xemu_hotkeys": "Default Xbox launch: Select/- plus X opens quick actions, B resets, L loads esde-slot1, R saves esde-slot1, A screenshots, Y toggles the debug monitor, Square/Capture toggles pause, and Select/- plus ZR is unbound",
         "pico8_hotkeys": "Default PICO-8 launch: Select/- plus X opens pause/menu, B resets the cart, A saves a screenshot, Y saves the current GIF buffer, Square/Capture opens pause/menu, and Select/- plus ZR is unbound",
         "gzdoom": "GZDoom only: Start/+ opens the menu, Select/- toggles the automap, and Square/Capture is intentionally unbound",
@@ -1947,7 +1985,7 @@ EOF
       },
       "managed_defaults": {
         "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
-        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Dolphin launches fullscreen without analytics, panic, or stop-confirm prompts; GameCube native Dolphin hotkeys cover reset, save/load slot 1, screenshot, pause, and fast mode, while Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
+        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Dolphin launches fullscreen without analytics, panic, or stop-confirm prompts; GameCube native Dolphin hotkeys cover reset, save/load slot 1, screenshot, and fast mode with Minus as Select/hotkey modifier and Plus as Start; Square/Capture pauses or opens Wii Remote Home only where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
         "ppsspp": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
         "pcsx2": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
         "azahar": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",

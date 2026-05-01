@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   GameCube hotkeys for reset, save/load slot 1, screenshot, pause, and fast
   mode, and keep unsupported quick-actions/debug-monitor chords explicitly
   unbound.
+- **Boomer Dolphin native button map**: Correct Dolphin's generated SDL
+  bindings so GameCube uses Minus as Select/hotkey modifier, Plus as Start,
+  Boomer's documented A/B/X/Y button numbers, L/R shoulder buttons, and ZR
+  axis for native Dolphin hotkeys.
 - **Boomer Controller Maps hotkey layout**: Render the same full hotkey combo
   list on every controller map with combo-first rows and `None` for unmapped
   actions. Rename displayed stick-click rows from `L3`/`R3` to `L4`/`R4` to
