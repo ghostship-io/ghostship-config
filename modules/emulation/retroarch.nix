@@ -9,6 +9,7 @@ let
     audio_driver = "pipewire"
     input_driver = "udev"
     menu_driver = "ozone"
+    menu_swap_ok_cancel = "true"
     video_fullscreen = "true"
     video_vsync = "true"
     video_shader_enable = "true"
