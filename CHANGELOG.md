@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer TeknoParrot Wine Mono**: Package the Wine Mono MSI expected by the
   managed Wine build and install it into TeknoParrot's Wine prefix before
   starting TeknoParrotUi.
+- **Boomer TeknoParrot first-run setup**: Seed TeknoParrot's `ParrotData.xml`
+  for kiosk launches and map friendly ES-DE XML profile names to the official
+  TeknoParrot `GameProfiles` id before invoking `--profile`.
 - **Boomer TeknoParrot ES-DE identity**: Show TeknoParrot as its own ES-DE
   system instead of reusing the generic Arcade theme label.
 - **Boomer TeknoParrot theme**: Add TeknoParrot metadata, logo, and system
