@@ -16,7 +16,7 @@
 - Frontend: ES-DE 3.4.1 AppImage, Art Book Next theme, Tools system enabled.
 - Launch path: every game starts through `run-emulator`, which applies
   `display-profile`, Gamescope, GameMode, MangoHud,
-  HDMI audio routing, RetroArch profiles, and launch logging.
+  HDMI audio routing, the RetroArch global shader preset, and launch logging.
 - Display policy: dynamic HDMI/DP connector discovery, 720p through 8K matrix,
   native render/output sizes, and centered pillarboxing for fixed-aspect
   systems on ultrawide displays. Gamescope FSR is disabled.
@@ -36,7 +36,7 @@
 | Game Boy Advance | RetroArch mGBA |
 | GameCube / Wii | Dolphin |
 | Nintendo 3DS | Azahar if present, then Lime3DS, otherwise RetroArch Citra |
-| Nintendo 64 | RetroArch Mupen64Plus-Next |
+| Nintendo 64 | RetroArch Mupen64Plus-Next, GLideN64 3x native scaling |
 | Nintendo DS | RetroArch DeSmuME |
 | NES / FDS | RetroArch FCEUmm |
 | SNES | RetroArch Snes9x |
@@ -57,7 +57,8 @@
 
 Installed RetroArch fallback coverage also includes MAME, SameBoy, bsnes,
 bsnes-hd, Beetle PCE Fast, Mesen, PicoDrive, ParaLLEl N64, melonDS, PPSSPP,
-PCSX2, and Citra where available.
+PCSX2, and Citra where available. ParaLLEl N64 stays installed as a fallback
+core, but Boomer no longer generates managed ParaLLEl N64 runtime options.
 
 ## Controllers, Media, And Tests
 

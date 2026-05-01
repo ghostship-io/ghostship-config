@@ -996,48 +996,17 @@ PY
           echo "Missing RetroArch core for $emulator_id" >&2
           exit 66
         fi
-        profile="${cfg.configRoot}/retroarch/profiles/current.cfg"
-        profile_override="''${EMULATION_RETROARCH_PROFILE:-}"
-        if [ -n "$profile_override" ] && [ "$profile_override" != "default" ]; then
-          case "$profile_override" in *.cfg) ;; *) profile_override="$profile_override.cfg" ;; esac
-          if [ ! -r "${cfg.configRoot}/retroarch/profiles/$profile_override" ]; then
-            log_event "error" "unknown RetroArch profile $profile_override"
-            echo "Unknown RetroArch profile: $profile_override" >&2
-            exit 64
-          fi
-          profile="${cfg.configRoot}/retroarch/profiles/$profile_override"
-          profile_name="$profile_override"
-        else
-          if [ ! -r "$profile" ]; then
-            profile="${cfg.configRoot}/retroarch/profiles/${cfg.visuals.defaultProfile}.cfg"
-          fi
-          profile_name="$(readlink "$profile" 2>/dev/null || basename "$profile")"
-          if [ "$profile_name" = "${cfg.visuals.defaultProfile}.cfg" ] && [ -r "${cfg.configRoot}/retroarch/shader-policy.json" ]; then
-            system_profile="$(jq -r --arg system "$system_id" '.systemDefaults[$system] // empty' "${cfg.configRoot}/retroarch/shader-policy.json")"
-            if [ -n "$system_profile" ] && [ -r "${cfg.configRoot}/retroarch/profiles/$system_profile.cfg" ]; then
-              profile="${cfg.configRoot}/retroarch/profiles/$system_profile.cfg"
-              profile_name="$system_profile.cfg"
-            fi
-          fi
-        fi
-        shader_status="${cfg.configRoot}/retroarch/shader-status.json"
-        if [ -r "$shader_status" ]; then
-          case "$profile_name" in
-            nnedi3*) jq -e '.nnedi3 == true' "$shader_status" >/dev/null 2>&1 || profile="${cfg.configRoot}/retroarch/profiles/sharp-bilinear-prescale.cfg" ;;
-            sharp*|pixel-aa-fast.cfg|scalefx-aa-fast.cfg|xbrz-freescale.cfg) jq -e '.sharp == true' "$shader_status" >/dev/null 2>&1 || profile="${cfg.configRoot}/retroarch/profiles/no-shader.cfg" ;;
-            megabezel*) jq -e '.megabezel == true' "$shader_status" >/dev/null 2>&1 || profile="${cfg.configRoot}/retroarch/profiles/sharp-bilinear-prescale.cfg" ;;
-          esac
-        fi
-        system_override="${cfg.configRoot}/retroarch/system-overrides/$system_id.cfg"
-        append_config="$profile"
-        if [ -r "$system_override" ]; then
-          append_config="$append_config|$system_override"
-        fi
+        append_configs=()
         retroachievements_config="${cfg.configRoot}/retroarch/retroachievements.cfg"
         if [ -r "$retroachievements_config" ]; then
-          append_config="$append_config|$retroachievements_config"
+          append_configs+=("$retroachievements_config")
         fi
-        cmd=(retroarch --config "${cfg.configRoot}/retroarch/retroarch.cfg" --appendconfig "$append_config" -L "$core_path" "$rom_path")
+        cmd=(retroarch --config "${cfg.configRoot}/retroarch/retroarch.cfg")
+        if [ "''${#append_configs[@]}" -gt 0 ]; then
+          append_config="$(IFS='|'; echo "''${append_configs[*]}")"
+          cmd+=(--appendconfig "$append_config")
+        fi
+        cmd+=(-L "$core_path" "$rom_path")
         ;;
       dolphin) cmd=(dolphin-emu -b -e "$rom_path") ;;
       cemu) cmd=(cemu -f -g "$rom_path") ;;
@@ -1644,7 +1613,7 @@ PY
       "standalone_defaults": {
         "azahar": "use emulator internal resolution scaling",
         "cemu": "use Vulkan and graphics packs/internal resolution",
-        "dolphin": "use standalone internal resolution; RA profile keeps dual core disabled",
+        "dolphin": "use standalone internal resolution",
         "pcsx2": "use Vulkan hardware renderer and internal resolution",
         "ppsspp": "use Vulkan and PPSSPP rendering resolution",
         "ryubing": "use Vulkan, docked mode, 16x AF, and emulator-native scaling/filtering",

@@ -262,7 +262,10 @@ changelog.
   of a login prompt. Keep Boomer's emulator defaults RetroAchievements-aligned where
   practical: Beetle SuperGrafx for PCE/PCE CD, FCEUmm for NES/FDS, Azahar for
   3DS, standalone PCSX2 for PS2, standalone PPSSPP for PSP, and no Gamescope
-  FSR; use emulator-native scaling plus NNEDI3/sharp RetroArch shaders. Keep
+  FSR; use emulator-native scaling plus the managed RetroArch `global.slangp`
+  shader preset. Keep
+  N64 on RetroArch Mupen64Plus-Next with GLideN64 3x native resolution and the
+  global shader preset; ParaLLEl N64 stays installed only as a fallback core.
   perf tests in `modules/emulation/perf.nix`, launch through `run-emulator`,
   and write recommendations instead of auto-mutating runtime profiles. Use the
   repo-pinned official Ryubing Canary package from

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer N64 Mupen64Plus-Next tuning**: Keep N64 on RetroArch
+  Mupen64Plus-Next, switch the managed core options to GLideN64 with 3x native
+  resolution, keep shaders on the global `global.slangp` preset, default all
+  four N64 controller paks to rumble, and stop generating ParaLLEl N64 and
+  shader-profile runtime option files.
 - **Boomer controller mapping standardization**: Map RetroArch players 1-5 to
   D-pad plus left-stick digital movement, force Beetle PCE Fast to 6-button
   pads for all five players, and enable all four generated Dolphin GameCube
