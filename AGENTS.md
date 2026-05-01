@@ -297,19 +297,19 @@ changelog.
   force-kill fallback.
   Controller Maps should stay text-only with a compact two-column button map
   above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
-  Switch A/B, and launch GZDoom with the first Boomer controls cfg from
-  `e0e6880`: named `Pad_*` aliases for A/B/X/Y, shoulders, triggers, Start,
-  Back, thumbs, and D-pad, with no broad button unbind block. Reset stale
-  `Doom.Bindings` and automap sections so GZDoom regenerates its generic
-  defaults, then keep only the `[Joy:JS:*]` axis seed: Switch Pro axis 0/1 are
-  strafe/forward, axis 2 is yaw, axis 3 is pitch with scale `0.25`, and unused
-  axes are disabled.
+  Switch A/B, and launch GZDoom with the managed Boomer controls cfg. Reset
+  stale `Doom.Bindings` and automap sections so GZDoom regenerates its generic
+  defaults, then override the current 8BitDo Ultimate 2C probe in
+  `boomer-controls.cfg`: B/Joy1 jump, A/Joy2 use, X/Joy3 crouch, Y/Joy4 reload,
+  L1/Joy5 User 1, R1/Joy7 User 2, L2/Joy8 alt-fire, Minus/Joy10 automap,
+  D-pad/POV1 left-right weapons and up-down inventory, R2 trigger fallbacks
+  fire, and axis 3 pitch scale `0.25`. Keep only the GZDoom menu A/B package
+  patch unless a future live probe proves another package patch is required.
   After Burner Climax should launch through TeknoParrot XML profiles under
   `TeknoParrotUi.exe --profile`, not by direct native ELF execution; test on
   Boomer's active kiosk `DISPLAY=:0`, not only via SSH.
   Boomer's probed kernel Switch Pro raw map is documented in
-  `docs/boomer-kuwanger-emulation.md`. Keep only the GZDoom menu A/B package
-  patch unless a future live probe proves another package patch is required.
+  `docs/boomer-kuwanger-emulation.md`.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

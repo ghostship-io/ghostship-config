@@ -50,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   button unbind block. Reset stale `Doom.Bindings` and automap sections so
   GZDoom regenerates its generic defaults, while keeping the managed right-stick
   axis map and 25% vertical look scale.
+- **Boomer GZDoom controller correction pass**: Apply the current in-game
+  8BitDo Ultimate 2C probe as targeted `Joy*`/`POV1*` overrides: Y reloads
+  instead of jumping, R1/L1 become User 2/User 1, L2 becomes alt-fire, Minus
+  toggles automap, D-pad left/right change weapons, and D-pad up/down handle
+  inventory.
 - **Boomer smoke-test kiosk restore**: Restore `greetd` instead of
   `getty@tty1` after root-run smoke tests on kiosk-mode hosts so Boomer returns
   to ES-DE instead of a console login prompt.

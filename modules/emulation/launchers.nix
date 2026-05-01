@@ -1311,26 +1311,66 @@ EOF
     freelook true
     lookstrafe false
 
+    // GZDoom regenerates generic Joy*/POV1* defaults before this cfg runs.
+    // Use the same physical -> GZDoom key -> target format for each fix:
+    // B -> Joy1 -> jump
+    // A -> Joy2 -> use/open
+    // X -> Joy3 -> crouch
+    // Y -> Joy4 -> reload (observed as jump before this override)
+    // L1 -> Joy5 -> mod special / user1 (observed as weapon switch)
+    // R1 -> Joy7 -> zoom/grenade/dash / user2 (observed as pause)
+    // L2 -> Joy8 -> alt-fire (observed as menu)
+    // Minus -> Joy10 -> automap (observed as crouch)
+    // R2 -> Joy14 or trigger axis -> fire
+    // Plus -> Pad_Start alias for now; raw Joy key needs the next press-test
+    bind Joy1 +jump
+    bind Joy2 +use
+    bind Joy3 crouch
+    bind Joy4 +reload
+    bind Joy5 +user1
+    bind Joy7 +user2
+    bind Joy8 +altattack
+    bind Joy10 togglemap
+    bind Joy14 +attack
+    bind Joy13 +altattack
+    bind Axis3Plus +altattack
+    bind Axis4Plus +altattack
+    bind Axis5Plus +attack
+    bind Axis6Plus +attack
+    // D-pad left/right -> previous/next weapon; up/down -> inventory prev/use.
+    bind POV1Left weapprev
+    bind POV1Right weapnext
+    bind POV1Up invprev
+    bind POV1Down invuse
+
+    // Alias fallbacks keep the intended physical Switch-label map if GZDoom
+    // routes a future controller through its game-controller names.
     bind pad_a +use
     bind pad_b +jump
-    bind pad_x invuse
-    bind pad_y togglemap
+    bind pad_x crouch
+    bind pad_y +reload
     bind rtrigger +attack
     bind ltrigger +altattack
-    bind lshoulder weapprev
-    bind rshoulder weapnext
+    bind lshoulder +user1
+    bind rshoulder +user2
     bind pad_start menu_main
-    bind pad_back pause
-    bind lthumb crouch
+    bind pad_back togglemap
+    bind lthumb togglemap
     bind rthumb centerview
-    bind dpadleft invprev
-    bind dpadright invnext
-    bind dpadup togglemap
+    bind dpadleft weapprev
+    bind dpadright weapnext
+    bind dpadup invprev
     bind dpaddown invuse
 
+    mapbind Joy10 togglemap
+    mapbind pad_back togglemap
     mapbind pad_y am_togglefollow
     mapbind pad_a am_setmark
     mapbind pad_b am_clearmarks
+    mapbind POV1Right +am_panright
+    mapbind POV1Left +am_panleft
+    mapbind POV1Up +am_panup
+    mapbind POV1Down +am_pandown
     mapbind dpadright +am_panright
     mapbind dpadleft +am_panleft
     mapbind dpadup +am_panup
@@ -1489,7 +1529,7 @@ EOF
         "screenshot": "Select/- plus A/East",
         "fast_forward": "Select/- plus ZR",
         "normal_exit": "Select/- held plus Start/+ double-press sends SIGTERM, then SIGKILL after 5 seconds if needed",
-        "gzdoom_menu": "Start/+ opens the GZDoom menu; Y and D-pad up toggle the map; Select/- pauses; Square/Capture is intentionally unbound"
+        "gzdoom_menu": "Start/+ opens the GZDoom menu, Select/- toggles the automap, and Square/Capture is intentionally unbound"
       },
       "managed_defaults": {
         "retroarch": "Switch Pro autoconfig maps physical A/B/X/Y to matching RetroPad labels; Rocknix-style Select hotkeys are configured and Square/Capture has no stable Home binding",
@@ -1501,7 +1541,7 @@ EOF
         "xemu": "inherits SDL Switch label hints from run-emulator; Square/Capture has no stable Home binding",
         "ryubing": "inherits SDL Switch label hints from run-emulator and uses emulator-native controller support; Square/Capture has no stable Home binding",
         "supermodel": "inherits SDL Switch label hints from run-emulator; Square/Capture has no stable Home binding",
-        "gzdoom": "run-emulator executes the first Boomer GZDoom control cfg from e0e6880: A is Use/Confirm, B is Jump/Back, X uses inventory, Y toggles map, L1/R1 select previous/next weapon, L2/R2 are alt fire/fire, Select/- pauses, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
+        "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1/R1 are User 1/User 2, L2/R2 are alt fire/fire, Select/- toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
         "pico8": "run-emulator launches carts with PICO-8; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu"
       },
       "known_gaps": {

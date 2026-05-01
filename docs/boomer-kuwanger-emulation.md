@@ -129,40 +129,41 @@ relative asset paths work. Keep assets under the Doom ROM folder and put the
 human-facing launchers at the top level for cleaner ES-DE scraping.
 Every GZDoom launch executes the managed
 `/srv/emulation/config/emulators/gzdoom/boomer-controls.cfg` file so joystick
-input is enabled. Boomer intentionally restored the first repo Doom control
-layout from `e0e6880`: the cfg uses GZDoom's named controller aliases and does
-not unbind the engine's generic defaults. The setup script clears stale
-`Doom.Bindings`, `Doom.DoubleBindings`, and `Doom.AutomapBindings` sections
-that earlier broken attempts wrote, then leaves GZDoom to regenerate its own
-default button map. The only GZDoom package patch kept is the menu A/B swap.
+input is enabled. Boomer reset back to the first repo Doom control layout from
+`e0e6880`, then started applying targeted overrides from the current in-game
+8BitDo Ultimate 2C probe. The setup script clears stale `Doom.Bindings`,
+`Doom.DoubleBindings`, and `Doom.AutomapBindings` sections that earlier broken
+attempts wrote, then leaves GZDoom to regenerate its own default button map.
+`boomer-controls.cfg` runs after that and overrides the observed bad generic
+`Joy*`/`POV1*` defaults. The only GZDoom package patch kept is the menu A/B
+swap.
 
 The setup script still writes GZDoom's `[Joy:JS:*]` SDL axis map so left X/Y are
 strafe/forward, right X/Y are yaw/pitch, `Axis3scale` is `0.25`, and unused
 axes cannot drive the view upward on launch.
 
-The restored GZDoom map is:
+The current correction pass uses this format: physical control -> current
+GZDoom key -> target binding.
 
-| Physical control | GZDoom binding |
-| --- | --- |
-| A | `Pad_A` -> `+use` |
-| B | `Pad_B` -> `+jump` |
-| X | `Pad_X` -> `invuse` |
-| Y | `Pad_Y` -> `togglemap` |
-| L1 / L | `LShoulder` -> `weapprev` |
-| R1 / R | `RShoulder` -> `weapnext` |
-| L2 / ZL | `LTrigger` -> `+altattack` |
-| R2 / ZR | `RTrigger` -> `+attack` |
-| Select / `-` | `Pad_Back` -> `pause` |
-| Start / `+` | `Pad_Start` -> `menu_main` |
-| Left stick click | `LThumb` -> `crouch` |
-| Right stick click | `RThumb` -> `centerview` |
-| D-pad left/right | `DPadLeft` / `DPadRight` -> `invprev` / `invnext` |
-| D-pad up/down | `DPadUp` / `DPadDown` -> `togglemap` / `invuse` |
+| Physical control | Current/probed key | Target binding |
+| --- | --- | --- |
+| B | `Joy1` | `+jump` |
+| A | `Joy2` | `+use` |
+| X | `Joy3` | `crouch` |
+| Y | `Joy4` (was jump) | `+reload` |
+| L1 / L | `Joy5` (was weapon switch) | `+user1` |
+| R1 / R | `Joy7` (was pause) | `+user2` |
+| L2 / ZL | `Joy8` (was menu) | `+altattack` |
+| R2 / ZR | `Joy14` or trigger axis fallback | `+attack` |
+| Select / `-` | `Joy10` (was crouch) | `togglemap` |
+| Start / `+` | `Pad_Start` alias fallback | `menu_main`; raw key still needs the next press-test |
+| D-pad left/right | `POV1Left` / `POV1Right` | `weapprev` / `weapnext` |
+| D-pad up/down | `POV1Up` (was map) / `POV1Down` | `invprev` / `invuse` |
+| L4 / R4 | not yet observed as unique events | unbound until proven |
 
-After the reset, GZDoom also regenerates its generic defaults such as
-`Joy1=+use`, `Joy4=+jump`, `Joy5/Joy6=weapprev/weapnext`,
-`Axis6Plus=+attack`, `Axis3Plus=+altattack`, and matching `POV1*` automap and
-inventory defaults.
+The cfg also keeps physical-label `Pad_*`, shoulder, trigger, and D-pad alias
+fallbacks with the same target layout in case GZDoom routes a future controller
+through named controller events instead of generic `Joy*` events.
 
 ### Switch Pro Raw Input Probe
 
