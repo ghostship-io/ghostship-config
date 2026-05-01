@@ -234,8 +234,10 @@ The wrapper uses a dedicated Wine prefix at:
 ```
 
 ES-DE lists `.teknoparrot` launcher files. Each launcher is a small text file
-with a `profile=<path>` entry, and `run-emulator` passes that profile to
-TeknoParrot as `--profile=<path>`. Keep copied game payloads under hidden
+whose first non-comment line is parsed as a raw argument string, matching the
+`.gzdoom` launcher style. If the first argument names a payload beside the
+launcher, `run-emulator` runs it from that payload directory; otherwise the
+arguments are passed to TeknoParrotUi. Keep copied game payloads under hidden
 `.assets/` directories beside those launchers.
 
 ## Display And Aspect Scaling

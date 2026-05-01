@@ -643,28 +643,58 @@ let
         install_dir="$prefix/TeknoParrot"
         rom="''${1:-}"
         profile=""
+        launcher_dir=""
+        launcher_target=""
+        launcher_cwd=""
+        launcher_args=()
         mkdir -p "$prefix" "${cfg.dataRoot}/logs/teknoparrot"
         export WINEPREFIX="$prefix/prefix"
         export WINEARCH=win64
         if [ -n "$rom" ]; then
           case "$rom" in
             *.teknoparrot|*.TEKNOPARROT)
-              while IFS='=' read -r key value; do
-                key="$(printf '%s' "$key" | tr -d '[:space:]')"
-                value="$(printf '%s' "$value" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/\r$//')"
-                case "$key" in
-                  ""|\#*) ;;
-                  profile)
-                    case "$value" in
-                      /*) profile="$value" ;;
-                      *) profile="$(dirname "$rom")/$value" ;;
-                    esac
-                    ;;
-                esac
-              done < "$rom"
-              if [ -z "$profile" ]; then
-                echo "TeknoParrot launcher is missing profile=: $rom" >&2
+              launcher_line="$(grep -v -E '^[[:space:]]*(#|$)' "$rom" | head -n 1 || true)"
+              if [ -z "$launcher_line" ]; then
+                echo "Empty TeknoParrot launcher: $rom" >&2
+                exit 64
+              fi
+              set +e
+              mapfile -d "" -t launcher_args < <(
+                TEKNOPARROT_LAUNCHER_LINE="$launcher_line" ${pkgs.python3}/bin/python3 - <<'PY'
+import os
+import shlex
+import sys
+
+try:
+    args = shlex.split(os.environ["TEKNOPARROT_LAUNCHER_LINE"], comments=False, posix=True)
+except ValueError as exc:
+    print(f"Invalid .teknoparrot launcher syntax: {exc}", file=sys.stderr)
+    sys.exit(64)
+
+for arg in args:
+    sys.stdout.buffer.write(arg.encode("utf-8") + b"\0")
+PY
+              )
+              parse_rc="$?"
+              set -e
+              if [ "$parse_rc" -ne 0 ]; then
+                exit "$parse_rc"
+              fi
+              if [ "''${#launcher_args[@]}" -eq 0 ]; then
+                echo "TeknoParrot launcher produced no arguments: $rom" >&2
                 exit 65
+              fi
+              launcher_dir="$(dirname "$rom")"
+              launcher_target="''${launcher_args[0]}"
+              case "$launcher_target" in
+                /*) ;;
+                *) launcher_target="$launcher_dir/$launcher_target" ;;
+              esac
+              if [ -e "$launcher_target" ]; then
+                launcher_cwd="$(dirname "$launcher_target")"
+                launcher_args[0]="$(basename "$launcher_target")"
+                cd "$launcher_cwd"
+                exec "''${launcher_args[@]}"
               fi
               ;;
             *) profile="$rom" ;;
@@ -681,6 +711,9 @@ let
     are managed by this module.
 EOF
           exit 69
+        fi
+        if [ "''${#launcher_args[@]}" -gt 0 ]; then
+          exec wine "$install_dir/TeknoParrotUi.exe" "''${launcher_args[@]}"
         fi
         if [ -n "$profile" ]; then
           exec wine "$install_dir/TeknoParrotUi.exe" --profile="$profile"
