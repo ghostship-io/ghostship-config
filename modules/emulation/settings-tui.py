@@ -320,7 +320,12 @@ SWITCH_PRO_BUTTONS = [
 ]
 
 
-COMMON_HOTKEYS = [
+GLOBAL_EXIT_HOTKEYS = [
+    "Exit: Select + Start twice",
+]
+
+
+RETROARCH_HOTKEYS = [
     "Quick Menu: Select + X",
     "Exit: Select + Start twice",
     "Save: Select + R",
@@ -329,7 +334,25 @@ COMMON_HOTKEYS = [
     "FPS: Select + Y",
     "Screenshot: Select + A",
     "Fast: Select + ZR",
-    "Turbo: Star + <Button>",
+]
+
+
+DOLPHIN_WII_HOTKEYS = [
+    "Home: Square / Capture",
+    "Exit: Select + Start twice",
+]
+
+
+GZDOOM_HOTKEYS = [
+    "Menu: Plus / Start",
+    "Map: Minus toggles",
+    "Exit: Select + Start twice",
+]
+
+
+PICO8_HOTKEYS = [
+    "Pause/Menu: Plus / Start",
+    "Exit: Select + Start twice",
 ]
 
 
@@ -347,7 +370,7 @@ def controller_map(title, mappings, notes=(), hotkeys=()):
     lines = [title, "Button Map (Switch Pro -> Original)"]
     lines.extend(f"  {line}" for line in two_column_button_lines(rows))
     lines.append("Hotkeys")
-    lines.extend(f"  {line}" for line in (hotkeys or COMMON_HOTKEYS))
+    lines.extend(f"  {line}" for line in (hotkeys or GLOBAL_EXIT_HOTKEYS))
     return lines
 
 
@@ -374,6 +397,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             ["Rocknix hotkeys use Select; Square is Home only where listed."],
+            ["Per-emulator pages list supported hotkeys.", "Exit: Select + Start twice"],
         ),
     },
     {
@@ -390,6 +414,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -412,6 +437,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -428,6 +454,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -448,6 +475,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -469,6 +497,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -489,6 +518,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -504,6 +534,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -525,6 +556,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -541,6 +573,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -559,6 +592,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -582,6 +616,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -602,6 +637,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             ["N64 A/B stay direct."],
+            RETROARCH_HOTKEYS,
         ),
     },
     {
@@ -645,6 +681,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            DOLPHIN_WII_HOTKEYS,
         ),
     },
     {
@@ -739,9 +776,30 @@ CONTROLLER_MAPS = [
         ),
     },
     {
-        "label": "DS / 3DS",
+        "label": "Nintendo DS",
         "detail": controller_map(
-            "DS / 3DS",
+            "Nintendo DS",
+            {
+                "D-pad": "D-pad",
+                "Left Stick": "D-pad",
+                "A": "A",
+                "B": "B",
+                "X": "X",
+                "Y": "Y",
+                "L": "L",
+                "R": "R",
+                "Minus": "Select",
+                "Plus": "Start",
+                "Star": "Turbo",
+            },
+            [],
+            RETROARCH_HOTKEYS,
+        ),
+    },
+    {
+        "label": "Nintendo 3DS",
+        "detail": controller_map(
+            "Nintendo 3DS",
             {
                 "D-pad": "D-pad",
                 "Left Stick": "Circle Pad",
@@ -785,9 +843,32 @@ CONTROLLER_MAPS = [
         ),
     },
     {
-        "label": "Arcade",
+        "label": "Final Burn Neo",
         "detail": controller_map(
-            "Arcade",
+            "Final Burn Neo",
+            {
+                "D-pad": "Stick",
+                "Left Stick": "Stick",
+                "A": "B1",
+                "B": "B2",
+                "X": "B3",
+                "Y": "B4",
+                "L": "B5",
+                "R": "B6",
+                "ZL": "B5 / B7",
+                "ZR": "B6 / B8",
+                "Minus": "Coin",
+                "Plus": "Start",
+                "Star": "Turbo",
+            },
+            [],
+            RETROARCH_HOTKEYS,
+        ),
+    },
+    {
+        "label": "Model 3 / TeknoParrot",
+        "detail": controller_map(
+            "Model 3 / TeknoParrot",
             {
                 "D-pad": "Stick",
                 "Left Stick": "Stick",
@@ -828,13 +909,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             ["Current pass maps observed Joy*/POV1* keys; vertical look is 25%."],
-            [
-                "Menu: Plus / Start",
-                "Map: Minus toggles",
-                "Exit: Select + Start twice",
-                "L4/R4: unbound until a live probe shows unique events",
-                "Turbo: Star + <Button>",
-            ],
+            GZDOOM_HOTKEYS,
         ),
     },
     {
@@ -850,6 +925,7 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+            PICO8_HOTKEYS,
         ),
     },
 ]
@@ -2264,15 +2340,33 @@ def smoke_test(mode):
             "Wii U",
             "Xbox",
             "PSP",
-            "DS / 3DS",
+            "Nintendo DS",
+            "Nintendo 3DS",
             "Switch",
-            "Arcade",
+            "Final Burn Neo",
+            "Model 3 / TeknoParrot",
             "GZDoom",
             "PICO-8",
         }
         labels = {row["label"] for row in CONTROLLER_MAPS}
         assert expected <= labels
         assert CONTROLLER_MAPS[0]["label"] == "Switch Pro Reference"
+        retroarch_labels = {
+            "NES / Famicom",
+            "SNES / Super Famicom",
+            "Game Boy / Color",
+            "Game Boy Advance",
+            "Virtual Boy",
+            "Genesis / Saturn",
+            "Master System / Game Gear",
+            "Dreamcast",
+            "PC Engine / CD",
+            "Neo Geo / Pocket",
+            "PlayStation",
+            "Nintendo 64",
+            "Nintendo DS",
+            "Final Burn Neo",
+        }
         for row in CONTROLLER_MAPS:
             wrapped = wrap_lines(row["detail"], metrics["right_width"])
             assert wrapped
@@ -2287,10 +2381,18 @@ def smoke_test(mode):
             assert any("Select + Start twice" in line for line in row["detail"])
             assert any("Square" in line for line in row["detail"])
             assert not any(line.strip().startswith("Note:") for line in row["detail"])
-            assert row["detail"][-1] == "  Turbo: Star + <Button>"
+            assert not any("Turbo: Star + <Button>" in line for line in row["detail"])
             assert not any("opens RetroArch quick menu" in line for line in row["detail"])
-            if row["label"] != "GZDoom":
+            if row["label"] in retroarch_labels:
                 assert any("Quick Menu: Select + X" in line for line in row["detail"])
+                assert any("Save: Select + R" in line for line in row["detail"])
+                assert any("Load: Select + L" in line for line in row["detail"])
+                assert any("Fast: Select + ZR" in line for line in row["detail"])
+            else:
+                assert not any("Quick Menu: Select + X" in line for line in row["detail"])
+                assert not any("Save: Select + R" in line for line in row["detail"])
+                assert not any("Load: Select + L" in line for line in row["detail"])
+                assert not any("Fast: Select + ZR" in line for line in row["detail"])
             assert not any("Original Controller" in line or "+---" in line for line in row["detail"])
         n64 = next(row for row in CONTROLLER_MAPS if row["label"] == "Nintendo 64")
         assert any("A -> A" in line for line in n64["detail"])
@@ -2303,6 +2405,7 @@ def smoke_test(mode):
         assert any("ZR -> Z" in line for line in gamecube["detail"])
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
         assert any("Square -> Console Home" in line for line in wii["detail"])
+        assert any("Home: Square / Capture" in line for line in wii["detail"])
         for row in CONTROLLER_MAPS:
             if row["label"] in {"Switch Pro Reference", "Wii Remote + Nunchuk", "GZDoom"}:
                 continue
@@ -2319,7 +2422,8 @@ def smoke_test(mode):
         assert any("R -> User 2" in line for line in gzdoom["detail"])
         assert any("Plus -> Menu" in line for line in gzdoom["detail"])
         assert any("Square -> None" in line for line in gzdoom["detail"])
-        assert any("L4/R4: unbound until a live probe shows unique events" in line for line in gzdoom["detail"])
+        assert any("Menu: Plus / Start" in line for line in gzdoom["detail"])
+        assert any("Map: Minus toggles" in line for line in gzdoom["detail"])
         assert metrics["right_x"] + metrics["right_width"] < 92
         print(json.dumps({"maps": [row["label"] for row in CONTROLLER_MAPS], "layout": metrics}, indent=2))
 

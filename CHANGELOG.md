@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer Controller Maps hotkey audit**: Show emulator hotkeys only where
+  they are actually configured, keeping RetroArch save-state controls off
+  standalone emulator maps while preserving the shared Select+Start exit chord.
 - **Boomer PICO-8 ES-DE support**: Seed a small starter set of existing NAS
   PICO-8 carts into an empty ES-DE ROM folder and document the PICO-8 Switch
   controller map in the on-device Controller Maps TUI and generated policy.

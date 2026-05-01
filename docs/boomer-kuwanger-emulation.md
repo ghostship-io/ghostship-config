@@ -569,8 +569,9 @@ scanning for nearby devices, but does not expose host-only discoverable or
 pairable fields. `Show Paired` sits directly under status and previews all
 paired devices in the right pane.
 `Controller Maps` uses the same two-pane layout with a slightly smaller font.
-Each page keeps a two-column button map at the top and common hotkeys below it
-so the right pane fits without ASCII controller diagrams.
+Each page keeps a two-column button map at the top and only the hotkeys
+supported by that emulator below it, so the right pane fits without ASCII
+controller diagrams.
 Non-status actions show only concise action help in the right pane so long
 status blocks do not crowd the menu. Player assignment accepts keyboard input as
 a player device, and B/Esc backs out before any assignment is made. Under the
