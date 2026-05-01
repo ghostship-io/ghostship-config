@@ -90,6 +90,7 @@ let
     BTN_START = 315
     DOUBLE_PRESS_SECONDS = 0.9
     FORCE_KILL_SECONDS = 5.0
+    XDOTOOL = "${lib.getExe pkgs.xdotool}"
     YDOTOOL = "${lib.getExe pkgs.ydotool}"
 
     KEY_COMMANDS = {
@@ -111,6 +112,13 @@ let
         "ctrl-9": [YDOTOOL, "key", "-d", "50", "29:1", "10:1", "10:0", "29:0"],
         "ctrl-r": [YDOTOOL, "key", "-d", "50", "29:1", "19:1", "19:0", "29:0"],
     }
+    X_KEY_NAMES = {
+        "ctrl-r": "ctrl+r",
+        "f1": "F1",
+        "f9": "F9",
+        "shift-f1": "shift+F1",
+        "tab": "Tab",
+    }
 
     PROFILES = {
         "global": {
@@ -118,11 +126,11 @@ let
         },
         "dolphin": {
             "bindings": {
-                (BTN_SELECT, BTN_B): ("send-key", "ctrl-r", "Minus + B reset Dolphin"),
-                (BTN_SELECT, BTN_L1): ("send-key", "f1", "Minus + L1 loaded Dolphin state slot 1"),
-                (BTN_SELECT, BTN_R1): ("send-key", "shift-f1", "Minus + R1 saved Dolphin state slot 1"),
-                (BTN_SELECT, BTN_A): ("send-key", "f9", "Minus + A triggered Dolphin screenshot"),
-                (BTN_SELECT, BTN_R2): ("send-key", "tab", "Minus + R2 toggled Dolphin fast mode"),
+                (BTN_SELECT, BTN_B): ("send-x-key", "ctrl-r", "Minus + B reset Dolphin"),
+                (BTN_SELECT, BTN_L1): ("send-x-key", "f1", "Minus + L1 loaded Dolphin state slot 1"),
+                (BTN_SELECT, BTN_R1): ("send-x-key", "shift-f1", "Minus + R1 saved Dolphin state slot 1"),
+                (BTN_SELECT, BTN_A): ("send-x-key", "f9", "Minus + A triggered Dolphin screenshot"),
+                (BTN_SELECT, BTN_R2): ("send-x-key", "tab", "Minus + R2 toggled Dolphin fast mode"),
             },
         },
         "xemu": {
@@ -285,6 +293,39 @@ let
         subprocess.run(command, check=True)
         return command
 
+    def x_key_name(name):
+        try:
+            return X_KEY_NAMES[name]
+        except KeyError as exc:
+            raise RuntimeError(f"unknown X key action: {name}") from exc
+
+    def find_x_window(pid):
+        if not os.environ.get("DISPLAY"):
+            return None
+        searches = [
+            [XDOTOOL, "search", "--pid", str(pid)],
+            [XDOTOOL, "search", "--class", "dolphin-emu"],
+            [XDOTOOL, "search", "--class", "Dolphin"],
+            [XDOTOOL, "search", "--name", "Dolphin"],
+        ]
+        for command in searches:
+            result = subprocess.run(command, check=False, text=True, capture_output=True)
+            windows = [line.strip() for line in result.stdout.splitlines() if line.strip().isdigit()]
+            if windows:
+                return windows[-1]
+        return None
+
+    def send_x_key(name, pid, dry_run=False):
+        x_key = x_key_name(name)
+        window = find_x_window(pid)
+        if not window:
+            return send_key(name, dry_run=dry_run)
+        command = [XDOTOOL, "windowactivate", "--sync", window, "key", "--clearmodifiers", x_key]
+        if dry_run:
+            return command
+        subprocess.run(command, check=True)
+        return command
+
     def resolve_binding(profile, pressed_codes, code):
         bindings = PROFILES[profile]["bindings"]
         for chord, action in bindings.items():
@@ -298,6 +339,8 @@ let
         kind, value, message = action
         if kind == "send-key":
             send_key(value, dry_run=args.dry_run)
+        elif kind == "send-x-key":
+            send_x_key(value, args.pid, dry_run=args.dry_run)
         elif kind == "hmp-command":
             command = value.format(snapshot_tag=args.snapshot_tag)
             if args.dry_run:
@@ -334,21 +377,21 @@ let
         if resolve_binding("pico8", {BTN_CAPTURE}, BTN_CAPTURE) is not None:
             raise AssertionError("bare Square must not resolve to a PICO-8 hotkey")
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_B}, BTN_B)
-        if action[:2] != ("send-key", "ctrl-r"):
+        if action[:2] != ("send-x-key", "ctrl-r"):
             raise AssertionError(f"unexpected Dolphin reset action: {action}")
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_L1}, BTN_L1)
-        if action[:2] != ("send-key", "f1"):
+        if action[:2] != ("send-x-key", "f1"):
             raise AssertionError(f"unexpected Dolphin load action: {action}")
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_R1}, BTN_R1)
-        if action[:2] != ("send-key", "shift-f1"):
+        if action[:2] != ("send-x-key", "shift-f1"):
             raise AssertionError(f"unexpected Dolphin save action: {action}")
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_A}, BTN_A)
-        if action[:2] != ("send-key", "f9"):
+        if action[:2] != ("send-x-key", "f9"):
             raise AssertionError(f"unexpected Dolphin screenshot action: {action}")
         if resolve_binding("dolphin", {BTN_CAPTURE}, BTN_CAPTURE) is not None:
             raise AssertionError("bare Square must not resolve to a Dolphin hotkey")
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_R2}, BTN_R2)
-        if action[:2] != ("send-key", "tab"):
+        if action[:2] != ("send-x-key", "tab"):
             raise AssertionError(f"unexpected Dolphin fast-mode action: {action}")
         if resolve_binding("dolphin", {BTN_SELECT, BTN_X}, BTN_X) is not None:
             raise AssertionError("Dolphin Minus + X must stay unbound")
