@@ -86,12 +86,15 @@ let
     set -euo pipefail
     export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.python3 ]}:$PATH
     secret_env="/run/ghostship-secrets/emulation-retroachievements.env"
-    retroarch_cfg="${cfg.configRoot}/retroarch/retroarch.cfg"
-    stale_retroarch_cfg="${cfg.configRoot}/retroarch/retroachievements.cfg"
+    retroarch_cfg="${cfg.configRoot}/retroarch/retroachievements.cfg"
     status_json="${cfg.configRoot}/retroachievements/status.json"
-    rm -f "$stale_retroarch_cfg"
     [ -r "$secret_env" ] || {
+      install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$retroarch_cfg")"
       install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$status_json")"
+      printf 'cheevos_enable = "false"\n' >"$retroarch_cfg.tmp"
+      chown ${cfg.user}:${cfg.group} "$retroarch_cfg.tmp"
+      chmod 0640 "$retroarch_cfg.tmp"
+      mv "$retroarch_cfg.tmp" "$retroarch_cfg"
       jq -n --arg checked_at "$(date -u +%FT%TZ)" '{checked_at:$checked_at, retroarch:"missing-secret-projection", standalone:"manual-login-required"}' >"$status_json.tmp"
       chown ${cfg.user}:${cfg.group} "$status_json.tmp"
       chmod 0644 "$status_json.tmp"
@@ -131,51 +134,27 @@ let
         return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
     retroarch_path.parent.mkdir(parents=True, exist_ok=True)
-    existing = retroarch_path.read_text(encoding="utf-8").splitlines() if retroarch_path.exists() else []
-    updates = {
-        "cheevos_enable": retroarch_quote("true" if configured else "false"),
-    }
+    output = [f"cheevos_enable = {retroarch_quote('true' if configured else 'false')}"]
     if configured:
-        updates.update({
-            "cheevos_hardcore_mode_enable": retroarch_quote("false"),
-            "cheevos_verbose_enable": retroarch_quote("true"),
-            "cheevos_start_active": retroarch_quote("true"),
-            "cheevos_auto_screenshot": retroarch_quote("true"),
-            "cheevos_badges_enable": retroarch_quote("true"),
-            "cheevos_challenge_indicators": retroarch_quote("true"),
-            "cheevos_richpresence_enable": retroarch_quote("true"),
-            "cheevos_visibility_account": retroarch_quote("true"),
-            "cheevos_visibility_unlock": retroarch_quote("true"),
-            "cheevos_visibility_mastery": retroarch_quote("true"),
-            "cheevos_visibility_lboard_start": retroarch_quote("true"),
-            "cheevos_visibility_lboard_submit": retroarch_quote("true"),
-            "cheevos_visibility_lboard_trackers": retroarch_quote("false"),
-            "cheevos_unlock_sound_enable": retroarch_quote("true"),
-            "cheevos_test_unofficial": retroarch_quote("false"),
-            "cheevos_username": retroarch_quote(user),
-            "cheevos_password": retroarch_quote(password),
-        })
-    else:
-        updates.update({
-            "cheevos_username": None,
-            "cheevos_password": None,
-        })
-
-    seen = set()
-    output = []
-    for line in existing:
-        stripped = line.strip()
-        key = stripped.split("=", 1)[0].strip() if "=" in stripped else ""
-        if key in updates:
-            seen.add(key)
-            value = updates[key]
-            if value is not None:
-                output.append(f"{key} = {value}")
-        else:
-            output.append(line)
-    for key, value in updates.items():
-        if key not in seen and value is not None:
-            output.append(f"{key} = {value}")
+        output.extend([
+            f"cheevos_hardcore_mode_enable = {retroarch_quote('false')}",
+            f"cheevos_verbose_enable = {retroarch_quote('true')}",
+            f"cheevos_start_active = {retroarch_quote('true')}",
+            f"cheevos_auto_screenshot = {retroarch_quote('true')}",
+            f"cheevos_badges_enable = {retroarch_quote('true')}",
+            f"cheevos_challenge_indicators = {retroarch_quote('true')}",
+            f"cheevos_richpresence_enable = {retroarch_quote('true')}",
+            f"cheevos_visibility_account = {retroarch_quote('true')}",
+            f"cheevos_visibility_unlock = {retroarch_quote('true')}",
+            f"cheevos_visibility_mastery = {retroarch_quote('true')}",
+            f"cheevos_visibility_lboard_start = {retroarch_quote('true')}",
+            f"cheevos_visibility_lboard_submit = {retroarch_quote('true')}",
+            f"cheevos_visibility_lboard_trackers = {retroarch_quote('false')}",
+            f"cheevos_unlock_sound_enable = {retroarch_quote('true')}",
+            f"cheevos_test_unofficial = {retroarch_quote('false')}",
+            f"cheevos_username = {retroarch_quote(user)}",
+            f"cheevos_password = {retroarch_quote(password)}",
+        ])
 
     fd, tmp = tempfile.mkstemp(prefix="retroarch.", dir=str(retroarch_path.parent))
     with os.fdopen(fd, "w", encoding="utf-8") as handle:

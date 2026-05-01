@@ -92,20 +92,20 @@ let
     YDOTOOL = "${lib.getExe pkgs.ydotool}"
 
     KEY_COMMANDS = {
-        "escape": [YDOTOOL, "key", "1:1", "1:0"],
-        "tab": [YDOTOOL, "key", "15:1", "15:0"],
-        "f1": [YDOTOOL, "key", "59:1", "59:0"],
-        "f2": [YDOTOOL, "key", "60:1", "60:0"],
-        "f9": [YDOTOOL, "key", "67:1", "67:0"],
-        "f10": [YDOTOOL, "key", "68:1", "68:0"],
-        "f12": [YDOTOOL, "key", "88:1", "88:0"],
-        "grave": [YDOTOOL, "key", "41:1", "41:0"],
-        "ctrl-p": [YDOTOOL, "key", "29:1", "25:1", "25:0", "29:0"],
-        "enter": [YDOTOOL, "key", "28:1", "28:0"],
-        "shift-f1": [YDOTOOL, "key", "42:1", "59:1", "59:0", "42:0"],
-        "ctrl-6": [YDOTOOL, "key", "29:1", "7:1", "7:0", "29:0"],
-        "ctrl-9": [YDOTOOL, "key", "29:1", "10:1", "10:0", "29:0"],
-        "ctrl-r": [YDOTOOL, "key", "29:1", "19:1", "19:0", "29:0"],
+        "escape": [YDOTOOL, "key", "-d", "50", "1:1", "1:0"],
+        "tab": [YDOTOOL, "key", "-d", "50", "15:1", "15:0"],
+        "f1": [YDOTOOL, "key", "-d", "50", "59:1", "59:0"],
+        "f2": [YDOTOOL, "key", "-d", "50", "60:1", "60:0"],
+        "f9": [YDOTOOL, "key", "-d", "50", "67:1", "67:0"],
+        "f10": [YDOTOOL, "key", "-d", "50", "68:1", "68:0"],
+        "f12": [YDOTOOL, "key", "-d", "50", "88:1", "88:0"],
+        "grave": [YDOTOOL, "key", "-d", "50", "41:1", "41:0"],
+        "ctrl-p": [YDOTOOL, "key", "-d", "50", "29:1", "25:1", "25:0", "29:0"],
+        "enter": [YDOTOOL, "key", "-d", "50", "28:1", "28:0"],
+        "shift-f1": [YDOTOOL, "key", "-d", "50", "42:1", "59:1", "59:0", "42:0"],
+        "ctrl-6": [YDOTOOL, "key", "-d", "50", "29:1", "7:1", "7:0", "29:0"],
+        "ctrl-9": [YDOTOOL, "key", "-d", "50", "29:1", "10:1", "10:0", "29:0"],
+        "ctrl-r": [YDOTOOL, "key", "-d", "50", "29:1", "19:1", "19:0", "29:0"],
     }
 
     PROFILES = {
@@ -315,7 +315,7 @@ let
             raise AssertionError("Select-less X must not resolve to an action")
         if resolve_binding("global", {BTN_SELECT, BTN_X}, BTN_X) is not None:
             raise AssertionError("global profile must not resolve emulator actions")
-        if key_command("f2") != [YDOTOOL, "key", "60:1", "60:0"]:
+        if key_command("f2") != [YDOTOOL, "key", "-d", "50", "60:1", "60:0"]:
             raise AssertionError("F2 command changed unexpectedly")
         action = resolve_binding("pico8", {BTN_SELECT, BTN_A}, BTN_A)
         if action[:2] != ("send-key", "ctrl-6"):
@@ -447,6 +447,8 @@ let
                 for offset in range(0, len(data) - EVENT.size + 1, EVENT.size):
                     _sec, _usec, ev_type, code, value = EVENT.unpack(data[offset : offset + EVENT.size])
                     if ev_type != EV_KEY:
+                        continue
+                    if value == 2:
                         continue
                     if value:
                         pressed[path].add(code)
@@ -1211,6 +1213,10 @@ PY
           exit 66
         fi
         cmd=(retroarch --config "${cfg.configRoot}/retroarch/retroarch.cfg")
+        retroachievements_config="${cfg.configRoot}/retroarch/retroachievements.cfg"
+        if [ -r "$retroachievements_config" ]; then
+          cmd+=(--appendconfig "$retroachievements_config")
+        fi
         cmd+=(-L "$core_path" "$rom_path")
         ;;
       dolphin)
@@ -1940,7 +1946,7 @@ EOF
         "pico8": "fallback plain PICO-8 launch: Start/+ opens pause/menu; PICO-8 uses an explicit managed -home config directory"
       },
       "managed_defaults": {
-        "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses only the managed base retroarch.cfg, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
+        "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Select hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
         "dolphin": "GameCube ports 1-4 and Wii slots 1-4 map physical A/B/X/Y to matching labels and use SDL slots 0-3; GameCube ports are enabled for all four players; Dolphin launches fullscreen without analytics, panic, or stop-confirm prompts; GameCube native Dolphin hotkeys cover reset, save/load slot 1, screenshot, pause, and fast mode, while Wii Remote Home uses Square/Capture where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
         "ppsspp": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
         "pcsx2": "inherits SDL Switch label hints from run-emulator; Select+Start twice exits through the per-launch broker",
