@@ -1451,30 +1451,32 @@ EOF
     // B -> Joy1 -> jump
     // A -> Joy2 -> use/open
     // X -> Joy3 -> crouch
-    // Y -> Joy4 -> reload (observed as jump before this override)
-    // L1 -> Joy6 -> mod special / user1 (Joy6 was still weapon switch)
-    // R1 -> Joy7 -> zoom/grenade/dash / user2 (observed as pause)
-    // L2 -> Joy8 -> alt-fire (observed as menu)
-    // Minus -> Joy10 -> automap (observed as crouch)
-    // R2 -> Joy9/Joy14 or trigger axis -> fire candidates
-    // Plus -> Joy11/Joy12 -> menu candidates
+    // Y -> Joy4 -> reload
+    // L1 -> Joy6 -> mod special / user1
+    // R1 -> Joy7 -> alt-fire
+    // L2 -> Joy8 -> zoom/grenade / user2
+    // R2 -> Joy9 -> primary fire
+    // Minus -> Joy10 -> automap
+    // Plus -> Joy11/12 -> menu
+    // L3 -> lthumb -> speed/run toggle
+    // R3 -> rthumb -> quick turn / user4
     bind Joy1 +jump
     bind Joy2 +use
     bind Joy3 crouch
     bind Joy4 +reload
     bind Joy5 +user1
     bind Joy6 +user1
-    bind Joy7 +user2
-    bind Joy8 +altattack
+    bind Joy7 +altattack
+    bind Joy8 +user2
     bind Joy9 +attack
     bind Joy10 togglemap
     bind Joy11 menu_main
     bind Joy12 menu_main
-    bind Joy13 +altattack
+    bind Joy13 +user2
     bind Joy14 +attack
-    bind Axis3Plus +altattack
-    bind Axis4Plus +altattack
-    bind Axis4Minus +altattack
+    bind Axis3Plus +user2
+    bind Axis4Plus +user2
+    bind Axis4Minus +user2
     bind Axis5Plus +attack
     bind Axis5Minus +attack
     bind Axis6Plus +attack
@@ -1492,12 +1494,12 @@ EOF
     bind pad_x crouch
     bind pad_y +reload
     bind rtrigger +attack
-    bind ltrigger +altattack
+    bind ltrigger +user2
+    bind rshoulder +altattack
     bind lshoulder +user1
-    bind rshoulder +user2
     bind pad_start menu_main
     bind pad_back togglemap
-    bind lthumb +user3
+    bind lthumb +speed
     bind rthumb +user4
     bind dpadleft weapprev
     bind dpadright weapnext
