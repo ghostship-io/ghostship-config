@@ -472,6 +472,15 @@ Default ES-DE mappings now use RetroAchievements-aligned cores where practical:
 Standalone defaults are PCSX2 for PS2, PPSSPP for PSP, Dolphin for GameCube
 and Wii, and Azahar for 3DS when available.
 
+PCSX2 is managed under `/srv/emulation/xdg/config/PCSX2`. `run-emulator`
+generates its `inis/PCSX2.ini` before each PS2 launch so the setup wizard stays
+disabled, the BIOS search directory is `/srv/emulation/bios`, the PS2 ROM
+folder is indexed, and saves, states, screenshots, logs, cache, patches,
+cheats, textures, and game settings stay under the managed emulation roots.
+The Boomer default uses PCSX2's Vulkan renderer at 3x native resolution and
+launches games with `-batch -fullscreen` so ES-DE starts directly into the
+game without manual config prompts.
+
 Defaults:
 
 - Vulkan video driver.
@@ -578,11 +587,19 @@ CD and SuperGrafx default all five players to 6-button pads. Dolphin enables
 all four GameCube controller ports and keeps Wii slots 1-4 on the same SDL
 controller order; GameCube binds Dolphin-native hotkeys for Minus + B reset,
 Minus + L1 load slot 1, Minus + R1 save slot 1, Minus + A screenshot, and
-Minus + R2 fast mode. Minus + X quick actions and Minus + Y debug
-monitor stay unbound for GameCube because Dolphin does not expose equivalent
-normal runtime actions. D-pad stays on physical D-pad and analog movement stays
-on analog sticks. Standalone SDL emulators keep their native left-stick
-mappings. Mupen64Plus-Next defaults all four N64 controller paks to Rumble Pak.
+Minus + R2 fast mode. These are native Dolphin SDL bindings: Minus/Select is
+`Back`, Plus/Start is `Start`, L1/R1 are `Shoulder L`/`Shoulder R`, R2 is
+`Trigger R`, and Square/Capture is `Misc 1` when Dolphin exposes it. Minus + X
+quick actions and Minus + Y debug monitor stay unbound for GameCube because
+Dolphin does not expose equivalent normal runtime actions. D-pad stays on
+physical D-pad and analog movement stays on analog sticks. PCSX2 uses native PCSX2 hotkey bindings instead of an external hotkey
+broker: Minus + X opens the pause menu, Minus + B resets the VM, Minus + L1
+loads state slot 1, Minus + R1 saves state slot 1, Minus + A saves a
+screenshot, Minus + Y toggles the OSD/FPS overlay, and Minus + R2 holds
+turbo/fast-forward. Square/Capture stays unbound for PCSX2 until Boomer has a
+proven stable SDL guide-style binding. Standalone SDL emulators keep their
+native left-stick mappings. Mupen64Plus-Next defaults all four N64 controller
+paks to Rumble Pak.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices

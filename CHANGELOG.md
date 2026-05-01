@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer PS2 PCSX2 setup**: Manage standalone PCSX2 `2.6.3` before each PS2
+  launch with no setup wizard, Vulkan 3x graphics, managed BIOS/ROM/data
+  paths, direct `-batch -fullscreen` launches, SDL controller mappings, and
+  native PCSX2 hotkey chords for pause menu, reset, save/load slot 1,
+  screenshot, OSD/FPS, and hold-turbo.
 - **Boomer Switch Ryubing setup**: Manage Ryubing's current lower-case config
   schema before Switch launches, install the newest local firmware archive into
   Ryubing's registered firmware store, keep the Canary pin current, and add
@@ -22,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   GameCube hotkeys for reset, save/load slot 1, screenshot, and fast mode, and
   keep unsupported quick-actions/debug-monitor and bare Square chords
   explicitly unbound.
+- **Boomer Dolphin native button map**: Correct Dolphin's generated SDL
+  bindings so GameCube uses Dolphin's native semantic names for Minus/Back,
+  Plus/Start, A/B/X/Y, L1/R1 shoulders, R2/Trigger R, and Square/Misc 1.
 - **Boomer Controller Maps hotkey layout**: Render the same full hotkey combo
   list on every controller map with combo-first rows and `None` for unmapped
   actions. Use `L1`/`R1` for shoulder rows, `L2`/`R2` for trigger rows, keep

@@ -58,7 +58,9 @@ supports it, Star/Home is left as the controller turbo/local button, and
 Square/Capture is used only where an emulator profile explicitly configures it.
 Every `run-emulator` launch starts the lightweight per-process exit broker for
 Minus + Plus twice. Xbox defaults to `xemu-hotkeys`, and PICO-8 defaults to
-`pico8-hotkeys`.
+`pico8-hotkeys`. PS2 launches through standalone PCSX2 with managed no-wizard
+configuration, Vulkan 3x graphics, SDL controller mappings, and PCSX2-native
+hotkey chords.
 Switch emulation uses the repo-pinned official Ryubing Canary release; refresh
 `modules/emulation/ryubing-canary-pin.nix` with `scripts/update-ryubing-canary`
 before rebuilding when upstream publishes a newer Canary.

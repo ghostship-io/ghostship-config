@@ -364,6 +364,7 @@ DOLPHIN_GC_HOTKEYS = hotkey_rows(
         "Minus + B": "Reset",
         "Minus + A": "Screenshot",
         "Minus + R2": "Fast",
+        "Square": "Pause if exposed",
     }
 )
 
@@ -402,6 +403,20 @@ XEMU_HOTKEYS = hotkey_rows(
         "Minus + B": "Reset",
         "Minus + A": "Screenshot",
         "Minus + Y": "Debug Monitor",
+    }
+)
+
+
+PCSX2_HOTKEYS = hotkey_rows(
+    {
+        "Minus + X": "Pause Menu",
+        "Minus + Plus 2x": "Exit",
+        "Minus + R1": "Save",
+        "Minus + L1": "Load",
+        "Minus + B": "Reset",
+        "Minus + A": "Screenshot",
+        "Minus + Y": "OSD/FPS",
+        "Minus + R2": "Fast",
     }
 )
 
@@ -719,9 +734,13 @@ CONTROLLER_MAPS = [
                 "R1": "R",
                 "R2": "Z",
                 "Plus": "Start",
+                "Square": "Pause if exposed",
                 "Star": "Turbo",
             },
-            ["Dolphin GameCube has no Home button."],
+            [
+                "Dolphin GameCube has no Home button.",
+                "Dolphin SDL: Minus=Back Plus=Start R2=Trigger R.",
+            ],
             DOLPHIN_GC_HOTKEYS,
         ),
     },
@@ -842,6 +861,32 @@ CONTROLLER_MAPS = [
                 "Star": "Turbo",
             },
             [],
+        ),
+    },
+    {
+        "label": "PlayStation 2",
+        "detail": controller_map(
+            "PlayStation 2",
+            {
+                "D-pad": "D-pad",
+                "Left Stick": "Left Stick",
+                "Right Stick": "Right Stick",
+                "L3": "L3",
+                "R3": "R3",
+                "A": "Cross",
+                "B": "Circle",
+                "X": "Triangle",
+                "Y": "Square",
+                "L1": "L1",
+                "R1": "R1",
+                "L2": "L2",
+                "R2": "R2",
+                "Minus": "Select",
+                "Plus": "Start",
+                "Star": "Turbo",
+            },
+            ["Square/Capture stays unbound for PCSX2."],
+            PCSX2_HOTKEYS,
         ),
     },
     {
@@ -2467,11 +2512,11 @@ def smoke_test(mode):
                 assert any("Minus + L1 -> Load" in line for line in row["detail"])
                 assert any("Minus + R2 -> Fast" in line for line in row["detail"])
             else:
-                if row["label"] not in {"GameCube", "Xbox"}:
+                if row["label"] not in {"GameCube", "PlayStation 2", "Xbox"}:
                     assert not any("Minus + X -> Quick Menu" in line for line in row["detail"])
                     assert not any("Minus + R1 -> Save" in line for line in row["detail"])
                     assert not any("Minus + L1 -> Load" in line for line in row["detail"])
-                if row["label"] != "GameCube":
+                if row["label"] not in {"GameCube", "PlayStation 2"}:
                     assert not any("Minus + R2 -> Fast" in line for line in row["detail"])
             assert not any("Original Controller" in line or "+---" in line for line in row["detail"])
         n64 = next(row for row in CONTROLLER_MAPS if row["label"] == "Nintendo 64")
@@ -2488,7 +2533,16 @@ def smoke_test(mode):
         assert any("Minus + R1 -> Save" in line for line in gamecube["detail"])
         assert any("Minus + L1 -> Load" in line for line in gamecube["detail"])
         assert any("Minus + R2 -> Fast" in line for line in gamecube["detail"])
-        assert any("Square -> None" in line for line in gamecube["detail"])
+        assert any("Square -> Pause if exposed" in line for line in gamecube["detail"])
+        ps2 = next(row for row in CONTROLLER_MAPS if row["label"] == "PlayStation 2")
+        assert any("Minus + X -> Pause Menu" in line for line in ps2["detail"])
+        assert any("Minus + B -> Reset" in line for line in ps2["detail"])
+        assert any("Minus + R1 -> Save" in line for line in ps2["detail"])
+        assert any("Minus + L1 -> Load" in line for line in ps2["detail"])
+        assert any("Minus + A -> Screenshot" in line for line in ps2["detail"])
+        assert any("Minus + Y -> OSD/FPS" in line for line in ps2["detail"])
+        assert any("Minus + R2 -> Fast" in line for line in ps2["detail"])
+        assert any("Square -> None" in line for line in ps2["detail"])
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
         assert any("Square -> Console Home" in line for line in wii["detail"])
         xbox = next(row for row in CONTROLLER_MAPS if row["label"] == "Xbox")
@@ -2504,7 +2558,7 @@ def smoke_test(mode):
         assert any("Minus + A -> Screenshot" in line for line in switch["detail"])
         assert any("Square -> Pause" in line for line in switch["detail"])
         for row in CONTROLLER_MAPS:
-            if row["label"] in {"Switch Pro Reference", "Wii Remote + Nunchuk", "Switch", "GZDoom"}:
+            if row["label"] in {"Switch Pro Reference", "GameCube", "Wii Remote + Nunchuk", "Switch", "GZDoom"}:
                 continue
             assert any("Square -> None" in line for line in row["detail"])
         gzdoom = next(row for row in CONTROLLER_MAPS if row["label"] == "GZDoom")
