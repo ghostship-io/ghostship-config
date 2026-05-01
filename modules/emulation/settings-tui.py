@@ -739,7 +739,7 @@ CONTROLLER_MAPS = [
             },
             [
                 "Dolphin GameCube has no Home button.",
-                "Dolphin SDL: Minus=Back Plus=Start R2=Trigger R.",
+                "Dolphin SDL: A/B/X/Y use label aliases.",
             ],
             DOLPHIN_GC_HOTKEYS,
         ),

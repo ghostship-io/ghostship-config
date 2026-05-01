@@ -2117,8 +2117,8 @@ EOF
 [Hotkeys1]
 Device = SDL/0/Nintendo Switch Pro Controller
 Keys/Toggle Pause = `Misc 1`
-Keys/Reset = `Back` & `Button S`
-Keys/Take Screenshot = `Back` & `Button E`
+Keys/Reset = `Back` & `Button B`
+Keys/Take Screenshot = `Back` & `Button A`
 Keys/Disable Emulation Speed Limit = `Back` & `Trigger R`
 Keys/Load State Slot 1 = `Back` & `Shoulder L`
 Keys/Save State Slot 1 = `Back` & `Shoulder R`
@@ -2129,10 +2129,10 @@ EOF
           cat >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
 [GCPad$slot]
 Device = SDL/$index/Nintendo Switch Pro Controller
-Buttons/A = \`Button E\`
-Buttons/B = \`Button S\`
-Buttons/X = \`Button N\`
-Buttons/Y = \`Button W\`
+Buttons/A = \`Button A\`
+Buttons/B = \`Button B\`
+Buttons/X = \`Button X\`
+Buttons/Y = \`Button Y\`
 Buttons/Z = \`Trigger R\`
 Buttons/Start = \`Start\`
 Main Stick/Up = \`Axis 1-\`
