@@ -62,6 +62,12 @@ let
     "retroarch-beetle-supergrafx.opt" = ''
       pce_fast_cdimagecache = "enabled"
       pce_fast_cdbios = "System Card 3"
+      sgx_default_joypad_type_p1 = "6 Buttons"
+      sgx_default_joypad_type_p2 = "6 Buttons"
+      sgx_default_joypad_type_p3 = "6 Buttons"
+      sgx_default_joypad_type_p4 = "6 Buttons"
+      sgx_default_joypad_type_p5 = "6 Buttons"
+      sgx_multitap = "enabled"
     '';
     "retroarch-beetle-psx-hw.opt" = ''
       beetle_psx_hw_renderer = "hardware_vk"
