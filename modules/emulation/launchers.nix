@@ -1029,14 +1029,13 @@ PY
           esac
         fi
         system_override="${cfg.configRoot}/retroarch/system-overrides/$system_id.cfg"
-        append_config=""
+        append_config="$profile"
         if [ -r "$system_override" ]; then
-          append_config="$system_override"
+          append_config="$append_config|$system_override"
         fi
         retroachievements_config="${cfg.configRoot}/retroarch/retroachievements.cfg"
         if [ -r "$retroachievements_config" ]; then
-          if [ -n "$append_config" ]; then append_config="$append_config|"; fi
-          append_config="$append_config$retroachievements_config"
+          append_config="$append_config|$retroachievements_config"
         fi
         cmd=(retroarch --config "${cfg.configRoot}/retroarch/retroarch.cfg" --appendconfig "$append_config" -L "$core_path" "$rom_path")
         ;;
