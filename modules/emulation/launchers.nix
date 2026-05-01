@@ -1267,7 +1267,7 @@ EOF
           'skip_boot_anim = true' \
           "" \
           '[display]' \
-          "renderer = 'vulkan'" \
+          "renderer = 'VULKAN'" \
           "" \
           '[display.quality]' \
           'surface_scale = 2' \
