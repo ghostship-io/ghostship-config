@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Model 3 ROM sets and crosshair textures are detected.
 - **Boomer Model 3 launch fix**: Launch Supermodel with force feedback enabled
   so Star Wars Trilogy Arcade clears its feedback-lever setup check.
+- **Boomer Star Wars Trilogy setup**: Remove the optional Star Wars Trilogy
+  drive-board ROM region from the managed Supermodel `Games.xml` so the game
+  does not stop at the feedback-lever setup screen.
 - **Boomer TeknoParrot logo**: Use the supplied path-based TeknoParrot SVG for
   the ES-DE system text logo.
 - **Boomer controller probe documentation**: Document the live Switch Pro
@@ -67,8 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inventory.
 - **Boomer GZDoom controller correction pass 2**: Keep the confirmed A/B/X,
   Minus, and D-pad mappings, move L1's remaining weapon-switch event from
-  `Joy6` to User 1, and add config-only R2 fire candidates for `Joy9` plus
-  trigger-axis directions.
+  `Joy6` to User 1, add config-only R2 fire candidates for `Joy9` plus
+  trigger-axis directions, and guess `Joy11`/`Joy12` for Plus/menu while
+  leaving L4/R4 documented but unmapped until unique events are proven.
 - **Boomer smoke-test kiosk restore**: Restore `greetd` instead of
   `getty@tty1` after root-run smoke tests on kiosk-mode hosts so Boomer returns
   to ES-DE instead of a console login prompt.

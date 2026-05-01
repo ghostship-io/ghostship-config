@@ -1284,6 +1284,24 @@ EOF
           install -m 0644 -o ${cfg.user} -g ${cfg.group} \
             ${packages.supermodelPackage}/share/supermodel/Config/Games.xml \
             "$supermodel_config_dir/Games.xml"
+          ${pkgs.python3}/bin/python3 - "$supermodel_config_dir/Games.xml" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+start = text.index('<game name="swtrilgy">')
+end = text.index('</game>', start) + len('</game>')
+block = text[start:end]
+drive_board = """      <!-- Force feedback controller prg -->
+      <region name="driveboard_program" stride="1" chunk_size="1" required="false">
+        <file offset="0" name="epr-21119.ic8" crc32="0x65082B14" />
+      </region>
+"""
+if drive_board not in block:
+    raise SystemExit("swtrilgy driveboard_program block not found")
+path.write_text(text[:start] + block.replace(drive_board, "") + text[end:])
+PY
           install -m 0644 -o ${cfg.user} -g ${cfg.group} \
             ${packages.supermodelPackage}/share/supermodel/Config/Music.xml \
             "$supermodel_config_dir/Music.xml"
@@ -1426,8 +1444,8 @@ EOF
     // R1 -> Joy7 -> zoom/grenade/dash / user2 (observed as pause)
     // L2 -> Joy8 -> alt-fire (observed as menu)
     // Minus -> Joy10 -> automap (observed as crouch)
-    // R2 -> Joy9 or trigger axis -> fire candidates
-    // Plus -> Pad_Start alias for now; raw Joy key needs the next press-test
+    // R2 -> Joy9/Joy14 or trigger axis -> fire candidates
+    // Plus -> Joy11/Joy12 -> menu candidates
     bind Joy1 +jump
     bind Joy2 +use
     bind Joy3 crouch
@@ -1438,8 +1456,10 @@ EOF
     bind Joy8 +altattack
     bind Joy9 +attack
     bind Joy10 togglemap
-    bind Joy14 +attack
+    bind Joy11 menu_main
+    bind Joy12 menu_main
     bind Joy13 +altattack
+    bind Joy14 +attack
     bind Axis3Plus +altattack
     bind Axis4Plus +altattack
     bind Axis4Minus +altattack
