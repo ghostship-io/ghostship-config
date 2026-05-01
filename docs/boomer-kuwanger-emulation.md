@@ -253,13 +253,17 @@ The wrapper seeds that prefix with the Wine Mono MSI version expected by the
 packaged Wine build before launching `TeknoParrotUi.exe`, because TeknoParrotUi
 is a .NET application.
 
-ES-DE lists `.xml` TeknoParrot profile files. `run-emulator` copies the selected
-profile into TeknoParrot's `UserProfiles` directory, switches to the
+ES-DE lists `.xml` TeknoParrot profile files. `run-emulator` matches the
+selected XML to TeknoParrot's official `GameProfiles` entry, copies the selected
+profile into `UserProfiles` using that official profile name, switches to the
 TeknoParrot install directory, and launches `TeknoParrotUi.exe --profile` under
-Wine. Keep copied game payloads under hidden `.assets/` directories beside
-those XML profiles. Profiles should use Wine-visible game paths, for example a
-`Z:\srv\...` path generated with `winepath -w`. The runtime does not provide
-proprietary game assets, premium unlocks, dongle bypasses, or patch packs.
+Wine. The wrapper also seeds `ParrotData.xml` with the first-run setup and
+policy prompts completed, update/icon downloads disabled, hardware acceleration
+disabled, and silent mode enabled for kiosk launches. Keep copied game payloads
+under hidden `.assets/` directories beside those XML profiles. Profiles should
+use Wine-visible game paths, for example a `Z:\srv\...` path generated with
+`winepath -w`. The runtime does not provide proprietary game assets, premium
+unlocks, dongle bypasses, or patch packs.
 
 ## Display And Aspect Scaling
 

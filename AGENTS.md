@@ -307,7 +307,9 @@ changelog.
   patch unless a future live probe proves another package patch is required.
   After Burner Climax should launch through TeknoParrot XML profiles under
   `TeknoParrotUi.exe --profile`, not by direct native ELF execution; test on
-  Boomer's active kiosk `DISPLAY=:0`, not only via SSH.
+  Boomer's active kiosk `DISPLAY=:0`, not only via SSH. TeknoParrotUi requires
+  the `--profile` argument to name an existing official `GameProfiles/*.xml`
+  file even when the launch profile itself is copied from ES-DE.
   Boomer's probed kernel Switch Pro raw map is documented in
   `docs/boomer-kuwanger-emulation.md`.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
