@@ -617,9 +617,8 @@ CONTROLLER_MAPS = [
                 "X": "X",
                 "Y": "Y",
                 "L": "L",
-                "R": "R / Z",
-                "ZL": "L",
-                "ZR": "R",
+                "R": "R",
+                "ZR": "Z",
                 "Plus": "Start",
                 "Star": "Turbo",
             },
@@ -2294,6 +2293,12 @@ def smoke_test(mode):
         n64 = next(row for row in CONTROLLER_MAPS if row["label"] == "Nintendo 64")
         assert any("A -> A" in line for line in n64["detail"])
         assert any("B -> B" in line for line in n64["detail"])
+        assert any("X -> None" in line for line in n64["detail"])
+        assert any("Y -> None" in line for line in n64["detail"])
+        gamecube = next(row for row in CONTROLLER_MAPS if row["label"] == "GameCube")
+        assert any("R -> R" in line for line in gamecube["detail"])
+        assert any("ZL -> None" in line for line in gamecube["detail"])
+        assert any("ZR -> Z" in line for line in gamecube["detail"])
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
         assert any("Square -> Console Home" in line for line in wii["detail"])
         for row in CONTROLLER_MAPS:
