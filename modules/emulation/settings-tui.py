@@ -304,6 +304,7 @@ SWITCH_PRO_BUTTONS = [
     "D-pad",
     "Left Stick",
     "Right Stick",
+    "",
     "A",
     "B",
     "X",
@@ -342,7 +343,7 @@ def two_column_button_lines(entries):
 
 
 def controller_map(title, mappings, notes=(), hotkeys=()):
-    rows = [f"{button} -> {mappings.get(button, 'None')}" for button in SWITCH_PRO_BUTTONS]
+    rows = [f"{button} -> {mappings.get(button, 'None')}" if button else "" for button in SWITCH_PRO_BUTTONS]
     lines = [title, "Button Map (Switch Pro -> Original)"]
     lines.extend(f"  {line}" for line in two_column_button_lines(rows))
     lines.append("Hotkeys")
@@ -2282,7 +2283,7 @@ def smoke_test(mode):
             assert "Hotkeys" in row["detail"]
             button_rows = row["detail"][2 : 2 + ((len(SWITCH_PRO_BUTTONS) + 1) // 2)]
             button_text = "\n".join(button_rows)
-            assert all(f"{button} ->" in button_text for button in SWITCH_PRO_BUTTONS)
+            assert all(f"{button} ->" in button_text for button in SWITCH_PRO_BUTTONS if button)
             assert any("Star" in line for line in row["detail"])
             assert any("Select + Start twice" in line for line in row["detail"])
             assert any("Square" in line for line in row["detail"])
