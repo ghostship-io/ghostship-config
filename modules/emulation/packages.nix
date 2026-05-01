@@ -37,6 +37,55 @@ let
             --replace-fail "case KEY_JOY1:" "case GHOSTSHIP_KEY_JOY1:" \
             --replace-fail "case KEY_JOY2:" "case KEY_JOY1:" \
             --replace-fail "case GHOSTSHIP_KEY_JOY1:" "case KEY_JOY2:"
+
+          substituteInPlace src/common/engine/m_joy.cpp \
+            --replace-fail '#include "configfile.h"' '#include "configfile.h"
+#include <cstdio>
+#include <cstdlib>
+
+static void GhostshipLogInput(const char *source, int code, bool down)
+{
+	const char *path = std::getenv("GHOSTSHIP_GZDOOM_INPUT_LOG");
+	if (path == nullptr || *path == 0) return;
+	FILE *file = std::fopen(path, "a");
+	if (file == nullptr) return;
+	std::fprintf(file, "%s code=%d state=%s\n", source, code, down ? "down" : "up");
+	std::fclose(file);
+}'
+
+          substituteInPlace src/common/engine/m_joy.cpp \
+            --replace-fail 'ev.type = (newbuttons & mask) ? EV_KeyDown : EV_KeyUp;
+				D_PostEvent(&ev);' 'ev.type = (newbuttons & mask) ? EV_KeyDown : EV_KeyUp;
+				GhostshipLogInput("Joy_GenerateButtonEvents", ev.data1, ev.type == EV_KeyDown);
+				D_PostEvent(&ev);'
+
+          substituteInPlace src/common/platform/posix/sdl/i_input.cpp \
+            --replace-fail '#include "i_interface.h"
+
+
+static void I_CheckGUICapture ();' '#include "i_interface.h"
+#include <cstdio>
+#include <cstdlib>
+
+static void GhostshipLogSDLJoystickButton(int button, int code, bool down)
+{
+	const char *path = std::getenv("GHOSTSHIP_GZDOOM_INPUT_LOG");
+	if (path == nullptr || *path == 0) return;
+	FILE *file = std::fopen(path, "a");
+	if (file == nullptr) return;
+	std::fprintf(file, "SDL_JOYBUTTON button=%d code=%d state=%s\n", button, code, down ? "down" : "up");
+	std::fclose(file);
+}
+
+static void I_CheckGUICapture ();'
+
+          substituteInPlace src/common/platform/posix/sdl/i_input.cpp \
+            --replace-fail 'event.data1 = KEY_FIRSTJOYBUTTON + sev.jbutton.button;
+		if(event.data1 != 0)
+			D_PostEvent(&event);' 'event.data1 = KEY_FIRSTJOYBUTTON + sev.jbutton.button;
+		GhostshipLogSDLJoystickButton(sev.jbutton.button, event.data1, event.type == EV_KeyDown);
+		if(event.data1 != 0)
+			D_PostEvent(&event);'
         '';
       })
     else

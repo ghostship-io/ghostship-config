@@ -942,6 +942,8 @@ PY
       supermodel) cmd=(supermodel "$rom_path" -res="$output_width","$output_height" -fullscreen) ;;
       gzdoom)
         run_cwd="$(dirname "$rom_path")"
+        export GHOSTSHIP_GZDOOM_INPUT_LOG="${cfg.dataRoot}/logs/gzdoom-input-$(date -u +%Y%m%dT%H%M%SZ).log"
+        log_event "gzdoom-input-log" "$GHOSTSHIP_GZDOOM_INPUT_LOG"
         gzdoom_controls="${cfg.configRoot}/emulators/gzdoom/boomer-controls.cfg"
         gzdoom_common_args=()
         if [ -r "$gzdoom_controls" ]; then
