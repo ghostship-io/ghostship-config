@@ -336,7 +336,7 @@ let
         window = find_x_window(pid, profile)
         if not window:
             return send_key(name, dry_run=dry_run)
-        command = [XDOTOOL, "windowactivate", "--sync", window, "key", "--clearmodifiers", x_key]
+        command = [XDOTOOL, "key", "--window", window, "--clearmodifiers", x_key]
         if dry_run:
             return command
         subprocess.run(command, check=True)
@@ -1841,7 +1841,7 @@ Volume = 100
 EOF
       if [ "''${EMULATION_DOLPHIN_HOTKEY_FALLBACK:-0}" = "1" ]; then
         cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
-[Hotkeys1]
+[Hotkeys]
 Device = XInput2/2/Virtual core pointer
 Keys/Toggle Pause = F10
 Keys/Reset = @(Control+R)
@@ -2650,14 +2650,14 @@ VSync = False
 MaxAnisotropy = 4
 EOF
         cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
-[Hotkeys1]
-Device = SDL/0/Nintendo Switch Pro Controller
-Keys/Toggle Pause = `Misc 1`
-Keys/Reset = `Back` & `Button A`
-Keys/Take Screenshot = `Back` & `Button B`
-Keys/Disable Emulation Speed Limit = `Back` & `Trigger R`
-Keys/Load State Slot 1 = `Back` & `Shoulder L`
-Keys/Save State Slot 1 = `Back` & `Shoulder R`
+[Hotkeys]
+Device = XInput2/2/Virtual core pointer
+Keys/Toggle Pause = F10
+Keys/Reset = @(Control+R)
+Keys/Take Screenshot = F9
+Keys/Disable Emulation Speed Limit = Tab
+Keys/Load State Slot 1 = F1
+Keys/Save State Slot 1 = @(Shift+F1)
 EOF
         : >"$dolphin_config_dir/GCPadNew.ini"
         for slot in 1 2 3 4; do

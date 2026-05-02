@@ -335,6 +335,9 @@ changelog.
   loader stack crash.
   Boomer's probed kernel Switch Pro raw map is documented in
   `docs/boomer-kuwanger-emulation.md`.
+  Dolphin 2603 loads hotkeys from `[Hotkeys]`, not `[Hotkeys1]`; keep
+  broker-injected GameCube fallback bindings on the XInput2 virtual pointer
+  device so raw controller chords can emit Dolphin keyboard hotkeys.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it
