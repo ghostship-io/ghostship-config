@@ -54,11 +54,12 @@ installs Art Book Next, and generates:
 Additional setup scripts sync RetroArch, ES-DE tools, and standalone emulator
 config scaffolds before the frontend starts. Existing ES-DE settings are
 preserved after first creation so runtime UI changes can survive rebuilds,
-except for managed defaults such as theme, systems sorting, display clock, and
-controller UI hints. Systems are sorted by manufacturer, hardware type, and
-release year, and hidden files/games are disabled so staging folders such as
-Switch `.updates` and `.dlc` stay out of the game list. ES-DE menu input is
-available from all connected controllers, not only player 1. Boomer runs in
+except for managed defaults such as theme, systems sorting, display clock,
+folders-on-top, and controller UI hints. Systems are sorted by manufacturer,
+hardware type, and release year, and hidden files/games are disabled so staging
+folders such as Switch `.updates` and `.dlc` stay out of the game list. ES-DE
+menu input is available from all connected controllers, not only player 1.
+Boomer runs in
 Hawaii standard time and the managed Art Book Next theme package uses ES-DE's
 supported `%H:%M` clock format so the hour renders reliably. True 12-hour time
 needs ES-DE formatter support beyond the official AppImage's theme tokens.
@@ -120,9 +121,10 @@ writes a marker recording the source path, resolved path, hash, and file count.
 `run-emulator` also converges Ryubing's `Config.json` before each Switch launch
 so Boomer uses Vulkan on the RX 6650M dGPU, docked mode, fullscreen launch, 2x
 internal resolution, 16x anisotropic filtering, shader cache, SDL3 audio, SDL3
-controller input for up to four connected players, and Ryubing's native
-scaling/filtering. The Switch hotkey broker maps Minus+X to `F4` for Ryubing
-UI, Minus+A to `F8` for screenshot, and Square/Capture to `F5` for pause.
+controller input for up to four connected players using Ryubing-native stable
+SDL3 controller IDs, and Ryubing's native scaling/filtering. The Switch hotkey
+broker maps Minus+X to `F4` for Ryubing UI, Minus+A to `F8` for screenshot,
+and Square/Capture to `F5` for pause.
 
 Ryubing update and DLC packages stay as operator-managed NSP files beside the
 Switch ROM folder, but under hidden staging directories so ES-DE does not list

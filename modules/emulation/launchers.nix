@@ -1195,14 +1195,14 @@ system_id = sys.argv[5]
 emulator_id = sys.argv[6]
 rom_path = sys.argv[7]
 
-def log_warning(message):
+def log_event(event, message):
     try:
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(
                 json.dumps(
                     {
                         "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                        "event": "warning",
+                        "event": event,
                         "system": system_id,
                         "emulator": emulator_id,
                         "rom": rom_path,
@@ -1214,6 +1214,9 @@ def log_warning(message):
             )
     except OSError:
         pass
+
+def log_warning(message):
+    log_event("warning", message)
 
 if path.exists():
     try:
@@ -1384,6 +1387,20 @@ def input_uniq(device_path):
         return ""
     return read_text(Path("/sys/class/input") / Path(device_path).name / "device/uniq").upper()
 
+def ryubing_guid(raw_guid):
+    raw = "".join(ch for ch in raw_guid.lower() if ch in "0123456789abcdef")
+    if len(raw) != 32:
+        return ""
+    return f"{raw[4:6]}{raw[6:8]}{raw[2:4]}{raw[0:2]}-{raw[10:12]}{raw[8:10]}-{raw[12:16]}-{raw[16:20]}-{raw[20:32]}"
+
+def stable_ryubing_guid(raw_guid):
+    guid = ryubing_guid(raw_guid)
+    if not guid:
+        return ""
+    return "0000" + guid[4:]
+
+assert stable_ryubing_guid("0500d71f7e0500000920000001800000") == "00000005-057e-0000-0920-000001800000"
+
 def player_order():
     try:
         raw = json.loads(player_order_path.read_text(encoding="utf-8"))
@@ -1454,13 +1471,15 @@ def enumerate_sdl_gamepads():
                     guid_buffer = ctypes.create_string_buffer(64)
                     sdl.SDL_GUIDToString(guid, guid_buffer, len(guid_buffer))
                     device_path = decode(sdl.SDL_GetGamepadPathForID(instance_id))
+                    raw_guid = guid_buffer.value.decode("ascii", errors="replace")
                     gamepads.append(
                         {
                             "sdl_index": index,
                             "instance_id": int(instance_id),
                             "name": decode(sdl.SDL_GetGamepadNameForID(instance_id)),
                             "path": device_path,
-                            "guid": guid_buffer.value.decode("ascii", errors="replace"),
+                            "guid": raw_guid,
+                            "ryubing_guid": stable_ryubing_guid(raw_guid),
                             "uniq": input_uniq(device_path),
                             "type": int(sdl.SDL_GetGamepadTypeForID(instance_id)),
                         }
@@ -1473,6 +1492,20 @@ def enumerate_sdl_gamepads():
         return gamepads
     finally:
         sdl.SDL_Quit()
+
+def assign_ryubing_ids(gamepads):
+    used = set()
+    for gamepad in gamepads:
+        guid = gamepad.get("ryubing_guid", "")
+        if not guid:
+            continue
+        index = 0
+        candidate = f"{index}-{guid}"
+        while candidate in used:
+            index += 1
+            candidate = f"{index}-{guid}"
+        used.add(candidate)
+        gamepad["ryubing_id"] = candidate
 
 def controller_config(gamepad, player):
     return {
@@ -1507,7 +1540,7 @@ def controller_config(gamepad, player):
             "enable_rumble": True,
         },
         "left_joycon": {
-            "button_minus": "Minus",
+            "button_minus": "Back",
             "button_l": "LeftShoulder",
             "button_zl": "LeftTrigger",
             "button_sl": "Unbound",
@@ -1518,7 +1551,7 @@ def controller_config(gamepad, player):
             "dpad_right": "DpadRight",
         },
         "right_joycon": {
-            "button_plus": "Plus",
+            "button_plus": "Start",
             "button_r": "RightShoulder",
             "button_zr": "RightTrigger",
             "button_sl": "Unbound",
@@ -1530,7 +1563,7 @@ def controller_config(gamepad, player):
         },
         "version": 1,
         "backend": "GamepadSDL3",
-        "id": f"{gamepad['sdl_index']}-{gamepad['guid']}",
+        "id": gamepad["ryubing_id"],
         "name": gamepad["name"],
         "controller_type": "ProController",
         "player_index": f"Player{player}",
@@ -1562,6 +1595,7 @@ def managed_input_config():
     if not gamepads:
         log_warning("no SDL3 gamepads detected for Ryubing; controller input will be unavailable")
         return []
+    assign_ryubing_ids(gamepads)
     if len(gamepads) < 4:
         log_warning(f"Ryubing detected {len(gamepads)} SDL3 gamepad(s); up to 4 are supported when connected before launch")
     assigned = assign_players(gamepads)
@@ -1570,8 +1604,45 @@ def managed_input_config():
         player = assigned.get(gamepad["instance_id"])
         if player is None or player > 4:
             continue
+        if not gamepad.get("ryubing_id"):
+            log_warning(f"Ryubing skipped SDL3 gamepad with unparsable GUID: {gamepad}")
+            continue
+        log_event(
+            "ryubing-input",
+            "detected SDL3 controller "
+            + json.dumps(
+                {
+                    "name": gamepad["name"],
+                    "path": gamepad["path"],
+                    "uniq": gamepad["uniq"],
+                    "raw_guid": gamepad["guid"],
+                    "ryubing_guid": gamepad["ryubing_guid"],
+                    "ryubing_id": gamepad["ryubing_id"],
+                    "player": player,
+                },
+                sort_keys=True,
+            ),
+        )
         configs.append(controller_config(gamepad, player))
     configs.sort(key=lambda row: row["player_index"])
+    if not configs:
+        log_warning(f"Ryubing detected {len(gamepads)} SDL3 gamepad(s) but generated no input profiles")
+    else:
+        log_event(
+            "ryubing-input",
+            "generated input profiles "
+            + json.dumps(
+                [
+                    {
+                        "id": row["id"],
+                        "player_index": row["player_index"],
+                        "controller_type": row["controller_type"],
+                    }
+                    for row in configs
+                ],
+                sort_keys=True,
+            ),
+        )
     return configs
 
 config.update(

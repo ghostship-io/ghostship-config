@@ -67,8 +67,8 @@ Switch emulation uses the repo-pinned official Ryubing Canary release; refresh
 before rebuilding when upstream publishes a newer Canary. Boomer manages
 Ryubing for Vulkan on the RX 6650M dGPU, docked fullscreen launches, 2x
 internal resolution, 16x anisotropic filtering, shader/PTC cache, SDL3
-controller input for up to four connected players, and keyboard-enabled
-emulator hotkeys.
+controller input for up to four connected players using Ryubing-native stable
+SDL3 controller IDs, and keyboard-enabled emulator hotkeys.
 Switch homebrew `.nro` launchers can keep sibling `data/` assets beside the ROM;
 `run-emulator` links those assets into Ryubing's emulated SD card at launch.
 HDMI audio is routed through PipeWire by selecting the currently

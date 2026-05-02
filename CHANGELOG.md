@@ -24,9 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Ryubing title updates and DLC, including native `/...nca` DLC PFS paths.
   Add Switch hotkeys for Minus + X -> F4, Minus + A -> F8, and Square/Capture
   -> F5 through ydotool while preserving Minus + Plus twice exit. Generate
-  Ryubing SDL3 Pro Controller profiles for up to four connected players and
-  tune Switch launches for the RX 6650M dGPU, 2x internal resolution, 16x
-  anisotropic filtering, Vulkan, docked fullscreen, and shader/PTC cache.
+  Ryubing SDL3 Pro Controller profiles with Ryubing-native stable SDL3 IDs for
+  up to four connected players and tune Switch launches for the RX 6650M dGPU,
+  2x internal resolution, 16x anisotropic filtering, Vulkan, docked fullscreen,
+  and shader/PTC cache. Keep ES-DE folders sorted first while hiding Switch
+  `.updates` and `.dlc` staging folders.
 - **Boomer Dolphin prompt fix**: Reassert Dolphin analytics opt-out and
   stop-confirm settings immediately before each launch with valid INI syntax
   plus Dolphin `-C` overrides, so GameCube kiosk launches do not ask to report

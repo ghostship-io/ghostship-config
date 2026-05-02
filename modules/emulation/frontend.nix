@@ -127,6 +127,7 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
       <bool name="ScraperRegionFallback" value="true" />
       <bool name="Debug" value="false" />
       <bool name="CheckForUpdates" value="false" />
+      <bool name="FoldersOnTop" value="true" />
       <bool name="ShowHiddenFiles" value="false" />
       <bool name="ShowHiddenGames" value="false" />
     </settings>
@@ -218,6 +219,7 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
     set_string("SystemsSorting", "systemsortname")
     set_string("InputControllerType", "switchpro")
     set_bool("DisplayClock", True)
+    set_bool("FoldersOnTop", True)
     set_bool("InputOnlyFirstController", False)
     set_bool("ShowHiddenFiles", False)
     set_bool("ShowHiddenGames", False)

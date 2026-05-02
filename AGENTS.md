@@ -297,8 +297,11 @@ changelog.
   preferred Vulkan device or it can still choose the 780M iGPU even when
   `MESA_VK_DEVICE_SELECT=1002:73ef` is set; set Ryubing `preferred_gpu` to
   `0x1002_0x73EF`, not the display name. Ryubing 1.3.279 needs SDL3
-  `input_config` entries for connected controllers; the stale
-  `WindowKeyboard` profile with keyboard disabled leaves BOTW with no controls.
+  `input_config` entries for connected controllers; generate IDs with
+  Ryubing's SDL3 stable GUID format like
+  `0-00000005-057e-0000-0920-000001800000`, not the raw SDL GUID. The stale
+  `WindowKeyboard` profile with keyboard disabled leaves Switch games with no
+  controls.
   Every `run-emulator` launch should keep the
   lightweight per-process Select+Start double-press exit broker; expanded
   standalone hotkeys stay opt-in per-emulator launch modes. Boomer's managed
