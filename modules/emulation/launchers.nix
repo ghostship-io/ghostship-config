@@ -160,9 +160,9 @@ let
         },
         "ryubing": {
             "bindings": {
-                (BTN_SELECT, BTN_X): ("send-x-key", "f4", "Minus + X toggled Ryubing UI"),
-                (BTN_SELECT, BTN_A): ("send-x-key", "f8", "Minus + A triggered Ryubing screenshot"),
-                (BTN_CAPTURE,): ("send-x-key", "f5", "Square toggled Ryubing pause"),
+                (BTN_SELECT, BTN_X): ("send-key", "f4", "Minus + X toggled Ryubing UI"),
+                (BTN_SELECT, BTN_A): ("send-key", "f8", "Minus + A triggered Ryubing screenshot"),
+                (BTN_CAPTURE,): ("send-key", "f5", "Square toggled Ryubing pause"),
             },
         },
     }
@@ -294,7 +294,10 @@ let
         command = key_command(name)
         if dry_run:
             return command
-        subprocess.run(command, check=True)
+        result = subprocess.run(command, check=False, text=True, capture_output=True)
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip()
+            raise RuntimeError(f"{' '.join(command)} failed with exit {result.returncode}: {detail}")
         return command
 
     def x_key_name(name):
@@ -339,7 +342,10 @@ let
         command = [XDOTOOL, "key", "--window", window, "--clearmodifiers", x_key]
         if dry_run:
             return command
-        subprocess.run(command, check=True)
+        result = subprocess.run(command, check=False, text=True, capture_output=True)
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip()
+            raise RuntimeError(f"{' '.join(command)} failed with exit {result.returncode}: {detail}")
         return command
 
     def resolve_binding(profile, pressed_codes, code):
@@ -414,13 +420,13 @@ let
         if resolve_binding("dolphin", {BTN_SELECT, BTN_Y}, BTN_Y) is not None:
             raise AssertionError("Dolphin Minus + Y must stay unbound")
         action = resolve_binding("ryubing", {BTN_SELECT, BTN_X}, BTN_X)
-        if action[:2] != ("send-x-key", "f4"):
+        if action[:2] != ("send-key", "f4"):
             raise AssertionError(f"unexpected Ryubing Minus + X action: {action}")
         action = resolve_binding("ryubing", {BTN_SELECT, BTN_A}, BTN_A)
-        if action[:2] != ("send-x-key", "f8"):
+        if action[:2] != ("send-key", "f8"):
             raise AssertionError(f"unexpected Ryubing Minus + A action: {action}")
         action = resolve_binding("ryubing", {BTN_CAPTURE}, BTN_CAPTURE)
-        if action[:2] != ("send-x-key", "f5"):
+        if action[:2] != ("send-key", "f5"):
             raise AssertionError(f"unexpected Ryubing Square action: {action}")
 
         socket_path = None
@@ -1166,12 +1172,49 @@ EOF
       mkdir -p "$ryujinx_system_dir" "$ryujinx_sdcard_dir" "$ryujinx_firmware_dir" "$(dirname "$ryujinx_firmware_marker")"
       ryujinx_config_file="$ryujinx_config_dir/Config.json"
 
-      ${pkgs.python3}/bin/python3 - "$ryujinx_config_file" <<'PY'
+      ${pkgs.python3}/bin/python3 - \
+        "$ryujinx_config_file" \
+        "${packages.ryubingCanaryPackage}/opt/ryubing-canary/libSDL3.so" \
+        "${cfg.configRoot}/controllers/player-order.json" \
+        "$log_file" \
+        "$system_id" \
+        "$emulator_id" \
+        "$rom_path" <<'PY'
+import ctypes
 import json
 import sys
+import time
+from ctypes import POINTER, Structure, c_bool, c_char_p, c_int, c_uint8, c_uint32, c_void_p
 from pathlib import Path
 
 path = Path(sys.argv[1])
+sdl_lib_path = Path(sys.argv[2])
+player_order_path = Path(sys.argv[3])
+log_path = Path(sys.argv[4])
+system_id = sys.argv[5]
+emulator_id = sys.argv[6]
+rom_path = sys.argv[7]
+
+def log_warning(message):
+    try:
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(
+                    {
+                        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "event": "warning",
+                        "system": system_id,
+                        "emulator": emulator_id,
+                        "rom": rom_path,
+                        "message": message,
+                    },
+                    separators=(",", ":"),
+                )
+                + "\n"
+            )
+    except OSError:
+        pass
+
 if path.exists():
     try:
         config = json.loads(path.read_text(encoding="utf-8"))
@@ -1272,7 +1315,7 @@ else:
         "start_fullscreen": True,
         "start_no_ui": False,
         "show_console": False,
-        "enable_keyboard": False,
+        "enable_keyboard": True,
         "enable_mouse": False,
         "disable_input_when_out_of_focus": False,
         "hotkeys": {
@@ -1324,6 +1367,213 @@ for key in (
 ):
     config.pop(key, None)
 
+class SdlGuid(Structure):
+    _fields_ = [("data", c_uint8 * 16)]
+
+def decode(value):
+    return (value or b"").decode("utf-8", errors="replace")
+
+def read_text(path):
+    try:
+        return path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+
+def input_uniq(device_path):
+    if not device_path:
+        return ""
+    return read_text(Path("/sys/class/input") / Path(device_path).name / "device/uniq").upper()
+
+def player_order():
+    try:
+        raw = json.loads(player_order_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    result = {}
+    for row in raw.get("players", []):
+        try:
+            player = int(row.get("player"))
+        except (TypeError, ValueError):
+            continue
+        mac = str(row.get("mac") or "").upper()
+        if row.get("connected") and 1 <= player <= 4 and mac:
+            result[mac] = player
+    return result
+
+def enumerate_sdl_gamepads():
+    if not sdl_lib_path.exists():
+        log_warning(f"Ryubing SDL3 library is missing: {sdl_lib_path}")
+        return []
+    try:
+        sdl = ctypes.CDLL(str(sdl_lib_path))
+    except OSError as exc:
+        log_warning(f"could not load Ryubing SDL3 library {sdl_lib_path}: {exc}")
+        return []
+
+    sdl.SDL_Init.argtypes = [c_uint32]
+    sdl.SDL_Init.restype = c_bool
+    sdl.SDL_GetError.restype = c_char_p
+    sdl.SDL_GetGamepads.argtypes = [POINTER(c_int)]
+    sdl.SDL_GetGamepads.restype = POINTER(c_uint32)
+    sdl.SDL_GetGamepadNameForID.argtypes = [c_uint32]
+    sdl.SDL_GetGamepadNameForID.restype = c_char_p
+    sdl.SDL_GetGamepadPathForID.argtypes = [c_uint32]
+    sdl.SDL_GetGamepadPathForID.restype = c_char_p
+    sdl.SDL_GetGamepadGUIDForID.argtypes = [c_uint32]
+    sdl.SDL_GetGamepadGUIDForID.restype = SdlGuid
+    sdl.SDL_GUIDToString.argtypes = [SdlGuid, ctypes.c_char_p, c_int]
+    sdl.SDL_GetGamepadTypeForID.argtypes = [c_uint32]
+    sdl.SDL_GetGamepadTypeForID.restype = c_int
+    sdl.SDL_OpenGamepad.argtypes = [c_uint32]
+    sdl.SDL_OpenGamepad.restype = c_void_p
+    sdl.SDL_CloseGamepad.argtypes = [c_void_p]
+    sdl.SDL_free.argtypes = [c_void_p]
+    sdl.SDL_Quit.argtypes = []
+
+    SDL_INIT_JOYSTICK = 0x00000200
+    SDL_INIT_GAMEPAD = 0x00002000
+    SDL_INIT_EVENTS = 0x00004000
+    if not sdl.SDL_Init(SDL_INIT_JOYSTICK | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS):
+        log_warning(f"SDL3 gamepad initialization failed: {decode(sdl.SDL_GetError())}")
+        return []
+    try:
+        count = c_int()
+        ids = sdl.SDL_GetGamepads(ctypes.byref(count))
+        gamepads = []
+        try:
+            for index in range(count.value):
+                instance_id = ids[index]
+                handle = sdl.SDL_OpenGamepad(instance_id)
+                if not handle:
+                    log_warning(
+                        f"SDL3 listed gamepad index {index} but could not open it: {decode(sdl.SDL_GetError())}"
+                    )
+                    continue
+                try:
+                    guid = sdl.SDL_GetGamepadGUIDForID(instance_id)
+                    guid_buffer = ctypes.create_string_buffer(64)
+                    sdl.SDL_GUIDToString(guid, guid_buffer, len(guid_buffer))
+                    device_path = decode(sdl.SDL_GetGamepadPathForID(instance_id))
+                    gamepads.append(
+                        {
+                            "sdl_index": index,
+                            "instance_id": int(instance_id),
+                            "name": decode(sdl.SDL_GetGamepadNameForID(instance_id)),
+                            "path": device_path,
+                            "guid": guid_buffer.value.decode("ascii", errors="replace"),
+                            "uniq": input_uniq(device_path),
+                            "type": int(sdl.SDL_GetGamepadTypeForID(instance_id)),
+                        }
+                    )
+                finally:
+                    sdl.SDL_CloseGamepad(handle)
+        finally:
+            if ids:
+                sdl.SDL_free(ids)
+        return gamepads
+    finally:
+        sdl.SDL_Quit()
+
+def controller_config(gamepad, player):
+    return {
+        "left_joycon_stick": {
+            "joystick": "Left",
+            "invert_stick_x": False,
+            "invert_stick_y": False,
+            "rotate90_cw": False,
+            "stick_button": "LeftStick",
+        },
+        "right_joycon_stick": {
+            "joystick": "Right",
+            "invert_stick_x": False,
+            "invert_stick_y": False,
+            "rotate90_cw": False,
+            "stick_button": "RightStick",
+        },
+        "deadzone_left": 0.05,
+        "deadzone_right": 0.05,
+        "range_left": 1.0,
+        "range_right": 1.0,
+        "trigger_threshold": 0.0,
+        "motion": {
+            "motion_backend": "GamepadDriver",
+            "sensitivity": 100,
+            "gyro_deadzone": 1,
+            "enable_motion": False,
+        },
+        "rumble": {
+            "strong_rumble": 1.0,
+            "weak_rumble": 1.0,
+            "enable_rumble": True,
+        },
+        "left_joycon": {
+            "button_minus": "Minus",
+            "button_l": "LeftShoulder",
+            "button_zl": "LeftTrigger",
+            "button_sl": "Unbound",
+            "button_sr": "Unbound",
+            "dpad_up": "DpadUp",
+            "dpad_down": "DpadDown",
+            "dpad_left": "DpadLeft",
+            "dpad_right": "DpadRight",
+        },
+        "right_joycon": {
+            "button_plus": "Plus",
+            "button_r": "RightShoulder",
+            "button_zr": "RightTrigger",
+            "button_sl": "Unbound",
+            "button_sr": "Unbound",
+            "button_x": "X",
+            "button_b": "B",
+            "button_y": "Y",
+            "button_a": "A",
+        },
+        "version": 1,
+        "backend": "GamepadSDL3",
+        "id": f"{gamepad['sdl_index']}-{gamepad['guid']}",
+        "name": gamepad["name"],
+        "controller_type": "ProController",
+        "player_index": f"Player{player}",
+    }
+
+def assign_players(gamepads):
+    order = player_order()
+    assigned = {}
+    used_players = set()
+    for gamepad in gamepads:
+        preferred = order.get(gamepad["uniq"])
+        if preferred and preferred not in used_players:
+            assigned[gamepad["instance_id"]] = preferred
+            used_players.add(preferred)
+    next_player = 1
+    for gamepad in gamepads:
+        if gamepad["instance_id"] in assigned:
+            continue
+        while next_player in used_players and next_player <= 4:
+            next_player += 1
+        if next_player > 4:
+            break
+        assigned[gamepad["instance_id"]] = next_player
+        used_players.add(next_player)
+    return assigned
+
+def managed_input_config():
+    gamepads = enumerate_sdl_gamepads()
+    if not gamepads:
+        log_warning("no SDL3 gamepads detected for Ryubing; controller input will be unavailable")
+        return []
+    if len(gamepads) < 4:
+        log_warning(f"Ryubing detected {len(gamepads)} SDL3 gamepad(s); up to 4 are supported when connected before launch")
+    assigned = assign_players(gamepads)
+    configs = []
+    for gamepad in gamepads:
+        player = assigned.get(gamepad["instance_id"])
+        if player is None or player > 4:
+            continue
+        configs.append(controller_config(gamepad, player))
+    configs.sort(key=lambda row: row["player_index"])
+    return configs
+
 config.update(
     {
         "backend_threading": "Auto",
@@ -1347,12 +1597,14 @@ config.update(
         "audio_volume": 1,
         "start_fullscreen": True,
         "show_console": False,
-        "enable_keyboard": False,
+        "use_input_global_config": False,
+        "enable_keyboard": True,
         "enable_mouse": False,
         "graphics_backend": "Vulkan",
-        "preferred_gpu": "AMD Radeon RX 6650M (RADV NAVI23)",
+        "preferred_gpu": "0x1002_0x73EF",
     }
 )
+config["input_config"] = managed_input_config()
 hotkeys = config.setdefault("hotkeys", {})
 hotkeys.update({"show_ui": "F4", "screenshot": "F8", "pause": "F5"})
 

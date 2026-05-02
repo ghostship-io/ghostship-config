@@ -295,7 +295,10 @@ changelog.
   plain `pico8` as the fallback alternate with the managed PICO-8 `-home` path.
   Ryubing needs `MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE=1` with Boomer's
   preferred Vulkan device or it can still choose the 780M iGPU even when
-  `MESA_VK_DEVICE_SELECT=1002:73ef` is set.
+  `MESA_VK_DEVICE_SELECT=1002:73ef` is set; set Ryubing `preferred_gpu` to
+  `0x1002_0x73EF`, not the display name. Ryubing 1.3.279 needs SDL3
+  `input_config` entries for connected controllers; the stale
+  `WindowKeyboard` profile with keyboard disabled leaves BOTW with no controls.
   Every `run-emulator` launch should keep the
   lightweight per-process Select+Start double-press exit broker; expanded
   standalone hotkeys stay opt-in per-emulator launch modes. Boomer's managed
