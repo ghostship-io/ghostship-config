@@ -1812,6 +1812,8 @@ RenderWindowAutoSize = False
 ConfirmStop = False
 UsePanicHandlers = False
 OnScreenDisplayMessages = True
+[General]
+HotkeysRequireFocus = False
 [DSP]
 DSPThread = True
 Backend = Cubeb
@@ -1820,9 +1822,9 @@ EOF
       if [ "''${EMULATION_DOLPHIN_HOTKEY_FALLBACK:-0}" = "1" ]; then
         cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
 [Hotkeys1]
-Device = Keyboard Mouse
+Device = XInput2/2/Virtual core pointer
 Keys/Toggle Pause = F10
-Keys/Reset = @(Ctrl+R)
+Keys/Reset = @(Control+R)
 Keys/Take Screenshot = F9
 Keys/Disable Emulation Speed Limit = Tab
 Keys/Load State Slot 1 = F1
@@ -2211,6 +2213,7 @@ PY
           -C Main.Interface.ConfirmStop=False
           -C Main.Interface.UsePanicHandlers=False
           -C Main.Interface.OnScreenDisplayMessages=True
+          -C Main.General.HotkeysRequireFocus=False
         )
         ;;
       cemu) cmd=(cemu -f -g "$rom_path") ;;
@@ -2605,6 +2608,8 @@ RenderWindowAutoSize = False
 ConfirmStop = False
 UsePanicHandlers = False
 OnScreenDisplayMessages = True
+[General]
+HotkeysRequireFocus = False
 [DSP]
 DSPThread = True
 Backend = Cubeb
