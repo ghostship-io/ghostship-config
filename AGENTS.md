@@ -285,6 +285,10 @@ changelog.
   and stops in the first-run machine wizard. ES-DE matches Xbox files by final
   `.iso` suffix, so name launchable XISOs `.xiso.iso` and keep redump backups
   from ending in `.iso`.
+  If Hunter: The Reckoning - Redeemer falls back to the Xemu "please insert
+  disc" dashboard while `info block` shows the XISO mounted, suspect the ROM
+  image first; the bad live copy had title ID `5655002d` but a different XBE
+  header hash from Xemu's known-starting compatibility report.
   Keep Boomer's ES-DE ROM folder names aligned exactly with
   `/mnt/z/Library/ROMs/roms`; Doom uses `Fantasy - GZDoom (2005)` with
   Batocera-style `.gzdoom` launchers at the ROM-folder top level and assets
