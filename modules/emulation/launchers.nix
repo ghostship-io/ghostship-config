@@ -90,31 +90,35 @@ let
     BTN_START = 315
     DOUBLE_PRESS_SECONDS = 0.9
     FORCE_KILL_SECONDS = 5.0
+    KEY_HOLD_MS = "120"
     XDOTOOL = "${lib.getExe pkgs.xdotool}"
     YDOTOOL = "${lib.getExe pkgs.ydotool}"
 
     KEY_COMMANDS = {
-        "escape": [YDOTOOL, "key", "-d", "50", "1:1", "1:0"],
-        "tab": [YDOTOOL, "key", "-d", "50", "15:1", "15:0"],
-        "f1": [YDOTOOL, "key", "-d", "50", "59:1", "59:0"],
-        "f2": [YDOTOOL, "key", "-d", "50", "60:1", "60:0"],
-        "f4": [YDOTOOL, "key", "-d", "50", "62:1", "62:0"],
-        "f5": [YDOTOOL, "key", "-d", "50", "63:1", "63:0"],
-        "f8": [YDOTOOL, "key", "-d", "50", "66:1", "66:0"],
-        "f9": [YDOTOOL, "key", "-d", "50", "67:1", "67:0"],
-        "f10": [YDOTOOL, "key", "-d", "50", "68:1", "68:0"],
-        "f12": [YDOTOOL, "key", "-d", "50", "88:1", "88:0"],
-        "grave": [YDOTOOL, "key", "-d", "50", "41:1", "41:0"],
-        "ctrl-p": [YDOTOOL, "key", "-d", "50", "29:1", "25:1", "25:0", "29:0"],
-        "enter": [YDOTOOL, "key", "-d", "50", "28:1", "28:0"],
-        "shift-f1": [YDOTOOL, "key", "-d", "50", "42:1", "59:1", "59:0", "42:0"],
-        "ctrl-6": [YDOTOOL, "key", "-d", "50", "29:1", "7:1", "7:0", "29:0"],
-        "ctrl-9": [YDOTOOL, "key", "-d", "50", "29:1", "10:1", "10:0", "29:0"],
-        "ctrl-r": [YDOTOOL, "key", "-d", "50", "29:1", "19:1", "19:0", "29:0"],
+        "escape": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "1:1", "1:0"],
+        "tab": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "15:1", "15:0"],
+        "f1": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "59:1", "59:0"],
+        "f2": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "60:1", "60:0"],
+        "f4": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "62:1", "62:0"],
+        "f5": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "63:1", "63:0"],
+        "f8": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "66:1", "66:0"],
+        "f9": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "67:1", "67:0"],
+        "f10": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "68:1", "68:0"],
+        "f12": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "88:1", "88:0"],
+        "grave": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "41:1", "41:0"],
+        "ctrl-p": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "29:1", "25:1", "25:0", "29:0"],
+        "enter": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "28:1", "28:0"],
+        "shift-f1": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "42:1", "59:1", "59:0", "42:0"],
+        "ctrl-6": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "29:1", "7:1", "7:0", "29:0"],
+        "ctrl-9": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "29:1", "10:1", "10:0", "29:0"],
+        "ctrl-r": [YDOTOOL, "key", "-d", KEY_HOLD_MS, "29:1", "19:1", "19:0", "29:0"],
     }
     X_KEY_NAMES = {
         "ctrl-r": "ctrl+r",
         "f1": "F1",
+        "f4": "F4",
+        "f5": "F5",
+        "f8": "F8",
         "f9": "F9",
         "shift-f1": "shift+F1",
         "tab": "Tab",
@@ -156,9 +160,9 @@ let
         },
         "ryubing": {
             "bindings": {
-                (BTN_SELECT, BTN_X): ("send-key", "f4", "Minus + X toggled Ryubing UI"),
-                (BTN_SELECT, BTN_A): ("send-key", "f8", "Minus + A triggered Ryubing screenshot"),
-                (BTN_CAPTURE,): ("send-key", "f5", "Square toggled Ryubing pause"),
+                (BTN_SELECT, BTN_X): ("send-x-key", "f4", "Minus + X toggled Ryubing UI"),
+                (BTN_SELECT, BTN_A): ("send-x-key", "f8", "Minus + A triggered Ryubing screenshot"),
+                (BTN_CAPTURE,): ("send-x-key", "f5", "Square toggled Ryubing pause"),
             },
         },
     }
@@ -299,15 +303,27 @@ let
         except KeyError as exc:
             raise RuntimeError(f"unknown X key action: {name}") from exc
 
-    def find_x_window(pid):
+    def find_x_window(pid, profile):
         if not os.environ.get("DISPLAY"):
             return None
-        searches = [
-            [XDOTOOL, "search", "--pid", str(pid)],
-            [XDOTOOL, "search", "--class", "dolphin-emu"],
-            [XDOTOOL, "search", "--class", "Dolphin"],
-            [XDOTOOL, "search", "--name", "Dolphin"],
-        ]
+        searches = [[XDOTOOL, "search", "--pid", str(pid)]]
+        if profile == "dolphin":
+            searches.extend(
+                [
+                    [XDOTOOL, "search", "--class", "dolphin-emu"],
+                    [XDOTOOL, "search", "--class", "Dolphin"],
+                    [XDOTOOL, "search", "--name", "Dolphin"],
+                ]
+            )
+        elif profile == "ryubing":
+            searches.extend(
+                [
+                    [XDOTOOL, "search", "--class", "Ryujinx"],
+                    [XDOTOOL, "search", "--class", "Ryubing"],
+                    [XDOTOOL, "search", "--name", "Ryujinx"],
+                    [XDOTOOL, "search", "--name", "Ryubing"],
+                ]
+            )
         for command in searches:
             result = subprocess.run(command, check=False, text=True, capture_output=True)
             windows = [line.strip() for line in result.stdout.splitlines() if line.strip().isdigit()]
@@ -315,9 +331,9 @@ let
                 return windows[-1]
         return None
 
-    def send_x_key(name, pid, dry_run=False):
+    def send_x_key(name, pid, profile, dry_run=False):
         x_key = x_key_name(name)
-        window = find_x_window(pid)
+        window = find_x_window(pid, profile)
         if not window:
             return send_key(name, dry_run=dry_run)
         command = [XDOTOOL, "windowactivate", "--sync", window, "key", "--clearmodifiers", x_key]
@@ -340,7 +356,7 @@ let
         if kind == "send-key":
             send_key(value, dry_run=args.dry_run)
         elif kind == "send-x-key":
-            send_x_key(value, args.pid, dry_run=args.dry_run)
+            send_x_key(value, args.pid, args.profile, dry_run=args.dry_run)
         elif kind == "hmp-command":
             command = value.format(snapshot_tag=args.snapshot_tag)
             if args.dry_run:
@@ -366,7 +382,7 @@ let
             raise AssertionError("Minus-less X must not resolve to an action")
         if resolve_binding("global", {BTN_SELECT, BTN_X}, BTN_X) is not None:
             raise AssertionError("global profile must not resolve emulator actions")
-        if key_command("f2") != [YDOTOOL, "key", "-d", "50", "60:1", "60:0"]:
+        if key_command("f2") != [YDOTOOL, "key", "-d", KEY_HOLD_MS, "60:1", "60:0"]:
             raise AssertionError("F2 command changed unexpectedly")
         action = resolve_binding("pico8", {BTN_SELECT, BTN_A}, BTN_A)
         if action[:2] != ("send-key", "ctrl-6"):
@@ -398,13 +414,13 @@ let
         if resolve_binding("dolphin", {BTN_SELECT, BTN_Y}, BTN_Y) is not None:
             raise AssertionError("Dolphin Minus + Y must stay unbound")
         action = resolve_binding("ryubing", {BTN_SELECT, BTN_X}, BTN_X)
-        if action[:2] != ("send-key", "f4"):
+        if action[:2] != ("send-x-key", "f4"):
             raise AssertionError(f"unexpected Ryubing Minus + X action: {action}")
         action = resolve_binding("ryubing", {BTN_SELECT, BTN_A}, BTN_A)
-        if action[:2] != ("send-key", "f8"):
+        if action[:2] != ("send-x-key", "f8"):
             raise AssertionError(f"unexpected Ryubing Minus + A action: {action}")
         action = resolve_binding("ryubing", {BTN_CAPTURE}, BTN_CAPTURE)
-        if action[:2] != ("send-key", "f5"):
+        if action[:2] != ("send-x-key", "f5"):
             raise AssertionError(f"unexpected Ryubing Square action: {action}")
 
         socket_path = None
@@ -1104,6 +1120,9 @@ EOF
     preferred_vk_device="$(jq -r '.preferred_vk_device // empty' <<<"$profile_json")"
     if [ -n "$preferred_vk_device" ]; then
       export MESA_VK_DEVICE_SELECT="$preferred_vk_device"
+      if [ "$emulator_id" = "ryubing" ]; then
+        export MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE=1
+      fi
     fi
     output_width="$(jq -r '.output_width' <<<"$profile_json")"
     output_height="$(jq -r '.output_height' <<<"$profile_json")"
@@ -1308,7 +1327,7 @@ for key in (
 config.update(
     {
         "backend_threading": "Auto",
-        "res_scale": 1,
+        "res_scale": 2,
         "res_scale_custom": 1,
         "max_anisotropy": 16,
         "aspect_ratio": "Fixed16x9",
@@ -1319,7 +1338,7 @@ config.update(
         "check_updates_on_start": False,
         "show_confirm_exit": False,
         "hide_cursor": 1,
-        "enable_vsync": True,
+        "enable_vsync": False,
         "enable_shader_cache": True,
         "enable_texture_recompression": False,
         "enable_macro_hle": True,
@@ -1331,6 +1350,7 @@ config.update(
         "enable_keyboard": False,
         "enable_mouse": False,
         "graphics_backend": "Vulkan",
+        "preferred_gpu": "AMD Radeon RX 6650M (RADV NAVI23)",
     }
 )
 hotkeys = config.setdefault("hotkeys", {})

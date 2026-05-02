@@ -118,10 +118,12 @@ into Ryubing's `bis/system/Contents/registered` directory when needed, and
 writes a marker recording the source path, resolved path, hash, and file count.
 
 `run-emulator` also converges Ryubing's `Config.json` before each Switch launch
-so Boomer uses Vulkan, docked mode, fullscreen launch, 16x anisotropic
-filtering, shader cache, SDL3 audio, and Ryubing's native scaling/filtering.
-The Switch hotkey broker maps Minus+X to `F4` for Ryubing UI, Minus+A to `F8`
-for screenshot, and Square/Capture to `F5` for pause.
+so Boomer uses Vulkan on the RX 6650M dGPU, docked mode, fullscreen launch, 2x
+internal resolution, 16x anisotropic filtering, shader cache, SDL3 audio, and
+Ryubing's native scaling/filtering. The Switch hotkey broker maps Minus+X to
+`F4` for Ryubing UI, Minus+A to `F8` for screenshot, and Square/Capture to `F5`
+for pause, targeting the Ryubing window when possible and falling back to
+ydotool.
 
 Ryubing update and DLC packages stay as operator-managed NSP files beside the
 Switch ROM folder, but under hidden staging directories so ES-DE does not list

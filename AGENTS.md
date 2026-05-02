@@ -293,6 +293,9 @@ changelog.
   disc before launching PCSX2. PICO-8 needs an explicit Gamescope Xwayland server on
   Boomer because its SDL path uses X11; keep `pico8-hotkeys` as the default and
   plain `pico8` as the fallback alternate with the managed PICO-8 `-home` path.
+  Ryubing needs `MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE=1` with Boomer's
+  preferred Vulkan device or it can still choose the 780M iGPU even when
+  `MESA_VK_DEVICE_SELECT=1002:73ef` is set.
   Every `run-emulator` launch should keep the
   lightweight per-process Select+Start double-press exit broker; expanded
   standalone hotkeys stay opt-in per-emulator launch modes. Boomer's managed
