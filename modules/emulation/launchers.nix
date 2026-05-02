@@ -1589,6 +1589,12 @@ def controller_config(gamepad, player):
             "weak_rumble": 1.0,
             "enable_rumble": True,
         },
+        "led": {
+            "enable_led": False,
+            "turn_off_led": False,
+            "use_rainbow": False,
+            "led_color": 4278518269,
+        },
         "left_joycon": {
             "button_minus": "Back",
             "button_l": "LeftShoulder",
