@@ -160,9 +160,9 @@ let
         },
         "ryubing": {
             "bindings": {
-                (BTN_SELECT, BTN_X): ("send-key", "f4", "Minus + X toggled Ryubing UI"),
-                (BTN_SELECT, BTN_A): ("send-key", "f8", "Minus + A triggered Ryubing screenshot"),
-                (BTN_CAPTURE,): ("send-key", "f5", "Square toggled Ryubing pause"),
+                (BTN_SELECT, BTN_X): ("send-x-key", "f4", "Minus + X toggled Ryubing UI"),
+                (BTN_SELECT, BTN_A): ("send-x-key", "f8", "Minus + A triggered Ryubing screenshot"),
+                (BTN_CAPTURE,): ("send-x-key", "f5", "Square toggled Ryubing pause"),
             },
         },
     }
@@ -306,63 +306,98 @@ let
         except KeyError as exc:
             raise RuntimeError(f"unknown X key action: {name}") from exc
 
+    def x_window_name(window):
+        result = subprocess.run(
+            [XDOTOOL, "getwindowname", window],
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            return ""
+        return result.stdout.strip()
+
     def find_x_window(pid, profile):
         if not os.environ.get("DISPLAY"):
-            return None
-        searches = [[XDOTOOL, "search", "--pid", str(pid)]]
+            return None, "DISPLAY is not set"
+        searches = [("pid", [XDOTOOL, "search", "--pid", str(pid)])]
         if profile == "dolphin":
             searches.extend(
                 [
-                    [XDOTOOL, "search", "--class", "dolphin-emu"],
-                    [XDOTOOL, "search", "--class", "Dolphin"],
-                    [XDOTOOL, "search", "--name", "Dolphin"],
+                    ("class dolphin-emu", [XDOTOOL, "search", "--class", "dolphin-emu"]),
+                    ("class Dolphin", [XDOTOOL, "search", "--class", "Dolphin"]),
+                    ("name Dolphin", [XDOTOOL, "search", "--name", "Dolphin"]),
                 ]
             )
         elif profile == "ryubing":
             searches.extend(
                 [
-                    [XDOTOOL, "search", "--class", "Ryujinx"],
-                    [XDOTOOL, "search", "--class", "Ryubing"],
-                    [XDOTOOL, "search", "--name", "Ryujinx"],
-                    [XDOTOOL, "search", "--name", "Ryubing"],
+                    ("class Ryujinx", [XDOTOOL, "search", "--class", "Ryujinx"]),
+                    ("class Ryubing", [XDOTOOL, "search", "--class", "Ryubing"]),
+                    ("name Ryujinx", [XDOTOOL, "search", "--name", "Ryujinx"]),
+                    ("name Ryubing", [XDOTOOL, "search", "--name", "Ryubing"]),
                 ]
             )
-        for command in searches:
+        failures = []
+        for label, command in searches:
             result = subprocess.run(command, check=False, text=True, capture_output=True)
             windows = [line.strip() for line in result.stdout.splitlines() if line.strip().isdigit()]
             if windows:
-                return windows[-1]
-        return None
+                return windows[-1], label
+            detail = (result.stderr or result.stdout or "").strip()
+            if detail:
+                failures.append(f"{label}: {detail}")
+        return None, "; ".join(failures)
 
-    def send_x_key(name, pid, profile, dry_run=False):
+    def send_x_key(name, pid, profile, log_path="", system="", emulator="", dry_run=False):
         x_key = x_key_name(name)
-        window = find_x_window(pid, profile)
+        window, source = find_x_window(pid, profile)
         if not window:
+            log(log_path, f"{profile} hotkey {x_key} fell back to ydotool; no X window found ({source or 'no matching windows'})", system=system, emulator=emulator)
             return send_key(name, dry_run=dry_run)
         command = [XDOTOOL, "key", "--window", window, "--clearmodifiers", x_key]
         if dry_run:
             return command
+        window_name = x_window_name(window)
         result = subprocess.run(command, check=False, text=True, capture_output=True)
         if result.returncode != 0:
             detail = (result.stderr or result.stdout or "").strip()
             raise RuntimeError(f"{' '.join(command)} failed with exit {result.returncode}: {detail}")
+        detail = f"{profile} hotkey {x_key} sent to X window {window}"
+        if window_name:
+            detail += f" ({window_name})"
+        detail += f" via {source}"
+        log(log_path, detail, system=system, emulator=emulator)
         return command
 
-    def resolve_binding(profile, pressed_codes, code):
+    def resolve_binding_with_chord(profile, pressed_codes, code):
         bindings = PROFILES[profile]["bindings"]
         for chord, action in bindings.items():
             if chord[-1] != code:
                 continue
             if all(button in pressed_codes for button in chord):
-                return action
-        return None
+                return chord, action
+        return None, None
+
+    def resolve_binding(profile, pressed_codes, code):
+        _chord, action = resolve_binding_with_chord(profile, pressed_codes, code)
+        return action
+
+    def compact_active_chords(active_chords, pressed_codes):
+        return {chord for chord in active_chords if all(button in pressed_codes for button in chord)}
+
+    def should_fire_chord(active_chords, chord):
+        if chord in active_chords:
+            return False
+        active_chords.add(chord)
+        return True
 
     def run_action(action, args):
         kind, value, message = action
         if kind == "send-key":
             send_key(value, dry_run=args.dry_run)
         elif kind == "send-x-key":
-            send_x_key(value, args.pid, args.profile, dry_run=args.dry_run)
+            send_x_key(value, args.pid, args.profile, args.log, args.system, args.emulator, dry_run=args.dry_run)
         elif kind == "hmp-command":
             command = value.format(snapshot_tag=args.snapshot_tag)
             if args.dry_run:
@@ -420,14 +455,25 @@ let
         if resolve_binding("dolphin", {BTN_SELECT, BTN_Y}, BTN_Y) is not None:
             raise AssertionError("Dolphin Minus + Y must stay unbound")
         action = resolve_binding("ryubing", {BTN_SELECT, BTN_X}, BTN_X)
-        if action[:2] != ("send-key", "f4"):
+        if action[:2] != ("send-x-key", "f4"):
             raise AssertionError(f"unexpected Ryubing Minus + X action: {action}")
         action = resolve_binding("ryubing", {BTN_SELECT, BTN_A}, BTN_A)
-        if action[:2] != ("send-key", "f8"):
+        if action[:2] != ("send-x-key", "f8"):
             raise AssertionError(f"unexpected Ryubing Minus + A action: {action}")
         action = resolve_binding("ryubing", {BTN_CAPTURE}, BTN_CAPTURE)
-        if action[:2] != ("send-key", "f5"):
+        if action[:2] != ("send-x-key", "f5"):
             raise AssertionError(f"unexpected Ryubing Square action: {action}")
+        active_chords = set()
+        chord = (BTN_SELECT, BTN_X)
+        if not should_fire_chord(active_chords, chord):
+            raise AssertionError("first chord press must fire")
+        if should_fire_chord(active_chords, chord):
+            raise AssertionError("held chord must not fire twice")
+        active_chords = compact_active_chords(active_chords, {BTN_SELECT})
+        if chord in active_chords:
+            raise AssertionError("released chord must clear debounce state")
+        if not should_fire_chord(active_chords, chord):
+            raise AssertionError("chord must fire again after release")
 
         socket_path = None
         received = []
@@ -507,6 +553,7 @@ let
             return 0
 
         pressed = {path: set() for path in fds}
+        active_chords = {path: set() for path in fds}
         last_select_start = {path: 0.0 for path in fds}
         log(args.log, f"started {args.profile} hotkey broker on {len(fds)} controller(s)", system=args.system, emulator=args.emulator)
 
@@ -534,6 +581,7 @@ let
                         pressed[path].add(code)
                     else:
                         pressed[path].discard(code)
+                        active_chords[path] = compact_active_chords(active_chords[path], pressed[path])
                         continue
                     if code == BTN_START and BTN_SELECT in pressed[path]:
                         now = time.monotonic()
@@ -548,8 +596,10 @@ let
                             return 0
                         last_select_start[path] = now
                         continue
-                    action = resolve_binding(args.profile, pressed[path], code)
+                    chord, action = resolve_binding_with_chord(args.profile, pressed[path], code)
                     if action is None:
+                        continue
+                    if not should_fire_chord(active_chords[path], chord):
                         continue
                     try:
                         message = run_action(action, args)
