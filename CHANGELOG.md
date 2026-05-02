@@ -27,7 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Ryubing SDL3 Pro Controller profiles with Ryubing-native stable SDL3 IDs for
   up to four connected players and tune Switch launches for the RX 6650M dGPU,
   2x internal resolution, 16x anisotropic filtering, Vulkan, docked fullscreen,
-  and shader/PTC cache. Keep ES-DE folders sorted first while hiding Switch
+  shader/PTC cache, and non-null disabled LED config required by Ryubing's
+  SDL3 controller backend. Keep ES-DE folders sorted first while hiding Switch
   `.updates` and `.dlc` staging folders.
 - **Boomer Dolphin prompt fix**: Reassert Dolphin analytics opt-out and
   stop-confirm settings immediately before each launch with valid INI syntax
