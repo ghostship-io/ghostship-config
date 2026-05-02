@@ -337,8 +337,8 @@ changelog.
   `docs/boomer-kuwanger-emulation.md`.
   Dolphin 2603 loads hotkeys from `[Hotkeys]`, not `[Hotkeys1]`; keep
   broker-injected GameCube fallback bindings on Dolphin's
-  `XInput2/0/Virtual core pointer` device so raw controller chords can emit
-  Dolphin keyboard hotkeys.
+  `XInput2/0/Virtual core pointer` device and use Dolphin's grouped hotkey
+  keys such as `General/Reset`, not `Keys/Reset`.
   WiiWare games should stay as extracted `.wad` files in the Wii ROM
   folder so ES-DE can launch them through Dolphin. Dolphin runtime config/cache
   can be reset, but preserve `/srv/emulation/xdg/share/dolphin-emu` because it

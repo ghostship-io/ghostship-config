@@ -1843,12 +1843,12 @@ EOF
         cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
 [Hotkeys]
 Device = XInput2/0/Virtual core pointer
-Keys/Toggle Pause = F10
-Keys/Reset = @(Control+R)
-Keys/Take Screenshot = F9
-Keys/Disable Emulation Speed Limit = Tab
-Keys/Load State Slot 1 = F1
-Keys/Save State Slot 1 = @(Shift+F1)
+General/Toggle Pause = F10
+General/Reset = @(Ctrl+R)
+General/Take Screenshot = F9
+Emulation Speed/Disable Emulation Speed Limit = Tab
+Load State/Load State Slot 1 = F1
+Save State/Save State Slot 1 = @(Shift+F1)
 EOF
         log_event "runtime" "prepared Dolphin keyboard fallback hotkeys"
       fi
@@ -2652,12 +2652,12 @@ EOF
         cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
 [Hotkeys]
 Device = XInput2/0/Virtual core pointer
-Keys/Toggle Pause = F10
-Keys/Reset = @(Control+R)
-Keys/Take Screenshot = F9
-Keys/Disable Emulation Speed Limit = Tab
-Keys/Load State Slot 1 = F1
-Keys/Save State Slot 1 = @(Shift+F1)
+General/Toggle Pause = F10
+General/Reset = @(Ctrl+R)
+General/Take Screenshot = F9
+Emulation Speed/Disable Emulation Speed Limit = Tab
+Load State/Load State Slot 1 = F1
+Save State/Save State Slot 1 = @(Shift+F1)
 EOF
         : >"$dolphin_config_dir/GCPadNew.ini"
         for slot in 1 2 3 4; do

@@ -37,8 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unsupported quick-actions/debug-monitor and bare Square chords explicitly
   unbound. Keep Dolphin's generated keyboard fallback hotkeys under the native
   `[Hotkeys]` section on Dolphin's `XInput2/0/Virtual core pointer` device and
-  inject them through the same raw `ydotool` path used by other standalone
-  hotkey profiles so Dolphin 2603 loads and receives them.
+  Dolphin's grouped hotkey keys such as `General/Reset`, then inject them
+  through the same raw `ydotool` path used by other standalone hotkey profiles
+  so Dolphin 2603 loads and receives them.
 - **Boomer Dolphin native button map**: Correct Dolphin's generated SDL
   bindings so GameCube uses label aliases with A/B and X/Y swapped for
   Boomer's Switch Pro controller, Plus as Start, L1/R1 shoulder labels, and R2
