@@ -1842,7 +1842,7 @@ EOF
       if [ "''${EMULATION_DOLPHIN_HOTKEY_FALLBACK:-0}" = "1" ]; then
         cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
 [Hotkeys]
-Device = XInput2/2/Virtual core pointer
+Device = XInput2/0/Virtual core pointer
 Keys/Toggle Pause = F10
 Keys/Reset = @(Control+R)
 Keys/Take Screenshot = F9
@@ -2651,7 +2651,7 @@ MaxAnisotropy = 4
 EOF
         cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
 [Hotkeys]
-Device = XInput2/2/Virtual core pointer
+Device = XInput2/0/Virtual core pointer
 Keys/Toggle Pause = F10
 Keys/Reset = @(Control+R)
 Keys/Take Screenshot = F9
