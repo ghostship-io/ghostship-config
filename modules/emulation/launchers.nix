@@ -130,11 +130,11 @@ let
         },
         "dolphin": {
             "bindings": {
-                (BTN_SELECT, BTN_B): ("send-x-key", "ctrl-r", "Minus + B reset Dolphin"),
-                (BTN_SELECT, BTN_L1): ("send-x-key", "f1", "Minus + L1 loaded Dolphin state slot 1"),
-                (BTN_SELECT, BTN_R1): ("send-x-key", "shift-f1", "Minus + R1 saved Dolphin state slot 1"),
-                (BTN_SELECT, BTN_A): ("send-x-key", "f9", "Minus + A triggered Dolphin screenshot"),
-                (BTN_SELECT, BTN_R2): ("send-x-key", "tab", "Minus + R2 toggled Dolphin fast mode"),
+                (BTN_SELECT, BTN_B): ("send-key", "ctrl-r", "Minus + B reset Dolphin"),
+                (BTN_SELECT, BTN_L1): ("send-key", "f1", "Minus + L1 loaded Dolphin state slot 1"),
+                (BTN_SELECT, BTN_R1): ("send-key", "shift-f1", "Minus + R1 saved Dolphin state slot 1"),
+                (BTN_SELECT, BTN_A): ("send-key", "f9", "Minus + A triggered Dolphin screenshot"),
+                (BTN_SELECT, BTN_R2): ("send-key", "tab", "Minus + R2 toggled Dolphin fast mode"),
             },
         },
         "xemu": {
@@ -393,21 +393,21 @@ let
         if resolve_binding("pico8", {BTN_CAPTURE}, BTN_CAPTURE) is not None:
             raise AssertionError("bare Square must not resolve to a PICO-8 hotkey")
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_B}, BTN_B)
-        if action[:2] != ("send-x-key", "ctrl-r"):
+        if action[:2] != ("send-key", "ctrl-r"):
             raise AssertionError(f"unexpected Dolphin reset action: {action}")
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_L1}, BTN_L1)
-        if action[:2] != ("send-x-key", "f1"):
+        if action[:2] != ("send-key", "f1"):
             raise AssertionError(f"unexpected Dolphin load action: {action}")
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_R1}, BTN_R1)
-        if action[:2] != ("send-x-key", "shift-f1"):
+        if action[:2] != ("send-key", "shift-f1"):
             raise AssertionError(f"unexpected Dolphin save action: {action}")
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_A}, BTN_A)
-        if action[:2] != ("send-x-key", "f9"):
+        if action[:2] != ("send-key", "f9"):
             raise AssertionError(f"unexpected Dolphin screenshot action: {action}")
         if resolve_binding("dolphin", {BTN_CAPTURE}, BTN_CAPTURE) is not None:
             raise AssertionError("bare Square must not resolve to a Dolphin hotkey")
         action = resolve_binding("dolphin", {BTN_SELECT, BTN_R2}, BTN_R2)
-        if action[:2] != ("send-x-key", "tab"):
+        if action[:2] != ("send-key", "tab"):
             raise AssertionError(f"unexpected Dolphin fast-mode action: {action}")
         if resolve_binding("dolphin", {BTN_SELECT, BTN_X}, BTN_X) is not None:
             raise AssertionError("Dolphin Minus + X must stay unbound")
