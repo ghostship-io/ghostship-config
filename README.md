@@ -60,19 +60,22 @@ Every `run-emulator` launch starts the lightweight per-process exit broker for
 Minus + Plus twice. Xbox defaults to `xemu-hotkeys`, and PICO-8 defaults to
 `pico8-hotkeys`. PS2 launches through standalone PCSX2 with managed no-wizard
 configuration, launcher-side `.m3u` first-disc resolution, Vulkan 3x graphics,
-four-player port 1 multitap, SDL controller mappings, PCSX2-native hotkey
+resolved connected-player SDL mappings, PCSX2-native hotkey
 chords, and token-backed RetroAchievements when the token secret is present.
 Switch emulation uses the repo-pinned official Ryubing Canary release; refresh
 `modules/emulation/ryubing-canary-pin.nix` with `scripts/update-ryubing-canary`
 before rebuilding when upstream publishes a newer Canary. Boomer manages
 Ryubing for Vulkan on the RX 6650M dGPU, docked fullscreen launches, 2x
 internal resolution, 16x anisotropic filtering, shader/PTC cache, SDL3
-controller input for up to four connected players using Ryubing-native stable
-SDL3 controller IDs, and keyboard-enabled emulator hotkeys.
+controller input for every connected player using Ryubing-native stable SDL3
+controller IDs, and keyboard-enabled emulator hotkeys. Before every emulator
+launch, Boomer reconciles controller LEDs and writes a resolved connected-player
+map that all launch-time emulator configs consume.
 Switch homebrew `.nro` launchers can keep sibling `data/` assets beside the ROM;
 `run-emulator` links those assets into Ryubing's emulated SD card at launch.
-HDMI audio is routed through PipeWire by selecting the currently
-available AMD HDMI/DP profile before ES-DE and emulator launches. Runtime state
+HDMI audio is routed through PipeWire by selecting the currently available AMD
+HDMI/DP profile before ES-DE and emulator launches, with stable 48 kHz/1024
+frame PipeWire buffers for emulator audio. Runtime state
 lives under `/srv/emulation`;
 the future 4TB ROM SSD
 mounts at `/srv/emulation/roms` from the Btrfs filesystem labeled `roms`.

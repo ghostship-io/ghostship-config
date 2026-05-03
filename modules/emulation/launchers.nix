@@ -38,6 +38,227 @@ let
     ++ lib.optional (packages.supermodelPackage != null) packages.supermodelPackage
   );
 
+  controllerResolve = pkgs.writeShellScriptBin "controller-resolve" ''
+    set -euo pipefail
+    order_file="${cfg.configRoot}/controllers/player-order.json"
+    runtime_dir="/run/ghostship-emulation/controllers"
+    output_file="$runtime_dir/resolved-order.json"
+    log_file="${cfg.dataRoot}/logs/controller-resolve.log"
+    mkdir -p "$runtime_dir" "$(dirname "$log_file")"
+
+    ${pkgs.python3}/bin/python3 - "$order_file" "$output_file" "$log_file" "${packages.ryubingCanaryPackage}/opt/ryubing-canary/libSDL3.so" <<'PY'
+import ctypes
+import json
+import os
+import re
+import sys
+import time
+from ctypes import POINTER, Structure, c_bool, c_char_p, c_int, c_uint8, c_uint32, c_void_p
+from pathlib import Path
+
+order_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+log_path = Path(sys.argv[3])
+sdl3_path = Path(sys.argv[4])
+
+PLAYER_ID_RE = re.compile(r"^(([0-9A-F]{2}:){5}[0-9A-F]{2}|USB:[0-9A-F]{4}:[0-9A-F]{4}:.+)$")
+SUPPORTED_RE = re.compile(r"(pro controller|nintendo switch pro|joy-?con|8bitdo|ultimate 2c|v057ep2009|v2dc8p(310b|301a))", re.I)
+
+def read(path):
+    try:
+        return Path(path).read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+
+def log(message):
+    try:
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {message}\n")
+    except OSError:
+        pass
+
+def usb_id_from_modalias(modalias, uniq):
+    match = re.search(r"v([0-9a-fA-F]{4})p([0-9a-fA-F]{4})", modalias or "")
+    if not match:
+        return ""
+    stable = re.sub(r"[^A-Za-z0-9_.:-]", "_", uniq or "unknown")
+    return f"USB:{match.group(1).upper()}:{match.group(2).upper()}:{stable}"
+
+def identity(uniq, modalias):
+    uniq = (uniq or "").upper()
+    if re.match(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$", uniq):
+        return uniq
+    return usb_id_from_modalias(modalias, uniq)
+
+def sysfs_devices():
+    devices = {}
+    events = sorted(Path("/sys/class/input").glob("event*"), key=lambda p: p.name)
+    sdl_index = 0
+    for event in events:
+        name = read(event / "device/name")
+        if not name or "imu" in name.lower():
+            continue
+        modalias = read(event / "device/modalias").lower()
+        if not modalias.startswith("input:b0003"):
+            continue
+        if not SUPPORTED_RE.search(f"{name} {modalias}"):
+            continue
+        ident = identity(read(event / "device/uniq"), modalias)
+        if not ident or not PLAYER_ID_RE.match(ident):
+            continue
+        devices.setdefault(ident, {
+            "identity": ident,
+            "name": name,
+            "transport": "bluetooth" if re.match(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$", ident) else "usb",
+            "event_path": f"/dev/input/{event.name}",
+            "sysfs_event": str(event),
+            "modalias": modalias,
+            "sdl2_index": sdl_index,
+            "sdl3_index": sdl_index,
+            "sdl_guid": "",
+            "xemu_guid": ident,
+        })
+        sdl_index += 1
+    return devices
+
+class SdlGuid(Structure):
+    _fields_ = [("data", c_uint8 * 16)]
+
+def decode(value):
+    return (value or b"").decode("utf-8", errors="replace")
+
+def input_uniq(device_path):
+    if not device_path:
+        return ""
+    return read(Path("/sys/class/input") / Path(device_path).name / "device/uniq").upper()
+
+def sdl3_gamepads():
+    if not sdl3_path.exists():
+        return []
+    try:
+        sdl = ctypes.CDLL(str(sdl3_path))
+    except OSError as exc:
+        log(f"could not load SDL3 for controller resolve: {exc}")
+        return []
+
+    sdl.SDL_Init.argtypes = [c_uint32]
+    sdl.SDL_Init.restype = c_bool
+    sdl.SDL_GetError.restype = c_char_p
+    sdl.SDL_GetGamepads.argtypes = [POINTER(c_int)]
+    sdl.SDL_GetGamepads.restype = POINTER(c_uint32)
+    sdl.SDL_GetGamepadNameForID.argtypes = [c_uint32]
+    sdl.SDL_GetGamepadNameForID.restype = c_char_p
+    sdl.SDL_GetGamepadPathForID.argtypes = [c_uint32]
+    sdl.SDL_GetGamepadPathForID.restype = c_char_p
+    sdl.SDL_GetGamepadGUIDForID.argtypes = [c_uint32]
+    sdl.SDL_GetGamepadGUIDForID.restype = SdlGuid
+    sdl.SDL_GUIDToString.argtypes = [SdlGuid, ctypes.c_char_p, c_int]
+    sdl.SDL_OpenGamepad.argtypes = [c_uint32]
+    sdl.SDL_OpenGamepad.restype = c_void_p
+    sdl.SDL_CloseGamepad.argtypes = [c_void_p]
+    sdl.SDL_free.argtypes = [c_void_p]
+    sdl.SDL_Quit.argtypes = []
+
+    if not sdl.SDL_Init(0x00000200 | 0x00002000 | 0x00004000):
+        log(f"SDL3 gamepad initialization failed: {decode(sdl.SDL_GetError())}")
+        return []
+    try:
+        count = c_int()
+        ids = sdl.SDL_GetGamepads(ctypes.byref(count))
+        result = []
+        try:
+            for index in range(count.value):
+                instance_id = ids[index]
+                handle = sdl.SDL_OpenGamepad(instance_id)
+                if not handle:
+                    continue
+                try:
+                    guid = sdl.SDL_GetGamepadGUIDForID(instance_id)
+                    guid_buffer = ctypes.create_string_buffer(64)
+                    sdl.SDL_GUIDToString(guid, guid_buffer, len(guid_buffer))
+                    path = decode(sdl.SDL_GetGamepadPathForID(instance_id))
+                    result.append({
+                        "sdl3_index": index,
+                        "sdl3_instance_id": int(instance_id),
+                        "name": decode(sdl.SDL_GetGamepadNameForID(instance_id)),
+                        "path": path,
+                        "uniq": input_uniq(path),
+                        "guid": guid_buffer.value.decode("ascii", errors="replace"),
+                    })
+                finally:
+                    sdl.SDL_CloseGamepad(handle)
+        finally:
+            if ids:
+                sdl.SDL_free(ids)
+        return result
+    finally:
+        sdl.SDL_Quit()
+
+def saved_players():
+    try:
+        raw = json.loads(order_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    rows = []
+    for row in raw.get("players", []):
+        ident = str(row.get("mac") or "").upper()
+        if not PLAYER_ID_RE.match(ident):
+            continue
+        try:
+            player = int(row.get("player"))
+        except (TypeError, ValueError):
+            continue
+        if 1 <= player <= 4 and row.get("connected") is True:
+            rows.append({"player": player, "identity": ident, "name": str(row.get("name") or "")})
+    return sorted(rows, key=lambda row: row["player"])
+
+connected = sysfs_devices()
+for gamepad in sdl3_gamepads():
+    ident = identity(gamepad.get("uniq", ""), read(Path("/sys/class/input") / Path(gamepad.get("path", "")).name / "device/modalias").lower())
+    if ident in connected:
+        connected[ident].update({
+            "name": gamepad.get("name") or connected[ident]["name"],
+            "sdl3_index": gamepad["sdl3_index"],
+            "sdl3_instance_id": gamepad["sdl3_instance_id"],
+            "sdl_guid": gamepad["guid"],
+            "xemu_guid": gamepad["guid"],
+        })
+resolved = []
+used = set()
+for row in saved_players():
+    device = connected.get(row["identity"])
+    if not device or row["identity"] in used:
+        continue
+    used.add(row["identity"])
+    resolved.append(device)
+
+for ident, device in sorted(connected.items(), key=lambda item: item[1].get("sdl2_index", 99)):
+    if ident not in used and len(resolved) < 4:
+        used.add(ident)
+        resolved.append(device)
+
+players = []
+for slot, device in enumerate(resolved[:4], start=1):
+    players.append({
+        **device,
+        "player": slot,
+        "sdl2_index": len(players),
+        "sdl3_index": len(players),
+    })
+
+payload = {
+    "version": 1,
+    "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "source_order": str(order_path),
+    "players": players,
+}
+tmp = output_path.with_suffix(".json.tmp")
+tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+os.replace(tmp, output_path)
+log(f"resolved {len(players)} connected controller(s)")
+PY
+  '';
+
   displayPolicy = pkgs.writeText "emulation-display-policy.json" (
     builtins.toJSON {
       upscaler = "none";
@@ -1088,6 +1309,11 @@ EOF
     export MESA_SHADER_CACHE_DIR="${cfg.dataRoot}/cache/mesa-shaders"
     export SDL_GAMECONTROLLERCONFIG_FILE="${cfg.configRoot}/controllers/gamecontrollerdb.txt"
     export SDL_GAMECONTROLLER_USE_BUTTON_LABELS=1
+    export SDL_AUDIO_DRIVER="''${SDL_AUDIO_DRIVER:-pipewire}"
+    export SDL_AUDIO_DEVICE_SAMPLE_FRAMES="''${SDL_AUDIO_DEVICE_SAMPLE_FRAMES:-1024}"
+    export SDL_AUDIO_FREQUENCY="''${SDL_AUDIO_FREQUENCY:-48000}"
+    export SDL_AUDIO_FORMAT="''${SDL_AUDIO_FORMAT:-F32}"
+    export SDL_AUDIO_DEVICE_STREAM_ROLE="''${SDL_AUDIO_DEVICE_STREAM_ROLE:-Game}"
     export TMPDIR="${cfg.dataRoot}/tmp"
 
     if [ "$#" -lt 3 ]; then
@@ -1111,6 +1337,12 @@ EOF
       jq -nc --arg time "$(date -u +%FT%TZ)" --arg event "$1" --arg system "$system_id" --arg emulator "$emulator_id" --arg rom "$rom_path" --arg message "''${2:-}" \
         '{time:$time,event:$event,system:$system,emulator:$emulator,rom:$rom,message:$message}' >>"$log_file"
     }
+
+    controller-leds apply || true
+    ${lib.getExe controllerResolve} || true
+    resolved_controllers="/run/ghostship-emulation/controllers/resolved-order.json"
+    resolved_player_count="$(jq -r '.players | length' "$resolved_controllers" 2>/dev/null || echo 0)"
+    log_event "controllers" "$(jq -c '.players // []' "$resolved_controllers" 2>/dev/null || echo '[]')"
 
     first_command() {
       for candidate in "$@"; do
@@ -1225,7 +1457,7 @@ EOF
       ${pkgs.python3}/bin/python3 - \
         "$ryujinx_config_file" \
         "${packages.ryubingCanaryPackage}/opt/ryubing-canary/libSDL3.so" \
-        "${cfg.configRoot}/controllers/player-order.json" \
+        "$resolved_controllers" \
         "$log_file" \
         "$system_id" \
         "$emulator_id" \
@@ -1239,7 +1471,7 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 sdl_lib_path = Path(sys.argv[2])
-player_order_path = Path(sys.argv[3])
+resolved_order_path = Path(sys.argv[3])
 log_path = Path(sys.argv[4])
 system_id = sys.argv[5]
 emulator_id = sys.argv[6]
@@ -1453,7 +1685,7 @@ assert stable_ryubing_guid("0500d71f7e0500000920000001800000") == "00000005-057e
 
 def player_order():
     try:
-        raw = json.loads(player_order_path.read_text(encoding="utf-8"))
+        raw = json.loads(resolved_order_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
     result = {}
@@ -1462,9 +1694,13 @@ def player_order():
             player = int(row.get("player"))
         except (TypeError, ValueError):
             continue
-        mac = str(row.get("mac") or "").upper()
-        if row.get("connected") and 1 <= player <= 4 and mac:
-            result[mac] = player
+        identities = [
+            str(row.get("identity") or "").upper(),
+            str(row.get("xemu_guid") or "").upper(),
+        ]
+        for ident in identities:
+            if 1 <= player <= 4 and ident:
+                result[ident] = player
     return result
 
 def enumerate_sdl_gamepads():
@@ -2188,7 +2424,17 @@ EOF
     prepare_dolphin_runtime() {
       dolphin_config_dir="$XDG_CONFIG_HOME/dolphin-emu"
       mkdir -p "$dolphin_config_dir"
-      cat >"$dolphin_config_dir/Dolphin.ini" <<'EOF'
+      dolphin_p1_device=0
+      dolphin_p2_device=0
+      dolphin_p3_device=0
+      dolphin_p4_device=0
+      case "''${resolved_player_count:-0}" in
+        1) dolphin_p1_device=6 ;;
+        2) dolphin_p1_device=6; dolphin_p2_device=6 ;;
+        3) dolphin_p1_device=6; dolphin_p2_device=6; dolphin_p3_device=6 ;;
+        4) dolphin_p1_device=6; dolphin_p2_device=6; dolphin_p3_device=6; dolphin_p4_device=6 ;;
+      esac
+      cat >"$dolphin_config_dir/Dolphin.ini" <<EOF
 [Analytics]
 PermissionAsked = True
 Enabled = False
@@ -2196,10 +2442,10 @@ Enabled = False
 CPUThread = True
 SkipIPL = True
 GFXBackend = Vulkan
-SIDevice0 = 6
-SIDevice1 = 6
-SIDevice2 = 6
-SIDevice3 = 6
+SIDevice0 = $dolphin_p1_device
+SIDevice1 = $dolphin_p2_device
+SIDevice2 = $dolphin_p3_device
+SIDevice3 = $dolphin_p4_device
 WiimoteContinuousScanning = True
 WiimoteEnableSpeaker = False
 [Display]
@@ -2217,6 +2463,77 @@ HotkeysRequireFocus = False
 DSPThread = True
 Backend = Cubeb
 Volume = 100
+EOF
+      : >"$dolphin_config_dir/GCPadNew.ini"
+      : >"$dolphin_config_dir/WiimoteNew.ini"
+      jq -c '.players[]?' "$resolved_controllers" 2>/dev/null | while read -r controller; do
+        slot="$(jq -r '.player' <<<"$controller")"
+        index="$(jq -r '.sdl2_index' <<<"$controller")"
+        name="$(jq -r '.name // "Nintendo Switch Pro Controller"' <<<"$controller")"
+        cat >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
+[GCPad$slot]
+Device = SDL/$index/$name
+Buttons/A = \`Button B\`
+Buttons/B = \`Button A\`
+Buttons/X = \`Button Y\`
+Buttons/Y = \`Button X\`
+Buttons/Z = \`Trigger R\`
+Buttons/Start = \`Start\`
+Main Stick/Up = \`Axis 1-\`
+Main Stick/Down = \`Axis 1+\`
+Main Stick/Left = \`Axis 0-\`
+Main Stick/Right = \`Axis 0+\`
+Main Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
+C-Stick/Up = \`Axis 3-\`
+C-Stick/Down = \`Axis 3+\`
+C-Stick/Left = \`Axis 2-\`
+C-Stick/Right = \`Axis 2+\`
+C-Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
+Triggers/L = \`Shoulder L\`
+Triggers/R = \`Shoulder R\`
+D-Pad/Up = \`Hat 0 N\`
+D-Pad/Down = \`Hat 0 S\`
+D-Pad/Left = \`Hat 0 W\`
+D-Pad/Right = \`Hat 0 E\`
+
+[GCPad$slot/Options]
+Always Connected = True
+EOF
+        cat >>"$dolphin_config_dir/WiimoteNew.ini" <<EOF
+[Wiimote$slot]
+Source = 1
+Device = SDL/$index/$name
+Buttons/A = \`Button B\`
+Buttons/B = \`Trigger L\`
+Buttons/1 = \`Button A\`
+Buttons/2 = \`Button X\`
+Buttons/- = \`Back\`
+Buttons/+ = \`Start\`
+Buttons/Home = \`Misc 1\`
+D-Pad/Up = \`Hat 0 N\`
+D-Pad/Down = \`Hat 0 S\`
+D-Pad/Left = \`Hat 0 W\`
+D-Pad/Right = \`Hat 0 E\`
+IR/Up = \`Axis 3-\`
+IR/Down = \`Axis 3+\`
+IR/Left = \`Axis 2-\`
+IR/Right = \`Axis 2+\`
+Shake/X = \`Shoulder R\`
+Shake/Y = \`Shoulder R\`
+Shake/Z = \`Shoulder R\`
+Extension = Nunchuk
+Nunchuk/Buttons/C = \`Back\`
+Nunchuk/Buttons/Z = \`Guide\`
+Nunchuk/Stick/Up = \`Axis 1-\`
+Nunchuk/Stick/Down = \`Axis 1+\`
+Nunchuk/Stick/Left = \`Axis 0-\`
+Nunchuk/Stick/Right = \`Axis 0+\`
+Nunchuk/Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42
+EOF
+      done
+      cat >>"$dolphin_config_dir/WiimoteNew.ini" <<'EOF'
+[BalanceBoard]
+Source = 0
 EOF
       if [ "''${EMULATION_DOLPHIN_HOTKEY_FALLBACK:-0}" = "1" ]; then
         cat >"$dolphin_config_dir/Hotkeys.ini" <<'EOF'
@@ -2505,7 +2822,137 @@ HoldTurbo = SDL-0/Back & SDL-0/+RightTrigger
 ToggleTurbo = Keyboard/Tab
 TogglePause = Keyboard/Space
 EOF
+      ${pkgs.python3}/bin/python3 - "$pcsx2_ini" "$resolved_controllers" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+ini_path = Path(sys.argv[1])
+resolved_path = Path(sys.argv[2])
+try:
+    players = json.loads(resolved_path.read_text(encoding="utf-8")).get("players", [])
+except (OSError, json.JSONDecodeError):
+    players = []
+players = [p for p in players if 1 <= int(p.get("player", 0)) <= 4]
+players.sort(key=lambda p: int(p["player"]))
+
+def pad_section(player, sdl_index):
+    return f"""[Pad{player}]
+Type = DualShock2
+Up = SDL-{sdl_index}/DPadUp
+Right = SDL-{sdl_index}/DPadRight
+Down = SDL-{sdl_index}/DPadDown
+Left = SDL-{sdl_index}/DPadLeft
+Triangle = SDL-{sdl_index}/FaceNorth
+Circle = SDL-{sdl_index}/FaceEast
+Cross = SDL-{sdl_index}/FaceSouth
+Square = SDL-{sdl_index}/FaceWest
+Select = SDL-{sdl_index}/Back
+Start = SDL-{sdl_index}/Start
+L1 = SDL-{sdl_index}/LeftShoulder
+L2 = SDL-{sdl_index}/+LeftTrigger
+R1 = SDL-{sdl_index}/RightShoulder
+R2 = SDL-{sdl_index}/+RightTrigger
+L3 = SDL-{sdl_index}/LeftStick
+R3 = SDL-{sdl_index}/RightStick
+LUp = SDL-{sdl_index}/-LeftY
+LRight = SDL-{sdl_index}/+LeftX
+LDown = SDL-{sdl_index}/+LeftY
+LLeft = SDL-{sdl_index}/-LeftX
+RUp = SDL-{sdl_index}/-RightY
+RRight = SDL-{sdl_index}/+RightX
+RDown = SDL-{sdl_index}/+RightY
+RLeft = SDL-{sdl_index}/-RightX
+SmallMotor = SDL-{sdl_index}/SmallMotor
+LargeMotor = SDL-{sdl_index}/LargeMotor
+"""
+
+text = ini_path.read_text(encoding="utf-8")
+prefix, rest = text.split("[Pad]\n", 1)
+_, suffix = rest.split("[Achievements]\n", 1)
+block = "[Pad]\n"
+block += f"MultitapPort1 = {'true' if len(players) > 2 else 'false'}\n"
+block += "MultitapPort2 = false\n\n"
+for player in players:
+    block += pad_section(int(player["player"]), int(player.get("sdl2_index", int(player["player"]) - 1))) + "\n"
+ini_path.write_text(prefix + block + "[Achievements]\n" + suffix, encoding="utf-8")
+PY
       log_event "runtime" "prepared PCSX2 managed config at $pcsx2_ini"
+    }
+
+    prepare_xemu_runtime() {
+      xemu_data_dir="${cfg.dataRoot}/xdg/share/xemu/xemu"
+      xemu_bios_dir="${cfg.biosRoot}/xbox"
+      mkdir -p "$xemu_data_dir"
+      if [ ! -f "$xemu_data_dir/eeprom.bin" ]; then
+        dd if=/dev/zero of="$xemu_data_dir/eeprom.bin" bs=256 count=1 status=none
+      fi
+      ${pkgs.python3}/bin/python3 - \
+        "$xemu_data_dir/xemu.toml" \
+        "$resolved_controllers" \
+        "$xemu_bios_dir" \
+        "$xemu_data_dir/eeprom.bin" \
+        "''${EMULATION_XEMU_PREFERRED_GPU_NAME:-}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+resolved_path = Path(sys.argv[2])
+bios_dir = Path(sys.argv[3])
+eeprom_path = Path(sys.argv[4])
+preferred_gpu = sys.argv[5]
+try:
+    players = json.loads(resolved_path.read_text(encoding="utf-8")).get("players", [])
+except (OSError, json.JSONDecodeError):
+    players = []
+players = sorted([p for p in players if 1 <= int(p.get("player", 0)) <= 4], key=lambda p: int(p["player"]))
+
+def q(value):
+    return "'" + str(value).replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+lines = [
+    "[general]",
+    "show_welcome = false",
+    "skip_boot_anim = true",
+    "",
+    "[audio]",
+    "use_dsp = false",
+    "hrtf = false",
+    "",
+    "[display]",
+    "renderer = 'VULKAN'",
+    "",
+    "[display.vulkan]",
+    f"preferred_physical_device = {q(preferred_gpu)}",
+    "",
+    "[display.window]",
+    "fullscreen_on_startup = true",
+    "vsync = false",
+    "",
+    "[display.quality]",
+    "surface_scale = 3",
+    "",
+    "[display.ui]",
+    "show_menubar = false",
+    "fit = 'scale'",
+    "",
+    "[sys.files]",
+    f"bootrom_path = {q(bios_dir / 'mcpx_1.0.bin')}",
+    f"flashrom_path = {q(bios_dir / 'Complex_4627.bin')}",
+    f"eeprom_path = {q(eeprom_path)}",
+    f"hdd_path = {q(bios_dir / 'xbox_hdd.qcow2')}",
+    "",
+    "[input.bindings]",
+]
+for port in range(1, 5):
+    match = next((p for p in players if int(p["player"]) == port), None)
+    if match is not None:
+        value = match.get("xemu_guid") or match.get("identity") or ""
+        lines.append(f"port{port} = {q(value)}")
+config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+      log_event "runtime" "prepared Xemu managed config from resolved controller order"
     }
 
     resolve_first_m3u_entry() {
@@ -2597,6 +3044,16 @@ PY
         if [ -r "$retroachievements_config" ]; then
           cmd+=(--appendconfig "$retroachievements_config")
         fi
+        retroarch_order_config="/run/ghostship-emulation/controllers/retroarch-order.cfg"
+        if jq -e '.players | length > 0' "$resolved_controllers" >/dev/null 2>&1; then
+          jq -r '
+            .players[]
+            | select(.player >= 1 and .player <= 4)
+            | "input_player\(.player)_joypad_index = \"\(.sdl2_index)\""
+          ' "$resolved_controllers" >"$retroarch_order_config.tmp"
+          mv "$retroarch_order_config.tmp" "$retroarch_order_config"
+          cmd+=(--appendconfig "$retroarch_order_config")
+        fi
         cmd+=(-L "$core_path" "$rom_path")
         ;;
       dolphin)
@@ -2617,6 +3074,7 @@ PY
         ;;
       cemu) cmd=(cemu -f -g "$rom_path") ;;
       xemu)
+        prepare_xemu_runtime
         cmd=(
           xemu
           -full-screen
@@ -2625,6 +3083,7 @@ PY
         )
         ;;
       xemu-hotkeys)
+        prepare_xemu_runtime
         runtime_root="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
         if [ ! -d "$runtime_root" ]; then
           runtime_root="${cfg.dataRoot}/tmp"
@@ -2931,8 +3390,19 @@ EOF
           'show_welcome = false' \
           'skip_boot_anim = true' \
           "" \
+          '[audio]' \
+          'use_dsp = false' \
+          'hrtf = false' \
+          "" \
           '[display]' \
           "renderer = 'VULKAN'" \
+          "" \
+          '[display.vulkan]' \
+          'preferred_physical_device = ""' \
+          "" \
+          '[display.window]' \
+          'fullscreen_on_startup = true' \
+          'vsync = false' \
           "" \
           '[display.quality]' \
           'surface_scale = 3' \
@@ -3400,6 +3870,7 @@ in
     ghostship.emulation.internal.scripts = {
       inherit
         displayProfile
+        controllerResolve
         romCoverageCheck
         runEmulator
         standaloneHotkeyBroker

@@ -166,6 +166,7 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
       "${cfg.dataRoot}/tools" \
       "${cfg.esde.appDataDir}" \
       "${cfg.esde.appDataDir}/custom_systems" \
+      "${cfg.esde.appDataDir}/collections" \
       "${cfg.esde.appDataDir}/settings" \
       "${cfg.esde.appDataDir}/themes" \
       "${cfg.esde.appDataDir}/scripts"
@@ -178,6 +179,12 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
     fi
 
     ln -sfn ${packages.artBookNext}/share/es-de/themes/art-book-next-es-de "${cfg.esde.appDataDir}/themes/art-book-next-es-de"
+    for collection in "custom-Local Multiplayer.cfg" "custom-Co-op.cfg"; do
+      if [ ! -e "${cfg.esde.appDataDir}/collections/$collection" ]; then
+        install -m 0644 -o ${cfg.user} -g ${cfg.group} /dev/null "${cfg.esde.appDataDir}/collections/$collection"
+      fi
+    done
+
     python3 - "${cfg.esde.appDataDir}/settings/es_settings.xml" <<'PY'
     import os
     import re
@@ -205,6 +212,18 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
                 return
         ET.SubElement(root, "string", {"name": name, "value": value})
 
+    def append_csv_string(name, values):
+        current = ""
+        for entry in root.findall("string"):
+            if entry.get("name") == name:
+                current = entry.get("value") or ""
+                break
+        selected = [item for item in current.split(",") if item]
+        for value in values:
+            if value not in selected:
+                selected.append(value)
+        set_string(name, ",".join(selected))
+
     def set_bool(name, value):
         text_value = "true" if value else "false"
         for entry in root.findall("bool"):
@@ -218,6 +237,7 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
     set_string("ThemeAspectRatio", "automatic")
     set_string("SystemsSorting", "systemsortname")
     set_string("InputControllerType", "switchpro")
+    append_csv_string("CollectionSystemsCustom", ["Local Multiplayer", "Co-op"])
     set_bool("DisplayClock", True)
     set_bool("FoldersOnTop", True)
     set_bool("InputOnlyFirstController", False)

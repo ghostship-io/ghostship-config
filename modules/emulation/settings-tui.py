@@ -1671,17 +1671,14 @@ class BluetoothBackend:
         return run_cmd(["systemctl", "restart", "bluetooth.service"], timeout=20)
 
     def reconnect_all(self):
-        output = []
-        for device in self.devices("Paired"):
-            self.action("trust", device["mac"])
-            self.action("wake", device["mac"], "on")
-            code, out, err = self.action("connect", device["mac"], timeout=20)
-            output.append(f"{device['name']} ({device['mac']}): {'OK' if code == 0 else 'failed'}")
-            if out:
-                output.append(out)
-            if err:
-                output.append(err)
-        return output
+        code, out, err = run_cmd(["controller-autoconnect", "once", "10"], timeout=15)
+        run_cmd(["controller-leds", "apply"], timeout=15)
+        lines = [f"Reconnect All: {'OK' if code == 0 else 'failed'}"]
+        if out:
+            lines.append(out)
+        if err:
+            lines.append(err)
+        return lines
 
 
 class AudioBackend:
@@ -2102,8 +2099,33 @@ class SettingsApp:
             self.run_and_show("Unpair Device", lambda: self.bt.action("remove", row["mac"], timeout=20))
 
     def bluetooth_reconnect_all(self):
-        self.tui.progress("Reconnect All", ["Connecting all paired devices..."])
-        output = self.bt.reconnect_all()
+        proc = subprocess.Popen(
+            ["controller-autoconnect", "once", "10"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        start = time.time()
+        canceled = False
+        while proc.poll() is None:
+            remaining = max(0, 10 - int(time.time() - start))
+            self.tui.progress("Reconnect All", [f"Connecting ready controllers... {remaining}s", "Press B to cancel."])
+            event = self.tui.get_input(timeout=0.25)
+            if event and event.action in (ACTION_BACK, ACTION_QUIT):
+                canceled = True
+                proc.terminate()
+                break
+        try:
+            out, err = proc.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            out, err = proc.communicate()
+        run_cmd(["controller-leds", "apply"], timeout=15)
+        output = ["Canceled." if canceled else "Reconnect pass complete."]
+        if out:
+            output.append(out)
+        if err:
+            output.append(err)
         self.tui.show_output("Reconnect All", output)
 
     def audio_output(self):

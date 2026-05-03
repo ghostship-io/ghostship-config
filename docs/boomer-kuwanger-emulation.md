@@ -356,6 +356,12 @@ physical HDMI port; it asks PipeWire which AMD HDMI/DP profile is currently
 `available`, sets that card profile, and makes the matching HDMI sink default.
 If `Bluetooth Settings` selects a connected Bluetooth audio sink, `audio-route`
 honors that preference and falls back to HDMI when the Bluetooth sink is absent.
+PipeWire is configured for stable emulator audio rather than ultra-low latency:
+48 kHz graph rate, 1024 default quantum, 512 minimum quantum, 2048 maximum
+quantum, and matching Pulse request/tlength defaults. SDL3 emulator launches
+prefer `SDL_AUDIO_DRIVER=pipewire` with 1024 sample frames and 48 kHz F32
+audio; SDL2-only paths may use the legacy SDL audio driver variable, but it is
+not set globally.
 
 Run `audio-route` from SSH to inspect and repair the route.
 
@@ -587,16 +593,22 @@ lightweight per-process exit broker for Minus + Plus twice. Xbox defaults to
 quick actions, Minus + B reset, Minus + L1 load `esde-slot1`, Minus + R1 save
 `esde-slot1`, Minus + A screenshot, and Minus + Y debug monitor. Plain `xemu`
 remains available as a fallback alternate.
+Before every `run-emulator` launch, Boomer runs a synchronous controller
+reconcile, writes `/run/ghostship-emulation/controllers/resolved-order.json`,
+and generates emulator input config only for currently connected controllers.
+Saved player order still lives at
+`/srv/emulation/config/controllers/player-order.json`, but disconnected or stale
+entries are ignored at launch. Controller gameplay mapping follows Batocera's
+Switch Pro-style baseline while Boomer's Minus hotkey chords stay unchanged.
+
 Minus + R2 is intentionally unmapped for Xemu because there is no reliable
 fast-forward command. RetroArch maps Minus hotkeys to save/load, reset,
 FPS, screenshot, and fast-forward actions, exits on Minus + Plus twice through
 the per-process broker, and uses only the managed base
 `retroarch.cfg`, XDG `global.slangp`, and XDG per-core `.opt` files. PC Engine
 CD and SuperGrafx default all five players to 6-button pads. Dolphin enables
-all four GameCube controller ports and keeps Wii slots 1-4 on the same SDL
-controller order; GameCube maps Dolphin's label aliases with A/B and X/Y
-swapped for Boomer's Switch Pro controller, so physical A/B/X/Y match the
-GameCube labels. Dolphin launches with the raw hotkey broker profile, matching
+only resolved connected GameCube/Wii slots in SDL player order. Dolphin
+launches with the raw hotkey broker profile, matching
 the Xemu approach for Minus chords: Minus + B reset, Minus + L1 load slot 1,
 Minus + R1 save slot 1, Minus + A screenshot, and Minus + R2 fast mode.
 Minus + X quick actions and Minus + Y debug monitor stay unbound for GameCube
@@ -609,6 +621,11 @@ turbo/fast-forward. Square/Capture stays unbound for PCSX2 until Boomer has a
 proven stable SDL guide-style binding. Standalone SDL emulators keep their
 native left-stick mappings. Mupen64Plus-Next defaults all four N64 controller
 paks to Rumble Pak.
+
+ES-DE seeds empty editable custom collections at
+`collections/custom-Local Multiplayer.cfg` and `collections/custom-Co-op.cfg`
+and enables them through `CollectionSystemsCustom`. Populate them later with
+one ROM path per line; ES-DE accepts paths relative to its root where practical.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. The normal path uses the kernel `hid-nintendo` devices

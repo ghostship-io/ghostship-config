@@ -420,7 +420,7 @@ let
                 ((.Modalias.data // "") | ascii_downcase),
                 ((.Icon.data // "") | ascii_downcase)
               ]
-            | select((.[2] == "true") and (((.[3] | test("v057ep2009")) or (.[1] | ascii_downcase | test("(^pro controller$|nintendo switch pro)")))))
+            | select((.[2] == "true") and (((.[3] | test("v057ep2009|v2dc8p(310b|301a)")) or (.[1] | ascii_downcase | test("(^pro controller$|nintendo switch pro|8bitdo|ultimate 2c)")))))
             | .[0]
           '
     }
@@ -485,7 +485,7 @@ let
                 ((.Modalias.data // "") | ascii_downcase),
                 ((.Icon.data // "") | ascii_downcase)
               ]
-            | select((.[3] == "true") and (((.[4] | test("v057ep2009")) or (.[1] | ascii_downcase | test("(^pro controller$|nintendo switch pro)")))))
+            | select((.[3] == "true") and (((.[4] | test("v057ep2009|v2dc8p(310b|301a)")) or (.[1] | ascii_downcase | test("(^pro controller$|nintendo switch pro|8bitdo|ultimate 2c)")))))
             | @tsv
           '
     }
@@ -497,7 +497,13 @@ let
     connect_once() {
       manage_pairing="''${1:-false}"
       attempt_limit="''${2:-0}"
+      duration="''${3:-0}"
       did_connect=0
+      deadline=0
+      if [ "$duration" -gt 0 ]; then
+        deadline=$(( $(date +%s) + duration ))
+      fi
+      while true; do
       rows_tmp="$(mktemp)"
       if ! bluez_switch_pro_rows >"$rows_tmp"; then
         log "skipped autoconnect because BlueZ device query timed out"
@@ -507,7 +513,13 @@ let
       mapfile -t rows <"$rows_tmp"
       rm -f "$rows_tmp"
       total="''${#rows[@]}"
-      [ "$total" -gt 0 ] || return 0
+      if [ "$total" -eq 0 ]; then
+        [ "$duration" -gt 0 ] || return 0
+        [ "$(date +%s)" -lt "$deadline" ] || break
+        timeout 2s bluetoothctl scan on >/dev/null 2>&1 || true
+        sleep 1
+        continue
+      fi
 
       start=0
       if [ "$attempt_limit" -gt 0 ]; then
@@ -545,6 +557,10 @@ let
         fi
         sleep 1
       done
+      [ "$duration" -gt 0 ] || break
+      [ "$(date +%s)" -lt "$deadline" ] || break
+      sleep 1
+      done
       if [ "$did_connect" = 1 ]; then
         ${lib.getExe controllerBluetoothLowLatency} || true
         ${lib.getExe controllerLeds} apply || true
@@ -553,7 +569,7 @@ let
 
     case "''${1:-loop}" in
       once|--once)
-        connect_once true
+        connect_once true 0 "''${2:-0}"
         ;;
       loop)
         while true; do
@@ -566,6 +582,22 @@ let
         exit 64
         ;;
     esac
+  '';
+
+  controllerUsbPair = pkgs.writeShellScriptBin "controller-usb-pair" ''
+    set -euo pipefail
+    export PATH=${emu.scriptPath}:$PATH
+    log_file="${cfg.dataRoot}/logs/controller-usb-pair.log"
+    mkdir -p "$(dirname "$log_file")"
+    {
+      echo "$(date -u +%FT%TZ) USB-assisted Switch Pro pairing/connect refresh"
+      timeout 5s bluetoothctl power on || true
+      timeout 5s bluetoothctl agent KeyboardDisplay || true
+      timeout 5s bluetoothctl default-agent || true
+      timeout 5s bluetoothctl pairable on || true
+      ${lib.getExe controllerAutoconnect} once 10 || true
+      ${lib.getExe controllerLeds} apply || true
+    } >>"$log_file" 2>&1
   '';
 
   controllerReconcileEvents = pkgs.writeShellScriptBin "controller-reconcile-events" ''
@@ -717,6 +749,7 @@ in
   config = lib.mkIf cfg.enable {
     ghostship.emulation.internal.scripts.controllerLeds = controllerLeds;
     ghostship.emulation.internal.scripts.controllerAutoconnect = controllerAutoconnect;
+    ghostship.emulation.internal.scripts.controllerUsbPair = controllerUsbPair;
     ghostship.emulation.internal.scripts.controllerBluetoothLowLatency = controllerBluetoothLowLatency;
     ghostship.emulation.internal.scripts.controllerBluetoothHealth = controllerBluetoothHealth;
     ghostship.emulation.internal.scripts.controllerBluetoothDiagnostics = controllerBluetoothDiagnostics;
@@ -762,6 +795,9 @@ in
       SUBSYSTEM=="usb", ATTR{idVendor}=="2dc8", ATTR{idProduct}=="310b", TEST=="power/control", ATTR{power/control}="on"
       SUBSYSTEM=="usb", ATTR{idVendor}=="2dc8", ATTR{idProduct}=="301a", TEST=="power/control", ATTR{power/control}="on"
       SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="2009", TEST=="power/control", ATTR{power/control}="on"
+      ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2dc8", ATTR{idProduct}=="310b", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-usb-pair.service"
+      ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2dc8", ATTR{idProduct}=="301a", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-usb-pair.service"
+      ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="2009", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-usb-pair.service"
       KERNEL=="hidraw*", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="310b", MODE="0660", GROUP="input", TAG+="uaccess"
       KERNEL=="hidraw*", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="301a", MODE="0660", GROUP="input", TAG+="uaccess"
       KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0660", GROUP="input", TAG+="uaccess"
@@ -913,6 +949,20 @@ in
         Restart = "always";
         RestartSec = "5s";
         TimeoutStopSec = "5s";
+      };
+    };
+
+    systemd.services.controller-usb-pair = {
+      description = "Attempt USB-assisted Switch Pro Bluetooth pairing refresh";
+      after = [
+        "bluetooth.service"
+        "emulation-setup.service"
+      ];
+      unitConfig.StartLimitIntervalSec = 0;
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${lib.getExe controllerUsbPair}";
+        TimeoutStartSec = "20s";
       };
     };
 

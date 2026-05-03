@@ -264,6 +264,22 @@ in
             support32Bit = true;
           };
           pulse.enable = true;
+          extraConfig.pipewire."91-emulation-stable-audio" = {
+            "context.properties" = {
+              "default.clock.rate" = 48000;
+              "default.clock.quantum" = 1024;
+              "default.clock.min-quantum" = 512;
+              "default.clock.max-quantum" = 2048;
+            };
+          };
+          extraConfig.pipewire-pulse."91-emulation-stable-audio" = {
+            "pulse.properties" = {
+              "pulse.min.req" = "512/48000";
+              "pulse.default.req" = "1024/48000";
+              "pulse.default.tlength" = "4096/48000";
+              "pulse.min.quantum" = "512/48000";
+            };
+          };
         };
 
         systemd.user.services.emulation-audio-route = {

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer resolved controller launches**: Add a pre-launch controller resolver
+  that reconciles LEDs, writes connected-only player order under `/run`, and
+  feeds RetroArch, Dolphin, PCSX2, Ryubing, and Xemu launch-time input config.
+- **Boomer stable emulator audio**: Prefer PipeWire SDL3 audio with 48 kHz/1024
+  frame stable buffering, add matching PipeWire/Pulse defaults, and set Xemu
+  audio to `use_dsp = false` and `hrtf = false`.
+- **Boomer ES-DE collections**: Seed empty Local Multiplayer and Co-op custom
+  collections and enable them in ES-DE settings for later manual population.
 - **Boomer PS2 m3u and multiplayer support**: Resolve PS2 `.m3u` playlists in
   `run-emulator` before launching PCSX2, seed a Soulcalibur III playlist when
   the CHD exists, enable PCSX2 port 1 multitap with four SDL controller slots,
