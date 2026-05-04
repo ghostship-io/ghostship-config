@@ -466,7 +466,10 @@ let
     cursor_file="${cfg.dataRoot}/config/controllers/autoconnect-cursor"
     mkdir -p "$(dirname "$log_file")"
     mkdir -p "$(dirname "$cursor_file")"
-    touch "$log_file"
+    if ! touch "$log_file" 2>/dev/null; then
+      log_file="/tmp/controller-autoconnect-$(id -u).log"
+      touch "$log_file"
+    fi
 
     log() {
       echo "$(date -u +%FT%TZ) $*" >>"$log_file"
