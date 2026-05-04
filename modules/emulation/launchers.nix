@@ -1600,6 +1600,7 @@ EOF
         "$rom_path" <<'PY'
 import ctypes
 import json
+import re
 import sys
 import time
 from ctypes import POINTER, Structure, c_bool, c_char_p, c_int, c_uint8, c_uint32, c_void_p
