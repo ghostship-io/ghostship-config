@@ -321,9 +321,10 @@ changelog.
   `0-00000003-057e-0000-0920-000000026803`, not the Bluetooth-style
   `00000005...` GUID and not the SDL instance id. Include a non-null disabled
   `led` block or LED-capable SDL3 controllers crash during `SetConfiguration`.
-  Keep `use_input_global_config = true` so launched games use the managed
-  global input profile instead of stale per-title configs. The stale
-  `WindowKeyboard` profile with keyboard disabled
+  Keep `use_input_global_config = true` in the global config and mirror the
+  managed input list into each launched title's `games/<titleid>/Config.json`
+  because Ryubing can otherwise ignore global `input_config` during game
+  launches. The stale `WindowKeyboard` profile with keyboard disabled
   leaves Switch games with no controls. Ryubing controller changes are not
   accepted by a timeout smoke alone: the generated `Config.json` must survive
   Ryubing startup, Ryubing logs must not report invalid configuration or "No

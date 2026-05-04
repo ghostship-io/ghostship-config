@@ -272,7 +272,7 @@ let
             124) status="pass-timeout" ;;
             *) status="fail-exited" ;;
           esac
-          if grep -Eiq 'missing RetroArch core|failed to open libretro core|failed to load content|failed to extract content|could not read content file|core failed to load|required firmware|no bios detected|cannot open bios|bios.*(missing|not found)|file format is unknown|unknown disk format|not a psp game|no content, starting dummy core|CPU_Init.*recognize|failed to (create|initialize).*Vulkan|Vulkan.*initialization.*failed|VK_ERROR_(INITIALIZATION_FAILED|DEVICE_LOST|OUT_OF_DEVICE_MEMORY)|segmentation fault|Trace/breakpoint trap|No matching controllers found|current configuration is invalid|configuration is invalid|input config verification failed|config load error|not initialized|couldn.t initialize SDL' "$stderr" 2>/dev/null; then
+          if grep -Eiq 'missing RetroArch core|failed to open libretro core|failed to load content|failed to extract content|could not read content file|core failed to load|required firmware|no bios detected|cannot open bios|bios.*(missing|not found)|file format is unknown|unknown disk format|not a psp game|no content, starting dummy core|CPU_Init.*recognize|failed to (create|initialize).*Vulkan|Vulkan.*initialization.*failed|VK_ERROR_(INITIALIZATION_FAILED|DEVICE_LOST|OUT_OF_DEVICE_MEMORY)|segmentation fault|Trace/breakpoint trap|No matching controllers found|current configuration is invalid|configuration is invalid|input config verification failed|config load error|not initialized|couldn.t initialize SDL|UnauthorizedAccessException|Access to the path .* is denied' "$stderr" 2>/dev/null; then
             status="fail-fatal-log"
           fi
         fi

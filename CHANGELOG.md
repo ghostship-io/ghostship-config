@@ -10,9 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Boomer emulator recovery hardening**: Generate Ryubing controller IDs from
   Ryubing's SDL3 duplicate-counter prefix plus stable GUID, fail Switch smoke tests on
   Ryubing controller rejection logs, force Ryubing launched games to use the
-  managed global input profile, keep the standalone hotkey broker attached to
-  the emulator process group, and expose verified USB controller pairing through
-  Bluetooth Settings with a kiosk-visible message path.
+  managed global input profile, mirror that input profile into per-title
+  Ryubing configs, keep the standalone hotkey broker attached to the emulator
+  process group, and expose verified USB controller pairing through Bluetooth
+  Settings with a kiosk-visible message path.
 - **PyLoad failed-download retry**: Add a daily `04:00`
   `pyload-restart-failed` systemd timer that runs a one-shot helper on
   `ghostship_net`, checks pyLoad's queue through `http://pyload:8000`, and

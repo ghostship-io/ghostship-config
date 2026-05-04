@@ -2326,12 +2326,25 @@ if not base_ids:
 application_id_base = base_id(base_ids[0])
 game_dir = ryujinx_config_dir / "games" / application_id_base
 game_dir.mkdir(parents=True, exist_ok=True)
+global_config_path = ryujinx_config_dir / "Config.json"
+title_config_path = game_dir / "Config.json"
 
 def load_json(path, fallback):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return fallback
+
+global_config = load_json(global_config_path, {})
+if isinstance(global_config, dict):
+    title_config = load_json(title_config_path, global_config)
+    if not isinstance(title_config, dict):
+        title_config = dict(global_config)
+    title_config["use_input_global_config"] = False
+    for key in ("input_config", "enable_keyboard", "enable_mouse", "disable_input_when_out_of_focus"):
+        if key in global_config:
+            title_config[key] = global_config[key]
+    title_config_path.write_text(json.dumps(title_config, indent=2) + "\n", encoding="utf-8")
 
 cache = load_json(cache_path, {})
 if not isinstance(cache, dict):
