@@ -1401,6 +1401,39 @@ EOF
       esac
     }
 
+    retroarch_analog_dpad_mode() {
+      case "$system_id" in
+        fbneo|gb|gba|gbc|gamegear|genesis|mastersystem|nds|neogeocd|nes|ngpc|pcengine|pcenginecd|saturn|segacd|snes|virtualboy)
+          echo 1
+          ;;
+        *)
+          echo 0
+          ;;
+      esac
+    }
+
+    retroarch_face_overrides() {
+      player="$1"
+      case "$system_id" in
+        dreamcast)
+          cat <<EOF
+input_player''${player}_b_btn = "1"
+input_player''${player}_a_btn = "0"
+input_player''${player}_y_btn = "3"
+input_player''${player}_x_btn = "2"
+EOF
+          ;;
+        *)
+          cat <<EOF
+input_player''${player}_b_btn = "0"
+input_player''${player}_a_btn = "1"
+input_player''${player}_y_btn = "2"
+input_player''${player}_x_btn = "3"
+EOF
+          ;;
+      esac
+    }
+
     heavy=0
     case "$emulator_id" in
       azahar|dolphin|cemu|xemu|xemu-hotkeys|ryubing|lime3ds|pcsx2|ppsspp|supermodel|teknoparrot|retroarch-beetle-psx-hw|retroarch-beetle-saturn|retroarch-mupen64plus|retroarch-parallel-n64|retroarch-flycast) heavy=1 ;;
@@ -2476,8 +2509,8 @@ EOF
 [GCPad$slot]
 Device = SDL/$index/$name
 Buttons/A = \`Button B\`
-Buttons/B = \`Button A\`
-Buttons/X = \`Button Y\`
+Buttons/B = \`Button Y\`
+Buttons/X = \`Button A\`
 Buttons/Y = \`Button X\`
 Buttons/Z = \`Trigger R\`
 Buttons/Start = \`Start\`
@@ -3048,11 +3081,17 @@ PY
         fi
         retroarch_order_config="/run/ghostship-emulation/controllers/retroarch-order.cfg"
         if jq -e '.players | length > 0' "$resolved_controllers" >/dev/null 2>&1; then
-          jq -r '
-            .players[]
-            | select(.player >= 1 and .player <= 4)
-            | "input_player\(.player)_joypad_index = \"\(.sdl2_index)\""
-          ' "$resolved_controllers" >"$retroarch_order_config.tmp"
+          analog_dpad_mode="$(retroarch_analog_dpad_mode)"
+          : >"$retroarch_order_config.tmp"
+          jq -c '.players[] | select(.player >= 1 and .player <= 4)' "$resolved_controllers" | while read -r controller; do
+            player="$(jq -r '.player' <<<"$controller")"
+            sdl2_index="$(jq -r '.sdl2_index' <<<"$controller")"
+            {
+              printf 'input_player%s_joypad_index = "%s"\n' "$player" "$sdl2_index"
+              printf 'input_player%s_analog_dpad_mode = "%s"\n' "$player" "$analog_dpad_mode"
+              retroarch_face_overrides "$player"
+            } >>"$retroarch_order_config.tmp"
+          done
           mv "$retroarch_order_config.tmp" "$retroarch_order_config"
           cmd+=(--appendconfig "$retroarch_order_config")
         fi
@@ -3517,8 +3556,8 @@ EOF
 [GCPad$slot]
 Device = SDL/$index/Nintendo Switch Pro Controller
 Buttons/A = \`Button B\`
-Buttons/B = \`Button A\`
-Buttons/X = \`Button Y\`
+Buttons/B = \`Button Y\`
+Buttons/X = \`Button A\`
 Buttons/Y = \`Button X\`
 Buttons/Z = \`Trigger R\`
 Buttons/Start = \`Start\`
@@ -3815,7 +3854,7 @@ EOF
         "face_east": "physical A / right face / secondary or cancel where applicable",
         "face_north": "physical X / upper face",
         "face_west": "physical Y / left face",
-        "digital_movement": "RetroArch no longer uses analog-to-D-pad config layers; D-pad stays on D-pad, analog-capable systems keep analog sticks as analog input, and standalone SDL emulators keep their native mappings",
+        "digital_movement": "RetroArch launch config sets left analog to D-pad only for systems whose original controller has no left analog stick; analog-capable systems keep analog sticks as analog input, and standalone SDL emulators keep their native mappings",
         "player_slots": "map every stable declarative player slot exposed by the emulator"
       },
       "global_sdl_hints": {
@@ -3842,14 +3881,14 @@ EOF
         "pico8": "fallback plain PICO-8 launch: Start/+ opens pause/menu; PICO-8 uses an explicit managed -home config directory"
       },
       "managed_defaults": {
-        "retroarch": "Switch Pro and 8BitDo autoconfig map physical A/B/X/Y to matching RetroPad labels; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Minus hotkeys are configured for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
-        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 use SDL slots 0-3; GameCube maps Dolphin label aliases with A/B and X/Y swapped for Boomer's Switch Pro controller, enables all four ports, launches fullscreen without analytics, panic, or stop-confirm prompts, and uses the raw hotkey broker for reset, save/load slot 1, screenshot, and fast mode; Square/Capture opens Wii Remote Home only where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
+        "retroarch": "Switch Pro and 8BitDo autoconfig map physical B/A/Y/X to RetroPad B/A/Y/X, then launch-time RetroArch append config pins connected players, sets analog-to-D-pad for digital-only systems, and applies the Dreamcast physical face override; RetroArch uses the managed base retroarch.cfg, generated RetroAchievements append config, XDG global.slangp, and XDG per-core .opt files; PC Engine-family cores default to 6-button pads for all five players; RetroArch Minus hotkeys keep the same physical buttons for menu, save/load, reset, FPS, screenshot, and fast-forward; Square/Capture has no stable Home binding",
+        "dolphin": "GameCube ports 1-4 and Wii slots 1-4 use resolved SDL slots; GameCube maps A/B/X/Y by physical position for Boomer's Switch Pro controller, enables only connected launch slots, launches fullscreen without analytics, panic, or stop-confirm prompts, and uses the raw hotkey broker for reset, save/load slot 1, screenshot, and fast mode; Square/Capture opens Wii Remote Home only where Dolphin exposes it; D-pad stays on physical D-pad and analog movement stays on analog sticks",
         "ppsspp": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "pcsx2": "launches through standalone PCSX2 with managed no-wizard config, launcher-side m3u first-disc resolution, Vulkan 3x internal resolution, native PCSX2 hotkey chords for pause menu/reset/save/load/screenshot/OSD/turbo, port 1 multitap for players 1-4, token-backed RetroAchievements when RETROACHIEVEMENTS_TOKEN is projected, and Minus + Plus twice exits through the per-launch broker; Square/Capture is intentionally unbound until a stable Boomer SDL guide binding is proven",
         "azahar": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "cemu": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
-        "xemu": "fallback plain Xemu launch with native Minus + Plus quick actions and per-launch Minus + Plus twice exit",
-        "xemu-hotkeys": "default Xbox launch with the standalone broker for quick actions, save/load, reset, screenshots, debug monitor, and pause",
+        "xemu": "fallback plain Xemu launch uses resolved controller ports with physical Xbox face layout through SDL and per-launch Minus + Plus twice exit",
+        "xemu-hotkeys": "default Xbox launch uses resolved controller ports with physical Xbox face layout through SDL plus the standalone broker for quick actions, save/load, reset, screenshots, debug monitor, and pause",
         "ryubing": "inherits SDL Switch label hints from run-emulator, installs the newest local firmware archive into Ryubing's registered firmware store, uses managed Vulkan/docked/fullscreen Ryubing settings, and maps Minus + X to F4, Minus + A to F8, Square/Capture to F5, and Minus + Plus twice to exit through the per-launch broker",
         "supermodel": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; Minus + Plus twice exits through the per-launch broker",

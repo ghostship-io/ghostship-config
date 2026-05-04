@@ -325,9 +325,10 @@ changelog.
   where explicitly configured and otherwise no-op, Select/Minus is the hotkey
   modifier, Star/Home is a controller-local turbo button when exposed, and
   expanded standalone raw hotkey brokers must be opt-in per-emulator launch modes.
-  Controller Maps should stay text-only with a compact two-column button map
-  above hotkeys, no ASCII controller art. Keep N64 A/B direct on physical
-  Switch A/B, and launch GZDoom with the managed Boomer controls cfg. Reset
+  Controller Maps should stay text-only with a compact two-column physical map
+  above hotkeys, no ASCII controller art. Keep N64 A on physical Switch B and
+  N64 B on physical Switch Y, and launch GZDoom with the managed Boomer
+  controls cfg. Reset
   stale `Doom.Bindings` and automap sections so GZDoom regenerates its generic
   defaults, then override the current 8BitDo Ultimate 2C probe in
   `boomer-controls.cfg`: B/Joy1 jump, A/Joy2 use, X/Joy3 crouch, Y/Joy4 reload,

@@ -599,7 +599,13 @@ and generates emulator input config only for currently connected controllers.
 Saved player order still lives at
 `/srv/emulation/config/controllers/player-order.json`, but disconnected or stale
 entries are ignored at launch. Controller gameplay mapping follows Batocera's
-Switch Pro-style baseline while Boomer's Minus hotkey chords stay unchanged.
+Switch Pro-style physical baseline while Boomer's Minus hotkey chords stay
+unchanged: physical B/south is the primary south button, physical A/east is
+the right/east button, physical Y/west is the left/west button, and physical
+X/north is the top/north button. RetroArch pins that face map at launch for
+resolved players, applies a Dreamcast physical face override, and enables
+left-stick-to-D-pad only for systems whose original controller has no left
+analog stick. N64 uses physical B for N64 A and physical Y for N64 B.
 
 Minus + R2 is intentionally unmapped for Xemu because there is no reliable
 fast-forward command. RetroArch maps Minus hotkeys to save/load, reset,
@@ -607,13 +613,16 @@ FPS, screenshot, and fast-forward actions, exits on Minus + Plus twice through
 the per-process broker, and uses only the managed base
 `retroarch.cfg`, XDG `global.slangp`, and XDG per-core `.opt` files. PC Engine
 CD and SuperGrafx default all five players to 6-button pads. Dolphin enables
-only resolved connected GameCube/Wii slots in SDL player order. Dolphin
+only resolved connected GameCube/Wii slots in SDL player order and maps
+GameCube face buttons by physical position: B->A, Y->B, A->X, and X->Y. Dolphin
 launches with the raw hotkey broker profile, matching
 the Xemu approach for Minus chords: Minus + B reset, Minus + L1 load slot 1,
 Minus + R1 save slot 1, Minus + A screenshot, and Minus + R2 fast mode.
 Minus + X quick actions and Minus + Y debug monitor stay unbound for GameCube
 because Dolphin does not expose equivalent normal runtime actions. D-pad stays
-on physical D-pad and analog movement stays on analog sticks. PCSX2 uses native PCSX2 hotkey bindings instead of an external hotkey
+on physical D-pad and analog movement stays on analog sticks for analog-capable
+standalone systems. PCSX2 uses native PCSX2 hotkey bindings instead of an
+external hotkey
 broker: Minus + X opens the pause menu, Minus + B resets the VM, Minus + L1
 loads state slot 1, Minus + R1 saves state slot 1, Minus + A saves a
 screenshot, Minus + Y toggles the OSD/FPS overlay, and Minus + R2 holds

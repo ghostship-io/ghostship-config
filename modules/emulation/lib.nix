@@ -323,7 +323,7 @@ let
       platform = "dreamcast";
       theme = "dreamcast";
       emulator = "retroarch-flycast";
-      extensions = "${commonRetroExtensions} ${discExtensions} .gdi .GDI .cdi .CDI";
+      extensions = "${commonRetroExtensions} ${discExtensions} .gdi .GDI .cdi .CDI .elf .ELF .lst .LST .dat .DAT";
       fixedAspect = "4:3";
     }
     {

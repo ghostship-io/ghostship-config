@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer physical controller maps**: Make Switch Pro/8BitDo face buttons
+  physical across emulator launch config, keep RetroArch hotkey gestures on the
+  same physical buttons, set left analog as D-pad only for digital-only
+  RetroArch systems, map N64 A/B to physical B/Y, align Dolphin GameCube face
+  buttons physically, and add Dreamcast `.elf/.lst/.dat` ES-DE launch coverage.
 - **Boomer USB controller reconnect fix**: Count wired resolved controllers in
   Bluetooth Settings status, run the legacy Reconnect Controllers tool through
   the bounded 10-second connector, and keep USB-assisted pairing bounded

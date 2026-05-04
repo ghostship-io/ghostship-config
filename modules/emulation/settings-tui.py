@@ -441,7 +441,7 @@ def two_column_button_lines(entries):
 
 def controller_map(title, mappings, notes=(), hotkeys=()):
     rows = [f"{button} -> {mappings.get(button, 'None')}" if button else "" for button in SWITCH_PRO_BUTTONS]
-    lines = [title, "Button Map (Switch Pro -> Original)"]
+    lines = [title, "Physical Map (Switch Pro -> Original)"]
     lines.extend(f"  {line}" for line in two_column_button_lines(rows))
     lines.append("Hotkeys")
     lines.extend(f"  {line}" for line in (hotkeys or GLOBAL_EXIT_HOTKEYS))
@@ -472,7 +472,7 @@ CONTROLLER_MAPS = [
                 "Square": "Console Home*",
                 "Star": "Turbo",
             },
-            ["Rocknix hotkeys use Minus; Square is Home only where listed."],
+            ["Face buttons are physical: B south, A east, Y west, X north."],
             GLOBAL_EXIT_HOTKEYS,
         ),
     },
@@ -620,10 +620,10 @@ CONTROLLER_MAPS = [
             {
                 "D-pad": "D-pad",
                 "Left Stick": "Analog",
-                "A": "A",
-                "B": "B",
-                "X": "X",
-                "Y": "Y",
+                "A": "B",
+                "B": "A",
+                "X": "Y",
+                "Y": "X",
                 "L1": "L Trigger",
                 "R1": "R Trigger",
                 "L2": "L Trigger",
@@ -659,10 +659,10 @@ CONTROLLER_MAPS = [
             {
                 "D-pad": "Stick",
                 "Left Stick": "Stick",
-                "A": "A",
-                "B": "B",
-                "X": "C",
-                "Y": "D",
+                "A": "B",
+                "B": "A",
+                "X": "D",
+                "Y": "C",
                 "Minus": "Coin/Select",
                 "Plus": "Start",
                 "Star": "Turbo",
@@ -681,8 +681,8 @@ CONTROLLER_MAPS = [
                 "Right Stick": "Right Stick",
                 "L3": "L3",
                 "R3": "R3",
-                "A": "PS Cross",
-                "B": "PS Circle",
+                "A": "PS Circle",
+                "B": "PS Cross",
                 "X": "PS Triangle",
                 "Y": "PS Square",
                 "L1": "L1",
@@ -705,8 +705,8 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Analog",
                 "Right Stick": "C-buttons",
-                "A": "A",
-                "B": "B",
+                "B": "A",
+                "Y": "B",
                 "L1": "L",
                 "R1": "R",
                 "L2": "Z",
@@ -714,7 +714,7 @@ CONTROLLER_MAPS = [
                 "Plus": "Start",
                 "Star": "Turbo",
             },
-            ["N64 A/B stay direct."],
+            ["N64 A is physical B; N64 B is physical Y."],
             RETROARCH_HOTKEYS,
         ),
     },
@@ -726,10 +726,10 @@ CONTROLLER_MAPS = [
                 "D-pad": "D-pad",
                 "Left Stick": "Main Stick",
                 "Right Stick": "C-Stick",
-                "A": "A",
-                "B": "B",
-                "X": "X",
-                "Y": "Y",
+                "A": "X",
+                "B": "A",
+                "X": "Y",
+                "Y": "B",
                 "L1": "L",
                 "R1": "R",
                 "R2": "Z",
@@ -825,10 +825,10 @@ CONTROLLER_MAPS = [
                 "Right Stick": "Right Stick",
                 "L3": "Left Stick Press",
                 "R3": "Right Stick Press",
-                "A": "A",
-                "B": "B",
-                "X": "X",
-                "Y": "Y",
+                "A": "B",
+                "B": "A",
+                "X": "Y",
+                "Y": "X",
                 "L1": "White",
                 "R1": "Black",
                 "L2": "Left Trigger",
@@ -848,8 +848,8 @@ CONTROLLER_MAPS = [
             {
                 "D-pad": "D-pad",
                 "Left Stick": "Analog",
-                "A": "PSP Cross",
-                "B": "PSP Circle",
+                "A": "PSP Circle",
+                "B": "PSP Cross",
                 "X": "PSP Triangle",
                 "Y": "PSP Square",
                 "L1": "L",
@@ -873,8 +873,8 @@ CONTROLLER_MAPS = [
                 "Right Stick": "Right Stick",
                 "L3": "L3",
                 "R3": "R3",
-                "A": "Cross",
-                "B": "Circle",
+                "A": "Circle",
+                "B": "Cross",
                 "X": "Triangle",
                 "Y": "Square",
                 "L1": "L1",
@@ -967,10 +967,10 @@ CONTROLLER_MAPS = [
             {
                 "D-pad": "Stick",
                 "Left Stick": "Stick",
-                "A": "B1",
-                "B": "B2",
-                "X": "B3",
-                "Y": "B4",
+                "A": "B2",
+                "B": "B1",
+                "X": "B4",
+                "Y": "B3",
                 "L1": "B5",
                 "R1": "B6",
                 "L2": "B5 / B7",
@@ -992,10 +992,10 @@ CONTROLLER_MAPS = [
                 "Left Stick": "Stick",
                 "L3": "Service",
                 "R3": "Test",
-                "A": "B1",
-                "B": "B2",
-                "X": "B3",
-                "Y": "B4",
+                "A": "B2",
+                "B": "B1",
+                "X": "B4",
+                "Y": "B3",
                 "L1": "B5",
                 "R1": "B6",
                 "L2": "B5 / B7",
@@ -2530,7 +2530,7 @@ def smoke_test(mode):
             assert wrapped
             assert len(wrapped) <= metrics["content_height"]
             assert all(len(line) <= metrics["right_width"] for line in wrapped)
-            assert "Button Map (Switch Pro -> Original)" in row["detail"]
+            assert "Physical Map (Switch Pro -> Original)" in row["detail"]
             assert "Hotkeys" in row["detail"]
             button_rows = row["detail"][2 : 2 + ((len(SWITCH_PRO_BUTTONS) + 1) // 2)]
             button_text = "\n".join(button_rows)
@@ -2556,11 +2556,15 @@ def smoke_test(mode):
                     assert not any("Minus + R2 -> Fast" in line for line in row["detail"])
             assert not any("Original Controller" in line or "+---" in line for line in row["detail"])
         n64 = next(row for row in CONTROLLER_MAPS if row["label"] == "Nintendo 64")
-        assert any("A -> A" in line for line in n64["detail"])
-        assert any("B -> B" in line for line in n64["detail"])
+        assert any("A -> None" in line for line in n64["detail"])
+        assert any("B -> A" in line for line in n64["detail"])
         assert any("X -> None" in line for line in n64["detail"])
-        assert any("Y -> None" in line for line in n64["detail"])
+        assert any("Y -> B" in line for line in n64["detail"])
         gamecube = next(row for row in CONTROLLER_MAPS if row["label"] == "GameCube")
+        assert any("B -> A" in line for line in gamecube["detail"])
+        assert any("Y -> B" in line for line in gamecube["detail"])
+        assert any("A -> X" in line for line in gamecube["detail"])
+        assert any("X -> Y" in line for line in gamecube["detail"])
         assert any("R1 -> R" in line for line in gamecube["detail"])
         assert any("L2 -> None" in line for line in gamecube["detail"])
         assert any("R2 -> Z" in line for line in gamecube["detail"])
@@ -2582,6 +2586,10 @@ def smoke_test(mode):
         wii = next(row for row in CONTROLLER_MAPS if row["label"] == "Wii Remote + Nunchuk")
         assert any("Square -> Console Home" in line for line in wii["detail"])
         xbox = next(row for row in CONTROLLER_MAPS if row["label"] == "Xbox")
+        assert any("B -> A" in line for line in xbox["detail"])
+        assert any("A -> B" in line for line in xbox["detail"])
+        assert any("Y -> X" in line for line in xbox["detail"])
+        assert any("X -> Y" in line for line in xbox["detail"])
         assert any("Minus + X -> Quick Menu" in line for line in xbox["detail"])
         assert any("Minus + R1 -> Save" in line for line in xbox["detail"])
         assert any("Minus + R2 -> None" in line for line in xbox["detail"])
