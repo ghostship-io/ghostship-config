@@ -103,6 +103,19 @@ def modalias_vid_pid(modalias):
         return "", ""
     return match.group(1).upper(), match.group(2).upper()
 
+def ryubing_guid_from_sdl(raw_guid):
+    raw = "".join(ch for ch in (raw_guid or "").lower() if ch in "0123456789abcdef")
+    if len(raw) != 32:
+        return ""
+    guid = f"{raw[4:6]}{raw[6:8]}{raw[2:4]}{raw[0:2]}-{raw[10:12]}{raw[8:10]}-{raw[12:16]}-{raw[16:20]}-{raw[20:32]}"
+    return "0000" + guid[4:]
+
+def stable_ryubing_guid(raw_guid, modalias):
+    vid, pid = modalias_vid_pid(modalias)
+    if (vid.lower(), pid.lower()) == ("057e", "2009"):
+        return "00000005-057e-0000-0920-000001800000"
+    return ryubing_guid_from_sdl(raw_guid)
+
 def transport_from_bus(bus):
     if bus == "0005":
         return "bluetooth"
@@ -318,11 +331,14 @@ for gamepad in sdl3_gamepads():
     input_meta = gamepad.get("input", {})
     ident = identity(input_meta.get("uniq", ""), input_meta.get("modalias", ""))
     if ident in connected:
+        ryubing_guid = stable_ryubing_guid(gamepad["guid"], input_meta.get("modalias", ""))
         connected[ident].update({
             "sdl_name": gamepad.get("name") or "",
             "sdl3_index": gamepad["sdl3_index"],
             "sdl3_instance_id": gamepad["sdl3_instance_id"],
             "sdl_guid": gamepad["guid"],
+            "ryubing_guid": ryubing_guid,
+            "ryubing_id": f"{gamepad['sdl3_instance_id']}-{ryubing_guid}" if ryubing_guid else "",
             "xemu_guid": gamepad["guid"],
         })
 resolved = []
@@ -550,6 +566,12 @@ PY
             return True
         except OSError:
             return False
+
+    def process_group(pid):
+        try:
+            return os.getpgid(pid)
+        except OSError:
+            return None
 
     def signal_group(pid, sig, pgid=None):
         try:
@@ -874,13 +896,20 @@ PY
         if not fds:
             log(args.log, f"no supported controller input devices found for {args.profile} hotkey broker", system=args.system, emulator=args.emulator)
             return 0
+        target_pgid = process_group(args.pid)
+        if target_pgid is None:
+            log(args.log, f"{args.profile} hotkey broker target process {args.pid} is already gone", system=args.system, emulator=args.emulator)
+            for fd in fds.values():
+                os.close(fd)
+            return 0
 
         pressed = {path: set() for path in fds}
         active_chords = {path: set() for path in fds}
         last_select_start = {path: 0.0 for path in fds}
-        log(args.log, f"started {args.profile} hotkey broker on {len(fds)} controller(s)", system=args.system, emulator=args.emulator)
+        event_detail = ", ".join(f"{path}:{input_name(path)}" for path in sorted(fds))
+        log(args.log, f"started {args.profile} hotkey broker on pid {args.pid}, pgid {target_pgid}, events [{event_detail}]", system=args.system, emulator=args.emulator)
 
-        while process_alive(args.pid):
+        while group_alive(target_pgid):
             try:
                 readable, _, _ = select.select(list(fds.values()), [], [], 0.2)
             except OSError:
@@ -1955,11 +1984,12 @@ def assign_ryubing_ids(gamepads):
         guid = gamepad.get("ryubing_guid", "")
         if not guid:
             continue
-        index = 0
-        candidate = f"{index}-{guid}"
+        instance_id = int(gamepad.get("instance_id", 0))
+        candidate = f"{instance_id}-{guid}"
+        suffix = 1
         while candidate in used:
-            index += 1
-            candidate = f"{index}-{guid}"
+            candidate = f"{instance_id + suffix}-{guid}"
+            suffix += 1
         used.add(candidate)
         gamepad["ryubing_id"] = candidate
 
@@ -2107,6 +2137,24 @@ def managed_input_config():
         )
     return configs
 
+def verify_managed_config(config):
+    expected = sorted(assign_players(enumerate_sdl_gamepads()).values())
+    expected = [player for player in expected if 1 <= player <= 4]
+    actual = sorted(
+        int(str(row.get("player_index", "")).removeprefix("Player"))
+        for row in config.get("input_config", [])
+        if row.get("backend") == "GamepadSDL3"
+        and row.get("controller_type") == "ProController"
+        and str(row.get("player_index", "")).removeprefix("Player").isdigit()
+    )
+    if expected and actual != expected:
+        raise SystemExit(f"Ryubing input config verification failed: expected players {expected}, generated {actual}")
+    for row in config.get("input_config", []):
+        if row.get("backend") == "WindowKeyboard":
+            raise SystemExit("Ryubing input config verification failed: stale WindowKeyboard profile remains")
+        if row.get("backend") == "GamepadSDL3" and not re.match(r"^[0-9]+-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", str(row.get("id", ""))):
+            raise SystemExit(f"Ryubing input config verification failed: invalid SDL3 id {row.get('id')!r}")
+
 config.update(
     {
         "backend_threading": "Auto",
@@ -2138,6 +2186,7 @@ config.update(
     }
 )
 config["input_config"] = managed_input_config()
+verify_managed_config(config)
 hotkeys = config.setdefault("hotkeys", {})
 hotkeys.update({"show_ui": "F4", "screenshot": "F8", "pause": "F5"})
 

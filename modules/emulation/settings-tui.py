@@ -1961,6 +1961,12 @@ class SettingsApp:
                         "action": self.bluetooth_scan_pair,
                     },
                     {
+                        "label": "USB Pair Controller",
+                        "desc": "Pair a plugged-in Switch Pro-style controller for Bluetooth.",
+                        "detail": ["Plug in one controller with USB.", "Boomer reports paired only after BlueZ verifies it."],
+                        "action": self.bluetooth_usb_pair_controller,
+                    },
+                    {
                         "label": "Connect Paired Device",
                         "desc": "Connect one saved Bluetooth device.",
                         "detail": ["Use this for a controller or headset that is already paired."],
@@ -2079,6 +2085,15 @@ class SettingsApp:
             run_cmd(["systemctl", "start", "--no-block", "controller-leds-apply.service"], timeout=8)
             return finish(0)
         self.run_and_show("Pair Device", action)
+
+    def bluetooth_usb_pair_controller(self):
+        def action():
+            code, out, err = run_cmd(["switch-usb-bt-pair"], timeout=15)
+            run_cmd(["controller-leds", "apply"], timeout=15)
+            append_log(PAIRING_LOG, ["usb pair controller", out, err])
+            return code, out, err
+
+        self.run_and_show("USB Pair Controller", action)
 
     def bluetooth_connect_paired(self):
         row = self.tui.choose("Connect Device", self.bt.paired_rows(), "No paired devices.")

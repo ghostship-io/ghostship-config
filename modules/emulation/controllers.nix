@@ -651,7 +651,7 @@ let
     export PATH=${emu.scriptPath}:$PATH
     log_file="${cfg.dataRoot}/logs/switch-usb-bt-pair.log"
     mkdir -p "$(dirname "$log_file")"
-    ${pkgs.python3}/bin/python3 - "$log_file" "''${1:-}" <<'PY'
+    ${pkgs.python3}/bin/python3 - "$log_file" "''${1:-}" "${pkgs.xmessage}/bin/xmessage" <<'PY'
 import fcntl
 import glob
 import os
@@ -664,11 +664,25 @@ from pathlib import Path
 
 log_path = Path(sys.argv[1])
 requested = sys.argv[2]
+xmessage = sys.argv[3]
 HIDIOCGRAWINFO = 0x80084803
 
 def log(message):
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {message}\n")
+
+def show_message(message):
+    print(message)
+    log(message)
+    if os.environ.get("DISPLAY"):
+        try:
+            subprocess.Popen(
+                [xmessage, "-center", "-timeout", "8", message],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            pass
 
 def adapter_mac():
     proc = subprocess.run(["bluetoothctl", "show"], check=False, text=True, capture_output=True, timeout=5)
@@ -718,6 +732,12 @@ def read_reply(fd, deadline):
             return data
     return b""
 
+def bluez_info(mac):
+    return subprocess.run(["bluetoothctl", "info", mac], check=False, text=True, capture_output=True, timeout=5).stdout
+
+def has_flag(info, name):
+    return re.search(rf"^\s*{re.escape(name)}:\s+yes\s*$", info, re.M) is not None
+
 path, fd = candidate_hidraw()
 try:
     host = bytes.fromhex(adapter_mac().replace(":", ""))[::-1]
@@ -741,6 +761,17 @@ try:
     if controller_mac:
         subprocess.run(["bluetoothctl", "trust", controller_mac], check=False, timeout=5)
         subprocess.run(["bluetoothctl", "connect", controller_mac], check=False, timeout=8)
+        info = bluez_info(controller_mac)
+        paired = (has_flag(info, "Paired") or has_flag(info, "Bonded")) and has_flag(info, "Trusted")
+        connected = has_flag(info, "Connected")
+        if not paired:
+            raise RuntimeError(f"USB pairing did not produce a trusted BlueZ pairing for {controller_mac}")
+        if connected:
+            show_message(f"Controller paired and connected: {controller_mac}")
+        else:
+            show_message(f"Controller paired: {controller_mac}. Unplug it and press a button to reconnect wirelessly.")
+    else:
+        raise RuntimeError("controller did not report a Bluetooth address during USB pairing")
 finally:
     os.close(fd)
 PY

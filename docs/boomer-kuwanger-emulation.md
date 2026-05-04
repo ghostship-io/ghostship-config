@@ -629,7 +629,9 @@ matching controllers found` warning for connected players, and a game can use
 the generated `ProController` profile, including L+R join where applicable.
 Ryubing input schema, GUID formatting, `led` blocks, and disabled keyboard
 entries must be copied from a known live-accepted Ryubing profile or source
-model, not inferred from SDL names alone.
+model, not inferred from SDL names alone. Generated Ryubing IDs use the live
+SDL3 instance id prefix plus the stable Ryubing GUID, and `run-emulator` refuses
+to launch if its generated connected-player profiles fail the local verifier.
 
 Minus + R2 is intentionally unmapped for Xemu because there is no reliable
 fast-forward command. RetroArch maps Minus hotkeys to save/load, reset,
@@ -673,6 +675,9 @@ Bluetooth. Boomer must not show a pairing success message until the intended
 state is verified. ES-DE under Gamescope does not provide a normal desktop
 notification service, so user-visible pairing messages need an explicit
 kiosk-visible Xwayland overlay or an ES-DE patch instead of `notify-send`.
+Bluetooth Settings exposes `USB Pair Controller` for the bounded USB helper;
+it refreshes LEDs afterward and reports paired/connected state only after
+checking BlueZ.
 
 Diagnostics:
 
@@ -732,6 +737,9 @@ interactive session, and rechecks BlueZ state before treating a reported
 pair/connect error as fatal. Keyboard input is handled by the terminal, while
 the raw `/dev/input` reader is limited to real controller navigation devices so
 Switch Pro IMU motion data and analog-stick idle noise do not move the menu.
+`USB Pair Controller` runs the USB-assisted Switch Pro-style pairing helper for
+one plugged-in controller and shows the verified result in the TUI, with an
+Xwayland popup when the kiosk display is available.
 Player assignment drains pending input before listening and accepts only a real
 button/key press, so stale stick navigation cannot move a controller to another
 slot. `Restart ES-DE` runs through a dedicated delayed system service outside
