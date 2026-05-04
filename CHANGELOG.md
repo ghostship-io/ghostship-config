@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 - **Boomer emulator recovery hardening**: Generate Ryubing controller IDs from
-  Ryubing's SDL3 duplicate-counter prefix plus stable GUID, fail Switch smoke tests on
+  Ryubing's launch-environment input ID list when available, fall back to its
+  SDL3 duplicate-counter stable GUID convention, fail Switch smoke tests on
   Ryubing controller rejection logs, force Ryubing launched games to use the
   managed global input profile, mirror that input profile into per-title
   Ryubing configs, keep the standalone hotkey broker attached to the emulator

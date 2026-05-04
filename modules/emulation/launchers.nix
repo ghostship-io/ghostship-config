@@ -1629,11 +1629,16 @@ EOF
         "$log_file" \
         "$system_id" \
         "$emulator_id" \
-        "$rom_path" <<'PY'
+        "$rom_path" \
+        "${packages.ryubingCanaryPackage}/bin/ryujinx" <<'PY'
 import ctypes
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 from ctypes import POINTER, Structure, c_bool, c_char_p, c_int, c_uint8, c_uint32, c_void_p
 from pathlib import Path
@@ -1645,6 +1650,7 @@ log_path = Path(sys.argv[4])
 system_id = sys.argv[5]
 emulator_id = sys.argv[6]
 rom_path = sys.argv[7]
+ryujinx_bin = sys.argv[8]
 
 def log_event(event, message):
     try:
@@ -1994,6 +2000,108 @@ def assign_ryubing_ids(gamepads):
         used.add(candidate)
         gamepad["ryubing_id"] = candidate
 
+def parse_ryubing_input_ids(output):
+    rows = []
+    for line in output.splitlines():
+        match = re.search(r'- ([0-9]+-[0-9a-fA-F-]+) \("(.+)"\)', line)
+        if match:
+            rows.append({"id": match.group(1), "name": match.group(2)})
+    return rows
+
+def ryubing_reported_input_ids():
+    if not Path(ryujinx_bin).exists():
+        return []
+    env = os.environ.copy()
+    if not env.get("DISPLAY") and Path("/tmp/.X11-unix/X0").exists():
+        env["DISPLAY"] = ":0"
+    if not env.get("DISPLAY"):
+        return []
+    with tempfile.TemporaryDirectory(prefix="ryubing-input-ids.") as tmp:
+        tmp_path = Path(tmp)
+        try:
+            shutil.copy2(path, tmp_path / "Config.json")
+        except OSError:
+            return []
+        profile_source = path.parent / "system" / "Profiles.json"
+        if profile_source.exists():
+            profile_target = tmp_path / "system" / "Profiles.json"
+            profile_target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(profile_source, profile_target)
+            except OSError:
+                pass
+        command = [
+            ryujinx_bin,
+            "--no-gui",
+            "--root-data-dir",
+            str(tmp_path),
+            "--list-input-ids",
+            rom_path,
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            output = completed.stdout
+        except subprocess.TimeoutExpired as exc:
+            output = exc.stdout or ""
+            if isinstance(output, bytes):
+                output = output.decode("utf-8", errors="replace")
+        return parse_ryubing_input_ids(output)
+
+def apply_ryubing_reported_ids(gamepads):
+    reported = ryubing_reported_input_ids()
+    if not reported:
+        log_warning("Ryubing did not report launch-environment input IDs; using computed SDL3 IDs")
+        return
+    remaining = list(reported)
+    matched = 0
+    for gamepad in gamepads:
+        name = gamepad.get("name", "")
+        selected_index = next(
+            (
+                index
+                for index, row in enumerate(remaining)
+                if row.get("name") == name
+            ),
+            None,
+        )
+        if selected_index is None and len(remaining) == 1:
+            selected_index = 0
+        if selected_index is None:
+            continue
+        row = remaining.pop(selected_index)
+        gamepad["ryubing_id"] = row["id"]
+        gamepad["ryubing_guid"] = row["id"].split("-", 1)[1]
+        matched += 1
+    if matched:
+        log_event(
+            "ryubing-input",
+            "using Ryubing-reported input IDs "
+            + json.dumps(
+                [
+                    {
+                        "id": gamepad.get("ryubing_id", ""),
+                        "name": gamepad.get("name", ""),
+                    }
+                    for gamepad in gamepads
+                    if gamepad.get("ryubing_id")
+                ],
+                sort_keys=True,
+            ),
+        )
+    else:
+        log_warning(
+            "Ryubing reported input IDs but none matched SDL3 gamepads: "
+            + json.dumps(reported, sort_keys=True)
+        )
+
 def controller_config(gamepad, player):
     return {
         "left_joycon_stick": {
@@ -2092,6 +2200,7 @@ def managed_input_config():
     if len(gamepads) < 4:
         log_warning(f"Ryubing detected {len(gamepads)} SDL3 gamepad(s); up to 4 are supported when connected before launch")
     assigned = assign_players(gamepads)
+    apply_ryubing_reported_ids(gamepads)
     configs = []
     for gamepad in gamepads:
         player = assigned.get(gamepad["instance_id"])

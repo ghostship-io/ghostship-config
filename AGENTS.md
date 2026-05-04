@@ -316,11 +316,12 @@ changelog.
   Ryubing's SDL3 stable GUID format like
   Ryubing's `SDL3GamepadDriver.GenerateGamepadId` convention: convert the SDL3
   GUID to Ryubing's GUID string, replace the first four chars with `0000`, and
-  prefix `0-`, `1-`, etc. only as a duplicate counter for identical GUIDs. For
-  Boomer's wired `057e:2009` probe this is
-  `0-00000003-057e-0000-0920-000000026803`, not the Bluetooth-style
-  `00000005...` GUID and not the SDL instance id. Include a non-null disabled
-  `led` block or LED-capable SDL3 controllers crash during `SetConfiguration`.
+  prefix `0-`, `1-`, etc. only as a duplicate counter for identical GUIDs. When
+  a display is available, prefer Ryubing's own `--no-gui --list-input-ids`
+  output for the launch environment; Boomer's wired `057e:2009` can report a
+  different SDL3 stable GUID under the actual Xwayland session than in a
+  displayless preflight. Include a non-null disabled `led` block or LED-capable
+  SDL3 controllers crash during `SetConfiguration`.
   Keep `use_input_global_config = true` in the global config and mirror the
   managed input list into each launched title's `games/<titleid>/Config.json`
   because Ryubing can otherwise ignore global `input_config` during game
