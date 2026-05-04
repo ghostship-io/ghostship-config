@@ -1149,21 +1149,28 @@ def is_controller_event_device(event_path):
 
 
 def format_bluetooth_status(adapter_lines, connected, paired, players, audio_output):
-    player_by_mac = {mac_key(player.get("mac")): player for player in players if player.get("mac")}
+    connected_players = [
+        player
+        for player in players
+        if player.get("connected") is True and 1 <= int(player.get("player", 0) or 0) <= 4
+    ]
+    connected_player_macs = {mac_key(player.get("mac")) for player in connected_players if player.get("mac")}
+    connected_other = [device for device in connected if mac_key(device.get("mac")) not in connected_player_macs]
     lines = []
     power = next((line for line in adapter_lines if line.startswith("Power:")), "Power: Unknown")
     scanning = next((line for line in adapter_lines if line.startswith("Scanning:")), "Scanning: Unknown")
     lines.append(f"{power} | {scanning}")
     lines.append(f"Audio: {ellipsize(audio_output, 48)}")
     lines.append("")
-    lines.append(f"Connected ({len(connected)}):")
-    if connected:
-        for device in connected[:6]:
-            player = player_by_mac.get(mac_key(device.get("mac")))
-            prefix = f"P{player.get('player')}" if player else "Other"
-            lines.append(f"{prefix} {ellipsize(device.get('name'), 44)}")
+    lines.append(f"Controllers ({len(connected_players)}):")
+    if connected_players:
+        for player in sorted(connected_players, key=lambda row: int(row.get("player", 99) or 99))[:4]:
+            transport = "USB" if str(player.get("mac", "")).upper().startswith("USB:") else "BT"
+            lines.append(f"P{player.get('player')} {transport} {ellipsize(player.get('name'), 40)}")
     else:
         lines.append("None")
+    if connected_other:
+        lines.append(f"Other Bluetooth: {len(connected_other)}")
     lines.append("")
     lines.append("Player slots:")
     for slot in range(1, 5):
@@ -1994,6 +2001,7 @@ class SettingsApp:
 
     def bluetooth_status_lines(self):
         pref = self.audio.preference()
+        run_cmd(["controller-leds", "apply"], timeout=15)
         order = read_json(PLAYER_ORDER, {"players": []})
         paired = self.bt.devices("Paired")
         connected = self.bt.devices("Connected")
@@ -2437,7 +2445,12 @@ def smoke_test(mode):
         ]
         worst_connected.append({"mac": "11:22:33:44:55:66", "name": "Bluetooth Headphones With A Long Friendly Name"})
         worst_players = [
-            {"player": slot, "mac": f"AA:BB:CC:DD:EE:0{slot}", "name": f"Controller With A Long Friendly Name {slot}"}
+            {
+                "player": slot,
+                "mac": f"AA:BB:CC:DD:EE:0{slot}",
+                "name": f"Controller With A Long Friendly Name {slot}",
+                "connected": True,
+            }
             for slot in range(1, 5)
         ]
         worst_status = format_bluetooth_status(
@@ -2447,6 +2460,7 @@ def smoke_test(mode):
             worst_players,
             "Bluetooth Headphones With A Long Friendly Name",
         )
+        assert "Controllers (4):" in worst_status
         assert len(wrap_lines(worst_status, metrics["right_width"])) <= metrics["content_height"]
         start, end = menu_window(len(labels_on), len(labels_on) - 1, metrics["content_height"])
         assert 0 <= start < end <= len(labels_on)

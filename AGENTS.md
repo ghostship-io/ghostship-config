@@ -348,6 +348,11 @@ changelog.
   loader stack crash.
   Boomer's probed kernel Switch Pro raw map is documented in
   `docs/boomer-kuwanger-emulation.md`.
+  Bluetooth Settings controller counts should come from resolved player order,
+  not only BlueZ connected devices, so wired controllers show up correctly;
+  keep `joycond` installed but inactive unless live testing proves it is needed.
+  Keep `/run/ghostship-emulation/controllers` writable by the kiosk user because
+  `run-emulator` writes launch-time resolved controller append configs there.
   Dolphin 2603 loads hotkeys from `[Hotkeys]`, not `[Hotkeys1]`; keep
   broker-injected GameCube fallback bindings on Dolphin's
   `XInput2/0/Virtual core pointer` device and use Dolphin's grouped hotkey

@@ -215,7 +215,7 @@ let
       { label = "Start scan for 30 seconds"; command = "bluetoothctl power on; timeout 30s bluetoothctl scan on || true"; }
     ];
     bluetooth-reconnect-controllers = mkMenuTool "bluetooth-reconnect-controllers" "Bluetooth Reconnect Controllers" [
-      { label = "Reconnect all paired devices"; command = "bluetoothctl devices Paired | awk '{print $2}' | while read -r mac; do bluetoothctl trust \"$mac\" || true; bluetoothctl connect \"$mac\" || true; done; bluetoothctl devices Connected"; }
+      { label = "Reconnect all controllers"; command = "controller-autoconnect once 10; controller-leds apply; bluetoothctl devices Connected || true"; }
       { label = "Power-cycle Bluetooth adapter"; command = "bluetoothctl power off; sleep 2; bluetoothctl power on; bluetoothctl devices Paired"; }
     ];
     player-assignment = mkMenuTool "player-assignment" "Player Assignment" [

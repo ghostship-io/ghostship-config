@@ -628,9 +628,8 @@ and enables them through `CollectionSystemsCustom`. Populate them later with
 one ROM path per line; ES-DE accepts paths relative to its root where practical.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
-not started by default. The normal path uses the kernel `hid-nintendo` devices
-directly so there is no extra userspace daemon competing for controller output
-reports.
+not started by default. Boomer reads the kernel input devices directly for
+emulator player order and owns its LED reconcile step before launches.
 
 Diagnostics:
 

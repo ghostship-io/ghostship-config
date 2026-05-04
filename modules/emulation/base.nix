@@ -396,6 +396,8 @@ in
           "d ${cfg.dataRoot}/logs/smoke 0755 ${cfg.user} ${cfg.group} -"
           "d ${cfg.dataRoot}/smoke-roms 0755 ${cfg.user} ${cfg.group} -"
           "d ${cfg.dataRoot}/tmp 0755 ${cfg.user} ${cfg.group} -"
+          "d /run/ghostship-emulation 0755 ${cfg.user} ${cfg.group} -"
+          "d /run/ghostship-emulation/controllers 0755 ${cfg.user} ${cfg.group} -"
           "d /run/ghostship-secrets 0755 root root -"
           "L+ /home/${cfg.user}/Emulation - - - - ${cfg.dataRoot}"
         ];

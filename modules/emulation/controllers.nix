@@ -592,8 +592,6 @@ let
     {
       echo "$(date -u +%FT%TZ) USB-assisted Switch Pro pairing/connect refresh"
       timeout 5s bluetoothctl power on || true
-      timeout 5s bluetoothctl agent KeyboardDisplay || true
-      timeout 5s bluetoothctl default-agent || true
       timeout 5s bluetoothctl pairable on || true
       ${lib.getExe controllerAutoconnect} once 10 || true
       ${lib.getExe controllerLeds} apply || true
@@ -962,7 +960,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${lib.getExe controllerUsbPair}";
-        TimeoutStartSec = "20s";
+        TimeoutStartSec = "45s";
       };
     };
 

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer USB controller reconnect fix**: Count wired resolved controllers in
+  Bluetooth Settings status, run the legacy Reconnect Controllers tool through
+  the bounded 10-second connector, and keep USB-assisted pairing bounded
+  without enabling `joycond` by default.
+- **Boomer RetroArch launch fix**: Own the resolved controller runtime
+  directory as the kiosk user so launch-time RetroArch player-order append
+  configs can be written before the emulator starts.
 - **Boomer resolved controller launches**: Add a pre-launch controller resolver
   that reconciles LEDs, writes connected-only player order under `/run`, and
   feeds RetroArch, Dolphin, PCSX2, Ryubing, and Xemu launch-time input config.

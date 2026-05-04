@@ -45,6 +45,7 @@ let
     output_file="$runtime_dir/resolved-order.json"
     log_file="${cfg.dataRoot}/logs/controller-resolve.log"
     mkdir -p "$runtime_dir" "$(dirname "$log_file")"
+    chown ${cfg.user}:${cfg.group} "$runtime_dir" "$(dirname "$log_file")" 2>/dev/null || true
 
     ${pkgs.python3}/bin/python3 - "$order_file" "$output_file" "$log_file" "${packages.ryubingCanaryPackage}/opt/ryubing-canary/libSDL3.so" <<'PY'
 import ctypes
@@ -1341,6 +1342,7 @@ EOF
     controller-leds apply || true
     ${lib.getExe controllerResolve} || true
     resolved_controllers="/run/ghostship-emulation/controllers/resolved-order.json"
+    mkdir -p "$(dirname "$resolved_controllers")"
     resolved_player_count="$(jq -r '.players | length' "$resolved_controllers" 2>/dev/null || echo 0)"
     log_event "controllers" "$(jq -c '.players // []' "$resolved_controllers" 2>/dev/null || echo '[]')"
 
