@@ -1074,18 +1074,6 @@ in
       };
     };
 
-    systemd.services.controller-autoconnect = {
-      description = "Automatically reconnect paired Switch Pro controllers";
-      after = [
-        "bluetooth.service"
-        "emulation-setup.service"
-      ];
-      serviceConfig = {
-        ExecStart = "${lib.getExe controllerAutoconnect}";
-        TimeoutStopSec = "5s";
-      };
-    };
-
     systemd.services.controller-usb-pair = {
       description = "Refresh Switch Pro controller order after USB add";
       after = [
