@@ -631,14 +631,14 @@ Ryubing input schema, GUID formatting, `led` blocks, and disabled keyboard
 entries must be copied from a known live-accepted Ryubing profile or source
 model, not inferred from SDL names alone. Generated Ryubing IDs mirror
 Ryubing's own SDL3 duplicate-counter prefix plus stable GUID convention, and
-`run-emulator` asks Ryubing for the launch-environment input IDs when a display
-is available because SDL3 can report a different stable GUID under the actual
-Xwayland session than in a displayless preflight. `run-emulator` keeps
-Ryubing's global input profile enabled for launched games and mirrors the
-managed input list into the launched title's `games/<titleid>` configuration so
-per-title configuration files cannot hide the generated connected-player
-profiles. The launcher refuses to launch if those generated profiles fail the
-local verifier.
+`run-emulator` derives those IDs from the Linux input modalias bus, VID, PID,
+and version fields, then asks Ryubing for the launch-environment input IDs when
+a display is already available. This avoids displayless SDL3 probes producing a
+different GUID than Ryubing uses under Xwayland. `run-emulator` keeps Ryubing's
+global input profile enabled for launched games and mirrors the managed input
+list into the launched title's `games/<titleid>` configuration so per-title
+configuration files cannot hide the generated connected-player profiles. The
+launcher refuses to launch if those generated profiles fail the local verifier.
 
 Minus + R2 is intentionally unmapped for Xemu because there is no reliable
 fast-forward command. RetroArch maps Minus hotkeys to save/load, reset,

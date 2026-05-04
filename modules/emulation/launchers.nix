@@ -110,8 +110,15 @@ def ryubing_guid_from_sdl(raw_guid):
     guid = f"{raw[4:6]}{raw[6:8]}{raw[2:4]}{raw[0:2]}-{raw[10:12]}{raw[8:10]}-{raw[12:16]}-{raw[16:20]}-{raw[20:32]}"
     return "0000" + guid[4:]
 
+def ryubing_guid_from_modalias(modalias):
+    match = re.search(r"input:b([0-9a-fA-F]{4})v([0-9a-fA-F]{4})p([0-9a-fA-F]{4})e([0-9a-fA-F]{4})", modalias or "")
+    if not match:
+        return ""
+    bus, vid, pid, version = (part.lower() for part in match.groups())
+    return f"0000{bus}-{vid}-0000-{pid[2:4]}{pid[0:2]}-0000{version[2:4]}{version[0:2]}0000"
+
 def stable_ryubing_guid(raw_guid, modalias):
-    return ryubing_guid_from_sdl(raw_guid)
+    return ryubing_guid_from_modalias(modalias) or ryubing_guid_from_sdl(raw_guid)
 
 def transport_from_bus(bus):
     if bus == "0005":
@@ -1877,14 +1884,24 @@ def vid_pid_from_modalias(modalias):
         return "", ""
     return match.group(1).lower(), match.group(2).lower()
 
+def ryubing_guid_from_modalias(modalias):
+    match = re.search(r"input:b([0-9a-fA-F]{4})v([0-9a-fA-F]{4})p([0-9a-fA-F]{4})e([0-9a-fA-F]{4})", modalias or "")
+    if not match:
+        return ""
+    bus, vid, pid, version = (part.lower() for part in match.groups())
+    return f"0000{bus}-{vid}-0000-{pid[2:4]}{pid[0:2]}-0000{version[2:4]}{version[0:2]}0000"
+
 def stable_ryubing_guid(raw_guid, input_meta=None):
+    modalias_guid = ryubing_guid_from_modalias((input_meta or {}).get("modalias", ""))
+    if modalias_guid:
+        return modalias_guid
     guid = ryubing_guid(raw_guid)
     if not guid:
         return ""
     return "0000" + guid[4:]
 
 assert stable_ryubing_guid("0500d71f7e0500000920000001800000") == "00000005-057e-0000-0920-000001800000"
-assert stable_ryubing_guid("030077557e0500000920000000026803", {"modalias": "input:b0003v057ep2009"}) == "00000003-057e-0000-0920-000000026803"
+assert stable_ryubing_guid("030077557e0500000920000000026803", {"modalias": "input:b0003v057ep2009e8111"}) == "00000003-057e-0000-0920-000011810000"
 
 def player_order():
     try:
