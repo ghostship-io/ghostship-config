@@ -1090,6 +1090,7 @@ in
 
     systemd.services.controller-autoconnect = {
       description = "Retired continuous controller reconnect loop";
+      restartIfChanged = false;
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${pkgs.coreutils}/bin/true";
