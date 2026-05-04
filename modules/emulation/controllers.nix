@@ -1088,11 +1088,14 @@ in
       };
     };
 
-    system.activationScripts.removeRetiredControllerAutoconnect = ''
-      if [ -L /etc/systemd/system/controller-autoconnect.service ]; then
-        rm -f /etc/systemd/system/controller-autoconnect.service
-      fi
-    '';
+    system.activationScripts.removeRetiredControllerAutoconnect = {
+      deps = [ "etc" ];
+      text = ''
+        if [ -L /etc/systemd/system/controller-autoconnect.service ]; then
+          rm -f /etc/systemd/system/controller-autoconnect.service
+        fi
+      '';
+    };
 
     systemd.services.controller-reconcile-events = {
       description = "Trigger controller player reconciliation from BlueZ events";
