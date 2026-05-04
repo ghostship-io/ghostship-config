@@ -184,6 +184,9 @@ Key services include Plex, Homepage, Muximux, the `arr` stack,
 qBittorrent/VueTorrent, SearXNG, Firecrawl, RomM, Grimmory, Chaptarr, BookStack, Hermes,
 PyLoad, RSS-Bridge, PriceBuddy, and n8n.
 
+PyLoad has a daily `04:00` `pyload-restart-failed` timer that checks the
+internal `http://pyload:8000` API and restarts failed queue links when present.
+
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts
 from the cached winner in `/srv/apps/gluetun/pia-wireguard-selection.json`, and

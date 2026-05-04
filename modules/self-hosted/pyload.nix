@@ -1,6 +1,8 @@
 { config, pkgs, ... }:
 
 let
+  pyload-secrets = config.ghostship.selfHostedSecrets.units."pyload-secrets".path;
+  pyloadImage = "lscr.io/linuxserver/pyload-ng:latest";
   pyloadInitConfigRun =
     let
       upstream = ''
@@ -87,11 +89,129 @@ let
           s6-setuidgid abc pyload --userdir /config
     '';
   };
+  pyloadRestartFailedScript = pkgs.writeTextFile {
+    name = "pyload-restart-failed.py";
+    executable = true;
+    text = ''
+      import json
+      import os
+      import sys
+      import urllib.error
+      import urllib.request
+
+      API_BASE = os.environ.get("PYLOAD_API_URL", "http://pyload:8000").rstrip("/")
+      API_KEY = os.environ.get("PYLOAD_API_KEY", "").strip()
+      TIMEOUT_SECONDS = 30
+
+
+      def fail(message: str) -> None:
+          print(f"pyLoad failed retry: {message}", file=sys.stderr)
+          raise SystemExit(1)
+
+
+      def request_json(path: str, method: str = "GET"):
+          request = urllib.request.Request(
+              f"{API_BASE}{path}",
+              headers={"X-API-Key": API_KEY},
+              method=method,
+          )
+          if method == "POST":
+              request.data = b""
+
+          try:
+              with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+                  body = response.read()
+          except urllib.error.HTTPError as exc:
+              detail = exc.read().decode("utf-8", errors="replace").strip()
+              if len(detail) > 240:
+                  detail = detail[:240] + "..."
+              fail(f"{method} {path} returned HTTP {exc.code}: {detail}")
+          except urllib.error.URLError as exc:
+              fail(f"{method} {path} failed: {exc.reason}")
+
+          if not body:
+              return None
+
+          try:
+              return json.loads(body.decode("utf-8"))
+          except json.JSONDecodeError as exc:
+              fail(f"{method} {path} returned invalid JSON: {exc}")
+
+
+      def is_failed_link(link: dict) -> bool:
+          status = link.get("status")
+          status_name = str(
+              link.get("statusname")
+              or link.get("status_name")
+              or link.get("statusmsg")
+              or ""
+          ).lower()
+          return status == 8 or status_name == "failed"
+
+
+      def main() -> int:
+          if not API_KEY:
+              fail("PYLOAD_API_KEY is missing")
+
+          queue = request_json("/api/get_queue_data")
+          if not isinstance(queue, list):
+              fail("GET /api/get_queue_data returned an unexpected payload")
+
+          package_count = len(queue)
+          link_count = 0
+          failed_count = 0
+
+          for package in queue:
+              links = package.get("links", []) if isinstance(package, dict) else []
+              if isinstance(links, dict):
+                  links = links.values()
+              for link in links:
+                  if not isinstance(link, dict):
+                      continue
+                  link_count += 1
+                  if is_failed_link(link):
+                      failed_count += 1
+
+          if failed_count == 0:
+              print(
+                  "pyLoad failed retry: "
+                  f"queue_packages={package_count} queue_links={link_count} "
+                  "failed_links=0; nothing to restart"
+              )
+              return 0
+
+          request_json("/api/restart_failed", method="POST")
+          print(
+              "pyLoad failed retry: "
+              f"queue_packages={package_count} queue_links={link_count} "
+              f"restarted_failed_links={failed_count}"
+          )
+          return 0
+
+
+      raise SystemExit(main())
+    '';
+  };
+  pyloadRestartFailedRunner = pkgs.writeShellScriptBin "pyload-restart-failed" ''
+    set -euo pipefail
+
+    exec ${pkgs.podman}/bin/podman run \
+      --rm \
+      --replace \
+      --name pyload-restart-failed \
+      --pull=never \
+      --network=ghostship_net \
+      --env-file ${pyload-secrets} \
+      --entrypoint /lsiopy/bin/python3 \
+      -v ${pyloadRestartFailedScript}:/run/pyload-restart-failed.py:ro \
+      ${pyloadImage} \
+      /run/pyload-restart-failed.py
+  '';
 in
 
 {
   virtualisation.oci-containers.containers."pyload" = {
-    image = "lscr.io/linuxserver/pyload-ng:latest";
+    image = pyloadImage;
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";
@@ -121,6 +241,32 @@ in
   systemd.services.podman-pyload = {
     after = [ "mnt-share.mount" ];
     wants = [ "mnt-share.mount" ];
+  };
+
+  systemd.services.pyload-restart-failed = {
+    description = "Restart failed pyLoad downloads";
+    after = [
+      "init-ghostship-net.service"
+      "podman-pyload.service"
+    ];
+    wants = [
+      "init-ghostship-net.service"
+      "podman-pyload.service"
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pyloadRestartFailedRunner}/bin/pyload-restart-failed";
+    };
+  };
+
+  systemd.timers.pyload-restart-failed = {
+    description = "Daily restart of failed pyLoad downloads";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* 04:00:00";
+      Persistent = true;
+      Unit = "pyload-restart-failed.service";
+    };
   };
 
   systemd.tmpfiles.rules = [

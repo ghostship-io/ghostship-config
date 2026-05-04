@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **PyLoad failed-download retry**: Add a daily `04:00`
+  `pyload-restart-failed` systemd timer that runs a one-shot helper on
+  `ghostship_net`, checks pyLoad's queue through `http://pyload:8000`, and
+  calls the native `restart_failed` API when failed links are present.
 - **Boomer controller recovery**: Treat wired Switch Pro-style controllers as
   USB in the resolved launch map, stop USB plug-in events from running the
   broken Bluetooth reconnect wrapper, make Reconnect All a bounded all-device
