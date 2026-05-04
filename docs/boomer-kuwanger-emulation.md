@@ -609,6 +609,28 @@ resolved players, applies a Dreamcast physical face override, and enables
 left-stick-to-D-pad only for systems whose original controller has no left
 analog stick. N64 uses physical B for N64 A and physical Y for N64 B.
 
+Controller launch acceptance is stricter than a timed smoke test. A timed launch
+only proves the emulator process stayed alive long enough to be observed. For
+controller changes, the required checks are:
+
+- resolved P1-P4 order matches the connected controller order and LEDs before
+  launch;
+- generated emulator config contains only connected players;
+- emulator logs do not reject the generated controller config;
+- Select+Start twice closes the launched standalone emulator through the
+  per-process broker;
+- one live game per touched emulator family accepts input from the expected
+  physical buttons.
+
+Ryubing has an additional contract because it validates SDL3 controller profiles
+at startup. Switch launch changes are accepted only when Ryubing keeps the
+generated `Config.json`, logs no invalid-configuration warning, logs no `No
+matching controllers found` warning for connected players, and a game can use
+the generated `ProController` profile, including L+R join where applicable.
+Ryubing input schema, GUID formatting, `led` blocks, and disabled keyboard
+entries must be copied from a known live-accepted Ryubing profile or source
+model, not inferred from SDL names alone.
+
 Minus + R2 is intentionally unmapped for Xemu because there is no reliable
 fast-forward command. RetroArch maps Minus hotkeys to save/load, reset,
 FPS, screenshot, and fast-forward actions, exits on Minus + Plus twice through
@@ -644,7 +666,13 @@ emulator player order and owns its LED reconcile step before launches. Plugging
 in a Switch Pro-style controller over USB refreshes wired player order and LEDs
 only; automatic USB-assisted Bluetooth pairing is kept as the hidden
 `switch-usb-bt-pair` proof helper until live hardware testing proves the
-hidraw manual-pairing exchange is reliable.
+hidraw manual-pairing exchange is reliable. USB-assisted pairing must report
+states precisely: `paired` means BlueZ reports Paired, Bonded, and Trusted;
+`connected` means BlueZ reports Connected after the controller reconnects over
+Bluetooth. Boomer must not show a pairing success message until the intended
+state is verified. ES-DE under Gamescope does not provide a normal desktop
+notification service, so user-visible pairing messages need an explicit
+kiosk-visible Xwayland overlay or an ES-DE patch instead of `notify-send`.
 
 Diagnostics:
 

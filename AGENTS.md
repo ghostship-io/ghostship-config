@@ -252,7 +252,13 @@ changelog.
   not Nintendo player LED sysfs controls. Boomer's current USB pairing proof
   helper can read and trust a `057e:2009` controller MAC over hidraw, but BlueZ
   connect while the controller remains USB-attached fails with
-  `br-connection-create-socket`.
+  `br-connection-create-socket`. USB-assisted Bluetooth pairing status must
+  distinguish BlueZ paired/trusted state from wireless connected state: paired
+  means BlueZ reports Paired, Bonded, and Trusted; connected means BlueZ reports
+  Connected after the controller reconnects wirelessly. Do not show an ES-DE
+  success popup until the intended BlueZ state is verified. Gamescope/ES-DE
+  does not provide `org.freedesktop.Notifications`; pairing messages need an
+  explicit kiosk-visible Xwayland overlay or ES-DE patch, not `notify-send`.
   Do not start-limit one-shot LED applies during fast reconnect cycles, but
   avoid direct rapid `controller-leds apply` fan-out or force-writing
   already-correct LEDs because hid-nintendo output reports can wedge the
@@ -311,10 +317,20 @@ changelog.
   `0-00000005-057e-0000-0920-000001800000`, not the raw SDL GUID, and include
   a non-null disabled `led` block or LED-capable SDL3 controllers crash during
   `SetConfiguration`. The stale `WindowKeyboard` profile with keyboard disabled
-  leaves Switch games with no controls.
+  leaves Switch games with no controls. Ryubing controller changes are not
+  accepted by a timeout smoke alone: the generated `Config.json` must survive
+  Ryubing startup, Ryubing logs must not report invalid configuration or "No
+  matching controllers found" for connected players, and a live game must accept
+  the connected Pro Controller profile, including L+R join where applicable.
+  Do not change the Ryubing input schema from guessed field names; derive it
+  from a known live-accepted profile or source and verify against the live log.
   Every `run-emulator` launch should keep the
   lightweight per-process Select+Start double-press exit broker; expanded
-  standalone hotkeys stay opt-in per-emulator launch modes. Boomer's managed
+  standalone hotkeys stay opt-in per-emulator launch modes. Standalone emulator
+  hotkey changes are accepted only after a live double-press test proves the
+  broker is reading the real controller event node, targeting the current
+  emulator PID or process group, logging the exit request, and closing the
+  emulator. Boomer's managed
   ES-DE UI defaults are
   manufacturer/type/year systems sorting, visible clock, Switch Pro
   controller prompts, all-controller ES-DE menu input, Hawaii standard time, and
