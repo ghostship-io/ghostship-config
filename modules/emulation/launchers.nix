@@ -207,10 +207,31 @@ class SdlGuid(Structure):
 def decode(value):
     return (value or b"").decode("utf-8", errors="replace")
 
-def input_uniq(device_path):
+def input_metadata_for_device_path(device_path):
     if not device_path:
-        return ""
-    return read(Path("/sys/class/input") / Path(device_path).name / "device/uniq").upper()
+        return {}
+    name = Path(device_path).name
+    roots = []
+    if name.startswith("event"):
+        roots.append(Path("/sys/class/input") / name / "device")
+    elif name.startswith("hidraw"):
+        hid_root = Path("/sys/class/hidraw") / name / "device"
+        try:
+            roots.extend(sorted(hid_root.glob("input/input*/")))
+        except OSError:
+            pass
+    for root in roots:
+        input_name = read(root / "name")
+        if "imu" in input_name.lower():
+            continue
+        modalias = read(root / "modalias").lower()
+        if input_name and SUPPORTED_RE.search(f"{input_name} {modalias}"):
+            return {
+                "uniq": read(root / "uniq").upper(),
+                "modalias": modalias,
+                "name": input_name,
+            }
+    return {}
 
 def sdl3_gamepads():
     if not sdl3_path.exists():
@@ -262,7 +283,7 @@ def sdl3_gamepads():
                         "sdl3_instance_id": int(instance_id),
                         "name": decode(sdl.SDL_GetGamepadNameForID(instance_id)),
                         "path": path,
-                        "uniq": input_uniq(path),
+                        "input": input_metadata_for_device_path(path),
                         "guid": guid_buffer.value.decode("ascii", errors="replace"),
                     })
                 finally:
@@ -294,10 +315,11 @@ def saved_players():
 
 connected = sysfs_devices()
 for gamepad in sdl3_gamepads():
-    ident = identity(gamepad.get("uniq", ""), read(Path("/sys/class/input") / Path(gamepad.get("path", "")).name / "device/modalias").lower())
+    input_meta = gamepad.get("input", {})
+    ident = identity(input_meta.get("uniq", ""), input_meta.get("modalias", ""))
     if ident in connected:
         connected[ident].update({
-            "name": gamepad.get("name") or connected[ident]["name"],
+            "sdl_name": gamepad.get("name") or "",
             "sdl3_index": gamepad["sdl3_index"],
             "sdl3_instance_id": gamepad["sdl3_instance_id"],
             "sdl_guid": gamepad["guid"],
@@ -1778,10 +1800,31 @@ def read_text(path):
     except OSError:
         return ""
 
-def input_uniq(device_path):
+def input_metadata_for_device_path(device_path):
     if not device_path:
-        return ""
-    return read_text(Path("/sys/class/input") / Path(device_path).name / "device/uniq").upper()
+        return {}
+    name = Path(device_path).name
+    roots = []
+    if name.startswith("event"):
+        roots.append(Path("/sys/class/input") / name / "device")
+    elif name.startswith("hidraw"):
+        hid_root = Path("/sys/class/hidraw") / name / "device"
+        try:
+            roots.extend(sorted(hid_root.glob("input/input*/")))
+        except OSError:
+            pass
+    for root in roots:
+        input_name = read_text(root / "name")
+        if "imu" in input_name.lower():
+            continue
+        modalias = read_text(root / "modalias").lower()
+        if input_name and re.search(r"(pro controller|nintendo switch pro|joy-?con|8bitdo|ultimate 2c|v057ep2009|v2dc8p(310b|301a))", f"{input_name} {modalias}", re.I):
+            return {
+                "uniq": read_text(root / "uniq").upper(),
+                "modalias": modalias,
+                "name": input_name,
+            }
+    return {}
 
 def ryubing_guid(raw_guid):
     raw = "".join(ch for ch in raw_guid.lower() if ch in "0123456789abcdef")
@@ -1789,13 +1832,23 @@ def ryubing_guid(raw_guid):
         return ""
     return f"{raw[4:6]}{raw[6:8]}{raw[2:4]}{raw[0:2]}-{raw[10:12]}{raw[8:10]}-{raw[12:16]}-{raw[16:20]}-{raw[20:32]}"
 
-def stable_ryubing_guid(raw_guid):
+def vid_pid_from_modalias(modalias):
+    match = re.search(r"v([0-9a-fA-F]{4})p([0-9a-fA-F]{4})", modalias or "")
+    if not match:
+        return "", ""
+    return match.group(1).lower(), match.group(2).lower()
+
+def stable_ryubing_guid(raw_guid, input_meta=None):
+    vid, pid = vid_pid_from_modalias((input_meta or {}).get("modalias", ""))
+    if (vid, pid) == ("057e", "2009"):
+        return "00000005-057e-0000-0920-000001800000"
     guid = ryubing_guid(raw_guid)
     if not guid:
         return ""
     return "0000" + guid[4:]
 
 assert stable_ryubing_guid("0500d71f7e0500000920000001800000") == "00000005-057e-0000-0920-000001800000"
+assert stable_ryubing_guid("030077557e0500000920000000026803", {"modalias": "input:b0003v057ep2009"}) == "00000005-057e-0000-0920-000001800000"
 
 def player_order():
     try:
@@ -1872,6 +1925,7 @@ def enumerate_sdl_gamepads():
                     sdl.SDL_GUIDToString(guid, guid_buffer, len(guid_buffer))
                     device_path = decode(sdl.SDL_GetGamepadPathForID(instance_id))
                     raw_guid = guid_buffer.value.decode("ascii", errors="replace")
+                    input_meta = input_metadata_for_device_path(device_path)
                     gamepads.append(
                         {
                             "sdl_index": index,
@@ -1879,8 +1933,9 @@ def enumerate_sdl_gamepads():
                             "name": decode(sdl.SDL_GetGamepadNameForID(instance_id)),
                             "path": device_path,
                             "guid": raw_guid,
-                            "ryubing_guid": stable_ryubing_guid(raw_guid),
-                            "uniq": input_uniq(device_path),
+                            "ryubing_guid": stable_ryubing_guid(raw_guid, input_meta),
+                            "uniq": input_meta.get("uniq", ""),
+                            "modalias": input_meta.get("modalias", ""),
                             "type": int(sdl.SDL_GetGamepadTypeForID(instance_id)),
                         }
                     )
@@ -2584,9 +2639,10 @@ EOF
         slot="$(jq -r '.player' <<<"$controller")"
         index="$(jq -r '.sdl2_index' <<<"$controller")"
         name="$(jq -r '.name // "Nintendo Switch Pro Controller"' <<<"$controller")"
+        sdl_name="$(jq -r '.sdl_name // .name // "Nintendo Switch Pro Controller"' <<<"$controller")"
         cat >>"$dolphin_config_dir/GCPadNew.ini" <<EOF
 [GCPad$slot]
-Device = SDL/$index/$name
+Device = SDL/$index/$sdl_name
 Buttons/A = \`Button B\`
 Buttons/B = \`Button Y\`
 Buttons/X = \`Button A\`
@@ -2616,7 +2672,7 @@ EOF
         cat >>"$dolphin_config_dir/WiimoteNew.ini" <<EOF
 [Wiimote$slot]
 Source = 1
-Device = SDL/$index/$name
+Device = SDL/$index/$sdl_name
 Buttons/A = \`Button B\`
 Buttons/B = \`Trigger L\`
 Buttons/1 = \`Button A\`
