@@ -249,7 +249,10 @@ changelog.
   LED writes after disconnect or radio failure. Some 8BitDo wired USB modes
   expose `2dc8:301a` via `hid-generic`, which should be tracked as an
   input-only player identity while connected because it can provide input but
-  not Nintendo player LED sysfs controls.
+  not Nintendo player LED sysfs controls. Boomer's current USB pairing proof
+  helper can read and trust a `057e:2009` controller MAC over hidraw, but BlueZ
+  connect while the controller remains USB-attached fails with
+  `br-connection-create-socket`.
   Do not start-limit one-shot LED applies during fast reconnect cycles, but
   avoid direct rapid `controller-leds apply` fan-out or force-writing
   already-correct LEDs because hid-nintendo output reports can wedge the
