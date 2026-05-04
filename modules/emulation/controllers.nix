@@ -12,16 +12,18 @@ let
     set -euo pipefail
     export PATH=${emu.scriptPath}:$PATH
     state_dir="${cfg.configRoot}/controllers"
+    runtime_dir="/run/ghostship-emulation/controllers"
     order_file="$state_dir/player-order.json"
     last_state_file="$state_dir/led-state.tsv"
+    lock_file="$runtime_dir/controller-leds.lock"
     log_file="${cfg.dataRoot}/logs/controller-leds.log"
     last_led_status=""
     mode="''${1:-loop}"
     led_write_delay="0.5"
-    mkdir -p "$state_dir" "$(dirname "$log_file")"
-    touch "$log_file" "$state_dir/controller-leds.lock"
-    chown ${cfg.user}:${cfg.group} "$state_dir" "$log_file" "$state_dir/controller-leds.lock" || true
-    exec 9>"$state_dir/controller-leds.lock"
+    mkdir -p "$state_dir" "$runtime_dir" "$(dirname "$log_file")"
+    touch "$log_file" "$lock_file"
+    chown ${cfg.user}:${cfg.group} "$state_dir" "$runtime_dir" "$log_file" "$lock_file" || true
+    exec 9>"$lock_file"
 
     ensure_order_file() {
       if ! jq -e '.players | type == "array"' "$order_file" >/dev/null 2>&1; then
