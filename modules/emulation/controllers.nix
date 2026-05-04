@@ -1096,6 +1096,15 @@ in
       };
     };
 
+    system.activationScripts.stopRetiredControllerAutoconnect = {
+      deps = [ "specialfs" ];
+      text = ''
+        if [ -d /run/systemd/system ]; then
+          ${pkgs.systemd}/bin/systemctl stop controller-autoconnect.service >/dev/null 2>&1 || true
+        fi
+      '';
+    };
+
     systemd.services.controller-reconcile-events = {
       description = "Trigger controller player reconciliation from BlueZ events";
       wantedBy = [ "multi-user.target" ];
