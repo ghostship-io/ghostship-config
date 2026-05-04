@@ -523,6 +523,49 @@ let
         continue
       fi
 
+      if [ "$duration" -gt 0 ] && [ "$attempt_limit" -eq 0 ]; then
+        pids=()
+        for row in "''${rows[@]}"; do
+          IFS=$'\t' read -r mac name connected _paired _modalias _icon <<<"$row"
+          [ -n "''${mac:-}" ] || continue
+          if connected_device "$connected"; then
+            continue
+          fi
+          (
+            if timeout 1s bluetoothctl info "$mac" 2>/dev/null | grep -q 'Connected: yes'; then
+              exit 0
+            fi
+            log "connecting ''${name:-Switch Pro Controller} ($mac)"
+            if [ "$manage_pairing" = true ]; then
+              timeout 2s bluetoothctl trust "$mac" >/dev/null 2>&1 || true
+              timeout 2s bluetoothctl wake "$mac" on >/dev/null 2>&1 || true
+            fi
+            if timeout 4s bluetoothctl connect "$mac" >>"$log_file" 2>&1; then
+              log "connected ''${name:-Switch Pro Controller} ($mac)"
+            else
+              log "connect failed ''${name:-Switch Pro Controller} ($mac)"
+            fi
+          ) &
+          pids+=("$!")
+        done
+        while [ "''${#pids[@]}" -gt 0 ] && [ "$(date +%s)" -lt "$deadline" ]; do
+          remaining=()
+          for pid in "''${pids[@]}"; do
+            if kill -0 "$pid" 2>/dev/null; then
+              remaining+=("$pid")
+            fi
+          done
+          pids=("''${remaining[@]}")
+          [ "''${#pids[@]}" -eq 0 ] || sleep 0.2
+        done
+        for pid in "''${pids[@]}"; do
+          kill "$pid" 2>/dev/null || true
+        done
+        ${lib.getExe controllerBluetoothLowLatency} || true
+        ${lib.getExe controllerLeds} apply || true
+        break
+      fi
+
       start=0
       if [ "$attempt_limit" -gt 0 ]; then
         start="$(cat "$cursor_file" 2>/dev/null || echo 0)"
@@ -592,12 +635,110 @@ let
     log_file="${cfg.dataRoot}/logs/controller-usb-pair.log"
     mkdir -p "$(dirname "$log_file")"
     {
-      echo "$(date -u +%FT%TZ) USB-assisted Switch Pro pairing/connect refresh"
-      timeout 5s bluetoothctl power on || true
-      timeout 5s bluetoothctl pairable on || true
-      ${lib.getExe controllerAutoconnect} once 10 || true
+      echo "$(date -u +%FT%TZ) USB Switch Pro controller appeared; refreshing wired controller order"
       ${lib.getExe controllerLeds} apply || true
     } >>"$log_file" 2>&1
+  '';
+
+  switchUsbBtPair = pkgs.writeShellScriptBin "switch-usb-bt-pair" ''
+    set -euo pipefail
+    export PATH=${emu.scriptPath}:$PATH
+    log_file="${cfg.dataRoot}/logs/switch-usb-bt-pair.log"
+    mkdir -p "$(dirname "$log_file")"
+    ${pkgs.python3}/bin/python3 - "$log_file" "''${1:-}" <<'PY'
+import fcntl
+import glob
+import os
+import re
+import struct
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+log_path = Path(sys.argv[1])
+requested = sys.argv[2]
+HIDIOCGRAWINFO = 0x80084803
+
+def log(message):
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {message}\n")
+
+def adapter_mac():
+    proc = subprocess.run(["bluetoothctl", "show"], check=False, text=True, capture_output=True, timeout=5)
+    match = re.search(r"Controller\s+(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})", proc.stdout)
+    if not match:
+        raise RuntimeError("could not determine local Bluetooth adapter address")
+    return match.group(1).upper()
+
+def hidraw_info(path):
+    fd = os.open(path, os.O_RDWR | os.O_NONBLOCK)
+    try:
+        data = bytearray(8)
+        fcntl.ioctl(fd, HIDIOCGRAWINFO, data, True)
+        _bus, vendor, product = struct.unpack("IHH", data)
+        return fd, vendor, product
+    except Exception:
+        os.close(fd)
+        raise
+
+def candidate_hidraw():
+    paths = [requested] if requested else sorted(glob.glob("/dev/hidraw*"))
+    for path in paths:
+        if not path:
+            continue
+        try:
+            fd, vendor, product = hidraw_info(path)
+        except OSError:
+            continue
+        if (vendor, product) in ((0x057E, 0x2009), (0x2DC8, 0x310B), (0x2DC8, 0x301A)):
+            return path, fd
+        os.close(fd)
+    raise RuntimeError("no supported Switch Pro-style USB hidraw device found")
+
+def report(packet, subcmd, payload=b""):
+    neutral_rumble = bytes([0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40])
+    data = bytes([0x01, packet & 0x0F]) + neutral_rumble + bytes([subcmd]) + payload
+    return data.ljust(64, b"\x00")
+
+def read_reply(fd, deadline):
+    while time.monotonic() < deadline:
+        try:
+            data = os.read(fd, 64)
+        except BlockingIOError:
+            time.sleep(0.05)
+            continue
+        if data and data[0] == 0x21:
+            return data
+    return b""
+
+path, fd = candidate_hidraw()
+try:
+    host = bytes.fromhex(adapter_mac().replace(":", ""))[::-1]
+    log(f"attempting USB-assisted Bluetooth pairing through {path}")
+    deadline = time.monotonic() + 8
+    replies = []
+    for packet, payload in enumerate((bytes([0x01]) + host, bytes([0x02]), bytes([0x03]))):
+        os.write(fd, report(packet, 0x01, payload))
+        replies.append(read_reply(fd, deadline))
+        if time.monotonic() >= deadline:
+            break
+    controller_mac = ""
+    first = replies[0] if replies else b""
+    marker = first.find(b"\x81\x01")
+    if marker >= 0 and len(first) >= marker + 9:
+        raw = first[marker + 3: marker + 9]
+        controller_mac = ":".join(f"{byte:02X}" for byte in raw[::-1])
+        log(f"controller reported Bluetooth address {controller_mac}")
+    else:
+        log("pairing exchange completed without a parseable controller Bluetooth address")
+    if controller_mac:
+        subprocess.run(["bluetoothctl", "trust", controller_mac], check=False, timeout=5)
+        subprocess.run(["bluetoothctl", "connect", controller_mac], check=False, timeout=8)
+finally:
+    os.close(fd)
+PY
+    ${lib.getExe controllerLeds} apply || true
   '';
 
   controllerReconcileEvents = pkgs.writeShellScriptBin "controller-reconcile-events" ''
@@ -661,44 +802,6 @@ let
         done
   '';
 
-  controllerBluetoothHealth = pkgs.writeShellScriptBin "controller-bluetooth-health" ''
-    set -euo pipefail
-    export PATH=${emu.scriptPath}:$PATH
-    log_file="${cfg.dataRoot}/logs/controller-bluetooth-health.log"
-    mkdir -p "$(dirname "$log_file")"
-    touch "$log_file"
-
-    map_hid_roots() {
-      for event in /sys/class/input/event*; do
-        [ -r "$event/device/name" ] || continue
-        name="$(cat "$event/device/name" 2>/dev/null || true)"
-        case "$name" in
-          *"IMU"*|*"imu"*)
-            continue
-            ;;
-          *"Pro Controller"*)
-            uniq="$(cat "$event/device/uniq" 2>/dev/null | tr '[:lower:]' '[:upper:]' || true)"
-            input_path="$(readlink -f "$event/device" 2>/dev/null || true)"
-            [ -n "$input_path" ] || continue
-            root="$(basename "$(dirname "$(dirname "$input_path")")")"
-            printf '%s=%s %s\n' "$root" "$uniq" "$name"
-            ;;
-        esac
-      done | sort -u
-    }
-
-    while true; do
-      warnings="$(journalctl -k --since '60 seconds ago' --no-pager 2>/dev/null | grep -Ec 'nintendo .*timeout waiting|joycon_enforce_subcmd_rate|compensating for .* dropped IMU reports' || true)"
-      if [ "''${warnings:-0}" -gt 0 ]; then
-        {
-          printf '%s recent_hid_warnings=%s\n' "$(date -u +%FT%TZ)" "$warnings"
-          map_hid_roots | sed 's/^/  /'
-        } >>"$log_file"
-      fi
-      sleep 60
-    done
-  '';
-
   controllerBluetoothDiagnostics = pkgs.writeShellScriptBin "controller-bluetooth-diagnostics" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:$PATH
@@ -750,8 +853,8 @@ in
     ghostship.emulation.internal.scripts.controllerLeds = controllerLeds;
     ghostship.emulation.internal.scripts.controllerAutoconnect = controllerAutoconnect;
     ghostship.emulation.internal.scripts.controllerUsbPair = controllerUsbPair;
+    ghostship.emulation.internal.scripts.switchUsbBtPair = switchUsbBtPair;
     ghostship.emulation.internal.scripts.controllerBluetoothLowLatency = controllerBluetoothLowLatency;
-    ghostship.emulation.internal.scripts.controllerBluetoothHealth = controllerBluetoothHealth;
     ghostship.emulation.internal.scripts.controllerBluetoothDiagnostics = controllerBluetoothDiagnostics;
 
     boot.kernelModules = [ "hid-nintendo" ];
@@ -795,9 +898,6 @@ in
       SUBSYSTEM=="usb", ATTR{idVendor}=="2dc8", ATTR{idProduct}=="310b", TEST=="power/control", ATTR{power/control}="on"
       SUBSYSTEM=="usb", ATTR{idVendor}=="2dc8", ATTR{idProduct}=="301a", TEST=="power/control", ATTR{power/control}="on"
       SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="2009", TEST=="power/control", ATTR{power/control}="on"
-      ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2dc8", ATTR{idProduct}=="310b", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-usb-pair.service"
-      ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2dc8", ATTR{idProduct}=="301a", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-usb-pair.service"
-      ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="2009", TAG+="systemd", ENV{SYSTEMD_WANTS}+="controller-usb-pair.service"
       KERNEL=="hidraw*", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="310b", MODE="0660", GROUP="input", TAG+="uaccess"
       KERNEL=="hidraw*", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="301a", MODE="0660", GROUP="input", TAG+="uaccess"
       KERNEL=="hidraw*", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0660", GROUP="input", TAG+="uaccess"
@@ -939,21 +1039,18 @@ in
 
     systemd.services.controller-autoconnect = {
       description = "Automatically reconnect paired Switch Pro controllers";
-      wantedBy = [ "multi-user.target" ];
       after = [
         "bluetooth.service"
         "emulation-setup.service"
       ];
       serviceConfig = {
         ExecStart = "${lib.getExe controllerAutoconnect}";
-        Restart = "always";
-        RestartSec = "5s";
         TimeoutStopSec = "5s";
       };
     };
 
     systemd.services.controller-usb-pair = {
-      description = "Attempt USB-assisted Switch Pro Bluetooth pairing refresh";
+      description = "Refresh Switch Pro controller order after USB add";
       after = [
         "bluetooth.service"
         "emulation-setup.service"
@@ -1099,17 +1196,5 @@ in
       '';
     };
 
-    systemd.services.controller-bluetooth-health = {
-      description = "Log Switch Pro Bluetooth HID health warnings";
-      after = [
-        "bluetooth.service"
-        "controller-leds.service"
-      ];
-      serviceConfig = {
-        ExecStart = "${lib.getExe controllerBluetoothHealth}";
-      };
-      bindsTo = [ "bluetooth.service" ];
-      partOf = [ "bluetooth.service" ];
-    };
   };
 }

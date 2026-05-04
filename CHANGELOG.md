@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Boomer controller recovery**: Treat wired Switch Pro-style controllers as
+  USB in the resolved launch map, stop USB plug-in events from running the
+  broken Bluetooth reconnect wrapper, make Reconnect All a bounded all-device
+  pass, disable the always-running controller autoconnect and Bluetooth health
+  diagnostics, and remove legacy hidden ES-DE menu tool scripts.
+- **Boomer GameMode fix**: Add the kiosk user to the `gamemode` group and set
+  conservative GameMode defaults so emulator launches can apply the
+  performance governor, renice, I/O priority, and split-lock policy without
+  `pkexec` authorization failures.
 - **Boomer physical controller maps**: Make Switch Pro/8BitDo face buttons
   physical across emulator launch config, keep RetroArch hotkey gestures on the
   same physical buttons, set left analog as D-pad only for digital-only

@@ -240,6 +240,7 @@ in
           group = cfg.group;
           extraGroups = [
             "audio"
+            "gamemode"
             "input"
             "render"
             "video"
@@ -307,7 +308,19 @@ in
         };
 
         networking.networkmanager.enable = lib.mkDefault true;
-        programs.gamemode.enable = true;
+        programs.gamemode = {
+          enable = true;
+          enableRenice = true;
+          settings = {
+            general = {
+              desiredgov = "performance";
+              igpu_power_threshold = -1;
+              renice = 10;
+              disable_splitlock = 1;
+              ioprio = 0;
+            };
+          };
+        };
         programs.ydotool = {
           enable = true;
           group = cfg.group;

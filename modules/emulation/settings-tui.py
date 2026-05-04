@@ -22,6 +22,7 @@ CONFIG_ROOT = Path(os.environ.get("EMULATION_CONFIG_ROOT", "/srv/emulation/confi
 DATA_ROOT = Path(os.environ.get("EMULATION_DATA_ROOT", "/srv/emulation"))
 AUDIO_PREF = CONFIG_ROOT / "audio" / "output.json"
 PLAYER_ORDER = CONFIG_ROOT / "controllers" / "player-order.json"
+RESOLVED_ORDER = Path("/run/ghostship-emulation/controllers/resolved-order.json")
 WIFI_POLICY = CONFIG_ROOT / "network" / "wifi-policy.json"
 PAIRING_LOG = DATA_ROOT / "logs" / "tools" / "bluetooth-pairing.log"
 
@@ -1152,9 +1153,13 @@ def format_bluetooth_status(adapter_lines, connected, paired, players, audio_out
     connected_players = [
         player
         for player in players
-        if player.get("connected") is True and 1 <= int(player.get("player", 0) or 0) <= 4
+        if (player.get("connected") is True or player.get("event_path")) and 1 <= int(player.get("player", 0) or 0) <= 4
     ]
-    connected_player_macs = {mac_key(player.get("mac")) for player in connected_players if player.get("mac")}
+    connected_player_macs = {
+        mac_key(player.get("mac") or player.get("identity"))
+        for player in connected_players
+        if player.get("mac") or player.get("identity")
+    }
     connected_other = [device for device in connected if mac_key(device.get("mac")) not in connected_player_macs]
     lines = []
     power = next((line for line in adapter_lines if line.startswith("Power:")), "Power: Unknown")
@@ -1165,7 +1170,8 @@ def format_bluetooth_status(adapter_lines, connected, paired, players, audio_out
     lines.append(f"Controllers ({len(connected_players)}):")
     if connected_players:
         for player in sorted(connected_players, key=lambda row: int(row.get("player", 99) or 99))[:4]:
-            transport = "USB" if str(player.get("mac", "")).upper().startswith("USB:") else "BT"
+            transport_value = str(player.get("transport") or player.get("mac") or player.get("identity") or "").upper()
+            transport = "USB" if transport_value.startswith("USB") or transport_value == "USB" else "BT"
             lines.append(f"P{player.get('player')} {transport} {ellipsize(player.get('name'), 40)}")
     else:
         lines.append("None")
@@ -2002,7 +2008,9 @@ class SettingsApp:
     def bluetooth_status_lines(self):
         pref = self.audio.preference()
         run_cmd(["controller-leds", "apply"], timeout=15)
-        order = read_json(PLAYER_ORDER, {"players": []})
+        code, _, _ = run_cmd(["controller-resolve"], timeout=15)
+        order_path = RESOLVED_ORDER if code == 0 and RESOLVED_ORDER.exists() else PLAYER_ORDER
+        order = read_json(order_path, {"players": []})
         paired = self.bt.devices("Paired")
         connected = self.bt.devices("Connected")
         return format_bluetooth_status(
@@ -2461,6 +2469,15 @@ def smoke_test(mode):
             "Bluetooth Headphones With A Long Friendly Name",
         )
         assert "Controllers (4):" in worst_status
+        usb_status = format_bluetooth_status(
+            adapter_lines,
+            [],
+            [],
+            [{"player": 1, "identity": "AA:BB:CC:DD:EE:FF", "transport": "usb", "event_path": "/dev/input/event17", "name": "Nintendo Switch Pro Controller"}],
+            "hdmi",
+        )
+        assert "Controllers (1):" in usb_status
+        assert "P1 USB Nintendo Switch Pro Controller" in usb_status
         assert len(wrap_lines(worst_status, metrics["right_width"])) <= metrics["content_height"]
         start, end = menu_window(len(labels_on), len(labels_on) - 1, metrics["content_height"])
         assert 0 <= start < end <= len(labels_on)

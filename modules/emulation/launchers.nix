@@ -65,6 +65,7 @@ sdl3_path = Path(sys.argv[4])
 
 PLAYER_ID_RE = re.compile(r"^(([0-9A-F]{2}:){5}[0-9A-F]{2}|USB:[0-9A-F]{4}:[0-9A-F]{4}:.+)$")
 SUPPORTED_RE = re.compile(r"(pro controller|nintendo switch pro|joy-?con|8bitdo|ultimate 2c|v057ep2009|v2dc8p(310b|301a))", re.I)
+MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
 
 def read(path):
     try:
@@ -88,11 +89,76 @@ def usb_id_from_modalias(modalias, uniq):
 
 def identity(uniq, modalias):
     uniq = (uniq or "").upper()
-    if re.match(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$", uniq):
+    if MAC_RE.match(uniq):
         return uniq
     return usb_id_from_modalias(modalias, uniq)
 
+def modalias_bus(modalias):
+    match = re.search(r"input:b([0-9a-fA-F]{4})", modalias or "")
+    return match.group(1).lower() if match else ""
+
+def modalias_vid_pid(modalias):
+    match = re.search(r"v([0-9a-fA-F]{4})p([0-9a-fA-F]{4})", modalias or "")
+    if not match:
+        return "", ""
+    return match.group(1).upper(), match.group(2).upper()
+
+def transport_from_bus(bus):
+    if bus == "0005":
+        return "bluetooth"
+    if bus == "0003":
+        return "usb"
+    return "unknown"
+
+def bluez_devices():
+    try:
+        import subprocess
+
+        proc = subprocess.run(
+            [
+                "${pkgs.systemd}/bin/busctl",
+                "--system",
+                "--json=short",
+                "call",
+                "org.bluez",
+                "/",
+                "org.freedesktop.DBus.ObjectManager",
+                "GetManagedObjects",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except Exception as exc:
+        log(f"could not query BlueZ devices: {exc}")
+        return {}
+    if proc.returncode != 0:
+        log("could not query BlueZ devices")
+        return {}
+    try:
+        root = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        log(f"could not parse BlueZ devices: {exc}")
+        return {}
+    devices = {}
+    for entry in root.get("data", [{}])[0].values():
+        device = entry.get("org.bluez.Device1")
+        if not device:
+            continue
+        address = str(device.get("Address", {}).get("data") or "").upper()
+        if not MAC_RE.match(address):
+            continue
+        devices[address] = {
+            "bluez_connected": bool(device.get("Connected", {}).get("data", False)),
+            "bluez_paired": bool(device.get("Paired", {}).get("data", device.get("Bonded", {}).get("data", False))),
+            "bluez_name": str(device.get("Alias", {}).get("data") or device.get("Name", {}).get("data") or ""),
+            "bluez_modalias": str(device.get("Modalias", {}).get("data") or "").lower(),
+        }
+    return devices
+
 def sysfs_devices():
+    bluez = bluez_devices()
     devices = {}
     events = sorted(Path("/sys/class/input").glob("event*"), key=lambda p: p.name)
     sdl_index = 0
@@ -101,17 +167,29 @@ def sysfs_devices():
         if not name or "imu" in name.lower():
             continue
         modalias = read(event / "device/modalias").lower()
-        if not modalias.startswith("input:b0003"):
+        bus = modalias_bus(modalias)
+        if bus not in {"0003", "0005"}:
             continue
         if not SUPPORTED_RE.search(f"{name} {modalias}"):
             continue
-        ident = identity(read(event / "device/uniq"), modalias)
+        uniq = read(event / "device/uniq")
+        ident = identity(uniq, modalias)
         if not ident or not PLAYER_ID_RE.match(ident):
             continue
+        bluez_state = bluez.get(ident, {})
+        transport = transport_from_bus(bus)
+        if transport == "bluetooth" and not bluez_state.get("bluez_connected", False):
+            continue
+        vid, pid = modalias_vid_pid(modalias)
         devices.setdefault(ident, {
             "identity": ident,
             "name": name,
-            "transport": "bluetooth" if re.match(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$", ident) else "usb",
+            "transport": transport,
+            "bus": bus,
+            "vid": vid,
+            "pid": pid,
+            "bluez_connected": bool(bluez_state.get("bluez_connected", False)),
+            "bluez_paired": bool(bluez_state.get("bluez_paired", False)),
             "event_path": f"/dev/input/{event.name}",
             "sysfs_event": str(event),
             "modalias": modalias,

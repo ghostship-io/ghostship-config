@@ -577,10 +577,12 @@ need to change and serialized at a half-second cadence so hid-nintendo output
 reports are not flooded.
 The one-shot apply is not start-limited and briefly waits for a reconnecting
 controller's LED sysfs path before relying on later retries.
-`controller-autoconnect` polls at a low cadence with short bounded connect
-attempts, uses BlueZ D-Bus state for discovery, reconnects paired Switch Pro
-controllers serially, re-checks live connected state before each attempt, and
-leaves headphones and other accessories alone.
+`controller-autoconnect once 10` is the bounded Reconnect All path. It uses
+BlueZ D-Bus state for discovery, attempts every paired Switch Pro-style
+controller within the ten-second window, then performs one final LED reconcile.
+It is not run as a continuous background service during normal play; controller
+add events and BlueZ state changes handle ordinary reconciliation without
+polling every paired controller forever.
 
 Controller shortcuts follow a Rocknix-style Switch layout. Minus is the hotkey
 modifier, Minus + X opens emulator quick menus where the active launch
@@ -638,23 +640,32 @@ one ROM path per line; ES-DE accepts paths relative to its root where practical.
 
 `joycond` and `joycond-cemuhook` stay installed for manual experiments but are
 not started by default. Boomer reads the kernel input devices directly for
-emulator player order and owns its LED reconcile step before launches.
+emulator player order and owns its LED reconcile step before launches. Plugging
+in a Switch Pro-style controller over USB refreshes wired player order and LEDs
+only; automatic USB-assisted Bluetooth pairing is kept as the hidden
+`switch-usb-bt-pair` proof helper until live hardware testing proves the
+hidraw manual-pairing exchange is reliable.
 
 Diagnostics:
 
 ```text
-/srv/emulation/logs/controller-bluetooth-health.log
 /srv/emulation/logs/controller-bluetooth-latency.log
 /srv/emulation/logs/tools/bluetooth-pairing.log
 controller-bluetooth-diagnostics 20
 ```
 
+GameMode is enabled for emulator launches through `gamemoderun`. The kiosk user
+must be in the `gamemode` group so GameMode's polkit rules allow its governor,
+process priority, and split-lock helper commands without interactive
+authentication. Boomer uses conservative GameMode defaults: performance CPU
+governor, no iGPU heuristic downgrade, renice 10, I/O priority 0, split-lock
+mitigation disabled while active, and no GPU overclock settings.
+
 The diagnostics command writes a timestamped summary plus a short `btmon`
 capture under `/srv/emulation/logs/bluetooth-diagnostics/`.
-`controller-bluetooth-health` and full BlueZ/`hid-nintendo` debug logging are
-kept as on-demand diagnostic paths only, because continuously logging every
-controller HID report creates unnecessary load during normal four-controller
-play.
+Full BlueZ/`hid-nintendo` debug logging is kept as an on-demand diagnostic path
+only, because continuously logging controller health creates unnecessary load
+during normal four-controller play.
 `bluetoothd` runs with a small safe CPU scheduling boost, and system D-Bus gets
 a smaller CPU weight bump because BlueZ control events use D-Bus. Do not enable
 realtime scheduling or IRQ pinning by default; the live kernel already gives
