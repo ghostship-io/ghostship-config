@@ -23,6 +23,7 @@ let
       packages.ryubingCanaryPackage
       packages.winePackage
       config.ghostship.emulation.internal.scripts.audioRoute
+      config.ghostship.emulation.internal.scripts.controllerLeds
       displayProfile
     ]
     ++ emu.optionalPackages [
