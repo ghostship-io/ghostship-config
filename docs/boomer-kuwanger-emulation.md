@@ -631,8 +631,10 @@ Ryubing input schema, GUID formatting, `led` blocks, and disabled keyboard
 entries must be copied from a known live-accepted Ryubing profile or source
 model, not inferred from SDL names alone. Generated Ryubing IDs mirror
 Ryubing's own SDL3 duplicate-counter prefix plus stable GUID convention, and
-`run-emulator` refuses to launch if its generated connected-player profiles
-fail the local verifier.
+`run-emulator` keeps Ryubing's global input profile enabled for launched games
+so per-title configuration files cannot hide the generated connected-player
+profiles. The launcher refuses to launch if those generated profiles fail the
+local verifier.
 
 Minus + R2 is intentionally unmapped for Xemu because there is no reliable
 fast-forward command. RetroArch maps Minus hotkeys to save/load, reset,
