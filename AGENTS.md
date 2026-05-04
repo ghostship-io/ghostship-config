@@ -314,9 +314,14 @@ changelog.
   `0x1002_0x73EF`, not the display name. Ryubing 1.3.279 needs SDL3
   `input_config` entries for connected controllers; generate IDs with
   Ryubing's SDL3 stable GUID format like
-  `0-00000005-057e-0000-0920-000001800000`, not the raw SDL GUID, and include
-  a non-null disabled `led` block or LED-capable SDL3 controllers crash during
-  `SetConfiguration`. The stale `WindowKeyboard` profile with keyboard disabled
+  Ryubing's `SDL3GamepadDriver.GenerateGamepadId` convention: convert the SDL3
+  GUID to Ryubing's GUID string, replace the first four chars with `0000`, and
+  prefix `0-`, `1-`, etc. only as a duplicate counter for identical GUIDs. For
+  Boomer's wired `057e:2009` probe this is
+  `0-00000003-057e-0000-0920-000000026803`, not the Bluetooth-style
+  `00000005...` GUID and not the SDL instance id. Include a non-null disabled
+  `led` block or LED-capable SDL3 controllers crash during `SetConfiguration`.
+  The stale `WindowKeyboard` profile with keyboard disabled
   leaves Switch games with no controls. Ryubing controller changes are not
   accepted by a timeout smoke alone: the generated `Config.json` must survive
   Ryubing startup, Ryubing logs must not report invalid configuration or "No

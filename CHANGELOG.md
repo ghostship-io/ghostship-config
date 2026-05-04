@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 - **Boomer emulator recovery hardening**: Generate Ryubing controller IDs from
-  the live SDL3 instance id plus stable GUID, fail Switch smoke tests on
+  Ryubing's SDL3 duplicate-counter prefix plus stable GUID, fail Switch smoke tests on
   Ryubing controller rejection logs, keep the standalone hotkey broker attached
   to the emulator process group, and expose verified USB controller pairing
   through Bluetooth Settings with a kiosk-visible message path.

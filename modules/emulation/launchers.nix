@@ -111,9 +111,6 @@ def ryubing_guid_from_sdl(raw_guid):
     return "0000" + guid[4:]
 
 def stable_ryubing_guid(raw_guid, modalias):
-    vid, pid = modalias_vid_pid(modalias)
-    if (vid.lower(), pid.lower()) == ("057e", "2009"):
-        return "00000005-057e-0000-0920-000001800000"
     return ryubing_guid_from_sdl(raw_guid)
 
 def transport_from_bus(bus):
@@ -327,18 +324,24 @@ def saved_players():
     return sorted(rows, key=lambda row: row["player"])
 
 connected = sysfs_devices()
+ryubing_duplicate_counts = {}
 for gamepad in sdl3_gamepads():
     input_meta = gamepad.get("input", {})
     ident = identity(input_meta.get("uniq", ""), input_meta.get("modalias", ""))
     if ident in connected:
         ryubing_guid = stable_ryubing_guid(gamepad["guid"], input_meta.get("modalias", ""))
+        ryubing_id = ""
+        if ryubing_guid:
+            prefix = ryubing_duplicate_counts.get(ryubing_guid, 0)
+            ryubing_id = f"{prefix}-{ryubing_guid}"
+            ryubing_duplicate_counts[ryubing_guid] = prefix + 1
         connected[ident].update({
             "sdl_name": gamepad.get("name") or "",
             "sdl3_index": gamepad["sdl3_index"],
             "sdl3_instance_id": gamepad["sdl3_instance_id"],
             "sdl_guid": gamepad["guid"],
             "ryubing_guid": ryubing_guid,
-            "ryubing_id": f"{gamepad['sdl3_instance_id']}-{ryubing_guid}" if ryubing_guid else "",
+            "ryubing_id": ryubing_id,
             "xemu_guid": gamepad["guid"],
         })
 resolved = []
@@ -1869,16 +1872,13 @@ def vid_pid_from_modalias(modalias):
     return match.group(1).lower(), match.group(2).lower()
 
 def stable_ryubing_guid(raw_guid, input_meta=None):
-    vid, pid = vid_pid_from_modalias((input_meta or {}).get("modalias", ""))
-    if (vid, pid) == ("057e", "2009"):
-        return "00000005-057e-0000-0920-000001800000"
     guid = ryubing_guid(raw_guid)
     if not guid:
         return ""
     return "0000" + guid[4:]
 
 assert stable_ryubing_guid("0500d71f7e0500000920000001800000") == "00000005-057e-0000-0920-000001800000"
-assert stable_ryubing_guid("030077557e0500000920000000026803", {"modalias": "input:b0003v057ep2009"}) == "00000005-057e-0000-0920-000001800000"
+assert stable_ryubing_guid("030077557e0500000920000000026803", {"modalias": "input:b0003v057ep2009"}) == "00000003-057e-0000-0920-000000026803"
 
 def player_order():
     try:
@@ -1980,16 +1980,17 @@ def enumerate_sdl_gamepads():
 
 def assign_ryubing_ids(gamepads):
     used = set()
+    duplicate_counts = {}
     for gamepad in gamepads:
         guid = gamepad.get("ryubing_guid", "")
         if not guid:
             continue
-        instance_id = int(gamepad.get("instance_id", 0))
-        candidate = f"{instance_id}-{guid}"
-        suffix = 1
+        prefix = duplicate_counts.get(guid, 0)
+        candidate = f"{prefix}-{guid}"
         while candidate in used:
-            candidate = f"{instance_id + suffix}-{guid}"
-            suffix += 1
+            prefix += 1
+            candidate = f"{prefix}-{guid}"
+        duplicate_counts[guid] = prefix + 1
         used.add(candidate)
         gamepad["ryubing_id"] = candidate
 
