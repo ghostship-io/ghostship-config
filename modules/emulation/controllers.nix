@@ -402,7 +402,10 @@ let
     export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.bluez pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.jq pkgs.systemd ]}:$PATH
     log_file="${cfg.dataRoot}/logs/controller-bluetooth-latency.log"
     mkdir -p "$(dirname "$log_file")"
-    touch "$log_file"
+    if ! touch "$log_file" 2>/dev/null; then
+      log_file="/tmp/controller-bluetooth-latency-$(id -u).log"
+      touch "$log_file"
+    fi
 
     log() {
       echo "$(date -u +%FT%TZ) $*" >>"$log_file"
