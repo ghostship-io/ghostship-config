@@ -19,8 +19,8 @@ let
     mode="''${1:-loop}"
     led_write_delay="0.5"
     mkdir -p "$state_dir" "$(dirname "$log_file")"
-    touch "$log_file"
-    chown ${cfg.user}:${cfg.group} "$state_dir" "$log_file" || true
+    touch "$log_file" "$state_dir/controller-leds.lock"
+    chown ${cfg.user}:${cfg.group} "$state_dir" "$log_file" "$state_dir/controller-leds.lock" || true
     exec 9>"$state_dir/controller-leds.lock"
 
     ensure_order_file() {
