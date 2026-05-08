@@ -307,6 +307,27 @@ in
   };
 
   projections = {
+    agent-zero = {
+      fileName = "agent-zero.env";
+      owner = "root";
+      group = "root";
+      mode = "0400";
+      fields = {
+        BW_CLIENTID = {
+          unit = "bitwarden";
+          key = "BW_CLIENTID";
+        };
+        BW_CLIENTSECRET = {
+          unit = "bitwarden";
+          key = "BW_CLIENTSECRET";
+        };
+        BW_PASSWORD = {
+          unit = "bitwarden";
+          key = "BW_PASSWORD";
+        };
+      };
+    };
+
     bazarr = {
       fileName = "bazarr.env";
       owner = "apps";

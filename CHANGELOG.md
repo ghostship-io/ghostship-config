@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Agent Zero stack service**: Add Agent Zero as an internal-only self-hosted
+  Podman service on `ghostship_net`, using the Ghostship GHCR image with
+  Bitwarden CLI credentials projected from the shared Bitwarden source.
 - **Source-based secret bundles**: Replaced service-tied ragenix bundles with
   source/provider/service files under `secrets/files/sources`, added shared
   runtime recipients for ScreenScraper and RetroAchievements, and moved services
