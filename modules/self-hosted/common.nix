@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  dockerhub-secrets = config.ghostship.selfHostedSecrets.units."dockerhub-secrets".path;
+  dockerhub-secrets = config.ghostship.selfHostedSecrets.projections.dockerhub.path;
   dockerhub-auth-script = pkgs.writeShellScriptBin "podman-dockerhub-auth" ''
     set -eu
 

@@ -215,7 +215,7 @@ Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
 legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`, and does not
 require any application-specific benchmark credentials.
 
-n8n runs as a single SQLite-backed workflow orchestrator in this repo and is intended to stay behind Cloudflare for browser access while Hermes talks to it over `ghostship_net`. Hermes should read its dedicated `N8N_API_KEY` from `n8n-secrets` rather than using a browser session. The live Muximux entry still needs a manual reorder on `chill-penguin` after deployment so it sits directly under Bazarr.
+n8n runs as a single SQLite-backed workflow orchestrator in this repo and is intended to stay behind Cloudflare for browser access while Hermes talks to it over `ghostship_net`. Hermes should read its dedicated projected `N8N_API_KEY` rather than using a browser session. The live Muximux entry still needs a manual reorder on `chill-penguin` after deployment so it sits directly under Bazarr.
 
 Chaptarr now extends the arr stack to books and audiobooks. It should mount the shared downloads root at `/downloads`, manage `/mnt/share/Library/Books` and `/mnt/share/Library/Audiobooks` as separate library roots, and stay visible in Homepage plus the Muximux dropdown immediately before Bazarr. Grimmory is still the primary reading and listening surface, so it also mounts both library roots. Public `chaptarr.ghostship.io` exposure remains part of the external Cloudflare/tunnel workflow rather than repo-managed ingress.
 
@@ -229,7 +229,7 @@ CloakBrowser Playwright session inside its own image with `humanize=True`.
 Firecrawl's Playwright sidecar follows the same embedded path, so the repo no
 longer ships a standalone manager or managed CDP/profile service.
 
-Firecrawl now runs as an internal five-container stack on `ghostship_net`: the upstream API image, a repo-owned CloakBrowser-patched Playwright sidecar image, RabbitMQ, Redis, and `nuq-postgres`. Internal consumers use `http://firecrawl-api:3002`, and the repo does not publish a separate Firecrawl web origin. The API reuses the existing `http://searxng:8080` backend for `/search`, reads `OPENAI_API_KEY` from the new `firecrawl-secrets` bundle, and targets Gemini through the OpenAI-compatible `OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/` plus `MODEL_NAME=gemini-2.5-flash-lite`. The Bull queue admin path stays internal-only behind the projected `BULL_AUTH_KEY`.
+Firecrawl now runs as an internal five-container stack on `ghostship_net`: the upstream API image, a repo-owned CloakBrowser-patched Playwright sidecar image, RabbitMQ, Redis, and `nuq-postgres`. Internal consumers use `http://firecrawl-api:3002`, and the repo does not publish a separate Firecrawl web origin. The API reuses the existing `http://searxng:8080` backend for `/search`, reads runtime `OPENAI_API_KEY` from the Google AI Studio source projection, and targets Gemini through the OpenAI-compatible `OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/` plus `MODEL_NAME=gemini-2.5-flash-lite`. Firecrawl-local Postgres, Bull, and API credentials stay in the `firecrawl` source bundle.
 
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions
@@ -245,10 +245,10 @@ The proxy also injects a real `<base href="/romm/">` into RomM's HTML so newer
 bundles that ship an empty Vite `BASE_URL` still boot the router under `/romm/`
 instead of briefly landing on the in-app not-found route.
 
-SearXNG is intended to run as an internal-only search hub on `ghostship_net`, and internal consumers such as Hermes should use the container-network address `http://searxng:8080`. The managed `podman-searxng` `preStart` path now renders the full `settings.yml` plus `limiter.toml`, requires the existing `SEARXNG_SECRET_KEY` from the `searxng-secrets` bundle instead of generating one on the fly, and keeps a persistent cache at `/srv/apps/searxng-cache` mounted to `/var/cache/searxng` so cache-backed engines like Startpage retain useful state across restarts. The active Hermes-facing engine surface is now performance-first: the promoted web pool is `startpage`, `qwant`, `presearch`, `wikipedia`, and `wikidata`; the technical pool is `arch linux wiki`, `nixos wiki`, `askubuntu`, `stackoverflow`, `superuser`, `mankier`, `mdn`, `github`, `gitlab`, `gitea.com`, `sourcehut`, `huggingface`, `repology`, `pypi`, `npm`, `crates.io`, `pkg.go.dev`, `packagist`, `pub.dev`, `rubygems`, `hex`, and `lib.rs`; the research pool is `openalex`, `semantic scholar`, `pubmed`, `arxiv`, and `crossref`; and the news pool is `reuters`, `tagesschau`, and `wikinews`. Hermes should use explicit `/search?q=...&format=json&engines=...` pools instead of relying on the full active engine list. The latest lightweight direct probes promoted `presearch`, while `brave` and `karmasearch` stayed out of the default web pool after immediate `429` and `403` responses respectively.
+SearXNG is intended to run as an internal-only search hub on `ghostship_net`, and internal consumers such as Hermes should use the container-network address `http://searxng:8080`. The managed `podman-searxng` `preStart` path now renders the full `settings.yml` plus `limiter.toml`, requires the projected `SEARXNG_SECRET_KEY` instead of generating one on the fly, and keeps a persistent cache at `/srv/apps/searxng-cache` mounted to `/var/cache/searxng` so cache-backed engines like Startpage retain useful state across restarts. The active Hermes-facing engine surface is now performance-first: the promoted web pool is `startpage`, `qwant`, `presearch`, `wikipedia`, and `wikidata`; the technical pool is `arch linux wiki`, `nixos wiki`, `askubuntu`, `stackoverflow`, `superuser`, `mankier`, `mdn`, `github`, `gitlab`, `gitea.com`, `sourcehut`, `huggingface`, `repology`, `pypi`, `npm`, `crates.io`, `pkg.go.dev`, `packagist`, `pub.dev`, `rubygems`, `hex`, and `lib.rs`; the research pool is `openalex`, `semantic scholar`, `pubmed`, `arxiv`, and `crossref`; and the news pool is `reuters`, `tagesschau`, and `wikinews`. Hermes should use explicit `/search?q=...&format=json&engines=...` pools instead of relying on the full active engine list. The latest lightweight direct probes promoted `presearch`, while `brave` and `karmasearch` stayed out of the default web pool after immediate `429` and `403` responses respectively.
 
 PriceBuddy seeds a `pricebuddy@ghostship.io` / `pricebuddy` login and reads a
-persistent agent API token from the `pricebuddy-secrets` bundle. The live
+persistent agent API token from the `pricebuddy` source projection. The live
 `/srv/apps/pricebuddy/pricebuddy-agent.env` file contains a shell-safe
 `PRICEBUDDY_API_TOKEN="id|token"` bearer line for direct API use. The host
 token-sync now strips any previously persisted token ID before rewriting that
@@ -261,7 +261,7 @@ Hermes now follows the current upstream `ghostship-hermes` `main` workstation co
 
 Ghostship's supported downstream Discord env surface is `DISCORD_ALLOWED_USERS`, `DISCORD_HOME_CHANNEL`, `DISCORD_FREE_RESPONSE_CHANNELS`, `GHOSTSHIP_CODEX_CHANNEL`, and `DISCORD_WEBHOOK_CHANNEL`. `GHOSTSHIP_CODEX_CHANNEL` is pinned to `1492841053642817606`, `DISCORD_WEBHOOK_CHANNEL` is pinned to `1491229248856260799`, `DISCORD_HOME_CHANNEL` is pinned to `1491229269127598281`, and the free-response channel list includes `1492841053642817606`, `1493462179725180959`, `1491229269127598281`, `1491229248856260799`, and `1491229299452412044`. The managed model contract keeps Codex on `openai-codex/gpt-5.5` for the forced Codex Discord channel, uses the local router as the normal primary path, uses OpenCode Go `opencode-go/minimax-m2.7` as the paid fallback lane, uses Firecrawl as the managed web backend, and keeps `agent.reasoning_effort=medium`.
 
-The default local browser path is image-owned native CloakBrowser exposed as `google-chrome` with `AGENT_BROWSER_PROFILE=/home/hermes/.local/state/cloakbrowser`, so the host must not inject `CLOAKBROWSER_URL` or other remote-browser defaults into Hermes. The image-managed Bitwarden path uses the Password Manager CLI `bw` with `BITWARDENCLI_APPDATA_DIR=/home/hermes/.local/state/bitwarden-cli`; populate `BW_CLIENTID`, `BW_CLIENTSECRET`, `BW_PASSWORD`, `OPENCODE_ZEN_API_KEY`, `ZENMUX_API_KEY`, and `ELECTRON_HUB_API_KEY` in `hermes-secrets` before relying on those workflows. The repo only seeds the Argo `SOUL.md` default into `/srv/apps/hermes/home/.hermes/SOUL.md` when that runtime-owned path is missing; it does not seed `skill-creator` or any other repo-managed default skill into `/srv/apps/hermes/home/.hermes/skills/`, and a fresh reset should rely on the image's bundled default skills there. This image cutover is intentionally destructive: stop the Hermes container, remove `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`, then start the latest published `ghcr.io/ghostship-io/ghostship-hermes:latest` image against clean persisted directories and let it reseed `/nix` and the runtime from scratch. That full reset wipes persisted Codex auth, XDG/userland state, custom skills, workspace contents, and user-installed Nix state, so operators must re-auth Codex inside the fresh runtime before the Codex lane works again. Muximux keeps PriceBuddy in the dropdown immediately after Bazarr.
+The default local browser path is image-owned native CloakBrowser exposed as `google-chrome` with `AGENT_BROWSER_PROFILE=/home/hermes/.local/state/cloakbrowser`, so the host must not inject `CLOAKBROWSER_URL` or other remote-browser defaults into Hermes. The image-managed Bitwarden path uses the Password Manager CLI `bw` with `BITWARDENCLI_APPDATA_DIR=/home/hermes/.local/state/bitwarden-cli`; populate `BW_CLIENTID`, `BW_CLIENTSECRET`, and `BW_PASSWORD` in the `bitwarden` source, plus `GO_API_KEY` in `opencode`, `API_KEY` in `zenmux`, and `API_KEY` in `electron-hub` before relying on those workflows. `OPENCODE_ZEN_API_KEY` is projected from `opencode`'s `GO_API_KEY` for runtime compatibility. The repo only seeds the Argo `SOUL.md` default into `/srv/apps/hermes/home/.hermes/SOUL.md` when that runtime-owned path is missing; it does not seed `skill-creator` or any other repo-managed default skill into `/srv/apps/hermes/home/.hermes/skills/`, and a fresh reset should rely on the image's bundled default skills there. This image cutover is intentionally destructive: stop the Hermes container, remove `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`, then start the latest published `ghcr.io/ghostship-io/ghostship-hermes:latest` image against clean persisted directories and let it reseed `/nix` and the runtime from scratch. That full reset wipes persisted Codex auth, XDG/userland state, custom skills, workspace contents, and user-installed Nix state, so operators must re-auth Codex inside the fresh runtime before the Codex lane works again. Muximux keeps PriceBuddy in the dropdown immediately after Bazarr.
 
 ## Usage
 
@@ -308,8 +308,9 @@ nixos-rebuild build --flake .#chill-penguin
 - `secrets/recipients.nix` defines operator and host SSH recipients. Runtime
   decryption uses SSH host `ed25519` keys; human edit access uses the dedicated
   passwordless non-default key `~/.ssh/id_ed25519_ragenix`.
-- `secrets/files/**/*.age` stores the logical-unit encrypted env files consumed
-  by NixOS through `ragenix`.
+- `secrets/files/sources/**/*.age` stores source/provider/service encrypted env
+  files consumed by NixOS through `ragenix`. Services receive stable runtime env
+  files projected under `/run/ghostship-secrets`.
 
 Helper commands:
 
@@ -321,9 +322,10 @@ secret-edit <logical-id>   # edit one logical-unit .age file directly
 secret-rekey               # rekey all .age files after recipient changes
 ```
 
-Normal operator flow is direct per-file editing with `secret-edit
-<logical-id>`. Use `secrets-list-keys` or `secret-list` to find the logical
-unit you need, then run `secret-rekey` only when recipient membership changes.
+Normal operator flow is direct source-bundle editing with `secret-edit
+<logical-id>`. Use `secrets-list-keys` or `secret-list` to find the provider or
+service source you need, then run `secret-rekey` only when recipient membership
+changes.
 
 ## Bootstrap
 

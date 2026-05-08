@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  bookstack-secrets = config.ghostship.selfHostedSecrets.units."bookstack-secrets".path;
+  bookstack-secrets = config.ghostship.selfHostedSecrets.projections.bookstack.path;
 in
 {
   virtualisation.oci-containers.containers."bookstack" = {

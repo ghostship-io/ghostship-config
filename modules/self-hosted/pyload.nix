@@ -1,7 +1,7 @@
 { config, pkgs, ... }:
 
 let
-  pyload-secrets = config.ghostship.selfHostedSecrets.units."pyload-secrets".path;
+  pyload-secrets = config.ghostship.selfHostedSecrets.projections.pyload.path;
   pyloadImage = "lscr.io/linuxserver/pyload-ng:latest";
   pyloadInitConfigRun =
     let

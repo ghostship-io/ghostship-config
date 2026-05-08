@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  searxng-secrets = config.ghostship.selfHostedSecrets.units."searxng-secrets".path;
+  searxng-secrets = config.ghostship.selfHostedSecrets.projections.searxng.path;
   searxng-config-dir = "/srv/apps/searxng";
   searxng-cache-dir = "/srv/apps/searxng-cache";
   limiter-enabled = true;

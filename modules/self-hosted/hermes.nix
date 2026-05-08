@@ -1,10 +1,8 @@
 { config, pkgs, ... }:
 
 let
-  hermes-secrets = config.ghostship.selfHostedSecrets.units."hermes-secrets".path;
-  pyload-secrets = config.ghostship.selfHostedSecrets.units."pyload-secrets".path;
-  n8n-secrets = config.ghostship.selfHostedSecrets.units."n8n-secrets".path;
-  bookstack-secrets = config.ghostship.selfHostedSecrets.units."bookstack-secrets".path;
+  hermes-secrets = config.ghostship.selfHostedSecrets.projections."hermes-secrets".path;
+  render-hermes-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project hermes-secrets";
   hermes-shared-secrets = config.ghostship.selfHostedSecrets.projections.hermes.path;
   render-hermes-shared-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project hermes";
   hermes-home = "/srv/apps/hermes/home";
@@ -175,11 +173,12 @@ in
         install -m0644 -o apps -g apps "${hermes-seed-soul}" "${hermes-home}/.hermes/SOUL.md"
       fi
 
+      ${render-hermes-secrets}
+      ${render-hermes-shared-secrets}
+
       for secret_file in \
         "${hermes-secrets}" \
-        "${pyload-secrets}" \
-        "${n8n-secrets}" \
-        "${bookstack-secrets}"
+        "${hermes-shared-secrets}"
       do
         if [ ! -f "$secret_file" ]; then
           echo "Waiting for Hermes runtime secret source at $secret_file..."
@@ -196,8 +195,6 @@ in
           exit 1
         fi
       done
-
-      ${render-hermes-shared-secrets}
       ${hermes-runtime-env-sync}/bin/hermes-runtime-env-sync.py
     '';
     postStart = ''
@@ -227,7 +224,6 @@ in
         hermes-secrets
         hermes-shared-secrets
         pricebuddy-agent-env
-        bookstack-secrets
       ];
       Unit = "hermes-runtime-env-sync.service";
     };

@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  cloudflared-secrets = config.ghostship.selfHostedSecrets.units."cloudflared-secrets".path;
+  cloudflared-secrets = config.ghostship.selfHostedSecrets.projections.cloudflared.path;
   cloudflared-runtime-env = config.ghostship.selfHostedSecrets.projections."cloudflared-runtime".path;
   render-cloudflared-runtime = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project cloudflared-runtime";
 in

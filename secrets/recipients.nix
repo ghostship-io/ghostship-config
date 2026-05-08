@@ -18,8 +18,15 @@ rec {
   };
 
   groups = {
-    editors = [ keys.operators.ragenix keys.operators.armored-armadillo ];
+    editors = [
+      keys.operators.ragenix
+      keys.operators.armored-armadillo
+    ];
     self-hosted-runtime = groups.editors ++ [ keys.hosts.chill-penguin ];
     emulation-runtime = groups.editors ++ [ keys.hosts.boomer-kuwanger ];
+    shared-runtime = groups.editors ++ [
+      keys.hosts.chill-penguin
+      keys.hosts.boomer-kuwanger
+    ];
   };
 }

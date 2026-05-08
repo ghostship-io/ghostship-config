@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  prowlarr-secrets = config.ghostship.selfHostedSecrets.units."prowlarr-secrets".path;
+  prowlarr-secrets = config.ghostship.selfHostedSecrets.projections.prowlarr.path;
 in
 {
   virtualisation.oci-containers.containers."prowlarr" = {

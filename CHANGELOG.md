@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Source-based secret bundles**: Replaced service-tied ragenix bundles with
+  source/provider/service files under `secrets/files/sources`, added shared
+  runtime recipients for ScreenScraper and RetroAchievements, and moved services
+  onto projected `/run/ghostship-secrets` env files while keeping runtime env
+  names stable. Firecrawl now gets `OPENAI_API_KEY` from the Google AI Studio
+  source, and `OPENCODE_ZEN_API_KEY` is projected from OpenCode Go's
+  `GO_API_KEY` instead of stored separately.
 - **Boomer emulator recovery hardening**: Generate Ryubing controller IDs from
   Linux input modalias bus/VID/PID/version fields and Ryubing's
   launch-environment input ID list when available, fail Switch smoke tests on

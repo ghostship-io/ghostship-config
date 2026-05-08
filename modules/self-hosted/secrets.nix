@@ -8,8 +8,10 @@
 let
   recipients = import ../../secrets/recipients.nix;
   catalog = import ../../secrets/catalog.nix { inherit recipients; };
-  unitCatalog = lib.filterAttrs (_: meta: meta.recipientGroup == "self-hosted-runtime") catalog.units;
-  projectionCatalog = catalog.projections;
+  unitCatalog = lib.filterAttrs (
+    _: meta: builtins.elem meta.recipientGroup [ "self-hosted-runtime" "shared-runtime" ]
+  ) catalog.units;
+  projectionCatalog = lib.filterAttrs (name: _: !(lib.hasPrefix "emulation-" name)) catalog.projections;
   projectionDir = "/run/ghostship-secrets";
 
   mkAgeSecret =
@@ -134,5 +136,15 @@ in
     systemd.tmpfiles.rules = [
       "d ${projectionDir} 0755 root root -"
     ];
+
+    system.activationScripts.ghostship-secret-projections = {
+      deps = [ "agenixInstall" "users" ];
+      text = lib.concatStringsSep "\n" (
+        map
+          (name: "${projectionRenderer}/bin/ghostship-secret-project ${lib.escapeShellArg name}")
+          (builtins.attrNames projectionCatalog)
+      );
+      supportsDryActivation = false;
+    };
   };
 }

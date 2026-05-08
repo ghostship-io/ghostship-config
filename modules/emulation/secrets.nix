@@ -3,6 +3,8 @@
 let
   cfg = config.ghostship.emulation;
   emu = config.ghostship.emulation.internal.lib;
+  recipients = import ../../secrets/recipients.nix;
+  catalog = import ../../secrets/catalog.nix { inherit recipients; };
 
   renderScraperSettings = pkgs.writeShellScriptBin "render-esde-scraper-settings" ''
     set -euo pipefail
@@ -210,12 +212,12 @@ in
     };
 
     age.identityPaths = lib.mkDefault [ "/etc/ssh/ssh_host_ed25519_key" ];
-    age.secrets.emulation-scraper-secrets = {
-      file = ../../secrets/files/services/emulation-scraper-secrets.env.age;
+    age.secrets.screenscraper = {
+      file = catalog.units.screenscraper.path;
       mode = "0400";
     };
-    age.secrets.emulation-retroachievements-secrets = {
-      file = ../../secrets/files/services/emulation-retroachievements-secrets.env.age;
+    age.secrets.retroachievements = {
+      file = catalog.units.retroachievements.path;
       mode = "0400";
     };
 
@@ -229,13 +231,18 @@ in
       };
       path = [ pkgs.coreutils pkgs.gawk renderRetroAchievementsSettings renderScraperSettings ];
       script = ''
-        scraper_secret_path="${config.age.secrets.emulation-scraper-secrets.path}"
+        scraper_secret_path="${config.age.secrets.screenscraper.path}"
         scraper_projection="/run/ghostship-secrets/emulation-scraper.env"
         if [ -r "$scraper_secret_path" ]; then
           install -d -m 0755 /run/ghostship-secrets
           awk -F= '
             /^[[:space:]]*($|#)/ { next }
-            $1 ~ /^(SCREENSCRAPER_USER|SCREENSCRAPER_PASS)$/ { print }
+            {
+              key = $1
+              sub(/^[^=]*=/, "")
+              if (key == "USER") print "SCREENSCRAPER_USER=" $0
+              if (key == "PASS") print "SCREENSCRAPER_PASS=" $0
+            }
           ' "$scraper_secret_path" >"$scraper_projection.tmp"
           chown ${cfg.user}:${cfg.group} "$scraper_projection.tmp"
           chmod 0440 "$scraper_projection.tmp"
@@ -243,13 +250,19 @@ in
           render-esde-scraper-settings || true
         fi
 
-        retroachievements_secret_path="${config.age.secrets.emulation-retroachievements-secrets.path}"
+        retroachievements_secret_path="${config.age.secrets.retroachievements.path}"
         retroachievements_projection="/run/ghostship-secrets/emulation-retroachievements.env"
         if [ -r "$retroachievements_secret_path" ]; then
           install -d -m 0755 /run/ghostship-secrets
           awk -F= '
             /^[[:space:]]*($|#)/ { next }
-            $1 ~ /^(RETROACHIEVEMENTS_USER|RETROACHIEVEMENTS_PASS|RETROACHIEVEMENTS_TOKEN)$/ { print }
+            {
+              key = $1
+              sub(/^[^=]*=/, "")
+              if (key == "USER") print "RETROACHIEVEMENTS_USER=" $0
+              if (key == "PASS") print "RETROACHIEVEMENTS_PASS=" $0
+              if (key == "TOKEN") print "RETROACHIEVEMENTS_TOKEN=" $0
+            }
           ' "$retroachievements_secret_path" >"$retroachievements_projection.tmp"
           chown ${cfg.user}:${cfg.group} "$retroachievements_projection.tmp"
           chmod 0440 "$retroachievements_projection.tmp"

@@ -72,7 +72,7 @@ in
       VERSION = "latest";
     };
     environmentFiles = [
-      config.ghostship.selfHostedSecrets.units."plex-secrets".path
+      config.ghostship.selfHostedSecrets.projections.plex.path
     ];
     devices = [
       "/dev/dri:/dev/dri"

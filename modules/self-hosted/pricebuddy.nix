@@ -22,7 +22,7 @@ let
       --file "$dockerfile" \
       "$context_dir"
   '';
-  pricebuddy-secrets = config.ghostship.selfHostedSecrets.units."pricebuddy-secrets".path;
+  pricebuddy-secrets = config.ghostship.selfHostedSecrets.projections.pricebuddy.path;
   pricebuddy-env = "/srv/apps/pricebuddy/pricebuddy.env";
   pricebuddy-db-env = "/srv/apps/pricebuddy/pricebuddy-db.env";
   pricebuddy-agent-env = "/srv/apps/pricebuddy/pricebuddy-agent.env";

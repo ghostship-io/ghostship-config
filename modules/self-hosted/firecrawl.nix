@@ -2,7 +2,6 @@
 
 let
   firecrawl-root = "/srv/apps/firecrawl";
-  firecrawl-secrets = config.ghostship.selfHostedSecrets.units."firecrawl-secrets".path;
   firecrawl-runtime-env = config.ghostship.selfHostedSecrets.projections."firecrawl-runtime".path;
   render-firecrawl-runtime = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project firecrawl-runtime";
   containers-root = ../../containers;
@@ -47,22 +46,11 @@ let
   firecrawl-runtime-sync = pkgs.writeShellScriptBin "firecrawl-runtime-sync" ''
     set -eu
 
-    if [ ! -f "${firecrawl-secrets}" ]; then
-      echo "Waiting for Firecrawl secrets at ${firecrawl-secrets}..."
-      for _ in $(seq 1 30); do
-        if [ -f "${firecrawl-secrets}" ]; then
-          break
-        fi
-        sleep 1
-      done
-    fi
-
-    if [ ! -f "${firecrawl-secrets}" ]; then
-      echo "Missing Firecrawl secrets file at ${firecrawl-secrets}" >&2
+    ${render-firecrawl-runtime}
+    if [ ! -s "${firecrawl-runtime-env}" ]; then
+      echo "Missing Firecrawl runtime secrets projection at ${firecrawl-runtime-env}" >&2
       exit 1
     fi
-
-    ${render-firecrawl-runtime}
   '';
 in
 {

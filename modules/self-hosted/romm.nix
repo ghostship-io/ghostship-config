@@ -1,7 +1,7 @@
 { config, pkgs, ... }:
 
 let
-  romm-secrets = config.ghostship.selfHostedSecrets.units."romm-secrets".path;
+  romm-secrets = config.ghostship.selfHostedSecrets.projections.romm.path;
 in
 {
   virtualisation.oci-containers.containers."romm" = {
