@@ -328,6 +328,19 @@ in
       };
     };
 
+    agent-zero-registry = {
+      fileName = "agent-zero-registry.env";
+      owner = "root";
+      group = "root";
+      mode = "0400";
+      fields = {
+        GITHUB_TOKEN = {
+          unit = "github";
+          key = "TOKEN";
+        };
+      };
+    };
+
     bazarr = {
       fileName = "bazarr.env";
       owner = "apps";
