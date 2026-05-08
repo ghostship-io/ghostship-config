@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Muximux Cloudflare recovery**: Point RomM at the live NAS ROM library under
+  `/mnt/share/Library/ROMS/ROMS`, create its `.romm` assets directory before
+  container start, and make the Muximux RomM proxy resolve `romm` at request
+  time so a stopped RomM container no longer prevents the dashboard nginx from
+  starting.
 - **Agent Zero stack service**: Add Agent Zero as an internal-only self-hosted
   Podman service on `ghostship_net`, using the Ghostship GHCR image with
   Bitwarden CLI credentials projected from the shared Bitwarden source.

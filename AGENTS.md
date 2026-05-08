@@ -460,6 +460,9 @@ changelog.
 - Muximux should embed RomM through a same-origin `/romm/` reverse proxy to the
   internal `http://romm:8080` service, not the public `https://romm.ghostship.io`
   hostname.
+- On `chill-penguin`, RomM's live NAS library path is
+  `/mnt/share/Library/ROMS/ROMS`; the old `/mnt/share/Library/ROMs` path can be
+  absent.
 - If the RomM iframe shim needs to load before the app bundle, inject it by
   replacing RomM's main module `src="/assets/index-...` tag in the proxied
   HTML, not by blindly prepending `<head>` content. The generic `<head>`

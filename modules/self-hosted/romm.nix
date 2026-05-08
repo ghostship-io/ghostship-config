@@ -2,6 +2,8 @@
 
 let
   romm-secrets = config.ghostship.selfHostedSecrets.projections.romm.path;
+  romm-library = "/mnt/share/Library/ROMS/ROMS";
+  romm-assets = "${romm-library}/.romm";
 in
 {
   virtualisation.oci-containers.containers."romm" = {
@@ -30,8 +32,8 @@ in
       "/srv/apps/romm/resources:/romm/resources:rw"
       "/srv/apps/romm/redis-data:/redis-data:rw"
       "/srv/apps/romm/config:/romm/config:rw"
-      "/mnt/share/Library/ROMs:/romm/library:rw"
-      "/mnt/share/Library/ROMs/.romm:/romm/assets:rw"
+      "${romm-library}:/romm/library:rw"
+      "${romm-assets}:/romm/assets:rw"
     ];
   };
 
@@ -51,6 +53,12 @@ in
     CONFIG_DIR="/srv/apps/romm"
     CONFIG_FILE="$CONFIG_DIR/config/config.yml"
     ENV_FILE="$CONFIG_DIR/romm.env"
+
+    if [ ! -d "${romm-library}" ]; then
+      echo "Missing RomM library path at ${romm-library}" >&2
+      exit 1
+    fi
+    install -d -m0755 "${romm-assets}"
 
     if [ -f "$CONFIG_FILE" ]; then
       echo "Surgically updating RomM config.yml..."

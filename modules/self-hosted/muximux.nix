@@ -145,13 +145,15 @@ let
         ssl_certificate_key /config/keys/cert.key;
 
         client_max_body_size 0;
+        resolver 10.89.0.1 valid=30s ipv6=off;
+        set $romm_upstream romm:8080;
 
     	location = /romm-iframe-shim.js {
     		add_header Cache-Control "no-store";
     	}
 
     	location /romm/ {
-    		proxy_pass http://romm:8080/;
+		proxy_pass http://$romm_upstream/;
     		proxy_http_version 1.1;
     		proxy_set_header Host romm:8080;
     		proxy_set_header X-Forwarded-Host $host;
@@ -174,10 +176,10 @@ let
     		sub_filter "'/api/" "'/romm/api/";
             # Keep the older bundle rewrite as a compatibility fallback.
     		sub_filter 'BASE_URL:"/"' 'BASE_URL:"/romm/"';
-    	}
+        }
 
         location /ws/socket.io/ {
-            proxy_pass http://romm:8080/ws/socket.io/;
+            proxy_pass http://$romm_upstream/ws/socket.io/;
             proxy_http_version 1.1;
             proxy_set_header Host romm:8080;
             proxy_set_header X-Forwarded-Host $host;
@@ -188,7 +190,7 @@ let
         }
 
     	location /assets/ {
-    		proxy_pass http://romm:8080/assets/;
+		proxy_pass http://$romm_upstream/assets/;
     		proxy_http_version 1.1;
     		proxy_set_header Host romm:8080;
     		proxy_set_header X-Forwarded-Host $host;
@@ -197,7 +199,7 @@ let
     	}
 
     	location /api/ {
-    		proxy_pass http://romm:8080/api/;
+		proxy_pass http://$romm_upstream/api/;
     		proxy_http_version 1.1;
     		proxy_set_header Host romm:8080;
     		proxy_set_header X-Forwarded-Host $host;

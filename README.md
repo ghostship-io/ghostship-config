@@ -234,6 +234,9 @@ Firecrawl now runs as an internal five-container stack on `ghostship_net`: the u
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions
 against a live unpatched container before reintroducing any frontend patch.
+The live NAS ROM library is mounted into RomM from
+`/mnt/share/Library/ROMS/ROMS`; the service creates the sibling `.romm` assets
+directory before Podman starts.
 Muximux embeds RomM through a same-origin `/romm/` reverse proxy because the
 public `romm.ghostship.io` origin sits behind Cloudflare Access and is not a
 stable iframe target.
