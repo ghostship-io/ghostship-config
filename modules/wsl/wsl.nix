@@ -117,6 +117,10 @@ in
       target = "/usr/bin/gh";
       source = "${pkgs.gh}/bin/gh";
     }
+    {
+      target = "/usr/bin/starship";
+      source = "${pkgs.starship}/bin/starship";
+    }
   ];
 
   environment.variables.WSLENV = "USERPROFILE/p";

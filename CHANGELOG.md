@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **WSL FHS shim replacement**: Replaced patched `envfs` on WSL hosts with
   explicit writable `/bin/...` and `/usr/bin/...` shims under
-  `ghostship.wsl.fhsShims`, preserving the known shell, Node, GitHub CLI, and
-  NixOS-WSL helper paths while leaving Docker Desktop free to create
+  `ghostship.wsl.fhsShims`, preserving the known shell, Starship, Node, GitHub
+  CLI, and NixOS-WSL helper paths while leaving Docker Desktop free to create
   `/usr/bin/docker-credential-desktop.exe` at runtime.
 - **GitHub PR workflow skill**: Add a shared `github-pr-workflow` skill for
   draft-first PRs, native automatic Codex review defaults, review feedback
