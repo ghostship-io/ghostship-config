@@ -218,6 +218,10 @@ in
       source = ../config/skills/codex-queue;
       force = true;
     };
+    ".agents/skills/github-pr-workflow" = {
+      source = ../config/skills/github-pr-workflow;
+      force = true;
+    };
     ".agents/skills/skill-creator" = {
       source = ../config/skills/skill-creator;
       force = true;

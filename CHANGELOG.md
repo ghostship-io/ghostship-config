@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **GitHub PR workflow skill**: Add a shared `github-pr-workflow` skill for
+  draft-first PRs, native automatic Codex review defaults, review feedback
+  handling, merge-conflict readiness, and shared GitHub Actions CI defaults.
 - **Muximux Cloudflare recovery**: Point RomM at the live NAS ROM library under
   `/mnt/share/Library/ROMS/ROMS`, create its `.romm` assets directory before
   container start, and make the Muximux RomM proxy resolve `romm` at request
