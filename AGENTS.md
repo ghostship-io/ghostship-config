@@ -11,14 +11,14 @@ changelog.
   repo-specific guidance. Keep it concise, imperative, and high-signal.
 - The shared workflow preferences require verified work to be committed before
   task completion.
-- In worktrees, use a named branch and GitHub PR. Push the branch, treat
-  GitHub Actions as the primary branch/feature validation path, set up GitHub
-  CI tests for GitHub repos when absent or insufficient, optimize CI to
-  conserve free-plan minutes, configure workflows to cancel superseded runs so
-  only the latest push per branch continues, resolve failing CI and Codex
-  review comments, resolve merge conflicts, do not return from feature work
-  until the PR is clean and ready for the user to merge, and leave PR merges to
-  the user.
+- In worktrees, work on a named branch and open a GitHub PR before returning to
+  the user. Push the branch, open the PR as draft/WIP, treat GitHub Actions as
+  the primary branch/feature validation path, set up GitHub CI tests for GitHub
+  repos when absent or insufficient, optimize CI to conserve free-plan minutes,
+  configure workflows to cancel superseded runs so only the latest push per
+  branch continues, review and resolve or explicitly reject Codex comments,
+  resolve failing CI and merge conflicts, then mark the PR ready/non-WIP before
+  handoff when it is ready for the user to merge. Leave PR merges to the user.
 - For repo research, use `brainstorming` when it is available.
 - Use the `nix` skill for Nix-platform work and the `python` skill for Python
   work when they are available.

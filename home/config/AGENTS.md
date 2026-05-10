@@ -66,6 +66,11 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - Update `README.md` and affected docs when behavior or workflow changes.
 - Keep `CHANGELOG.md` current.
 - Commit finished work after verification.
+- In a worktree, finish on a named branch with a pushed commit and an opened
+  GitHub PR before returning to the user.
+- Open worktree PRs as draft/WIP first; before handoff, review Codex comments,
+  resolve or explicitly reject findings, check CI, resolve conflicts, and mark
+  the PR ready/non-WIP when it is ready for the user to merge.
 - Bump the version when warranted.
 
 ## Execution
