@@ -210,12 +210,12 @@ in
       source = ../config/skills/ssh;
       force = true;
     };
-    ".agents/skills/merge-worktree" = {
-      source = ../config/skills/merge-worktree;
-      force = true;
-    };
     ".agents/skills/codex-queue" = {
       source = ../config/skills/codex-queue;
+      force = true;
+    };
+    ".agents/skills/github-pr-workflow" = {
+      source = ../config/skills/github-pr-workflow;
       force = true;
     };
     ".agents/skills/skill-creator" = {

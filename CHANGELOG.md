@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **GitHub PR workflow skill**: Add a shared `github-pr-workflow` skill for
+  draft-first PRs, native automatic Codex review defaults, review feedback
+  handling, merge-conflict readiness, and shared GitHub Actions CI defaults,
+  and retire the local `merge-worktree` skill from the shared skill set.
 - **Agent Zero plugin contract**: Project the new Agent Zero plugin runtime
   environment names, including `BW_CLIENT_ID`, `BW_CLIENT_SECRET`, and the
   provider plugin API keys for Ollama Cloud, OpenCode Go, NVIDIA Build Free,
