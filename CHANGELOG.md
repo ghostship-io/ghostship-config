@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Agent Zero shared memory**: Increase the Agent Zero container shared memory
+  mount to 2 GiB for browser-heavy workloads.
 - **Worktree PR handoff**: Tighten shared agent policy so worktree work must
   end with a pushed branch, draft-first PR, reviewed Codex comments, checked CI,
   resolved conflicts, and a ready/non-WIP PR before user handoff when unblocked.
