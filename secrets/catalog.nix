@@ -313,17 +313,37 @@ in
       group = "root";
       mode = "0400";
       fields = {
-        BW_CLIENTID = {
+        BW_CLIENT_ID = {
           unit = "bitwarden";
           key = "BW_CLIENTID";
         };
-        BW_CLIENTSECRET = {
+        BW_CLIENT_SECRET = {
           unit = "bitwarden";
           key = "BW_CLIENTSECRET";
         };
         BW_PASSWORD = {
           unit = "bitwarden";
           key = "BW_PASSWORD";
+        };
+        OLLAMA_CLOUD_API_KEY = {
+          unit = "ollama";
+          key = "API_KEY";
+        };
+        OPENCODE_GO_API_KEY = {
+          unit = "opencode";
+          key = "GO_API_KEY";
+        };
+        NVIDIA_BUILD_FREE_API_KEY = {
+          unit = "nvidia-build";
+          key = "API_KEY";
+        };
+        OPENCODE_ZEN_FREE_API_KEY = {
+          unit = "opencode";
+          key = "GO_API_KEY";
+        };
+        OPENROUTER_FREE_API_KEY = {
+          unit = "openrouter";
+          key = "API_KEY";
         };
       };
     };

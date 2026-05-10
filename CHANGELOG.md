@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Agent Zero plugin contract**: Project the new Agent Zero plugin runtime
+  environment names, including `BW_CLIENT_ID`, `BW_CLIENT_SECRET`, and the
+  provider plugin API keys for Ollama Cloud, OpenCode Go, NVIDIA Build Free,
+  OpenCode Zen Free, and OpenRouter Free.
 - **Muximux Cloudflare recovery**: Point RomM at the live NAS ROM library under
   `/mnt/share/Library/ROMS/ROMS`, create its `.romm` assets directory before
   container start, and make the Muximux RomM proxy resolve `romm` at request
