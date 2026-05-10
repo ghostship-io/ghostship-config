@@ -29,10 +29,12 @@ conflict resolution, Actions logs, and any connector gap.
 ## PR Lifecycle
 
 - Use a named branch for worktree work.
-- Open every PR as draft/WIP. Prefer `github:yeet`; use
+- Commit and push finished work, then open a PR before returning to the user.
+- Open every worktree PR as draft/WIP first. Prefer `github:yeet`; use
   `gh pr create --draft` only as the CLI fallback.
-- Keep the PR draft until local verification is done and the PR body explains
-  intent, impact, and validation.
+- Treat draft/WIP as the initial validation state only. Keep the PR draft until
+  local verification is done, the PR body explains intent, impact, and
+  validation, and Codex review feedback has been inspected.
 - Ensure the repository is configured for native Codex automatic review through
   the Codex/GitHub integration. Prefer native automatic review over custom
   Codex Action workflows.
@@ -48,6 +50,11 @@ conflict resolution, Actions logs, and any connector gap.
 - Resolve merge conflicts locally, push the resolution, and re-check CI and
   Codex review state before calling the PR ready to merge.
 - Use `github:gh-fix-ci` for failing GitHub Actions checks.
+- Do not call a PR ready while unresolved Codex findings, failing CI, or merge
+  conflicts remain.
+- Before handing back to the user, mark the PR ready/non-draft when it is ready
+  for the user to merge. If a concrete blocker prevents readiness, state it
+  explicitly with the PR link and remaining work.
 - Merge only after merge conflicts, CI, and Codex feedback are resolved. Leave
   final PR merges to the user when repo policy says so.
 - Close abandoned PRs with `gh pr close <pr> --comment ...`; delete branches
@@ -97,3 +104,4 @@ Before marking a PR ready or merge-ready:
 - All Codex review findings are fixed or explicitly rejected with rationale and
   reaction.
 - Merge conflicts are resolved and the resolution is pushed.
+- Draft/WIP state has been cleared unless a concrete blocker is stated.

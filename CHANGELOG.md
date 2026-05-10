@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Worktree PR handoff**: Tighten shared agent policy so worktree work must
+  end with a pushed branch, draft-first PR, reviewed Codex comments, checked CI,
+  resolved conflicts, and a ready/non-WIP PR before user handoff when unblocked.
 - **WSL FHS shim replacement**: Replaced patched `envfs` on WSL hosts with
   explicit writable `/bin/...` and `/usr/bin/...` shims under
   `ghostship.wsl.fhsShims`, preserving the known shell, Starship, Node, GitHub
