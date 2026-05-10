@@ -24,6 +24,10 @@ changelog.
   work when they are available.
 - Shared skills live under `home/config/skills/*` and are linked into
   `~/.agents/skills`.
+- GitHub PR workflow policy lives in
+  `home/config/skills/github-pr-workflow`; keep detailed PR operations routed
+  through the installed GitHub plugin skills and prefer native automatic Codex
+  review.
 - `codex-queue` is for long manual-review queues only; its tooling may split,
   launch, monitor, validate, and merge, but must not automate final item
   judgments.
