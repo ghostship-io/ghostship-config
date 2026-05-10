@@ -32,9 +32,9 @@ logical-unit secret files.
 - Develop-role hosts use the richer interactive profile and default to `fish`.
 - WSL-role hosts layer WSL-specific mounts, Windows interop, and notification
   helpers on top of the develop profile.
-- WSL-role hosts import the Windows PATH for desktop interop and use patched
-  `services.envfs` for Linux/FHS paths such as `/usr/bin/bash`; the patch
-  filters Windows/DrvFS PATH binaries out of `/usr/bin`.
+- WSL-role hosts import the Windows PATH for desktop interop and use explicit
+  writable FHS shims for the hardcoded `/bin/...` and `/usr/bin/...` paths
+  needed by Windows-side tooling.
 - System packages are reserved for host/admin essentials, service/runtime
   dependencies, and a small system-wide convenience baseline. Interactive shell
   tooling lives in Home Manager.
@@ -361,11 +361,12 @@ Supported onboarding flow:
   repo is native `nix` and `nixos-rebuild`.
 - WSL hosts expose wrapped `wsl-open`, `win-powershell`, a Windows
   notification bridge for `notify-send`, and a `hard`-mounted NFS automount at
-  `/mnt/z`. Windows PATH import is enabled for desktop interop, and patched
-  `envfs` provides Linux/FHS paths such as `/usr/bin/bash` while filtering
-  Windows/DrvFS PATH binaries out of `/usr/bin`, including WSL `9p` mounts with
-  `aname=drvfs`. Envfs also allows metadata/path probes so shebang launchers
-  such as npm and npx can reopen envfs-synthesized entries without WSL wrappers.
+  `/mnt/z`. Windows PATH import is enabled for desktop interop, and explicit
+  WSL FHS shims provide the small set of hardcoded `/bin/...` and
+  `/usr/bin/...` paths required by Windows-side tools. Keep `/usr/bin` writable
+  so Docker Desktop can manage `/usr/bin/docker-credential-desktop.exe`
+  itself; add future hardcoded FHS needs to `ghostship.wsl.fhsShims` instead of
+  reintroducing `envfs`.
   The managed Paseo desktop-attachment path is `localhost:6768` from Windows to
   the WSL daemon. WSL activation now stops the `/mnt/z` automount and unmounts
   any live NFS mount before reloading the generated mount units so host
@@ -376,8 +377,8 @@ Supported onboarding flow:
 - WSL hosts also cap `nix.settings.cores` at `4` so each build job cannot
   fan out across all reported host threads and recreate the same memory-pressure
   stalls from inside a smaller job queue.
-- When a WSL change alters `envfs` or `wsl.extraBin`-owned `/bin/...` entries, a
-  full WSL distro restart may be needed after `nixos-rebuild switch` before
-  those refreshed paths appear in the live instance.
+- When a WSL change alters FHS shim entries, a full WSL distro restart may be
+  needed after `nixos-rebuild switch` before refreshed `/bin/...` or
+  `/usr/bin/...` paths appear in the live instance.
 - Login sessions raise the soft `nofile` limit to `65536` to keep busy shells,
   editors, and agent workflows from running into a low default descriptor cap.
