@@ -173,7 +173,8 @@ changelog.
   persistence only, Bitwarden env names `BW_CLIENT_ID`, `BW_CLIENT_SECRET`,
   `BW_PASSWORD`, and provider env names `OLLAMA_CLOUD_API_KEY`,
   `OPENCODE_GO_API_KEY`, `NVIDIA_BUILD_FREE_API_KEY`,
-  `OPENCODE_ZEN_FREE_API_KEY`, and `OPENROUTER_FREE_API_KEY`.
+  `OPENCODE_ZEN_FREE_API_KEY`, `OPENROUTER_FREE_API_KEY`, and
+  `GOOGLE_API_KEY` for Google AI Studio.
 - WSL hosts should cap `nix.settings.max-jobs` instead of inheriting `auto`;
   on `launch-octopus`, `auto` resolved to `22` and repeatedly left
   `nix-daemon` unresponsive under concurrent flake shells, agent sessions, and

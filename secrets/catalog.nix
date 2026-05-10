@@ -345,6 +345,10 @@ in
           unit = "openrouter";
           key = "API_KEY";
         };
+        GOOGLE_API_KEY = {
+          unit = "google-ai-studio";
+          key = "API_KEY";
+        };
       };
     };
 
