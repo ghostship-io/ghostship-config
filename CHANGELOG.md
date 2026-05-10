@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **WSL FHS shim replacement**: Replaced patched `envfs` on WSL hosts with
+  explicit writable `/bin/...` and `/usr/bin/...` shims under
+  `ghostship.wsl.fhsShims`, preserving the known shell, Node, GitHub CLI, and
+  NixOS-WSL helper paths while leaving Docker Desktop free to create
+  `/usr/bin/docker-credential-desktop.exe` at runtime.
 - **Agent Zero plugin contract**: Project the new Agent Zero plugin runtime
   environment names, including `BW_CLIENT_ID`, `BW_CLIENT_SECRET`, and the
   provider plugin API keys for Ollama Cloud, OpenCode Go, NVIDIA Build Free,

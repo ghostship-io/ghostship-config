@@ -62,13 +62,11 @@ changelog.
 - Managed Synology NFS mounts should use `hard`, not `soft`, on both WSL and
   NixOS clients so transient NAS stalls do not surface as client-side I/O
   errors or integrity failures during copies.
-- WSL hosts use patched `services.envfs` so Windows-side tooling can resolve
-  Linux/FHS paths such as `/usr/bin/bash`, keep
-  `wsl.wslConf.interop.appendWindowsPath = true` for desktop interop, and patch
-  envfs to filter Windows/DrvFS PATH binaries, including WSL `9p` mounts with
-  `aname=drvfs`, out of `/usr/bin` while allowing metadata/path probes so
-  shebang launchers such as npm and npx can reopen envfs-synthesized entries
-  without wrappers.
+- WSL hosts keep `wsl.wslConf.interop.appendWindowsPath = true` for desktop
+  interop and use explicit writable FHS shims under `ghostship.wsl.fhsShims`
+  instead of `services.envfs`; add new hardcoded `/bin/...` or `/usr/bin/...`
+  needs there, and leave `/usr/bin/docker-credential-desktop.exe` for Docker
+  Desktop to create at runtime.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode
@@ -132,9 +130,9 @@ changelog.
   `C:\Users\the owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
 - WSL registry `BasePath` values may be missing or use `\??\` / `\\?\` NT
   prefixes. Guard for that before using them as normal paths.
-- WSL `envfs` or `wsl.extraBin` changes can require a full WSL distro restart
-  after a `nixos-rebuild switch` before refreshed `/usr/bin/...` or `/bin/...`
-  entries appear in the live instance.
+- WSL FHS shim changes can require a full WSL distro restart after a
+  `nixos-rebuild switch` before refreshed `/usr/bin/...` or `/bin/...` entries
+  appear in the live instance.
 
 ## Remote Access and Deployment
 
