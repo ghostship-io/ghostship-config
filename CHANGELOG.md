@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Agent Zero Nix persistence**: Mount `/nix` through a Podman named volume
+  with copy-up so the Ghostship Agent Zero image keeps its baked-in Nix install
+  while persisting runtime Nix state.
 - **Agent Zero Google AI Studio key**: Project the shared Google AI Studio
   provider secret into Agent Zero as `GOOGLE_API_KEY`.
 - **Agent Zero shared memory**: Increase the Agent Zero container shared memory

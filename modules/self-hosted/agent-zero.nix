@@ -28,6 +28,7 @@ in
     volumes = [
       "/srv/apps/agent-zero/usr:/a0/usr:rw"
       "/srv/apps/agent-zero/root:/root:rw"
+      "agent-zero-nix:/nix:rw,copy"
     ];
   };
 
