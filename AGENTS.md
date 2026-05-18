@@ -66,6 +66,8 @@ changelog.
 - Managed Synology NFS mounts should use `hard`, not `soft`, on both WSL and
   NixOS clients so transient NAS stalls do not surface as client-side I/O
   errors or integrity failures during copies.
+- Agent Zero on `chill-penguin` is a NixOS-managed Podman service
+  (`podman-agent-zero`), not a Docker Compose deployment.
 - WSL hosts keep `wsl.wslConf.interop.appendWindowsPath = true` for desktop
   interop and use explicit writable FHS shims under `ghostship.wsl.fhsShims`
   instead of `services.envfs`; add new hardcoded `/bin/...` or `/usr/bin/...`
