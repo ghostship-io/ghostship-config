@@ -39,8 +39,8 @@ let
         Preferences.WebUI\\ClickjackingProtection=literal:false
         Preferences.WebUI\\HostHeaderValidation=literal:false
         Preferences.WebUI\\ReverseProxySupportEnabled=literal:true
-        Preferences.WebUI\\AlternativeUIEnabled=literal:true
-        Preferences.WebUI\\RootFolder=literal:/vuetorrent
+        Preferences.WebUI\\AlternativeUIEnabled=literal:false
+        Preferences.WebUI\\RootFolder=literal:
         Preferences.Queueing\\QueueingEnabled=literal:true
         Preferences.Queueing\\MaxActiveDownloads=literal:5
         Preferences.Queueing\\MaxActiveTorrents=literal:20
