@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Podman auto-update auth**: Merge Agent Zero's GHCR auth into the shared
   Podman auto-update auth file so the daily registry update pass can check the
   private Agent Zero image without failing the whole run.
+- **VueTorrent startup**: Stop fetching the VueTorrent LinuxServer Docker mod
+  during qBittorrent container startup so the download stack can reach a
+  healthy WebUI without depending on a GHCR mod fetch inside the VPN namespace.
 - **Agent Zero Nix persistence**: Mount `/nix` through a Podman named volume
   with copy-up so the Ghostship Agent Zero image keeps its baked-in Nix install
   while persisting runtime Nix state.

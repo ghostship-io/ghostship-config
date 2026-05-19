@@ -192,7 +192,6 @@ in
       PUID = "3000";
       PGID = "3000";
       WEBUI_PORT = "5000";
-      DOCKER_MODS = "ghcr.io/vuetorrent/vuetorrent-lsio-mod:latest";
     };
     volumes = [
       "/srv/apps/vuetorrent:/config"
