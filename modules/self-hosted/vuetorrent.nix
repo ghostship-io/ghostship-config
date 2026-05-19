@@ -207,7 +207,7 @@ in
     volumes = [
       "/srv/apps/vuetorrent:/config"
       "/mnt/share/Downloads:/downloads"
-      "${vuetorrent-ui}/public:/vuetorrent:ro"
+      "${vuetorrent-ui}:/vuetorrent:ro"
     ];
   };
 
