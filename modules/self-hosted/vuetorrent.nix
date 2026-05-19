@@ -8,6 +8,7 @@ let
 
     CONFIG_DIR="/srv/apps/vuetorrent"
     CONFIG_FILE="$CONFIG_DIR/qBittorrent/qBittorrent.conf"
+    LOCK_FILE="$CONFIG_DIR/qBittorrent/lockfile"
     LEGACY_UI_DIR="$CONFIG_DIR/ui"
     LEGACY_RELEASE_MARKER="$CONFIG_DIR/.vuetorrent-release-url"
 
@@ -40,7 +41,6 @@ let
         Preferences.WebUI\\HostHeaderValidation=literal:false
         Preferences.WebUI\\ReverseProxySupportEnabled=literal:true
         Preferences.WebUI\\AlternativeUIEnabled=literal:false
-        Preferences.WebUI\\RootFolder=literal:
         Preferences.Queueing\\QueueingEnabled=literal:true
         Preferences.Queueing\\MaxActiveDownloads=literal:5
         Preferences.Queueing\\MaxActiveTorrents=literal:20
@@ -55,6 +55,9 @@ let
       )
 
       ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_args[@]}"
+      ${pkgs.gnused}/bin/sed -i 's/^WebUI\\Address = /WebUI\\Address=/' "$CONFIG_FILE"
+      ${pkgs.gnused}/bin/sed -i '/^WebUI\\RootFolder[ =]/d' "$CONFIG_FILE"
+      ${pkgs.coreutils}/bin/rm -f "$LOCK_FILE"
       
       echo "VueTorrent config updated"
     fi
@@ -65,6 +68,7 @@ let
     set -eu
 
     CONFIG_FILE="/srv/apps/vuetorrent/qBittorrent/qBittorrent.conf"
+    LOCK_FILE="/srv/apps/vuetorrent/qBittorrent/lockfile"
     DOWNLOAD_TEMP_DIR="/mnt/share/Downloads/Torrent/.incomplete"
     TUN_INTERFACE="tun0"
     TUN_IP=""
@@ -95,6 +99,9 @@ let
     )
 
     ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_bind_args[@]}"
+    ${pkgs.gnused}/bin/sed -i 's/^WebUI\\Address = /WebUI\\Address=/' "$CONFIG_FILE"
+    ${pkgs.gnused}/bin/sed -i '/^WebUI\\RootFolder[ =]/d' "$CONFIG_FILE"
+    ${pkgs.coreutils}/bin/rm -f "$LOCK_FILE"
     echo "Primed VueTorrent binding for $TUN_INTERFACE/$TUN_IP before startup."
   '';
   vuetorrent-auto-resume-script = pkgs.writeShellScriptBin "vuetorrent-auto-resume" ''
