@@ -1,6 +1,11 @@
 { config, lib, pkgs, ... }:
 
 let
+  vuetorrent-ui = pkgs.fetchzip {
+    url = "https://github.com/VueTorrent/VueTorrent/releases/download/v2.33.0/vuetorrent.zip";
+    hash = "sha256-AnQ606UTmm59V9fQEyMDx9WVIjwBNiOFi9rms+RSdNk=";
+  };
+
   vuetorrent-config-script = pkgs.writeShellScriptBin "vuetorrent-config.sh" ''
     #!/bin/sh
     set -eu
@@ -40,7 +45,8 @@ let
         Preferences.WebUI\\ClickjackingProtection=literal:false
         Preferences.WebUI\\HostHeaderValidation=literal:false
         Preferences.WebUI\\ReverseProxySupportEnabled=literal:true
-        Preferences.WebUI\\AlternativeUIEnabled=literal:false
+        Preferences.WebUI\\AlternativeUIEnabled=literal:true
+        Preferences.WebUI\\RootFolder=literal:/vuetorrent
         Preferences.Queueing\\QueueingEnabled=literal:true
         Preferences.Queueing\\MaxActiveDownloads=literal:5
         Preferences.Queueing\\MaxActiveTorrents=literal:20
@@ -56,7 +62,6 @@ let
 
       ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_args[@]}"
       ${pkgs.gnused}/bin/sed -i 's/^WebUI\\Address = /WebUI\\Address=/' "$CONFIG_FILE"
-      ${pkgs.gnused}/bin/sed -i '/^WebUI\\RootFolder[ =]/d' "$CONFIG_FILE"
       ${pkgs.coreutils}/bin/rm -f "$LOCK_FILE"
       
       echo "VueTorrent config updated"
@@ -100,7 +105,6 @@ let
 
     ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_bind_args[@]}"
     ${pkgs.gnused}/bin/sed -i 's/^WebUI\\Address = /WebUI\\Address=/' "$CONFIG_FILE"
-    ${pkgs.gnused}/bin/sed -i '/^WebUI\\RootFolder[ =]/d' "$CONFIG_FILE"
     ${pkgs.coreutils}/bin/rm -f "$LOCK_FILE"
     echo "Primed VueTorrent binding for $TUN_INTERFACE/$TUN_IP before startup."
   '';
@@ -203,6 +207,7 @@ in
     volumes = [
       "/srv/apps/vuetorrent:/config"
       "/mnt/share/Downloads:/downloads"
+      "${vuetorrent-ui}/public:/vuetorrent:ro"
     ];
   };
 
