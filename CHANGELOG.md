@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **NZBGet networking**: Move NZBGet off Gluetun's VPN namespace and onto
+  `ghostship_net`, updating internal Homepage and Hermes URLs to
+  `http://nzbget:5001`.
 - **Podman auto-update auth**: Merge Agent Zero's GHCR auth into the shared
   Podman auto-update auth file so the daily registry update pass can check the
   private Agent Zero image without failing the whole run.

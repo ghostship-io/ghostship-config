@@ -640,7 +640,7 @@ in
             if [ "$CURRENT_IP" != "$LAST_IP" ]; then
               if [ -n "$LAST_IP" ]; then
                 echo "Gluetun IP changed from $LAST_IP to $CURRENT_IP. Restarting dependents..."
-                systemctl restart podman-nzbget.service podman-vuetorrent.service
+                systemctl restart podman-vuetorrent.service
               else
                 echo "Gluetun IP initialized to $CURRENT_IP."
               fi
