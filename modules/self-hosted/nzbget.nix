@@ -30,8 +30,8 @@
   };
 
   systemd.services.podman-nzbget = {
-    after = [ "mnt-share.mount" "podman-create-ghostship-network.service" ];
-    requires = [ "podman-create-ghostship-network.service" ];
+    after = [ "mnt-share.mount" "init-ghostship-net.service" ];
+    requires = [ "init-ghostship-net.service" ];
     wants = [ "mnt-share.mount" ];
   };
 
