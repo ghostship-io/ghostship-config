@@ -7,10 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **Codex Desktop WSL worktrees**: Keep develop hosts interactive on fish while
-  routing Codex Desktop's non-interactive `fish -c '/usr/bin/bash -lc ...'`
-  worktree probes directly through Bash so Bash regex quoting does not fail in
-  fish.
+- **Develop login shell**: Set develop-role users to `fish` directly.
 - **NZBGet networking**: Move NZBGet off Gluetun's VPN namespace and onto
   `ghostship_net`, updating internal Homepage and Hermes URLs to
   `http://nzbget:5001`.

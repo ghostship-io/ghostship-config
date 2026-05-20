@@ -30,10 +30,6 @@ logical-unit secret files.
 - All Bash shells, including root, get the same global completion and history
   defaults from the NixOS layer.
 - Develop-role hosts use the richer interactive profile and default to `fish`.
-  The configured login shell is a compatibility wrapper named
-  `codex-desktop-fish` that normally execs real fish, but routes Codex
-  Desktop's non-interactive Bash worktree probes directly to Bash so Desktop
-  worktree creation works under WSL without changing interactive shells.
 - WSL-role hosts layer WSL-specific mounts, Windows interop, and notification
   helpers on top of the develop profile.
 - WSL-role hosts import the Windows PATH for desktop interop and use explicit

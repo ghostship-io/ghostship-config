@@ -43,10 +43,7 @@ changelog.
   unrelated valid hook entries and warning instead of rewriting malformed JSON.
   Restart already-running Codex sessions after the relevant rebuild or switch
   if they were holding the stale hook state open.
-- Develop hosts keep interactive fish through the Nix-managed
-  `codex-desktop-fish` login-shell wrapper; preserve its Codex Desktop Bash
-  delegation path when touching user shell defaults or Desktop worktree
-  behavior.
+- Develop hosts use `pkgs.fish` directly as the login shell.
 - Develop hosts replace Codex's built-in
   `~/.codex/skills/.system/skill-creator` path with a symlink to the managed
   shared `~/.agents/skills/skill-creator`, and

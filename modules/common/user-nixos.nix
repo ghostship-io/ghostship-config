@@ -2,19 +2,6 @@
 
 let
   roles = config.ghostship.host.roles or { };
-  codexDesktopFish = pkgs.writeShellScriptBin "codex-desktop-fish" ''
-    if [ "$#" -ge 2 ] && [ "$1" = "-c" ]; then
-      case "$2" in
-        /usr/bin/bash\ -lc\ *|/bin/bash\ -lc\ *)
-          exec ${pkgs.bashInteractive}/bin/bash -lc "$2"
-          ;;
-      esac
-    fi
-
-    exec ${pkgs.fish}/bin/fish "$@"
-  '' // {
-    shellPath = "/bin/codex-desktop-fish";
-  };
 in
 
 {
@@ -39,7 +26,7 @@ in
     group = "nixos";
     description = "nixos";
     extraGroups = [ "wheel" "networkmanager" ];
-    shell = if roles.develop or false then codexDesktopFish else pkgs.bashInteractive;
+    shell = if roles.develop or false then pkgs.fish else pkgs.bashInteractive;
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFh0VLGYtDCgU2MKtiHmHf8al1iq12zpFQR2g1yEpHkL owner@home.local"
     ];
