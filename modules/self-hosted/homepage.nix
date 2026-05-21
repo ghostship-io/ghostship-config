@@ -173,7 +173,7 @@ in
             "[Downloads].[NZBGet].server=literal:chill-penguin"
             "[Downloads].[NZBGet].container=literal:nzbget"
             "[Downloads].[NZBGet].widget.type=literal:nzbget"
-            "[Downloads].[NZBGet].widget.url=literal:http://nzbget:5001"
+            "[Downloads].[NZBGet].widget.url=literal:http://gluetun:5001"
 
             "[Downloads].[VueTorrent].icon=literal:sh-vuetorrent"
             "[Downloads].[VueTorrent].description=literal:Torrent Downloader"

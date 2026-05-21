@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **NZBGet Gluetun routing**: Move NZBGet back into Gluetun's VPN namespace and
+  update internal Homepage and Hermes URLs to `http://gluetun:5001`.
+
 ## [1.0.1] - 2026-05-21
 
 - **Shared PR workflow skill pruning**: Remove the repo-managed
