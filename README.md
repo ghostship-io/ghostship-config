@@ -162,8 +162,8 @@ notes.
   external layer now includes the standalone `obra/superpowers/brainstorming`
   skill.
 - The curated shared set is `codex-queue`, `ghostship-review-worktree`,
-  `ghostship-merge-worktree`, `github-pr-workflow`, `nix`, `python`, `ssh`,
-  `wsl2`, and a vendored
+  `ghostship-merge-worktree`, `ghostship-pull-worktree`,
+  `github-pr-workflow`, `nix`, `python`, `ssh`, `wsl2`, and a vendored
   `skill-creator` package pinned to the upstream `skill-creator` source at
   `vercel-labs/agent-browser` `v0.9.3`.
 - `codex-queue` is the shared Codex CLI workflow for long manual-review queues:
@@ -176,6 +176,10 @@ notes.
 - `ghostship-merge-worktree` is the main local worktree merge workflow to use
   after review approval. It inspects non-`main` worktrees, commits remaining
   work, handles local `main` merge-back, and leaves cleanup to Codex/Desktop.
+- `ghostship-pull-worktree` is the pull request workflow for worktrees that
+  should land through GitHub. It pushes the branch, opens a draft PR, requests
+  Codex review, resolves review and CI issues, and marks the PR ready only
+  when the review and checks pass.
 - `github-pr-workflow` is the shared GitHub PR policy skill for draft/WIP PRs,
   automatic Codex review, review feedback handling, merge-conflict readiness,
   and shared GitHub Actions CI defaults while routing detailed operations to

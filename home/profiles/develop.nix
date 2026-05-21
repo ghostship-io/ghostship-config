@@ -66,6 +66,10 @@ in
       source = ../config/skills/ghostship-merge-worktree;
       force = true;
     };
+    ".agents/skills/ghostship-pull-worktree" = {
+      source = ../config/skills/ghostship-pull-worktree;
+      force = true;
+    };
     ".agents/skills/github-pr-workflow" = {
       source = ../config/skills/github-pr-workflow;
       force = true;

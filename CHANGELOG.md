@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   local worktree pre-merge review workflow for concrete issue finding and fix
   planning before merge, while keeping `ghostship-merge-worktree` as the local
   merge workflow used after approval.
+- **Ghostship pull worktree skill**: Add `ghostship-pull-worktree` for the
+  draft PR path from a worktree, including Codex review, CI follow-up, and
+  ready-for-merge gating.
 - **Develop artifact cleanup inventory**: Add a single Home Manager cleanup
   module for retired develop-user artifacts, moving old Superpowers, managed
   Caveman, and Workmux cleanup into one maintained activation entry.

@@ -37,6 +37,7 @@ let
     { name = "codex-queue"; }
     { name = "ghostship-review-worktree"; }
     { name = "ghostship-merge-worktree"; }
+    { name = "ghostship-pull-worktree"; }
     { name = "github-pr-workflow"; }
     { name = "skill-creator"; }
   ];
