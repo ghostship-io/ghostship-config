@@ -58,6 +58,10 @@ in
       source = ../config/skills/codex-queue;
       force = true;
     };
+    ".agents/skills/ghostship-review-worktree" = {
+      source = ../config/skills/ghostship-review-worktree;
+      force = true;
+    };
     ".agents/skills/ghostship-merge-worktree" = {
       source = ../config/skills/ghostship-merge-worktree;
       force = true;

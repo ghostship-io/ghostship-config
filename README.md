@@ -161,17 +161,21 @@ notes.
   `ghostship-agent-maintenance` instead of the repo-owned skill tree; that
   external layer now includes the standalone `obra/superpowers/brainstorming`
   skill.
-- The curated shared set is `codex-queue`, `ghostship-merge-worktree`,
-  `github-pr-workflow`, `nix`, `python`, `ssh`, `wsl2`, and a vendored
+- The curated shared set is `codex-queue`, `ghostship-review-worktree`,
+  `ghostship-merge-worktree`, `github-pr-workflow`, `nix`, `python`, `ssh`,
+  `wsl2`, and a vendored
   `skill-creator` package pinned to the upstream `skill-creator` source at
   `vercel-labs/agent-browser` `v0.9.3`.
 - `codex-queue` is the shared Codex CLI workflow for long manual-review queues:
   it prepares durable JSONL queue shards, launches tmux-backed worker
   worktrees, monitors idle workers, validates per-item ledgers, and assists
   merge preflight without automating the actual review judgment.
-- `ghostship-merge-worktree` is the main local worktree merge workflow. It inspects
-  non-`main` worktrees, commits remaining work, handles local `main`
-  merge-back, and leaves cleanup to Codex/Desktop.
+- `ghostship-review-worktree` is the local worktree pre-merge review workflow.
+  It reviews current worktree changes against `main`, checks for concrete
+  issues, and produces a fix plan without editing files unless explicitly asked.
+- `ghostship-merge-worktree` is the main local worktree merge workflow to use
+  after review approval. It inspects non-`main` worktrees, commits remaining
+  work, handles local `main` merge-back, and leaves cleanup to Codex/Desktop.
 - `github-pr-workflow` is the shared GitHub PR policy skill for draft/WIP PRs,
   automatic Codex review, review feedback handling, merge-conflict readiness,
   and shared GitHub Actions CI defaults while routing detailed operations to

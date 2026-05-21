@@ -35,6 +35,7 @@ let
     { name = "python"; }
     { name = "ssh"; }
     { name = "codex-queue"; }
+    { name = "ghostship-review-worktree"; }
     { name = "ghostship-merge-worktree"; }
     { name = "github-pr-workflow"; }
     { name = "skill-creator"; }

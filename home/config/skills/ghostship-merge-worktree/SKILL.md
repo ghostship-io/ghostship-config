@@ -1,12 +1,12 @@
 ---
 name: ghostship-merge-worktree
-description: Default local git worktree workflow for finishing a Codex Desktop or other local worktree and reconciling it back into local `main`, including detached HEAD worktrees. Use when an agent is working in a local git worktree, needs to review and commit outstanding work, update affected docs, merge local `main` into the finished worktree if needed, and fast-forward local `main` to the result while leaving worktree cleanup to Codex/Desktop.
+description: Local git worktree merge workflow for finishing an approved Codex Desktop or other local worktree and reconciling it back into local `main`, including detached HEAD worktrees. Use after ghostship-review-worktree has reviewed the worktree and the merge is approved. Handles committing outstanding work, updating affected docs, merging local `main` into the finished worktree if needed, and fast-forwarding local `main` to the result while leaving worktree cleanup to Codex/Desktop.
 ---
 
 # ghostship-merge-worktree
 
-Use this skill as the default workflow for local non-`main` git worktrees in
-personal repositories.
+Use this skill after `ghostship-review-worktree` has reviewed the local
+non-`main` worktree and the merge is approved.
 
 ## Core workflow
 

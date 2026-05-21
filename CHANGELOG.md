@@ -7,10 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **Ghostship merge worktree skill**: Restore the retired `merge-worktree` workflow
-  as `ghostship-merge-worktree`, install it as the main local worktree merge
-  workflow on develop hosts, and keep GitHub PR policy scoped to PR-specific
-  work.
+- **Ghostship worktree review skill**: Add `ghostship-review-worktree` as the
+  local worktree pre-merge review workflow for concrete issue finding and fix
+  planning before merge, while keeping `ghostship-merge-worktree` as the local
+  merge workflow used after approval.
 - **Develop artifact cleanup inventory**: Add a single Home Manager cleanup
   module for retired develop-user artifacts, moving old Superpowers, managed
   Caveman, and Workmux cleanup into one maintained activation entry.
