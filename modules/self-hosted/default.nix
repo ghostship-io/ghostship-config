@@ -4,6 +4,7 @@
   imports = [
     # Infra
     ./common.nix
+    ./cleanup.nix
     ./secrets.nix
     ./gluetun.nix
     ./cloudflared.nix
@@ -31,7 +32,6 @@
 
     # Apps and utilities
     ./agent-zero.nix
-    ./hermes.nix
     ./n8n.nix
     ./bentopdf.nix
     ./convertx.nix
@@ -39,7 +39,6 @@
     ./omnitools.nix
     ./metube.nix
     ./changedetection.nix
-    ./firecrawl.nix
     ./rss-bridge.nix
     ./pricebuddy.nix
     ./bookstack-db.nix

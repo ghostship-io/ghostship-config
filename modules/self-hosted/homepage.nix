@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   homepage-secrets = config.ghostship.selfHostedSecrets.projections.homepage.path;
@@ -183,11 +188,6 @@ in
             "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000"
 
             # Services group
-            "[Services].[Hermes].icon=literal:sh-agent-zero"
-            "[Services].[Hermes].description=literal:Agent Terminal"
-            "[Services].[Hermes].server=literal:chill-penguin"
-            "[Services].[Hermes].container=literal:hermes"
-
             "[Services].[pyLoad].icon=literal:sh-pyload"
             "[Services].[pyLoad].description=literal:Download Manager"
             "[Services].[pyLoad].server=literal:chill-penguin"
@@ -240,16 +240,6 @@ in
             "[Management].[Plex Auto Languages].server=literal:chill-penguin"
             "[Management].[Plex Auto Languages].container=literal:plex-auto-languages"
 
-            "[Management].[Firecrawl].icon=literal:mdi-fire-#f97316"
-            "[Management].[Firecrawl].description=literal:Web Extraction API"
-            "[Management].[Firecrawl].server=literal:chill-penguin"
-            "[Management].[Firecrawl].container=literal:firecrawl-api"
-
-            "[Management].[Firecrawl Playwright].icon=literal:sh-google-chrome"
-            "[Management].[Firecrawl Playwright].description=literal:Browser Sidecar"
-            "[Management].[Firecrawl Playwright].server=literal:chill-penguin"
-            "[Management].[Firecrawl Playwright].container=literal:firecrawl-playwright"
-
             "[Management].[PriceBuddy Scraper].icon=literal:web-check"
             "[Management].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
             "[Management].[PriceBuddy Scraper].server=literal:chill-penguin"
@@ -292,21 +282,6 @@ in
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
 
-            "[Infrastructure].[Firecrawl Postgres].icon=literal:sh-postgresql"
-            "[Infrastructure].[Firecrawl Postgres].description=literal:Metadata Database"
-            "[Infrastructure].[Firecrawl Postgres].server=literal:chill-penguin"
-            "[Infrastructure].[Firecrawl Postgres].container=literal:firecrawl-postgres"
-
-            "[Infrastructure].[Firecrawl RabbitMQ].icon=literal:mdi-rabbit-variant-#ff6600"
-            "[Infrastructure].[Firecrawl RabbitMQ].description=literal:Job Queue Broker"
-            "[Infrastructure].[Firecrawl RabbitMQ].server=literal:chill-penguin"
-            "[Infrastructure].[Firecrawl RabbitMQ].container=literal:firecrawl-rabbitmq"
-
-            "[Infrastructure].[Firecrawl Redis].icon=literal:sh-redis"
-            "[Infrastructure].[Firecrawl Redis].description=literal:Cache and Rate Limit"
-            "[Infrastructure].[Firecrawl Redis].server=literal:chill-penguin"
-            "[Infrastructure].[Firecrawl Redis].container=literal:firecrawl-redis"
-
             "[Infrastructure].[PriceBuddy DB].icon=literal:sh-mariadb"
             "[Infrastructure].[PriceBuddy DB].description=literal:PriceBuddy Database"
             "[Infrastructure].[PriceBuddy DB].server=literal:chill-penguin"
@@ -321,11 +296,11 @@ in
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
 
           ${pkgs.yq-go}/bin/yq -i '
-            (.[] | select(has("Services")) | .Services) |= map(select((has("Honcho") or has("CloakBrowser") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
+            (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("CloakBrowser") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
             | (.[] | select(has("Management")) | .Management) |= map(select((has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG")) | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select(has("Plex Auto Languages") | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("SearXNG") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
-            | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("Honcho Redis") or has("Honcho DB")) | not))
+            | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("Honcho Redis") or has("Honcho DB") or has("Firecrawl Postgres") or has("Firecrawl RabbitMQ") or has("Firecrawl Redis")) | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("FlareSolverr") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
           ' "$SERVICES_FILE"
         fi
