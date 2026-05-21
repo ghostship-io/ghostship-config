@@ -48,6 +48,20 @@ let
       geminiExtensionKeys = [ ];
       codexHookCommands = [ ];
     }
+    {
+      name = "deprecated-shared-skills";
+      paths = [
+        ".agents/skills/codex-queue"
+        ".agents/skills/nix"
+        ".agents/skills/python"
+        ".agents/skills/skill-creator"
+        ".agents/skills/ssh"
+        ".agents/skills/wsl2"
+        ".codex/skills/.system/skill-creator"
+      ];
+      geminiExtensionKeys = [ ];
+      codexHookCommands = [ ];
+    }
   ];
 
   cleanupInventory = pkgs.writeText "ghostship-retired-artifacts.json" (

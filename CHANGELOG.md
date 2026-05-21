@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Shared skill pruning**: Remove deprecated repo-managed `codex-queue`,
+  `nix`, `python`, `skill-creator`, `ssh`, and `wsl2` skills from develop host
+  links, Codex skill config, and stale artifact cleanup.
 - **Ghostship worktree review skill**: Add `ghostship-review-worktree` as the
   local worktree pre-merge review workflow for concrete issue finding and fix
   planning before merge, while keeping `ghostship-merge-worktree` as the local

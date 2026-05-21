@@ -27,37 +27,7 @@ in
     SSH_AUTH_SOCK = sshAgentSock;
   };
 
-  home.activation.overrideCodexSkillCreator = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    codex_system_skills_dir="$HOME/.codex/skills/.system"
-    codex_skill_creator_path="$codex_system_skills_dir/skill-creator"
-    shared_skill_creator_path="$HOME/.agents/skills/skill-creator"
-
-    $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$codex_system_skills_dir"
-    $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf "$codex_skill_creator_path"
-    $DRY_RUN_CMD ${pkgs.coreutils}/bin/ln -sfn "$shared_skill_creator_path" "$codex_skill_creator_path"
-  '';
-
   home.file = {
-    ".agents/skills/nix" = {
-      source = ../config/skills/nix;
-      force = true;
-    };
-    ".agents/skills/wsl2" = {
-      source = ../config/skills/wsl2;
-      force = true;
-    };
-    ".agents/skills/python" = {
-      source = ../config/skills/python;
-      force = true;
-    };
-    ".agents/skills/ssh" = {
-      source = ../config/skills/ssh;
-      force = true;
-    };
-    ".agents/skills/codex-queue" = {
-      source = ../config/skills/codex-queue;
-      force = true;
-    };
     ".agents/skills/ghostship-review-worktree" = {
       source = ../config/skills/ghostship-review-worktree;
       force = true;
@@ -72,10 +42,6 @@ in
     };
     ".agents/skills/github-pr-workflow" = {
       source = ../config/skills/github-pr-workflow;
-      force = true;
-    };
-    ".agents/skills/skill-creator" = {
-      source = ../config/skills/skill-creator;
       force = true;
     };
     ".gemini/GEMINI.md" = {
