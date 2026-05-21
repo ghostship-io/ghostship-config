@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.0.3] - 2026-05-21
+
+- **Ghostship worktree review scope**: Refocus
+  `ghostship-review-worktree` on current Codex session changes instead of
+  pre-merge comparison against `main`, and remove changelog/version review
+  duties from that skill.
+
 ## [1.0.2] - 2026-05-21
 
 - **VS Code WSL launcher fix**: Resolve the generated `/usr/bin/sh` wrapper
