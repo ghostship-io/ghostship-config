@@ -9,9 +9,6 @@ let
   agentToolsRoot = "${userHome}/.local/share/ghostship-agent-tools";
   agentNpmPrefix = "${agentToolsRoot}/npm";
   agentBinDir = "${agentNpmPrefix}/bin";
-  codexSystemSkillsDir = "${userHome}/.codex/skills/.system";
-  codexSkillCreatorPath = "${codexSystemSkillsDir}/skill-creator";
-  sharedSkillCreatorPath = "${userHome}/.agents/skills/skill-creator";
   opencodeUserConfigPath = "${userHome}/.config/opencode/opencode.json";
 
   browserRuntimeLibs = [
@@ -111,18 +108,6 @@ let
 
     log_warn() {
       printf 'warn: %s\n' "$1" >&2
-    }
-
-    reassert_codex_skill_creator_override() {
-      mkdir -p "${codexSystemSkillsDir}"
-
-      if [ ! -e "${sharedSkillCreatorPath}" ]; then
-        log_warn "shared skill-creator path is missing, skipping Codex override"
-        return 0
-      fi
-
-      rm -rf "${codexSkillCreatorPath}"
-      ln -sfn "${sharedSkillCreatorPath}" "${codexSkillCreatorPath}"
     }
 
     install_agent_cli() {
@@ -352,7 +337,6 @@ let
     install_agent_cli "opencode-ai" "opencode"
     install_agent_cli "skills" "skills"
     remove_stale_openspec_cli
-    reassert_codex_skill_creator_override
     ${lib.concatMapStrings (skill: ''
       ensure_managed_global_skill "${skill.name}" "${skill.source}"
     '') managedGlobalSkills}
