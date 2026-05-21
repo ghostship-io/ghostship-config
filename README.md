@@ -161,15 +161,8 @@ notes.
   `ghostship-agent-maintenance` instead of the repo-owned skill tree; that
   external layer now includes the standalone `obra/superpowers/brainstorming`
   skill.
-- The curated shared set is `codex-queue`, `ghostship-review-worktree`,
-  `ghostship-merge-worktree`, `ghostship-pull-worktree`,
-  `github-pr-workflow`, `nix`, `python`, `ssh`, `wsl2`, and a vendored
-  `skill-creator` package pinned to the upstream `skill-creator` source at
-  `vercel-labs/agent-browser` `v0.9.3`.
-- `codex-queue` is the shared Codex CLI workflow for long manual-review queues:
-  it prepares durable JSONL queue shards, launches tmux-backed worker
-  worktrees, monitors idle workers, validates per-item ledgers, and assists
-  merge preflight without automating the actual review judgment.
+- The curated shared set is `ghostship-review-worktree`,
+  `ghostship-merge-worktree`, and `ghostship-pull-worktree`.
 - `ghostship-review-worktree` is the local worktree pre-merge review workflow.
   It reviews current worktree changes against `main`, checks for concrete
   issues including documentation, changelog, and versioning gaps, and produces
@@ -182,15 +175,6 @@ notes.
   should land through GitHub. It pushes the branch, opens a draft PR, requests
   Codex review, resolves review and CI issues, and marks the PR ready only
   when the review and checks pass.
-- `github-pr-workflow` is the shared GitHub PR policy skill for draft/WIP PRs,
-  automatic Codex review, review feedback handling, merge-conflict readiness,
-  and shared GitHub Actions CI defaults while routing detailed operations to
-  the installed GitHub plugin skills.
-- Develop hosts also replace Codex's built-in
-  `~/.codex/skills/.system/skill-creator` path with a managed symlink to
-  `~/.agents/skills/skill-creator`, and `ghostship-agent-maintenance`
-  reasserts that override after Codex CLI refreshes.
-
 ## Self-Hosted Stack
 
 The container stack lives in the flat
@@ -236,9 +220,8 @@ post-completion recheck enabled. Torrent data is rooted at
 `/downloads/Torrent/.incomplete`, so the shared `/downloads` mount root stays
 clear of qBittorrent partfiles. A `vuetorrent-auto-resume` timer retries
 errored qBittorrent torrents every 5 minutes through qBittorrent's internal
-Web API start action without a per-torrent retry cap. The
-NZBGet container runs directly on `ghostship_net` at `http://nzbget:5001`
-instead of sharing Gluetun's VPN namespace.
+Web API start action without a per-torrent retry cap. NZBGet shares Gluetun's
+VPN namespace and internal callers should reach it at `http://gluetun:5001`.
 Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
 legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`, and does not
 require any application-specific benchmark credentials.

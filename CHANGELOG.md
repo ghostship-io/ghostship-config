@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.0] - 2026-05-21
+
+- **Hermes and Firecrawl retirement**: Remove the deprecated Hermes
+  `ghostship-hermes` service and the full Firecrawl stack from
+  `chill-penguin`, including their self-hosted modules, Firecrawl image build
+  contexts, Firecrawl secret source, Hermes runtime projections, dashboard
+  entries, and active README guidance.
+- **chill-penguin retired artifact cleanup**: Add an allowlist-only self-hosted
+  cleanup module for retired `chill-penguin` services. Activation now stops and
+  removes known retired Hermes, Firecrawl, Honcho, LiteLLM, and standalone
+  CloakBrowser manager units/containers, deletes their `/srv/apps` state, prunes
+  retired project images, and removes stale Homepage/Muximux rows.
+
+## [1.0.3] - 2026-05-21
+
+- **NZBGet Gluetun routing**: Move NZBGet back into Gluetun's VPN namespace and
+  update internal Homepage and Hermes URLs to `http://gluetun:5001`.
+
+## [1.0.2] - 2026-05-21
+
+- **VS Code WSL launcher fix**: Resolve the generated `/usr/bin/sh` wrapper
+  path before locating its paired `shell`, so FHS shims that symlink to the
+  wrapper still launch the real shell correctly.
+
+## [1.0.1] - 2026-05-21
+
+- **Shared PR workflow skill pruning**: Remove the repo-managed
+  `github-pr-workflow` skill from develop host links, Codex skill config, and
+  stale artifact cleanup.
+
+## [1.0.0] - 2026-05-21
+
+- **Shared skill pruning**: Remove deprecated repo-managed `codex-queue`,
+  `nix`, `python`, `skill-creator`, `ssh`, and `wsl2` skills from develop host
+  links, Codex skill config, and stale artifact cleanup.
 - **Ghostship worktree review skill**: Add `ghostship-review-worktree` as the
   local worktree pre-merge review workflow for concrete issue finding and fix
   planning before merge, while keeping `ghostship-merge-worktree` as the local
@@ -794,19 +829,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Shell flake timeouts**: Increased Starship's prompt scan timeout and
   direnv's warning timeout to 30 seconds so slow `use flake` environments have
   more time to initialize before the prompt or warning path gives up.
-
-## [1.0.0] - 2026-05-21
-
-- **Hermes and Firecrawl retirement**: Remove the deprecated Hermes
-  `ghostship-hermes` service and the full Firecrawl stack from
-  `chill-penguin`, including their self-hosted modules, Firecrawl image build
-  contexts, Firecrawl secret source, Hermes runtime projections, dashboard
-  entries, and active README guidance.
-- **chill-penguin retired artifact cleanup**: Add an allowlist-only self-hosted
-  cleanup module for retired `chill-penguin` services. Activation now stops and
-  removes known retired Hermes, Firecrawl, Honcho, LiteLLM, and standalone
-  CloakBrowser manager units/containers, deletes their `/srv/apps` state, prunes
-  retired project images, and removes stale Homepage/Muximux rows.
 
 ## [0.1.9] - 2026-04-02
 
