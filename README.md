@@ -161,7 +161,7 @@ notes.
   `ghostship-agent-maintenance` instead of the repo-owned skill tree; that
   external layer now includes the standalone `obra/superpowers/brainstorming`
   skill.
-- The curated shared set is `codex-queue`, `merge-worktree-main`,
+- The curated shared set is `codex-queue`, `ghostship-merge-worktree`,
   `github-pr-workflow`, `nix`, `python`, `ssh`, `wsl2`, and a vendored
   `skill-creator` package pinned to the upstream `skill-creator` source at
   `vercel-labs/agent-browser` `v0.9.3`.
@@ -169,7 +169,7 @@ notes.
   it prepares durable JSONL queue shards, launches tmux-backed worker
   worktrees, monitors idle workers, validates per-item ledgers, and assists
   merge preflight without automating the actual review judgment.
-- `merge-worktree-main` is the main local worktree merge workflow. It inspects
+- `ghostship-merge-worktree` is the main local worktree merge workflow. It inspects
   non-`main` worktrees, commits remaining work, handles local `main`
   merge-back, and leaves cleanup to Codex/Desktop.
 - `github-pr-workflow` is the shared GitHub PR policy skill for draft/WIP PRs,

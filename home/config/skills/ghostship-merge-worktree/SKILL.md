@@ -1,16 +1,16 @@
 ---
-name: merge-worktree-main
+name: ghostship-merge-worktree
 description: Default local git worktree workflow for finishing a Codex Desktop or other local worktree and reconciling it back into local `main`, including detached HEAD worktrees. Use when an agent is working in a local git worktree, needs to review and commit outstanding work, update affected docs, merge local `main` into the finished worktree if needed, and fast-forward local `main` to the result while leaving worktree cleanup to Codex/Desktop.
 ---
 
-# merge-worktree-main
+# ghostship-merge-worktree
 
 Use this skill as the default workflow for local non-`main` git worktrees in
 personal repositories.
 
 ## Core workflow
 
-- Run `$HOME/.agents/skills/merge-worktree-main/scripts/finalize_worktree.sh inspect --target-branch main`
+- Run `$HOME/.agents/skills/ghostship-merge-worktree/scripts/finalize_worktree.sh inspect --target-branch main`
   from the active worktree first. The helper is bundled with this skill; do
   not look for a repo-local `scripts/finalize_worktree.sh`.
 - Treat the `inspect` output as the canonical local preflight report for the
@@ -41,7 +41,7 @@ personal repositories.
 - If merging local `main` into the source worktree conflicts, resolve the
   conflicts in the source worktree immediately, commit the resolution there,
   and continue the finish flow instead of stopping for user intervention.
-- Run `$HOME/.agents/skills/merge-worktree-main/scripts/finalize_worktree.sh finish --target-branch main`
+- Run `$HOME/.agents/skills/ghostship-merge-worktree/scripts/finalize_worktree.sh finish --target-branch main`
   only after `inspect` reports `can_finish_now=yes` and the source worktree is
   clean and committed.
 

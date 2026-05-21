@@ -43,6 +43,7 @@ let
       paths = [
         ".agents/skills/merge-worktree"
         ".agents/skills/local-worktree-workflow"
+        ".agents/skills/merge-worktree-main"
       ];
       geminiExtensionKeys = [ ];
       codexHookCommands = [ ];
