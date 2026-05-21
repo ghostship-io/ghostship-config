@@ -73,6 +73,10 @@ changelog.
   instead of `services.envfs`; add new hardcoded `/bin/...` or `/usr/bin/...`
   needs there, and leave `/usr/bin/docker-credential-desktop.exe` for Docker
   Desktop to create at runtime.
+- WSL develop hosts keep fish as the login shell, but their NixOS-WSL
+  `shell-wrapper` routes nested `/usr/bin/bash -lc ...` and `/bin/bash -lc ...`
+  probes through Bash after environment import because fish cannot parse some
+  Bash-quoted desktop worktree commands.
 - Develop-host `codex`, `gemini`, and `opencode` defaults are intentionally
   YOLO or allow-all; Codex injects its dangerous bypass flag unless approval or
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode

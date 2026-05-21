@@ -99,6 +99,9 @@ notes.
 - WSL hosts also publish the same agent instructions to the Windows-side Codex
   Desktop path `%USERPROFILE%\.codex\AGENTS.md` so Codex Desktop sessions that
   run against the WSL guest keep the same shared instructions.
+- WSL hosts keep fish as the develop login shell, but the NixOS-WSL shell
+  wrapper has a narrow compatibility path: nested Bash-quoted worktree probes
+  run through Bash after the normal NixOS and fish environment is imported.
 - The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
   unless you override it explicitly, so local automation stays on the
   profile-capable Chrome engine even if upstream auto-selection changes.

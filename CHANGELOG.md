@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Codex Desktop WSL fish compatibility**: Override only the NixOS-WSL
+  `shell-wrapper` on WSL hosts so nested Bash-quoted worktree probes bypass
+  fish parsing after importing the normal NixOS and fish environment, while
+  develop users still default to fish.
 - **NZBGet networking**: Move NZBGet off Gluetun's VPN namespace and onto
   `ghostship_net`, updating internal Homepage and Hermes URLs to
   `http://nzbget:5001`.
