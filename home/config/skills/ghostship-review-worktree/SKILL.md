@@ -1,11 +1,11 @@
 ---
 name: ghostship-review-worktree
-description: Review the current Ghostship worktree against main before merge. Use when asked to review session changes, inspect a Codex worktree, find concrete issues, or create a fix plan for security, leaked secrets, correctness, performance, consistency, or bloat problems. Do not use for normal implementation work; after approval, use ghostship-merge-worktree for the merge workflow.
+description: Review the current worktree against the repo's main branch before merge. Use when asked to review session changes, inspect a Codex worktree, find concrete issues, or create a plan for security, leaked secrets, correctness, performance, consistency, documentation, changelog, versioning, or bloat problems. Do not use for normal implementation work.
 ---
 
 # Ghostship Review Worktree
 
-Review the current worktree before it is merged.
+Review the current worktree before merge.
 
 Operate as a reviewer and planner. Do not edit files unless explicitly asked.
 
@@ -20,7 +20,7 @@ Before reviewing:
 1. Check the current branch and worktree state.
 2. Fetch `origin/main` if network access is available.
 3. If `origin/main` is ahead of local `main`, update local `main` to match
-   `origin/main` only when it is safe to do so.
+   `origin/main` when it is safe to do so.
 4. If local `main` cannot be updated because it is checked out elsewhere,
    protected, missing, or the fetch fails, use the freshest available
    main-equivalent ref:
@@ -52,10 +52,40 @@ Check for:
 - inconsistencies with existing code patterns, APIs, naming, error handling,
   logging, tests, or configuration
 - missing or weak validation
+- missing or outdated `README.md` updates when behavior, usage, configuration,
+  setup, or user-facing functionality changed
+- missing, outdated, or unsynced `CHANGELOG.md` updates
+- missing or inappropriate version bump
+- mismatch between the version number and changelog entry
 - unnecessary bloat, dead code, speculative abstractions, or unrelated changes
 
-Do not invent theoretical issues. If a risk is speculative, label it as
-speculative or omit it.
+## Version and Changelog Rules
+
+Always verify that the version is bumped for the worktree changes.
+
+Use the repo's existing version source. Prefer `VERSION` when present. If the
+repo uses another canonical version source, such as `package.json`,
+`pyproject.toml`, `Cargo.toml`, or similar, use that instead and note it.
+
+The version bump must follow the repo's existing semantic versioning convention:
+
+- `MAJOR` for breaking API, CLI, config, data, migration, or compatibility
+  changes
+- `MINOR` for backward-compatible features or meaningful user-facing behavior
+  changes
+- `PATCH` for fixes, refactors, documentation-only changes, test changes,
+  tooling changes, performance improvements, and small internal changes
+- default to `PATCH` when a bump is required but the correct level is unclear
+
+`CHANGELOG.md` and the version source must be in sync:
+
+- the changelog must include an entry for the new version
+- the changelog version must match the bumped version exactly
+- the changelog entry must summarize the actual worktree changes
+- the changelog must not describe unrelated changes
+- if the repo has an existing changelog format, preserve it
+
+Do not invent a new versioning scheme or changelog format.
 
 ## Checks
 
@@ -67,6 +97,8 @@ Run relevant repo-local checks when appropriate and available, such as:
 - build
 - formatting checks
 - configured secret scanning
+- documentation or changelog validation if configured
+- version consistency checks if configured
 
 Do not add new tooling.
 
@@ -80,6 +112,10 @@ Include:
 - what worktree changes were reviewed
 - checks run and results
 - concrete findings with file and line references where possible
+- whether `README.md` should be updated
+- whether `CHANGELOG.md` is updated and synced
+- whether the version is bumped correctly
+- the recommended semantic version bump level
 - a fix plan for each issue
 - recommended fix order
 - verification steps to run after fixes

@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Ghostship merge worktree skill**: Replace the bundled merge helper tooling
   with an instruction-only direct merge workflow that updates `main`, handles
   drift and conflicts, verifies `main`, and pushes without using the PR path.
+- **Ghostship review worktree checks**: Extend `ghostship-review-worktree` to
+  review documentation, changelog, and semantic versioning consistency before
+  merge.
 - **Develop artifact cleanup inventory**: Add a single Home Manager cleanup
   module for retired develop-user artifacts, moving old Superpowers, managed
   Caveman, and Workmux cleanup into one maintained activation entry.

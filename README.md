@@ -172,7 +172,8 @@ notes.
   merge preflight without automating the actual review judgment.
 - `ghostship-review-worktree` is the local worktree pre-merge review workflow.
   It reviews current worktree changes against `main`, checks for concrete
-  issues, and produces a fix plan without editing files unless explicitly asked.
+  issues including documentation, changelog, and versioning gaps, and produces
+  a fix plan without editing files unless explicitly asked.
 - `ghostship-merge-worktree` is the main local worktree merge workflow to use
   after review approval. It updates `main` from `origin/main` when possible,
   merges current `main` into the worktree branch, verifies the branch, merges
