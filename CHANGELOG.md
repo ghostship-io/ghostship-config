@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Develop artifact cleanup inventory**: Add a single Home Manager cleanup
+  module for retired develop-user artifacts, moving old Superpowers, managed
+  Caveman, and Workmux cleanup into one maintained activation entry.
 - **Codex Desktop WSL fish compatibility**: Override only the NixOS-WSL
   `shell-wrapper` on WSL hosts so nested Bash-quoted worktree probes bypass
   fish parsing after importing the normal NixOS and fish environment, while

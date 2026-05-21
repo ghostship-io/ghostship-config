@@ -92,6 +92,9 @@ notes.
 - Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`,
   `paseo`, `agent-deck`, and `agent-browser` through Nix-managed wrapper
   scripts.
+- Retired develop-user artifacts are cleaned from one inventory in
+  `home/profiles/cleanup.nix`; add old skills, hooks, and agent state there
+  instead of adding scattered cleanup activation snippets.
 - The shared agent instructions live at `home/config/AGENTS.md` in the repo and
   are published to each agent's native path. Codex reads `~/.codex/AGENTS.md`,
   Gemini reads `~/.gemini/GEMINI.md`, and OpenCode reads

@@ -37,6 +37,9 @@ changelog.
   `home/config/skills/*` inventory. Keep repo-owned shared skills curated under
   `home/config/skills/`, and let `ghostship-agent-maintenance` install or
   refresh any configured external `skills.sh` repos on each WSL develop host.
+- Put retired develop-user artifact cleanup in `home/profiles/cleanup.nix`;
+  keep one-off cleanup activation snippets out of feature modules unless the
+  cleanup is required for that feature's own startup.
 - Develop-host convergence should scrub the known stale `workmux
   set-window-status ...` commands from `~/.codex/hooks.json` so removed
   repo-managed tooling does not keep breaking Codex hooks, while preserving
