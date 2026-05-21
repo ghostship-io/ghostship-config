@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.0.0] - 2026-05-21
+
 - **Shared skill pruning**: Remove deprecated repo-managed `codex-queue`,
   `nix`, `python`, `skill-creator`, `ssh`, and `wsl2` skills from develop host
   links, Codex skill config, and stale artifact cleanup.
