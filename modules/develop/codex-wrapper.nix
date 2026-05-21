@@ -30,16 +30,9 @@ let
   '';
 
   skills = [
-    { name = "nix"; }
-    { name = "wsl2"; }
-    { name = "python"; }
-    { name = "ssh"; }
-    { name = "codex-queue"; }
     { name = "ghostship-review-worktree"; }
     { name = "ghostship-merge-worktree"; }
     { name = "ghostship-pull-worktree"; }
-    { name = "github-pr-workflow"; }
-    { name = "skill-creator"; }
   ];
 
   skillConfig = map (skill: {
