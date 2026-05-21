@@ -144,6 +144,7 @@ notes.
   every new shell.
 - Those launcher defaults only take effect after the relevant develop-host
   NixOS rebuild or Home Manager switch applies the generated config files.
+
 ## Shared Skills
 
 - Shared repo-managed skills live under `home/config/skills/` and are linked
@@ -166,6 +167,7 @@ notes.
   should land through GitHub. It pushes the branch, opens a draft PR, requests
   Codex review, resolves review and CI issues, and marks the PR ready only
   when the review and checks pass.
+
 ## Self-Hosted Stack
 
 The container stack lives in the flat
@@ -204,9 +206,8 @@ post-completion recheck enabled. Torrent data is rooted at
 `/downloads/Torrent/.incomplete`, so the shared `/downloads` mount root stays
 clear of qBittorrent partfiles. A `vuetorrent-auto-resume` timer retries
 errored qBittorrent torrents every 5 minutes through qBittorrent's internal
-Web API start action without a per-torrent retry cap. The
-NZBGet container runs directly on `ghostship_net` at `http://nzbget:5001`
-instead of sharing Gluetun's VPN namespace.
+Web API start action without a per-torrent retry cap. NZBGet shares Gluetun's
+VPN namespace and internal callers should reach it at `http://gluetun:5001`.
 Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
 legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`, and does not
 require any application-specific benchmark credentials.

@@ -30,7 +30,7 @@ let
     PROWLARR_URL = "http://prowlarr:9696";
     PLEX_URL = "http://plex:32400";
     ROMM_URL = "http://romm:8080";
-    NZBGET_URL = "http://nzbget:5001";
+    NZBGET_URL = "http://gluetun:5001";
     QBITTORRENT_URL = "http://gluetun:5000";
     GRIMMORY_URL = "http://grimmory:6060";
     TAUTULLI_URL = "http://tautulli:8181";
