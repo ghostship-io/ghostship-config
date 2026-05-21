@@ -1,8 +1,7 @@
 # Agent Preferences
 
 - Be concise.
-- Use the project `AGENTS.md` as workspace memory.
-- Record only short durable lessons in the project `AGENTS.md`.
+- Record only short durable lessons in the project `AGENTS.md` after repeated failures.
 
 ## 1. Think Before Coding
 
@@ -66,11 +65,6 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - Update `README.md` and affected docs when behavior or workflow changes.
 - Keep `CHANGELOG.md` current.
 - Commit finished work after verification.
-- In a worktree, finish on a named branch with a pushed commit and an opened
-  GitHub PR before returning to the user.
-- Open worktree PRs as draft/WIP first; before handoff, review Codex comments,
-  resolve or explicitly reject findings, check CI, resolve conflicts, and mark
-  the PR ready/non-WIP when it is ready for the user to merge.
 - Bump the version when warranted.
 
 ## Execution
