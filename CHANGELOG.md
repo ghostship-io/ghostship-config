@@ -7,18 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## [1.0.4] - 2026-05-21
+## [1.0.5] - 2026-05-21
 
 - **Ghostship audit worktree skill**: Rename
   `ghostship-review-worktree` to `ghostship-audit-worktree` across the
   repo-managed skill tree and develop-host skill link.
 
-## [1.0.3] - 2026-05-21
+## [1.0.4] - 2026-05-21
 
 - **Ghostship worktree review scope**: Refocus
   `ghostship-review-worktree` on current Codex session changes instead of
   pre-merge comparison against `main`, and remove changelog/version review
   duties from that skill.
+
+## [1.0.3] - 2026-05-21
+
+- **NZBGet Gluetun routing**: Move NZBGet back into Gluetun's VPN namespace and
+  update internal Homepage and Hermes URLs to `http://gluetun:5001`.
 
 ## [1.0.2] - 2026-05-21
 
