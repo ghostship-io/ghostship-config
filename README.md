@@ -174,8 +174,9 @@ notes.
   It reviews current worktree changes against `main`, checks for concrete
   issues, and produces a fix plan without editing files unless explicitly asked.
 - `ghostship-merge-worktree` is the main local worktree merge workflow to use
-  after review approval. It inspects non-`main` worktrees, commits remaining
-  work, handles local `main` merge-back, and leaves cleanup to Codex/Desktop.
+  after review approval. It updates `main` from `origin/main` when possible,
+  merges current `main` into the worktree branch, verifies the branch, merges
+  back into `main`, and pushes `main` without using the pull request path.
 - `ghostship-pull-worktree` is the pull request workflow for worktrees that
   should land through GitHub. It pushes the branch, opens a draft PR, requests
   Codex review, resolves review and CI issues, and marks the PR ready only
