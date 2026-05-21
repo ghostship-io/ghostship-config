@@ -1,6 +1,6 @@
 ---
 name: github-pr-workflow
-description: GitHub pull request policy for Codex worktrees, draft/WIP PRs, automatic Codex review, merge conflict resolution, PR readiness, PR close/merge decisions, and GitHub Actions CI setup or optimization. Use when working in a git worktree, opening or closing GitHub pull requests or merge requests, requesting or handling Codex review, resolving PR review feedback or merge conflicts, publishing local changes, or configuring CI defaults.
+description: GitHub pull request policy for draft/WIP PRs, automatic Codex review, merge conflict resolution, PR readiness, PR close/merge decisions, and GitHub Actions CI setup or optimization. Use when opening, updating, reviewing, closing, or preparing a GitHub pull request; requesting or handling Codex review; resolving PR feedback or merge conflicts; pushing branches; or configuring GitHub Actions defaults. For local-only worktree merge-back flows, use merge-worktree-main instead.
 ---
 
 # GitHub PR Workflow

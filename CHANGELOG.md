@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Merge worktree main skill**: Restore the retired `merge-worktree` workflow
+  as `merge-worktree-main`, install it as the main local worktree merge
+  workflow on develop hosts, and keep GitHub PR policy scoped to PR-specific
+  work.
 - **Develop artifact cleanup inventory**: Add a single Home Manager cleanup
   module for retired develop-user artifacts, moving old Superpowers, managed
   Caveman, and Workmux cleanup into one maintained activation entry.

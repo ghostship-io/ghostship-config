@@ -38,6 +38,15 @@ let
         "workmux set-window-status done"
       ];
     }
+    {
+      name = "renamed-worktree-workflow-skills";
+      paths = [
+        ".agents/skills/merge-worktree"
+        ".agents/skills/local-worktree-workflow"
+      ];
+      geminiExtensionKeys = [ ];
+      codexHookCommands = [ ];
+    }
   ];
 
   cleanupInventory = pkgs.writeText "ghostship-retired-artifacts.json" (

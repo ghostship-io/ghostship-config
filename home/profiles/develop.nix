@@ -58,6 +58,10 @@ in
       source = ../config/skills/codex-queue;
       force = true;
     };
+    ".agents/skills/merge-worktree-main" = {
+      source = ../config/skills/merge-worktree-main;
+      force = true;
+    };
     ".agents/skills/github-pr-workflow" = {
       source = ../config/skills/github-pr-workflow;
       force = true;

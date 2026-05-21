@@ -24,6 +24,9 @@ changelog.
   work when they are available.
 - Shared skills live under `home/config/skills/*` and are linked into
   `~/.agents/skills`.
+- `home/config/skills/merge-worktree-main` is the main local worktree
+  merge-back workflow. Use `github-pr-workflow` only when a GitHub PR, GitHub
+  review, or GitHub Actions workflow is part of the task.
 - GitHub PR workflow policy lives in
   `home/config/skills/github-pr-workflow`; keep detailed PR operations routed
   through the installed GitHub plugin skills and prefer native automatic Codex
