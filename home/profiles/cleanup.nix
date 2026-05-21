@@ -57,6 +57,7 @@ let
         ".agents/skills/skill-creator"
         ".agents/skills/ssh"
         ".agents/skills/wsl2"
+        ".agents/skills/github-pr-workflow"
         ".codex/skills/.system/skill-creator"
       ];
       geminiExtensionKeys = [ ];

@@ -162,8 +162,7 @@ notes.
   external layer now includes the standalone `obra/superpowers/brainstorming`
   skill.
 - The curated shared set is `ghostship-review-worktree`,
-  `ghostship-merge-worktree`, `ghostship-pull-worktree`, and
-  `github-pr-workflow`.
+  `ghostship-merge-worktree`, and `ghostship-pull-worktree`.
 - `ghostship-review-worktree` is the local worktree pre-merge review workflow.
   It reviews current worktree changes against `main`, checks for concrete
   issues including documentation, changelog, and versioning gaps, and produces
@@ -176,10 +175,6 @@ notes.
   should land through GitHub. It pushes the branch, opens a draft PR, requests
   Codex review, resolves review and CI issues, and marks the PR ready only
   when the review and checks pass.
-- `github-pr-workflow` is the shared GitHub PR policy skill for draft/WIP PRs,
-  automatic Codex review, review feedback handling, merge-conflict readiness,
-  and shared GitHub Actions CI defaults while routing detailed operations to
-  the installed GitHub plugin skills.
 ## Self-Hosted Stack
 
 The container stack lives in the flat

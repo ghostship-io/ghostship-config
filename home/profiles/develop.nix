@@ -40,10 +40,6 @@ in
       source = ../config/skills/ghostship-pull-worktree;
       force = true;
     };
-    ".agents/skills/github-pr-workflow" = {
-      source = ../config/skills/github-pr-workflow;
-      force = true;
-    };
     ".gemini/GEMINI.md" = {
       source = ../config/AGENTS.md;
       force = true;
