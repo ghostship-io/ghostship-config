@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   removes known retired Hermes, Firecrawl, Honcho, LiteLLM, and standalone
   CloakBrowser manager units/containers, deletes their `/srv/apps` state, prunes
   retired project images, and removes stale Homepage/Muximux rows.
+- **Retired agent tool cleanup**: Remove managed Paseo, Agent Deck, and the
+  WSL OpenCode server service while keeping the OpenCode CLI, add exact cleanup
+  for their retired user config/state paths plus browser-use and Caveman skill
+  artifacts, and switch managed global skill refreshes to the installed
+  `skills` CLI with `brainstorming` verified under shared `.agents`.
 
 ## [1.0.3] - 2026-05-21
 

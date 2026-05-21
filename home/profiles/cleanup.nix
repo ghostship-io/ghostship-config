@@ -16,12 +16,73 @@ let
       name = "managed-caveman";
       paths = [
         ".agents/skills/caveman"
+        ".agents/skills/caveman-compress"
+        ".agents/skills/caveman-commit"
+        ".agents/skills/caveman-help"
+        ".agents/skills/caveman-review"
+        ".agents/skills/compress"
         ".gemini/extensions/caveman"
       ];
+      pathGlobs = [
+        ".agents/skills/caveman-*"
+      ];
       geminiExtensionKeys = [ "caveman" ];
+      skillLockNames = [
+        "caveman"
+        "caveman-compress"
+        "caveman-commit"
+        "caveman-help"
+        "caveman-review"
+        "compress"
+      ];
       codexHookCommands = [
         "echo 'CAVEMAN MODE ACTIVE. Rules: Drop articles/filler/pleasantries/hedging. Fragments OK. Short synonyms. Pattern: [thing] [action] [reason]. [next step]. Not: Sure! I would be happy to help you with that. Yes: Bug in auth middleware. Fix: Code/commits/security: write normal. User says stop caveman or normal mode to deactivate.'"
       ];
+    }
+    {
+      name = "browser-use";
+      paths = [
+        ".config/browseruse"
+      ];
+      pathGlobs = [ ];
+      geminiExtensionKeys = [ ];
+      skillLockNames = [ ];
+      codexHookCommands = [ ];
+    }
+    {
+      name = "paseo";
+      paths = [
+        ".paseo"
+        ".local/share/ghostship-agent-tools/npm/bin/paseo"
+        ".local/share/ghostship-agent-tools/npm/lib/node_modules/@getpaseo"
+        ".local/share/ghostship-agent-tools/npm/lib/node_modules/@getpaseo/cli"
+      ];
+      pathGlobs = [ ];
+      geminiExtensionKeys = [ ];
+      skillLockNames = [ ];
+      codexHookCommands = [ ];
+    }
+    {
+      name = "agent-deck";
+      paths = [
+        ".agent-deck"
+        ".local/share/ghostship-agent-tools/npm/bin/agent-deck"
+      ];
+      pathGlobs = [ ];
+      geminiExtensionKeys = [ ];
+      skillLockNames = [ ];
+      codexHookCommands = [ ];
+    }
+    {
+      name = "opencode-server";
+      paths = [
+        ".config/systemd/user/opencode-server.service"
+        ".config/systemd/user/default.target.wants/opencode-server.service"
+      ];
+      pathGlobs = [ ];
+      geminiExtensionKeys = [ ];
+      skillLockNames = [ ];
+      codexHookCommands = [ ];
     }
     {
       name = "workmux";
@@ -32,7 +93,9 @@ let
         ".config/opencode/plugin/workmux-status.ts"
         ".config/opencode/skills/workmux"
       ];
+      pathGlobs = [ ];
       geminiExtensionKeys = [ ];
+      skillLockNames = [ ];
       codexHookCommands = [
         "workmux set-window-status working"
         "workmux set-window-status done"
@@ -45,7 +108,9 @@ let
         ".agents/skills/local-worktree-workflow"
         ".agents/skills/merge-worktree-main"
       ];
+      pathGlobs = [ ];
       geminiExtensionKeys = [ ];
+      skillLockNames = [ ];
       codexHookCommands = [ ];
     }
     {
@@ -87,6 +152,11 @@ let
         command
         for entry in inventory
         for command in entry.get("codexHookCommands", [])
+    }
+    skill_lock_names = {
+        name
+        for entry in inventory
+        for name in entry.get("skillLockNames", [])
     }
 
     def read_json(path: Path, label: str):
@@ -172,8 +242,34 @@ let
         if changed:
             write_json(path, data)
 
+    def clean_skill_lock() -> None:
+        if not skill_lock_names:
+            return
+
+        path = home / ".agents/.skill-lock.json"
+        if not path.is_file():
+            return
+
+        data = read_json(path, "global skill lock")
+        if not isinstance(data, dict):
+            return
+
+        skills = data.get("skills")
+        if not isinstance(skills, dict):
+            return
+
+        changed = False
+        for name in skill_lock_names:
+            if name in skills:
+                del skills[name]
+                changed = True
+
+        if changed:
+            write_json(path, data)
+
     clean_gemini_enablement()
     clean_codex_hooks()
+    clean_skill_lock()
   '';
 
   renderPathCleanup =
@@ -187,6 +283,18 @@ let
         cleanup_home_path ${relativePath}
       ''
     ) entry.paths;
+
+  renderGlobCleanup =
+    entry:
+    lib.concatMapStringsSep "\n" (
+      pattern:
+      let
+        relativePattern = lib.escapeShellArg pattern;
+      in
+      ''
+        cleanup_home_glob ${relativePattern}
+      ''
+    ) (entry.pathGlobs or [ ]);
 in
 {
   home.activation.ghostshipRetiredArtifactCleanup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -203,7 +311,32 @@ in
       $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf -- "$HOME/$relative_path"
     }
 
-    ${lib.concatMapStringsSep "\n" renderPathCleanup retiredArtifacts}
+    cleanup_home_glob() {
+      relative_pattern="$1"
+
+      case "$relative_pattern" in
+        /*|..|../*|*/../*)
+          printf 'warning: refusing retired artifact cleanup glob outside HOME: %s\n' "$relative_pattern" >&2
+          return 0
+          ;;
+      esac
+
+      relative_dir="$(${pkgs.coreutils}/bin/dirname "$relative_pattern")"
+      relative_name="$(${pkgs.coreutils}/bin/basename "$relative_pattern")"
+
+      if [ ! -d "$HOME/$relative_dir" ]; then
+        return 0
+      fi
+
+      ${pkgs.findutils}/bin/find "$HOME/$relative_dir" \
+        -maxdepth 1 -name "$relative_name" \
+        -exec $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf -- {} +
+    }
+
+    ${lib.concatMapStringsSep "\n" (entry: ''
+      ${renderPathCleanup entry}
+      ${renderGlobCleanup entry}
+    '') retiredArtifacts}
 
     $DRY_RUN_CMD ${pkgs.python3}/bin/python ${cleanupJsonState} ${cleanupInventory}
   '';
