@@ -28,8 +28,8 @@ in
   };
 
   home.file = {
-    ".agents/skills/ghostship-review-worktree" = {
-      source = ../config/skills/ghostship-review-worktree;
+    ".agents/skills/ghostship-audit-worktree" = {
+      source = ../config/skills/ghostship-audit-worktree;
       force = true;
     };
     ".agents/skills/ghostship-merge-worktree" = {

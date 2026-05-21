@@ -1,11 +1,11 @@
 ---
-name: ghostship-review-worktree
-description: Thoroughly review changes made during the current Codex session. Use when asked to review session work, inspect recent Codex changes, find concrete issues, or create a plan for security, leaked secrets, correctness, performance, consistency, documentation, README, tests, or bloat problems. Do not use for merge preparation, PR creation, or normal implementation work.
+name: ghostship-audit-worktree
+description: Thoroughly audit changes made during the current Codex session. Use when asked to audit session work, inspect recent Codex changes, find concrete issues, or create a plan for security, leaked secrets, correctness, performance, consistency, documentation, README, tests, or bloat problems. Do not use for merge preparation, PR creation, or normal implementation work.
 ---
 
-# Ghostship Review Worktree
+# Ghostship Audit Worktree
 
-Thoroughly review the work completed during the current Codex session.
+Thoroughly audit the work completed during the current Codex session.
 
 Operate as a reviewer and planner. Do not edit files unless explicitly asked.
 
@@ -13,7 +13,7 @@ Operate as a reviewer and planner. Do not edit files unless explicitly asked.
 
 Focus only on changes made during the current Codex session.
 
-Use available session and repository context to identify the reviewed changes, including:
+Use available session and repository context to identify the audited changes, including:
 
 - current conversation/session context
 - `git status`
@@ -24,13 +24,13 @@ Use available session and repository context to identify the reviewed changes, i
 - relevant nearby code needed to understand the changes
 - call sites, callers, and downstream usage affected by the changes
 
-Do not fetch, update, merge, rebase, or compare against `main` as part of this review.
+Do not fetch, update, merge, rebase, or compare against `main` as part of this audit.
 
-Do not review merge readiness, base drift, branch freshness, or conflict risk. Those belong to merge or pull request workflows.
+Do not audit merge readiness, base drift, branch freshness, or conflict risk. Those belong to merge or pull request workflows.
 
-Do not review the entire repository blindly, but follow the changed code far enough to validate behavior, integration, and consistency.
+Do not audit the entire repository blindly, but follow the changed code far enough to validate behavior, integration, and consistency.
 
-## Review depth
+## Audit depth
 
 Be thorough.
 
@@ -49,7 +49,7 @@ Inspect:
 
 Do not stop at superficial style comments. Prioritize concrete issues that could affect correctness, security, maintainability, operability, or user behavior.
 
-## Review goals
+## Audit goals
 
 Find concrete, actionable issues in the session changes.
 
@@ -73,13 +73,13 @@ Check for:
 - stale examples, comments, or usage instructions caused by the change
 - unnecessary bloat, dead code, speculative abstractions, or unrelated changes
 
-Do not review `CHANGELOG.md` or version bumps as part of this skill.
+Do not audit `CHANGELOG.md` or version bumps as part of this skill.
 
 Do not invent theoretical issues. If a risk is speculative, label it as speculative or omit it.
 
-## Documentation review
+## Documentation audit
 
-Review documentation impact explicitly.
+Audit documentation impact explicitly.
 
 Check whether the session changes require updates to:
 
@@ -116,13 +116,13 @@ Use normal Codex plan-mode output.
 
 Include:
 
-- what session changes were reviewed
+- what session changes were audited
 - checks run and results
 - concrete findings with file and line references where possible
 - severity for each finding when useful
 - evidence for each finding
 - fix plan for each issue
-- documentation and `README.md` review result
+- documentation and `README.md` audit result
 - recommended fix order
 - verification steps to run after fixes
 - remaining uncertainty or blockers, if any

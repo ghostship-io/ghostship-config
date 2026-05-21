@@ -161,10 +161,10 @@ notes.
   `ghostship-agent-maintenance` instead of the repo-owned skill tree; that
   external layer now includes the standalone `obra/superpowers/brainstorming`
   skill.
-- The curated shared set is `ghostship-review-worktree`,
+- The curated shared set is `ghostship-audit-worktree`,
   `ghostship-merge-worktree`, and `ghostship-pull-worktree`.
-- `ghostship-review-worktree` is the current Codex session review workflow. It
-  reviews only session changes, checks for concrete issues including
+- `ghostship-audit-worktree` is the current Codex session audit workflow. It
+  audits only session changes, checks for concrete issues including
   documentation and README gaps, and produces a fix plan without editing files
   unless explicitly asked.
 - `ghostship-merge-worktree` is the main local worktree merge workflow to use

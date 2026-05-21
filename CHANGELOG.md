@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.0.4] - 2026-05-21
+
+- **Ghostship audit worktree skill**: Rename
+  `ghostship-review-worktree` to `ghostship-audit-worktree` across the
+  repo-managed skill tree and develop-host skill link.
+
 ## [1.0.3] - 2026-05-21
 
 - **Ghostship worktree review scope**: Refocus
