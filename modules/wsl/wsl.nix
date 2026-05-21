@@ -18,7 +18,7 @@ let
 
     set -eo pipefail
 
-    wrapper_path="''${BASH_SOURCE[0]}"
+    wrapper_path="$(${pkgs.coreutils}/bin/readlink -f -- "''${BASH_SOURCE[0]}")"
     wrapper_dir="$(${pkgs.coreutils}/bin/dirname -- "$wrapper_path")"
     wrapped_shell="$wrapper_dir/shell"
     shell_name="$(${pkgs.coreutils}/bin/readlink -- "$wrapped_shell" 2>/dev/null || printf '%s\n' "$wrapped_shell")"

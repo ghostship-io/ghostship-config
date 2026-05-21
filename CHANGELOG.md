@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **VS Code WSL launcher fix**: Resolve the generated `/usr/bin/sh` wrapper
+  path before locating its paired `shell`, so FHS shims that symlink to the
+  wrapper still launch the real shell correctly.
 - **Ghostship worktree review skill**: Add `ghostship-review-worktree` as the
   local worktree pre-merge review workflow for concrete issue finding and fix
   planning before merge, while keeping `ghostship-merge-worktree` as the local
