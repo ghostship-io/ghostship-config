@@ -99,15 +99,6 @@ in
       exports = [ "API_KEY" ];
     };
 
-    firecrawl = mkUnit {
-      relativeFile = "secrets/files/sources/services/firecrawl.env.age";
-      exports = [
-        "POSTGRES_PASSWORD"
-        "BULL_AUTH_KEY"
-        "API_KEY"
-      ];
-    };
-
     github = mkUnit {
       relativeFile = "secrets/files/sources/providers/github.env.age";
       exports = [ "TOKEN" ];
@@ -570,27 +561,6 @@ in
       };
     };
 
-    firecrawl-runtime = {
-      fileName = "firecrawl-runtime.env";
-      owner = "root";
-      group = "root";
-      mode = "0400";
-      fields = {
-        OPENAI_API_KEY = {
-          unit = "google-ai-studio";
-          key = "API_KEY";
-        };
-        POSTGRES_PASSWORD = {
-          unit = "firecrawl";
-          key = "POSTGRES_PASSWORD";
-        };
-        BULL_AUTH_KEY = {
-          unit = "firecrawl";
-          key = "BULL_AUTH_KEY";
-        };
-      };
-    };
-
     gluetun = {
       fileName = "gluetun.env";
       owner = "apps";
@@ -654,160 +624,6 @@ in
         GRIMMORY_MYSQL_ROOT_PASS = {
           unit = "grimmory";
           key = "MYSQL_ROOT_PASS";
-        };
-      };
-    };
-
-    hermes = {
-      fileName = "hermes-shared.env";
-      owner = "root";
-      group = "root";
-      mode = "0400";
-      fields = {
-        CHANGEDETECTION_API_KEY = {
-          unit = "changedetection";
-          key = "API_KEY";
-        };
-        SYNOLOGY_USER = {
-          unit = "synology";
-          key = "USER";
-        };
-        SYNOLOGY_PASS = {
-          unit = "synology";
-          key = "PASS";
-        };
-        N8N_API_KEY = {
-          unit = "n8n";
-          key = "API_KEY";
-        };
-        SONARR_API_KEY = {
-          unit = "sonarr";
-          key = "API_KEY";
-        };
-        RADARR_API_KEY = {
-          unit = "radarr";
-          key = "API_KEY";
-        };
-        PROWLARR_API_KEY = {
-          unit = "prowlarr";
-          key = "API_KEY";
-        };
-        PLEX_TOKEN = {
-          unit = "plex";
-          key = "TOKEN";
-        };
-        TAUTULLI_API_KEY = {
-          unit = "tautulli";
-          key = "API_KEY";
-        };
-        BAZARR_API_KEY = {
-          unit = "bazarr";
-          key = "API_KEY";
-        };
-        CHAPTARR_API_KEY = {
-          unit = "chaptarr";
-          key = "API_KEY";
-        };
-        BOOKSTACK_TOKEN_ID = {
-          unit = "bookstack";
-          key = "TOKEN_ID";
-        };
-        BOOKSTACK_TOKEN_SECRET = {
-          unit = "bookstack";
-          key = "TOKEN_SECRET";
-        };
-        FIRECRAWL_API_KEY = {
-          unit = "firecrawl";
-          key = "API_KEY";
-        };
-        PYLOAD_API_KEY = {
-          unit = "pyload";
-          key = "API_KEY";
-        };
-        ROMM_USERNAME = {
-          unit = "romm";
-          key = "USER";
-        };
-        ROMM_PASSWORD = {
-          unit = "romm";
-          key = "PASS";
-        };
-        GRIMMORY_USERNAME = {
-          unit = "grimmory";
-          key = "USER";
-        };
-        GRIMMORY_PASSWORD = {
-          unit = "grimmory";
-          key = "PASS";
-        };
-      };
-    };
-
-    hermes-secrets = {
-      fileName = "hermes-secrets.env";
-      owner = "root";
-      group = "root";
-      mode = "0400";
-      fields = {
-        GOOGLE_AI_STUDIO_API_KEY = {
-          unit = "google-ai-studio";
-          key = "API_KEY";
-        };
-        OPENCODE_GO_API_KEY = {
-          unit = "opencode";
-          key = "GO_API_KEY";
-        };
-        OPENCODE_ZEN_API_KEY = {
-          unit = "opencode";
-          key = "GO_API_KEY";
-        };
-        ZENMUX_API_KEY = {
-          unit = "zenmux";
-          key = "API_KEY";
-        };
-        ELECTRON_HUB_API_KEY = {
-          unit = "electron-hub";
-          key = "API_KEY";
-        };
-        OPENROUTER_API_KEY = {
-          unit = "openrouter";
-          key = "API_KEY";
-        };
-        BWS_ACCESS_TOKEN = {
-          unit = "bitwarden";
-          key = "BWS_ACCESS_TOKEN";
-        };
-        DISCORD_BOT_TOKEN = {
-          unit = "discord";
-          key = "BOT_TOKEN";
-        };
-        WEBHOOK_SECRET = {
-          unit = "discord";
-          key = "WEBHOOK_SECRET";
-        };
-        BW_CLIENTID = {
-          unit = "bitwarden";
-          key = "BW_CLIENTID";
-        };
-        BW_CLIENTSECRET = {
-          unit = "bitwarden";
-          key = "BW_CLIENTSECRET";
-        };
-        BW_PASSWORD = {
-          unit = "bitwarden";
-          key = "BW_PASSWORD";
-        };
-        GITHUB_TOKEN = {
-          unit = "github";
-          key = "TOKEN";
-        };
-        NVIDIA_BUILD_API_KEY = {
-          unit = "nvidia-build";
-          key = "API_KEY";
-        };
-        OLLAMA_API_KEY = {
-          unit = "ollama";
-          key = "API_KEY";
         };
       };
     };

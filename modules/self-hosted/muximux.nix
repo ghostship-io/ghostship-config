@@ -132,50 +132,50 @@ let
   '';
   muximuxDefaultSite = pkgs.writeText "muximux-default.conf" ''
     server {
-    	listen 80 default_server;
+      listen 80 default_server;
 
-    	listen 443 ssl;
+      listen 443 ssl;
 
-    	root /config/www/muximux;
-    	index index.html index.htm index.php;
+      root /config/www/muximux;
+      index index.html index.htm index.php;
 
-    	server_name _;
+      server_name _;
 
-    	ssl_certificate /config/keys/cert.crt;
+      ssl_certificate /config/keys/cert.crt;
         ssl_certificate_key /config/keys/cert.key;
 
         client_max_body_size 0;
         resolver 10.89.0.1 valid=30s ipv6=off;
         set $romm_upstream romm:8080;
 
-    	location = /romm-iframe-shim.js {
-    		add_header Cache-Control "no-store";
-    	}
+      location = /romm-iframe-shim.js {
+        add_header Cache-Control "no-store";
+      }
 
-    	location /romm/ {
-		proxy_pass http://$romm_upstream/;
-    		proxy_http_version 1.1;
-    		proxy_set_header Host romm:8080;
-    		proxy_set_header X-Forwarded-Host $host;
-    		proxy_set_header X-Forwarded-Proto $scheme;
-    		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    		proxy_set_header Accept-Encoding "";
+      location /romm/ {
+    proxy_pass http://$romm_upstream/;
+        proxy_http_version 1.1;
+        proxy_set_header Host romm:8080;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Accept-Encoding "";
 
             # RomM emits root-relative asset and API paths even when proxied.
             # Newer builds also ship an empty Vite env object, so Vue Router
             # falls back to the document <base> tag for its runtime base.
-    		sub_filter_once off;
-    		sub_filter_types text/html application/javascript text/css;
-		sub_filter '<head>' '<head><base href="/romm/" />';
-    		sub_filter 'src="/assets/index-' 'src="/romm-iframe-shim.js?v=${rommIframeShimVersion}"></script><script type="module" crossorigin src="/romm/assets/index-';
-    		sub_filter 'href="/' 'href="/romm/';
-    		sub_filter 'src="/' 'src="/romm/';
-    		sub_filter '"/assets/' '"/romm/assets/';
-    		sub_filter '"/api/' '"/romm/api/';
-    		sub_filter "'/assets/" "'/romm/assets/";
-    		sub_filter "'/api/" "'/romm/api/";
+        sub_filter_once off;
+        sub_filter_types text/html application/javascript text/css;
+    sub_filter '<head>' '<head><base href="/romm/" />';
+        sub_filter 'src="/assets/index-' 'src="/romm-iframe-shim.js?v=${rommIframeShimVersion}"></script><script type="module" crossorigin src="/romm/assets/index-';
+        sub_filter 'href="/' 'href="/romm/';
+        sub_filter 'src="/' 'src="/romm/';
+        sub_filter '"/assets/' '"/romm/assets/';
+        sub_filter '"/api/' '"/romm/api/';
+        sub_filter "'/assets/" "'/romm/assets/";
+        sub_filter "'/api/" "'/romm/api/";
             # Keep the older bundle rewrite as a compatibility fallback.
-    		sub_filter 'BASE_URL:"/"' 'BASE_URL:"/romm/"';
+        sub_filter 'BASE_URL:"/"' 'BASE_URL:"/romm/"';
         }
 
         location /ws/socket.io/ {
@@ -189,37 +189,37 @@ let
             proxy_set_header Connection "upgrade";
         }
 
-    	location /assets/ {
-		proxy_pass http://$romm_upstream/assets/;
-    		proxy_http_version 1.1;
-    		proxy_set_header Host romm:8080;
-    		proxy_set_header X-Forwarded-Host $host;
-    		proxy_set_header X-Forwarded-Proto $scheme;
-    		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    	}
+      location /assets/ {
+    proxy_pass http://$romm_upstream/assets/;
+        proxy_http_version 1.1;
+        proxy_set_header Host romm:8080;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      }
 
-    	location /api/ {
-		proxy_pass http://$romm_upstream/api/;
-    		proxy_http_version 1.1;
-    		proxy_set_header Host romm:8080;
-    		proxy_set_header X-Forwarded-Host $host;
-    		proxy_set_header X-Forwarded-Proto $scheme;
-    		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    	}
+      location /api/ {
+    proxy_pass http://$romm_upstream/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host romm:8080;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      }
 
-    	location / {
-    		try_files $uri $uri/ /index.html /index.php?$args =404;
-    	}
+      location / {
+        try_files $uri $uri/ /index.html /index.php?$args =404;
+      }
 
-    	location ~ \.php$ {
-    		fastcgi_split_path_info ^(.+\.php)(/.+)$;
-    		# With php5-cgi alone:
-    		fastcgi_pass 127.0.0.1:9000;
-    		# With php5-fpm:
-    		#fastcgi_pass unix:/var/run/php5-fpm.sock;
-    		fastcgi_index index.php;
-    		include /etc/nginx/fastcgi_params;
-    	}
+      location ~ \.php$ {
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        # With php5-cgi alone:
+        fastcgi_pass 127.0.0.1:9000;
+        # With php5-fpm:
+        #fastcgi_pass unix:/var/run/php5-fpm.sock;
+        fastcgi_index index.php;
+        include /etc/nginx/fastcgi_params;
+      }
     }
   '';
 in
@@ -332,13 +332,6 @@ in
           Grimmory.color=literal:"#49da7e"
           Grimmory.enabled=literal:"true"
           Grimmory.dd=literal:"false"
-          Hermes.name=literal:"Hermes"
-          Hermes.url=literal:"https://hermes.ghostship.io"
-          Hermes.scale=literal:1
-          Hermes.icon=literal:"muximux-terminal3"
-          Hermes.color=literal:"#00d4ff"
-          Hermes.enabled=literal:"true"
-          Hermes.dd=literal:"false"
           RomM.name=literal:"RomM"
           RomM.url=literal:"/romm/"
           RomM.scale=literal:1
