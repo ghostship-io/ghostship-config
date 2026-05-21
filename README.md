@@ -89,9 +89,8 @@ notes.
 
 ## Agent Launchers
 
-- Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`,
-  `paseo`, `agent-deck`, and `agent-browser` through Nix-managed wrapper
-  scripts.
+- Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`, and
+  `agent-browser` through Nix-managed wrapper scripts.
 - Retired develop-user artifacts are cleaned from one inventory in
   `home/profiles/cleanup.nix`; add old skills, hooks, and agent state there
   instead of adding scattered cleanup activation snippets.
@@ -108,15 +107,15 @@ notes.
 - The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
   unless you override it explicitly, so local automation stays on the
   profile-capable Chrome engine even if upstream auto-selection changes.
-- `codex`, `gemini`, `gemini-cli`, `opencode`, `paseo`, and `agent-deck`
-  delegate to installed user-local CLIs under
+- `codex`, `gemini`, `gemini-cli`, and `opencode` delegate to installed
+  user-local CLIs under
   `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`.
 - `ghostship-agent-maintenance.service` owns automatic agent upkeep. Its
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent
-  CLIs including `paseo`, ensures the configured external `skills.sh` repos are
-  installed globally on each develop host, including the managed
-  `obra/superpowers/brainstorming` skill, refreshes shared global skills,
+  CLIs, ensures the managed `skills` CLI is available, installs the
+  `brainstorming` skill from `obra/superpowers` globally on each develop host,
+  refreshes shared global skills,
   refreshes managed Gemini extensions, bootstraps `agent-browser` only when
   `~/.agent-browser` is missing, and carries an explicit shell-capable runtime
   path so npm and npx child processes can still spawn `sh` under systemd.
@@ -128,20 +127,12 @@ notes.
   `--with-deps` because the wrapper already supplies the required shared
   libraries. It also rewrites `~/.config/opencode/opencode.json` from
   OpenRouter's ranked programming free-model frontend endpoint with `(free)`
-  rewritten to `(ghostship-free)` and rebuilds `agent-deck` from the latest
-  upstream source release with the Ghostship web-mutations patch instead of
-  pinning it in the flake.
+  rewritten to `(ghostship-free)`.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
-- WSL hosts enable `opencode-server.service` as a Home Manager user service for
-  `nixos`. The unit ensures the managed `opencode` CLI exists on first start
-  and binds `opencode serve` to `127.0.0.1:4096` so the Windows desktop app can
-  attach over WSL localhost forwarding. Restart it with
-  `systemctl --user restart opencode-server` after the relevant Home Manager
-  switch if you need to pick up a config or binary refresh. `paseo` remains an
-  installed interactive CLI, but the repo no longer starts a managed WSL daemon
-  for it.
+- OpenCode remains an installed interactive CLI on develop hosts, but the repo
+  no longer starts a managed WSL `opencode serve` user service.
 - Develop-host convergence also cleans the known stale `workmux set-window-status ...` entries from `~/.codex/hooks.json` so removed repo-managed tooling does not keep breaking Codex hooks. The cleanup preserves unrelated valid hooks, warns instead of rewriting malformed JSON, and takes effect after the relevant Home Manager or NixOS switch. Restart any already-running Codex sessions after the switch if they were holding the stale hook state open.
 - Develop-host launchers now keep only the approval defaults: Codex prepends
   `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit
@@ -153,14 +144,15 @@ notes.
   every new shell.
 - Those launcher defaults only take effect after the relevant develop-host
   NixOS rebuild or Home Manager switch applies the generated config files.
+
 ## Shared Skills
 
 - Shared repo-managed skills live under `home/config/skills/` and are linked
-  into `~/.agents/skills/` on develop hosts. Managed external `skills.sh`
+  into `~/.agents/skills/` on develop hosts. Managed external `skills` CLI
   installs also land under `~/.agents/skills/`, but they are maintained by
   `ghostship-agent-maintenance` instead of the repo-owned skill tree; that
-  external layer now includes the standalone `obra/superpowers/brainstorming`
-  skill.
+  external layer now includes the standalone `brainstorming` skill from
+  `obra/superpowers`.
 - The curated shared set is `ghostship-audit-worktree`,
   `ghostship-merge-worktree`, and `ghostship-pull-worktree`.
 - `ghostship-audit-worktree` is the current Codex session audit workflow. It
@@ -175,6 +167,7 @@ notes.
   should land through GitHub. It pushes the branch, opens a draft PR, requests
   Codex review, resolves review and CI issues, and marks the PR ready only
   when the review and checks pass.
+
 ## Self-Hosted Stack
 
 The container stack lives in the flat
@@ -184,8 +177,15 @@ Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, the `arr` stack,
-qBittorrent/VueTorrent, SearXNG, Firecrawl, RomM, Grimmory, Chaptarr, BookStack, Hermes,
-PyLoad, RSS-Bridge, PriceBuddy, and n8n.
+qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr, BookStack,
+PyLoad, RSS-Bridge, PriceBuddy, Agent Zero, and n8n.
+
+Retired `chill-penguin` self-hosted service artifacts are cleaned from the
+allowlist in
+[`modules/self-hosted/cleanup.nix`](/home/nixos/nixos-config/modules/self-hosted/cleanup.nix).
+Add old `/srv/apps` paths, Podman containers/images, systemd units, and
+dashboard rows there instead of scattering one-off cleanup snippets through
+service modules.
 
 PyLoad has a daily `04:00` `pyload-restart-failed` timer that checks the
 internal `http://pyload:8000` API and restarts failed queue links when present.
@@ -219,21 +219,29 @@ Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
 legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`, and does not
 require any application-specific benchmark credentials.
 
-n8n runs as a single SQLite-backed workflow orchestrator in this repo and is intended to stay behind Cloudflare for browser access while Hermes talks to it over `ghostship_net`. Hermes should read its dedicated projected `N8N_API_KEY` rather than using a browser session. The live Muximux entry still needs a manual reorder on `chill-penguin` after deployment so it sits directly under Bazarr.
+n8n runs as a single SQLite-backed workflow orchestrator in this repo and is
+intended to stay behind Cloudflare for browser access. The live Muximux entry
+still needs a manual reorder on `chill-penguin` after deployment so it sits
+directly under Bazarr.
 
 Chaptarr now extends the arr stack to books and audiobooks. It should mount the shared downloads root at `/downloads`, manage `/mnt/share/Library/Books` and `/mnt/share/Library/Audiobooks` as separate library roots, and stay visible in Homepage plus the Muximux dropdown immediately before Bazarr. Grimmory is still the primary reading and listening surface, so it also mounts both library roots. Public `chaptarr.ghostship.io` exposure remains part of the external Cloudflare/tunnel workflow rather than repo-managed ingress.
 
-BookStack now adds a repo-managed wiki service on `chill-penguin` with app state under `/srv/apps/bookstack`, MariaDB state under `/srv/apps/bookstack-db`, and Homepage visibility in the `Services` group and a Muximux tile after Prowlarr. Keep `BOOKSTACK_APP_URL` pointed at the external `https://bookstack.ghostship.io` origin, and treat the initial in-app setup plus API token creation (`Authorization: Token <token_id>:<token_secret>`) as manual post-deploy operator steps instead of repo-managed bootstrap. Hermes now receives `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, and `BOOKSTACK_TOKEN_SECRET` through the managed runtime env projection so the future utility contract is already wired once the secret bundle is populated. Public `bookstack.ghostship.io` exposure remains part of the external Cloudflare/tunnel workflow rather than repo-managed ingress.
+BookStack now adds a repo-managed wiki service on `chill-penguin` with app
+state under `/srv/apps/bookstack`, MariaDB state under
+`/srv/apps/bookstack-db`, and Homepage visibility in the `Services` group and
+a Muximux tile after Prowlarr. Keep `BOOKSTACK_APP_URL` pointed at the external
+`https://bookstack.ghostship.io` origin, and treat the initial in-app setup
+plus API token creation (`Authorization: Token <token_id>:<token_secret>`) as
+manual post-deploy operator steps instead of repo-managed bootstrap. Public
+`bookstack.ghostship.io` exposure remains part of the external
+Cloudflare/tunnel workflow rather than repo-managed ingress.
 
 CloakBrowser now ships only as a shared embedded browser contract for repo-managed
 scraping images. `pricebuddy-scraper` is now a repo-owned Playwright service
 that launches CloakBrowser with `humanize=True` behind the existing
 `/api/article` sidecar contract, while `changedetection` launches a local
 CloakBrowser Playwright session inside its own image with `humanize=True`.
-Firecrawl's Playwright sidecar follows the same embedded path, so the repo no
-longer ships a standalone manager or managed CDP/profile service.
-
-Firecrawl now runs as an internal five-container stack on `ghostship_net`: the upstream API image, a repo-owned CloakBrowser-patched Playwright sidecar image, RabbitMQ, Redis, and `nuq-postgres`. Internal consumers use `http://firecrawl-api:3002`, and the repo does not publish a separate Firecrawl web origin. The API reuses the existing `http://searxng:8080` backend for `/search`, reads runtime `OPENAI_API_KEY` from the Google AI Studio source projection, and targets Gemini through the OpenAI-compatible `OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/` plus `MODEL_NAME=gemini-2.5-flash-lite`. Firecrawl-local Postgres, Bull, and API credentials stay in the `firecrawl` source bundle.
+The repo no longer ships a standalone manager or managed CDP/profile service.
 
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions
@@ -252,7 +260,25 @@ The proxy also injects a real `<base href="/romm/">` into RomM's HTML so newer
 bundles that ship an empty Vite `BASE_URL` still boot the router under `/romm/`
 instead of briefly landing on the in-app not-found route.
 
-SearXNG is intended to run as an internal-only search hub on `ghostship_net`, and internal consumers such as Hermes should use the container-network address `http://searxng:8080`. The managed `podman-searxng` `preStart` path now renders the full `settings.yml` plus `limiter.toml`, requires the projected `SEARXNG_SECRET_KEY` instead of generating one on the fly, and keeps a persistent cache at `/srv/apps/searxng-cache` mounted to `/var/cache/searxng` so cache-backed engines like Startpage retain useful state across restarts. The active Hermes-facing engine surface is now performance-first: the promoted web pool is `startpage`, `qwant`, `presearch`, `wikipedia`, and `wikidata`; the technical pool is `arch linux wiki`, `nixos wiki`, `askubuntu`, `stackoverflow`, `superuser`, `mankier`, `mdn`, `github`, `gitlab`, `gitea.com`, `sourcehut`, `huggingface`, `repology`, `pypi`, `npm`, `crates.io`, `pkg.go.dev`, `packagist`, `pub.dev`, `rubygems`, `hex`, and `lib.rs`; the research pool is `openalex`, `semantic scholar`, `pubmed`, `arxiv`, and `crossref`; and the news pool is `reuters`, `tagesschau`, and `wikinews`. Hermes should use explicit `/search?q=...&format=json&engines=...` pools instead of relying on the full active engine list. The latest lightweight direct probes promoted `presearch`, while `brave` and `karmasearch` stayed out of the default web pool after immediate `429` and `403` responses respectively.
+SearXNG is intended to run as an internal-only search hub on `ghostship_net`;
+internal consumers should use the container-network address
+`http://searxng:8080`. The managed `podman-searxng` `preStart` path now renders
+the full `settings.yml` plus `limiter.toml`, requires the projected
+`SEARXNG_SECRET_KEY` instead of generating one on the fly, and keeps a
+persistent cache at `/srv/apps/searxng-cache` mounted to `/var/cache/searxng`
+so cache-backed engines like Startpage retain useful state across restarts. The
+active internal engine surface is performance-first: the promoted web pool is
+`startpage`, `qwant`, `presearch`, `wikipedia`, and `wikidata`; the technical
+pool is `arch linux wiki`, `nixos wiki`, `askubuntu`, `stackoverflow`,
+`superuser`, `mankier`, `mdn`, `github`, `gitlab`, `gitea.com`, `sourcehut`,
+`huggingface`, `repology`, `pypi`, `npm`, `crates.io`, `pkg.go.dev`,
+`packagist`, `pub.dev`, `rubygems`, `hex`, and `lib.rs`; the research pool is
+`openalex`, `semantic scholar`, `pubmed`, `arxiv`, and `crossref`; and the news
+pool is `reuters`, `tagesschau`, and `wikinews`. Internal callers should use
+explicit `/search?q=...&format=json&engines=...` pools instead of relying on the
+full active engine list. The latest lightweight direct probes promoted
+`presearch`, while `brave` and `karmasearch` stayed out of the default web pool
+after immediate `429` and `403` responses respectively.
 
 PriceBuddy seeds a `pricebuddy@ghostship.io` / `pricebuddy` login and reads a
 persistent agent API token from the `pricebuddy` source projection. The live
@@ -264,11 +290,6 @@ files, scraper reachability, and final bearer-token shape without treating
 upstream auth-route bugs or third-party Cloudflare challenges as Ghostship env
 regressions.
 
-Hermes now follows the current upstream `ghostship-hermes` `main` workstation contract on `chill-penguin`: `/srv/apps/hermes/home` mounts at `/home/hermes`, `/srv/apps/hermes/workspace` mounts at `/workspace`, and `/srv/apps/hermes/nix` mounts directly at `/nix`. The image owns its internal supervision, fixed runtime env, first-boot `/nix` seeding for an empty mount, and later boot-time reconciliation of the image-managed default profile for a reused non-empty `/nix`, so `podman-hermes` no longer tries to start in-container `systemd` units or pre-populate `/nix` from the host.
-
-Ghostship's supported downstream Discord env surface is `DISCORD_ALLOWED_USERS`, `DISCORD_HOME_CHANNEL`, `DISCORD_FREE_RESPONSE_CHANNELS`, `GHOSTSHIP_CODEX_CHANNEL`, and `DISCORD_WEBHOOK_CHANNEL`. `GHOSTSHIP_CODEX_CHANNEL` is pinned to `1492841053642817606`, `DISCORD_WEBHOOK_CHANNEL` is pinned to `1491229248856260799`, `DISCORD_HOME_CHANNEL` is pinned to `1491229269127598281`, and the free-response channel list includes `1492841053642817606`, `1493462179725180959`, `1491229269127598281`, `1491229248856260799`, and `1491229299452412044`. The managed model contract keeps Codex on `openai-codex/gpt-5.5` for the forced Codex Discord channel, uses the local router as the normal primary path, uses OpenCode Go `opencode-go/minimax-m2.7` as the paid fallback lane, uses Firecrawl as the managed web backend, and keeps `agent.reasoning_effort=medium`.
-
-The default local browser path is image-owned native CloakBrowser exposed as `google-chrome` with `AGENT_BROWSER_PROFILE=/home/hermes/.local/state/cloakbrowser`, so the host must not inject `CLOAKBROWSER_URL` or other remote-browser defaults into Hermes. The image-managed Bitwarden path uses the Password Manager CLI `bw` with `BITWARDENCLI_APPDATA_DIR=/home/hermes/.local/state/bitwarden-cli`; populate `BW_CLIENTID`, `BW_CLIENTSECRET`, and `BW_PASSWORD` in the `bitwarden` source, plus `GO_API_KEY` in `opencode`, `API_KEY` in `zenmux`, and `API_KEY` in `electron-hub` before relying on those workflows. `OPENCODE_ZEN_API_KEY` is projected from `opencode`'s `GO_API_KEY` for runtime compatibility. The repo only seeds the Argo `SOUL.md` default into `/srv/apps/hermes/home/.hermes/SOUL.md` when that runtime-owned path is missing; it does not seed `skill-creator` or any other repo-managed default skill into `/srv/apps/hermes/home/.hermes/skills/`, and a fresh reset should rely on the image's bundled default skills there. This image cutover is intentionally destructive: stop the Hermes container, remove `/srv/apps/hermes/home`, `/srv/apps/hermes/workspace`, and `/srv/apps/hermes/nix`, then start the latest published `ghcr.io/ghostship-io/ghostship-hermes:latest` image against clean persisted directories and let it reseed `/nix` and the runtime from scratch. That full reset wipes persisted Codex auth, XDG/userland state, custom skills, workspace contents, and user-installed Nix state, so operators must re-auth Codex inside the fresh runtime before the Codex lane works again. Muximux keeps PriceBuddy in the dropdown immediately after Bazarr.
 
 ## Usage
 
@@ -371,10 +392,9 @@ Supported onboarding flow:
   so Docker Desktop can manage `/usr/bin/docker-credential-desktop.exe`
   itself; add future hardcoded FHS needs to `ghostship.wsl.fhsShims` instead of
   reintroducing `envfs`.
-  The managed Paseo desktop-attachment path is `localhost:6768` from Windows to
-  the WSL daemon. WSL activation now stops the `/mnt/z` automount and unmounts
-  any live NFS mount before reloading the generated mount units so host
-  switches do not fail on stale `/mnt/z` mount state.
+  WSL activation stops the `/mnt/z` automount and unmounts any live NFS mount
+  before reloading the generated mount units so host switches do not fail on
+  stale `/mnt/z` mount state.
 - WSL hosts cap `nix.settings.max-jobs` at `8` so concurrent flake shells,
   agent sessions, and host builds do not wedge `nix-daemon` under `auto`
   parallelism.

@@ -6,21 +6,7 @@
 }:
 
 let
-  agentTooling = import ../../modules/develop/agent-tooling.nix {
-    inherit pkgs;
-  };
   windowsPowerShell = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
-  opencodePort = 4096;
-  ensureOpencodeInstalled = pkgs.writeShellScript "ghostship-ensure-opencode-installed" ''
-    set -euo pipefail
-
-    export HOME="${config.home.homeDirectory}"
-    export PATH="${agentTooling.agentBinDir}:${agentTooling.runtimeBinPath}:$PATH"
-
-    if [ ! -x "${agentTooling.agentBinDir}/opencode" ]; then
-      exec ${agentTooling.agentMaintenance}/bin/ghostship-agent-maintenance
-    fi
-  '';
   wslOpenWrapped = pkgs.writeShellScriptBin "wsl-open" ''
     export PowershellExe="${windowsPowerShell}"
     export WslOpenExe="${windowsPowerShell} Start"
@@ -114,27 +100,6 @@ in
 
   home.sessionVariables = {
     PowershellExe = windowsPowerShell;
-  };
-
-  systemd.user.services.opencode-server = {
-    Unit = {
-      Description = "Managed OpenCode server for WSL desktop attachment";
-    };
-    Install = {
-      WantedBy = [ "default.target" ];
-    };
-    Service = {
-      ExecStartPre = "${ensureOpencodeInstalled}";
-      ExecStart = "${agentTooling.agentBinDir}/opencode serve --hostname 127.0.0.1 --port ${toString opencodePort}";
-      Environment = [
-        "HOME=${config.home.homeDirectory}"
-        "PATH=${agentTooling.agentBinDir}:${agentTooling.runtimeBinPath}"
-        "SSH_AUTH_SOCK=/run/user/1000/ssh-agent"
-      ];
-      Restart = "on-failure";
-      RestartSec = "5s";
-      WorkingDirectory = config.home.homeDirectory;
-    };
   };
 
   programs.fish = {
