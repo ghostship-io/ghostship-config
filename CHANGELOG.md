@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.0.2] - 2026-05-21
+
+- **VS Code WSL launcher fix**: Resolve the generated `/usr/bin/sh` wrapper
+  path before locating its paired `shell`, so FHS shims that symlink to the
+  wrapper still launch the real shell correctly.
+
 ## [1.0.1] - 2026-05-21
 
 - **Shared PR workflow skill pruning**: Remove the repo-managed
