@@ -5,7 +5,6 @@
 }:
 
 let
-  paseoPackage = "@getpaseo/cli";
   userHome = "/home/nixos";
   agentToolsRoot = "${userHome}/.local/share/ghostship-agent-tools";
   agentNpmPrefix = "${agentToolsRoot}/npm";
@@ -49,7 +48,6 @@ let
     pkgs.gawk
     pkgs.gcc
     pkgs.git
-    pkgs.go
     pkgs.gnutar
     pkgs.gnugrep
     pkgs.gzip
@@ -91,7 +89,7 @@ let
   managedGlobalSkills = [
     {
       name = "brainstorming";
-      source = "obra/superpowers/brainstorming";
+      source = "obra/superpowers";
     }
   ];
 
@@ -153,91 +151,20 @@ let
       rmdir "${agentNpmPrefix}/lib/node_modules/@fission-ai" 2>/dev/null || true
     }
 
-    install_agent_deck_latest() {
-      detect_agent_deck_os() {
-        case "$(${pkgs.coreutils}/bin/uname -s)" in
-          Linux) printf 'linux\n' ;;
-          Darwin) printf 'darwin\n' ;;
-          *)
-            log_warn "unsupported OS for agent-deck auto-install"
-            return 1
-            ;;
-        esac
-      }
-
-      detect_agent_deck_arch() {
-        case "$(${pkgs.coreutils}/bin/uname -m)" in
-          x86_64|amd64) printf 'amd64\n' ;;
-          arm64|aarch64) printf 'arm64\n' ;;
-          *)
-            log_warn "unsupported architecture for agent-deck auto-install"
-            return 1
-            ;;
-        esac
-      }
-
-      os="$(detect_agent_deck_os)" || return 0
-      arch="$(detect_agent_deck_arch)" || return 0
-
-      release_meta="$(mktemp)"
-      source_dir="$(mktemp -d)"
-      trap 'rm -f "$release_meta"; rm -rf "$source_dir"' RETURN
-
-      if ! ${pkgs.curl}/bin/curl -fsSL "https://api.github.com/repos/asheshgoplani/agent-deck/releases/latest" > "$release_meta"; then
-        log_warn "agent-deck release metadata fetch failed, continuing"
-        return 0
-      fi
-
-      version="$(${pkgs.jq}/bin/jq -r '.tag_name // empty' "$release_meta")"
-      if [ -z "$version" ] || [ "$version" = "null" ]; then
-        log_warn "agent-deck release metadata missing tag name, continuing"
-        return 0
-      fi
-
-      desired_version="''${version#v}"
-      current_version=""
-      if [ -x "${agentBinDir}/agent-deck" ]; then
-        current_version="$(${agentBinDir}/agent-deck --version 2>/dev/null | ${pkgs.gnugrep}/bin/grep -Eo 'v?[0-9]+\.[0-9]+\.[0-9]+' | tail -n1 | sed 's/^v//')"
-      fi
-
-      if [ -n "$current_version" ] && [ "$current_version" = "$desired_version" ]; then
-        log_info "agent-deck ''${version} already installed"
-        return 0
-      fi
-
-      log_info "building agent-deck ''${version}"
-      if ! ${pkgs.git}/bin/git clone --depth 1 --branch "$version" https://github.com/asheshgoplani/agent-deck "$source_dir/repo" >/dev/null 2>&1; then
-        log_warn "agent-deck source checkout failed, continuing"
-        return 0
-      fi
-
-      if ! (
-        cd "$source_dir/repo"
-        PATH=${lib.makeBinPath [ pkgs.go pkgs.git pkgs.coreutils ]}:$PATH
-        GOCACHE="$(mktemp -d)"
-        GOPATH="$(mktemp -d)"
-        trap 'rm -rf "$GOCACHE" "$GOPATH"' EXIT
-        ${pkgs.go}/bin/go build -ldflags "-s -w -X main.Version=$desired_version" -o agent-deck ./cmd/agent-deck
-      ); then
-        log_warn "agent-deck build failed, continuing"
-        return 0
-      fi
-
-      if [ ! -x "$source_dir/repo/agent-deck" ]; then
-        log_warn "agent-deck built binary missing, continuing"
-        return 0
-      fi
-
-      install -m755 "$source_dir/repo/agent-deck" "${agentBinDir}/agent-deck"
-    }
-
     ensure_managed_global_skill() {
       name="$1"
       source="$2"
+      skill_dir="$HOME/.agents/skills/$name"
 
-      if skills_json="$(${pkgs.nodejs}/bin/npx -y skills list -g --json 2>/dev/null)"; then
+      if [ -f "$skill_dir/SKILL.md" ]; then
+        return 0
+      fi
+
+      if skills_json="$(${agentBinDir}/skills list -g --json 2>/dev/null)"; then
         if printf '%s\n' "$skills_json" | ${pkgs.jq}/bin/jq -e --arg name "$name" 'map(select(.scope == "global" and .name == $name)) | length > 0' >/dev/null; then
-          return 0
+          if [ -f "$skill_dir/SKILL.md" ]; then
+            return 0
+          fi
         fi
       else
         log_warn "global skills discovery failed before managed install, continuing"
@@ -245,7 +172,7 @@ let
 
       log_info "installing managed skill $name"
 
-      if ! skills_output="$(${pkgs.nodejs}/bin/npx -y skills add "$source" --global --yes 2>&1)"; then
+      if ! skills_output="$(${agentBinDir}/skills add "$source" --skill "$name" --global --yes 2>&1)"; then
         log_warn "managed skill $name install failed, continuing"
         if [ -n "$skills_output" ]; then
           printf '%s\n' "$skills_output" >&2
@@ -256,10 +183,14 @@ let
       if [ -n "$skills_output" ]; then
         printf '%s\n' "$skills_output" >&2
       fi
+
+      if [ ! -f "$skill_dir/SKILL.md" ]; then
+        log_warn "managed skill $name did not create $skill_dir/SKILL.md"
+      fi
     }
 
     refresh_global_skills() {
-      if ! skills_json="$(${pkgs.nodejs}/bin/npx -y skills list -g --json 2>&1)"; then
+      if ! skills_json="$(${agentBinDir}/skills list -g --json 2>&1)"; then
         log_warn "global skills discovery failed, continuing"
         if [ -n "$skills_json" ]; then
           printf '%s\n' "$skills_json" >&2
@@ -273,7 +204,7 @@ let
 
       log_info "refreshing global skills"
 
-      if ! skills_output="$(${pkgs.nodejs}/bin/npx -y skills update -g 2>&1)"; then
+      if ! skills_output="$(${agentBinDir}/skills update -g 2>&1)"; then
         log_warn "global skills update failed, continuing"
         if [ -n "$skills_output" ]; then
           printf '%s\n' "$skills_output" >&2
@@ -416,11 +347,10 @@ let
 
     mkdir -p "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
-    install_agent_deck_latest
     install_agent_cli "@openai/codex" "codex"
     install_agent_cli "@google/gemini-cli" "gemini"
     install_agent_cli "opencode-ai" "opencode"
-    install_agent_cli "${paseoPackage}" "paseo"
+    install_agent_cli "skills" "skills"
     remove_stale_openspec_cli
     reassert_codex_skill_creator_override
     ${lib.concatMapStrings (skill: ''

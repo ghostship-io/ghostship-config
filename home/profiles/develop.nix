@@ -8,13 +8,6 @@
 
 let
   sshAgentSock = "/run/user/1000/ssh-agent";
-  agentTooling = import ../../modules/develop/agent-tooling.nix {
-    inherit pkgs inputs;
-  };
-  agentDeckCli = agentTooling.mkInstalledAgentWrapper {
-    name = "agent-deck";
-    binaryName = "agent-deck";
-  };
 in
 {
   imports = [
@@ -109,7 +102,6 @@ in
     ripgrep-all
     git-ignore
     gh
-    agentDeckCli
     starship
     zoxide
     fd

@@ -89,9 +89,8 @@ notes.
 
 ## Agent Launchers
 
-- Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`,
-  `paseo`, `agent-deck`, and `agent-browser` through Nix-managed wrapper
-  scripts.
+- Develop hosts expose `codex`, `gemini`, `gemini-cli`, `opencode`, and
+  `agent-browser` through Nix-managed wrapper scripts.
 - Retired develop-user artifacts are cleaned from one inventory in
   `home/profiles/cleanup.nix`; add old skills, hooks, and agent state there
   instead of adding scattered cleanup activation snippets.
@@ -108,15 +107,15 @@ notes.
 - The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
   unless you override it explicitly, so local automation stays on the
   profile-capable Chrome engine even if upstream auto-selection changes.
-- `codex`, `gemini`, `gemini-cli`, `opencode`, `paseo`, and `agent-deck`
-  delegate to installed user-local CLIs under
+- `codex`, `gemini`, `gemini-cli`, and `opencode` delegate to installed
+  user-local CLIs under
   `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`.
 - `ghostship-agent-maintenance.service` owns automatic agent upkeep. Its
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent
-  CLIs including `paseo`, ensures the configured external `skills.sh` repos are
-  installed globally on each develop host, including the managed
-  `obra/superpowers/brainstorming` skill, refreshes shared global skills,
+  CLIs, ensures the managed `skills` CLI is available, installs the
+  `brainstorming` skill from `obra/superpowers` globally on each develop host,
+  refreshes shared global skills,
   refreshes managed Gemini extensions, bootstraps `agent-browser` only when
   `~/.agent-browser` is missing, and carries an explicit shell-capable runtime
   path so npm and npx child processes can still spawn `sh` under systemd.
@@ -128,20 +127,12 @@ notes.
   `--with-deps` because the wrapper already supplies the required shared
   libraries. It also rewrites `~/.config/opencode/opencode.json` from
   OpenRouter's ranked programming free-model frontend endpoint with `(free)`
-  rewritten to `(ghostship-free)` and rebuilds `agent-deck` from the latest
-  upstream source release with the Ghostship web-mutations patch instead of
-  pinning it in the flake.
+  rewritten to `(ghostship-free)`.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
-- WSL hosts enable `opencode-server.service` as a Home Manager user service for
-  `nixos`. The unit ensures the managed `opencode` CLI exists on first start
-  and binds `opencode serve` to `127.0.0.1:4096` so the Windows desktop app can
-  attach over WSL localhost forwarding. Restart it with
-  `systemctl --user restart opencode-server` after the relevant Home Manager
-  switch if you need to pick up a config or binary refresh. `paseo` remains an
-  installed interactive CLI, but the repo no longer starts a managed WSL daemon
-  for it.
+- OpenCode remains an installed interactive CLI on develop hosts, but the repo
+  no longer starts a managed WSL `opencode serve` user service.
 - Develop-host convergence also cleans the known stale `workmux set-window-status ...` entries from `~/.codex/hooks.json` so removed repo-managed tooling does not keep breaking Codex hooks. The cleanup preserves unrelated valid hooks, warns instead of rewriting malformed JSON, and takes effect after the relevant Home Manager or NixOS switch. Restart any already-running Codex sessions after the switch if they were holding the stale hook state open.
 - Develop-host launchers now keep only the approval defaults: Codex prepends
   `--dangerously-bypass-approvals-and-sandbox` unless you pass explicit
@@ -156,11 +147,11 @@ notes.
 ## Shared Skills
 
 - Shared repo-managed skills live under `home/config/skills/` and are linked
-  into `~/.agents/skills/` on develop hosts. Managed external `skills.sh`
+  into `~/.agents/skills/` on develop hosts. Managed external `skills` CLI
   installs also land under `~/.agents/skills/`, but they are maintained by
   `ghostship-agent-maintenance` instead of the repo-owned skill tree; that
-  external layer now includes the standalone `obra/superpowers/brainstorming`
-  skill.
+  external layer now includes the standalone `brainstorming` skill from
+  `obra/superpowers`.
 - The curated shared set is `codex-queue`, `ghostship-review-worktree`,
   `ghostship-merge-worktree`, `ghostship-pull-worktree`,
   `github-pr-workflow`, `nix`, `python`, `ssh`, `wsl2`, and a vendored
@@ -388,10 +379,9 @@ Supported onboarding flow:
   so Docker Desktop can manage `/usr/bin/docker-credential-desktop.exe`
   itself; add future hardcoded FHS needs to `ghostship.wsl.fhsShims` instead of
   reintroducing `envfs`.
-  The managed Paseo desktop-attachment path is `localhost:6768` from Windows to
-  the WSL daemon. WSL activation now stops the `/mnt/z` automount and unmounts
-  any live NFS mount before reloading the generated mount units so host
-  switches do not fail on stale `/mnt/z` mount state.
+  WSL activation stops the `/mnt/z` automount and unmounts any live NFS mount
+  before reloading the generated mount units so host switches do not fail on
+  stale `/mnt/z` mount state.
 - WSL hosts cap `nix.settings.max-jobs` at `8` so concurrent flake shells,
   agent sessions, and host builds do not wedge `nix-daemon` under `auto`
   parallelism.
