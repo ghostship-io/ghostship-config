@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Retired image cleanup**: Expand `chill-penguin` retired artifact cleanup
+  to prune remaining Hermes and Firecrawl image repositories, and add the
+  Homepage NZBGet widget auth fields while keeping the internal URL on
+  `http://gluetun:5001`.
 - **Develop login shell**: Set develop-role users to `fish` directly.
 - **Codex Desktop WSL shell handling**: Keep the NixOS user shell on fish while
   letting Codex Desktop use the standard WSL shell path without the temporary

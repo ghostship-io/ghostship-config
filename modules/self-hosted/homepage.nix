@@ -179,6 +179,8 @@ in
             "[Downloads].[NZBGet].container=literal:nzbget"
             "[Downloads].[NZBGet].widget.type=literal:nzbget"
             "[Downloads].[NZBGet].widget.url=literal:http://gluetun:5001"
+            "[Downloads].[NZBGet].widget.username=literal:ghostship"
+            "[Downloads].[NZBGet].widget.password=literal:\"\""
 
             "[Downloads].[VueTorrent].icon=literal:sh-vuetorrent"
             "[Downloads].[VueTorrent].description=literal:Torrent Downloader"
