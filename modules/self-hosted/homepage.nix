@@ -310,6 +310,13 @@ in
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("SearXNG") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("Honcho Redis") or has("Honcho DB") or has("Firecrawl Postgres") or has("Firecrawl RabbitMQ") or has("Firecrawl Redis")) | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("FlareSolverr") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
+            | (.[] | select(has("Management")) | .Management) |= (
+                map(select(has("Agent Zero") | not)) as $items
+                | map(select(has("Agent Zero"))) as $agent
+                | ($items | map(select(has("Homepage") or has("Muximux"))))
+                  + $agent
+                  + ($items | map(select((has("Homepage") or has("Muximux")) | not)))
+              )
           ' "$SERVICES_FILE"
         fi
 
