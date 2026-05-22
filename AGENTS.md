@@ -22,21 +22,11 @@ changelog.
 - For repo research, use `brainstorming` when it is available.
 - Use the `nix` skill for Nix-platform work and the `python` skill for Python
   work when they are available.
-- Shared skills live under `home/config/skills/*` and are linked into
-  `~/.agents/skills`.
-- GitHub PR workflow policy lives in
-  `home/config/skills/github-pr-workflow`; keep detailed PR operations routed
-  through the installed GitHub plugin skills and prefer native automatic Codex
-  review.
-- `codex-queue` is for long manual-review queues only; its tooling may split,
-  launch, monitor, validate, and merge, but must not automate final item
-  judgments.
-- The shared local skill is named `skill-creator` and is vendored from the
-  upstream `skill-creator` package in `vercel-labs/agent-browser` `v0.9.3`.
-- Managed `skills.sh` installs are separate from the repo-managed
-  `home/config/skills/*` inventory. Keep repo-owned shared skills curated under
-  `home/config/skills/`, and let `ghostship-agent-maintenance` install or
-  refresh any configured external `skills.sh` repos on each WSL develop host.
+- Repo-managed shared skills are retired; do not restore the old
+  `home/config/skills/{codex-queue,github-pr-workflow,nix,python,skill-creator,ssh,wsl2}`
+  inventory unless the skill model is explicitly revisited.
+- Develop hosts rely on the installed global `skills` CLI and linked local
+  Ghostship workflow skills under `home/config/skills/ghostship-*`.
 - Develop-host convergence should scrub the known stale `workmux
   set-window-status ...` commands from `~/.codex/hooks.json` so removed
   repo-managed tooling does not keep breaking Codex hooks, while preserving
@@ -79,11 +69,10 @@ changelog.
   sandbox flags are already present, Gemini injects `--yolo`, and OpenCode
   keeps `permission = "allow"` in config. Those defaults are only live after
   the relevant NixOS rebuild or Home Manager switch.
-- Develop hosts expose `agent-deck` through the same repo-managed wrapper
-  pattern as the other agent CLIs.
-- WSL desktop-facing OpenCode support uses the `opencode-server` user service
-  on `127.0.0.1:4096`; do not add a repo-managed Paseo daemon.
-- Develop hosts install `codex`, `gemini`, `opencode`, and `paseo` into the
+- Retired develop tools Paseo, Agent Deck, and the WSL OpenCode desktop server
+  should stay removed; use cleanup modules for stale artifacts instead of
+  reintroducing their services.
+- Develop hosts install `codex`, `gemini`, and `opencode` into the
   user-local npm prefix under
   `/home/nixos/.local/share/ghostship-agent-tools/npm`, and
   `ghostship-agent-maintenance.service` plus its timer own installing and
@@ -102,11 +91,9 @@ changelog.
   package-manager bootstrapping is unsupported there and the wrapper already
   supplies the required shared libraries. It also rewrites
   `~/.config/opencode/opencode.json` from OpenRouter's ranked programming free
-  frontend endpoint while preserving the `(ghostship-free)` label rewrite, and
-  refreshes `agent-deck` from the latest upstream source release with the
-  Ghostship web-mutations patch; do not reintroduce static OpenRouter model
-  maps into the Nix-managed OpenCode config files or pin `agent-deck` back
-  into the flake.
+  frontend endpoint while preserving the `(ghostship-free)` label rewrite; do
+  not reintroduce static OpenRouter model maps into the Nix-managed OpenCode
+  config files.
 - For an immediate user-triggered refresh, run `ghostship-agent-maintenance`
   directly instead of trying to start the system unit as an unprivileged user.
 - Develop hosts should keep `ssh-agent` on the fixed
@@ -508,17 +495,10 @@ changelog.
 
 ## Service-Specific Notes
 
-- Hermes on `chill-penguin` should follow the current upstream `ghostship-hermes` `main` workstation contract: mount `/srv/apps/hermes/home` at `/home/hermes`, mount `/srv/apps/hermes/workspace` directly at `/workspace`, and bind `/srv/apps/hermes/nix` at `/nix`. Let the image own internal supervision, first-boot `/nix` seeding for an empty mount, and later boot-time reconciliation of `/nix/var/nix/profiles/per-user/hermes/ghostship-defaults` on a reused non-empty `/nix`; do not reintroduce repo-side startup shims, in-container `systemd` calls, or separate Honcho compatibility-state mounts.
-- Hermes container-executed commands run against the image-seeded `/srv/apps/hermes/nix` store mounted at `/nix`, not the host generation's `/nix/store`. Do not embed host `${pkgs.*}` store paths in Hermes container healthchecks or other in-container commands unless that exact path is guaranteed to exist in the upstream image store; prefer in-container commands such as `curl` on `PATH` or image-provided store paths.
-- Hermes uses s6-overlay in the container; keep the Podman stop signal on `SIGTERM`, not `SIGRTMIN+3`.
-- Hermes managed runtime state lives at `/home/hermes/.hermes`, and repo-managed host wiring should pass supported downstream env through the container environment or env files instead of patching `/home/hermes/.hermes/.env` directly. Fixed workstation layout, XDG, ttyd, browser, and router-topology env are image-owned internals, not supported downstream overrides. Terminal sessions should continue to default to `/workspace` through the upstream image-owned terminal contract.
+- Hermes and Firecrawl are retired from the `chill-penguin` self-hosted stack.
+  Keep their modules, image contexts, secret sources, dashboard entries, and
+  runtime projections removed; use the cleanup modules for stale live artifacts.
 - Secret source bundles live under `secrets/files/sources/`; services should consume projected runtime env files from `/run/ghostship-secrets`, not source bundles directly.
-- Hermes provider env is projected from provider/service source bundles. Keep `OPENCODE_ZEN_API_KEY` as a runtime alias for `opencode`'s `GO_API_KEY`, not a separate stored secret.
-- Hermes utility env projection on `chill-penguin` should read only the required utility-facing values from service-local secret bundles or generated runtime env files, write the selected auth subset to `/srv/apps/hermes/runtime.env`, and supply upstream with the supported Discord env surface `DISCORD_ALLOWED_USERS`, `DISCORD_HOME_CHANNEL`, `DISCORD_FREE_RESPONSE_CHANNELS`, `GHOSTSHIP_CODEX_CHANNEL`, and `DISCORD_WEBHOOK_CHANNEL` plus unchanged provider and utility pass-through vars. `GHOSTSHIP_CODEX_CHANNEL` is `1492841053642817606`, `DISCORD_WEBHOOK_CHANNEL` is `1491229248856260799`, `DISCORD_HOME_CHANNEL` should stay pinned to `1491229269127598281`, and `DISCORD_FREE_RESPONSE_CHANNELS` must include `1492841053642817606`, `1493462179725180959`, `1491229269127598281`, `1491229248856260799`, and `1491229299452412044`. Do not emit `GHOSTSHIP_ROUTER_CHANNEL`, `BROWSER_CDP_URL`, or any `BROWSER_*_CDP_URL` default from the repo. Keep Synology on `http://192.168.200.106:5000/`, keep qBittorrent plus NZBGet URL-only while their control auth remains disabled in this stack, and keep the n8n contract narrowed to `N8N_URL` plus `N8N_API_KEY`.
-- Hermes now treats the local router as primary for normal model routing, keeps Codex on `openai-codex/gpt-5.5` for the forced Discord Codex channel, uses `opencode-go/minimax-m2.7` as the paid fallback lane, uses Firecrawl as the managed web backend, and defaults `agent.reasoning_effort = "medium"`.
-- Hermes uses image-managed Bitwarden Password Manager CLI `bw` state at `/home/hermes/.local/state/bitwarden-cli`; keep `BITWARDENCLI_APPDATA_DIR` aligned with that path and carry `BW_CLIENTID`, `BW_CLIENTSECRET`, and `BW_PASSWORD` through the `bitwarden` source projection when Bitwarden login is needed.
-- Hermes on `chill-penguin` should not seed any repo-managed default skills into `/srv/apps/hermes/home/.hermes/skills/`; the repo-managed runtime seed surface there is intentionally empty, and the image's bundled default skill seeding should own that path instead.
-- Hermes root persona source now lives at `modules/self-hosted/hermes-seeds/SOUL.md` and seeds `/srv/apps/hermes/home/.hermes/SOUL.md` only when the target file is missing; once seeded, treat the host copy as operator-owned runtime state instead of forcing repo updates into the live container home.
 - PriceBuddy env files belong in `preStart`, not activation. Its durable API
   token is separate from the seeded app login and must be written as an
   `id|token` bearer value in `pricebuddy-agent.env`.
@@ -534,10 +514,10 @@ changelog.
   on `0:3000`.
 - Bazarr's authoritative config is `/srv/apps/bazarr/config/config.yaml`.
 - CloakBrowser consumer images live under `containers/` and are built locally into content-addressed `localhost/...` tags from Nix-managed contexts; `pricebuddy-scraper` and `changedetection` both run embedded local CloakBrowser Playwright sessions with `humanize=True` instead of the manager/CDP path.
-- The standalone `cloakhq/cloakbrowser-manager` service is retired on `chill-penguin`; keep Changedetection, PriceBuddy scraper, Firecrawl Playwright, and Hermes on their embedded or image-owned browser paths only.
-- n8n on `chill-penguin` should stay as a single SQLite-backed service with state persisted under `/srv/apps/n8n`; keep browser access behind Cloudflare, keep Hermes on the internal `http://n8n:5678` path with `N8N_API_KEY` projected from the `n8n` source, and expect a one-time manual Muximux reorder after deployment so the live tile sits directly under Bazarr.
+- The standalone `cloakhq/cloakbrowser-manager` service is retired on `chill-penguin`; keep Changedetection and PriceBuddy scraper on their embedded browser paths only.
+- n8n on `chill-penguin` should stay as a single SQLite-backed service with state persisted under `/srv/apps/n8n`; keep browser access behind Cloudflare and expect a one-time manual Muximux reorder after deployment so the live tile sits directly under Bazarr.
 - Chaptarr on `chill-penguin` should follow the standard arr service pattern: keep its config under `/srv/apps/chaptarr`, mount the shared downloads root at `/downloads`, mount `/mnt/share/Library/Books` plus `/mnt/share/Library/Audiobooks` as separate library roots, and source its API key from the `chaptarr` source projection. Grimmory should keep both library roots mounted because it is the primary consumption UI, and the generated Muximux dropdown order should place Chaptarr before Bazarr.
-- BookStack on `chill-penguin` should keep app state under `/srv/apps/bookstack`, MariaDB state under `/srv/apps/bookstack-db`, and `BOOKSTACK_APP_URL` pinned to the external `https://bookstack.ghostship.io` origin. Keep the initial in-app setup plus API token creation manual for now, keep the Hermes env projection wired to `BOOKSTACK_URL`, `BOOKSTACK_TOKEN_ID`, and `BOOKSTACK_TOKEN_SECRET`, and keep the generated Muximux tile immediately after Prowlarr.
+- BookStack on `chill-penguin` should keep app state under `/srv/apps/bookstack`, MariaDB state under `/srv/apps/bookstack-db`, and `BOOKSTACK_APP_URL` pinned to the external `https://bookstack.ghostship.io` origin. Keep the initial in-app setup plus API token creation manual for now, and keep the generated Muximux tile immediately after Prowlarr.
 - Gluetun on `chill-penguin` should stay on Gluetun's custom-provider WireGuard path for PIA. `podman-gluetun` should start from the cached winner at `/srv/apps/gluetun/pia-wireguard-selection.json` or do only a provisional latency pick when no cache exists, regenerate `/run/secrets/gluetun-runtime.env` from that active winner during startup, and rely on `gluetun-pia-selector` to rerank Vancouver port-forward-capable WireGuard servers 5 minutes after boot and every 8 hours thereafter. The selector should pin Vancouver, benchmark the top 10 Vancouver servers with a bounded generic HTTPS download pull, and restart Gluetun only when a materially faster Vancouver winner is found while keeping PIA VPN-side port forwarding plus qBittorrent/VueTorrent port reconciliation wired through Gluetun's native hooks and the generic `/v1/portforward` monitor path.
 - qBittorrent 5.1.4 on `chill-penguin` can stay `disconnected` if it only binds to Gluetun by interface name (`tun0`). Reconcile `current_interface_address` to Gluetun's live `tun0` IPv4 as part of the Gluetun monitor or port-forward reconciliation, not just the interface name and listen port.
 - Keep VueTorrent/qBittorrent torrent data under `/downloads/Torrent` and incomplete data under `/downloads/Torrent/.incomplete`; do not let torrent `.parts` files land in the shared `/downloads` root.

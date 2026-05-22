@@ -8,9 +8,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 - **Develop login shell**: Set develop-role users to `fish` directly.
+- **Codex Desktop WSL shell handling**: Keep the NixOS user shell on fish while
+  letting Codex Desktop use the standard WSL shell path without the temporary
+  fish-wrapper compatibility override.
+
+## [2.0.1] - 2026-05-21
+
+- **Ghostship audit worktree skill**: Rename
+  `ghostship-review-worktree` to `ghostship-audit-worktree` across the
+  repo-managed skill tree and develop-host skill link.
+- **Ghostship audit worktree scope**: Refocus
+  `ghostship-review-worktree` on current Codex session changes instead of
+  pre-merge comparison against `main`, and remove changelog/version review
+  duties from that skill.
+
+## [2.0.0] - 2026-05-21
+
+- **Hermes and Firecrawl retirement**: Remove the deprecated Hermes
+  `ghostship-hermes` service and the full Firecrawl stack from
+  `chill-penguin`, including their self-hosted modules, Firecrawl image build
+  contexts, Firecrawl secret source, Hermes runtime projections, dashboard
+  entries, and active README guidance.
+- **chill-penguin retired artifact cleanup**: Add an allowlist-only self-hosted
+  cleanup module for retired `chill-penguin` services. Activation now stops and
+  removes known retired Hermes, Firecrawl, Honcho, LiteLLM, and standalone
+  CloakBrowser manager units/containers, deletes their `/srv/apps` state, prunes
+  retired project images, and removes stale Homepage/Muximux rows.
+- **Retired agent tool cleanup**: Remove managed Paseo, Agent Deck, and the
+  WSL OpenCode server service while keeping the OpenCode CLI, add exact cleanup
+  for their retired user config/state paths plus browser-use and Caveman skill
+  artifacts, and switch managed global skill refreshes to the installed
+  `skills` CLI with `brainstorming` verified under shared `.agents`.
+
+## [1.0.3] - 2026-05-21
+
+- **NZBGet Gluetun routing**: Move NZBGet back into Gluetun's VPN namespace and
+  update internal Homepage and Hermes URLs to `http://gluetun:5001`.
+
+## [1.0.2] - 2026-05-21
+
+- **VS Code WSL launcher fix**: Resolve the generated `/usr/bin/sh` wrapper
+  path before locating its paired `shell`, so FHS shims that symlink to the
+  wrapper still launch the real shell correctly.
+
+## [1.0.1] - 2026-05-21
+
+- **Shared PR workflow skill pruning**: Remove the repo-managed
+  `github-pr-workflow` skill from develop host links, Codex skill config, and
+  stale artifact cleanup.
+
+## [1.0.0] - 2026-05-21
+
+- **Shared skill pruning**: Remove deprecated repo-managed `codex-queue`,
+  `nix`, `python`, `skill-creator`, `ssh`, and `wsl2` skills from develop host
+  links, Codex skill config, and stale artifact cleanup.
+- **Ghostship worktree review skill**: Add `ghostship-review-worktree` as the
+  local worktree pre-merge review workflow for concrete issue finding and fix
+  planning before merge, while keeping `ghostship-merge-worktree` as the local
+  merge workflow used after approval.
+- **Ghostship pull worktree skill**: Add `ghostship-pull-worktree` for the
+  draft PR path from a worktree, including Codex review, CI follow-up, and
+  ready-for-merge gating.
+- **Ghostship merge worktree skill**: Replace the bundled merge helper tooling
+  with an instruction-only direct merge workflow that updates `main`, handles
+  drift and conflicts, verifies `main`, and pushes without using the PR path.
+- **Ghostship review worktree checks**: Extend `ghostship-review-worktree` to
+  review documentation, changelog, and semantic versioning consistency before
+  merge.
+- **Develop artifact cleanup inventory**: Add a single Home Manager cleanup
+  module for retired develop-user artifacts, moving old Superpowers, managed
+  Caveman, and Workmux cleanup into one maintained activation entry.
+- **Codex Desktop WSL fish compatibility**: Override only the NixOS-WSL
+  `shell-wrapper` on WSL hosts so nested Bash-quoted worktree probes bypass
+  fish parsing after importing the normal NixOS and fish environment, while
+  develop users still default to fish.
 - **NZBGet networking**: Move NZBGet off Gluetun's VPN namespace and onto
-  `ghostship_net`, updating internal Homepage and Hermes URLs to
-  `http://nzbget:5001`.
+  `ghostship_net`, updating the internal Homepage URL to `http://nzbget:5001`.
 - **Podman auto-update auth**: Merge Agent Zero's GHCR auth into the shared
   Podman auto-update auth file so the daily registry update pass can check the
   private Agent Zero image without failing the whole run.

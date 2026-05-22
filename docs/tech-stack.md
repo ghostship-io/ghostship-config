@@ -32,5 +32,5 @@
 
 ## AI & Automation
 - **AGENT CLI**: Local AI agent interface with custom Nix packaging and Home Manager configuration.
-- **browser-use MCP**: Model Context Protocol server for browser automation, integrated with Nix-native browser binaries and using headless mode.
+- **agent-browser**: Browser automation CLI integrated with Nix-native browser libraries.
 - **AGENT Global Instructions**: Distilled expert system definitions and personas managed via a global `gemini.md` in Home Manager.

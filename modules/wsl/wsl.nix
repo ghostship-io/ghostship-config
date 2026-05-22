@@ -1,6 +1,63 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  inputs,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
+  upstreamNativeUtils = pkgs.callPackage "${inputs.nixos-wsl}/utils" { };
+  codexCompatibleNativeUtils = pkgs.runCommand "nixos-wsl-utils-codex-compatible" { } ''
+    mkdir -p "$out/bin"
+    ln -s ${upstreamNativeUtils}/bin/split-path "$out/bin/split-path"
+    ln -s ${upstreamNativeUtils}/bin/systemd-shim "$out/bin/systemd-shim"
+
+    cat > "$out/bin/shell-wrapper" <<'EOF'
+    #!${pkgs.bashInteractive}/bin/bash
+
+    set -eo pipefail
+
+    wrapper_path="$(${pkgs.coreutils}/bin/readlink -f -- "''${BASH_SOURCE[0]}")"
+    wrapper_dir="$(${pkgs.coreutils}/bin/dirname -- "$wrapper_path")"
+    wrapped_shell="$wrapper_dir/shell"
+    shell_name="$(${pkgs.coreutils}/bin/readlink -- "$wrapped_shell" 2>/dev/null || printf '%s\n' "$wrapped_shell")"
+
+    while [ ! -e /run/current-system/sw/bin ]; do
+      ${pkgs.coreutils}/bin/sleep 0.05
+    done
+
+    if [ -z "''${__NIXOS_SET_ENVIRONMENT_DONE:-}" ] && [ -r /etc/set-environment ]; then
+      # shellcheck disable=SC1091
+      . /etc/set-environment
+    fi
+
+    export SHELL="$shell_name"
+
+    import_fish_environment() {
+      local entry name value
+      while IFS= read -r -d "" entry; do
+        name="''${entry%%=*}"
+        value="''${entry#*=}"
+        if [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+          printf -v "$name" '%s' "$value" 2>/dev/null && export "$name" 2>/dev/null || true
+        fi
+      done < <("$wrapped_shell" -c 'env -0' 2>/dev/null || true)
+      export SHELL="$shell_name"
+    }
+
+    if [ "$#" -ge 2 ] \
+      && [ "$1" = "-c" ] \
+      && [[ "$2" == /usr/bin/bash\ -lc* || "$2" == /bin/bash\ -lc* ]]; then
+      import_fish_environment
+      exec ${pkgs.bashInteractive}/bin/bash -lc "$2"
+    fi
+
+    exec "$wrapped_shell" "$@"
+    EOF
+
+    chmod 0555 "$out/bin/shell-wrapper"
+  '';
   nixos-enter = pkgs.nixos-enter or config.system.build.nixos-enter;
   nixos-enter' = nixos-enter.overrideAttrs (_: {
     runtimeShell = "/bin/bash";
@@ -24,6 +81,11 @@ in
   # memory and leave new clients waiting on a busy daemon.
   nix.settings.max-jobs = lib.mkForce 8;
   nix.settings.cores = lib.mkDefault 4;
+
+  # Codex Desktop currently sends Bash-quoted worktree probes through the WSL
+  # user's fish login shell. Keep fish as the default shell, but let those
+  # nested Bash commands reach Bash after the normal NixOS and fish env setup.
+  system.build.nativeUtils = lib.mkForce codexCompatibleNativeUtils;
 
   services.resolved.enable = false;
   networking.useNetworkd = false;
