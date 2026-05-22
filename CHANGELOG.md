@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.2] - 2026-05-22
+
+- **Agent Zero dashboards**: Add Agent Zero to Homepage's Management group
+  directly after Muximux and to Muximux directly after Grimmory, using the
+  public `https://agent-zero.ghostship.io` route.
 - **Retired image cleanup**: Expand `chill-penguin` retired artifact cleanup
   to prune remaining Hermes and Firecrawl image repositories, and add the
   Homepage NZBGet widget auth fields while keeping the internal URL on

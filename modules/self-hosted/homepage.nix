@@ -237,6 +237,12 @@ in
             "[Management].[Muximux].server=literal:chill-penguin"
             "[Management].[Muximux].container=literal:muximux"
 
+            "[Management].[Agent Zero].icon=literal:sh-agent-zero"
+            "[Management].[Agent Zero].href=literal:https://agent-zero.ghostship.io"
+            "[Management].[Agent Zero].description=literal:AI Agent Workbench"
+            "[Management].[Agent Zero].server=literal:chill-penguin"
+            "[Management].[Agent Zero].container=literal:agent-zero"
+
             "[Management].[Plex Auto Languages].icon=literal:sh-plex"
             "[Management].[Plex Auto Languages].description=literal:Language Manager"
             "[Management].[Plex Auto Languages].server=literal:chill-penguin"
