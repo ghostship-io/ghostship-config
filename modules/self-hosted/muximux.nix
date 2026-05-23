@@ -335,7 +335,7 @@ in
           "Agent Zero.name"=literal:"Agent Zero"
           "Agent Zero.url"=literal:"https://agent-zero.ghostship.io"
           "Agent Zero.scale"=literal:1
-          "Agent Zero.icon"=literal:"muximux-home2"
+          "Agent Zero.icon"=literal:"muximux-brand-dot-ai"
           "Agent Zero.color"=literal:"#00bcd4"
           "Agent Zero.enabled"=literal:"true"
           "Agent Zero.dd"=literal:"false"

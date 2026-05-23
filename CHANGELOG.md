@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.4] - 2026-05-22
+
+- **Agent Zero Muximux icon**: Replace the Homepage-style home glyph with the
+  Muximux-native `muximux-brand-dot-ai` icon for a closer AI/A-style mark.
+
 ## [2.0.3] - 2026-05-22
 
 - **Agent Zero Muximux icon**: Switch the Agent Zero Muximux tile to the
