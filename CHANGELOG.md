@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.5] - 2026-05-23
+
+- **Agent Zero Muximux icon**: Switch the Agent Zero Muximux tile to the
+  triangular `muximux-archlinux` glyph so it visually tracks the Homepage
+  Agent Zero A mark more closely.
+
 ## [2.0.4] - 2026-05-22
 
 - **Agent Zero Muximux icon**: Replace the Homepage-style home glyph with the
