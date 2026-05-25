@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.6] - 2026-05-25
+
+- **Agent Zero DinD contract**: Run the Agent Zero container privileged so the
+  latest image can start its nested Docker daemon and manage bridge networking.
+
 ## [2.0.5] - 2026-05-23
 
 - **Agent Zero Muximux icon**: Switch the Agent Zero Muximux tile to the

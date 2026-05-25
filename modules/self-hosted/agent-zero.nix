@@ -16,6 +16,7 @@ in
     };
     extraOptions = [
       "--network=ghostship_net"
+      "--privileged"
       "--shm-size=2g"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:80/ || exit 1"
       "--health-interval=30s"
