@@ -74,7 +74,9 @@ if (hasOpenCodeGo || hasOllama) {
   state.apiKey = 'managed';
   state.customBaseUrl = 'http://127.0.0.1:5910/v1';
   state.wireApi = 'chat';
-  state.model = state.model || (hasOpenCodeGo ? 'opencode-go/kimi-k2.6' : 'ollama/gpt-oss:120b');
+  if (!state.model || (!state.model.startsWith('opencode-go/') && !state.model.startsWith('ollama/'))) {
+    state.model = hasOpenCodeGo ? 'opencode-go/kimi-k2.6' : 'ollama/gpt-oss:120b';
+  }
   state.providerKeys = providerKeys;
 
   fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
