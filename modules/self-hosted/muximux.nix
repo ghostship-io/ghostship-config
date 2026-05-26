@@ -339,6 +339,13 @@ in
           "Agent Zero.color"=literal:"#00bcd4"
           "Agent Zero.enabled"=literal:"true"
           "Agent Zero.dd"=literal:"false"
+          Codex.name=literal:"Codex"
+          Codex.url=literal:"https://codex.ghostship.io"
+          Codex.scale=literal:1
+          Codex.icon=literal:"muximux-terminal3"
+          Codex.color=literal:"#10a37f"
+          Codex.enabled=literal:"true"
+          Codex.dd=literal:"false"
           RomM.name=literal:"RomM"
           RomM.url=literal:"/romm/"
           RomM.scale=literal:1

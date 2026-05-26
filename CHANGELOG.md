@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.7] - 2026-05-26
+
+- **Codex web service**: Add a Nix-based `codex` Podman service for
+  `codex.ghostship.io` with Docker-in-Docker support, persistent Codex home,
+  workspace, nested Docker state, and `/nix` storage, plus a dedicated refresh
+  timer and Homepage/Muximux entries.
+
 ## [2.0.6] - 2026-05-25
 
 - **Agent Zero DinD contract**: Run the Agent Zero container privileged so the

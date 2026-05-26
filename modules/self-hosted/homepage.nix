@@ -237,6 +237,12 @@ in
             "[Management].[Muximux].server=literal:chill-penguin"
             "[Management].[Muximux].container=literal:muximux"
 
+            "[Management].[Codex].icon=literal:sh-openai"
+            "[Management].[Codex].href=literal:https://codex.ghostship.io"
+            "[Management].[Codex].description=literal:Codex Web UI"
+            "[Management].[Codex].server=literal:chill-penguin"
+            "[Management].[Codex].container=literal:codex"
+
             "[Management].[Agent Zero].icon=literal:sh-agent-zero"
             "[Management].[Agent Zero].href=literal:https://agent-zero.ghostship.io"
             "[Management].[Agent Zero].description=literal:AI Agent Workbench"

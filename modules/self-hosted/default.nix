@@ -31,6 +31,7 @@
     ./pyload.nix
 
     # Apps and utilities
+    ./codex.nix
     ./agent-zero.nix
     ./n8n.nix
     ./bentopdf.nix
