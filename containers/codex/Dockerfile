@@ -22,12 +22,13 @@ RUN nix-channel --update \
       nixpkgs.openssh \
       nixpkgs.procps \
       nixpkgs.ripgrep \
-    && mkdir -p /home/codexapp /workspace /var/lib/docker /usr/local/bin
+    && mkdir -p /home/codexapp /var/lib/docker /usr/local/bin
 
 COPY codex-entrypoint /usr/local/bin/codex-entrypoint
-RUN chmod 0755 /usr/local/bin/codex-entrypoint
+COPY codex-provider-mux /usr/local/bin/codex-provider-mux
+RUN chmod 0755 /usr/local/bin/codex-entrypoint /usr/local/bin/codex-provider-mux
 
-WORKDIR /workspace
+WORKDIR /home/codexapp
 EXPOSE 5900
 
 ENTRYPOINT ["/root/.nix-profile/bin/bash", "/usr/local/bin/codex-entrypoint"]

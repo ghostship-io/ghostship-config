@@ -7,8 +7,9 @@ export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 export CODEXUI_CODEX_COMMAND="${CODEXUI_CODEX_COMMAND:-/usr/local/bin/codex}"
 export NPM_CONFIG_PREFIX="${NPM_CONFIG_PREFIX:-/usr/local}"
 export npm_config_prefix="$NPM_CONFIG_PREFIX"
+export OLLAMA_API_KEY="${OLLAMA_API_KEY:-${OLLAMA_CLOUD_API_KEY:-}}"
 
-mkdir -p "$HOME" "$CODEX_HOME" /workspace /var/lib/docker /var/run
+mkdir -p "$HOME" "$CODEX_HOME" /var/lib/docker /var/run
 chmod 0700 "$CODEX_HOME" || true
 
 if ! docker info >/dev/null 2>&1; then
@@ -32,6 +33,54 @@ if ! docker info >/dev/null 2>&1; then
   tail -n 200 /tmp/dockerd.log >&2 || true
   exit 1
 fi
+
+if [ -n "${OPENCODE_GO_API_KEY:-}${OLLAMA_API_KEY:-}" ]; then
+  node /usr/local/bin/codex-provider-mux >/tmp/codex-provider-mux.log 2>&1 &
+  for _ in $(seq 1 30); do
+    if curl -fsS --max-time 2 http://127.0.0.1:5910/health >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+fi
+
+node <<'NODE'
+const fs = require('fs');
+const path = require('path');
+
+const codexHome = process.env.CODEX_HOME || `${process.env.HOME}/.codex`;
+const statePath = path.join(codexHome, 'webui-custom-providers.json');
+const hasOpenCodeGo = Boolean(process.env.OPENCODE_GO_API_KEY);
+const hasOllama = Boolean(process.env.OLLAMA_API_KEY);
+
+if (hasOpenCodeGo || hasOllama) {
+  fs.mkdirSync(codexHome, { recursive: true, mode: 0o700 });
+
+  let state = {};
+  if (fs.existsSync(statePath)) {
+    try {
+      state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    } catch {
+      state = {};
+    }
+  }
+
+  const providerKeys = { ...(state.providerKeys || {}) };
+  providerKeys.custom = 'managed';
+
+  state.enabled = true;
+  state.customKey = true;
+  state.provider = 'custom';
+  state.apiKey = 'managed';
+  state.customBaseUrl = 'http://127.0.0.1:5910/v1';
+  state.wireApi = 'chat';
+  state.model = state.model || (hasOpenCodeGo ? 'opencode-go/kimi-k2.6' : 'ollama/gpt-oss:120b');
+  state.providerKeys = providerKeys;
+
+  fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+  fs.chmodSync(statePath, 0o600);
+}
+NODE
 
 npm install -g --no-fund --no-audit codexapp@latest @openai/codex@latest
 

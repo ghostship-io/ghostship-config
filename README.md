@@ -181,12 +181,13 @@ qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr, BookStack,
 PyLoad, RSS-Bridge, PriceBuddy, Codex, Agent Zero, and n8n.
 
 Codex runs at `https://codex.ghostship.io` as a Nix-based Podman container
-with Docker-in-Docker enabled for app-server workflows. Its Codex home,
-workspace, nested Docker state, and `/nix` store are persisted under
-`/srv/apps/codex` and named Podman volumes. The dedicated
-`codex-auto-update.timer` rebuilds the local runtime image and restarts the
-service so `codexapp` and `@openai/codex` refresh while persistent state
-survives upgrades.
+with Docker-in-Docker enabled for app-server workflows. Its Codex home, nested
+Docker state, and `/nix` store are persisted under `/srv/apps/codex` and named
+Podman volumes. The container seeds Codexapp's custom provider through a local
+OpenAI-compatible mux backed by the managed Ollama Cloud and OpenCode Go
+secrets. The dedicated `codex-auto-update.timer` rebuilds the local runtime
+image and restarts the service so `codexapp` and `@openai/codex` refresh while
+persistent state survives upgrades.
 
 Retired `chill-penguin` self-hosted service artifacts are cleaned from the
 allowlist in

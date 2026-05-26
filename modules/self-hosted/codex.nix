@@ -1,9 +1,13 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 
 let
   codex-state-dir = "/srv/apps/codex";
   containers-root = ../../containers;
-  codex-image = "localhost/ghostship-codex:latest";
+  containers-root-str = toString containers-root;
+  containers-hash = builtins.substring 11 12 containers-root-str;
+  codex-image = "localhost/ghostship-codex:${containers-hash}";
+  codex-secrets = config.ghostship.selfHostedSecrets.projections.codex.path;
+  render-codex-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project codex";
   codex-build = pkgs.writeShellScriptBin "ghostship-build-codex-image" ''
     set -eu
 
@@ -47,9 +51,9 @@ in
       NPM_CONFIG_PREFIX = "/usr/local";
       npm_config_prefix = "/usr/local";
     };
+    environmentFiles = [ codex-secrets ];
     volumes = [
       "${codex-state-dir}/home:/home/codexapp:rw"
-      "${codex-state-dir}/workspace:/workspace:rw"
       "codex-nix:/nix:rw,copy"
       "codex-docker:/var/lib/docker:rw"
     ];
@@ -58,16 +62,21 @@ in
   systemd.tmpfiles.rules = [
     "d ${codex-state-dir} 0755 root root -"
     "d ${codex-state-dir}/home 0755 root root -"
-    "d ${codex-state-dir}/workspace 0755 root root -"
   ];
 
   systemd.services = {
     podman-codex = {
       preStart = ''
+        ${render-codex-secrets}
+
+        if [ ! -f "${codex-secrets}" ]; then
+          echo "Missing Codex secret source at ${codex-secrets}" >&2
+          exit 1
+        fi
+
         install -d -m0755 -o root -g root \
           ${codex-state-dir} \
-          ${codex-state-dir}/home \
-          ${codex-state-dir}/workspace
+          ${codex-state-dir}/home
 
         ${codex-build}/bin/ghostship-build-codex-image
       '';

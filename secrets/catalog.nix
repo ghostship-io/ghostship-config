@@ -356,6 +356,23 @@ in
       };
     };
 
+    codex = {
+      fileName = "codex.env";
+      owner = "root";
+      group = "root";
+      mode = "0400";
+      fields = {
+        OLLAMA_CLOUD_API_KEY = {
+          unit = "ollama";
+          key = "API_KEY";
+        };
+        OPENCODE_GO_API_KEY = {
+          unit = "opencode";
+          key = "GO_API_KEY";
+        };
+      };
+    };
+
     bazarr = {
       fileName = "bazarr.env";
       owner = "apps";

@@ -1,0 +1,193 @@
+#!/usr/bin/env node
+'use strict';
+
+const http = require('http');
+
+const listenHost = '127.0.0.1';
+const listenPort = Number(process.env.CODEX_PROVIDER_MUX_PORT || 5910);
+const opencodeKey = process.env.OPENCODE_GO_API_KEY || '';
+const ollamaKey = process.env.OLLAMA_API_KEY || process.env.OLLAMA_CLOUD_API_KEY || '';
+
+function sendJson(res, status, value) {
+  const body = JSON.stringify(value);
+  res.writeHead(status, {
+    'content-type': 'application/json',
+    'content-length': Buffer.byteLength(body),
+  });
+  res.end(body);
+}
+
+function normalizeModel(model) {
+  if (typeof model === 'string') {
+    return model;
+  }
+  return '';
+}
+
+async function upstreamJson(url, apiKey) {
+  const response = await fetch(url, {
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  const body = await response.json();
+  const models = Array.isArray(body.data) ? body.data : Array.isArray(body.models) ? body.models : [];
+  return models.map((model) => (typeof model === 'string' ? { id: model } : model)).filter((model) => model && model.id);
+}
+
+async function listModels() {
+  const sources = [];
+
+  if (opencodeKey) {
+    sources.push(
+      upstreamJson('https://opencode.ai/zen/go/v1/models', opencodeKey).then((models) =>
+        models.map((model) => ({
+          ...model,
+          id: normalizeModel(model.id).startsWith('opencode-go/')
+            ? model.id
+            : `opencode-go/${model.id}`,
+          owned_by: model.owned_by || 'opencode-go',
+        }))
+      )
+    );
+  }
+
+  if (ollamaKey) {
+    sources.push(
+      upstreamJson('https://ollama.com/v1/models', ollamaKey).then((models) =>
+        models.map((model) => ({
+          ...model,
+          id: normalizeModel(model.id).startsWith('ollama/') ? model.id : `ollama/${model.id}`,
+          owned_by: model.owned_by || 'ollama',
+        }))
+      )
+    );
+  }
+
+  const settled = await Promise.allSettled(sources);
+  return settled.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+}
+
+function routeForModel(model) {
+  if (model.startsWith('ollama/')) {
+    return {
+      apiKey: ollamaKey,
+      model: model.slice('ollama/'.length),
+      url: 'https://ollama.com/v1/chat/completions',
+      provider: 'ollama',
+    };
+  }
+
+  if (model.startsWith('opencode-go/')) {
+    return {
+      apiKey: opencodeKey,
+      model: model.slice('opencode-go/'.length),
+      url: 'https://opencode.ai/zen/go/v1/chat/completions',
+      provider: 'opencode-go',
+    };
+  }
+
+  if (opencodeKey) {
+    return {
+      apiKey: opencodeKey,
+      model,
+      url: 'https://opencode.ai/zen/go/v1/chat/completions',
+      provider: 'opencode-go',
+    };
+  }
+
+  return {
+    apiKey: ollamaKey,
+    model,
+    url: 'https://ollama.com/v1/chat/completions',
+    provider: 'ollama',
+  };
+}
+
+async function readBody(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+function copyHeaders(headers) {
+  const copied = {};
+  for (const [key, value] of headers.entries()) {
+    const lower = key.toLowerCase();
+    if (!['content-encoding', 'content-length', 'transfer-encoding', 'connection'].includes(lower)) {
+      copied[key] = value;
+    }
+  }
+  return copied;
+}
+
+async function proxyChat(req, res) {
+  let payload;
+  try {
+    payload = JSON.parse(await readBody(req));
+  } catch {
+    sendJson(res, 400, { error: { message: 'Invalid JSON request body' } });
+    return;
+  }
+
+  const route = routeForModel(normalizeModel(payload.model));
+  if (!route.apiKey) {
+    sendJson(res, 503, { error: { message: `Missing ${route.provider} API key` } });
+    return;
+  }
+
+  payload.model = route.model;
+
+  const upstream = await fetch(route.url, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${route.apiKey}`,
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  res.writeHead(upstream.status, copyHeaders(upstream.headers));
+  if (upstream.body) {
+    for await (const chunk of upstream.body) {
+      res.write(chunk);
+    }
+  }
+  res.end();
+}
+
+const server = http.createServer(async (req, res) => {
+  try {
+    const url = new URL(req.url || '/', `http://${req.headers.host || `${listenHost}:${listenPort}`}`);
+
+    if (req.method === 'GET' && url.pathname === '/health') {
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/v1/models') {
+      sendJson(res, 200, { object: 'list', data: await listModels() });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/v1/chat/completions') {
+      await proxyChat(req, res);
+      return;
+    }
+
+    sendJson(res, 404, { error: { message: 'Not found' } });
+  } catch (error) {
+    sendJson(res, 500, { error: { message: error instanceof Error ? error.message : String(error) } });
+  }
+});
+
+server.listen(listenPort, listenHost);

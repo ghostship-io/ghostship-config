@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.8] - 2026-05-26
+
+- **Codex provider wiring**: Remove the standalone `/workspace` mount so Codex
+  uses its persisted home as the working area, and seed a managed local provider
+  mux for Ollama Cloud and OpenCode Go credentials.
+
 ## [2.0.7] - 2026-05-26
 
 - **Codex web service**: Add a Nix-based `codex` Podman service for
