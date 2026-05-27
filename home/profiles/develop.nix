@@ -33,6 +33,10 @@ in
       source = ../config/skills/ghostship-pull-worktree;
       force = true;
     };
+    ".agents/skills/grill-me" = {
+      source = ../config/skills/grill-me;
+      force = true;
+    };
     ".gemini/GEMINI.md" = {
       source = ../config/AGENTS.md;
       force = true;

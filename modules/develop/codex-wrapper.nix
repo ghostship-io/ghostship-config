@@ -33,6 +33,7 @@ let
     { name = "ghostship-audit-worktree"; }
     { name = "ghostship-merge-worktree"; }
     { name = "ghostship-pull-worktree"; }
+    { name = "grill-me"; }
   ];
 
   skillConfig = map (skill: {

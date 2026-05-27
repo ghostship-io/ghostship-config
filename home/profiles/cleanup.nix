@@ -40,6 +40,18 @@ let
       ];
     }
     {
+      name = "brainstorming";
+      paths = [
+        ".agents/skills/brainstorming"
+      ];
+      pathGlobs = [ ];
+      geminiExtensionKeys = [ ];
+      skillLockNames = [
+        "brainstorming"
+      ];
+      codexHookCommands = [ ];
+    }
+    {
       name = "browser-use";
       paths = [
         ".config/browseruse"

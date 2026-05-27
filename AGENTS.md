@@ -19,10 +19,9 @@ changelog.
   branch continues, review and resolve or explicitly reject Codex comments,
   resolve failing CI and merge conflicts, then mark the PR ready/non-WIP before
   handoff when it is ready for the user to merge. Leave PR merges to the user.
-- For repo research, use `brainstorming` when it is available.
 - Use the `nix` skill for Nix-platform work and the `python` skill for Python
   work when they are available.
-- Repo-managed shared skills are retired; do not restore the old
+- The old repo-managed shared skill inventory is retired; do not restore
   `home/config/skills/{codex-queue,github-pr-workflow,nix,python,skill-creator,ssh,wsl2}`
   inventory unless the skill model is explicitly revisited.
 - Develop hosts rely on the installed global `skills` CLI and linked local

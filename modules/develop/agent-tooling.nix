@@ -83,12 +83,7 @@ let
     }
   ];
 
-  managedGlobalSkills = [
-    {
-      name = "brainstorming";
-      source = "obra/superpowers";
-    }
-  ];
+  managedGlobalSkills = [ ];
 
   agentMaintenance = pkgs.writeShellScriptBin "ghostship-agent-maintenance" ''
     set -euo pipefail

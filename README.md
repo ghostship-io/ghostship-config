@@ -113,9 +113,8 @@ notes.
 - `ghostship-agent-maintenance.service` owns automatic agent upkeep. Its
   timer runs on boot and every `4h`, with `Persistent=true` so missed runs
   fire after WSL resumes, and it installs or upgrades the user-local agent
-  CLIs, ensures the managed `skills` CLI is available, installs the
-  `brainstorming` skill from `obra/superpowers` globally on each develop host,
-  refreshes shared global skills,
+  CLIs, ensures the managed `skills` CLI is available, refreshes shared global
+  skills,
   refreshes managed Gemini extensions, bootstraps `agent-browser` only when
   `~/.agent-browser` is missing, and carries an explicit shell-capable runtime
   path so npm and npx child processes can still spawn `sh` under systemd.
@@ -150,11 +149,9 @@ notes.
 - Shared repo-managed skills live under `home/config/skills/` and are linked
   into `~/.agents/skills/` on develop hosts. Managed external `skills` CLI
   installs also land under `~/.agents/skills/`, but they are maintained by
-  `ghostship-agent-maintenance` instead of the repo-owned skill tree; that
-  external layer now includes the standalone `brainstorming` skill from
-  `obra/superpowers`.
+  `ghostship-agent-maintenance` instead of the repo-owned skill tree.
 - The curated shared set is `ghostship-audit-worktree`,
-  `ghostship-merge-worktree`, and `ghostship-pull-worktree`.
+  `ghostship-merge-worktree`, `ghostship-pull-worktree`, and `grill-me`.
 - `ghostship-audit-worktree` is the current Codex session audit workflow. It
   audits only session changes, checks for concrete issues including
   documentation and README gaps, and produces a fix plan without editing files
@@ -167,6 +164,8 @@ notes.
   should land through GitHub. It pushes the branch, opens a draft PR, requests
   Codex review, resolves review and CI issues, and marks the PR ready only
   when the review and checks pass.
+- `grill-me` is vendored from Matt Pocock's MIT-licensed skills repo for
+  plan and design stress-testing.
 
 ## Self-Hosted Stack
 

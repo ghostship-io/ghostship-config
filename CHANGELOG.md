@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.9] - 2026-05-27
+
+- **Shared skill curation**: Vendor Matt Pocock's MIT-licensed `grill-me`
+  skill into the repo-managed shared skill set, remove the managed global
+  `brainstorming` install, and clean stale `brainstorming` skill state during
+  develop-host activation.
+
 ## [2.0.8] - 2026-05-26
 
 - **Codex provider wiring**: Remove the standalone `/workspace` mount so Codex
