@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **CloakBrowser extension defaults**: Make uBlock Origin Lite default to
+  complete filtering instead of optimal, and make Bypass Paywalls Clean enable
+  all regular default sites when extension storage is empty.
 - **CloakBrowser reset**: Remove the CloakBrowser profile-default patching path
   so the manager UI and API keep upstream profile defaults while retaining the
   extension launch fix.

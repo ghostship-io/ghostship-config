@@ -159,6 +159,14 @@ def configure_ubol(root: Path) -> None:
     mode_manager = root / "js" / "mode-manager.js"
     text = mode_manager.read_text()
     text, count = re.subn(
+        r"optimal:\s*\[\s*'all-urls'\s*\],",
+        "optimal: [],",
+        text,
+        count=1,
+    )
+    if count != 1:
+        raise RuntimeError("unable to clear uBlock Origin Lite optimal filtering")
+    text, count = re.subn(
         r"complete:\s*\[\],",
         "complete: [ 'all-urls' ],",
         text,
@@ -166,6 +174,24 @@ def configure_ubol(root: Path) -> None:
     )
     if count != 1:
         raise RuntimeError("unable to set uBlock Origin Lite complete filtering")
+    text, count = re.subn(
+        r"(const unserializeModeDetails = details => \{\n\s*return \{\n\s*none: new Set\(details\.none\),\n\s*basic: new Set\(details\.basic \?\? details\.network\),\n\s*optimal: new Set\(details\.optimal \?\? details\.extendedSpecific\),\n\s*complete: new Set\(details\.complete \?\? details\.extendedGeneric\),\n\s*\};\n\};)",
+        r"\1\n\nconst applyGhostshipDefaultFiltering = details => {\n    if ( details.optimal.has('all-urls') ) {\n        details.optimal.delete('all-urls');\n        details.complete.add('all-urls');\n    }\n    return details;\n};",
+        text,
+        count=1,
+    )
+    if count != 1 and "applyGhostshipDefaultFiltering" not in text:
+        raise RuntimeError("unable to add uBlock Origin Lite filtering migration")
+    text = text.replace(
+        "readFilteringModeDetails.cache = unserializeModeDetails(sessionModes);\n            return readFilteringModeDetails.cache;",
+        "readFilteringModeDetails.cache = applyGhostshipDefaultFiltering(unserializeModeDetails(sessionModes));\n            return readFilteringModeDetails.cache;",
+        1,
+    )
+    text = text.replace(
+        "userModes = unserializeModeDetails(userModes);",
+        "userModes = applyGhostshipDefaultFiltering(unserializeModeDetails(userModes));",
+        1,
+    )
     mode_manager.write_text(text)
 
 
@@ -183,6 +209,14 @@ def configure_bypass_paywalls(root: Path) -> None:
 
     background = root / "background.js"
     text = background.read_text()
+    enabled_default_sites = (
+        "filterObject(defaultSites, function (val, key) {\n"
+        "      return val.domain && !val.domain.match(/^(###$|#options_)/)\n"
+        "    },\n"
+        "      function (val, key) {\n"
+        "      return [key, val.domain]\n"
+        "    })"
+    )
     text = re.sub(r"optIn:\s*false,", "optIn: true,", text, count=1)
     text = re.sub(r"optInUpdate:\s*(true|false)", "optInUpdate: true", text, count=1)
     text = re.sub(
@@ -199,6 +233,8 @@ def configure_bypass_paywalls(root: Path) -> None:
     text = text.replace(
         "var sites = items.sites;",
         "var sites = items.sites;\n"
+        "    if (!Object.values(sites).some(val => val && val !== '###' && defaultSites_domains.includes(val))) "
+        f"Object.assign(sites, {enabled_default_sites});\n"
         "    if (!sites['#options_enable_new_sites']) "
         "sites['#options_enable_new_sites'] = '#options_enable_new_sites';\n"
         "    if (!sites['#options_optin_update_rules']) "
@@ -216,6 +252,17 @@ def configure_bypass_paywalls(root: Path) -> None:
         1,
     )
     background.write_text(text)
+
+    options = root / "options" / "options.js"
+    text = options.read_text()
+    text = text.replace(
+        "var sites = items.sites;",
+        "var sites = items.sites;\n"
+        "    if (!Object.values(sites).some(val => val && val !== '###' && defaultSites_domains.includes(val))) "
+        f"Object.assign(sites, {enabled_default_sites});",
+        1,
+    )
+    options.write_text(text)
 
 
 def make_readable(path: Path) -> None:
