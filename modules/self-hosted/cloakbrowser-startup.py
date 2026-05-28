@@ -1,10 +1,8 @@
 import os
-import sys
 from pathlib import Path
 
 APP_DIR = Path("/app")
 MAIN_PATH = APP_DIR / "backend" / "main.py"
-MANAGED_PROFILES = ("Default",)
 
 ORIGINAL_CLASS = """class AuthMiddleware:
     \"\"\"Raw ASGI middleware for optional token auth.
@@ -71,35 +69,8 @@ def patch_manager() -> None:
     print("CloakBrowser origin patch applied.")
 
 
-def init_profiles() -> None:
-    print("Initializing database and default profile...")
-    sys.path.append(str(APP_DIR))
-    try:
-        from backend import database as db
-
-        db.init_db()
-        profiles_by_name = {p["name"]: p for p in db.list_profiles()}
-
-        for profile_name in MANAGED_PROFILES:
-            if profile_name in profiles_by_name:
-                continue
-
-            print(f"Creating {profile_name} profile...")
-            db.create_profile(
-                name=profile_name,
-                proxy=None,
-                humanize=True,
-                geoip=True,
-                platform="windows",
-            )
-            print(f"{profile_name} profile created.")
-    except Exception as exc:
-        print(f"Failed to initialize profiles: {exc}")
-
-
 def main() -> None:
     patch_manager()
-    init_profiles()
     os.execv("/entrypoint.sh", ["/entrypoint.sh"])
 
 

@@ -4,6 +4,11 @@ let
   cloakbrowser-startup = pkgs.writeText "cloakbrowser-startup.py" (
     builtins.readFile ./cloakbrowser-startup.py
   );
+  cloakbrowser-extensions = pkgs.writeTextFile {
+    name = "cloakbrowser-extensions.py";
+    executable = true;
+    text = "#!${pkgs.python3}/bin/python3\n" + builtins.readFile ./cloakbrowser-extensions.py;
+  };
 in
 {
   virtualisation.oci-containers.containers."cloakbrowser" = {
@@ -32,5 +37,26 @@ in
   systemd.tmpfiles.rules = [
     "d /srv/apps/cloakbrowser 0755 apps apps -"
     "d /srv/apps/cloakbrowser/data 0755 apps apps -"
+    "d /srv/apps/cloakbrowser/data/extensions 0755 apps apps -"
   ];
+
+  systemd.services.cloakbrowser-extensions = {
+    description = "Download and configure CloakBrowser extensions";
+    before = [ "podman-cloakbrowser.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${cloakbrowser-extensions}";
+    };
+  };
+
+  systemd.timers.cloakbrowser-extensions = {
+    description = "Refresh CloakBrowser extensions daily";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      Persistent = true;
+      Unit = "cloakbrowser-extensions.service";
+    };
+  };
 }

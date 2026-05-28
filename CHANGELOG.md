@@ -7,9 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **CloakBrowser recommended defaults**: Add a checked-in JSON profile payload
-  documenting the recommended CloakBrowser API create settings and extension
-  launch arguments.
+- **CloakBrowser extensions**: Add a daily extension refresh service that
+  unpacks and configures uBlock Origin Lite, I still don't care about cookies,
+  and Bypass Paywalls Clean under CloakBrowser data, remove startup creation of
+  a managed default profile, and document the recommended API profile payload.
 
 ## [2.0.10] - 2026-05-28
 
