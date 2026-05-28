@@ -7,16 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-- **CloakBrowser profile defaults**: Patch the frontend new-profile form and
-  stale frontend create payloads so the macOS/M3/Honolulu profile defaults are
-  preselected and preserved at create time.
+- **CloakBrowser reset**: Remove the CloakBrowser profile-default patching path
+  so the manager UI and API keep upstream profile defaults while retaining the
+  extension launch fix.
 - **CloakBrowser extension defaults**: Persist requested uBlock Origin Lite and
   Bypass Paywalls Clean first-run defaults in the managed extension refresh,
   including complete uBOL filtering, selected rulesets, BPC custom sites, update
   checks, set-cookie opt-in, and suppressed update option pages.
-- **CloakBrowser profile defaults**: Patch API and backend profile creation
-  defaults to use the Ghostship macOS/M3 fingerprint profile and managed
-  extension launch arguments when no explicit values are supplied.
 - **CloakBrowser extension launch fix**: Allow Playwright-managed
   CloakBrowser profiles to load unpacked extensions by ignoring the default
   `--disable-extensions` Chromium flag, and disable auto-launch in the
