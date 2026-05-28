@@ -3,6 +3,7 @@ import pwd
 import re
 import shutil
 import struct
+import json
 import tempfile
 import urllib.request
 import zipfile
@@ -130,24 +131,30 @@ def install_extension(name: str, url: str) -> Path:
 
 def configure_ubol(root: Path) -> None:
     manifest = root / "manifest.json"
-    text = manifest.read_text()
+    manifest_data = json.loads(manifest.read_text())
+    for ruleset in manifest_data.get("declarative_net_request", {}).get("rule_resources", []):
+        if ruleset.get("id") in UBOL_RULESETS:
+            ruleset["enabled"] = True
+    manifest.write_text(json.dumps(manifest_data, indent=2) + "\n")
 
-    def patch_ruleset(match: re.Match[str]) -> str:
-        block = match.group(0)
-        ruleset = re.search(r'"id"\s*:\s*"([^"]+)"', block)
-        if not ruleset or ruleset.group(1) not in UBOL_RULESETS:
-            return block
-        if re.search(r'"enabled"\s*:', block):
-            return re.sub(r'"enabled"\s*:\s*(true|false)', '"enabled": true', block)
-        return block.rstrip()[:-1] + ',\n        "enabled": true\n      }'
+    ruleset_details = root / "rulesets" / "ruleset-details.json"
+    details = json.loads(ruleset_details.read_text())
+    for ruleset in details:
+        if ruleset.get("id") in UBOL_RULESETS:
+            ruleset["enabled"] = True
+    ruleset_details.write_text(json.dumps(details, indent=2, ensure_ascii=False) + "\n")
 
-    text = re.sub(
-        r'\{\s*"id"\s*:\s*"[^"]+".*?\n\s*\}',
-        patch_ruleset,
+    config = root / "js" / "config.js"
+    text = config.read_text()
+    text, count = re.subn(
+        r"enabledRulesets:\s*\[\],",
+        "enabledRulesets: " + json.dumps(sorted(UBOL_RULESETS)) + ",",
         text,
-        flags=re.S,
+        count=1,
     )
-    manifest.write_text(text)
+    if count != 1:
+        raise RuntimeError("unable to set uBlock Origin Lite default rulesets")
+    config.write_text(text)
 
     mode_manager = root / "js" / "mode-manager.js"
     text = mode_manager.read_text()
@@ -163,20 +170,45 @@ def configure_ubol(root: Path) -> None:
 
 
 def configure_bypass_paywalls(root: Path) -> None:
+    manifest = root / "manifest.json"
+    data = json.loads(manifest.read_text())
+    host_permissions = set(data.get("host_permissions") or [])
+    host_permissions.add("*://*/*")
+    data["host_permissions"] = sorted(host_permissions)
+    data["optional_host_permissions"] = [
+        item for item in data.get("optional_host_permissions") or []
+        if item != "*://*/*"
+    ]
+    manifest.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+
     background = root / "background.js"
     text = background.read_text()
     text = re.sub(r"optIn:\s*false,", "optIn: true,", text, count=1)
-    text = re.sub(r"optInUpdate:\s*true", "optInUpdate: false", text, count=1)
+    text = re.sub(r"optInUpdate:\s*(true|false)", "optInUpdate: true", text, count=1)
+    text = re.sub(
+        r"sites_custom:\s*\{\},",
+        "sites_custom: {},\n  customOptIn: true,\n  optInShown: true,\n  customShown: true,\n  fetchShown: true,",
+        text,
+        count=1,
+    )
+    text = text.replace(
+        "return val.domain && !val.domain.match(/^(###$|#options_(disable|optin)_)/)",
+        "return val.domain && !val.domain.match(/^(###$|#options_)/) || val.domain === '#options_enable_new_sites' || val.domain === '#options_optin_update_rules'",
+        1,
+    )
     text = text.replace(
         "var sites = items.sites;",
         "var sites = items.sites;\n"
         "    if (!sites['#options_enable_new_sites']) "
-        "sites['#options_enable_new_sites'] = '#options_enable_new_sites';",
+        "sites['#options_enable_new_sites'] = '#options_enable_new_sites';\n"
+        "    if (!sites['#options_optin_update_rules']) "
+        "sites['#options_optin_update_rules'] = '#options_optin_update_rules';\n"
+        "    delete sites['#options_on_update'];",
         1,
     )
     text = text.replace(
         "ext_api.runtime.openOptionsPage();",
-        "/* ghostship default: suppress automatic options page */",
+        "void 0; /* ghostship default: suppress automatic options page */",
     )
     text = text.replace(
         "if (!result.optInShown || !result.customShown || (!ext_chromium && !result.fetchShown)) {",

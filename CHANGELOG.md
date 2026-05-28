@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **CloakBrowser extension defaults**: Persist requested uBlock Origin Lite and
+  Bypass Paywalls Clean first-run defaults in the managed extension refresh,
+  including complete uBOL filtering, selected rulesets, BPC custom sites, update
+  checks, set-cookie opt-in, and suppressed update option pages.
 - **CloakBrowser profile defaults**: Patch API and backend profile creation
   defaults to use the Ghostship macOS/M3 fingerprint profile and managed
   extension launch arguments when no explicit values are supplied.
