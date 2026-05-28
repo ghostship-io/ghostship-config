@@ -3,6 +3,7 @@ from pathlib import Path
 
 APP_DIR = Path("/app")
 MAIN_PATH = APP_DIR / "backend" / "main.py"
+CONFIG_PATH = Path("/usr/local/lib/python3.12/site-packages/cloakbrowser/config.py")
 
 ORIGINAL_CLASS = """class AuthMiddleware:
     \"\"\"Raw ASGI middleware for optional token auth.
@@ -69,8 +70,31 @@ def patch_manager() -> None:
     print("CloakBrowser origin patch applied.")
 
 
+def patch_extension_launch() -> None:
+    print(f"Patching {CONFIG_PATH} to allow unpacked Chrome extensions...")
+    text = CONFIG_PATH.read_text()
+    patched = (
+        'IGNORE_DEFAULT_ARGS = ["--enable-automation", '
+        '"--enable-unsafe-swiftshader", "--disable-extensions"]'
+    )
+    if patched in text:
+        print("CloakBrowser extension launch patch already applied.")
+        return
+
+    original = (
+        'IGNORE_DEFAULT_ARGS = ["--enable-automation", '
+        '"--enable-unsafe-swiftshader"]'
+    )
+    if original not in text:
+        raise RuntimeError("CloakBrowser patch anchor missing: IGNORE_DEFAULT_ARGS")
+
+    CONFIG_PATH.write_text(text.replace(original, patched, 1))
+    print("CloakBrowser extension launch patch applied.")
+
+
 def main() -> None:
     patch_manager()
+    patch_extension_launch()
     os.execv("/entrypoint.sh", ["/entrypoint.sh"])
 
 

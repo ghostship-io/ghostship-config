@@ -16,9 +16,10 @@
   "headless": false,
   "geoip": false,
   "clipboard_sync": true,
-  "auto_launch": true,
+  "auto_launch": false,
   "color_scheme": null,
   "launch_args": [
+    "--disable-extensions-except=/data/extensions/ublock-origin-lite,/data/extensions/i-still-dont-care-about-cookies,/data/extensions/bypass-paywalls-chrome-clean",
     "--load-extension=/data/extensions/ublock-origin-lite,/data/extensions/i-still-dont-care-about-cookies,/data/extensions/bypass-paywalls-chrome-clean"
   ],
   "notes": "Recommended Ghostship CloakBrowser profile defaults. Requires unpacked extensions under /data/extensions before launch.",

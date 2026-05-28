@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **CloakBrowser extension launch fix**: Allow Playwright-managed
+  CloakBrowser profiles to load unpacked extensions by ignoring the default
+  `--disable-extensions` Chromium flag, and disable auto-launch in the
+  recommended profile payload.
 - **CloakBrowser extensions**: Add a daily extension refresh service that
   unpacks and configures uBlock Origin Lite, I still don't care about cookies,
   and Bypass Paywalls Clean under CloakBrowser data, remove startup creation of
