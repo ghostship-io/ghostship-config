@@ -56,8 +56,6 @@ changelog.
 - Managed Synology NFS mounts should use `hard`, not `soft`, on both WSL and
   NixOS clients so transient NAS stalls do not surface as client-side I/O
   errors or integrity failures during copies.
-- Agent Zero on `chill-penguin` is a NixOS-managed Podman service
-  (`podman-agent-zero`), not a Docker Compose deployment.
 - WSL hosts keep `wsl.wslConf.interop.appendWindowsPath = true` for desktop
   interop and use explicit writable FHS shims under `ghostship.wsl.fhsShims`
   instead of `services.envfs`; add new hardcoded `/bin/...` or `/usr/bin/...`
@@ -158,12 +156,6 @@ changelog.
 - Use native Nix commands in repo docs and operations: `nix`, `nixos-rebuild`,
   and `switch-to-configuration`.
 - Prefer `-L` for build logs.
-- Agent Zero's current plugin image contract uses `/a0/usr` and `/root`
-  persistence only, Bitwarden env names `BW_CLIENT_ID`, `BW_CLIENT_SECRET`,
-  `BW_PASSWORD`, and provider env names `OLLAMA_CLOUD_API_KEY`,
-  `OPENCODE_GO_API_KEY`, `NVIDIA_BUILD_FREE_API_KEY`,
-  `OPENCODE_ZEN_FREE_API_KEY`, `OPENROUTER_FREE_API_KEY`, and
-  `GOOGLE_API_KEY` for Google AI Studio.
 - WSL hosts should cap `nix.settings.max-jobs` instead of inheriting `auto`;
   on `launch-octopus`, `auto` resolved to `22` and repeatedly left
   `nix-daemon` unresponsive under concurrent flake shells, agent sessions, and

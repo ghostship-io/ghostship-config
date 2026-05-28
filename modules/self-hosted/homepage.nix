@@ -237,18 +237,6 @@ in
             "[Management].[Muximux].server=literal:chill-penguin"
             "[Management].[Muximux].container=literal:muximux"
 
-            "[Management].[Codex].icon=literal:sh-openai"
-            "[Management].[Codex].href=literal:https://codex.ghostship.io"
-            "[Management].[Codex].description=literal:Codex Web UI"
-            "[Management].[Codex].server=literal:chill-penguin"
-            "[Management].[Codex].container=literal:codex"
-
-            "[Management].[Agent Zero].icon=literal:sh-agent-zero"
-            "[Management].[Agent Zero].href=literal:https://agent-zero.ghostship.io"
-            "[Management].[Agent Zero].description=literal:AI Agent Workbench"
-            "[Management].[Agent Zero].server=literal:chill-penguin"
-            "[Management].[Agent Zero].container=literal:agent-zero"
-
             "[Management].[CloakBrowser].icon=literal:sh-google-chrome"
             "[Management].[CloakBrowser].href=literal:https://cloakbrowser.ghostship.io"
             "[Management].[CloakBrowser].description=literal:Browser Profile Manager"
@@ -322,13 +310,6 @@ in
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("SearXNG") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("Honcho Redis") or has("Honcho DB") or has("Firecrawl Postgres") or has("Firecrawl RabbitMQ") or has("Firecrawl Redis")) | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("FlareSolverr") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
-            | (.[] | select(has("Management")) | .Management) |= (
-                map(select(has("Agent Zero") | not)) as $items
-                | map(select(has("Agent Zero"))) as $agent
-                | ($items | map(select(has("Homepage") or has("Muximux"))))
-                  + $agent
-                  + ($items | map(select((has("Homepage") or has("Muximux")) | not)))
-              )
           ' "$SERVICES_FILE"
         fi
 

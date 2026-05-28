@@ -2,7 +2,6 @@
 
 let
   dockerhub-secrets = config.ghostship.selfHostedSecrets.projections.dockerhub.path;
-  agent-zero-ghcr-auth-file = "/run/containers/0/agent-zero-ghcr-auth.json";
   dockerhub-auth-script = pkgs.writeShellScriptBin "podman-dockerhub-auth" ''
     set -eu
 
@@ -39,19 +38,6 @@ EOF
       cat > /run/containers/0/auth.json <<EOF
 {"auths":{"https://index.docker.io/v1/":{"auth":"$AUTH"}}}
 EOF
-    fi
-
-    if [ -s "${agent-zero-ghcr-auth-file}" ]; then
-      tmp_auth="$(mktemp)"
-      if ${pkgs.jq}/bin/jq -s '{
-        auths: ((.[0].auths // {}) + (.[1].auths // {}))
-      }' /run/containers/0/auth.json "${agent-zero-ghcr-auth-file}" > "$tmp_auth"; then
-        mv "$tmp_auth" /run/containers/0/auth.json
-      else
-        rm -f "$tmp_auth"
-        echo "Failed to merge Agent Zero GHCR auth into Podman auth config" >&2
-        exit 1
-      fi
     fi
 
     cp /run/containers/0/auth.json /root/.config/containers/auth.json

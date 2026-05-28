@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.18] - 2026-05-28
+
+- **Self-hosted agent containers**: Retire the Codex and Agent Zero
+  `chill-penguin` containers, dashboard entries, secrets projections, and
+  persistent Podman artifacts.
 - **CloakBrowser extension defaults**: Make uBlock Origin Lite default to
   complete filtering instead of optimal, and make Bypass Paywalls Clean enable
   all regular default sites when extension storage is empty.

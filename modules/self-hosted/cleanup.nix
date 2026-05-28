@@ -8,6 +8,35 @@
 let
   retiredArtifacts = [
     {
+      name = "codex";
+      paths = [ "/srv/apps/codex" ];
+      units = [
+        "podman-codex"
+        "codex-auto-update"
+      ];
+      timers = [ "codex-auto-update" ];
+      containers = [ "codex" ];
+      volumes = [
+        "codex-nix"
+        "codex-docker"
+      ];
+      imageRefs = [ ];
+      imageRepositories = [ "localhost/ghostship-codex" ];
+      homepageEntries = [ "Codex" ];
+      muximuxSections = [ "Codex" ];
+    }
+    {
+      name = "agent-zero";
+      paths = [ "/srv/apps/agent-zero" ];
+      units = [ "podman-agent-zero" ];
+      containers = [ "agent-zero" ];
+      volumes = [ "agent-zero-nix" ];
+      imageRefs = [ "ghcr.io/ghostship-io/ghostship-agent-zero:latest" ];
+      imageRepositories = [ "ghcr.io/ghostship-io/ghostship-agent-zero" ];
+      homepageEntries = [ "Agent Zero" ];
+      muximuxSections = [ "Agent Zero" ];
+    }
+    {
       name = "hermes";
       paths = [ "/srv/apps/hermes" ];
       units = [
@@ -200,8 +229,18 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
         fi
       '')}
 
+      ${renderCommands "timers" (timer: ''
+        if [ -d /run/systemd/system ]; then
+          ${pkgs.systemd}/bin/systemctl stop ${lib.escapeShellArg "${timer}.timer"} >/dev/null 2>&1 || true
+        fi
+      '')}
+
       ${renderCommands "containers" (container: ''
         ${pkgs.podman}/bin/podman rm -f ${lib.escapeShellArg container} >/dev/null 2>&1 || true
+      '')}
+
+      ${renderCommands "volumes" (volume: ''
+        ${pkgs.podman}/bin/podman volume rm -f ${lib.escapeShellArg volume} >/dev/null 2>&1 || true
       '')}
 
       ${renderCommands "paths" (path: ''

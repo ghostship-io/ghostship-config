@@ -332,20 +332,6 @@ in
           Grimmory.color=literal:"#49da7e"
           Grimmory.enabled=literal:"true"
           Grimmory.dd=literal:"false"
-          "Agent Zero.name"=literal:"Agent Zero"
-          "Agent Zero.url"=literal:"https://agent-zero.ghostship.io"
-          "Agent Zero.scale"=literal:1
-          "Agent Zero.icon"=literal:"muximux-archlinux"
-          "Agent Zero.color"=literal:"#00bcd4"
-          "Agent Zero.enabled"=literal:"true"
-          "Agent Zero.dd"=literal:"false"
-          Codex.name=literal:"Codex"
-          Codex.url=literal:"https://codex.ghostship.io"
-          Codex.scale=literal:1
-          Codex.icon=literal:"muximux-terminal3"
-          Codex.color=literal:"#10a37f"
-          Codex.enabled=literal:"true"
-          Codex.dd=literal:"false"
           CloakBrowser.name=literal:"CloakBrowser"
           CloakBrowser.url=literal:"https://cloakbrowser.ghostship.io"
           CloakBrowser.scale=literal:1
@@ -519,17 +505,11 @@ in
 
             for (i = 1; i <= section_count; i++) {
               name = section_order[i]
-              if (name == "Honcho" || name == "BookStack" || name == "Agent Zero" || name == "CloakBrowser" || name == "Chaptarr" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection") {
+              if (name == "Honcho" || name == "BookStack" || name == "Chaptarr" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection") {
                 continue
               }
 
               printf "%s", section_data[name]
-              if (name == "Grimmory" && ("Agent Zero" in section_data)) {
-                printf "%s", section_data["Agent Zero"]
-              }
-              if (name == "Codex" && ("CloakBrowser" in section_data)) {
-                printf "%s", section_data["CloakBrowser"]
-              }
               if (name == "Prowlarr" && ("BookStack" in section_data)) {
                 printf "%s", section_data["BookStack"]
               }
@@ -554,12 +534,6 @@ in
             }
             if (!("Prowlarr" in section_data) && ("BookStack" in section_data)) {
               printf "%s", section_data["BookStack"]
-            }
-            if (!("Grimmory" in section_data) && ("Agent Zero" in section_data)) {
-              printf "%s", section_data["Agent Zero"]
-            }
-            if (!("Codex" in section_data) && ("CloakBrowser" in section_data)) {
-              printf "%s", section_data["CloakBrowser"]
             }
             if (!("Tautulli" in section_data) && ("Chaptarr" in section_data)) {
               printf "%s", section_data["Chaptarr"]
