@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **CloakBrowser profile defaults**: Patch API and backend profile creation
+  defaults to use the Ghostship macOS/M3 fingerprint profile and managed
+  extension launch arguments when no explicit values are supplied.
 - **CloakBrowser extension launch fix**: Allow Playwright-managed
   CloakBrowser profiles to load unpacked extensions by ignoring the default
   `--disable-extensions` Chromium flag, and disable auto-launch in the

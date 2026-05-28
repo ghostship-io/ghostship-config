@@ -3,7 +3,20 @@ from pathlib import Path
 
 APP_DIR = Path("/app")
 MAIN_PATH = APP_DIR / "backend" / "main.py"
+MODELS_PATH = APP_DIR / "backend" / "models.py"
+DATABASE_PATH = APP_DIR / "backend" / "database.py"
 CONFIG_PATH = Path("/usr/local/lib/python3.12/site-packages/cloakbrowser/config.py")
+
+EXTENSION_PATHS = (
+    "/data/extensions/ublock-origin-lite",
+    "/data/extensions/i-still-dont-care-about-cookies",
+    "/data/extensions/bypass-paywalls-chrome-clean",
+)
+EXTENSIONS_ARG = ",".join(EXTENSION_PATHS)
+DEFAULT_LAUNCH_ARGS = [
+    f"--disable-extensions-except={EXTENSIONS_ARG}",
+    f"--load-extension={EXTENSIONS_ARG}",
+]
 
 ORIGINAL_CLASS = """class AuthMiddleware:
     \"\"\"Raw ASGI middleware for optional token auth.
@@ -92,9 +105,108 @@ def patch_extension_launch() -> None:
     print("CloakBrowser extension launch patch applied.")
 
 
+def patch_profile_defaults() -> None:
+    print("Patching CloakBrowser API and database profile defaults...")
+    patch_models_defaults()
+    patch_database_defaults()
+
+
+def patch_models_defaults() -> None:
+    text = MODELS_PATH.read_text()
+    if "GHOSTSHIP_DEFAULT_LAUNCH_ARGS" not in text:
+        anchor = "from pydantic import BaseModel, Field, field_validator\n"
+        if anchor not in text:
+            raise RuntimeError("CloakBrowser patch anchor missing: pydantic imports")
+        text = text.replace(
+            anchor,
+            anchor
+            + "\n"
+            + "GHOSTSHIP_DEFAULT_LAUNCH_ARGS = [\n"
+            + f"    {DEFAULT_LAUNCH_ARGS[0]!r},\n"
+            + f"    {DEFAULT_LAUNCH_ARGS[1]!r},\n"
+            + "]\n",
+            1,
+        )
+
+    replacements = {
+        "fingerprint_seed: int | None = None  # random if not set":
+            "fingerprint_seed: int | None = 9999",
+        "timezone: str | None = None  # \"America/New_York\"":
+            'timezone: str | None = "Pacific/Honolulu"',
+        "locale: str | None = None  # \"en-US\"":
+            'locale: str | None = "en-US"',
+        'platform: Literal["windows", "macos", "linux"] = "windows"':
+            'platform: Literal["windows", "macos", "linux"] = "macos"',
+        "gpu_vendor: str | None = None":
+            'gpu_vendor: str | None = "Google Inc. (Apple)"',
+        "gpu_renderer: str | None = None":
+            'gpu_renderer: str | None = "ANGLE (Apple, ANGLE Metal Renderer: Apple M3, Unspecified Version)"',
+        "humanize: bool = False":
+            "humanize: bool = True",
+        "launch_args: list[str] = Field(default_factory=list)":
+            "launch_args: list[str] = Field(default_factory=lambda: GHOSTSHIP_DEFAULT_LAUNCH_ARGS.copy())",
+    }
+    for original, patched in replacements.items():
+        if patched in text:
+            continue
+        if original not in text:
+            raise RuntimeError(f"CloakBrowser patch anchor missing in models.py: {original}")
+        text = text.replace(original, patched, 1)
+
+    MODELS_PATH.write_text(text)
+    print("CloakBrowser API profile defaults patched.")
+
+
+def patch_database_defaults() -> None:
+    text = DATABASE_PATH.read_text()
+    if "GHOSTSHIP_DEFAULT_LAUNCH_ARGS" not in text:
+        anchor = 'DB_PATH = DATA_DIR / "profiles.db"\n'
+        if anchor not in text:
+            raise RuntimeError("CloakBrowser patch anchor missing: DB_PATH")
+        text = text.replace(
+            anchor,
+            anchor
+            + "\n"
+            + "GHOSTSHIP_DEFAULT_LAUNCH_ARGS = [\n"
+            + f"    {DEFAULT_LAUNCH_ARGS[0]!r},\n"
+            + f"    {DEFAULT_LAUNCH_ARGS[1]!r},\n"
+            + "]\n",
+            1,
+        )
+
+    replacements = {
+        "seed = fingerprint_seed if fingerprint_seed is not None else random.randint(10000, 99999)":
+            "seed = fingerprint_seed if fingerprint_seed is not None else 9999",
+        'fields.get("timezone")':
+            'fields.get("timezone", "Pacific/Honolulu")',
+        'fields.get("locale")':
+            'fields.get("locale", "en-US")',
+        'fields.get("platform", "windows")':
+            'fields.get("platform", "macos")',
+        'fields.get("gpu_vendor")':
+            'fields.get("gpu_vendor", "Google Inc. (Apple)")',
+        'fields.get("gpu_renderer")':
+            'fields.get("gpu_renderer", "ANGLE (Apple, ANGLE Metal Renderer: Apple M3, Unspecified Version)")',
+        'fields.get("humanize", False)':
+            'fields.get("humanize", True)',
+        'json.dumps(fields.get("launch_args") or [])':
+            'json.dumps(fields.get("launch_args") or GHOSTSHIP_DEFAULT_LAUNCH_ARGS)',
+    }
+    for original, patched in replacements.items():
+        if patched in text:
+            continue
+        if original not in text:
+            raise RuntimeError(f"CloakBrowser patch anchor missing in database.py: {original}")
+        text = text.replace(original, patched, 1)
+
+    DATABASE_PATH.write_text(text)
+    print("CloakBrowser database profile defaults patched.")
+
+
 def main() -> None:
     patch_manager()
     patch_extension_launch()
+    patch_profile_defaults()
     os.execv("/entrypoint.sh", ["/entrypoint.sh"])
 
 
