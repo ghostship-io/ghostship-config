@@ -235,10 +235,10 @@ def configure_bypass_paywalls(root: Path) -> None:
         "var sites = items.sites;\n"
         "    if (!Object.values(sites).some(val => val && val !== '###' && defaultSites_domains.includes(val))) "
         f"Object.assign(sites, {enabled_default_sites});\n"
-        "    if (!sites['#options_enable_new_sites']) "
-        "sites['#options_enable_new_sites'] = '#options_enable_new_sites';\n"
-        "    if (!sites['#options_optin_update_rules']) "
-        "sites['#options_optin_update_rules'] = '#options_optin_update_rules';\n"
+        "    delete sites['#options_enable_new_sites'];\n"
+        "    delete sites['#options_optin_update_rules'];\n"
+        "    sites['Enable new sites by default'] = '#options_enable_new_sites';\n"
+        "    sites['Check for update rules at startup'] = '#options_optin_update_rules';\n"
         "    delete sites['#options_on_update'];",
         1,
     )
