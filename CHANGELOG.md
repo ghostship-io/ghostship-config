@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **CloakBrowser recommended defaults**: Add a checked-in JSON profile payload
+  documenting the recommended CloakBrowser API create settings and extension
+  launch arguments.
+
 ## [2.0.10] - 2026-05-28
 
 - **CloakBrowser manager restore**: Reintroduce the standalone

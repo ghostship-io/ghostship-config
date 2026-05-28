@@ -1,0 +1,31 @@
+{
+  "name": "Default",
+  "fingerprint_seed": 9999,
+  "proxy": null,
+  "timezone": "Pacific/Honolulu",
+  "locale": "en-US",
+  "platform": "macos",
+  "user_agent": null,
+  "screen_width": 1920,
+  "screen_height": 1080,
+  "gpu_vendor": "Google Inc. (Apple)",
+  "gpu_renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3, Unspecified Version)",
+  "hardware_concurrency": null,
+  "humanize": true,
+  "human_preset": "default",
+  "headless": false,
+  "geoip": false,
+  "clipboard_sync": true,
+  "auto_launch": true,
+  "color_scheme": null,
+  "launch_args": [
+    "--load-extension=/data/extensions/ublock-origin-lite,/data/extensions/i-still-dont-care-about-cookies,/data/extensions/bypass-paywalls-chrome-clean"
+  ],
+  "notes": "Recommended Ghostship CloakBrowser profile defaults. Requires unpacked extensions under /data/extensions before launch.",
+  "tags": [
+    {
+      "tag": "ghostship-default",
+      "color": "#6366f1"
+    }
+  ]
+}
