@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.10] - 2026-05-28
+
+- **CloakBrowser manager restore**: Reintroduce the standalone
+  `cloakhq/cloakbrowser-manager` service on `chill-penguin` with internal
+  `ghostship_net` networking only, restore Homepage and Muximux entries, and
+  stop retired-artifact cleanup from deleting its state.
+
 ## [2.0.9] - 2026-05-27
 
 - **Shared skill curation**: Vendor Matt Pocock's MIT-licensed `grill-me`

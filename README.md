@@ -244,12 +244,12 @@ manual post-deploy operator steps instead of repo-managed bootstrap. Public
 `bookstack.ghostship.io` exposure remains part of the external
 Cloudflare/tunnel workflow rather than repo-managed ingress.
 
-CloakBrowser now ships only as a shared embedded browser contract for repo-managed
-scraping images. `pricebuddy-scraper` is now a repo-owned Playwright service
-that launches CloakBrowser with `humanize=True` behind the existing
-`/api/article` sidecar contract, while `changedetection` launches a local
-CloakBrowser Playwright session inside its own image with `humanize=True`.
-The repo no longer ships a standalone manager or managed CDP/profile service.
+CloakBrowser runs again as a standalone manager on `chill-penguin` for direct
+profile management, alongside the embedded browser contract used by
+repo-managed scraping images. The manager stays on the internal
+`ghostship_net` network and does not use Gluetun. `pricebuddy-scraper` and
+`changedetection` still launch local CloakBrowser Playwright sessions inside
+their own images with `humanize=True`.
 
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions

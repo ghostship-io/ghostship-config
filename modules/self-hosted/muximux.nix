@@ -346,6 +346,13 @@ in
           Codex.color=literal:"#10a37f"
           Codex.enabled=literal:"true"
           Codex.dd=literal:"false"
+          CloakBrowser.name=literal:"CloakBrowser"
+          CloakBrowser.url=literal:"https://cloakbrowser.ghostship.io"
+          CloakBrowser.scale=literal:1
+          CloakBrowser.icon=literal:"muximux-chrome"
+          CloakBrowser.color=literal:"#000000"
+          CloakBrowser.enabled=literal:"true"
+          CloakBrowser.dd=literal:"false"
           RomM.name=literal:"RomM"
           RomM.url=literal:"/romm/"
           RomM.scale=literal:1
@@ -512,13 +519,16 @@ in
 
             for (i = 1; i <= section_count; i++) {
               name = section_order[i]
-              if (name == "Honcho" || name == "BookStack" || name == "Agent Zero" || name == "Chaptarr" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection") {
+              if (name == "Honcho" || name == "BookStack" || name == "Agent Zero" || name == "CloakBrowser" || name == "Chaptarr" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection") {
                 continue
               }
 
               printf "%s", section_data[name]
               if (name == "Grimmory" && ("Agent Zero" in section_data)) {
                 printf "%s", section_data["Agent Zero"]
+              }
+              if (name == "Codex" && ("CloakBrowser" in section_data)) {
+                printf "%s", section_data["CloakBrowser"]
               }
               if (name == "Prowlarr" && ("BookStack" in section_data)) {
                 printf "%s", section_data["BookStack"]
@@ -547,6 +557,9 @@ in
             }
             if (!("Grimmory" in section_data) && ("Agent Zero" in section_data)) {
               printf "%s", section_data["Agent Zero"]
+            }
+            if (!("Codex" in section_data) && ("CloakBrowser" in section_data)) {
+              printf "%s", section_data["CloakBrowser"]
             }
             if (!("Tautulli" in section_data) && ("Chaptarr" in section_data)) {
               printf "%s", section_data["Chaptarr"]

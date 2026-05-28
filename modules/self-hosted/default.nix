@@ -33,6 +33,7 @@
     # Apps and utilities
     ./codex.nix
     ./agent-zero.nix
+    ./cloakbrowser.nix
     ./n8n.nix
     ./bentopdf.nix
     ./convertx.nix

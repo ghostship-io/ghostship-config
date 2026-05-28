@@ -105,26 +105,6 @@ let
       ];
       muximuxSections = [ "LiteLLM" ];
     }
-    {
-      name = "cloakbrowser-manager";
-      paths = [ "/srv/apps/cloakbrowser" ];
-      units = [
-        "podman-cloakbrowser"
-        "podman-cloakbrowser-manager"
-        "changedetection-cloakbrowser-keepalive"
-      ];
-      containers = [
-        "cloakbrowser"
-        "cloakbrowser-manager"
-      ];
-      imageRefs = [ "docker.io/cloakhq/cloakbrowser-manager:latest" ];
-      imageRepositories = [
-        "docker.io/cloakhq/cloakbrowser-manager"
-        "cloakhq/cloakbrowser-manager"
-      ];
-      homepageEntries = [ "CloakBrowser" ];
-      muximuxSections = [ "CloakBrowser" ];
-    }
   ];
 
   renderCommands =

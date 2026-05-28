@@ -249,6 +249,12 @@ in
             "[Management].[Agent Zero].server=literal:chill-penguin"
             "[Management].[Agent Zero].container=literal:agent-zero"
 
+            "[Management].[CloakBrowser].icon=literal:sh-google-chrome"
+            "[Management].[CloakBrowser].href=literal:https://cloakbrowser.ghostship.io"
+            "[Management].[CloakBrowser].description=literal:Browser Profile Manager"
+            "[Management].[CloakBrowser].server=literal:chill-penguin"
+            "[Management].[CloakBrowser].container=literal:cloakbrowser"
+
             "[Management].[Plex Auto Languages].icon=literal:sh-plex"
             "[Management].[Plex Auto Languages].description=literal:Language Manager"
             "[Management].[Plex Auto Languages].server=literal:chill-penguin"
@@ -310,7 +316,7 @@ in
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
 
           ${pkgs.yq-go}/bin/yq -i '
-            (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("CloakBrowser") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
+            (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
             | (.[] | select(has("Management")) | .Management) |= map(select((has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG")) | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select(has("Plex Auto Languages") | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("SearXNG") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
