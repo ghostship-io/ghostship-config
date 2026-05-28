@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **CloakBrowser profile defaults**: Patch the frontend new-profile form and
+  stale frontend create payloads so the macOS/M3/Honolulu profile defaults are
+  preselected and preserved at create time.
 - **CloakBrowser extension defaults**: Persist requested uBlock Origin Lite and
   Bypass Paywalls Clean first-run defaults in the managed extension refresh,
   including complete uBOL filtering, selected rulesets, BPC custom sites, update
