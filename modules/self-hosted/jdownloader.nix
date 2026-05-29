@@ -11,7 +11,7 @@ let
     set -eu
 
     install -d -m0755 -o apps -g apps /srv/apps/jdownloader
-    install -d -m0775 -o apps -g apps /mnt/share/Downloads/JDownloader2
+    mkdir -p /mnt/share/Downloads/JDownloader2
   '';
 in
 {
