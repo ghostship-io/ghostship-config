@@ -29,6 +29,7 @@
     ./searxng.nix
     ./searxng-valkey.nix
     ./pyload.nix
+    ./jdownloader.nix
 
     # Apps and utilities
     ./cloakbrowser.nix

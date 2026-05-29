@@ -189,6 +189,12 @@ in
             "[Downloads].[VueTorrent].widget.type=literal:qbittorrent"
             "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000"
 
+            "[Downloads].[JDownloader2].icon=literal:sh-jdownloader"
+            "[Downloads].[JDownloader2].href=literal:https://my.jdownloader.org/"
+            "[Downloads].[JDownloader2].description=literal:Headless Download Manager"
+            "[Downloads].[JDownloader2].server=literal:chill-penguin"
+            "[Downloads].[JDownloader2].container=literal:jdownloader"
+
             # Services group
             "[Services].[pyLoad].icon=literal:sh-pyload"
             "[Services].[pyLoad].description=literal:Download Manager"

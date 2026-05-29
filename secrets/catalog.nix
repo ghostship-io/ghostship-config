@@ -133,6 +133,15 @@ in
       ];
     };
 
+    jdownloader = mkUnit {
+      relativeFile = "secrets/files/sources/services/jdownloader.env.age";
+      exports = [
+        "MYJDOWNLOADER_EMAIL"
+        "MYJDOWNLOADER_PASSWORD"
+        "MYJDOWNLOADER_DEVICE_NAME"
+      ];
+    };
+
     n8n = mkUnit {
       relativeFile = "secrets/files/sources/services/n8n.env.age";
       exports = [ "API_KEY" ];
@@ -627,6 +636,27 @@ in
         GRIMMORY_PASS = {
           unit = "grimmory";
           key = "PASS";
+        };
+      };
+    };
+
+    jdownloader = {
+      fileName = "jdownloader.env";
+      owner = "apps";
+      group = "apps";
+      mode = "0440";
+      fields = {
+        MYJDOWNLOADER_EMAIL = {
+          unit = "jdownloader";
+          key = "MYJDOWNLOADER_EMAIL";
+        };
+        MYJDOWNLOADER_PASSWORD = {
+          unit = "jdownloader";
+          key = "MYJDOWNLOADER_PASSWORD";
+        };
+        MYJDOWNLOADER_DEVICE_NAME = {
+          unit = "jdownloader";
+          key = "MYJDOWNLOADER_DEVICE_NAME";
         };
       };
     };

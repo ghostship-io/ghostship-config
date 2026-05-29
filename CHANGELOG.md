@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.19] - 2026-05-29
+
+- **JDownloader2 self-hosted service**: Add a headless
+  `jlesage/jdownloader-2:latest` container on `chill-penguin` with
+  MyJDownloader credentials projected from the new `jdownloader` secret,
+  downloads rooted at `/mnt/share/Downloads/JDownloader2`, and
+  Homepage/Muximux links to `https://my.jdownloader.org/`.
+
 ## [2.0.18] - 2026-05-28
 
 - **Self-hosted agent containers**: Retire the Codex and Agent Zero
