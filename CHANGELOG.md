@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.5] - 2026-05-30
+
+- **Codex mobile inset priority**: Mark the mobile composer bottom inset
+  override important so later upstream bundle CSS cannot reset it.
+
 ## [2.1.4] - 2026-05-30
 
 - **Codex mobile cache bust**: Inline the mobile viewport override into the
