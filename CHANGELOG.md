@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.13] - 2026-05-30
+
+- **Codex mobile viewport owner**: Apply the mobile bottom inset to Codex's
+  main content viewport, use the small viewport height on touch devices for
+  first paint, and serve the PWA manifest with the manifest media type.
+
 ## [2.1.12] - 2026-05-30
 
 - **Codex mobile first-load inset**: Re-run the visual viewport sizing after

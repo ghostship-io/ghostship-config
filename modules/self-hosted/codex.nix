@@ -29,7 +29,6 @@ let
       "start_url": "/",
       "scope": "/",
       "display": "standalone",
-      "display_override": ["standalone"],
       "background_color": "#0d0d0d",
       "theme_color": "#0d0d0d",
       "icons": [
@@ -54,18 +53,26 @@ let
       html,
       body,
       #root {
-        height: var(--codex-visual-viewport-height, 100dvh) !important;
-        min-height: var(--codex-visual-viewport-height, 100dvh) !important;
+        height: 100svh !important;
+        min-height: 100svh !important;
       }
 
-      html,
-      body {
+      .app-shell-main-content-viewport {
         --thread-floating-content-bottom-inset: calc(
           16px + max(
             env(safe-area-inset-bottom, 0px),
             var(--codex-visual-viewport-bottom-inset, 0px)
           )
         ) !important;
+      }
+
+      @supports (height: 100dvh) {
+        html,
+        body,
+        #root {
+          height: min(var(--codex-visual-viewport-height, 100svh), 100svh) !important;
+          min-height: min(var(--codex-visual-viewport-height, 100svh), 100svh) !important;
+        }
       }
     }
   '';
@@ -84,13 +91,10 @@ let
 
         root.style.setProperty("--codex-visual-viewport-height", height + "px");
         root.style.setProperty("--codex-visual-viewport-bottom-inset", bottomInset + "px");
-        root.style.setProperty(
+        document.querySelector(".app-shell-main-content-viewport")?.style.setProperty(
           bottomInsetProperty,
           `calc(16px + max(env(safe-area-inset-bottom, 0px), ''${bottomInset}px))`,
-        );
-        document.body?.style.setProperty(
-          bottomInsetProperty,
-          `calc(16px + max(env(safe-area-inset-bottom, 0px), ''${bottomInset}px))`,
+          "important",
         );
       };
 
@@ -151,6 +155,9 @@ let
           reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
           reply.header("Pragma", "no-cache");
           reply.header("Expires", "0");
+          if (path === "/manifest.json") {
+            reply.header("Content-Type", "application/manifest+json; charset=utf-8");
+          }
         }
         return payload;
       });
@@ -200,6 +207,9 @@ let
 
                 sed -i \
                         's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <link rel="stylesheet" href="./codex-mobile-viewport.css" />\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>|' \
+                        "$webview/index.html"
+                sed -i \
+                        's|<link rel="manifest" href="/manifest.json?v=ghostship-${repoVersion}" />|<link rel="manifest" href="/manifest.json?v=ghostship-${repoVersion}" />\n    <link rel="icon" sizes="192x192" href="/assets/pwa-icon-192.png" />\n    <link rel="apple-touch-icon" href="/assets/pwa-icon-192.png" />|' \
                         "$webview/index.html"
       '';
 
