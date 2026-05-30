@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.9] - 2026-05-30
+
+- **Codex static cache disable**: Disable Fastify Static's default cache
+  header on the Codex webview root and apply no-store headers there directly.
+
 ## [2.1.8] - 2026-05-30
 
 - **Codex static shell headers**: Set no-store headers from Fastify Static's

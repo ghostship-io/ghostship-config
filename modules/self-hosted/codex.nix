@@ -121,16 +121,11 @@ let
             substituteInPlace "$server_main" \
               --replace-fail 'prefix: "/",' \
               'prefix: "/",
-        setHeaders: (res, pathName) => {
-          if (
-            pathName.endsWith("/index.html") ||
-            pathName.endsWith("/manifest.json") ||
-            pathName.endsWith("/codex-mobile-viewport.js")
-          ) {
-            res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
-            res.setHeader("Pragma", "no-cache");
-            res.setHeader("Expires", "0");
-          }
+        cacheControl: false,
+        setHeaders: (res) => {
+          res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
+          res.setHeader("Pragma", "no-cache");
+          res.setHeader("Expires", "0");
         },'
 
                 sed -i \
