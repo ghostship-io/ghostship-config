@@ -102,6 +102,8 @@ let
       ''
                       cp -a ${codexWebUnpatched} "$out"
                       chmod -R u+w "$out"
+                      substituteInPlace "$out/bin/codex-web" \
+                        --replace-fail ${codexWebUnpatched} "$out"
 
                       webview="$out/lib/node_modules/codex-web/scratch/asar/webview"
                       substituteInPlace "$webview/index.html" \

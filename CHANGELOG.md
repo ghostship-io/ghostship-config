@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.10] - 2026-05-30
+
+- **Codex patched launcher**: Repoint the copied `codex-web` launcher at the
+  patched package output so the live server uses the mobile and manifest fixes.
+
 ## [2.1.9] - 2026-05-30
 
 - **Codex static cache disable**: Disable Fastify Static's default cache
