@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.24] - 2026-05-30
+
+- **Codex Nix seed tracking**: Track the built Codex image store path when
+  seeding the persistent `/nix` mount so package changes reseed runtime store
+  artifacts even when the upstream image tag is unchanged.
+
 ## [2.0.23] - 2026-05-30
 
 - **Codex container GitHub CLI**: Add GitHub CLI to the Codex web container

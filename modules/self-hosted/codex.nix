@@ -185,7 +185,7 @@ in
       install -d -m0755 -o 3000 -g 3000 ${codexHome}
       install -d -m0755 -o 3000 -g 3000 ${codexWorkspace}
 
-      if [ ! -e ${codexNix}/.ghostship-seeded-image ] || [ "$(<${codexNix}/.ghostship-seeded-image)" != "${imageName}:${imageTag}" ]; then
+      if [ ! -e ${codexNix}/.ghostship-seeded-image ] || [ "$(<${codexNix}/.ghostship-seeded-image)" != "${codexImage}" ]; then
         ${pkgs.podman}/bin/podman load -i ${codexImage}
 
         seed_container="codex-nix-seed-$$"
@@ -204,7 +204,7 @@ in
         else
           mv "$seed_tmp" ${codexNix}
         fi
-        printf '%s\n' "${imageName}:${imageTag}" > ${codexNix}/.ghostship-seeded-image
+        printf '%s\n' "${codexImage}" > ${codexNix}/.ghostship-seeded-image
         chown -R 3000:3000 ${codexNix}
       fi
     '';
