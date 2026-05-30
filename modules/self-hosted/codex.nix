@@ -34,20 +34,38 @@ let
       "theme_color": "#0d0d0d",
       "icons": [
         {
+          "src": "/assets/pwa-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any maskable"
+        },
+        {
           "src": "/assets/pwa-icon-512.png",
           "sizes": "512x512",
           "type": "image/png",
           "purpose": "any maskable"
         }
-      ],
-      "share_target": {
-        "action": "/share/receive",
-        "method": "GET",
-        "params": {
-          "title": "title",
-          "text": "text",
-          "url": "url"
-        }
+      ]
+    }
+  '';
+
+  codexMobileViewportStyle = pkgs.writeText "codex-mobile-viewport.css" ''
+    @media (hover: none) and (pointer: coarse) {
+      html,
+      body,
+      #root {
+        height: var(--codex-visual-viewport-height, 100dvh) !important;
+        min-height: var(--codex-visual-viewport-height, 100dvh) !important;
+      }
+
+      html,
+      body {
+        --thread-floating-content-bottom-inset: calc(
+          16px + max(
+            env(safe-area-inset-bottom, 0px),
+            var(--codex-visual-viewport-bottom-inset, 0px)
+          )
+        ) !important;
       }
     }
   '';
@@ -55,6 +73,7 @@ let
   codexMobileViewportScript = pkgs.writeText "codex-mobile-viewport.js" ''
     (() => {
       const root = document.documentElement;
+      const bottomInsetProperty = "--thread-floating-content-bottom-inset";
 
       const updateViewport = () => {
         const viewport = window.visualViewport;
@@ -65,13 +84,43 @@ let
 
         root.style.setProperty("--codex-visual-viewport-height", height + "px");
         root.style.setProperty("--codex-visual-viewport-bottom-inset", bottomInset + "px");
+        root.style.setProperty(
+          bottomInsetProperty,
+          `calc(16px + max(env(safe-area-inset-bottom, 0px), ''${bottomInset}px))`,
+        );
+        document.body?.style.setProperty(
+          bottomInsetProperty,
+          `calc(16px + max(env(safe-area-inset-bottom, 0px), ''${bottomInset}px))`,
+        );
       };
 
       updateViewport();
       window.visualViewport?.addEventListener("resize", updateViewport);
       window.visualViewport?.addEventListener("scroll", updateViewport);
       window.addEventListener("resize", updateViewport);
+
+      if ("serviceWorker" in navigator && window.isSecureContext) {
+        navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(() => {});
+      }
     })();
+  '';
+
+  codexServiceWorker = pkgs.writeText "codex-service-worker.js" ''
+    self.addEventListener("install", (event) => {
+      event.waitUntil(self.skipWaiting());
+    });
+
+    self.addEventListener("activate", (event) => {
+      event.waitUntil(self.clients.claim());
+    });
+
+    self.addEventListener("fetch", (event) => {
+      if (event.request.method !== "GET") {
+        return;
+      }
+
+      event.respondWith(fetch(event.request));
+    });
   '';
 
   codexCacheControlHook = pkgs.writeText "codex-cache-control-hook.js" ''
@@ -83,7 +132,9 @@ let
           (path === "/" ||
             path === "/index.html" ||
             path === "/manifest.json" ||
+            path === "/codex-mobile-viewport.css" ||
             path === "/codex-mobile-viewport.js" ||
+            path === "/service-worker.js" ||
             !path.includes("."))
         ) {
           reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
@@ -97,7 +148,10 @@ let
   codexWeb =
     pkgs.runCommand "codex-web-mobile-viewport-${inputs.codex-web.shortRev or inputs.codex-web.rev}"
       {
-        nativeBuildInputs = [ pkgs.gnused ];
+        nativeBuildInputs = [
+          pkgs.gnused
+          pkgs.imagemagick
+        ];
       }
       ''
                       cp -a ${codexWebUnpatched} "$out"
@@ -114,7 +168,10 @@ let
                   'href="/manifest.json?v=ghostship-${repoVersion}"'
 
                 install -m0644 ${codexWebManifest} "$webview/manifest.json"
+                magick "$webview/assets/pwa-icon-512.png" -resize 192x192 "$webview/assets/pwa-icon-192.png"
+                install -m0644 ${codexMobileViewportStyle} "$webview/codex-mobile-viewport.css"
                 install -m0644 ${codexMobileViewportScript} "$webview/codex-mobile-viewport.js"
+                install -m0644 ${codexServiceWorker} "$webview/service-worker.js"
 
                 server_main="$out/lib/node_modules/codex-web/src/server/main.js"
                 substituteInPlace "$server_main" \
@@ -131,7 +188,7 @@ let
         },'
 
                 sed -i \
-                        's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <style>\n      @media (hover: none) and (pointer: coarse) {\n        html,\n        body,\n        #root {\n          height: var(--codex-visual-viewport-height, 100dvh) !important;\n          min-height: var(--codex-visual-viewport-height, 100dvh) !important;\n        }\n\n        .app-shell-main-content-viewport {\n          --thread-floating-content-bottom-inset: calc(\n            var(--spacing) * 3 + max(\n              env(safe-area-inset-bottom, 0px),\n              var(--codex-visual-viewport-bottom-inset, 0px)\n            )\n          ) !important;\n        }\n      }\n    </style>\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>|' \
+                        's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <link rel="stylesheet" href="./codex-mobile-viewport.css" />\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>|' \
                         "$webview/index.html"
       '';
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.11] - 2026-05-30
+
+- **Codex mobile installability**: Add a real service worker, 192px PWA icon,
+  and body-level mobile bottom inset so Chrome can install the app and the
+  portal-mounted follow-up composer clears mobile browser controls.
+
 ## [2.1.10] - 2026-05-30
 
 - **Codex patched launcher**: Repoint the copied `codex-web` launcher at the
