@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.15] - 2026-05-30
+
+- **Codex mobile diagnostics**: Add a temporary `?ghostship-debug=1` overlay
+  that reports Android viewport, composer positioning, service worker, and
+  install-prompt state from the device.
+
 ## [2.1.14] - 2026-05-30
 
 - **Codex Android clearance**: Give the mobile floating composer a fixed

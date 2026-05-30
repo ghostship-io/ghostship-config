@@ -84,6 +84,13 @@ let
     (() => {
       const root = document.documentElement;
       const bottomInsetProperty = "--thread-floating-content-bottom-inset";
+      let beforeInstallPromptFired = false;
+
+      window.addEventListener("beforeinstallprompt", (event) => {
+        beforeInstallPromptFired = true;
+        window.__ghostshipBeforeInstallPrompt = event;
+        updateDebugOverlay();
+      });
 
       const updateViewport = () => {
         const viewport = window.visualViewport;
@@ -101,9 +108,152 @@ let
         );
       };
 
+      const findFloatingComposer = () =>
+        document.querySelector(
+          '.pointer-events-none.absolute[class*="bottom-(--thread-floating-content-bottom-inset)"]',
+        ) || document.querySelector('[class*="bottom-(--thread-floating-content-bottom-inset)"]');
+
+      const formatRect = (element) => {
+        if (!element) {
+          return null;
+        }
+        const rect = element.getBoundingClientRect();
+        return {
+          top: Math.round(rect.top),
+          bottom: Math.round(rect.bottom),
+          height: Math.round(rect.height),
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+        };
+      };
+
+      async function getServiceWorkerState() {
+        if (!("serviceWorker" in navigator)) {
+          return { supported: false };
+        }
+
+        let registrations = "unknown";
+        try {
+          registrations = (await navigator.serviceWorker.getRegistrations()).map((registration) => ({
+            scope: registration.scope,
+            active: Boolean(registration.active),
+            waiting: Boolean(registration.waiting),
+            installing: Boolean(registration.installing),
+          }));
+        } catch (error) {
+          registrations = "error: " + error;
+        }
+
+        return {
+          supported: true,
+          controller: Boolean(navigator.serviceWorker.controller),
+          registrations,
+        };
+      }
+
+      async function collectDebugState() {
+        const viewport = window.visualViewport;
+        const contentViewport = document.querySelector(".app-shell-main-content-viewport");
+        const floatingComposer = findFloatingComposer();
+        const input = document.querySelector('[contenteditable="true"], textarea, input');
+        const floatingStyle = floatingComposer ? getComputedStyle(floatingComposer) : null;
+        const contentStyle = contentViewport ? getComputedStyle(contentViewport) : null;
+        const rootStyle = getComputedStyle(root);
+
+        return {
+          href: location.href,
+          userAgent: navigator.userAgent,
+          displayModeStandalone: window.matchMedia("(display-mode: standalone)").matches,
+          beforeInstallPromptFired,
+          serviceWorker: await getServiceWorkerState(),
+          manifestHref: document.querySelector('link[rel="manifest"]')?.href || null,
+          window: {
+            innerHeight: window.innerHeight,
+            innerWidth: window.innerWidth,
+            scrollY: Math.round(window.scrollY),
+          },
+          visualViewport: viewport
+            ? {
+                height: Math.round(viewport.height),
+                width: Math.round(viewport.width),
+                offsetTop: Math.round(viewport.offsetTop),
+                offsetLeft: Math.round(viewport.offsetLeft),
+                scale: viewport.scale,
+              }
+            : null,
+          documentElement: {
+            clientHeight: root.clientHeight,
+            scrollHeight: root.scrollHeight,
+            codexHeight: rootStyle.getPropertyValue("--codex-visual-viewport-height").trim(),
+            codexBottomInset: rootStyle
+              .getPropertyValue("--codex-visual-viewport-bottom-inset")
+              .trim(),
+          },
+          body: {
+            clientHeight: document.body?.clientHeight,
+            scrollHeight: document.body?.scrollHeight,
+          },
+          contentViewport: {
+            found: Boolean(contentViewport),
+            rect: formatRect(contentViewport),
+            bottomInset: contentStyle?.getPropertyValue(bottomInsetProperty).trim() || null,
+          },
+          floatingComposer: {
+            found: Boolean(floatingComposer),
+            rect: formatRect(floatingComposer),
+            className: floatingComposer?.className || null,
+            position: floatingStyle?.position || null,
+            bottom: floatingStyle?.bottom || null,
+            transform: floatingStyle?.transform || null,
+          },
+          firstInput: {
+            found: Boolean(input),
+            rect: formatRect(input),
+            tag: input?.tagName || null,
+          },
+        };
+      }
+
+      async function updateDebugOverlay() {
+        if (!new URLSearchParams(location.search).has("ghostship-debug")) {
+          return;
+        }
+
+        let overlay = document.getElementById("ghostship-mobile-debug");
+        if (!overlay) {
+          overlay = document.createElement("pre");
+          overlay.id = "ghostship-mobile-debug";
+          overlay.style.cssText = [
+            "position:fixed",
+            "z-index:2147483647",
+            "left:8px",
+            "right:8px",
+            "top:8px",
+            "max-height:48vh",
+            "overflow:auto",
+            "margin:0",
+            "padding:10px",
+            "font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace",
+            "white-space:pre-wrap",
+            "color:#f8fafc",
+            "background:rgba(2,6,23,.94)",
+            "border:1px solid rgba(148,163,184,.6)",
+            "border-radius:8px",
+            "box-shadow:0 8px 30px rgba(0,0,0,.45)",
+          ].join(";");
+          document.documentElement.appendChild(overlay);
+        }
+
+        const state = await collectDebugState();
+        overlay.textContent = "Ghostship mobile debug\n" + JSON.stringify(state, null, 2);
+      }
+
       const scheduleViewportUpdate = () => {
         updateViewport();
+        updateDebugOverlay();
         requestAnimationFrame(updateViewport);
+        requestAnimationFrame(updateDebugOverlay);
       };
 
       scheduleViewportUpdate();
@@ -116,10 +266,21 @@ let
       window.visualViewport?.addEventListener("scroll", updateViewport);
       window.addEventListener("resize", updateViewport);
       window.addEventListener("orientationchange", scheduleViewportUpdate);
+      window.visualViewport?.addEventListener("resize", updateDebugOverlay);
+      window.visualViewport?.addEventListener("scroll", updateDebugOverlay);
+      window.addEventListener("resize", updateDebugOverlay);
+      window.addEventListener("orientationchange", updateDebugOverlay);
 
       if ("serviceWorker" in navigator && window.isSecureContext) {
-        navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(() => {});
+        navigator.serviceWorker
+          .register("/service-worker.js", { scope: "/" })
+          .finally(updateDebugOverlay)
+          .catch(() => {});
       }
+
+      [250, 1000, 2500, 5000].forEach((delay) => {
+        window.setTimeout(updateDebugOverlay, delay);
+      });
     })();
   '';
 
