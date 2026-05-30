@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.2] - 2026-05-30
+
+- **Codex mobile viewport**: Patch the Codex web bundle in the container image
+  to use the mobile visual viewport and safe bottom inset so the floating
+  composer is not clipped behind mobile browser chrome.
 - **Codex Ollama proxy fix**: Strip the UI-only `ollama/` model prefix from
   Ollama-compatible JSON request bodies before forwarding them to ollama.com.
 

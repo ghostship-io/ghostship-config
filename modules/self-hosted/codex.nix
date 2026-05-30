@@ -16,8 +16,70 @@ let
   imageTag = "codex-web-${inputs.codex-web.shortRev or inputs.codex-web.rev}";
   system = pkgs.stdenv.hostPlatform.system;
 
-  codexWeb = inputs.codex-web.packages.${system}.default;
+  codexWebUnpatched = inputs.codex-web.packages.${system}.default;
   codexWebCli = inputs.codex-web.packages.${system}.codex;
+
+  codexWeb =
+    pkgs.runCommand "codex-web-mobile-viewport-${inputs.codex-web.shortRev or inputs.codex-web.rev}"
+      {
+        nativeBuildInputs = [ pkgs.gnused ];
+      }
+      ''
+        cp -a ${codexWebUnpatched} "$out"
+        chmod -R u+w "$out"
+
+        webview="$out/lib/node_modules/codex-web/scratch/asar/webview"
+        substituteInPlace "$webview/index.html" \
+          --replace-fail 'content="width=device-width, initial-scale=1.0"' \
+          'content="width=device-width, initial-scale=1.0, viewport-fit=cover"'
+
+        cat > "$webview/codex-mobile-viewport.js" <<'EOF'
+        (() => {
+          const root = document.documentElement;
+
+          const updateViewport = () => {
+            const viewport = window.visualViewport;
+            const height = viewport?.height || window.innerHeight;
+            const bottomInset = viewport
+              ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+              : 0;
+
+            root.style.setProperty("--codex-visual-viewport-height", height + "px");
+            root.style.setProperty("--codex-visual-viewport-bottom-inset", bottomInset + "px");
+          };
+
+          updateViewport();
+          window.visualViewport?.addEventListener("resize", updateViewport);
+          window.visualViewport?.addEventListener("scroll", updateViewport);
+          window.addEventListener("resize", updateViewport);
+        })();
+        EOF
+
+        sed -i \
+          's#</head>#    <script src="./codex-mobile-viewport.js"></script>\n  </head>#' \
+          "$webview/index.html"
+
+        cat >> "$webview"/assets/app-shell-*.css <<'EOF'
+
+        @media (hover: none) and (pointer: coarse) {
+          html,
+          body,
+          #root {
+            height: var(--codex-visual-viewport-height, 100dvh) !important;
+            min-height: var(--codex-visual-viewport-height, 100dvh) !important;
+          }
+
+          .app-shell-main-content-viewport {
+            --thread-floating-content-bottom-inset: calc(
+              var(--spacing) * 3 + max(
+                env(safe-area-inset-bottom, 0px),
+                var(--codex-visual-viewport-bottom-inset, 0px)
+              )
+            );
+          }
+        }
+        EOF
+      '';
 
   codexPackages = with pkgs; [
     codexWeb
