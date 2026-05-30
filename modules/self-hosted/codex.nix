@@ -88,7 +88,7 @@ let
         EOF
 
         sed -i \
-          's#</head>#    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>#' \
+          's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>|' \
           "$webview/index.html"
 
         cat >> "$webview"/assets/app-shell-*.css <<'EOF'
