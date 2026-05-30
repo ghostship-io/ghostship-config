@@ -176,7 +176,7 @@ Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, Codex, the `arr` stack,
-qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr, BookStack,
+qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr,
 PyLoad, RSS-Bridge, PriceBuddy, and n8n.
 
 Retired `chill-penguin` self-hosted service artifacts are cleaned from the
@@ -232,16 +232,6 @@ still needs a manual reorder on `chill-penguin` after deployment so it sits
 directly under Bazarr.
 
 Chaptarr now extends the arr stack to books and audiobooks. It should mount the shared downloads root at `/downloads`, manage `/mnt/share/Library/Books` and `/mnt/share/Library/Audiobooks` as separate library roots, and stay visible in Homepage plus the Muximux dropdown immediately before Bazarr. Grimmory is still the primary reading and listening surface, so it also mounts both library roots. Public `chaptarr.ghostship.io` exposure remains part of the external Cloudflare/tunnel workflow rather than repo-managed ingress.
-
-BookStack now adds a repo-managed wiki service on `chill-penguin` with app
-state under `/srv/apps/bookstack`, MariaDB state under
-`/srv/apps/bookstack-db`, and Homepage visibility in the `Services` group and
-a Muximux tile after Prowlarr. Keep `BOOKSTACK_APP_URL` pointed at the external
-`https://bookstack.ghostship.io` origin, and treat the initial in-app setup
-plus API token creation (`Authorization: Token <token_id>:<token_secret>`) as
-manual post-deploy operator steps instead of repo-managed bootstrap. Public
-`bookstack.ghostship.io` exposure remains part of the external
-Cloudflare/tunnel workflow rather than repo-managed ingress.
 
 CloakBrowser runs again as a standalone manager on `chill-penguin` for direct
 profile management, alongside the embedded browser contract used by

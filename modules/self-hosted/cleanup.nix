@@ -8,6 +8,28 @@
 let
   retiredArtifacts = [
     {
+      name = "bookstack";
+      paths = [
+        "/srv/apps/bookstack"
+        "/srv/apps/bookstack-db"
+      ];
+      units = [
+        "podman-bookstack"
+        "podman-bookstack-db"
+      ];
+      containers = [
+        "bookstack"
+        "bookstack-db"
+      ];
+      imageRefs = [ "lscr.io/linuxserver/bookstack:latest" ];
+      imageRepositories = [ "lscr.io/linuxserver/bookstack" ];
+      homepageEntries = [
+        "BookStack"
+        "BookStack DB"
+      ];
+      muximuxSections = [ "BookStack" ];
+    }
+    {
       name = "jdownloader";
       paths = [ "/srv/apps/jdownloader" ];
       units = [ "podman-jdownloader" ];

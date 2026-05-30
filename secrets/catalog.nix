@@ -44,20 +44,6 @@ in
       ];
     };
 
-    bookstack = mkUnit {
-      relativeFile = "secrets/files/sources/services/bookstack.env.age";
-      exports = [
-        "APP_KEY"
-        "APP_URL"
-        "DB_DATABASE"
-        "DB_USER"
-        "DB_PASS"
-        "DB_ROOT_PASS"
-        "TOKEN_ID"
-        "TOKEN_SECRET"
-      ];
-    };
-
     changedetection = mkUnit {
       relativeFile = "secrets/files/sources/services/changedetection.env.age";
       exports = [ "API_KEY" ];
@@ -327,72 +313,6 @@ in
         RADARR_API_KEY = {
           unit = "radarr";
           key = "API_KEY";
-        };
-      };
-    };
-
-    bookstack = {
-      fileName = "bookstack.env";
-      owner = "apps";
-      group = "apps";
-      mode = "0440";
-      fields = {
-        BOOKSTACK_APP_KEY = {
-          unit = "bookstack";
-          key = "APP_KEY";
-        };
-        BOOKSTACK_APP_URL = {
-          unit = "bookstack";
-          key = "APP_URL";
-        };
-        BOOKSTACK_DB_DATABASE = {
-          unit = "bookstack";
-          key = "DB_DATABASE";
-        };
-        BOOKSTACK_DB_USER = {
-          unit = "bookstack";
-          key = "DB_USER";
-        };
-        BOOKSTACK_DB_PASS = {
-          unit = "bookstack";
-          key = "DB_PASS";
-        };
-        BOOKSTACK_DB_ROOT_PASS = {
-          unit = "bookstack";
-          key = "DB_ROOT_PASS";
-        };
-        BOOKSTACK_TOKEN_ID = {
-          unit = "bookstack";
-          key = "TOKEN_ID";
-        };
-        BOOKSTACK_TOKEN_SECRET = {
-          unit = "bookstack";
-          key = "TOKEN_SECRET";
-        };
-      };
-    };
-
-    bookstack-db = {
-      fileName = "bookstack-db.env";
-      owner = "apps";
-      group = "apps";
-      mode = "0440";
-      fields = {
-        BOOKSTACK_DB_DATABASE = {
-          unit = "bookstack";
-          key = "DB_DATABASE";
-        };
-        BOOKSTACK_DB_USER = {
-          unit = "bookstack";
-          key = "DB_USER";
-        };
-        BOOKSTACK_DB_PASS = {
-          unit = "bookstack";
-          key = "DB_PASS";
-        };
-        BOOKSTACK_DB_ROOT_PASS = {
-          unit = "bookstack";
-          key = "DB_ROOT_PASS";
         };
       };
     };

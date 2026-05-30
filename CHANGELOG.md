@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.22] - 2026-05-30
+
+- **BookStack removal**: Remove BookStack and its MariaDB sidecar from the
+  `chill-penguin` self-hosted stack, including secret projections, dashboard
+  entries, modules, and retired live container/config artifacts.
+
 ## [2.0.21] - 2026-05-30
 
 - **Codex web service**: Restore Codex as a repo-built Podman OCI service for

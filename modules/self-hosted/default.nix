@@ -41,8 +41,6 @@
     ./changedetection.nix
     ./rss-bridge.nix
     ./pricebuddy.nix
-    ./bookstack-db.nix
-    ./bookstack.nix
     ./codex.nix
 
     # Games

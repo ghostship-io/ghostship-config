@@ -215,12 +215,6 @@ in
             "[Services].[Changedetection].server=literal:chill-penguin"
             "[Services].[Changedetection].container=literal:changedetection"
 
-            "[Services].[BookStack].icon=literal:sh-bookstack"
-            "[Services].[BookStack].description=literal:Documentation Wiki"
-            "[Services].[BookStack].server=literal:chill-penguin"
-            "[Services].[BookStack].container=literal:bookstack"
-            "[Services].[BookStack].href=literal:https://bookstack.ghostship.io"
-
             "[Services].[PriceBuddy].icon=literal:sh-priceghost"
             "[Services].[PriceBuddy].description=literal:Price Tracker"
             "[Services].[PriceBuddy].server=literal:chill-penguin"
@@ -301,10 +295,6 @@ in
             "[Infrastructure].[PriceBuddy DB].server=literal:chill-penguin"
             "[Infrastructure].[PriceBuddy DB].container=literal:pricebuddy-db"
 
-            "[Infrastructure].[BookStack DB].icon=literal:sh-mariadb"
-            "[Infrastructure].[BookStack DB].description=literal:BookStack Database"
-            "[Infrastructure].[BookStack DB].server=literal:chill-penguin"
-            "[Infrastructure].[BookStack DB].container=literal:bookstack-db"
           )
 
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"

@@ -325,13 +325,6 @@ in
           Prowlarr.icon=literal:"muximux-paw"
           Prowlarr.color=literal:"#e45124"
           Prowlarr.enabled=literal:"true"
-          BookStack.name=literal:"BookStack"
-          BookStack.url=literal:"https://bookstack.ghostship.io"
-          BookStack.scale=literal:1
-          BookStack.icon=literal:"muximux-menu_book"
-          BookStack.color=literal:"#206ea7"
-          BookStack.enabled=literal:"true"
-          BookStack.dd=literal:"false"
           Grimmory.name=literal:"Grimmory"
           Grimmory.url=literal:"https://grimmory.ghostship.io"
           Grimmory.scale=literal:1
@@ -520,9 +513,6 @@ in
                 printf "%s", section_data["Codex"]
               }
               printf "%s", section_data[name]
-              if (name == "Prowlarr" && ("BookStack" in section_data)) {
-                printf "%s", section_data["BookStack"]
-              }
               if (name == "RSS-Bridge" && ("Changedetection" in section_data)) {
                 printf "%s", section_data["Changedetection"]
               }
@@ -544,9 +534,6 @@ in
             }
             if (!("CloakBrowser" in section_data) && ("Codex" in section_data)) {
               printf "%s", section_data["Codex"]
-            }
-            if (!("Prowlarr" in section_data) && ("BookStack" in section_data)) {
-              printf "%s", section_data["BookStack"]
             }
             if (!("Tautulli" in section_data) && ("Chaptarr" in section_data)) {
               printf "%s", section_data["Chaptarr"]
