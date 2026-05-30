@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.21] - 2026-05-30
+
+- **Codex web service**: Restore Codex as a repo-built Podman OCI service for
+  `codex.ghostship.io` using `0xcaff/codex-web`, the Codex CLI, Nix, Git, SSH,
+  Docker-in-Docker, Python, Node.js, `uv`, `direnv`, search tools, and basic
+  build tools, with persistent `/nix`, `/workspace`, `/home/codex`, Docker
+  state seeded from the built image's Nix store, and `/mnt/share` mounted into
+  the container.
+
 ## [2.0.20] - 2026-05-30
 
 - **JDownloader2 removal**: Remove the headless JDownloader2 service, secret

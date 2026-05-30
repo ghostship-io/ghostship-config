@@ -43,6 +43,7 @@
     ./pricebuddy.nix
     ./bookstack-db.nix
     ./bookstack.nix
+    ./codex.nix
 
     # Games
     ./romm-db.nix

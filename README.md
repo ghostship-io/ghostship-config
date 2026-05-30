@@ -175,7 +175,7 @@ inventory. Services use Podman, native healthchecks, and registry auto-update.
 Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
-Key services include Plex, Homepage, Muximux, the `arr` stack,
+Key services include Plex, Homepage, Muximux, Codex, the `arr` stack,
 qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr, BookStack,
 PyLoad, RSS-Bridge, PriceBuddy, and n8n.
 
@@ -188,6 +188,14 @@ service modules.
 
 PyLoad has a daily `04:00` `pyload-restart-failed` timer that checks the
 internal `http://pyload:8000` API and restarts failed queue links when present.
+
+Codex runs as a repo-built Podman OCI image with `0xcaff/codex-web`, the Codex
+CLI, Nix, Git, SSH, Docker-in-Docker, Python, Node.js, `uv`, `direnv`, search
+tools, and basic build tools. The service is intended for
+`https://codex.ghostship.io`; it keeps `/nix`, `/workspace`, `/home/codex`, and
+Docker state under `/srv/apps/codex`, mounts `/mnt/share`, and seeds the
+persistent `/nix` path from the built image before mounting it so the image's
+Nix store artifacts remain available at runtime.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts

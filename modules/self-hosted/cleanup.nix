@@ -18,24 +18,6 @@ let
       muximuxSections = [ "JDownloader2" ];
     }
     {
-      name = "codex";
-      paths = [ "/srv/apps/codex" ];
-      units = [
-        "podman-codex"
-        "codex-auto-update"
-      ];
-      timers = [ "codex-auto-update" ];
-      containers = [ "codex" ];
-      volumes = [
-        "codex-nix"
-        "codex-docker"
-      ];
-      imageRefs = [ ];
-      imageRepositories = [ "localhost/ghostship-codex" ];
-      homepageEntries = [ "Codex" ];
-      muximuxSections = [ "Codex" ];
-    }
-    {
       name = "agent-zero";
       paths = [ "/srv/apps/agent-zero" ];
       units = [ "podman-agent-zero" ];

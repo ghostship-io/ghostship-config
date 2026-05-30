@@ -237,6 +237,12 @@ in
             "[Management].[Muximux].server=literal:chill-penguin"
             "[Management].[Muximux].container=literal:muximux"
 
+            "[Management].[Codex].icon=literal:sh-codex"
+            "[Management].[Codex].href=literal:https://codex.ghostship.io"
+            "[Management].[Codex].description=literal:Codex Web"
+            "[Management].[Codex].server=literal:chill-penguin"
+            "[Management].[Codex].container=literal:codex"
+
             "[Management].[CloakBrowser].icon=literal:sh-google-chrome"
             "[Management].[CloakBrowser].href=literal:https://cloakbrowser.ghostship.io"
             "[Management].[CloakBrowser].description=literal:Browser Profile Manager"

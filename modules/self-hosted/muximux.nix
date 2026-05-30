@@ -275,6 +275,13 @@ in
           Homepage.color=literal:"#109f61"
           Homepage.enabled=literal:"true"
           Homepage.default=literal:"true"
+          Codex.name=literal:"Codex"
+          Codex.url=literal:"https://codex.ghostship.io"
+          Codex.scale=literal:1
+          Codex.icon=literal:"muximux-code"
+          Codex.color=literal:"#111827"
+          Codex.enabled=literal:"true"
+          Codex.dd=literal:"false"
           Synology.name=literal:"Synology"
           Synology.url=literal:"https://synology.ghostship.io"
           Synology.scale=literal:1
@@ -505,11 +512,14 @@ in
 
             for (i = 1; i <= section_count; i++) {
               name = section_order[i]
-              if (name == "Honcho" || name == "BookStack" || name == "Chaptarr" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection") {
+              if (name == "Honcho" || name == "Codex" || name == "BookStack" || name == "Chaptarr" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection") {
                 continue
               }
 
               printf "%s", section_data[name]
+              if (name == "Homepage" && ("Codex" in section_data)) {
+                printf "%s", section_data["Codex"]
+              }
               if (name == "Prowlarr" && ("BookStack" in section_data)) {
                 printf "%s", section_data["BookStack"]
               }
@@ -531,6 +541,9 @@ in
 
             if (!("RSS-Bridge" in section_data) && ("Changedetection" in section_data)) {
               printf "%s", section_data["Changedetection"]
+            }
+            if (!("Homepage" in section_data) && ("Codex" in section_data)) {
+              printf "%s", section_data["Codex"]
             }
             if (!("Prowlarr" in section_data) && ("BookStack" in section_data)) {
               printf "%s", section_data["BookStack"]
