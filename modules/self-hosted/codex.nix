@@ -14,6 +14,7 @@ let
   codexSecrets = config.ghostship.selfHostedSecrets.projections.codex.path;
   imageName = "localhost/ghostship-codex";
   imageTag = "codex-web-${inputs.codex-web.shortRev or inputs.codex-web.rev}";
+  repoVersion = lib.removeSuffix "\n" (builtins.readFile ../../VERSION);
   system = pkgs.stdenv.hostPlatform.system;
 
   codexWebUnpatched = inputs.codex-web.packages.${system}.default;
@@ -34,7 +35,7 @@ let
           'content="width=device-width, initial-scale=1.0, viewport-fit=cover"'
         substituteInPlace "$webview/index.html" \
           --replace-fail 'href="/manifest.json"' \
-          'href="/manifest.json?v=ghostship-2.1.4"'
+          'href="/manifest.json?v=ghostship-${repoVersion}"'
 
         cat > "$webview/manifest.json" <<'EOF'
         {
