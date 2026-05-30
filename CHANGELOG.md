@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.8] - 2026-05-30
+
+- **Codex static shell headers**: Set no-store headers from Fastify Static's
+  file header hook so the app shell and manifest are not overwritten by static
+  defaults.
+
 ## [2.1.7] - 2026-05-30
 
 - **Codex shell cache enforcement**: Disable Fastify's default static cache

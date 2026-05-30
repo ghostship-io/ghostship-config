@@ -100,32 +100,42 @@ let
         nativeBuildInputs = [ pkgs.gnused ];
       }
       ''
-                  cp -a ${codexWebUnpatched} "$out"
-                  chmod -R u+w "$out"
+                      cp -a ${codexWebUnpatched} "$out"
+                      chmod -R u+w "$out"
 
-                  webview="$out/lib/node_modules/codex-web/scratch/asar/webview"
-                  substituteInPlace "$webview/index.html" \
-                    --replace-fail 'content="width=device-width, initial-scale=1.0"' \
-                    'content="width=device-width, initial-scale=1.0, viewport-fit=cover"'
-            substituteInPlace "$webview/index.html" \
-              --replace-fail 'href="/manifest.json"' \
-              'href="/manifest.json?v=ghostship-${repoVersion}"'
+                      webview="$out/lib/node_modules/codex-web/scratch/asar/webview"
+                      substituteInPlace "$webview/index.html" \
+                        --replace-fail 'content="width=device-width, initial-scale=1.0"' \
+                        'content="width=device-width, initial-scale=1.0, viewport-fit=cover"'
+                substituteInPlace "$webview/index.html" \
+                  --replace-fail 'href="/manifest.json"' \
+                  'href="/manifest.json?v=ghostship-${repoVersion}"'
 
-            install -m0644 ${codexWebManifest} "$webview/manifest.json"
-            install -m0644 ${codexMobileViewportScript} "$webview/codex-mobile-viewport.js"
+                install -m0644 ${codexWebManifest} "$webview/manifest.json"
+                install -m0644 ${codexMobileViewportScript} "$webview/codex-mobile-viewport.js"
 
-            server_main="$out/lib/node_modules/codex-web/src/server/main.js"
-            substituteInPlace "$server_main" \
-              --replace-fail 'const sockets = new Set();' \
-              "$(cat ${codexCacheControlHook})"
+                server_main="$out/lib/node_modules/codex-web/src/server/main.js"
+                substituteInPlace "$server_main" \
+                  --replace-fail 'const sockets = new Set();' \
+                  "$(cat ${codexCacheControlHook})"
             substituteInPlace "$server_main" \
               --replace-fail 'prefix: "/",' \
               'prefix: "/",
-        cacheControl: false,'
+        setHeaders: (res, pathName) => {
+          if (
+            pathName.endsWith("/index.html") ||
+            pathName.endsWith("/manifest.json") ||
+            pathName.endsWith("/codex-mobile-viewport.js")
+          ) {
+            res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
+            res.setHeader("Pragma", "no-cache");
+            res.setHeader("Expires", "0");
+          }
+        },'
 
-            sed -i \
-                    's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <style>\n      @media (hover: none) and (pointer: coarse) {\n        html,\n        body,\n        #root {\n          height: var(--codex-visual-viewport-height, 100dvh) !important;\n          min-height: var(--codex-visual-viewport-height, 100dvh) !important;\n        }\n\n        .app-shell-main-content-viewport {\n          --thread-floating-content-bottom-inset: calc(\n            var(--spacing) * 3 + max(\n              env(safe-area-inset-bottom, 0px),\n              var(--codex-visual-viewport-bottom-inset, 0px)\n            )\n          ) !important;\n        }\n      }\n    </style>\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>|' \
-                    "$webview/index.html"
+                sed -i \
+                        's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <style>\n      @media (hover: none) and (pointer: coarse) {\n        html,\n        body,\n        #root {\n          height: var(--codex-visual-viewport-height, 100dvh) !important;\n          min-height: var(--codex-visual-viewport-height, 100dvh) !important;\n        }\n\n        .app-shell-main-content-viewport {\n          --thread-floating-content-bottom-inset: calc(\n            var(--spacing) * 3 + max(\n              env(safe-area-inset-bottom, 0px),\n              var(--codex-visual-viewport-bottom-inset, 0px)\n            )\n          ) !important;\n        }\n      }\n    </style>\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>|' \
+                        "$webview/index.html"
       '';
 
   codexPackages = with pkgs; [
