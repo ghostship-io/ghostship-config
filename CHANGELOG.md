@@ -12,8 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Codex Ollama picker**: Add Ollama to the Codex web container, run Codex web
   and an authenticated ollama.com API proxy as the persistent `codex` user,
   project the Ollama API key into the container, and route the live
-  ollama.com `/api/tags` model list through Codex CLI's native Ollama provider
-  while keeping GPT models in the same picker.
+  ollama.com model list filtered to `tools`, `thinking`, and `cloud` models
+  through Codex CLI's native Ollama provider while keeping GPT models in the
+  same picker.
 - **Codex Bitwarden CLI**: Add Bitwarden CLI to the Codex web container and
   project `BW_CLIENTID`, `BW_CLIENTSECRET`, and `BW_PASSWORD` into the Codex
   runtime environment.

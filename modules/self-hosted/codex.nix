@@ -147,45 +147,28 @@ let
         const ollamaPrefix = "ollama/";
         const fallbackOllamaModels = ${
           builtins.toJSON [
-            "gemma3:12b"
-            "gemma3:27b"
-            "kimi-k2.6"
-            "qwen3-coder:480b"
-            "minimax-m2.5"
-            "mistral-large-3:675b"
             "glm-5"
             "qwen3-next:80b"
-            "deepseek-v4-flash"
-            "gpt-oss:20b"
-            "minimax-m2.1"
-            "nemotron-3-super"
             "kimi-k2.5"
-            "qwen3-vl:235b"
-            "devstral-small-2:24b"
-            "cogito-2.1:671b"
-            "qwen3-coder-next"
-            "nemotron-3-nano:30b"
-            "ministral-3:8b"
-            "gemma3:4b"
-            "rnj-1:8b"
-            "qwen3.5:397b"
-            "glm-5.1"
+            "kimi-k2.6"
             "kimi-k2-thinking"
-            "minimax-m2.7"
-            "ministral-3:3b"
-            "ministral-3:14b"
-            "devstral-2:123b"
-            "gemma4:31b"
-            "glm-4.6"
-            "glm-4.7"
-            "kimi-k2:1t"
-            "deepseek-v3.2"
-            "gpt-oss:120b"
-            "minimax-m2"
             "gemini-3-flash-preview"
-            "deepseek-v4-pro"
-            "deepseek-v3.1:671b"
+            "minimax-m2"
+            "glm-4.7"
+            "deepseek-v4-flash"
             "qwen3-vl:235b-instruct"
+            "glm-5.1"
+            "gpt-oss:120b"
+            "qwen3-vl:235b"
+            "gemma4:31b"
+            "nemotron-3-super"
+            "deepseek-v4-pro"
+            "nemotron-3-nano:30b"
+            "gpt-oss:20b"
+            "minimax-m2.5"
+            "deepseek-v3.2"
+            "minimax-m2.7"
+            "qwen3.5:397b"
           ]
         };
 
@@ -221,14 +204,27 @@ let
             if (process.env.OLLAMA_API_KEY) {
               headers.authorization = `Bearer ''${process.env.OLLAMA_API_KEY}`;
             }
-            const response = await fetch("https://ollama.com/api/tags", { headers });
-            if (!response.ok) {
-              throw new Error(`ollama.com/api/tags returned ''${response.status}`);
+            const [tagsResponse, searchResponse] = await Promise.all([
+              fetch("https://ollama.com/api/tags", { headers }),
+              fetch("https://ollama.com/search?c=tools&c=thinking&c=cloud", { headers }),
+            ]);
+            if (!tagsResponse.ok) {
+              throw new Error(`ollama.com/api/tags returned ''${tagsResponse.status}`);
             }
-            const payload = await response.json();
-            const names = Array.isArray(payload.models)
-              ? payload.models.map((model) => model.model || model.name).filter(Boolean)
-              : [];
+            if (!searchResponse.ok) {
+              throw new Error(`ollama.com/search returned ''${searchResponse.status}`);
+            }
+            const payload = await tagsResponse.json();
+            const searchHtml = await searchResponse.text();
+            const taggedFamilies = new Set(
+              Array.from(searchHtml.matchAll(/href="\/library\/([^"?#/]+)/g), (match) => match[1])
+            );
+            const names = Array.isArray(payload.models) ?
+              payload.models
+                .map((model) => model.model || model.name)
+                .filter(Boolean)
+                .filter((name) => taggedFamilies.has(name) || taggedFamilies.has(name.split(":", 1)[0])) :
+              [];
             return names.length > 0 ? names : fallbackOllamaModels;
           } catch (error) {
             console.error(`failed to fetch ollama.com model list: ''${error?.message || error}`);
