@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.16] - 2026-05-30
+
+- **Codex deep-link diagnostics**: Keep mobile helper assets root-relative on
+  thread routes, avoid serving the SPA shell for asset-like 404s, and report
+  client runtime errors in the mobile debug overlay.
+
 ## [2.1.15] - 2026-05-30
 
 - **Codex mobile diagnostics**: Add a temporary `?ghostship-debug=1` overlay

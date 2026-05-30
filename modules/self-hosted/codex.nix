@@ -85,6 +85,23 @@ let
       const root = document.documentElement;
       const bottomInsetProperty = "--thread-floating-content-bottom-inset";
       let beforeInstallPromptFired = false;
+      const runtimeErrors = [];
+
+      const recordRuntimeError = (message) => {
+        runtimeErrors.push(String(message).slice(0, 500));
+        if (runtimeErrors.length > 8) {
+          runtimeErrors.shift();
+        }
+        updateDebugOverlay();
+      };
+
+      window.addEventListener("error", (event) => {
+        recordRuntimeError(event.message || event.error || "unknown error");
+      });
+
+      window.addEventListener("unhandledrejection", (event) => {
+        recordRuntimeError(event.reason || "unhandled rejection");
+      });
 
       window.addEventListener("beforeinstallprompt", (event) => {
         beforeInstallPromptFired = true;
@@ -166,6 +183,7 @@ let
           userAgent: navigator.userAgent,
           displayModeStandalone: window.matchMedia("(display-mode: standalone)").matches,
           beforeInstallPromptFired,
+          runtimeErrors,
           serviceWorker: await getServiceWorkerState(),
           manifestHref: document.querySelector('link[rel="manifest"]')?.href || null,
           window: {
@@ -194,6 +212,12 @@ let
             clientHeight: document.body?.clientHeight,
             scrollHeight: document.body?.scrollHeight,
           },
+          rootChildren: Array.from(document.getElementById("root")?.children || []).map(
+            (element) => ({
+              tag: element.tagName,
+              className: element.className || null,
+            }),
+          ),
           contentViewport: {
             found: Boolean(contentViewport),
             rect: formatRect(contentViewport),
@@ -367,11 +391,21 @@ let
         },'
 
                 sed -i \
-                        's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <link rel="stylesheet" href="./codex-mobile-viewport.css" />\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>|' \
+                        's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <link rel="stylesheet" href="/codex-mobile-viewport.css" />\n    <script src="/codex-mobile-viewport.js"></script>\n  </head>|' \
                         "$webview/index.html"
                 sed -i \
                         's|<link rel="manifest" href="/manifest.json" />|<link rel="manifest" href="/manifest.json" />\n    <link rel="icon" sizes="192x192" href="/assets/pwa-icon-192.png" />\n    <link rel="apple-touch-icon" href="/assets/pwa-icon-192.png" />|' \
                         "$webview/index.html"
+                substituteInPlace "$server_main" \
+                  --replace-fail 'if (request.method === "GET") {
+            return reply.sendFile("index.html");
+        }' 'if (
+            request.method === "GET" &&
+            request.headers.accept?.includes("text/html") &&
+            !new URL(request.url, "http://localhost").pathname.split("/").pop()?.includes(".")
+        ) {
+            return reply.sendFile("index.html");
+        }'
       '';
 
   codexPackages = with pkgs; [
