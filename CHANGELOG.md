@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.7] - 2026-05-30
+
+- **Codex shell cache enforcement**: Disable Fastify's default static cache
+  header for the Codex webview root so the app-shell no-store hook is not
+  overwritten.
+
 ## [2.1.6] - 2026-05-30
 
 - **Codex shell cache control**: Mark Codex HTML, manifest, mobile viewport
