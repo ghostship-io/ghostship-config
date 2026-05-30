@@ -37,7 +37,6 @@ in
     bitwarden = mkUnit {
       relativeFile = "secrets/files/sources/providers/bitwarden.env.age";
       exports = [
-        "BWS_ACCESS_TOKEN"
         "BW_CLIENTID"
         "BW_CLIENTSECRET"
         "BW_PASSWORD"
@@ -325,6 +324,31 @@ in
       fields = {
         CHAPTARR_API_KEY = {
           unit = "chaptarr";
+          key = "API_KEY";
+        };
+      };
+    };
+
+    codex = {
+      fileName = "codex.env";
+      owner = "root";
+      group = "root";
+      mode = "0440";
+      fields = {
+        BW_CLIENTID = {
+          unit = "bitwarden";
+          key = "BW_CLIENTID";
+        };
+        BW_CLIENTSECRET = {
+          unit = "bitwarden";
+          key = "BW_CLIENTSECRET";
+        };
+        BW_PASSWORD = {
+          unit = "bitwarden";
+          key = "BW_PASSWORD";
+        };
+        OLLAMA_API_KEY = {
+          unit = "ollama";
           key = "API_KEY";
         };
       };

@@ -256,6 +256,13 @@ in
     install -d -m0755 -o apps -g apps /srv/apps/muximux/www/muximux
     install -m0644 -o apps -g apps ${muximuxDefaultSite} /srv/apps/muximux/nginx/site-confs/default
     install -m0644 -o apps -g apps ${rommIframeShim} /srv/apps/muximux/www/muximux/romm-iframe-shim.js
+    muximux_php="/srv/apps/muximux/www/muximux/muximux.php"
+    if [ -f "$muximux_php" ] && ! grep -q "allow='clipboard-read; clipboard-write'" "$muximux_php"; then
+      ${pkgs.gnused}/bin/sed -i \
+        "s/allowfullscreen='true'/allow='clipboard-read; clipboard-write' allowfullscreen='true'/" \
+        "$muximux_php"
+      chown apps:apps "$muximux_php"
+    fi
   '';
 
   system.activationScripts.muximux-config = {

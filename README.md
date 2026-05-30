@@ -190,12 +190,19 @@ PyLoad has a daily `04:00` `pyload-restart-failed` timer that checks the
 internal `http://pyload:8000` API and restarts failed queue links when present.
 
 Codex runs as a repo-built Podman OCI image with `0xcaff/codex-web`, the Codex
-CLI, Nix, Git, GitHub CLI, SSH, Docker-in-Docker, Python, Node.js, `uv`,
-`direnv`, search tools, and basic build tools. The service is intended for
-`https://codex.ghostship.io`; it keeps `/nix`, `/workspace`, `/home/codex`, and
-Docker state under `/srv/apps/codex`, mounts `/mnt/share`, and seeds the
-persistent `/nix` path from the built image before mounting it so the image's
-Nix store artifacts remain available at runtime.
+CLI, Nix, Git, GitHub CLI, SSH, Docker-in-Docker, Ollama, Bitwarden CLI,
+Python, Node.js, `uv`, `direnv`, search tools, and basic build tools. The
+service is intended for `https://codex.ghostship.io`; it keeps `/nix`,
+`/workspace`, `/home/codex`, and Docker state under `/srv/apps/codex`, mounts
+`/mnt/share`, and seeds the persistent `/nix` path from the built image before
+mounting it so the image's Nix store artifacts remain available at runtime.
+Codex web and the local Ollama API proxy run as the `codex` user; the proxy
+forwards Codex CLI's native `ollama` provider traffic to `https://ollama.com`
+with the projected `OLLAMA_API_KEY`. The web picker appends the current
+ollama.com model list from `/api/tags` as an Ollama model block. The Codex
+container also receives the Bitwarden runtime variables `BW_CLIENTID`,
+`BW_CLIENTSECRET`, and `BW_PASSWORD` from the shared Bitwarden secret
+projection at startup.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts

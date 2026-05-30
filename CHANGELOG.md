@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.0] - 2026-05-30
+
+- **Codex Ollama picker**: Add Ollama to the Codex web container, run Codex web
+  and an authenticated ollama.com API proxy as the persistent `codex` user,
+  project the Ollama API key into the container, and route the live
+  ollama.com `/api/tags` model list through Codex CLI's native Ollama provider
+  while keeping GPT models in the same picker.
+- **Codex Bitwarden CLI**: Add Bitwarden CLI to the Codex web container and
+  project `BW_CLIENTID`, `BW_CLIENTSECRET`, and `BW_PASSWORD` into the Codex
+  runtime environment.
+- **Muximux clipboard permission**: Allow clipboard read/write in service
+  iframes so Codex copy actions work when opened through `apps.ghostship.io`.
+
 ## [2.0.24] - 2026-05-30
 
 - **Codex Nix seed tracking**: Track the built Codex image store path when

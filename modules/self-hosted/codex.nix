@@ -1,4 +1,5 @@
 {
+  config,
   inputs,
   lib,
   pkgs,
@@ -10,6 +11,7 @@ let
   codexNix = "/srv/apps/codex/nix";
   codexDocker = "/srv/apps/codex/docker";
   codexWorkspace = "/srv/apps/codex/workspace";
+  codexSecrets = config.ghostship.selfHostedSecrets.projections.codex.path;
   imageName = "localhost/ghostship-codex";
   imageTag = "codex-web-${inputs.codex-web.shortRev or inputs.codex-web.rev}";
   system = pkgs.stdenv.hostPlatform.system;
@@ -22,6 +24,8 @@ let
     codexWebCli
     nix
     docker
+    ollama
+    bitwarden-cli
     git
     gh
     openssh
@@ -48,7 +52,7 @@ let
     iptables
     iproute2
     kmod
-    shadow
+    su-exec
     which
     file
     bashInteractive
@@ -56,6 +60,254 @@ let
   ];
 
   codexPath = lib.makeBinPath codexPackages;
+
+  codexOllamaCloudProxy = pkgs.writeTextFile {
+    name = "codex-ollama-cloud-proxy";
+    destination = "/bin/codex-ollama-cloud-proxy";
+    executable = true;
+    text = ''
+      #!${pkgs.nodejs_24}/bin/node
+      const http = require("node:http");
+
+      const listenHost = "127.0.0.1";
+      const listenPort = Number(process.env.OLLAMA_PROXY_PORT || "11434");
+      const upstream = new URL(process.env.OLLAMA_CLOUD_BASE_URL || "https://ollama.com");
+
+      const server = http.createServer(async (request, response) => {
+        try {
+          const body = await new Promise((resolve, reject) => {
+            const chunks = [];
+            request.on("data", (chunk) => chunks.push(chunk));
+            request.on("end", () => resolve(Buffer.concat(chunks)));
+            request.on("error", reject);
+          });
+
+          const target = new URL(request.url || "/", upstream);
+          const headers = { ...request.headers };
+          headers.host = upstream.host;
+          if (process.env.OLLAMA_API_KEY) {
+            headers.authorization = `Bearer ''${process.env.OLLAMA_API_KEY}`;
+          }
+
+          const upstreamResponse = await fetch(target, {
+            method: request.method,
+            headers,
+            body: ["GET", "HEAD"].includes(request.method || "GET") ? undefined : body,
+          });
+
+          response.writeHead(upstreamResponse.status, Object.fromEntries(upstreamResponse.headers));
+          if (upstreamResponse.body) {
+            for await (const chunk of upstreamResponse.body) {
+              response.write(chunk);
+            }
+          }
+          response.end();
+        } catch (error) {
+          response.writeHead(502, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: String(error?.message || error) }));
+        }
+      });
+
+      server.listen(listenPort, listenHost, () => {
+        console.error(`Ollama cloud proxy listening on http://''${listenHost}:''${listenPort}`);
+      });
+    '';
+  };
+
+  codexAppServerProxy = pkgs.writeTextFile {
+    name = "codex-app-server-proxy";
+    destination = "/bin/codex-app-server-proxy";
+    executable = true;
+    text = ''
+      #!${pkgs.nodejs_24}/bin/node
+      const { spawn } = require("node:child_process");
+      const readline = require("node:readline");
+
+      const realCodex = process.env.CODEX_REAL_CLI_PATH || "${codexWebCli}/bin/codex";
+      const args = process.argv.slice(2);
+      const isAppServer = args[0] === "app-server";
+
+      if (!isAppServer) {
+        const child = spawn(realCodex, args, { stdio: "inherit", env: process.env });
+        child.on("exit", (code, signal) => {
+          if (signal) {
+            process.kill(process.pid, signal);
+          }
+          process.exit(code ?? 1);
+        });
+        process.on("SIGTERM", () => child.kill("SIGTERM"));
+        process.on("SIGINT", () => child.kill("SIGINT"));
+      } else {
+        const child = spawn(realCodex, args, {
+          stdio: ["pipe", "pipe", "pipe"],
+          env: process.env,
+        });
+
+        const requestMethods = new Map();
+        const ollamaPrefix = "ollama/";
+        const fallbackOllamaModels = ${
+          builtins.toJSON [
+            "gemma3:12b"
+            "gemma3:27b"
+            "kimi-k2.6"
+            "qwen3-coder:480b"
+            "minimax-m2.5"
+            "mistral-large-3:675b"
+            "glm-5"
+            "qwen3-next:80b"
+            "deepseek-v4-flash"
+            "gpt-oss:20b"
+            "minimax-m2.1"
+            "nemotron-3-super"
+            "kimi-k2.5"
+            "qwen3-vl:235b"
+            "devstral-small-2:24b"
+            "cogito-2.1:671b"
+            "qwen3-coder-next"
+            "nemotron-3-nano:30b"
+            "ministral-3:8b"
+            "gemma3:4b"
+            "rnj-1:8b"
+            "qwen3.5:397b"
+            "glm-5.1"
+            "kimi-k2-thinking"
+            "minimax-m2.7"
+            "ministral-3:3b"
+            "ministral-3:14b"
+            "devstral-2:123b"
+            "gemma4:31b"
+            "glm-4.6"
+            "glm-4.7"
+            "kimi-k2:1t"
+            "deepseek-v3.2"
+            "gpt-oss:120b"
+            "minimax-m2"
+            "gemini-3-flash-preview"
+            "deepseek-v4-pro"
+            "deepseek-v3.1:671b"
+            "qwen3-vl:235b-instruct"
+          ]
+        };
+
+        function routeOllamaSelection(message) {
+          if (!message || typeof message !== "object" || !message.params || typeof message.params !== "object") {
+            return message;
+          }
+          const params = message.params;
+          if (typeof params.model !== "string" || !params.model.startsWith(ollamaPrefix)) {
+            return message;
+          }
+
+          params.model = params.model.slice(ollamaPrefix.length);
+          if (["thread/start", "thread/fork", "thread/resume"].includes(message.method)) {
+            params.modelProvider = "ollama";
+            params.serviceTier = null;
+          }
+          return message;
+        }
+
+        function effortTemplate(models) {
+          for (const model of models) {
+            if (Array.isArray(model.supportedReasoningEfforts) && model.supportedReasoningEfforts.length > 0) {
+              return model.supportedReasoningEfforts;
+            }
+          }
+          return ["low", "medium", "high"];
+        }
+
+        async function fetchOllamaModelNames() {
+          try {
+            const headers = {};
+            if (process.env.OLLAMA_API_KEY) {
+              headers.authorization = `Bearer ''${process.env.OLLAMA_API_KEY}`;
+            }
+            const response = await fetch("https://ollama.com/api/tags", { headers });
+            if (!response.ok) {
+              throw new Error(`ollama.com/api/tags returned ''${response.status}`);
+            }
+            const payload = await response.json();
+            const names = Array.isArray(payload.models)
+              ? payload.models.map((model) => model.model || model.name).filter(Boolean)
+              : [];
+            return names.length > 0 ? names : fallbackOllamaModels;
+          } catch (error) {
+            console.error(`failed to fetch ollama.com model list: ''${error?.message || error}`);
+            return fallbackOllamaModels;
+          }
+        }
+
+        async function decorateOllamaModels(openaiModels) {
+          const supportedReasoningEfforts = effortTemplate(openaiModels);
+          const modelNames = await fetchOllamaModelNames();
+          return modelNames.map((modelName) => ({
+            upgrade: null,
+            upgradeInfo: null,
+            availabilityNux: null,
+            hidden: false,
+            supportedReasoningEfforts,
+            defaultReasoningEffort: "medium",
+            inputModalities: ["text"],
+            supportsPersonality: true,
+            additionalSpeedTiers: [],
+            serviceTiers: [],
+            isDefault: false,
+            id: `ollama/''${modelName}`,
+            model: `ollama/''${modelName}`,
+            displayName: `Ollama / ''${modelName}`,
+            description: "Ollama cloud model reached through ollama.com using the projected API key.",
+          }));
+        }
+
+        async function appendOllamaModels(message) {
+          const method = requestMethods.get(message?.id);
+          if (method !== "model/list" || !Array.isArray(message?.result?.data)) {
+            return message;
+          }
+
+          const data = message.result.data;
+          const existing = new Set(data.map((model) => model.id || model.model));
+          const injected = (await decorateOllamaModels(data)).filter((model) => !existing.has(model.id));
+          message.result = {
+            ...message.result,
+            data: data.concat(injected),
+          };
+          return message;
+        }
+
+        const input = readline.createInterface({ input: process.stdin });
+        input.on("line", (line) => {
+          if (line.trim() === "") {
+            child.stdin.write("\n");
+            return;
+          }
+          try {
+            const message = JSON.parse(line);
+            if (message.id !== undefined && typeof message.method === "string") {
+              requestMethods.set(message.id, message.method);
+            }
+            child.stdin.write(JSON.stringify(routeOllamaSelection(message)) + "\n");
+          } catch {
+            child.stdin.write(line + "\n");
+          }
+        });
+        input.on("close", () => child.stdin.end());
+
+        const output = readline.createInterface({ input: child.stdout });
+        output.on("line", async (line) => {
+          try {
+            process.stdout.write(JSON.stringify(await appendOllamaModels(JSON.parse(line))) + "\n");
+          } catch {
+            process.stdout.write(line + "\n");
+          }
+        });
+
+        child.stderr.pipe(process.stderr);
+        child.on("exit", (code) => process.exit(code ?? 1));
+        process.on("SIGTERM", () => child.kill("SIGTERM"));
+        process.on("SIGINT", () => child.kill("SIGINT"));
+      }
+    '';
+  };
 
   codexEntrypoint = pkgs.writeShellScriptBin "codex-web-entrypoint" ''
     set -eu
@@ -67,9 +319,16 @@ let
     export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     export SSL_CERT_FILE=$NIX_SSL_CERT_FILE
     export NIX_CONFIG="experimental-features = nix-command flakes"
-    export CODEX_CLI_PATH=${codexWebCli}/bin/codex
+    export CODEX_REAL_CLI_PATH=${codexWebCli}/bin/codex
+    export CODEX_CLI_PATH=${codexAppServerProxy}/bin/codex-app-server-proxy
+    export OLLAMA_HOST=http://127.0.0.1:11434
+    export OLLAMA_MODELS=$HOME/.ollama/models
+    export OLLAMA_CLOUD_BASE_URL=https://ollama.com
+    web_pid=""
+    ollama_proxy_pid=""
 
-    mkdir -p "$HOME" /workspace /mnt/share /var/lib/docker /var/run /tmp
+    mkdir -p "$HOME/.ollama/models" "$HOME/.codex" /workspace /mnt/share /var/lib/docker /var/run /tmp
+    chown -R codex:codex "$HOME" /workspace
 
     rm -f /var/run/docker.pid
     dockerd \
@@ -88,10 +347,41 @@ let
       fi
       sleep 1
     done
+    chmod 0666 /var/run/docker.sock || true
+
+    su-exec codex:codex env \
+      HOME="$HOME" \
+      USER="$USER" \
+      PATH="$PATH" \
+      OLLAMA_HOST="$OLLAMA_HOST" \
+      OLLAMA_MODELS="$OLLAMA_MODELS" \
+      OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
+      OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
+      NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
+      SSL_CERT_FILE="$SSL_CERT_FILE" \
+      ${codexOllamaCloudProxy}/bin/codex-ollama-cloud-proxy &
+    ollama_proxy_pid=$!
+    trap 'kill "$docker_pid" "''${ollama_proxy_pid:-}" "''${web_pid:-}" 2>/dev/null || true' EXIT
 
     cd /workspace
 
-    exec ${codexWeb}/bin/codex-web --host 0.0.0.0 --port 8214
+    su-exec codex:codex env \
+      HOME="$HOME" \
+      USER="$USER" \
+      PATH="$PATH" \
+      DOCKER_HOST="$DOCKER_HOST" \
+      NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
+      SSL_CERT_FILE="$SSL_CERT_FILE" \
+      NIX_CONFIG="$NIX_CONFIG" \
+      CODEX_REAL_CLI_PATH="$CODEX_REAL_CLI_PATH" \
+      CODEX_CLI_PATH="$CODEX_CLI_PATH" \
+      OLLAMA_HOST="$OLLAMA_HOST" \
+      OLLAMA_MODELS="$OLLAMA_MODELS" \
+      OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
+      OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
+      ${codexWeb}/bin/codex-web --host 0.0.0.0 --port 8214 &
+    web_pid=$!
+    wait "$web_pid"
   '';
 
   codexImage = pkgs.dockerTools.buildLayeredImage {
@@ -99,12 +389,14 @@ let
     tag = imageTag;
     contents = codexPackages ++ [
       codexEntrypoint
+      codexOllamaCloudProxy
+      codexAppServerProxy
       pkgs.dockerTools.binSh
       pkgs.dockerTools.usrBinEnv
       pkgs.dockerTools.caCertificates
     ];
     extraCommands = ''
-      mkdir -p etc tmp workspace home/codex
+      mkdir -p etc/nix tmp workspace home/codex
       mkdir -p mnt/share var/lib/docker var/run
       chmod 1777 tmp
       cat > etc/passwd <<'EOF'
@@ -115,7 +407,7 @@ let
       root:x:0:
       codex:x:3000:
       EOF
-      cat > etc/nix.conf <<'EOF'
+      cat > etc/nix/nix.conf <<'EOF'
       experimental-features = nix-command flakes
       sandbox = false
       EOF
@@ -130,7 +422,11 @@ let
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "NIX_CONFIG=experimental-features = nix-command flakes"
-        "CODEX_CLI_PATH=${codexWebCli}/bin/codex"
+        "CODEX_REAL_CLI_PATH=${codexWebCli}/bin/codex"
+        "CODEX_CLI_PATH=${codexAppServerProxy}/bin/codex-app-server-proxy"
+        "OLLAMA_HOST=http://127.0.0.1:11434"
+        "OLLAMA_MODELS=/home/codex/.ollama/models"
+        "OLLAMA_CLOUD_BASE_URL=https://ollama.com"
       ];
       WorkingDir = "/workspace";
       ExposedPorts = {
@@ -148,6 +444,7 @@ in
       "io.containers.autoupdate" = "disabled";
     };
     ports = [ ];
+    environmentFiles = [ codexSecrets ];
     extraOptions = [
       "--privileged"
       "--network=ghostship_net"
