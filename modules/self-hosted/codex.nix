@@ -357,6 +357,7 @@ let
         nativeBuildInputs = [
           pkgs.gnused
           pkgs.imagemagick
+          pkgs.perl
         ];
       }
       ''
@@ -396,16 +397,13 @@ let
                 sed -i \
                         's|<link rel="manifest" href="/manifest.json" />|<link rel="manifest" href="/manifest.json" />\n    <link rel="icon" sizes="192x192" href="/assets/pwa-icon-192.png" />\n    <link rel="apple-touch-icon" href="/assets/pwa-icon-192.png" />|' \
                         "$webview/index.html"
-                substituteInPlace "$server_main" \
-                  --replace-fail 'if (request.method === "GET") {
-            return reply.sendFile("index.html");
-        }' 'if (
+                perl -0pi -e 's@if \(request\.method === "GET"\) \{\s*return reply\.sendFile\("index\.html"\);\s*\}@if (
             request.method === "GET" &&
             request.headers.accept?.includes("text/html") &&
             !new URL(request.url, "http://localhost").pathname.split("/").pop()?.includes(".")
         ) {
             return reply.sendFile("index.html");
-        }'
+        }@s or die "failed to patch SPA fallback\n"' "$server_main"
       '';
 
   codexPackages = with pkgs; [
