@@ -20,6 +20,80 @@ let
   codexWebUnpatched = inputs.codex-web.packages.${system}.default;
   codexWebCli = inputs.codex-web.packages.${system}.codex;
 
+  codexWebManifest = pkgs.writeText "codex-web-manifest.json" ''
+    {
+      "id": "/",
+      "name": "Codex",
+      "short_name": "Codex",
+      "description": "Ghostship Codex",
+      "start_url": "/",
+      "scope": "/",
+      "display": "standalone",
+      "display_override": ["standalone"],
+      "background_color": "#0d0d0d",
+      "theme_color": "#0d0d0d",
+      "icons": [
+        {
+          "src": "/assets/pwa-icon-512.png",
+          "sizes": "512x512",
+          "type": "image/png",
+          "purpose": "any maskable"
+        }
+      ],
+      "share_target": {
+        "action": "/share/receive",
+        "method": "GET",
+        "params": {
+          "title": "title",
+          "text": "text",
+          "url": "url"
+        }
+      }
+    }
+  '';
+
+  codexMobileViewportScript = pkgs.writeText "codex-mobile-viewport.js" ''
+    (() => {
+      const root = document.documentElement;
+
+      const updateViewport = () => {
+        const viewport = window.visualViewport;
+        const height = viewport?.height || window.innerHeight;
+        const bottomInset = viewport
+          ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+          : 0;
+
+        root.style.setProperty("--codex-visual-viewport-height", height + "px");
+        root.style.setProperty("--codex-visual-viewport-bottom-inset", bottomInset + "px");
+      };
+
+      updateViewport();
+      window.visualViewport?.addEventListener("resize", updateViewport);
+      window.visualViewport?.addEventListener("scroll", updateViewport);
+      window.addEventListener("resize", updateViewport);
+    })();
+  '';
+
+  codexCacheControlHook = pkgs.writeText "codex-cache-control-hook.js" ''
+    const sockets = new Set();
+      app.addHook("onSend", async (request, reply, payload) => {
+        const path = new URL(request.url, "http://localhost").pathname;
+        if (
+          request.method === "GET" &&
+          (path === "/" ||
+            path === "/index.html" ||
+            path === "/manifest.json" ||
+            path === "/codex-mobile-viewport.js" ||
+            !path.includes("."))
+        ) {
+          reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
+          reply.header("Pragma", "no-cache");
+          reply.header("Expires", "0");
+        }
+        return payload;
+      });
+  '';
+
   codexWeb =
     pkgs.runCommand "codex-web-mobile-viewport-${inputs.codex-web.shortRev or inputs.codex-web.rev}"
       {
@@ -33,86 +107,19 @@ let
               substituteInPlace "$webview/index.html" \
                 --replace-fail 'content="width=device-width, initial-scale=1.0"' \
                 'content="width=device-width, initial-scale=1.0, viewport-fit=cover"'
-              substituteInPlace "$webview/index.html" \
-                --replace-fail 'href="/manifest.json"' \
-                'href="/manifest.json?v=ghostship-${repoVersion}"'
+        substituteInPlace "$webview/index.html" \
+          --replace-fail 'href="/manifest.json"' \
+          'href="/manifest.json?v=ghostship-${repoVersion}"'
 
-              cat > "$webview/manifest.json" <<'EOF'
-              {
-                "id": "/",
-                "name": "Codex",
-                "short_name": "Codex",
-                "description": "Ghostship Codex",
-                "start_url": "/",
-                "scope": "/",
-                "display": "standalone",
-                "display_override": ["standalone"],
-                "background_color": "#0d0d0d",
-                "theme_color": "#0d0d0d",
-                "icons": [
-                  {
-                    "src": "/assets/pwa-icon-512.png",
-                    "sizes": "512x512",
-                    "type": "image/png",
-                    "purpose": "any maskable"
-                  }
-                ],
-                "share_target": {
-                  "action": "/share/receive",
-                  "method": "GET",
-                  "params": {
-                    "title": "title",
-                    "text": "text",
-                    "url": "url"
-                  }
-                }
-              }
-              EOF
+        install -m0644 ${codexWebManifest} "$webview/manifest.json"
+        install -m0644 ${codexMobileViewportScript} "$webview/codex-mobile-viewport.js"
 
-              cat > "$webview/codex-mobile-viewport.js" <<'EOF'
-              (() => {
-                const root = document.documentElement;
+        server_main="$out/lib/node_modules/codex-web/src/server/main.js"
+        substituteInPlace "$server_main" \
+          --replace-fail 'const sockets = new Set();' \
+          "$(cat ${codexCacheControlHook})"
 
-                const updateViewport = () => {
-                  const viewport = window.visualViewport;
-                  const height = viewport?.height || window.innerHeight;
-                  const bottomInset = viewport
-                    ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
-                    : 0;
-
-                  root.style.setProperty("--codex-visual-viewport-height", height + "px");
-                  root.style.setProperty("--codex-visual-viewport-bottom-inset", bottomInset + "px");
-                };
-
-                updateViewport();
-                window.visualViewport?.addEventListener("resize", updateViewport);
-                window.visualViewport?.addEventListener("scroll", updateViewport);
-                window.addEventListener("resize", updateViewport);
-              })();
-              EOF
-
-              server_main="$out/lib/node_modules/codex-web/src/server/main.js"
-              substituteInPlace "$server_main" \
-                --replace-fail 'const sockets = new Set();' \
-                'const sockets = new Set();
-        app.addHook("onSend", async (request, reply, payload) => {
-          const path = new URL(request.url, "http://localhost").pathname;
-          if (
-            request.method === "GET" &&
-            (path === "/" ||
-              path === "/index.html" ||
-              path === "/manifest.json" ||
-              path === "/codex-mobile-viewport.js" ||
-              !path.includes("."))
-          ) {
-            reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
-            reply.header("Pragma", "no-cache");
-            reply.header("Expires", "0");
-          }
-          return payload;
-        });'
-
-              sed -i \
+        sed -i \
                 's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <style>\n      @media (hover: none) and (pointer: coarse) {\n        html,\n        body,\n        #root {\n          height: var(--codex-visual-viewport-height, 100dvh) !important;\n          min-height: var(--codex-visual-viewport-height, 100dvh) !important;\n        }\n\n        .app-shell-main-content-viewport {\n          --thread-floating-content-bottom-inset: calc(\n            var(--spacing) * 3 + max(\n              env(safe-area-inset-bottom, 0px),\n              var(--codex-visual-viewport-bottom-inset, 0px)\n            )\n          ) !important;\n        }\n      }\n    </style>\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>|' \
                 "$webview/index.html"
       '';
