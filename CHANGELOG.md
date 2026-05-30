@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.6] - 2026-05-30
+
+- **Codex shell cache control**: Mark Codex HTML, manifest, mobile viewport
+  script, and SPA fallback responses as non-cacheable so authenticated browser
+  paths stop reusing stale app-shell metadata.
+
 ## [2.1.5] - 2026-05-30
 
 - **Codex mobile inset priority**: Mark the mobile composer bottom inset
