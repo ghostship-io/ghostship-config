@@ -32,6 +32,9 @@ let
         substituteInPlace "$webview/index.html" \
           --replace-fail 'content="width=device-width, initial-scale=1.0"' \
           'content="width=device-width, initial-scale=1.0, viewport-fit=cover"'
+        substituteInPlace "$webview/index.html" \
+          --replace-fail 'href="/manifest.json"' \
+          'href="/manifest.json?v=ghostship-2.1.4"'
 
         cat > "$webview/manifest.json" <<'EOF'
         {
@@ -88,29 +91,8 @@ let
         EOF
 
         sed -i \
-          's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>|' \
+          's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <style>\n      @media (hover: none) and (pointer: coarse) {\n        html,\n        body,\n        #root {\n          height: var(--codex-visual-viewport-height, 100dvh) !important;\n          min-height: var(--codex-visual-viewport-height, 100dvh) !important;\n        }\n\n        .app-shell-main-content-viewport {\n          --thread-floating-content-bottom-inset: calc(\n            var(--spacing) * 3 + max(\n              env(safe-area-inset-bottom, 0px),\n              var(--codex-visual-viewport-bottom-inset, 0px)\n            )\n          );\n        }\n      }\n    </style>\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>|' \
           "$webview/index.html"
-
-        cat >> "$webview"/assets/app-shell-*.css <<'EOF'
-
-        @media (hover: none) and (pointer: coarse) {
-          html,
-          body,
-          #root {
-            height: var(--codex-visual-viewport-height, 100dvh) !important;
-            min-height: var(--codex-visual-viewport-height, 100dvh) !important;
-          }
-
-          .app-shell-main-content-viewport {
-            --thread-floating-content-bottom-inset: calc(
-              var(--spacing) * 3 + max(
-                env(safe-area-inset-bottom, 0px),
-                var(--codex-visual-viewport-bottom-inset, 0px)
-              )
-            );
-          }
-        }
-        EOF
       '';
 
   codexPackages = with pkgs; [

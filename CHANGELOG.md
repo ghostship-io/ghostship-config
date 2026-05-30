@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.4] - 2026-05-30
+
+- **Codex mobile cache bust**: Inline the mobile viewport override into the
+  Codex web HTML and version the manifest link so mobile browsers do not keep
+  stale hashed assets or manifest metadata.
+
 ## [2.1.3] - 2026-05-30
 
 - **Codex installable web app**: Add standalone PWA manifest metadata and iOS
