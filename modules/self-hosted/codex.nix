@@ -72,6 +72,31 @@ let
       const listenHost = "127.0.0.1";
       const listenPort = Number(process.env.OLLAMA_PROXY_PORT || "11434");
       const upstream = new URL(process.env.OLLAMA_CLOUD_BASE_URL || "https://ollama.com");
+      const ollamaPrefix = "ollama/";
+
+      function normalizeRequestBody(body, headers) {
+        if (body.length === 0) {
+          return body;
+        }
+        const contentType = String(headers["content-type"] || "");
+        if (!contentType.includes("application/json")) {
+          return body;
+        }
+
+        try {
+          const payload = JSON.parse(body.toString("utf8"));
+          if (payload && typeof payload.model === "string" && payload.model.startsWith(ollamaPrefix)) {
+            payload.model = payload.model.slice(ollamaPrefix.length);
+            const normalized = Buffer.from(JSON.stringify(payload));
+            headers["content-length"] = String(normalized.length);
+            return normalized;
+          }
+        } catch {
+          return body;
+        }
+
+        return body;
+      }
 
       const server = http.createServer(async (request, response) => {
         try {
@@ -88,11 +113,12 @@ let
           if (process.env.OLLAMA_API_KEY) {
             headers.authorization = `Bearer ''${process.env.OLLAMA_API_KEY}`;
           }
+          const upstreamBody = normalizeRequestBody(body, headers);
 
           const upstreamResponse = await fetch(target, {
             method: request.method,
             headers,
-            body: ["GET", "HEAD"].includes(request.method || "GET") ? undefined : body,
+            body: ["GET", "HEAD"].includes(request.method || "GET") ? undefined : upstreamBody,
           });
 
           response.writeHead(upstreamResponse.status, Object.fromEntries(upstreamResponse.headers));

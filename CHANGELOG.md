@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Codex Ollama proxy fix**: Strip the UI-only `ollama/` model prefix from
+  Ollama-compatible JSON request bodies before forwarding them to ollama.com.
+
 ## [2.1.0] - 2026-05-30
 
 - **Codex Ollama picker**: Add Ollama to the Codex web container, run Codex web
