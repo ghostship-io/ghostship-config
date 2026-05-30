@@ -190,8 +190,8 @@ PyLoad has a daily `04:00` `pyload-restart-failed` timer that checks the
 internal `http://pyload:8000` API and restarts failed queue links when present.
 
 Codex runs as a repo-built Podman OCI image with `0xcaff/codex-web`, the Codex
-CLI, Nix, Git, SSH, Docker-in-Docker, Python, Node.js, `uv`, `direnv`, search
-tools, and basic build tools. The service is intended for
+CLI, Nix, Git, GitHub CLI, SSH, Docker-in-Docker, Python, Node.js, `uv`,
+`direnv`, search tools, and basic build tools. The service is intended for
 `https://codex.ghostship.io`; it keeps `/nix`, `/workspace`, `/home/codex`, and
 Docker state under `/srv/apps/codex`, mounts `/mnt/share`, and seeds the
 persistent `/nix` path from the built image before mounting it so the image's

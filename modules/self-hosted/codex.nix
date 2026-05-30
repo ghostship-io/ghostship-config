@@ -23,6 +23,7 @@ let
     nix
     docker
     git
+    gh
     openssh
     curl
     jq
