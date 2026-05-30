@@ -516,10 +516,10 @@ in
                 continue
               }
 
-              printf "%s", section_data[name]
-              if (name == "Homepage" && ("Codex" in section_data)) {
+              if (name == "CloakBrowser" && ("Codex" in section_data)) {
                 printf "%s", section_data["Codex"]
               }
+              printf "%s", section_data[name]
               if (name == "Prowlarr" && ("BookStack" in section_data)) {
                 printf "%s", section_data["BookStack"]
               }
@@ -542,7 +542,7 @@ in
             if (!("RSS-Bridge" in section_data) && ("Changedetection" in section_data)) {
               printf "%s", section_data["Changedetection"]
             }
-            if (!("Homepage" in section_data) && ("Codex" in section_data)) {
+            if (!("CloakBrowser" in section_data) && ("Codex" in section_data)) {
               printf "%s", section_data["Codex"]
             }
             if (!("Prowlarr" in section_data) && ("BookStack" in section_data)) {
