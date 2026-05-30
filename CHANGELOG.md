@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.3] - 2026-05-30
+
+- **Codex installable web app**: Add standalone PWA manifest metadata and iOS
+  standalone web-app tags to the patched Codex web bundle.
+
 ## [2.1.2] - 2026-05-30
 
 - **Codex mobile viewport**: Patch the Codex web bundle in the container image

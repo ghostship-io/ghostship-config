@@ -33,6 +33,38 @@ let
           --replace-fail 'content="width=device-width, initial-scale=1.0"' \
           'content="width=device-width, initial-scale=1.0, viewport-fit=cover"'
 
+        cat > "$webview/manifest.json" <<'EOF'
+        {
+          "id": "/",
+          "name": "Codex",
+          "short_name": "Codex",
+          "description": "Ghostship Codex",
+          "start_url": "/",
+          "scope": "/",
+          "display": "standalone",
+          "display_override": ["standalone"],
+          "background_color": "#0d0d0d",
+          "theme_color": "#0d0d0d",
+          "icons": [
+            {
+              "src": "/assets/pwa-icon-512.png",
+              "sizes": "512x512",
+              "type": "image/png",
+              "purpose": "any maskable"
+            }
+          ],
+          "share_target": {
+            "action": "/share/receive",
+            "method": "GET",
+            "params": {
+              "title": "title",
+              "text": "text",
+              "url": "url"
+            }
+          }
+        }
+        EOF
+
         cat > "$webview/codex-mobile-viewport.js" <<'EOF'
         (() => {
           const root = document.documentElement;
@@ -56,7 +88,7 @@ let
         EOF
 
         sed -i \
-          's#</head>#    <script src="./codex-mobile-viewport.js"></script>\n  </head>#' \
+          's#</head>#    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>#' \
           "$webview/index.html"
 
         cat >> "$webview"/assets/app-shell-*.css <<'EOF'
