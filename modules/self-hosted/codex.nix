@@ -14,7 +14,6 @@ let
   codexSecrets = config.ghostship.selfHostedSecrets.projections.codex.path;
   imageName = "localhost/ghostship-codex";
   imageTag = "codex-web-${inputs.codex-web.shortRev or inputs.codex-web.rev}";
-  repoVersion = lib.removeSuffix "\n" (builtins.readFile ../../VERSION);
   system = pkgs.stdenv.hostPlatform.system;
 
   codexWebUnpatched = inputs.codex-web.packages.${system}.default;
@@ -59,11 +58,15 @@ let
 
       .app-shell-main-content-viewport {
         --thread-floating-content-bottom-inset: calc(
-          16px + max(
+          72px + max(
             env(safe-area-inset-bottom, 0px),
             var(--codex-visual-viewport-bottom-inset, 0px)
           )
         ) !important;
+      }
+
+      .pointer-events-none.absolute[class*="bottom-(--thread-floating-content-bottom-inset)"] {
+        bottom: var(--thread-floating-content-bottom-inset) !important;
       }
 
       @supports (height: 100dvh) {
@@ -93,7 +96,7 @@ let
         root.style.setProperty("--codex-visual-viewport-bottom-inset", bottomInset + "px");
         document.querySelector(".app-shell-main-content-viewport")?.style.setProperty(
           bottomInsetProperty,
-          `calc(16px + max(env(safe-area-inset-bottom, 0px), ''${bottomInset}px))`,
+          `calc(72px + max(env(safe-area-inset-bottom, 0px), ''${bottomInset}px))`,
           "important",
         );
       };
@@ -181,9 +184,6 @@ let
                       substituteInPlace "$webview/index.html" \
                         --replace-fail 'content="width=device-width, initial-scale=1.0"' \
                         'content="width=device-width, initial-scale=1.0, viewport-fit=cover"'
-                substituteInPlace "$webview/index.html" \
-                  --replace-fail 'href="/manifest.json"' \
-                  'href="/manifest.json?v=ghostship-${repoVersion}"'
 
                 install -m0644 ${codexWebManifest} "$webview/manifest.json"
                 magick "$webview/assets/pwa-icon-512.png" -resize 192x192 "$webview/assets/pwa-icon-192.png"
@@ -209,7 +209,7 @@ let
                         's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <link rel="stylesheet" href="./codex-mobile-viewport.css" />\n    <script src="./codex-mobile-viewport.js"></script>\n  </head>|' \
                         "$webview/index.html"
                 sed -i \
-                        's|<link rel="manifest" href="/manifest.json?v=ghostship-${repoVersion}" />|<link rel="manifest" href="/manifest.json?v=ghostship-${repoVersion}" />\n    <link rel="icon" sizes="192x192" href="/assets/pwa-icon-192.png" />\n    <link rel="apple-touch-icon" href="/assets/pwa-icon-192.png" />|' \
+                        's|<link rel="manifest" href="/manifest.json" />|<link rel="manifest" href="/manifest.json" />\n    <link rel="icon" sizes="192x192" href="/assets/pwa-icon-192.png" />\n    <link rel="apple-touch-icon" href="/assets/pwa-icon-192.png" />|' \
                         "$webview/index.html"
       '';
 

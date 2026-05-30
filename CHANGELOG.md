@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.14] - 2026-05-30
+
+- **Codex Android clearance**: Give the mobile floating composer a fixed
+  Android navigation clearance fallback and keep the manifest link unversioned
+  while no-store headers handle freshness.
+
 ## [2.1.13] - 2026-05-30
 
 - **Codex mobile viewport owner**: Apply the mobile bottom inset to Codex's
