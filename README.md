@@ -177,7 +177,7 @@ internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, the `arr` stack,
 qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr, BookStack,
-PyLoad, JDownloader2, RSS-Bridge, PriceBuddy, and n8n.
+PyLoad, RSS-Bridge, PriceBuddy, and n8n.
 
 Retired `chill-penguin` self-hosted service artifacts are cleaned from the
 allowlist in
@@ -188,11 +188,6 @@ service modules.
 
 PyLoad has a daily `04:00` `pyload-restart-failed` timer that checks the
 internal `http://pyload:8000` API and restarts failed queue links when present.
-
-JDownloader2 runs headless on `chill-penguin` and uses MyJDownloader as its
-primary interface. Its persistent app state lives under `/srv/apps/jdownloader`,
-the MyJDownloader credentials come from the `jdownloader` secret projection,
-and downloads are written to `/mnt/share/Downloads/JDownloader2`.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts

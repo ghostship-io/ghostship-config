@@ -8,6 +8,16 @@
 let
   retiredArtifacts = [
     {
+      name = "jdownloader";
+      paths = [ "/srv/apps/jdownloader" ];
+      units = [ "podman-jdownloader" ];
+      containers = [ "jdownloader" ];
+      imageRefs = [ "docker.io/jlesage/jdownloader-2:latest" ];
+      imageRepositories = [ "docker.io/jlesage/jdownloader-2" ];
+      homepageEntries = [ "JDownloader2" ];
+      muximuxSections = [ "JDownloader2" ];
+    }
+    {
       name = "codex";
       paths = [ "/srv/apps/codex" ];
       units = [

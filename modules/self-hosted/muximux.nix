@@ -388,13 +388,6 @@ in
           pyLoad.color=literal:"#ffcc00"
           pyLoad.enabled=literal:"true"
           pyLoad.dd=literal:"true"
-          JDownloader2.name=literal:"JDownloader2"
-          JDownloader2.url=literal:"https://my.jdownloader.org/"
-          JDownloader2.scale=literal:1
-          JDownloader2.icon=literal:"fa-download"
-          JDownloader2.color=literal:"#0ea5e9"
-          JDownloader2.enabled=literal:"true"
-          JDownloader2.dd=literal:"true"
           SearXNG.name=literal:"SearXNG"
           SearXNG.url=literal:"https://searxng.ghostship.io"
           SearXNG.scale=literal:1

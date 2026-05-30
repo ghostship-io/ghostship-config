@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.0.20] - 2026-05-30
+
+- **JDownloader2 removal**: Remove the headless JDownloader2 service, secret
+  projection, dashboard entries, and retired live container/config/image
+  artifacts from the `chill-penguin` self-hosted stack.
+
 ## [2.0.19] - 2026-05-29
 
 - **JDownloader2 self-hosted service**: Add a headless
