@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.12] - 2026-05-30
+
+- **Codex mobile first-load inset**: Re-run the visual viewport sizing after
+  DOM readiness, page load, animation frames, and short Android browser-chrome
+  settle delays so the follow-up composer clears mobile controls before focus.
+
 ## [2.1.11] - 2026-05-30
 
 - **Codex mobile installability**: Add a real service worker, 192px PWA icon,

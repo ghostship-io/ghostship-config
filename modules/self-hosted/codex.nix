@@ -94,10 +94,21 @@ let
         );
       };
 
-      updateViewport();
+      const scheduleViewportUpdate = () => {
+        updateViewport();
+        requestAnimationFrame(updateViewport);
+      };
+
+      scheduleViewportUpdate();
+      [50, 150, 300, 750, 1500].forEach((delay) => {
+        window.setTimeout(scheduleViewportUpdate, delay);
+      });
+      document.addEventListener("DOMContentLoaded", scheduleViewportUpdate, { once: true });
+      window.addEventListener("load", scheduleViewportUpdate, { once: true });
       window.visualViewport?.addEventListener("resize", updateViewport);
       window.visualViewport?.addEventListener("scroll", updateViewport);
       window.addEventListener("resize", updateViewport);
+      window.addEventListener("orientationchange", scheduleViewportUpdate);
 
       if ("serviceWorker" in navigator && window.isSecureContext) {
         navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(() => {});
