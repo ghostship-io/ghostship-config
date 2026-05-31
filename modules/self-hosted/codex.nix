@@ -84,15 +84,26 @@ let
     (() => {
       const root = document.documentElement;
       const bottomInsetProperty = "--thread-floating-content-bottom-inset";
+      const debugEnabled = new URLSearchParams(location.search).has("ghostship-debug");
       let beforeInstallPromptFired = false;
       const runtimeErrors = [];
+      let lastRootMutationAt = null;
+      let debugUpdateTimer = null;
+
+      const scheduleDebugOverlayUpdate = () => {
+        if (!debugEnabled) {
+          return;
+        }
+        window.clearTimeout(debugUpdateTimer);
+        debugUpdateTimer = window.setTimeout(updateDebugOverlay, 80);
+      };
 
       const recordRuntimeError = (message) => {
         runtimeErrors.push(String(message).slice(0, 500));
         if (runtimeErrors.length > 8) {
           runtimeErrors.shift();
         }
-        updateDebugOverlay();
+        scheduleDebugOverlayUpdate();
       };
 
       window.addEventListener("error", (event) => {
@@ -106,7 +117,7 @@ let
       window.addEventListener("beforeinstallprompt", (event) => {
         beforeInstallPromptFired = true;
         window.__ghostshipBeforeInstallPrompt = event;
-        updateDebugOverlay();
+        scheduleDebugOverlayUpdate();
       });
 
       const updateViewport = () => {
@@ -171,19 +182,29 @@ let
 
       async function collectDebugState() {
         const viewport = window.visualViewport;
+        const appRoot = document.getElementById("root");
         const contentViewport = document.querySelector(".app-shell-main-content-viewport");
         const floatingComposer = findFloatingComposer();
         const input = document.querySelector('[contenteditable="true"], textarea, input');
         const floatingStyle = floatingComposer ? getComputedStyle(floatingComposer) : null;
         const contentStyle = contentViewport ? getComputedStyle(contentViewport) : null;
         const rootStyle = getComputedStyle(root);
+        const rootChildren = Array.from(appRoot?.children || []).map((element) => ({
+          tag: element.tagName,
+          className: element.className || null,
+        }));
+        const startupLoaderPresent = Boolean(appRoot?.querySelector(".startup-loader"));
 
         return {
+          sampledAt: new Date().toISOString(),
           href: location.href,
           userAgent: navigator.userAgent,
           displayModeStandalone: window.matchMedia("(display-mode: standalone)").matches,
           beforeInstallPromptFired,
           runtimeErrors,
+          appHydrated: Boolean(appRoot) && !startupLoaderPresent && rootChildren.length > 0,
+          startupLoaderPresent,
+          lastRootMutationAt,
           serviceWorker: await getServiceWorkerState(),
           manifestHref: document.querySelector('link[rel="manifest"]')?.href || null,
           window: {
@@ -212,12 +233,7 @@ let
             clientHeight: document.body?.clientHeight,
             scrollHeight: document.body?.scrollHeight,
           },
-          rootChildren: Array.from(document.getElementById("root")?.children || []).map(
-            (element) => ({
-              tag: element.tagName,
-              className: element.className || null,
-            }),
-          ),
+          rootChildren,
           contentViewport: {
             found: Boolean(contentViewport),
             rect: formatRect(contentViewport),
@@ -240,7 +256,7 @@ let
       }
 
       async function updateDebugOverlay() {
-        if (!new URLSearchParams(location.search).has("ghostship-debug")) {
+        if (!debugEnabled) {
           return;
         }
 
@@ -280,6 +296,30 @@ let
         requestAnimationFrame(updateDebugOverlay);
       };
 
+      const observeRootHydration = () => {
+        if (!debugEnabled || !("MutationObserver" in window)) {
+          return;
+        }
+
+        const appRoot = document.getElementById("root");
+        if (!appRoot) {
+          window.setTimeout(observeRootHydration, 100);
+          return;
+        }
+
+        const observer = new MutationObserver(() => {
+          lastRootMutationAt = new Date().toISOString();
+          scheduleViewportUpdate();
+        });
+        observer.observe(appRoot, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ["class", "style"],
+        });
+        window.setTimeout(() => observer.disconnect(), 60000);
+      };
+
       scheduleViewportUpdate();
       [50, 150, 300, 750, 1500].forEach((delay) => {
         window.setTimeout(scheduleViewportUpdate, delay);
@@ -294,16 +334,17 @@ let
       window.visualViewport?.addEventListener("scroll", updateDebugOverlay);
       window.addEventListener("resize", updateDebugOverlay);
       window.addEventListener("orientationchange", updateDebugOverlay);
+      observeRootHydration();
 
       if ("serviceWorker" in navigator && window.isSecureContext) {
         navigator.serviceWorker
           .register("/service-worker.js", { scope: "/" })
-          .finally(updateDebugOverlay)
+          .finally(scheduleDebugOverlayUpdate)
           .catch(() => {});
       }
 
-      [250, 1000, 2500, 5000].forEach((delay) => {
-        window.setTimeout(updateDebugOverlay, delay);
+      [250, 1000, 2500, 5000, 10000, 20000, 30000].forEach((delay) => {
+        window.setTimeout(scheduleDebugOverlayUpdate, delay);
       });
     })();
   '';

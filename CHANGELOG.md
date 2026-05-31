@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.17] - 2026-05-30
+
+- **Codex hydration diagnostics**: Keep the mobile debug overlay refreshing
+  after React root mutations so thread screenshots capture hydrated app state
+  instead of only the startup loader.
+
 ## [2.1.16] - 2026-05-30
 
 - **Codex deep-link diagnostics**: Keep mobile helper assets root-relative on
