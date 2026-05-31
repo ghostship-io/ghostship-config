@@ -54,6 +54,14 @@ let
       #root {
         height: 100svh !important;
         min-height: 100svh !important;
+        overflow: hidden !important;
+      }
+
+      #root > .relative.flex.flex-col {
+        height: var(--codex-visual-viewport-height, 100svh) !important;
+        min-height: var(--codex-visual-viewport-height, 100svh) !important;
+        max-height: var(--codex-visual-viewport-height, 100svh) !important;
+        overflow: hidden !important;
       }
 
       .app-shell-main-content-viewport {
@@ -63,6 +71,10 @@ let
             var(--codex-visual-viewport-bottom-inset, 0px)
           )
         ) !important;
+        height: var(--codex-visual-viewport-height, 100svh) !important;
+        min-height: var(--codex-visual-viewport-height, 100svh) !important;
+        max-height: var(--codex-visual-viewport-height, 100svh) !important;
+        overflow: hidden !important;
       }
 
       .pointer-events-none.absolute[class*="bottom-(--thread-floating-content-bottom-inset)"] {
@@ -75,6 +87,7 @@ let
         #root {
           height: min(var(--codex-visual-viewport-height, 100svh), 100svh) !important;
           min-height: min(var(--codex-visual-viewport-height, 100svh), 100svh) !important;
+          max-height: min(var(--codex-visual-viewport-height, 100svh), 100svh) !important;
         }
       }
     }

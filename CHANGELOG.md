@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.18] - 2026-05-31
+
+- **Codex mobile shell height**: Clamp the hydrated Codex app shell and main
+  content viewport to the measured mobile visual viewport so first-load thread
+  pages do not extend under Android Chrome controls.
+
 ## [2.1.17] - 2026-05-30
 
 - **Codex hydration diagnostics**: Keep the mobile debug overlay refreshing
