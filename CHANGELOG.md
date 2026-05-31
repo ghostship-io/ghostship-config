@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.21] - 2026-05-31
+
+- **Retired image cleanup**: Add leftover upstream Agent Zero and local Honcho
+  image repositories to the `chill-penguin` retired artifact cleanup inventory.
+
 ## [2.1.20] - 2026-05-31
 
 - **Develop module cleanup**: Remove the unused `modules/develop/core.nix`
