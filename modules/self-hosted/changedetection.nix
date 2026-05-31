@@ -13,7 +13,7 @@ let
     dockerfile="${containers-root}/changedetection-cloakbrowser/Dockerfile"
     context_dir="${containers-root}"
 
-    if ${pkgs.podman}/bin/podman image exists "$image"; then
+    if [ "''${FORCE_REBUILD:-0}" != "1" ] && ${pkgs.podman}/bin/podman image exists "$image"; then
       exit 0
     fi
 
@@ -96,6 +96,37 @@ in
       ${changedetection-build}/bin/ghostship-build-changedetection-image
       ${changedetection-pre-start}
     '';
+  };
+
+  systemd.services.changedetection-local-image-refresh = {
+    description = "Refresh the local Changedetection CloakBrowser image";
+    after = [ "podman-auto-update.service" ];
+    wants = [ "podman-auto-update.service" ];
+    serviceConfig.Type = "oneshot";
+    script = ''
+      FORCE_REBUILD=1 ${changedetection-build}/bin/ghostship-build-changedetection-image
+      ${pkgs.systemd}/bin/systemctl try-restart podman-changedetection.service
+      ${pkgs.podman}/bin/podman images --format '{{.Repository}}:{{.Tag}}' \
+        | while IFS= read -r stale_image; do
+            case "$stale_image" in
+              localhost/ghostship-changedetection-cloakbrowser:*)
+                if [ "$stale_image" != "${changedetection-image}" ]; then
+                  ${pkgs.podman}/bin/podman rmi -f "$stale_image" >/dev/null 2>&1 || true
+                fi
+                ;;
+            esac
+          done
+    '';
+  };
+
+  systemd.timers.changedetection-local-image-refresh = {
+    description = "Daily local Changedetection CloakBrowser image refresh";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      Persistent = true;
+      RandomizedDelaySec = "45m";
+    };
   };
 
   systemd.tmpfiles.rules = [

@@ -12,7 +12,7 @@ let
     dockerfile="${containers-root}/pricebuddy-scraper-cloakbrowser/Dockerfile"
     context_dir="${containers-root}"
 
-    if ${pkgs.podman}/bin/podman image exists "$image"; then
+    if [ "''${FORCE_REBUILD:-0}" != "1" ] && ${pkgs.podman}/bin/podman image exists "$image"; then
       exit 0
     fi
 
@@ -312,8 +312,39 @@ in
 
   systemd.services.podman-pricebuddy-scraper = {
     preStart = lib.mkBefore ''
-    ${pricebuddy-scraper-build}/bin/ghostship-build-pricebuddy-scraper-image
+      ${pricebuddy-scraper-build}/bin/ghostship-build-pricebuddy-scraper-image
     '';
+  };
+
+  systemd.services.pricebuddy-scraper-local-image-refresh = {
+    description = "Refresh the local PriceBuddy scraper CloakBrowser image";
+    after = [ "podman-auto-update.service" ];
+    wants = [ "podman-auto-update.service" ];
+    serviceConfig.Type = "oneshot";
+    script = ''
+      FORCE_REBUILD=1 ${pricebuddy-scraper-build}/bin/ghostship-build-pricebuddy-scraper-image
+      ${pkgs.systemd}/bin/systemctl try-restart podman-pricebuddy-scraper.service
+      ${pkgs.podman}/bin/podman images --format '{{.Repository}}:{{.Tag}}' \
+        | while IFS= read -r stale_image; do
+            case "$stale_image" in
+              localhost/ghostship-pricebuddy-scraper-cloakbrowser:*)
+                if [ "$stale_image" != "${pricebuddy-scraper-image}" ]; then
+                  ${pkgs.podman}/bin/podman rmi -f "$stale_image" >/dev/null 2>&1 || true
+                fi
+                ;;
+            esac
+          done
+    '';
+  };
+
+  systemd.timers.pricebuddy-scraper-local-image-refresh = {
+    description = "Daily local PriceBuddy scraper CloakBrowser image refresh";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      Persistent = true;
+      RandomizedDelaySec = "45m";
+    };
   };
 
   systemd.services.podman-pricebuddy = {

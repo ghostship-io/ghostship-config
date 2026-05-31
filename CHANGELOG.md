@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.23] - 2026-05-31
+
+- **Local image refresh**: Add daily forced rebuild timers for the local
+  Changedetection and PriceBuddy scraper CloakBrowser images so their `latest`
+  base images update automatically before the running services restart. The
+  refresh services also prune stale hash-tagged local image leftovers after the
+  restarted service adopts the current tag, and automatic NixOS upgrades no
+  longer try to commit lock-file changes from remote flake checkouts.
+
 ## [2.1.22] - 2026-05-31
 
 - **Develop and secret cleanup**: Remove duplicate Home Manager OpenCode
