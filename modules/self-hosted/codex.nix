@@ -19,34 +19,6 @@ let
   codexWebUnpatched = inputs.codex-web.packages.${system}.default;
   codexWebCli = inputs.codex-web.packages.${system}.codex;
 
-  codexWebManifest = pkgs.writeText "codex-web-manifest.json" ''
-    {
-      "id": "/",
-      "name": "Codex",
-      "short_name": "Codex",
-      "description": "Ghostship Codex",
-      "start_url": "/",
-      "scope": "/",
-      "display": "standalone",
-      "background_color": "#0d0d0d",
-      "theme_color": "#0d0d0d",
-      "icons": [
-        {
-          "src": "/assets/pwa-icon-192.png",
-          "sizes": "192x192",
-          "type": "image/png",
-          "purpose": "any maskable"
-        },
-        {
-          "src": "/assets/pwa-icon-512.png",
-          "sizes": "512x512",
-          "type": "image/png",
-          "purpose": "any maskable"
-        }
-      ]
-    }
-  '';
-
   codexMobileViewportStyle = pkgs.writeText "codex-mobile-viewport.css" ''
     @media (hover: none) and (pointer: coarse) {
       html,
@@ -54,13 +26,6 @@ let
       #root {
         height: 100svh !important;
         min-height: 100svh !important;
-        overflow: hidden !important;
-      }
-
-      #root > .relative.flex.flex-col {
-        height: var(--codex-visual-viewport-height, 100svh) !important;
-        min-height: var(--codex-visual-viewport-height, 100svh) !important;
-        max-height: var(--codex-visual-viewport-height, 100svh) !important;
         overflow: hidden !important;
       }
 
@@ -97,41 +62,6 @@ let
     (() => {
       const root = document.documentElement;
       const bottomInsetProperty = "--thread-floating-content-bottom-inset";
-      const debugEnabled = new URLSearchParams(location.search).has("ghostship-debug");
-      let beforeInstallPromptFired = false;
-      const runtimeErrors = [];
-      let lastRootMutationAt = null;
-      let debugUpdateTimer = null;
-
-      const scheduleDebugOverlayUpdate = () => {
-        if (!debugEnabled) {
-          return;
-        }
-        window.clearTimeout(debugUpdateTimer);
-        debugUpdateTimer = window.setTimeout(updateDebugOverlay, 80);
-      };
-
-      const recordRuntimeError = (message) => {
-        runtimeErrors.push(String(message).slice(0, 500));
-        if (runtimeErrors.length > 8) {
-          runtimeErrors.shift();
-        }
-        scheduleDebugOverlayUpdate();
-      };
-
-      window.addEventListener("error", (event) => {
-        recordRuntimeError(event.message || event.error || "unknown error");
-      });
-
-      window.addEventListener("unhandledrejection", (event) => {
-        recordRuntimeError(event.reason || "unhandled rejection");
-      });
-
-      window.addEventListener("beforeinstallprompt", (event) => {
-        beforeInstallPromptFired = true;
-        window.__ghostshipBeforeInstallPrompt = event;
-        scheduleDebugOverlayUpdate();
-      });
 
       const updateViewport = () => {
         const viewport = window.visualViewport;
@@ -149,188 +79,9 @@ let
         );
       };
 
-      const findFloatingComposer = () =>
-        document.querySelector(
-          '.pointer-events-none.absolute[class*="bottom-(--thread-floating-content-bottom-inset)"]',
-        ) || document.querySelector('[class*="bottom-(--thread-floating-content-bottom-inset)"]');
-
-      const formatRect = (element) => {
-        if (!element) {
-          return null;
-        }
-        const rect = element.getBoundingClientRect();
-        return {
-          top: Math.round(rect.top),
-          bottom: Math.round(rect.bottom),
-          height: Math.round(rect.height),
-          left: Math.round(rect.left),
-          right: Math.round(rect.right),
-          width: Math.round(rect.width),
-        };
-      };
-
-      async function getServiceWorkerState() {
-        if (!("serviceWorker" in navigator)) {
-          return { supported: false };
-        }
-
-        let registrations = "unknown";
-        try {
-          registrations = (await navigator.serviceWorker.getRegistrations()).map((registration) => ({
-            scope: registration.scope,
-            active: Boolean(registration.active),
-            waiting: Boolean(registration.waiting),
-            installing: Boolean(registration.installing),
-          }));
-        } catch (error) {
-          registrations = "error: " + error;
-        }
-
-        return {
-          supported: true,
-          controller: Boolean(navigator.serviceWorker.controller),
-          registrations,
-        };
-      }
-
-      async function collectDebugState() {
-        const viewport = window.visualViewport;
-        const appRoot = document.getElementById("root");
-        const contentViewport = document.querySelector(".app-shell-main-content-viewport");
-        const floatingComposer = findFloatingComposer();
-        const input = document.querySelector('[contenteditable="true"], textarea, input');
-        const floatingStyle = floatingComposer ? getComputedStyle(floatingComposer) : null;
-        const contentStyle = contentViewport ? getComputedStyle(contentViewport) : null;
-        const rootStyle = getComputedStyle(root);
-        const rootChildren = Array.from(appRoot?.children || []).map((element) => ({
-          tag: element.tagName,
-          className: element.className || null,
-        }));
-        const startupLoaderPresent = Boolean(appRoot?.querySelector(".startup-loader"));
-
-        return {
-          sampledAt: new Date().toISOString(),
-          href: location.href,
-          userAgent: navigator.userAgent,
-          displayModeStandalone: window.matchMedia("(display-mode: standalone)").matches,
-          beforeInstallPromptFired,
-          runtimeErrors,
-          appHydrated: Boolean(appRoot) && !startupLoaderPresent && rootChildren.length > 0,
-          startupLoaderPresent,
-          lastRootMutationAt,
-          serviceWorker: await getServiceWorkerState(),
-          manifestHref: document.querySelector('link[rel="manifest"]')?.href || null,
-          window: {
-            innerHeight: window.innerHeight,
-            innerWidth: window.innerWidth,
-            scrollY: Math.round(window.scrollY),
-          },
-          visualViewport: viewport
-            ? {
-                height: Math.round(viewport.height),
-                width: Math.round(viewport.width),
-                offsetTop: Math.round(viewport.offsetTop),
-                offsetLeft: Math.round(viewport.offsetLeft),
-                scale: viewport.scale,
-              }
-            : null,
-          documentElement: {
-            clientHeight: root.clientHeight,
-            scrollHeight: root.scrollHeight,
-            codexHeight: rootStyle.getPropertyValue("--codex-visual-viewport-height").trim(),
-            codexBottomInset: rootStyle
-              .getPropertyValue("--codex-visual-viewport-bottom-inset")
-              .trim(),
-          },
-          body: {
-            clientHeight: document.body?.clientHeight,
-            scrollHeight: document.body?.scrollHeight,
-          },
-          rootChildren,
-          contentViewport: {
-            found: Boolean(contentViewport),
-            rect: formatRect(contentViewport),
-            bottomInset: contentStyle?.getPropertyValue(bottomInsetProperty).trim() || null,
-          },
-          floatingComposer: {
-            found: Boolean(floatingComposer),
-            rect: formatRect(floatingComposer),
-            className: floatingComposer?.className || null,
-            position: floatingStyle?.position || null,
-            bottom: floatingStyle?.bottom || null,
-            transform: floatingStyle?.transform || null,
-          },
-          firstInput: {
-            found: Boolean(input),
-            rect: formatRect(input),
-            tag: input?.tagName || null,
-          },
-        };
-      }
-
-      async function updateDebugOverlay() {
-        if (!debugEnabled) {
-          return;
-        }
-
-        let overlay = document.getElementById("ghostship-mobile-debug");
-        if (!overlay) {
-          overlay = document.createElement("pre");
-          overlay.id = "ghostship-mobile-debug";
-          overlay.style.cssText = [
-            "position:fixed",
-            "z-index:2147483647",
-            "left:8px",
-            "right:8px",
-            "top:8px",
-            "max-height:48vh",
-            "overflow:auto",
-            "margin:0",
-            "padding:10px",
-            "font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace",
-            "white-space:pre-wrap",
-            "color:#f8fafc",
-            "background:rgba(2,6,23,.94)",
-            "border:1px solid rgba(148,163,184,.6)",
-            "border-radius:8px",
-            "box-shadow:0 8px 30px rgba(0,0,0,.45)",
-          ].join(";");
-          document.documentElement.appendChild(overlay);
-        }
-
-        const state = await collectDebugState();
-        overlay.textContent = "Ghostship mobile debug\n" + JSON.stringify(state, null, 2);
-      }
-
       const scheduleViewportUpdate = () => {
         updateViewport();
-        updateDebugOverlay();
         requestAnimationFrame(updateViewport);
-        requestAnimationFrame(updateDebugOverlay);
-      };
-
-      const observeRootHydration = () => {
-        if (!debugEnabled || !("MutationObserver" in window)) {
-          return;
-        }
-
-        const appRoot = document.getElementById("root");
-        if (!appRoot) {
-          window.setTimeout(observeRootHydration, 100);
-          return;
-        }
-
-        const observer = new MutationObserver(() => {
-          lastRootMutationAt = new Date().toISOString();
-          scheduleViewportUpdate();
-        });
-        observer.observe(appRoot, {
-          childList: true,
-          subtree: true,
-          attributes: true,
-          attributeFilter: ["class", "style"],
-        });
-        window.setTimeout(() => observer.disconnect(), 60000);
       };
 
       scheduleViewportUpdate();
@@ -343,41 +94,7 @@ let
       window.visualViewport?.addEventListener("scroll", updateViewport);
       window.addEventListener("resize", updateViewport);
       window.addEventListener("orientationchange", scheduleViewportUpdate);
-      window.visualViewport?.addEventListener("resize", updateDebugOverlay);
-      window.visualViewport?.addEventListener("scroll", updateDebugOverlay);
-      window.addEventListener("resize", updateDebugOverlay);
-      window.addEventListener("orientationchange", updateDebugOverlay);
-      observeRootHydration();
-
-      if ("serviceWorker" in navigator && window.isSecureContext) {
-        navigator.serviceWorker
-          .register("/service-worker.js", { scope: "/" })
-          .finally(scheduleDebugOverlayUpdate)
-          .catch(() => {});
-      }
-
-      [250, 1000, 2500, 5000, 10000, 20000, 30000].forEach((delay) => {
-        window.setTimeout(scheduleDebugOverlayUpdate, delay);
-      });
     })();
-  '';
-
-  codexServiceWorker = pkgs.writeText "codex-service-worker.js" ''
-    self.addEventListener("install", (event) => {
-      event.waitUntil(self.skipWaiting());
-    });
-
-    self.addEventListener("activate", (event) => {
-      event.waitUntil(self.clients.claim());
-    });
-
-    self.addEventListener("fetch", (event) => {
-      if (event.request.method !== "GET") {
-        return;
-      }
-
-      event.respondWith(fetch(event.request));
-    });
   '';
 
   codexCacheControlHook = pkgs.writeText "codex-cache-control-hook.js" ''
@@ -388,18 +105,13 @@ let
           request.method === "GET" &&
           (path === "/" ||
             path === "/index.html" ||
-            path === "/manifest.json" ||
             path === "/codex-mobile-viewport.css" ||
             path === "/codex-mobile-viewport.js" ||
-            path === "/service-worker.js" ||
             !path.includes("."))
         ) {
           reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
           reply.header("Pragma", "no-cache");
           reply.header("Expires", "0");
-          if (path === "/manifest.json") {
-            reply.header("Content-Type", "application/manifest+json; charset=utf-8");
-          }
         }
         return payload;
       });
@@ -408,11 +120,7 @@ let
   codexWeb =
     pkgs.runCommand "codex-web-mobile-viewport-${inputs.codex-web.shortRev or inputs.codex-web.rev}"
       {
-        nativeBuildInputs = [
-          pkgs.gnused
-          pkgs.imagemagick
-          pkgs.perl
-        ];
+        nativeBuildInputs = [ pkgs.gnused ];
       }
       ''
                       cp -a ${codexWebUnpatched} "$out"
@@ -425,11 +133,8 @@ let
                         --replace-fail 'content="width=device-width, initial-scale=1.0"' \
                         'content="width=device-width, initial-scale=1.0, viewport-fit=cover"'
 
-                install -m0644 ${codexWebManifest} "$webview/manifest.json"
-                magick "$webview/assets/pwa-icon-512.png" -resize 192x192 "$webview/assets/pwa-icon-192.png"
                 install -m0644 ${codexMobileViewportStyle} "$webview/codex-mobile-viewport.css"
                 install -m0644 ${codexMobileViewportScript} "$webview/codex-mobile-viewport.js"
-                install -m0644 ${codexServiceWorker} "$webview/service-worker.js"
 
                 server_main="$out/lib/node_modules/codex-web/src/server/main.js"
                 substituteInPlace "$server_main" \
@@ -446,18 +151,8 @@ let
         },'
 
                 sed -i \
-                        's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <link rel="stylesheet" href="/codex-mobile-viewport.css" />\n    <script src="/codex-mobile-viewport.js"></script>\n  </head>|' \
+                        's|</head>|    <link rel="stylesheet" href="/codex-mobile-viewport.css" />\n    <script src="/codex-mobile-viewport.js"></script>\n  </head>|' \
                         "$webview/index.html"
-                sed -i \
-                        's|<link rel="manifest" href="/manifest.json" />|<link rel="manifest" href="/manifest.json" />\n    <link rel="icon" sizes="192x192" href="/assets/pwa-icon-192.png" />\n    <link rel="apple-touch-icon" href="/assets/pwa-icon-192.png" />|' \
-                        "$webview/index.html"
-                perl -0pi -e 's@if \(request\.method === "GET"\) \{\s*return reply\.sendFile\("index\.html"\);\s*\}@if (
-            request.method === "GET" &&
-            request.headers.accept?.includes("text/html") &&
-            !new URL(request.url, "http://localhost").pathname.split("/").pop()?.includes(".")
-        ) {
-            return reply.sendFile("index.html");
-        }@s or die "failed to patch SPA fallback\n"' "$server_main"
       '';
 
   codexPackages = with pkgs; [

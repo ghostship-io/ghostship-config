@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.19] - 2026-05-31
+
+- **Codex mobile patch cleanup**: Remove temporary manifest, service worker,
+  debug overlay, and route fallback changes while keeping the mobile viewport
+  clamp that fixes Android thread input clipping.
+
 ## [2.1.18] - 2026-05-31
 
 - **Codex mobile shell height**: Clamp the hydrated Codex app shell and main
