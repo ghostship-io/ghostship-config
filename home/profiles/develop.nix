@@ -72,7 +72,6 @@ in
     zoxide
     fd
     bat
-    cifs-utils
     fastfetch
     eza
     playwright-driver.browsers

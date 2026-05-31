@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.22] - 2026-05-31
+
+- **Develop and secret cleanup**: Remove duplicate Home Manager OpenCode
+  wrapper wiring, drop the unused CIFS package from develop hosts, and retire
+  unused n8n, Electron Hub, Google AI Studio, NVIDIA Build, SMB, and Zenmux
+  secret catalog entries.
+
 ## [2.1.21] - 2026-05-31
 
 - **Retired image cleanup**: Add leftover upstream Agent Zero and local Honcho

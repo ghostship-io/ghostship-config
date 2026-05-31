@@ -79,11 +79,6 @@ in
       ];
     };
 
-    electron-hub = mkUnit {
-      relativeFile = "secrets/files/sources/services/electron-hub.env.age";
-      exports = [ "API_KEY" ];
-    };
-
     github = mkUnit {
       relativeFile = "secrets/files/sources/providers/github.env.age";
       exports = [ "TOKEN" ];
@@ -92,11 +87,6 @@ in
     gluetun = mkUnit {
       relativeFile = "secrets/files/sources/services/gluetun.env.age";
       exports = [ "HTTP_CONTROL_SERVER_API_KEY" ];
-    };
-
-    google-ai-studio = mkUnit {
-      relativeFile = "secrets/files/sources/providers/google-ai-studio.env.age";
-      exports = [ "API_KEY" ];
     };
 
     grimmory = mkUnit {
@@ -116,16 +106,6 @@ in
         "CLIENT_ID"
         "CLIENT_SECRET"
       ];
-    };
-
-    n8n = mkUnit {
-      relativeFile = "secrets/files/sources/services/n8n.env.age";
-      exports = [ "API_KEY" ];
-    };
-
-    nvidia-build = mkUnit {
-      relativeFile = "secrets/files/sources/providers/nvidia-build.env.age";
-      exports = [ "API_KEY" ];
     };
 
     ollama = mkUnit {
@@ -221,16 +201,6 @@ in
       exports = [ "SECRET_KEY" ];
     };
 
-    smb = mkUnit {
-      relativeFile = "secrets/files/sources/storage/smb.env.age";
-      exports = [
-        "USER"
-        "PASS"
-        "SERVER"
-        "SHARE"
-      ];
-    };
-
     sonarr = mkUnit {
       relativeFile = "secrets/files/sources/services/sonarr.env.age";
       exports = [ "API_KEY" ];
@@ -273,11 +243,6 @@ in
         "OPENVPN_USER"
         "OPENVPN_PASS"
       ];
-    };
-
-    zenmux = mkUnit {
-      relativeFile = "secrets/files/sources/services/zenmux.env.age";
-      exports = [ "API_KEY" ];
     };
 
   };
@@ -571,19 +536,6 @@ in
         GRIMMORY_PASS = {
           unit = "grimmory";
           key = "PASS";
-        };
-      };
-    };
-
-    n8n = {
-      fileName = "n8n.env";
-      owner = "apps";
-      group = "apps";
-      mode = "0440";
-      fields = {
-        N8N_API_KEY = {
-          unit = "n8n";
-          key = "API_KEY";
         };
       };
     };
