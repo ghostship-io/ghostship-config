@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.20] - 2026-05-31
+
+- **Develop module cleanup**: Remove the unused `modules/develop/core.nix`
+  duplicate now that develop hosts import `modules/develop/default.nix`.
+
 ## [2.1.19] - 2026-05-31
 
 - **Codex mobile patch cleanup**: Remove temporary manifest, service worker,
