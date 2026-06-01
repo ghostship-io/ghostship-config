@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.32] - 2026-06-01
+
+- **Hatchet workflow stack**: Replace the short-lived Prefect stack with a
+  Hatchet control plane using PostgreSQL-backed messaging, wire Homepage and
+  Muximux to `hatchet.ghostship.io`, and retire Prefect runtime artifacts.
+
 ## [2.1.31] - 2026-06-01
 
 - **Prefect workflow stack**: Replace the Windmill stack with a Prefect 3
