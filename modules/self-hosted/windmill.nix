@@ -1,6 +1,46 @@
 { lib, pkgs, ... }:
 
 let
+  imageName = "localhost/ghostship-windmill";
+  imageTag = "1.601.1-no-jemalloc";
+  withoutJemalloc = builtins.filter (feature: feature != "jemalloc");
+  windmillPackage = pkgs.windmill.overrideAttrs (old: {
+    buildFeatures = withoutJemalloc old.buildFeatures;
+    cargoBuildFeatures = withoutJemalloc old.cargoBuildFeatures;
+  });
+  windmillImage = pkgs.dockerTools.buildLayeredImage {
+    name = imageName;
+    tag = imageTag;
+    contents = [
+      windmillPackage
+      pkgs.curl
+      pkgs.dockerTools.binSh
+      pkgs.dockerTools.usrBinEnv
+      pkgs.dockerTools.caCertificates
+    ];
+    extraCommands = ''
+      mkdir -p root tmp
+      chmod 1777 tmp
+      cat > etc/passwd <<'EOF'
+      root:x:0:0:root:/root:/bin/sh
+      EOF
+      cat > etc/group <<'EOF'
+      root:x:0:
+      EOF
+    '';
+    config = {
+      Cmd = [ "${windmillPackage}/bin/windmill" ];
+      Env = [
+        "HOME=/root"
+        "PATH=/bin:/usr/bin:${windmillPackage}/bin:${pkgs.curl}/bin"
+        "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+        "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+      ];
+      ExposedPorts = {
+        "8000/tcp" = { };
+      };
+    };
+  };
   stateDir = "/srv/apps/windmill";
   envDir = "${stateDir}/env";
   postgresEnv = "${envDir}/postgres.env";
@@ -31,6 +71,7 @@ let
         cat > "${windmillEnv}.tmp" <<EOF
     DATABASE_URL=postgres://windmill:$password@windmill-db:5432/windmill?sslmode=disable
     BASE_URL=https://windmill.ghostship.io
+    WM_BASE_URL=https://windmill.ghostship.io
     RUST_LOG=info
     DISABLE_NSJAIL=true
     ENABLE_UNSHARE_PID=true
@@ -80,14 +121,15 @@ in
     };
 
     "windmill" = {
-      image = "ghcr.io/windmill-labs/windmill:main";
-      pull = "always";
+      image = "${imageName}:${imageTag}";
+      imageFile = windmillImage;
+      pull = "never";
       labels = {
-        "io.containers.autoupdate" = "registry";
+        "io.containers.autoupdate" = "disabled";
       };
       extraOptions = [
         "--network=ghostship_net"
-        "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:8000/ || exit 1"
+        "--health-cmd=curl -fsS http://127.0.0.1:8000/ >/dev/null || exit 1"
         "--health-interval=30s"
         "--health-timeout=10s"
         "--health-retries=5"
@@ -101,10 +143,11 @@ in
     };
 
     "windmill-worker" = {
-      image = "ghcr.io/windmill-labs/windmill:main";
-      pull = "always";
+      image = "${imageName}:${imageTag}";
+      imageFile = windmillImage;
+      pull = "never";
       labels = {
-        "io.containers.autoupdate" = "registry";
+        "io.containers.autoupdate" = "disabled";
       };
       extraOptions = [
         "--network=ghostship_net"
