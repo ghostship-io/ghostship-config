@@ -374,13 +374,13 @@ in
           Bazarr.color=literal:"#9c36b5"
           Bazarr.enabled=literal:"true"
           Bazarr.dd=literal:"true"
-          N8N.name=literal:"n8n"
-          N8N.url=literal:"https://n8n.ghostship.io"
-          N8N.scale=literal:1
-          N8N.icon=literal:"fa-random"
-          N8N.color=literal:"#ef6c00"
-          N8N.enabled=literal:"true"
-          N8N.dd=literal:"true"
+          Windmill.name=literal:"Windmill"
+          Windmill.url=literal:"https://windmill.ghostship.io"
+          Windmill.scale=literal:1
+          Windmill.icon=literal:"fa-cogs"
+          Windmill.color=literal:"#3b82f6"
+          Windmill.enabled=literal:"true"
+          Windmill.dd=literal:"true"
           pyLoad.name=literal:"pyLoad"
           pyLoad.url=literal:"https://pyload.ghostship.io"
           pyLoad.scale=literal:1
@@ -388,14 +388,6 @@ in
           pyLoad.color=literal:"#ffcc00"
           pyLoad.enabled=literal:"true"
           pyLoad.dd=literal:"true"
-          SearXNG.name=literal:"SearXNG"
-          SearXNG.url=literal:"https://searxng.ghostship.io"
-          SearXNG.scale=literal:1
-          SearXNG.icon=literal:"muximux-search"
-          SearXNG.color=literal:"#ffffff"
-          SearXNG.enabled=literal:"true"
-          SearXNG.dd=literal:"true"
-
           RSS-Bridge.name=literal:"RSS-Bridge"
           RSS-Bridge.url=literal:"https://rss-bridge.ghostship.io"
           RSS-Bridge.scale=literal:1
@@ -463,7 +455,7 @@ in
 
             for (i = 1; i <= section_count; i++) {
               name = section_order[i]
-              if (name == "Honcho" || name == "Codex" || name == "BookStack" || name == "Chaptarr" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection" || name == "OmniTools" || name == "MeTube" || name == "ConvertX" || name == "BentoPDF" || name == "IT Tools") {
+              if (name == "Honcho" || name == "Codex" || name == "BookStack" || name == "Chaptarr" || name == "Windmill" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection" || name == "OmniTools" || name == "MeTube" || name == "ConvertX" || name == "BentoPDF" || name == "IT Tools" || name == "SearXNG") {
                 continue
               }
 
@@ -474,8 +466,8 @@ in
               if (name == "Tautulli" && ("Chaptarr" in section_data)) {
                 printf "%s", section_data["Chaptarr"]
               }
-              if (name == "Bazarr" && ("N8N" in section_data)) {
-                printf "%s", section_data["N8N"]
+              if (name == "Bazarr" && ("Windmill" in section_data)) {
+                printf "%s", section_data["Windmill"]
               }
             }
 
@@ -486,8 +478,8 @@ in
               printf "%s", section_data["Chaptarr"]
             }
             if (!("Bazarr" in section_data)) {
-              if ("N8N" in section_data) {
-                printf "%s", section_data["N8N"]
+              if ("Windmill" in section_data) {
+                printf "%s", section_data["Windmill"]
               }
             }
           }

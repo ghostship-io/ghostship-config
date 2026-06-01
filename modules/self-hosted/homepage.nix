@@ -200,15 +200,10 @@ in
             "[Services].[RSS-Bridge].server=literal:chill-penguin"
             "[Services].[RSS-Bridge].container=literal:rss-bridge"
 
-            "[Services].[SearXNG].icon=literal:sh-searxng"
-            "[Services].[SearXNG].description=literal:Metasearch Engine"
-            "[Services].[SearXNG].server=literal:chill-penguin"
-            "[Services].[SearXNG].container=literal:searxng"
-
-            "[Services].[n8n].icon=literal:sh-n8n"
-            "[Services].[n8n].description=literal:Workflow Orchestrator"
-            "[Services].[n8n].server=literal:chill-penguin"
-            "[Services].[n8n].container=literal:n8n"
+            "[Services].[Windmill].icon=literal:sh-windmill"
+            "[Services].[Windmill].description=literal:Workflow Orchestrator"
+            "[Services].[Windmill].server=literal:chill-penguin"
+            "[Services].[Windmill].container=literal:windmill"
 
             # Management group
             "[Management].[Homepage].icon=literal:sh-homepage"
@@ -244,23 +239,17 @@ in
             "[Utilities].[Plex Auto Languages].server=literal:chill-penguin"
             "[Utilities].[Plex Auto Languages].container=literal:plex-auto-languages"
 
-            # Infrastructure group
-            "[Infrastructure].[SearXNG Cache].icon=literal:sh-redis"
-            "[Infrastructure].[SearXNG Cache].description=literal:Search Cache"
-            "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
-            "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
-
           )
 
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
 
           ${pkgs.yq-go}/bin/yq -i '
-            (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy Scraper") or has("Changedetection")) | not))
+            (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy Scraper") or has("Changedetection") or has("n8n") or has("SearXNG")) | not))
             | (.[] | select(has("Management")) | .Management) |= map(select((has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG") or has("Plex Auto Languages") or has("PriceBuddy Scraper")) | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("BentoPDF") or has("ConvertX") or has("IT-Tools") or has("MeTube") or has("OmniTools")) | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("SearXNG") or has("Firecrawl") or has("Firecrawl Playwright")) | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("Honcho Redis") or has("Honcho DB") or has("Firecrawl Postgres") or has("Firecrawl RabbitMQ") or has("Firecrawl Redis")) | not))
-            | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("FlareSolverr") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy DB") or has("PriceBuddy Scraper")) | not))
+            | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("FlareSolverr") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy DB") or has("PriceBuddy Scraper") or has("SearXNG Cache")) | not))
           ' "$SERVICES_FILE"
         fi
 
@@ -274,11 +263,10 @@ in
             "0.resources.disk=literal:/"
             "0.resources.network=literal:end0"
             "1.search.provider=literal:custom"
-            "1.search.url=literal:https://searxng.ghostship.io/search?q="
+            "1.search.url=literal:https://duckduckgo.com/?q="
             "1.search.focus=literal:true"
-            "1.search.target=literal:_self"
-            "1.search.suggestionUrl=literal:https://searxng.ghostship.io/autocompleter?q="
-            "1.search.showSearchSuggestions=literal:true"
+            "1.search.target=literal:_blank"
+            "1.search.showSearchSuggestions=literal:false"
             "2.openmeteo.label=literal:\"the owner's local area\""
             "2.openmeteo.latitude=literal:a home coordinate"
             "2.openmeteo.longitude=literal:a home coordinate"
@@ -286,6 +274,7 @@ in
             "2.openmeteo.units=literal:imperial"
           )
           ${pkgs.ghostship-config}/bin/ghostship-config set "$WIDGETS_FILE" "''${widget_args[@]}"
+          ${pkgs.yq-go}/bin/yq -i 'del(.[1].search.suggestionUrl)' "$WIDGETS_FILE"
         fi
 
         # Update docker.yaml if it exists

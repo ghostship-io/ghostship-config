@@ -26,13 +26,11 @@
     ./bazarr.nix
     ./chaptarr.nix
     ./plex-auto-languages.nix
-    ./searxng.nix
-    ./searxng-valkey.nix
     ./pyload.nix
 
     # Apps and utilities
     ./cloakbrowser.nix
-    ./n8n.nix
+    ./windmill.nix
     ./rss-bridge.nix
     ./codex.nix
 

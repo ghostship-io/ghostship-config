@@ -250,6 +250,45 @@ let
       ];
       muximuxSections = [ "PriceBuddy" ];
     }
+    {
+      name = "n8n";
+      paths = [ "/srv/apps/n8n" ];
+      units = [ "podman-n8n" ];
+      containers = [ "n8n" ];
+      imageRefs = [ "docker.n8n.io/n8nio/n8n:latest" ];
+      imageRepositories = [ "docker.n8n.io/n8nio/n8n" ];
+      homepageEntries = [ "n8n" ];
+      muximuxSections = [ "N8N" ];
+    }
+    {
+      name = "searxng";
+      paths = [
+        "/srv/apps/searxng"
+        "/srv/apps/searxng-cache"
+        "/srv/apps/searxng-valkey"
+      ];
+      units = [
+        "podman-searxng"
+        "podman-searxng-valkey"
+      ];
+      containers = [
+        "searxng"
+        "searxng-valkey"
+      ];
+      imageRefs = [
+        "docker.io/searxng/searxng:latest"
+        "docker.io/valkey/valkey:latest"
+      ];
+      imageRepositories = [
+        "docker.io/searxng/searxng"
+        "docker.io/valkey/valkey"
+      ];
+      homepageEntries = [
+        "SearXNG"
+        "SearXNG Cache"
+      ];
+      muximuxSections = [ "SearXNG" ];
+    }
   ];
 
   renderCommands =

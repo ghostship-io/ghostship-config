@@ -178,11 +178,6 @@ in
       ];
     };
 
-    searxng = mkUnit {
-      relativeFile = "secrets/files/sources/services/searxng.env.age";
-      exports = [ "SECRET_KEY" ];
-    };
-
     sonarr = mkUnit {
       relativeFile = "secrets/files/sources/services/sonarr.env.age";
       exports = [ "API_KEY" ];
@@ -682,19 +677,6 @@ in
         ROMM_DB_PASS = {
           unit = "romm";
           key = "DB_PASS";
-        };
-      };
-    };
-
-    searxng = {
-      fileName = "searxng.env";
-      owner = "apps";
-      group = "apps";
-      mode = "0440";
-      fields = {
-        SEARXNG_SECRET_KEY = {
-          unit = "searxng";
-          key = "SECRET_KEY";
         };
       };
     };

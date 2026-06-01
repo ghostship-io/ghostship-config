@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.28] - 2026-06-01
+
+- **Windmill workflow stack**: Replace n8n with a repo-managed Windmill
+  server, worker, and PostgreSQL stack; wire dashboard entries to
+  `windmill.ghostship.io`; and retire the now-unused SearXNG search/cache
+  containers, secrets, dashboards, and runtime artifacts.
+
 ## [2.1.27] - 2026-06-01
 
 - **Self-hosted service retirement**: Retire Changedetection and PriceBuddy
