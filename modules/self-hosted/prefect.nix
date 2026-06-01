@@ -60,6 +60,13 @@ let
     echo "Timed out waiting for prefect-db to accept connections" >&2
     exit 1
   '';
+  ensureDb = pkgs.writeShellScript "prefect-ensure-db" ''
+    set -eu
+
+    if ! ${pkgs.podman}/bin/podman exec prefect-db psql -U prefect -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'prefect'" | ${pkgs.gnugrep}/bin/grep -qx 1; then
+      ${pkgs.podman}/bin/podman exec prefect-db createdb -U prefect prefect
+    fi
+  '';
   waitForRedis = pkgs.writeShellScript "prefect-wait-for-redis" ''
     set -eu
 
@@ -221,6 +228,7 @@ in
       preStart = lib.mkBefore ''
         ${syncEnv}
         ${waitForDb}
+        ${ensureDb}
         ${waitForRedis}
       '';
     };

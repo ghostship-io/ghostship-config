@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.38] - 2026-06-01
+
+- **Prefect database bootstrap**: Ensure the Prefect PostgreSQL database exists
+  before starting the server so reused state directories can migrate cleanly.
+
 ## [2.1.37] - 2026-06-01
 
 - **Prefect workflow stack**: Replace Windmill with Prefect as the final
