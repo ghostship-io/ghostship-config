@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.41] - 2026-06-01
+
+- **Prefect support image pulls**: Reuse cached PostgreSQL and Redis images on
+  service restarts while keeping Podman registry auto-update labels, preventing
+  Docker Hub rate limits from blocking Prefect support services.
+
 ## [2.1.40] - 2026-06-01
 
 - **Prefect Redis cache**: Run Prefect Redis without snapshot persistence so

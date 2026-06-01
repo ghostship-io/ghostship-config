@@ -99,7 +99,7 @@ in
   virtualisation.oci-containers.containers = {
     "prefect-db" = {
       image = "docker.io/library/postgres:16-alpine";
-      pull = "always";
+      pull = "missing";
       labels = {
         "io.containers.autoupdate" = "registry";
       };
@@ -120,7 +120,7 @@ in
 
     "prefect-redis" = {
       image = "docker.io/library/redis:7-alpine";
-      pull = "always";
+      pull = "missing";
       labels = {
         "io.containers.autoupdate" = "registry";
       };
