@@ -153,6 +153,53 @@ let
       ];
       muximuxSections = [ "LiteLLM" ];
     }
+    {
+      name = "bentopdf";
+      paths = [ "/srv/apps/bentopdf" ];
+      units = [ "podman-bentopdf" ];
+      containers = [ "bentopdf" ];
+      imageRefs = [ "docker.io/bentopdf/bentopdf:latest" ];
+      imageRepositories = [ "docker.io/bentopdf/bentopdf" ];
+      homepageEntries = [ "BentoPDF" ];
+      muximuxSections = [ "BentoPDF" ];
+    }
+    {
+      name = "convertx";
+      paths = [ "/srv/apps/convertx" ];
+      units = [ "podman-convertx" ];
+      containers = [ "convertx" ];
+      imageRefs = [ "ghcr.io/c4illin/convertx:latest" ];
+      imageRepositories = [ "ghcr.io/c4illin/convertx" ];
+      homepageEntries = [ "ConvertX" ];
+      muximuxSections = [ "ConvertX" ];
+    }
+    {
+      name = "it-tools";
+      units = [ "podman-it-tools" ];
+      containers = [ "it-tools" ];
+      imageRefs = [ "docker.io/corentinth/it-tools:latest" ];
+      imageRepositories = [ "docker.io/corentinth/it-tools" ];
+      homepageEntries = [ "IT-Tools" ];
+      muximuxSections = [ "IT Tools" ];
+    }
+    {
+      name = "metube";
+      units = [ "podman-metube" ];
+      containers = [ "metube" ];
+      imageRefs = [ "ghcr.io/alexta69/metube:latest" ];
+      imageRepositories = [ "ghcr.io/alexta69/metube" ];
+      homepageEntries = [ "MeTube" ];
+      muximuxSections = [ "MeTube" ];
+    }
+    {
+      name = "omnitools";
+      units = [ "podman-omni-tools" ];
+      containers = [ "omni-tools" ];
+      imageRefs = [ "docker.io/iib0011/omni-tools:latest" ];
+      imageRepositories = [ "docker.io/iib0011/omni-tools" ];
+      homepageEntries = [ "OmniTools" ];
+      muximuxSections = [ "OmniTools" ];
+    }
   ];
 
   renderCommands =

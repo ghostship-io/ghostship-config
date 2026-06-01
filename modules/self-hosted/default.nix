@@ -33,11 +33,6 @@
     # Apps and utilities
     ./cloakbrowser.nix
     ./n8n.nix
-    ./bentopdf.nix
-    ./convertx.nix
-    ./it-tools.nix
-    ./omnitools.nix
-    ./metube.nix
     ./changedetection.nix
     ./rss-bridge.nix
     ./pricebuddy.nix

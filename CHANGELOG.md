@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.26] - 2026-06-01
+
+- **Self-hosted service retirement**: Retire BentoPDF, ConvertX, IT Tools,
+  MeTube, and OmniTools from the `chill-penguin` stack, add cleanup for their
+  stale containers/images/dashboard entries, redistribute Homepage utilities,
+  and replace the broken Codex Homepage icon.
+
 ## [2.1.25] - 2026-06-01
 
 - **CloakBrowser extension refresh**: Keep the last known-good unpacked

@@ -210,11 +210,6 @@ in
             "[Services].[n8n].server=literal:chill-penguin"
             "[Services].[n8n].container=literal:n8n"
 
-            "[Services].[Changedetection].icon=literal:sh-changedetection"
-            "[Services].[Changedetection].description=literal:Website Change Monitor"
-            "[Services].[Changedetection].server=literal:chill-penguin"
-            "[Services].[Changedetection].container=literal:changedetection"
-
             "[Services].[PriceBuddy].icon=literal:sh-priceghost"
             "[Services].[PriceBuddy].description=literal:Price Tracker"
             "[Services].[PriceBuddy].server=literal:chill-penguin"
@@ -231,7 +226,7 @@ in
             "[Management].[Muximux].server=literal:chill-penguin"
             "[Management].[Muximux].container=literal:muximux"
 
-            "[Management].[Codex].icon=literal:sh-codex"
+            "[Management].[Codex].icon=literal:si-openai-#10a37f"
             "[Management].[Codex].href=literal:https://codex.ghostship.io"
             "[Management].[Codex].description=literal:Codex Web"
             "[Management].[Codex].server=literal:chill-penguin"
@@ -243,46 +238,26 @@ in
             "[Management].[CloakBrowser].server=literal:chill-penguin"
             "[Management].[CloakBrowser].container=literal:cloakbrowser"
 
-            "[Management].[Plex Auto Languages].icon=literal:sh-plex"
-            "[Management].[Plex Auto Languages].description=literal:Language Manager"
-            "[Management].[Plex Auto Languages].server=literal:chill-penguin"
-            "[Management].[Plex Auto Languages].container=literal:plex-auto-languages"
-
-            "[Management].[PriceBuddy Scraper].icon=literal:web-check"
-            "[Management].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
-            "[Management].[PriceBuddy Scraper].server=literal:chill-penguin"
-            "[Management].[PriceBuddy Scraper].container=literal:pricebuddy-scraper"
-
             # Utilities group
             "[Utilities].[FlareSolverr].icon=literal:sh-flaresolverr"
             "[Utilities].[FlareSolverr].description=literal:Proxy Server"
             "[Utilities].[FlareSolverr].server=literal:chill-penguin"
             "[Utilities].[FlareSolverr].container=literal:flaresolverr"
 
-            "[Utilities].[BentoPDF].icon=literal:sh-bentopdf"
-            "[Utilities].[BentoPDF].description=literal:PDF Toolkit"
-            "[Utilities].[BentoPDF].server=literal:chill-penguin"
-            "[Utilities].[BentoPDF].container=literal:bentopdf"
+            "[Utilities].[Changedetection].icon=literal:sh-changedetection"
+            "[Utilities].[Changedetection].description=literal:Website Change Monitor"
+            "[Utilities].[Changedetection].server=literal:chill-penguin"
+            "[Utilities].[Changedetection].container=literal:changedetection"
 
-            "[Utilities].[ConvertX].icon=literal:sh-convertx"
-            "[Utilities].[ConvertX].description=literal:File Converter"
-            "[Utilities].[ConvertX].server=literal:chill-penguin"
-            "[Utilities].[ConvertX].container=literal:convertx"
+            "[Utilities].[Plex Auto Languages].icon=literal:sh-plex"
+            "[Utilities].[Plex Auto Languages].description=literal:Language Manager"
+            "[Utilities].[Plex Auto Languages].server=literal:chill-penguin"
+            "[Utilities].[Plex Auto Languages].container=literal:plex-auto-languages"
 
-            "[Utilities].[IT-Tools].icon=literal:sh-it-tools"
-            "[Utilities].[IT-Tools].description=literal:Developer Tools"
-            "[Utilities].[IT-Tools].server=literal:chill-penguin"
-            "[Utilities].[IT-Tools].container=literal:it-tools"
-
-            "[Utilities].[MeTube].icon=literal:sh-metube"
-            "[Utilities].[MeTube].description=literal:YouTube Downloader"
-            "[Utilities].[MeTube].server=literal:chill-penguin"
-            "[Utilities].[MeTube].container=literal:metube"
-
-            "[Utilities].[OmniTools].icon=literal:sh-omnitools"
-            "[Utilities].[OmniTools].description=literal:Omni Toolkit"
-            "[Utilities].[OmniTools].server=literal:chill-penguin"
-            "[Utilities].[OmniTools].container=literal:omni-tools"
+            "[Utilities].[PriceBuddy Scraper].icon=literal:web-check"
+            "[Utilities].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
+            "[Utilities].[PriceBuddy Scraper].server=literal:chill-penguin"
+            "[Utilities].[PriceBuddy Scraper].container=literal:pricebuddy-scraper"
 
             # Infrastructure group
             "[Infrastructure].[SearXNG Cache].icon=literal:sh-redis"
@@ -300,10 +275,10 @@ in
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
 
           ${pkgs.yq-go}/bin/yq -i '
-            (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
-            | (.[] | select(has("Management")) | .Management) |= map(select((has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG")) | not))
-            | (.[] | select(has("Utilities")) | .Utilities) |= map(select(has("Plex Auto Languages") | not))
-            | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("SearXNG") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
+            (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper") or has("Changedetection")) | not))
+            | (.[] | select(has("Management")) | .Management) |= map(select((has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG") or has("Plex Auto Languages") or has("PriceBuddy Scraper")) | not))
+            | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("BentoPDF") or has("ConvertX") or has("IT-Tools") or has("MeTube") or has("OmniTools")) | not))
+            | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("SearXNG") or has("Firecrawl") or has("Firecrawl Playwright")) | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("Honcho Redis") or has("Honcho DB") or has("Firecrawl Postgres") or has("Firecrawl RabbitMQ") or has("Firecrawl Redis")) | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("FlareSolverr") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
           ' "$SERVICES_FILE"

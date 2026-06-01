@@ -417,41 +417,6 @@ in
           Changedetection.color=literal:"#0ea5e9"
           Changedetection.enabled=literal:"true"
           Changedetection.dd=literal:"true"
-          OmniTools.name=literal:"OmniTools"
-          OmniTools.url=literal:"https://omnitools.ghostship.io"
-          OmniTools.scale=literal:1
-          OmniTools.icon=literal:"fa-wrench"
-          OmniTools.color=literal:"#ff9800"
-          OmniTools.enabled=literal:"true"
-          OmniTools.dd=literal:"true"
-          MeTube.name=literal:"MeTube"
-          MeTube.url=literal:"https://metube.ghostship.io"
-          MeTube.scale=literal:1
-          MeTube.icon=literal:"muximux-cloud-download2"
-          MeTube.color=literal:"#ff4c41"
-          MeTube.enabled=literal:"true"
-          MeTube.dd=literal:"true"
-          ConvertX.name=literal:"ConvertX"
-          ConvertX.url=literal:"https://convertx.ghostship.io"
-          ConvertX.scale=literal:1
-          ConvertX.icon=literal:"muximux-expertsexchange"
-          ConvertX.color=literal:"#557f14"
-          ConvertX.enabled=literal:"true"
-          ConvertX.dd=literal:"true"
-          BentoPDF.name=literal:"BentoPDF"
-          BentoPDF.url=literal:"https://bentopdf.ghostship.io"
-          BentoPDF.scale=literal:1
-          BentoPDF.icon=literal:"muximux-file-pdf"
-          BentoPDF.color=literal:"#7c86ff"
-          BentoPDF.enabled=literal:"true"
-          BentoPDF.dd=literal:"true"
-          "IT Tools.name"=literal:"IT Tools"
-          "IT Tools.url"=literal:"https://it-tools.ghostship.io"
-          "IT Tools.scale"=literal:1
-          "IT Tools.icon"=literal:"muximux-info2"
-          "IT Tools.color"=literal:"#2c9a66"
-          "IT Tools.enabled"=literal:"true"
-          "IT Tools.dd"=literal:"true"
           SSH.name=literal:"SSH"
           SSH.url=literal:"https://ssh.ghostship.io"
           SSH.scale=literal:1
@@ -512,7 +477,7 @@ in
 
             for (i = 1; i <= section_count; i++) {
               name = section_order[i]
-              if (name == "Honcho" || name == "Codex" || name == "BookStack" || name == "Chaptarr" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection") {
+              if (name == "Honcho" || name == "Codex" || name == "BookStack" || name == "Chaptarr" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection" || name == "OmniTools" || name == "MeTube" || name == "ConvertX" || name == "BentoPDF" || name == "IT Tools") {
                 continue
               }
 
