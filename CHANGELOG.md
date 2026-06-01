@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.35] - 2026-06-01
+
+- **Muximux qBittorrent order**: Keep qBittorrent in the same Muximux position
+  previously occupied by VueTorrent, directly after NZBGet.
+
 ## [2.1.34] - 2026-06-01
 
 - **qBittorrent runtime identity**: Rename the managed torrent container,
