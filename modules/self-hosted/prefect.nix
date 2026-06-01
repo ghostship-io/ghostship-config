@@ -140,7 +140,7 @@ in
 
     "prefect" = {
       image = "docker.io/prefecthq/prefect:3-latest";
-      pull = "always";
+      pull = "missing";
       labels = {
         "io.containers.autoupdate" = "registry";
       };
@@ -164,7 +164,7 @@ in
 
     "prefect-services" = {
       image = "docker.io/prefecthq/prefect:3-latest";
-      pull = "always";
+      pull = "missing";
       labels = {
         "io.containers.autoupdate" = "registry";
       };
@@ -182,7 +182,7 @@ in
 
     "prefect-worker" = {
       image = "docker.io/prefecthq/prefect:3-latest";
-      pull = "always";
+      pull = "missing";
       labels = {
         "io.containers.autoupdate" = "registry";
       };
