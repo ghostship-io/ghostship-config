@@ -24,12 +24,15 @@ let
         password="$(cat "$password_file")"
 
         umask 077
-        cat > "${postgresEnv}.tmp" <<EOF
+        postgres_tmp="${postgresEnv}.$$"
+        prefect_tmp="${prefectEnv}.$$"
+
+        cat > "$postgres_tmp" <<EOF
     POSTGRES_USER=prefect
     POSTGRES_PASSWORD=$password
     POSTGRES_DB=prefect
     EOF
-        cat > "${prefectEnv}.tmp" <<EOF
+        cat > "$prefect_tmp" <<EOF
     PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://prefect:$password@prefect-db:5432/prefect
     PREFECT_MESSAGING_BROKER=prefect_redis.messaging
     PREFECT_MESSAGING_CACHE=prefect_redis.messaging
@@ -42,10 +45,10 @@ let
     PREFECT_API_URL=http://prefect:4200/api
     EOF
 
-        chown root:apps "${postgresEnv}.tmp" "${prefectEnv}.tmp"
-        chmod 0640 "${postgresEnv}.tmp" "${prefectEnv}.tmp"
-        mv "${postgresEnv}.tmp" "${postgresEnv}"
-        mv "${prefectEnv}.tmp" "${prefectEnv}"
+        chown root:apps "$postgres_tmp" "$prefect_tmp"
+        chmod 0640 "$postgres_tmp" "$prefect_tmp"
+        mv "$postgres_tmp" "${postgresEnv}"
+        mv "$prefect_tmp" "${prefectEnv}"
   '';
   waitForDb = pkgs.writeShellScript "prefect-wait-for-db" ''
     set -eu
@@ -243,19 +246,33 @@ in
     };
 
     podman-prefect-services = {
-      after = [ "podman-prefect.service" ];
-      wants = [ "podman-prefect.service" ];
+      after = [
+        "podman-prefect.service"
+        "podman-prefect-redis.service"
+      ];
+      wants = [
+        "podman-prefect.service"
+        "podman-prefect-redis.service"
+      ];
       preStart = lib.mkBefore ''
         ${syncEnv}
+        ${waitForRedis}
         ${waitForServer}
       '';
     };
 
     podman-prefect-worker = {
-      after = [ "podman-prefect.service" ];
-      wants = [ "podman-prefect.service" ];
+      after = [
+        "podman-prefect.service"
+        "podman-prefect-redis.service"
+      ];
+      wants = [
+        "podman-prefect.service"
+        "podman-prefect-redis.service"
+      ];
       preStart = lib.mkBefore ''
         ${syncEnv}
+        ${waitForRedis}
         ${waitForServer}
       '';
     };

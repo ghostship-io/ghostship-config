@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.42] - 2026-06-01
+
+- **Prefect startup ordering**: Use unique generated env temp files and make
+  Prefect services wait for Redis so concurrent service starts do not race.
+
 ## [2.1.41] - 2026-06-01
 
 - **Prefect support image pulls**: Reuse cached PostgreSQL and Redis images on
