@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.33] - 2026-06-01
+
+- **Windmill official-base image**: Restore Windmill and build the
+  `JEMALLOC_SYS_WITH_LG_PAGE=14` binary as an overlay on top of the official
+  Windmill image instead of using a fully custom Nix root filesystem.
+
 ## [2.1.32] - 2026-06-01
 
 - **Hatchet workflow stack**: Replace the short-lived Prefect stack with a

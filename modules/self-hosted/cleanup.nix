@@ -290,23 +290,33 @@ let
       muximuxSections = [ "SearXNG" ];
     }
     {
-      name = "windmill";
-      paths = [ "/srv/apps/windmill" ];
+      name = "hatchet";
+      paths = [ "/srv/apps/hatchet" ];
       units = [
-        "podman-windmill"
-        "podman-windmill-db"
-        "podman-windmill-worker"
+        "hatchet-setup"
+        "podman-hatchet"
+        "podman-hatchet-db"
+        "podman-hatchet-engine"
       ];
       containers = [
-        "windmill"
-        "windmill-db"
-        "windmill-worker"
+        "hatchet"
+        "hatchet-db"
+        "hatchet-engine"
+      ];
+      imageRefs = [
+        "ghcr.io/hatchet-dev/hatchet/hatchet-admin:latest"
+        "ghcr.io/hatchet-dev/hatchet/hatchet-dashboard:latest"
+        "ghcr.io/hatchet-dev/hatchet/hatchet-engine:latest"
+        "ghcr.io/hatchet-dev/hatchet/hatchet-migrate:latest"
       ];
       imageRepositories = [
-        "localhost/ghostship-windmill"
+        "ghcr.io/hatchet-dev/hatchet/hatchet-admin"
+        "ghcr.io/hatchet-dev/hatchet/hatchet-dashboard"
+        "ghcr.io/hatchet-dev/hatchet/hatchet-engine"
+        "ghcr.io/hatchet-dev/hatchet/hatchet-migrate"
       ];
-      homepageEntries = [ "Windmill" ];
-      muximuxSections = [ "Windmill" ];
+      homepageEntries = [ "Hatchet" ];
+      muximuxSections = [ "Hatchet" ];
     }
     {
       name = "prefect";

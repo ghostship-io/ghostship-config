@@ -30,7 +30,7 @@
 
     # Apps and utilities
     ./cloakbrowser.nix
-    ./hatchet.nix
+    ./windmill.nix
     ./rss-bridge.nix
     ./codex.nix
 
