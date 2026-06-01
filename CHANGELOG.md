@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.40] - 2026-06-01
+
+- **Prefect Redis cache**: Run Prefect Redis without snapshot persistence so
+  background services keep accepting writes even when RDB saves would fail.
+
 ## [2.1.39] - 2026-06-01
 
 - **Prefect image pulls**: Reuse cached Prefect images on service restarts

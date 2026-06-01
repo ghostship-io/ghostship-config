@@ -133,6 +133,15 @@ in
         "--health-start-period=30s"
         "--health-on-failure=kill"
       ];
+      cmd = [
+        "redis-server"
+        "--save"
+        ""
+        "--appendonly"
+        "no"
+        "--stop-writes-on-bgsave-error"
+        "no"
+      ];
       volumes = [
         "${stateDir}/redis:/data:rw"
       ];
