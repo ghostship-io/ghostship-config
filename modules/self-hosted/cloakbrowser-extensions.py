@@ -112,9 +112,17 @@ def install_extension(name: str, url: str) -> Path:
     target = BASE / name
     print(f"Installing {name}...")
 
+    try:
+        archive = fetch(url)
+    except Exception as exc:
+        if (target / "manifest.json").is_file():
+            print(f"WARNING: keeping existing {name} after refresh download failed: {exc}")
+            return target
+        raise
+
     with tempfile.TemporaryDirectory(prefix=f"{name}.", dir=str(BASE)) as tmp_dir:
         temp = Path(tmp_dir)
-        safe_extract_zip(crx_to_zip(fetch(url)), temp)
+        safe_extract_zip(crx_to_zip(archive), temp)
         root = find_extension_root(temp)
 
         staged = BASE / f".{name}.staged"

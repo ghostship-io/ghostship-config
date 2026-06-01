@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.25] - 2026-06-01
+
+- **CloakBrowser extension refresh**: Keep the last known-good unpacked
+  extension when an upstream extension download temporarily fails, while still
+  failing if no usable installed copy exists.
+
 ## [2.1.24] - 2026-06-01
 
 - **Container auto-update auth**: Extend the shared Podman registry auth file
