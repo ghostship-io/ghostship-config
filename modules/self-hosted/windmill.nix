@@ -2,11 +2,11 @@
 
 let
   imageName = "localhost/ghostship-windmill";
-  imageTag = "1.601.1-no-jemalloc";
-  withoutJemalloc = builtins.filter (feature: feature != "jemalloc");
+  imageTag = "1.601.1-lg-page-14";
   windmillPackage = pkgs.windmill.overrideAttrs (old: {
-    buildFeatures = withoutJemalloc old.buildFeatures;
-    cargoBuildFeatures = withoutJemalloc old.cargoBuildFeatures;
+    env = old.env // {
+      JEMALLOC_SYS_WITH_LG_PAGE = "14";
+    };
   });
   windmillImage = pkgs.dockerTools.buildLayeredImage {
     name = imageName;
