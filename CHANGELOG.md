@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.24] - 2026-06-01
+
+- **Container auto-update auth**: Extend the shared Podman registry auth file
+  to cover `docker.n8n.io` as well as Docker Hub so n8n auto-update checks do
+  not fall back to anonymous pulls and fail on registry rate limits.
+
 ## [2.1.23] - 2026-05-31
 
 - **Local image refresh**: Add daily forced rebuild timers for the local

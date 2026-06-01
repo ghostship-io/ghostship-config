@@ -36,7 +36,7 @@ EOF
     else
       AUTH="$(${pkgs.coreutils}/bin/printf '%s:%s' "$DOCKERHUB_USER" "$DOCKERHUB_TOKEN" | ${pkgs.coreutils}/bin/base64 -w0)"
       cat > /run/containers/0/auth.json <<EOF
-{"auths":{"https://index.docker.io/v1/":{"auth":"$AUTH"}}}
+{"auths":{"https://index.docker.io/v1/":{"auth":"$AUTH"},"docker.io":{"auth":"$AUTH"},"docker.n8n.io":{"auth":"$AUTH"}}}
 EOF
     fi
 
@@ -44,9 +44,13 @@ EOF
     chmod 600 /run/containers/0/auth.json /root/.config/containers/auth.json
   '';
   dockerhub-auth-file = "/run/containers/0/auth.json";
-  dockerhub-dockerhub-containers =
+  dockerhub-authenticated-containers =
     lib.attrNames (
-      lib.filterAttrs (_: container: builtins.substring 0 10 container.image == "docker.io/") config.virtualisation.oci-containers.containers
+      lib.filterAttrs
+        (_: container:
+          builtins.substring 0 10 container.image == "docker.io/"
+          || builtins.substring 0 14 container.image == "docker.n8n.io/")
+        config.virtualisation.oci-containers.containers
     );
 in
 
@@ -99,7 +103,7 @@ in
           preStart = lib.mkBefore "${dockerhub-auth-script}/bin/podman-dockerhub-auth";
         };
       })
-      dockerhub-dockerhub-containers
+      dockerhub-authenticated-containers
   );
 
   systemd.timers.podman-auto-update = {
