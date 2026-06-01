@@ -7,12 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## [2.1.26] - 2026-06-01
-
-- **Codex instruction ownership**: Replace the retired `home/config/AGENTS.md`
-  preference copy with a pointer to `ghostship-agent`, which now owns the
-  user-level Codex instructions.
-
 ## [2.1.25] - 2026-06-01
 
 - **CloakBrowser extension refresh**: Keep the last known-good unpacked
