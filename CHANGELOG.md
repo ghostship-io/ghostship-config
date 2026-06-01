@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.27] - 2026-06-01
+
+- **Self-hosted service retirement**: Retire Changedetection and PriceBuddy
+  now that n8n replaces the change-monitoring workflow and PriceBuddy appears
+  abandoned. Remove their local image contexts, secret wiring, refresh timers,
+  dashboard entries, containers, and stale runtime artifacts.
+
 ## [2.1.26] - 2026-06-01
 
 - **Self-hosted service retirement**: Retire BentoPDF, ConvertX, IT Tools,

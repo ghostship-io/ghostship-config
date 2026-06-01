@@ -33,9 +33,7 @@
     # Apps and utilities
     ./cloakbrowser.nix
     ./n8n.nix
-    ./changedetection.nix
     ./rss-bridge.nix
-    ./pricebuddy.nix
     ./codex.nix
 
     # Games

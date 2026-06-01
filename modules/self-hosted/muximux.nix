@@ -381,13 +381,6 @@ in
           N8N.color=literal:"#ef6c00"
           N8N.enabled=literal:"true"
           N8N.dd=literal:"true"
-          PriceBuddy.name=literal:"PriceBuddy"
-          PriceBuddy.url=literal:"https://pricebuddy.ghostship.io"
-          PriceBuddy.scale=literal:1
-          PriceBuddy.icon=literal:"muximux-attach_money"
-          PriceBuddy.color=literal:"#22c55e"
-          PriceBuddy.enabled=literal:"true"
-          PriceBuddy.dd=literal:"true"
           pyLoad.name=literal:"pyLoad"
           pyLoad.url=literal:"https://pyload.ghostship.io"
           pyLoad.scale=literal:1
@@ -410,13 +403,6 @@ in
           RSS-Bridge.color=literal:"#f97316"
           RSS-Bridge.enabled=literal:"true"
           RSS-Bridge.dd=literal:"true"
-          Changedetection.name=literal:"Changedetection"
-          Changedetection.url=literal:"https://changedetection.ghostship.io"
-          Changedetection.scale=literal:1
-          Changedetection.icon=literal:"fa-eye"
-          Changedetection.color=literal:"#0ea5e9"
-          Changedetection.enabled=literal:"true"
-          Changedetection.dd=literal:"true"
           SSH.name=literal:"SSH"
           SSH.url=literal:"https://ssh.ghostship.io"
           SSH.scale=literal:1
@@ -485,25 +471,14 @@ in
                 printf "%s", section_data["Codex"]
               }
               printf "%s", section_data[name]
-              if (name == "RSS-Bridge" && ("Changedetection" in section_data)) {
-                printf "%s", section_data["Changedetection"]
-              }
               if (name == "Tautulli" && ("Chaptarr" in section_data)) {
                 printf "%s", section_data["Chaptarr"]
               }
-              if (name == "Bazarr") {
-                if ("N8N" in section_data) {
-                  printf "%s", section_data["N8N"]
-                }
-                if ("PriceBuddy" in section_data) {
-                  printf "%s", section_data["PriceBuddy"]
-                }
+              if (name == "Bazarr" && ("N8N" in section_data)) {
+                printf "%s", section_data["N8N"]
               }
             }
 
-            if (!("RSS-Bridge" in section_data) && ("Changedetection" in section_data)) {
-              printf "%s", section_data["Changedetection"]
-            }
             if (!("CloakBrowser" in section_data) && ("Codex" in section_data)) {
               printf "%s", section_data["Codex"]
             }
@@ -513,9 +488,6 @@ in
             if (!("Bazarr" in section_data)) {
               if ("N8N" in section_data) {
                 printf "%s", section_data["N8N"]
-              }
-              if ("PriceBuddy" in section_data) {
-                printf "%s", section_data["PriceBuddy"]
               }
             }
           }

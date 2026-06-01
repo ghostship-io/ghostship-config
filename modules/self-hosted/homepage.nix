@@ -210,11 +210,6 @@ in
             "[Services].[n8n].server=literal:chill-penguin"
             "[Services].[n8n].container=literal:n8n"
 
-            "[Services].[PriceBuddy].icon=literal:sh-priceghost"
-            "[Services].[PriceBuddy].description=literal:Price Tracker"
-            "[Services].[PriceBuddy].server=literal:chill-penguin"
-            "[Services].[PriceBuddy].container=literal:pricebuddy"
-
             # Management group
             "[Management].[Homepage].icon=literal:sh-homepage"
             "[Management].[Homepage].description=literal:Dashboard"
@@ -244,20 +239,10 @@ in
             "[Utilities].[FlareSolverr].server=literal:chill-penguin"
             "[Utilities].[FlareSolverr].container=literal:flaresolverr"
 
-            "[Utilities].[Changedetection].icon=literal:sh-changedetection"
-            "[Utilities].[Changedetection].description=literal:Website Change Monitor"
-            "[Utilities].[Changedetection].server=literal:chill-penguin"
-            "[Utilities].[Changedetection].container=literal:changedetection"
-
             "[Utilities].[Plex Auto Languages].icon=literal:sh-plex"
             "[Utilities].[Plex Auto Languages].description=literal:Language Manager"
             "[Utilities].[Plex Auto Languages].server=literal:chill-penguin"
             "[Utilities].[Plex Auto Languages].container=literal:plex-auto-languages"
-
-            "[Utilities].[PriceBuddy Scraper].icon=literal:web-check"
-            "[Utilities].[PriceBuddy Scraper].description=literal:PriceBuddy Scraper"
-            "[Utilities].[PriceBuddy Scraper].server=literal:chill-penguin"
-            "[Utilities].[PriceBuddy Scraper].container=literal:pricebuddy-scraper"
 
             # Infrastructure group
             "[Infrastructure].[SearXNG Cache].icon=literal:sh-redis"
@@ -265,22 +250,17 @@ in
             "[Infrastructure].[SearXNG Cache].server=literal:chill-penguin"
             "[Infrastructure].[SearXNG Cache].container=literal:searxng-valkey"
 
-            "[Infrastructure].[PriceBuddy DB].icon=literal:sh-mariadb"
-            "[Infrastructure].[PriceBuddy DB].description=literal:PriceBuddy Database"
-            "[Infrastructure].[PriceBuddy DB].server=literal:chill-penguin"
-            "[Infrastructure].[PriceBuddy DB].container=literal:pricebuddy-db"
-
           )
 
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
 
           ${pkgs.yq-go}/bin/yq -i '
-            (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy Scraper") or has("Changedetection")) | not))
+            (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy Scraper") or has("Changedetection")) | not))
             | (.[] | select(has("Management")) | .Management) |= map(select((has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG") or has("Plex Auto Languages") or has("PriceBuddy Scraper")) | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("BentoPDF") or has("ConvertX") or has("IT-Tools") or has("MeTube") or has("OmniTools")) | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("SearXNG") or has("Firecrawl") or has("Firecrawl Playwright")) | not))
             | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("Honcho Redis") or has("Honcho DB") or has("Firecrawl Postgres") or has("Firecrawl RabbitMQ") or has("Firecrawl Redis")) | not))
-            | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("FlareSolverr") or has("Firecrawl Playwright") or has("PriceBuddy Scraper")) | not))
+            | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("FlareSolverr") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy DB") or has("PriceBuddy Scraper")) | not))
           ' "$SERVICES_FILE"
         fi
 

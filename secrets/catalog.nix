@@ -43,11 +43,6 @@ in
       ];
     };
 
-    changedetection = mkUnit {
-      relativeFile = "secrets/files/sources/services/changedetection.env.age";
-      exports = [ "API_KEY" ];
-    };
-
     chaptarr = mkUnit {
       relativeFile = "secrets/files/sources/services/chaptarr.env.age";
       exports = [ "API_KEY" ];
@@ -134,19 +129,6 @@ in
         "CLAIM"
         "API_KEY"
         "TOKEN"
-      ];
-    };
-
-    pricebuddy = mkUnit {
-      relativeFile = "secrets/files/sources/services/pricebuddy.env.age";
-      exports = [
-        "APP_USER_EMAIL"
-        "APP_USER_PASSWORD"
-        "DB_USER"
-        "DB_PASS"
-        "MYSQL_ROOT_PASS"
-        "APP_KEY"
-        "API_TOKEN"
       ];
     };
 
@@ -574,43 +556,6 @@ in
         PLEX_TOKEN = {
           unit = "plex";
           key = "TOKEN";
-        };
-      };
-    };
-
-    pricebuddy = {
-      fileName = "pricebuddy.env";
-      owner = "apps";
-      group = "apps";
-      mode = "0440";
-      fields = {
-        PRICEBUDDY_APP_USER_EMAIL = {
-          unit = "pricebuddy";
-          key = "APP_USER_EMAIL";
-        };
-        PRICEBUDDY_APP_USER_PASSWORD = {
-          unit = "pricebuddy";
-          key = "APP_USER_PASSWORD";
-        };
-        PRICEBUDDY_DB_USER = {
-          unit = "pricebuddy";
-          key = "DB_USER";
-        };
-        PRICEBUDDY_DB_PASS = {
-          unit = "pricebuddy";
-          key = "DB_PASS";
-        };
-        PRICEBUDDY_MYSQL_ROOT_PASS = {
-          unit = "pricebuddy";
-          key = "MYSQL_ROOT_PASS";
-        };
-        PRICEBUDDY_APP_KEY = {
-          unit = "pricebuddy";
-          key = "APP_KEY";
-        };
-        PRICEBUDDY_API_TOKEN = {
-          unit = "pricebuddy";
-          key = "API_TOKEN";
         };
       };
     };

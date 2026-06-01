@@ -200,6 +200,56 @@ let
       homepageEntries = [ "OmniTools" ];
       muximuxSections = [ "OmniTools" ];
     }
+    {
+      name = "changedetection";
+      paths = [ "/srv/apps/changedetection" ];
+      units = [
+        "podman-changedetection"
+        "changedetection-local-image-refresh"
+      ];
+      timers = [ "changedetection-local-image-refresh" ];
+      containers = [ "changedetection" ];
+      imageRefs = [ ];
+      imageRepositories = [
+        "ghcr.io/dgtlmoon/changedetection.io"
+        "localhost/ghostship-changedetection-cloakbrowser"
+      ];
+      homepageEntries = [ "Changedetection" ];
+      muximuxSections = [ "Changedetection" ];
+    }
+    {
+      name = "pricebuddy";
+      paths = [
+        "/srv/apps/pricebuddy"
+        "/srv/apps/pricebuddy-db"
+      ];
+      units = [
+        "podman-pricebuddy"
+        "podman-pricebuddy-db"
+        "podman-pricebuddy-scraper"
+        "pricebuddy-scraper-local-image-refresh"
+      ];
+      timers = [ "pricebuddy-scraper-local-image-refresh" ];
+      containers = [
+        "pricebuddy"
+        "pricebuddy-db"
+        "pricebuddy-scraper"
+      ];
+      imageRefs = [
+        "docker.io/jez500/pricebuddy:latest"
+        "docker.io/library/mysql:8.2"
+      ];
+      imageRepositories = [
+        "docker.io/jez500/pricebuddy"
+        "localhost/ghostship-pricebuddy-scraper-cloakbrowser"
+      ];
+      homepageEntries = [
+        "PriceBuddy"
+        "PriceBuddy DB"
+        "PriceBuddy Scraper"
+      ];
+      muximuxSections = [ "PriceBuddy" ];
+    }
   ];
 
   renderCommands =

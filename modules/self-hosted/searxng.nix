@@ -330,7 +330,7 @@ let
       categories = [ "science" "scientific publications" ];
       weight = 6;
       timeout = 5.0;
-      mailto = "pricebuddy@ghostship.io";
+      mailto = "search@ghostship.io";
     })
     (mkEngine "semantic scholar" {
       categories = [ "science" "scientific publications" ];
