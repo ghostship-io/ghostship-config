@@ -289,6 +289,23 @@ let
       ];
       muximuxSections = [ "SearXNG" ];
     }
+    {
+      name = "windmill-container-app";
+      paths = [ "/srv/apps/windmill" ];
+      units = [
+        "podman-windmill-db"
+        "podman-windmill-worker"
+      ];
+      containers = [
+        "windmill-db"
+        "windmill-worker"
+      ];
+      imageRefs = [
+        "docker.io/library/postgres:16-alpine"
+        "ghcr.io/windmill-labs/windmill:main"
+      ];
+      imageRepositories = [ "ghcr.io/windmill-labs/windmill" ];
+    }
   ];
 
   renderCommands =
