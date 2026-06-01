@@ -14,12 +14,13 @@ let
     contents = [
       windmillPackage
       pkgs.curl
+      pkgs.util-linux
       pkgs.dockerTools.binSh
       pkgs.dockerTools.usrBinEnv
       pkgs.dockerTools.caCertificates
     ];
     extraCommands = ''
-      mkdir -p root tmp
+      mkdir -p etc root tmp
       chmod 1777 tmp
       cat > etc/passwd <<'EOF'
       root:x:0:0:root:/root:/bin/sh
@@ -32,7 +33,7 @@ let
       Cmd = [ "${windmillPackage}/bin/windmill" ];
       Env = [
         "HOME=/root"
-        "PATH=/bin:/usr/bin:${windmillPackage}/bin:${pkgs.curl}/bin"
+        "PATH=/bin:/usr/bin:${windmillPackage}/bin:${pkgs.curl}/bin:${pkgs.util-linux}/bin"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
       ];

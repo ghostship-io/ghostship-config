@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.29] - 2026-06-01
+
+- **Windmill worker startup**: Include `unshare` in the repo-built Windmill
+  Podman image so the worker can satisfy `ENABLE_UNSHARE_PID` and stay running
+  on `chill-penguin`.
+
 ## [2.1.28] - 2026-06-01
 
 - **Windmill workflow stack**: Replace n8n with a repo-managed Windmill
