@@ -20,7 +20,7 @@
     ./sonarr.nix
     ./radarr.nix
     ./nzbget.nix
-    ./vuetorrent.nix
+    ./qbittorrent.nix
     ./flaresolverr.nix
     ./recyclarr.nix
     ./bazarr.nix

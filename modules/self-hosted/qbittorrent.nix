@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   vuetorrent-ui = pkgs.fetchzip {
@@ -6,23 +11,33 @@ let
     hash = "sha256-AnQ606UTmm59V9fQEyMDx9WVIjwBNiOFi9rms+RSdNk=";
   };
 
-  vuetorrent-config-script = pkgs.writeShellScriptBin "vuetorrent-config.sh" ''
+  qbittorrent-config-script = pkgs.writeShellScriptBin "qbittorrent-config.sh" ''
     #!/bin/sh
     set -eu
     # qBittorrent (VueTorrent) configuration
 
-    CONFIG_DIR="/srv/apps/vuetorrent"
+    OLD_CONFIG_DIR="/srv/apps/vuetorrent"
+    CONFIG_DIR="/srv/apps/qbittorrent"
     CONFIG_FILE="$CONFIG_DIR/qBittorrent/qBittorrent.conf"
     LOCK_FILE="$CONFIG_DIR/qBittorrent/lockfile"
     LEGACY_UI_DIR="$CONFIG_DIR/ui"
     LEGACY_RELEASE_MARKER="$CONFIG_DIR/.vuetorrent-release-url"
+
+    if [ -d "$OLD_CONFIG_DIR" ] && [ ! -f "$CONFIG_FILE" ]; then
+      if [ -d "$CONFIG_DIR" ] && [ -z "$(${pkgs.findutils}/bin/find "$CONFIG_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        ${pkgs.coreutils}/bin/rmdir "$CONFIG_DIR"
+      fi
+      if [ ! -e "$CONFIG_DIR" ]; then
+        ${pkgs.coreutils}/bin/mv "$OLD_CONFIG_DIR" "$CONFIG_DIR"
+      fi
+    fi
 
     # 1. Ensure directories exist
     mkdir -p "$CONFIG_DIR/qBittorrent"
     chown -R 3000:3000 "$CONFIG_DIR"
 
     # 2. Remove the legacy manual VueTorrent download state. The supported
-    # LSIO Docker mod now supplies the UI inside the container.
+    # Nix store mount now supplies the UI inside the container.
     if [ -e "$LEGACY_UI_DIR" ] || [ -e "$LEGACY_RELEASE_MARKER" ]; then
       echo "Removing legacy VueTorrent UI state..."
       ${pkgs.coreutils}/bin/rm -rf "$LEGACY_UI_DIR" "$LEGACY_RELEASE_MARKER"
@@ -30,7 +45,7 @@ let
 
     # 3. Update config if it exists
     if [ -f "$CONFIG_FILE" ]; then
-      echo "Surgically updating VueTorrent config..."
+      echo "Surgically updating qBittorrent config..."
 
       # Remove legacy KV-style lines from the old broken writer.
       ${pkgs.gnused}/bin/sed -i '/^WebUI\./d' "$CONFIG_FILE"
@@ -64,16 +79,16 @@ let
       ${pkgs.gnused}/bin/sed -i 's/^WebUI\\Address = /WebUI\\Address=/' "$CONFIG_FILE"
       ${pkgs.coreutils}/bin/rm -f "$LOCK_FILE"
       
-      echo "VueTorrent config updated"
+      echo "qBittorrent config updated"
     fi
   '';
 
-  vuetorrent-prestart-script = pkgs.writeShellScriptBin "vuetorrent-prestart.sh" ''
+  qbittorrent-prestart-script = pkgs.writeShellScriptBin "qbittorrent-prestart.sh" ''
     #!/bin/sh
     set -eu
 
-    CONFIG_FILE="/srv/apps/vuetorrent/qBittorrent/qBittorrent.conf"
-    LOCK_FILE="/srv/apps/vuetorrent/qBittorrent/lockfile"
+    CONFIG_FILE="/srv/apps/qbittorrent/qBittorrent/qBittorrent.conf"
+    LOCK_FILE="/srv/apps/qbittorrent/qBittorrent/lockfile"
     DOWNLOAD_TEMP_DIR="/mnt/share/Downloads/Torrent/.incomplete"
     TUN_INTERFACE="tun0"
     TUN_IP=""
@@ -93,7 +108,7 @@ let
     done
 
     if [ -z "$TUN_IP" ]; then
-      echo "VueTorrent pre-start could not determine Gluetun $TUN_INTERFACE address; leaving qBittorrent binding unchanged." >&2
+      echo "qBittorrent pre-start could not determine Gluetun $TUN_INTERFACE address; leaving qBittorrent binding unchanged." >&2
       exit 0
     fi
 
@@ -106,13 +121,13 @@ let
     ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_bind_args[@]}"
     ${pkgs.gnused}/bin/sed -i 's/^WebUI\\Address = /WebUI\\Address=/' "$CONFIG_FILE"
     ${pkgs.coreutils}/bin/rm -f "$LOCK_FILE"
-    echo "Primed VueTorrent binding for $TUN_INTERFACE/$TUN_IP before startup."
+    echo "Primed qBittorrent binding for $TUN_INTERFACE/$TUN_IP before startup."
   '';
-  vuetorrent-auto-resume-script = pkgs.writeShellScriptBin "vuetorrent-auto-resume" ''
+  qbittorrent-auto-resume-script = pkgs.writeShellScriptBin "qbittorrent-auto-resume" ''
     #!/bin/sh
     set -eu
 
-    STATE_DIR="/srv/apps/vuetorrent"
+    STATE_DIR="/srv/apps/qbittorrent"
     STATE_FILE="$STATE_DIR/auto-resume-attempts.json"
     QBT_API="http://127.0.0.1:5000/api/v2"
 
@@ -127,8 +142,8 @@ let
       exit 0
     fi
 
-    if ! ${pkgs.podman}/bin/podman ps --filter "name=vuetorrent" --filter "status=running" --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx vuetorrent; then
-      echo "VueTorrent is not running; skipping qBittorrent auto-resume."
+    if ! ${pkgs.podman}/bin/podman ps --filter "name=qbittorrent" --filter "status=running" --format '{{.Names}}' | ${pkgs.gnugrep}/bin/grep -qx qbittorrent; then
+      echo "qBittorrent is not running; skipping qBittorrent auto-resume."
       exit 0
     fi
 
@@ -183,7 +198,7 @@ let
   '';
 in
 {
-  virtualisation.oci-containers.containers."vuetorrent" = {
+  virtualisation.oci-containers.containers."qbittorrent" = {
     image = "lscr.io/linuxserver/qbittorrent:latest";
     pull = "always";
     labels = {
@@ -205,58 +220,61 @@ in
       WEBUI_PORT = "5000";
     };
     volumes = [
-      "/srv/apps/vuetorrent:/config"
+      "/srv/apps/qbittorrent:/config"
       "/mnt/share/Downloads:/downloads"
       "${vuetorrent-ui}:/vuetorrent:ro"
     ];
   };
 
-  systemd.services.podman-vuetorrent = {
-    after = [ "mnt-share.mount" "podman-gluetun.service" ];
+  systemd.services.podman-qbittorrent = {
+    after = [
+      "mnt-share.mount"
+      "podman-gluetun.service"
+    ];
     bindsTo = [ "podman-gluetun.service" ];
     partOf = [ "podman-gluetun.service" ];
     requires = [ "podman-gluetun.service" ];
     wants = [ "mnt-share.mount" ];
     preStart = lib.mkAfter ''
-      ${vuetorrent-prestart-script}/bin/vuetorrent-prestart.sh
+      ${qbittorrent-prestart-script}/bin/qbittorrent-prestart.sh
     '';
   };
 
-  systemd.services.vuetorrent-auto-resume = {
+  systemd.services.qbittorrent-auto-resume = {
     description = "Resume errored qBittorrent torrents indefinitely";
     after = [
       "podman-gluetun.service"
-      "podman-vuetorrent.service"
+      "podman-qbittorrent.service"
     ];
     wants = [
       "podman-gluetun.service"
-      "podman-vuetorrent.service"
+      "podman-qbittorrent.service"
     ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${vuetorrent-auto-resume-script}/bin/vuetorrent-auto-resume";
+      ExecStart = "${qbittorrent-auto-resume-script}/bin/qbittorrent-auto-resume";
     };
   };
 
-  systemd.timers.vuetorrent-auto-resume = {
+  systemd.timers.qbittorrent-auto-resume = {
     description = "Periodically resume errored qBittorrent torrents";
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnBootSec = "10m";
       OnUnitActiveSec = "5m";
       Persistent = true;
-      Unit = "vuetorrent-auto-resume.service";
+      Unit = "qbittorrent-auto-resume.service";
     };
   };
 
   systemd.tmpfiles.rules = [
-    "d /srv/apps/vuetorrent 0755 apps apps -"
-    "d /srv/apps/vuetorrent/qBittorrent 0755 apps apps -"
+    "d /srv/apps/qbittorrent 0755 apps apps -"
+    "d /srv/apps/qbittorrent/qBittorrent 0755 apps apps -"
   ];
 
-  system.activationScripts.vuetorrent-config = {
+  system.activationScripts.qbittorrent-config = {
     text = ''
-      ${vuetorrent-config-script}/bin/vuetorrent-config.sh
+      ${qbittorrent-config-script}/bin/qbittorrent-config.sh
     '';
   };
 }

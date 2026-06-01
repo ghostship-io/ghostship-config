@@ -251,6 +251,17 @@ let
       muximuxSections = [ "PriceBuddy" ];
     }
     {
+      name = "vuetorrent";
+      units = [
+        "podman-vuetorrent"
+        "vuetorrent-auto-resume"
+      ];
+      timers = [ "vuetorrent-auto-resume" ];
+      containers = [ "vuetorrent" ];
+      homepageEntries = [ "VueTorrent" ];
+      muximuxSections = [ "VueTorrent" ];
+    }
+    {
       name = "n8n";
       paths = [ "/srv/apps/n8n" ];
       units = [ "podman-n8n" ];

@@ -182,12 +182,12 @@ in
             "[Downloads].[NZBGet].widget.username=literal:ghostship"
             "[Downloads].[NZBGet].widget.password=literal:"
 
-            "[Downloads].[VueTorrent].icon=literal:sh-vuetorrent"
-            "[Downloads].[VueTorrent].description=literal:Torrent Downloader"
-            "[Downloads].[VueTorrent].server=literal:chill-penguin"
-            "[Downloads].[VueTorrent].container=literal:vuetorrent"
-            "[Downloads].[VueTorrent].widget.type=literal:qbittorrent"
-            "[Downloads].[VueTorrent].widget.url=literal:http://gluetun:5000"
+            "[Downloads].[qBittorrent].icon=literal:sh-qbittorrent"
+            "[Downloads].[qBittorrent].description=literal:Torrent Downloader"
+            "[Downloads].[qBittorrent].server=literal:chill-penguin"
+            "[Downloads].[qBittorrent].container=literal:qbittorrent"
+            "[Downloads].[qBittorrent].widget.type=literal:qbittorrent"
+            "[Downloads].[qBittorrent].widget.url=literal:http://gluetun:5000"
 
             # Services group
             "[Services].[pyLoad].icon=literal:sh-pyload"
@@ -245,6 +245,7 @@ in
 
           ${pkgs.yq-go}/bin/yq -i '
             (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy Scraper") or has("Changedetection") or has("n8n") or has("SearXNG") or has("Prefect") or has("Hatchet")) | not))
+            | (.[] | select(has("Downloads")) | .Downloads) |= map(select((has("VueTorrent")) | not))
             | (.[] | select(has("Management")) | .Management) |= map(select((has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG") or has("Plex Auto Languages") or has("PriceBuddy Scraper")) | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("BentoPDF") or has("ConvertX") or has("IT-Tools") or has("MeTube") or has("OmniTools")) | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("SearXNG") or has("Firecrawl") or has("Firecrawl Playwright")) | not))

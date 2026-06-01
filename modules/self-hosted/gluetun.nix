@@ -640,7 +640,7 @@ in
             if [ "$CURRENT_IP" != "$LAST_IP" ]; then
               if [ -n "$LAST_IP" ]; then
                 echo "Gluetun IP changed from $LAST_IP to $CURRENT_IP. Restarting dependents..."
-                systemctl restart podman-vuetorrent.service
+                systemctl restart podman-qbittorrent.service
               else
                 echo "Gluetun IP initialized to $CURRENT_IP."
               fi
@@ -652,31 +652,31 @@ in
             TUN_IP=$(${pkgs.podman}/bin/podman exec gluetun sh -c "ip -4 -o addr show dev $TUN_INTERFACE 2>/dev/null | tr -s ' ' | cut -d' ' -f4 | cut -d/ -f1 | head -n1" 2>/dev/null || true)
 
             if ${pkgs.podman}/bin/podman exec gluetun wget -qO- http://127.0.0.1:5000/api/v2/app/version >/dev/null 2>&1; then
-              CURRENT_VT_PREFS=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- http://127.0.0.1:5000/api/v2/app/preferences 2>/dev/null || true)
-              CURRENT_VT_PORT=$(printf '%s' "$CURRENT_VT_PREFS" | ${pkgs.jq}/bin/jq -r '.listen_port // empty' 2>/dev/null || true)
-              CURRENT_VT_INTERFACE=$(printf '%s' "$CURRENT_VT_PREFS" | ${pkgs.jq}/bin/jq -r '.current_network_interface // empty' 2>/dev/null || true)
-              CURRENT_VT_ADDR=$(printf '%s' "$CURRENT_VT_PREFS" | ${pkgs.jq}/bin/jq -r '.current_interface_address // empty' 2>/dev/null || true)
-              CURRENT_VT_EXTERNAL_IP=$(printf '%s' "$CURRENT_VT_PREFS" | ${pkgs.jq}/bin/jq -r '.status_bar_external_ip // false' 2>/dev/null || true)
+              CURRENT_QBT_PREFS=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- http://127.0.0.1:5000/api/v2/app/preferences 2>/dev/null || true)
+              CURRENT_QBT_PORT=$(printf '%s' "$CURRENT_QBT_PREFS" | ${pkgs.jq}/bin/jq -r '.listen_port // empty' 2>/dev/null || true)
+              CURRENT_QBT_INTERFACE=$(printf '%s' "$CURRENT_QBT_PREFS" | ${pkgs.jq}/bin/jq -r '.current_network_interface // empty' 2>/dev/null || true)
+              CURRENT_QBT_ADDR=$(printf '%s' "$CURRENT_QBT_PREFS" | ${pkgs.jq}/bin/jq -r '.current_interface_address // empty' 2>/dev/null || true)
+              CURRENT_QBT_EXTERNAL_IP=$(printf '%s' "$CURRENT_QBT_PREFS" | ${pkgs.jq}/bin/jq -r '.status_bar_external_ip // false' 2>/dev/null || true)
 
-              if [ -n "$TUN_IP" ] && { [ "$CURRENT_VT_INTERFACE" != "$TUN_INTERFACE" ] || [ "$CURRENT_VT_ADDR" != "$TUN_IP" ] || [ "$CURRENT_VT_EXTERNAL_IP" != "true" ]; }; then
-                echo "VueTorrent interface binding drift detected (Interface: $CURRENT_VT_INTERFACE, Address: $CURRENT_VT_ADDR, External IP enabled: $CURRENT_VT_EXTERNAL_IP). Reconciling to $TUN_INTERFACE/$TUN_IP."
-                VT_BIND_JSON=$(${pkgs.jq}/bin/jq -cn \
+              if [ -n "$TUN_IP" ] && { [ "$CURRENT_QBT_INTERFACE" != "$TUN_INTERFACE" ] || [ "$CURRENT_QBT_ADDR" != "$TUN_IP" ] || [ "$CURRENT_QBT_EXTERNAL_IP" != "true" ]; }; then
+                echo "qBittorrent interface binding drift detected (Interface: $CURRENT_QBT_INTERFACE, Address: $CURRENT_QBT_ADDR, External IP enabled: $CURRENT_QBT_EXTERNAL_IP). Reconciling to $TUN_INTERFACE/$TUN_IP."
+                QBT_BIND_JSON=$(${pkgs.jq}/bin/jq -cn \
                   --arg interface "$TUN_INTERFACE" \
                   --arg address "$TUN_IP" \
                   '{"current_network_interface": $interface, "current_interface_address": $address, "status_bar_external_ip": true}')
-                ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "json=$VT_BIND_JSON" http://127.0.0.1:5000/api/v2/app/setPreferences >/dev/null 2>&1 || true
+                ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "json=$QBT_BIND_JSON" http://127.0.0.1:5000/api/v2/app/setPreferences >/dev/null 2>&1 || true
               fi
 
               if [ -n "$FORWARDED_PORT" ] && [ "$FORWARDED_PORT" != "null" ] && [ "$FORWARDED_PORT" != "0" ]; then
                 PF_FAILURES=0
-                if [ "$CURRENT_VT_PORT" != "$FORWARDED_PORT" ] || [ "$CURRENT_VT_INTERFACE" != "$TUN_INTERFACE" ] || [ "$CURRENT_VT_ADDR" != "$TUN_IP" ]; then
-                  echo "VueTorrent port or tunnel binding mismatch (Port: $CURRENT_VT_PORT, Interface: $CURRENT_VT_INTERFACE, Address: $CURRENT_VT_ADDR). Updating to $FORWARDED_PORT on $TUN_INTERFACE/$TUN_IP."
-                  VT_PORT_JSON=$(${pkgs.jq}/bin/jq -cn \
+                if [ "$CURRENT_QBT_PORT" != "$FORWARDED_PORT" ] || [ "$CURRENT_QBT_INTERFACE" != "$TUN_INTERFACE" ] || [ "$CURRENT_QBT_ADDR" != "$TUN_IP" ]; then
+                  echo "qBittorrent port or tunnel binding mismatch (Port: $CURRENT_QBT_PORT, Interface: $CURRENT_QBT_INTERFACE, Address: $CURRENT_QBT_ADDR). Updating to $FORWARDED_PORT on $TUN_INTERFACE/$TUN_IP."
+                  QBT_PORT_JSON=$(${pkgs.jq}/bin/jq -cn \
                     --arg interface "$TUN_INTERFACE" \
                     --arg address "$TUN_IP" \
                     --arg port "$FORWARDED_PORT" \
                     '{"listen_port": ($port | tonumber), "current_network_interface": $interface, "current_interface_address": $address, "random_port": false, "upnp": false, "status_bar_external_ip": true}')
-                  ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "json=$VT_PORT_JSON" http://127.0.0.1:5000/api/v2/app/setPreferences >/dev/null 2>&1 || true
+                  ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "json=$QBT_PORT_JSON" http://127.0.0.1:5000/api/v2/app/setPreferences >/dev/null 2>&1 || true
                 fi
               elif [ "$VPN_STATUS" = "running" ]; then
                 PF_FAILURES=$((PF_FAILURES + 1))

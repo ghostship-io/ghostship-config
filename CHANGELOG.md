@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.34] - 2026-06-01
+
+- **qBittorrent runtime identity**: Rename the managed torrent container,
+  systemd units, dashboard entries, and Gluetun restart wiring from
+  `vuetorrent` to `qbittorrent` while keeping the VueTorrent alternate WebUI
+  installed as the qBittorrent UI.
+
 ## [2.1.33] - 2026-06-01
 
 - **Windmill official-base image**: Restore Windmill and build the

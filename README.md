@@ -176,7 +176,7 @@ Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, Codex, the `arr` stack,
-qBittorrent/VueTorrent, SearXNG, RomM, Grimmory, Chaptarr,
+qBittorrent, SearXNG, RomM, Grimmory, Chaptarr,
 PyLoad, RSS-Bridge, PriceBuddy, and n8n.
 
 Retired `chill-penguin` self-hosted service artifacts are cleaned from the
@@ -212,8 +212,8 @@ regenerating `/run/secrets/gluetun-runtime.env`. A background
 `gluetun-pia-selector` run starts 5 minutes after boot and reruns every 8 hours:
 it pins selection to the PF-capable Vancouver PIA WireGuard servers, latency-screens those endpoints, benchmarks the top 10 Vancouver servers with a bounded generic HTTPS download test, and only restarts Gluetun when the new Vancouver winner is materially faster than the current cached server. The persisted `/srv/apps/gluetun` mount remains the
 owner of Gluetun state and PIA's forwarded-port lease, while the
-qBittorrent/VueTorrent up/down hooks plus the Gluetun monitor keep the listen
-port reconciled after startup and reconnects. `podman-vuetorrent` also primes
+qBittorrent up/down hooks plus the Gluetun monitor keep the listen
+port reconciled after startup and reconnects. `podman-qbittorrent` also primes
 `qBittorrent.conf` with Gluetun's current `tun0` IPv4 during service startup,
 so qBittorrent does not spend its first boot window bound to the previous VPN
 address after a Gluetun restart. The monitor still reconciles qBittorrent's
@@ -225,7 +225,7 @@ active downloads and 20 active torrents, with the global download cap set to
 post-completion recheck enabled. Torrent data is rooted at
 `/downloads/Torrent`, with incomplete torrent data under
 `/downloads/Torrent/.incomplete`, so the shared `/downloads` mount root stays
-clear of qBittorrent partfiles. A `vuetorrent-auto-resume` timer retries
+clear of qBittorrent partfiles. A `qbittorrent-auto-resume` timer retries
 errored qBittorrent torrents every 5 minutes through qBittorrent's internal
 Web API start action without a per-torrent retry cap. NZBGet shares Gluetun's
 VPN namespace and internal callers should reach it at `http://gluetun:5001`.
