@@ -289,6 +289,25 @@ let
       ];
       muximuxSections = [ "SearXNG" ];
     }
+    {
+      name = "windmill";
+      paths = [ "/srv/apps/windmill" ];
+      units = [
+        "podman-windmill"
+        "podman-windmill-db"
+        "podman-windmill-worker"
+      ];
+      containers = [
+        "windmill"
+        "windmill-db"
+        "windmill-worker"
+      ];
+      imageRepositories = [
+        "localhost/ghostship-windmill"
+      ];
+      homepageEntries = [ "Windmill" ];
+      muximuxSections = [ "Windmill" ];
+    }
   ];
 
   renderCommands =

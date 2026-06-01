@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.31] - 2026-06-01
+
+- **Prefect workflow stack**: Replace the Windmill stack with a Prefect 3
+  Podman deployment backed by PostgreSQL and Redis, wire Homepage and Muximux
+  to `prefect.ghostship.io`, and retire Windmill runtime artifacts.
+
 ## [2.1.30] - 2026-06-01
 
 - **Windmill worker isolation**: Override the worker unshare flags to avoid

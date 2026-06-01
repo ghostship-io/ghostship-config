@@ -374,13 +374,13 @@ in
           Bazarr.color=literal:"#9c36b5"
           Bazarr.enabled=literal:"true"
           Bazarr.dd=literal:"true"
-          Windmill.name=literal:"Windmill"
-          Windmill.url=literal:"https://windmill.ghostship.io"
-          Windmill.scale=literal:1
-          Windmill.icon=literal:"fa-cogs"
-          Windmill.color=literal:"#3b82f6"
-          Windmill.enabled=literal:"true"
-          Windmill.dd=literal:"true"
+          Prefect.name=literal:"Prefect"
+          Prefect.url=literal:"https://prefect.ghostship.io"
+          Prefect.scale=literal:1
+          Prefect.icon=literal:"fa-cogs"
+          Prefect.color=literal:"#024dfd"
+          Prefect.enabled=literal:"true"
+          Prefect.dd=literal:"true"
           pyLoad.name=literal:"pyLoad"
           pyLoad.url=literal:"https://pyload.ghostship.io"
           pyLoad.scale=literal:1
@@ -455,7 +455,7 @@ in
 
             for (i = 1; i <= section_count; i++) {
               name = section_order[i]
-              if (name == "Honcho" || name == "Codex" || name == "BookStack" || name == "Chaptarr" || name == "Windmill" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection" || name == "OmniTools" || name == "MeTube" || name == "ConvertX" || name == "BentoPDF" || name == "IT Tools" || name == "SearXNG") {
+              if (name == "Honcho" || name == "Codex" || name == "BookStack" || name == "Chaptarr" || name == "Prefect" || name == "Windmill" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection" || name == "OmniTools" || name == "MeTube" || name == "ConvertX" || name == "BentoPDF" || name == "IT Tools" || name == "SearXNG") {
                 continue
               }
 
@@ -466,8 +466,8 @@ in
               if (name == "Tautulli" && ("Chaptarr" in section_data)) {
                 printf "%s", section_data["Chaptarr"]
               }
-              if (name == "Bazarr" && ("Windmill" in section_data)) {
-                printf "%s", section_data["Windmill"]
+              if (name == "Bazarr" && ("Prefect" in section_data)) {
+                printf "%s", section_data["Prefect"]
               }
             }
 
@@ -478,8 +478,8 @@ in
               printf "%s", section_data["Chaptarr"]
             }
             if (!("Bazarr" in section_data)) {
-              if ("Windmill" in section_data) {
-                printf "%s", section_data["Windmill"]
+              if ("Prefect" in section_data) {
+                printf "%s", section_data["Prefect"]
               }
             }
           }
