@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.30] - 2026-06-01
+
+- **Windmill worker isolation**: Override the worker unshare flags to avoid
+  Podman's denied `--mount-proc` path while keeping PID unshare enabled.
+
 ## [2.1.29] - 2026-06-01
 
 - **Windmill worker startup**: Include `unshare` in the repo-built Windmill

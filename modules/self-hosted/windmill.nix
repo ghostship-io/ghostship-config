@@ -155,6 +155,7 @@ in
       ];
       environment = {
         MODE = "worker";
+        UNSHARE_ISOLATION_FLAGS = "--user --map-root-user --pid --fork";
         WORKER_GROUP = "default";
       };
       environmentFiles = [ windmillEnv ];
