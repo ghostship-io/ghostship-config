@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.36] - 2026-06-01
+
+- **Muximux qBittorrent icon**: Use a distinct magnet icon for qBittorrent
+  instead of sharing NZBGet's download icon.
+
 ## [2.1.35] - 2026-06-01
 
 - **Muximux qBittorrent order**: Keep qBittorrent in the same Muximux position

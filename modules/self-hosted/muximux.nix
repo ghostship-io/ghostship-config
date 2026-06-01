@@ -311,7 +311,7 @@ in
           qBittorrent.name=literal:"qBittorrent"
           qBittorrent.url=literal:"https://qbittorrent.ghostship.io"
           qBittorrent.scale=literal:1
-          qBittorrent.icon=literal:"fa-download"
+          qBittorrent.icon=literal:"fa-magnet"
           qBittorrent.color=literal:"#63cda9"
           qBittorrent.enabled=literal:"true"
           Sonarr.name=literal:"Sonarr"
