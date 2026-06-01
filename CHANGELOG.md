@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.37] - 2026-06-01
+
+- **Prefect workflow stack**: Replace Windmill with Prefect as the final
+  workflow orchestrator design, restore the Prefect Podman stack, wire
+  dashboards to `prefect.ghostship.io`, and retire Windmill artifacts.
+
 ## [2.1.36] - 2026-06-01
 
 - **Muximux qBittorrent icon**: Use a distinct magnet icon for qBittorrent

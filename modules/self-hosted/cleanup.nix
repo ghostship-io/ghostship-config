@@ -330,31 +330,23 @@ let
       muximuxSections = [ "Hatchet" ];
     }
     {
-      name = "prefect";
-      paths = [ "/srv/apps/prefect" ];
+      name = "windmill";
+      paths = [ "/srv/apps/windmill" ];
       units = [
-        "podman-prefect"
-        "podman-prefect-db"
-        "podman-prefect-redis"
-        "podman-prefect-services"
-        "podman-prefect-worker"
+        "podman-windmill"
+        "podman-windmill-db"
+        "podman-windmill-worker"
       ];
       containers = [
-        "prefect"
-        "prefect-db"
-        "prefect-redis"
-        "prefect-services"
-        "prefect-worker"
-      ];
-      imageRefs = [
-        "docker.io/prefecthq/prefect:3-latest"
-        "docker.io/library/redis:7-alpine"
+        "windmill"
+        "windmill-db"
+        "windmill-worker"
       ];
       imageRepositories = [
-        "docker.io/prefecthq/prefect"
+        "localhost/ghostship-windmill"
       ];
-      homepageEntries = [ "Prefect" ];
-      muximuxSections = [ "Prefect" ];
+      homepageEntries = [ "Windmill" ];
+      muximuxSections = [ "Windmill" ];
     }
   ];
 
