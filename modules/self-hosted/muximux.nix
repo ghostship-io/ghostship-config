@@ -147,13 +147,33 @@ let
         client_max_body_size 0;
         resolver 10.89.0.1 valid=30s ipv6=off;
         set $romm_upstream romm:8080;
+        set $pyload_upstream pyload:8000;
 
       location = /romm-iframe-shim.js {
         add_header Cache-Control "no-store";
       }
 
+      location = /pyload {
+        return 308 /pyload/;
+      }
+
+      location /pyload/ {
+        rewrite ^/pyload/(.*)$ /$1 break;
+        proxy_pass http://$pyload_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Accept-Encoding "";
+        proxy_redirect / /pyload/;
+        proxy_redirect http://$host/ /pyload/;
+        proxy_cookie_path / /pyload/;
+      }
+
       location /romm/ {
-    proxy_pass http://$romm_upstream/;
+        rewrite ^/romm/(.*)$ /$1 break;
+        proxy_pass http://$romm_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host romm:8080;
         proxy_set_header X-Forwarded-Host $host;
@@ -382,7 +402,7 @@ in
           Prefect.enabled=literal:"true"
           Prefect.dd=literal:"true"
           pyLoad.name=literal:"pyLoad"
-          pyLoad.url=literal:"https://pyload.ghostship.io"
+          pyLoad.url=literal:"/pyload/"
           pyLoad.scale=literal:1
           pyLoad.icon=literal:"fa-download"
           pyLoad.color=literal:"#ffcc00"
@@ -395,13 +415,6 @@ in
           RSS-Bridge.color=literal:"#f97316"
           RSS-Bridge.enabled=literal:"true"
           RSS-Bridge.dd=literal:"true"
-          SSH.name=literal:"SSH"
-          SSH.url=literal:"https://ssh.ghostship.io"
-          SSH.scale=literal:1
-          SSH.icon=literal:"muximux-terminal3"
-          SSH.color=literal:"#0045a6"
-          SSH.enabled=literal:"true"
-          SSH.dd=literal:"true"
         )
 
         ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${mux_args[@]}"
@@ -455,7 +468,7 @@ in
 
             for (i = 1; i <= section_count; i++) {
               name = section_order[i]
-              if (name == "Honcho" || name == "Codex" || name == "BookStack" || name == "Chaptarr" || name == "Hatchet" || name == "Prefect" || name == "Windmill" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection" || name == "OmniTools" || name == "MeTube" || name == "ConvertX" || name == "BentoPDF" || name == "IT Tools" || name == "SearXNG" || name == "qBittorrent") {
+              if (name == "Honcho" || name == "Codex" || name == "BookStack" || name == "Chaptarr" || name == "Hatchet" || name == "Prefect" || name == "Windmill" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection" || name == "OmniTools" || name == "MeTube" || name == "ConvertX" || name == "BentoPDF" || name == "IT Tools" || name == "SearXNG" || name == "qBittorrent" || name == "SSH") {
                 continue
               }
 

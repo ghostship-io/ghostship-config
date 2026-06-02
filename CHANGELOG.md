@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.44] - 2026-06-02
+
+- **Muximux iframe fixes**: Route pyLoad through a same-origin `/pyload/`
+  Muximux proxy with redirect and cookie-path rewrites, fix RomM's `/romm/`
+  proxy prefix stripping so asset requests return JavaScript/CSS instead of the
+  Muximux app shell, and remove the non-web SSH Access endpoint from Muximux.
+
 ## [2.1.43] - 2026-06-02
 
 - **Muximux iframe audit tooling**: Add a repeatable `agent-browser` based
