@@ -107,6 +107,9 @@ notes.
 - The managed `agent-browser` wrapper defaults `AGENT_BROWSER_ENGINE=chrome`
   unless you override it explicitly, so local automation stays on the
   profile-capable Chrome engine even if upstream auto-selection changes.
+- Muximux iframe regressions should be checked through the real public
+  Cloudflare Access path with `scripts/audit-muximux-iframes`; see
+  [`docs/muximux-iframe-testing.md`](docs/muximux-iframe-testing.md).
 - `codex`, `gemini`, `gemini-cli`, and `opencode` delegate to installed
   user-local CLIs under
   `/home/nixos/.local/share/ghostship-agent-tools/npm/bin`.

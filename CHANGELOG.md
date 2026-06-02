@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.43] - 2026-06-02
+
+- **Muximux iframe audit tooling**: Add a repeatable `agent-browser` based
+  audit script and documentation for testing Muximux entries through the real
+  Cloudflare Access path before making iframe fixes.
+
 ## [2.1.42] - 2026-06-01
 
 - **Prefect startup ordering**: Use unique generated env temp files and make

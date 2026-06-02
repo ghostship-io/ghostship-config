@@ -1,0 +1,314 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/audit-muximux-iframes [--url URL] [--session NAME] [--out DIR] [--services CSV]
+
+Audits Muximux iframe entries through the public Cloudflare Access path.
+
+Requirements:
+  - agent-browser on PATH
+  - .envrc with CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET exports
+  - node and npm on PATH
+
+The script creates a cached temporary Node package under
+${XDG_CACHE_HOME:-$HOME/.cache}/muximux-iframe-audit-node so it can attach to
+agent-browser's CDP endpoint with Playwright. No repo-local node_modules is used.
+EOF
+}
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+url="https://apps.ghostship.io/"
+session="muximux-iframe-audit"
+out_dir=""
+services_csv=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --url)
+      url="$2"
+      shift 2
+      ;;
+    --session)
+      session="$2"
+      shift 2
+      ;;
+    --out)
+      out_dir="$2"
+      shift 2
+      ;;
+    --services)
+      services_csv="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+cd "$repo_root"
+
+if [ ! -f .envrc ]; then
+  echo "Missing .envrc with Cloudflare Access credentials" >&2
+  exit 1
+fi
+
+eval "$(
+  grep -E '^export CF_ACCESS_CLIENT_(ID|SECRET)=' .envrc
+)"
+
+: "${CF_ACCESS_CLIENT_ID:?missing CF_ACCESS_CLIENT_ID in .envrc}"
+: "${CF_ACCESS_CLIENT_SECRET:?missing CF_ACCESS_CLIENT_SECRET in .envrc}"
+
+command -v agent-browser >/dev/null || {
+  echo "agent-browser is required on PATH" >&2
+  exit 1
+}
+command -v node >/dev/null || {
+  echo "node is required on PATH" >&2
+  exit 1
+}
+command -v npm >/dev/null || {
+  echo "npm is required on PATH" >&2
+  exit 1
+}
+
+if [ -z "$out_dir" ]; then
+  out_dir="/tmp/muximux-iframe-audit-$(date -u +%Y%m%dT%H%M%SZ)"
+fi
+mkdir -p "$out_dir"
+
+cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/muximux-iframe-audit-node"
+if [ ! -d "$cache_root/node_modules/playwright" ]; then
+  mkdir -p "$cache_root"
+  (
+    cd "$cache_root"
+    [ -f package.json ] || npm init -y >/dev/null
+    npm install playwright@1.60.0 >/dev/null
+  )
+fi
+
+headers_json="$(
+  python3 - <<'PY'
+import json
+import os
+
+print(json.dumps({
+    "CF-Access-Client-Id": os.environ["CF_ACCESS_CLIENT_ID"],
+    "CF-Access-Client-Secret": os.environ["CF_ACCESS_CLIENT_SECRET"],
+}))
+PY
+)"
+
+echo "Opening $url through agent-browser session '$session'..."
+AGENT_BROWSER_SESSION="$session" agent-browser --headers "$headers_json" --ignore-https-errors open "$url" >/dev/null
+AGENT_BROWSER_SESSION="$session" agent-browser wait 2500 >/dev/null
+cdp_url="$(AGENT_BROWSER_SESSION="$session" agent-browser get cdp-url)"
+
+audit_js="$(mktemp)"
+cat > "$audit_js" <<'NODE'
+const { chromium } = require('playwright');
+const fs = require('fs');
+
+const [cdpUrl, targetUrl, outDir, servicesCsv] = process.argv.slice(2);
+const headers = {
+  'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID,
+  'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET,
+};
+
+const fixedServices = servicesCsv
+  ? servicesCsv.split(',').map(value => value.trim()).filter(Boolean)
+  : null;
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
+const slug = value => clean(value).replace(/[^A-Za-z0-9_.-]+/g, '_') || 'service';
+
+function classify(result) {
+  const visibleFrame = result.visibleFrame;
+  const consoleText = result.console.map(item => item.text).join('\n');
+  const failuresText = result.failures.map(item => `${item.url} ${item.failure}`).join('\n');
+
+  if (/frame-ancestors|ERR_BLOCKED_BY_RESPONSE/i.test(`${consoleText}\n${failuresText}`)) {
+    return 'blocked';
+  }
+  if (/Mixed Content/i.test(consoleText)) {
+    return 'mixed-content';
+  }
+  if (!visibleFrame || !visibleFrame.src) {
+    return 'no-visible-iframe';
+  }
+  if (!result.loadedFrame || !result.loadedFrame.url || result.loadedFrame.url === 'about:blank') {
+    return 'blank-frame';
+  }
+  if (!clean(result.loadedFrame.title) && !clean(result.loadedFrame.text)) {
+    return 'blank-content';
+  }
+  return 'loaded';
+}
+
+(async () => {
+  const browser = await chromium.connectOverCDP(cdpUrl);
+  const context = browser.contexts()[0];
+  let page = context.pages().find(candidate => candidate.url().startsWith(targetUrl));
+  if (!page) page = context.pages()[0];
+
+  await page.setExtraHTTPHeaders(headers);
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await sleep(2500);
+
+  const discoveredServices = await page.evaluate(() => {
+    const names = [];
+    for (const link of document.querySelectorAll('a[data-content]')) {
+      const name = link.getAttribute('data-content') || '';
+      if (!name || names.includes(name)) continue;
+      names.push(name);
+    }
+    return names;
+  });
+  const services = fixedServices || discoveredServices;
+  const results = [];
+
+  for (const service of services) {
+    const requests = [];
+    const failures = [];
+    const consoleMessages = [];
+
+    const includeUrl = url => /ghostship\.io|cloudflareaccess/i.test(url);
+    const onRequest = request => {
+      if (includeUrl(request.url())) {
+        requests.push({ event: 'request', method: request.method(), url: request.url() });
+      }
+    };
+    const onResponse = response => {
+      if (!includeUrl(response.url())) return;
+      const interestingHeaders = {};
+      for (const [key, value] of Object.entries(response.headers())) {
+        if (['content-security-policy', 'location', 'www-authenticate', 'x-frame-options'].includes(key)) {
+          interestingHeaders[key] = value;
+        }
+      }
+      requests.push({
+        event: 'response',
+        status: response.status(),
+        url: response.url(),
+        headers: interestingHeaders,
+      });
+    };
+    const onFailed = request => {
+      if (includeUrl(request.url())) {
+        failures.push({ url: request.url(), failure: request.failure()?.errorText || '' });
+      }
+    };
+    const onConsole = message => {
+      if (['error', 'warning'].includes(message.type())) {
+        consoleMessages.push({ type: message.type(), text: message.text().slice(0, 800) });
+      }
+    };
+
+    page.on('request', onRequest);
+    page.on('response', onResponse);
+    page.on('requestfailed', onFailed);
+    page.on('console', onConsole);
+
+    const result = { service, requests, failures, console: consoleMessages };
+    try {
+      await page.evaluate(name => {
+        const selector = `a[data-content="${CSS.escape(name)}"]`;
+        const link = document.querySelector(selector);
+        if (!link) throw new Error(`Missing Muximux menu entry: ${name}`);
+        link.click();
+      }, service);
+      await sleep(5500);
+
+      result.pageTitle = await page.title();
+      result.visibleFrame = await page.evaluate(() => {
+        const frames = Array.from(document.querySelectorAll('iframe')).map((frame, index) => ({
+          index,
+          src: frame.src,
+          width: frame.offsetWidth,
+          height: frame.offsetHeight,
+          visible: frame.offsetWidth > 0 && frame.offsetHeight > 0,
+        }));
+        return frames.find(frame => frame.visible) || null;
+      });
+
+      const visibleSrc = result.visibleFrame?.src || '';
+      const frame = page.frames().find(candidate => {
+        if (!visibleSrc) return false;
+        return candidate.url() === visibleSrc || candidate.url().startsWith(visibleSrc);
+      });
+
+      if (frame) {
+        let title = '';
+        let text = '';
+        try { title = await frame.title(); } catch {}
+        try { text = await frame.locator('body').innerText({ timeout: 1500 }); } catch {}
+        result.loadedFrame = {
+          url: frame.url(),
+          title: clean(title),
+          text: clean(text).slice(0, 1500),
+        };
+      } else {
+        result.loadedFrame = null;
+      }
+
+      result.status = classify(result);
+      result.screenshot = `${outDir}/${slug(service)}.png`;
+      await page.screenshot({ path: result.screenshot, fullPage: false });
+    } catch (error) {
+      result.status = 'error';
+      result.error = error.message;
+    } finally {
+      page.off('request', onRequest);
+      page.off('response', onResponse);
+      page.off('requestfailed', onFailed);
+      page.off('console', onConsole);
+      results.push(result);
+    }
+  }
+
+  const output = {
+    generatedAt: new Date().toISOString(),
+    url: targetUrl,
+    services,
+    results,
+  };
+  fs.writeFileSync(`${outDir}/results.json`, JSON.stringify(output, null, 2));
+
+  const lines = [];
+  lines.push('| Service | Status | Frame | Title | Notes |');
+  lines.push('| --- | --- | --- | --- | --- |');
+  for (const result of results) {
+    const badResponses = result.requests.filter(item => item.event === 'response' && (item.status >= 400 || item.status === 302));
+    const notes = [];
+    if (result.failures.length) notes.push(`${result.failures.length} request failure(s)`);
+    if (badResponses.length) notes.push(`${badResponses.length} non-2xx/3xx response(s)`);
+    if (result.console.length) notes.push(`${result.console.length} console warning/error(s)`);
+    if (result.error) notes.push(result.error);
+    lines.push(`| ${result.service} | ${result.status} | ${result.loadedFrame?.url || result.visibleFrame?.src || ''} | ${result.loadedFrame?.title || ''} | ${notes.join('; ')} |`);
+  }
+  fs.writeFileSync(`${outDir}/summary.md`, `${lines.join('\n')}\n`);
+
+  console.log(`Wrote ${outDir}/results.json`);
+  console.log(`Wrote ${outDir}/summary.md`);
+  console.log(lines.join('\n'));
+
+  await browser.close();
+})();
+NODE
+
+NODE_PATH="$cache_root/node_modules" \
+  CF_ACCESS_CLIENT_ID="$CF_ACCESS_CLIENT_ID" \
+  CF_ACCESS_CLIENT_SECRET="$CF_ACCESS_CLIENT_SECRET" \
+  node "$audit_js" "$cdp_url" "$url" "$out_dir" "$services_csv"
+
+rm -f "$audit_js"
