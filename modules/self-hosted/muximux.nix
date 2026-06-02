@@ -166,8 +166,8 @@ let
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header Accept-Encoding "";
-        proxy_redirect / /pyload/;
-        proxy_redirect http://$host/ /pyload/;
+        proxy_redirect / https://$host/pyload/;
+        proxy_redirect http://$host/ https://$host/pyload/;
         proxy_cookie_path / /pyload/;
       }
 

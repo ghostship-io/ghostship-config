@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.45] - 2026-06-02
+
+- **Muximux pyLoad redirects**: Force same-origin pyLoad proxy redirects to
+  stay on HTTPS so Cloudflare-served Muximux iframes do not hit mixed-content
+  redirects after pyLoad autologin.
+
 ## [2.1.44] - 2026-06-02
 
 - **Muximux iframe fixes**: Route pyLoad through a same-origin `/pyload/`
