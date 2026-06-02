@@ -181,6 +181,17 @@ let
         proxy_redirect http://$host/ https://$host/pyload/;
       }
 
+      location /json/ {
+        proxy_pass http://$pyload_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_redirect / https://$host/pyload/;
+        proxy_redirect http://$host/ https://$host/pyload/;
+      }
+
       location /romm/ {
         rewrite ^/romm/(.*)$ /$1 break;
         proxy_pass http://$romm_upstream;

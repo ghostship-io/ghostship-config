@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.47] - 2026-06-02
+
+- **Muximux pyLoad API polling**: Proxy pyLoad's root `/json/` polling
+  endpoints through Muximux so the same-origin dashboard can refresh status and
+  queue data instead of logging 404s.
+
 ## [2.1.46] - 2026-06-02
 
 - **Muximux proxy asset paths**: Proxy pyLoad's root `/web/` assets through
