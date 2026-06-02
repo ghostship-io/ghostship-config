@@ -168,7 +168,17 @@ let
         proxy_set_header Accept-Encoding "";
         proxy_redirect / https://$host/pyload/;
         proxy_redirect http://$host/ https://$host/pyload/;
-        proxy_cookie_path / /pyload/;
+      }
+
+      location /web/ {
+        proxy_pass http://$pyload_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_redirect / https://$host/pyload/;
+        proxy_redirect http://$host/ https://$host/pyload/;
       }
 
       location /romm/ {
@@ -210,7 +220,7 @@ let
         }
 
       location /assets/ {
-    proxy_pass http://$romm_upstream/assets/;
+        proxy_pass http://$romm_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host romm:8080;
         proxy_set_header X-Forwarded-Host $host;
@@ -219,7 +229,7 @@ let
       }
 
       location /api/ {
-    proxy_pass http://$romm_upstream/api/;
+        proxy_pass http://$romm_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host romm:8080;
         proxy_set_header X-Forwarded-Host $host;

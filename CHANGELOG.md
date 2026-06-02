@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.46] - 2026-06-02
+
+- **Muximux proxy asset paths**: Proxy pyLoad's root `/web/` assets through
+  Muximux, keep pyLoad's session cookie available to those asset requests, and
+  fix RomM's root `/assets/` and `/api/` proxy paths so dynamically referenced
+  assets do not fall back to Muximux.
+
 ## [2.1.45] - 2026-06-02
 
 - **Muximux pyLoad redirects**: Force same-origin pyLoad proxy redirects to
