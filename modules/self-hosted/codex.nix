@@ -11,6 +11,7 @@ let
   codexNix = "/srv/apps/codex/nix";
   codexDocker = "/srv/apps/codex/docker";
   codexWorkspace = "/srv/apps/codex/workspace";
+  codexAutomation = "${codexHome}/.automation";
   codexSecrets = config.ghostship.selfHostedSecrets.projections.codex.path;
   imageName = "localhost/ghostship-codex";
   imageTag = "codex-web-${inputs.codex-web.shortRev or inputs.codex-web.rev}";
@@ -159,8 +160,12 @@ let
     codexWeb
     codexWebCli
     nix
+    s6
     docker
     ollama
+    supercronic
+    webhook
+    go-task
     bitwarden-cli
     git
     gh
@@ -196,6 +201,22 @@ let
   ];
 
   codexPath = lib.makeBinPath codexPackages;
+  codexRuntimeEnv = ''
+    export HOME=/home/codex
+    export USER=codex
+    export PATH=${codexPath}:$PATH
+    export DOCKER_HOST=unix:///var/run/docker.sock
+    export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+    export SSL_CERT_FILE=$NIX_SSL_CERT_FILE
+    export NIX_CONFIG="experimental-features = nix-command flakes"
+    export CODEX_REAL_CLI_PATH=${codexWebCli}/bin/codex
+    export CODEX_CLI_PATH=${codexAppServerProxy}/bin/codex-app-server-proxy
+    export OLLAMA_HOST=http://127.0.0.1:11434
+    export OLLAMA_MODELS=$HOME/.ollama/models
+    export OLLAMA_CLOUD_BASE_URL=https://ollama.com
+    export CODEX_AUTOMATION_DIR=$HOME/.automation
+    export CODEX_WEBHOOK_PORT="''${CODEX_WEBHOOK_PORT:-9000}"
+  '';
 
   codexOllamaCloudProxy = pkgs.writeTextFile {
     name = "codex-ollama-cloud-proxy";
@@ -467,79 +488,165 @@ let
     '';
   };
 
-  codexEntrypoint = pkgs.writeShellScriptBin "codex-web-entrypoint" ''
+  codexContainerSetup = pkgs.writeShellScriptBin "codex-container-setup" ''
     set -eu
 
-    export HOME=/home/codex
-    export USER=codex
-    export PATH=${codexPath}:$PATH
-    export DOCKER_HOST=unix:///var/run/docker.sock
-    export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-    export SSL_CERT_FILE=$NIX_SSL_CERT_FILE
-    export NIX_CONFIG="experimental-features = nix-command flakes"
-    export CODEX_REAL_CLI_PATH=${codexWebCli}/bin/codex
-    export CODEX_CLI_PATH=${codexAppServerProxy}/bin/codex-app-server-proxy
-    export OLLAMA_HOST=http://127.0.0.1:11434
-    export OLLAMA_MODELS=$HOME/.ollama/models
-    export OLLAMA_CLOUD_BASE_URL=https://ollama.com
-    web_pid=""
-    ollama_proxy_pid=""
+    ${codexRuntimeEnv}
 
-    mkdir -p "$HOME/.ollama/models" "$HOME/.codex" /workspace /mnt/share /var/lib/docker /var/run /tmp
+    mkdir -p "$HOME/.ollama/models" "$HOME/.codex" "$CODEX_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
     chown -R codex:codex "$HOME" /workspace
+  '';
 
-    rm -f /var/run/docker.pid
-    dockerd \
-      --host=unix:///var/run/docker.sock \
-      --data-root=/var/lib/docker \
-      --storage-driver=vfs \
-      --iptables=false \
-      --ip-masq=false \
-      --bridge=none &
-    docker_pid=$!
-    trap 'kill "$docker_pid" 2>/dev/null || true' EXIT
+  codexDockerdRun = pkgs.writeTextFile {
+    name = "codex-svc-dockerd-run";
+    executable = true;
+    text = ''
+      #!/bin/sh
+      set -eu
 
-    for _ in $(seq 1 30); do
-      if docker info >/dev/null 2>&1; then
-        break
-      fi
-      sleep 1
-    done
-    chmod 0666 /var/run/docker.sock || true
+      ${codexRuntimeEnv}
 
-    su-exec codex:codex env \
-      HOME="$HOME" \
-      USER="$USER" \
-      PATH="$PATH" \
-      OLLAMA_HOST="$OLLAMA_HOST" \
-      OLLAMA_MODELS="$OLLAMA_MODELS" \
-      OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
-      OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
-      NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
-      SSL_CERT_FILE="$SSL_CERT_FILE" \
-      ${codexOllamaCloudProxy}/bin/codex-ollama-cloud-proxy &
-    ollama_proxy_pid=$!
-    trap 'kill "$docker_pid" "''${ollama_proxy_pid:-}" "''${web_pid:-}" 2>/dev/null || true' EXIT
+      rm -f /var/run/docker.pid
+      exec dockerd \
+        --host=unix:///var/run/docker.sock \
+        --data-root=/var/lib/docker \
+        --storage-driver=vfs \
+        --iptables=false \
+        --ip-masq=false \
+        --bridge=none
+    '';
+  };
 
-    cd /workspace
+  codexOllamaProxyRun = pkgs.writeTextFile {
+    name = "codex-svc-ollama-proxy-run";
+    executable = true;
+    text = ''
+      #!/bin/sh
+      set -eu
 
-    su-exec codex:codex env \
-      HOME="$HOME" \
-      USER="$USER" \
-      PATH="$PATH" \
-      DOCKER_HOST="$DOCKER_HOST" \
-      NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
-      SSL_CERT_FILE="$SSL_CERT_FILE" \
-      NIX_CONFIG="$NIX_CONFIG" \
-      CODEX_REAL_CLI_PATH="$CODEX_REAL_CLI_PATH" \
-      CODEX_CLI_PATH="$CODEX_CLI_PATH" \
-      OLLAMA_HOST="$OLLAMA_HOST" \
-      OLLAMA_MODELS="$OLLAMA_MODELS" \
-      OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
-      OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
-      ${codexWeb}/bin/codex-web --host 0.0.0.0 --port 8214 &
-    web_pid=$!
-    wait "$web_pid"
+      ${codexRuntimeEnv}
+
+      exec su-exec codex:codex env \
+        HOME="$HOME" \
+        USER="$USER" \
+        PATH="$PATH" \
+        OLLAMA_HOST="$OLLAMA_HOST" \
+        OLLAMA_MODELS="$OLLAMA_MODELS" \
+        OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
+        OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
+        NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
+        SSL_CERT_FILE="$SSL_CERT_FILE" \
+        ${codexOllamaCloudProxy}/bin/codex-ollama-cloud-proxy
+    '';
+  };
+
+  codexWebRun = pkgs.writeTextFile {
+    name = "codex-svc-web-run";
+    executable = true;
+    text = ''
+      #!/bin/sh
+      set -eu
+
+      ${codexRuntimeEnv}
+
+      for _ in $(seq 1 30); do
+        if docker info >/dev/null 2>&1; then
+          break
+        fi
+        sleep 1
+      done
+      chmod 0666 /var/run/docker.sock || true
+
+      cd /workspace
+
+      exec su-exec codex:codex env \
+        HOME="$HOME" \
+        USER="$USER" \
+        PATH="$PATH" \
+        DOCKER_HOST="$DOCKER_HOST" \
+        NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
+        SSL_CERT_FILE="$SSL_CERT_FILE" \
+        NIX_CONFIG="$NIX_CONFIG" \
+        CODEX_REAL_CLI_PATH="$CODEX_REAL_CLI_PATH" \
+        CODEX_CLI_PATH="$CODEX_CLI_PATH" \
+        OLLAMA_HOST="$OLLAMA_HOST" \
+        OLLAMA_MODELS="$OLLAMA_MODELS" \
+        OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
+        OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
+        ${codexWeb}/bin/codex-web --host 0.0.0.0 --port 8214
+    '';
+  };
+
+  codexSupercronicRun = pkgs.writeTextFile {
+    name = "codex-svc-supercronic-run";
+    executable = true;
+    text = ''
+      #!/bin/sh
+      set -eu
+
+      ${codexRuntimeEnv}
+
+      exec su-exec codex:codex env \
+        HOME="$HOME" \
+        USER="$USER" \
+        PATH="$PATH" \
+        DOCKER_HOST="$DOCKER_HOST" \
+        NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
+        SSL_CERT_FILE="$SSL_CERT_FILE" \
+        NIX_CONFIG="$NIX_CONFIG" \
+        CODEX_REAL_CLI_PATH="$CODEX_REAL_CLI_PATH" \
+        CODEX_CLI_PATH="$CODEX_CLI_PATH" \
+        OLLAMA_HOST="$OLLAMA_HOST" \
+        OLLAMA_MODELS="$OLLAMA_MODELS" \
+        OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
+        OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
+        CODEX_AUTOMATION_DIR="$CODEX_AUTOMATION_DIR" \
+        supercronic -no-reap -inotify -passthrough-logs "$CODEX_AUTOMATION_DIR/crontab"
+    '';
+  };
+
+  codexWebhookRun = pkgs.writeTextFile {
+    name = "codex-svc-webhook-run";
+    executable = true;
+    text = ''
+      #!/bin/sh
+      set -eu
+
+      ${codexRuntimeEnv}
+
+      cd "$CODEX_AUTOMATION_DIR"
+
+      exec su-exec codex:codex env \
+        HOME="$HOME" \
+        USER="$USER" \
+        PATH="$PATH" \
+        DOCKER_HOST="$DOCKER_HOST" \
+        NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
+        SSL_CERT_FILE="$SSL_CERT_FILE" \
+        NIX_CONFIG="$NIX_CONFIG" \
+        CODEX_REAL_CLI_PATH="$CODEX_REAL_CLI_PATH" \
+        CODEX_CLI_PATH="$CODEX_CLI_PATH" \
+        OLLAMA_HOST="$OLLAMA_HOST" \
+        OLLAMA_MODELS="$OLLAMA_MODELS" \
+        OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
+        OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
+        CODEX_AUTOMATION_DIR="$CODEX_AUTOMATION_DIR" \
+        webhook \
+          -hooks "$CODEX_AUTOMATION_DIR/hooks.json" \
+          -hotreload \
+          -ip 0.0.0.0 \
+          -port "$CODEX_WEBHOOK_PORT" \
+          -verbose
+    '';
+  };
+
+  codexEntrypoint = pkgs.writeShellScriptBin "codex-s6-entrypoint" ''
+    set -eu
+
+    ${codexRuntimeEnv}
+    ${codexContainerSetup}/bin/codex-container-setup
+
+    exec s6-svscan /etc/s6/services
   '';
 
   codexImage = pkgs.dockerTools.buildLayeredImage {
@@ -547,6 +654,12 @@ let
     tag = imageTag;
     contents = codexPackages ++ [
       codexEntrypoint
+      codexContainerSetup
+      codexDockerdRun
+      codexOllamaProxyRun
+      codexWebRun
+      codexSupercronicRun
+      codexWebhookRun
       codexOllamaCloudProxy
       codexAppServerProxy
       pkgs.dockerTools.binSh
@@ -554,8 +667,16 @@ let
       pkgs.dockerTools.caCertificates
     ];
     extraCommands = ''
-      mkdir -p etc/nix tmp workspace home/codex
+      mkdir -p etc/nix etc/s6/services tmp workspace home/codex
       mkdir -p mnt/share var/lib/docker var/run
+      for service in dockerd ollama-proxy codex-web supercronic webhook; do
+        mkdir -p "etc/s6/services/$service"
+      done
+      ln -s ${codexDockerdRun} etc/s6/services/dockerd/run
+      ln -s ${codexOllamaProxyRun} etc/s6/services/ollama-proxy/run
+      ln -s ${codexWebRun} etc/s6/services/codex-web/run
+      ln -s ${codexSupercronicRun} etc/s6/services/supercronic/run
+      ln -s ${codexWebhookRun} etc/s6/services/webhook/run
       chmod 1777 tmp
       cat > etc/passwd <<'EOF'
       root:x:0:0:root:/root:/bin/sh
@@ -571,7 +692,7 @@ let
       EOF
     '';
     config = {
-      Cmd = [ "${codexEntrypoint}/bin/codex-web-entrypoint" ];
+      Cmd = [ "${codexEntrypoint}/bin/codex-s6-entrypoint" ];
       Env = [
         "HOME=/home/codex"
         "USER=codex"
@@ -585,10 +706,13 @@ let
         "OLLAMA_HOST=http://127.0.0.1:11434"
         "OLLAMA_MODELS=/home/codex/.ollama/models"
         "OLLAMA_CLOUD_BASE_URL=https://ollama.com"
+        "CODEX_AUTOMATION_DIR=/home/codex/.automation"
+        "CODEX_WEBHOOK_PORT=9000"
       ];
       WorkingDir = "/workspace";
       ExposedPorts = {
         "8214/tcp" = { };
+        "9000/tcp" = { };
       };
     };
   };
@@ -627,6 +751,8 @@ in
     "d ${codexDocker} 0755 root root -"
     "d ${codexHome} 0755 3000 3000 -"
     "d ${codexWorkspace} 0755 3000 3000 -"
+    "d ${codexAutomation} 0755 3000 3000 -"
+    "d ${codexAutomation}/tasks 0755 3000 3000 -"
   ];
 
   systemd.services.podman-codex = {
@@ -639,6 +765,45 @@ in
       install -d -m0755 -o root -g root ${codexDocker}
       install -d -m0755 -o 3000 -g 3000 ${codexHome}
       install -d -m0755 -o 3000 -g 3000 ${codexWorkspace}
+      install -d -m0755 -o 3000 -g 3000 ${codexAutomation}
+      install -d -m0755 -o 3000 -g 3000 ${codexAutomation}/tasks
+
+      if [ ! -e ${codexAutomation}/crontab ]; then
+        cat > ${codexAutomation}/crontab <<'EOF'
+# Supercronic crontab for the Codex container.
+# Run Taskfile jobs from this persistent automation directory, for example:
+# */15 * * * * cd /home/codex/.automation && task -t Taskfile.yml cron:default
+EOF
+        chown 3000:3000 ${codexAutomation}/crontab
+        chmod 0644 ${codexAutomation}/crontab
+      fi
+
+      if [ ! -e ${codexAutomation}/hooks.json ]; then
+        cat > ${codexAutomation}/hooks.json <<'EOF'
+[]
+EOF
+        chown 3000:3000 ${codexAutomation}/hooks.json
+        chmod 0644 ${codexAutomation}/hooks.json
+      fi
+
+      if [ ! -e ${codexAutomation}/Taskfile.yml ]; then
+        cat > ${codexAutomation}/Taskfile.yml <<'EOF'
+version: '3'
+
+tasks:
+  cron:default:
+    desc: Placeholder cron task for Codex container automation.
+    cmds:
+      - echo "Define cron automation in /home/codex/.automation/Taskfile.yml"
+
+  webhook:default:
+    desc: Placeholder webhook task for Codex container automation.
+    cmds:
+      - echo "Define webhook automation in /home/codex/.automation/Taskfile.yml"
+EOF
+        chown 3000:3000 ${codexAutomation}/Taskfile.yml
+        chmod 0644 ${codexAutomation}/Taskfile.yml
+      fi
 
       if [ ! -e ${codexNix}/.ghostship-seeded-image ] || [ "$(<${codexNix}/.ghostship-seeded-image)" != "${codexImage}" ]; then
         ${pkgs.podman}/bin/podman load -i ${codexImage}

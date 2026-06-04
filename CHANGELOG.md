@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.57] - 2026-06-04
+
+- **Codex container supervision**: Run the Codex container under s6, add
+  `supercronic`, `webhook`, and `task`, and persist cron, webhook, and Taskfile
+  automation under `/home/codex/.automation`.
+
 ## [2.1.56] - 2026-06-04
 
 - **Prefect retirement**: Remove the Prefect workflow stack, its PostgreSQL and
