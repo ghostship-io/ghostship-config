@@ -6,7 +6,7 @@ Symptoms:
 - `https://romm.ghostship.io` loaded in the browser iframe from `https://apps.ghostship.io` failed even after allowing the app origin in the iframe CSP.
 
 Checks performed:
-- SSH into `chill-penguin-root`
+- SSH into `chill-penguin`
 - Verified `podman ps` shows `romm` healthy
 - Verified `podman exec romm curl -skI http://127.0.0.1:8080/` returns `200 OK`
 - Verified `podman run --network container:cloudflared curlimages/curl:8.10.1 -skI http://romm:8080/` returns `200 OK`

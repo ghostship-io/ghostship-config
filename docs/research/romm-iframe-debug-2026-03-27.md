@@ -10,7 +10,7 @@ Investigate why `https://romm.ghostship.io` works standalone but crashes or fail
 
 - Parent app: `https://apps.ghostship.io`
 - Embedded app: `https://romm.ghostship.io`
-- Server: `chill-penguin-root`
+- Server: `chill-penguin`
 - Runtime: `podman` container named `romm`
 
 ## Server State Confirmed Early

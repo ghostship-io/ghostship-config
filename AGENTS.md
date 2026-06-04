@@ -129,8 +129,7 @@ changelog.
 
 - Do not recommend or call `sudo`. It prompts for a password and blocks agent
   execution. Use a root shell or direct root SSH host instead.
-- Use `ssh chill-penguin-root` for live work on `chill-penguin`. If that alias
-  stops working, stop and ask the user to restore it.
+- Use `ssh chill-penguin` for live work on `chill-penguin`.
 - For prompt-driven remote work, start the command in detached tmux and drive it
   with `capture-pane` plus `send-keys`. Do not use blocking top-level SSH TTY
   sessions for agent workflows.

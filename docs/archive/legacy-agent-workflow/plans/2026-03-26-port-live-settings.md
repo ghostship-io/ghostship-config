@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Historical note: this archived plan predates the current repo-local OpenSpec workflow.
 
-**Goal:** Port all customized environment settings from `chill-penguin-root` into Nix modules using `ghostship-config` surgical updates. 
+**Goal:** Port all customized environment settings from `chill-penguin` into Nix modules using `ghostship-config` surgical updates.
 
 **Architecture:** 
 - **Muximux**: Define all 30 portal sections in the exact order found on the server.
