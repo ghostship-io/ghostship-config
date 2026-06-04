@@ -35,7 +35,7 @@ Useful options:
 
 ```sh
 scripts/audit-muximux-iframes --out /tmp/muximux-audit
-scripts/audit-muximux-iframes --services Prefect,RomM,pyLoad,SSH
+scripts/audit-muximux-iframes --services RomM,pyLoad,SSH
 scripts/audit-muximux-iframes --session muximux-regression
 ```
 

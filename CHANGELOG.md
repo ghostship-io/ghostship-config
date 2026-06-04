@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.56] - 2026-06-04
+
+- **Prefect retirement**: Remove the Prefect workflow stack, its PostgreSQL and
+  Redis support containers, and its Homepage and Muximux dashboard entries from
+  `chill-penguin`.
+
 ## [2.1.55] - 2026-06-04
 
 - **Developer SSH public key**: Manage `id_ed25519_dev.pub` through the

@@ -445,13 +445,6 @@ in
           Bazarr.color=literal:"#9c36b5"
           Bazarr.enabled=literal:"true"
           Bazarr.dd=literal:"true"
-          Prefect.name=literal:"Prefect"
-          Prefect.url=literal:"https://prefect.ghostship.io"
-          Prefect.scale=literal:1
-          Prefect.icon=literal:"fa-cogs"
-          Prefect.color=literal:"#024dfd"
-          Prefect.enabled=literal:"true"
-          Prefect.dd=literal:"true"
           pyLoad.name=literal:"pyLoad"
           pyLoad.url=literal:"/pyload/"
           pyLoad.scale=literal:1
@@ -533,9 +526,6 @@ in
               if (name == "Tautulli" && ("Chaptarr" in section_data)) {
                 printf "%s", section_data["Chaptarr"]
               }
-              if (name == "Bazarr" && ("Prefect" in section_data)) {
-                printf "%s", section_data["Prefect"]
-              }
             }
 
             if (!("CloakBrowser" in section_data) && ("Codex" in section_data)) {
@@ -543,11 +533,6 @@ in
             }
             if (!("Tautulli" in section_data) && ("Chaptarr" in section_data)) {
               printf "%s", section_data["Chaptarr"]
-            }
-            if (!("Bazarr" in section_data)) {
-              if ("Prefect" in section_data) {
-                printf "%s", section_data["Prefect"]
-              }
             }
           }
         ' "$CONFIG_FILE" > "$temp_file"

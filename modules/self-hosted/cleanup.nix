@@ -348,6 +348,39 @@ let
       homepageEntries = [ "Windmill" ];
       muximuxSections = [ "Windmill" ];
     }
+    {
+      name = "prefect";
+      paths = [ "/srv/apps/prefect" ];
+      units = [
+        "podman-prefect"
+        "podman-prefect-db"
+        "podman-prefect-redis"
+        "podman-prefect-services"
+        "podman-prefect-worker"
+      ];
+      containers = [
+        "prefect"
+        "prefect-db"
+        "prefect-redis"
+        "prefect-services"
+        "prefect-worker"
+      ];
+      imageRefs = [
+        "docker.io/library/postgres:16-alpine"
+        "docker.io/library/redis:7-alpine"
+      ];
+      imageRepositories = [
+        "docker.io/prefecthq/prefect"
+      ];
+      homepageEntries = [
+        "Prefect"
+        "Prefect DB"
+        "Prefect Redis"
+        "Prefect Services"
+        "Prefect Worker"
+      ];
+      muximuxSections = [ "Prefect" ];
+    }
   ];
 
   renderCommands =

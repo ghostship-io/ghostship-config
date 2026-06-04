@@ -30,7 +30,6 @@
 
     # Apps and utilities
     ./cloakbrowser.nix
-    ./prefect.nix
     ./rss-bridge.nix
     ./codex.nix
 
