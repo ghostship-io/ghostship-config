@@ -1,6 +1,7 @@
 { inputs, config, lib, pkgs, ... }:
 
 let
+  roles = config.ghostship.host.roles or { };
   recipients = import ../../secrets/recipients.nix;
   catalog = import ../../secrets/catalog.nix { inherit recipients; };
   editKeyPath = "$HOME/.ssh/id_ed25519_ragenix";
@@ -116,11 +117,11 @@ in
       secrets-list-keys
     ];
 
-    age.identityPaths = lib.mkIf (config.networking.hostName == "launch-octopus") (
+    age.identityPaths = lib.mkIf (roles.develop or false) (
       lib.mkDefault [ "/home/nixos/.ssh/id_ed25519_ragenix" ]
     );
 
-    age.secrets = lib.mkIf (config.networking.hostName == "launch-octopus") {
+    age.secrets = lib.mkIf (roles.develop or false) {
       id-ed25519-dev = {
         file = catalog.units.id-ed25519-dev.path;
         owner = "nixos";

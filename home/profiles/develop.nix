@@ -127,6 +127,12 @@ in
       j = "z";
       run = ",";
     };
+    shellInit = lib.mkBefore ''
+      if test "$CODEX_INTERNAL_ORIGINATOR_OVERRIDE" = "Codex Desktop"
+        set -gx CODEX_HOME "$HOME/.codex-desktop"
+        set -gx CODEX_SQLITE_HOME "$HOME/.codex-desktop/sqlite"
+      end
+    '';
     interactiveShellInit = lib.mkBefore ''
       if not set -q sponge_delay
         set -U sponge_delay 10

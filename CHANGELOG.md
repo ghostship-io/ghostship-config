@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.1.53] - 2026-06-04
 
-- **Developer SSH key secret**: Encrypt `id_ed25519_dev` as a launch-octopus
+- **Developer SSH key secret**: Encrypt `id_ed25519_dev` as a develop-host
   home secret and keep Git plus `chill-penguin` SSH using that key.
 
 ## [2.1.52] - 2026-06-04

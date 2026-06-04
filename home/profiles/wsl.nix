@@ -150,4 +150,15 @@ in
       fi
     fi
   '';
+
+  home.activation.codexDesktopHome = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    CODEX_DESKTOP_HOME="$HOME/.codex-desktop"
+
+    mkdir -p \
+      "$CODEX_DESKTOP_HOME" \
+      "$CODEX_DESKTOP_HOME/sqlite" \
+      "$CODEX_DESKTOP_HOME/sessions" \
+      "$CODEX_DESKTOP_HOME/worktrees" \
+      "$CODEX_DESKTOP_HOME/.tmp"
+  '';
 }
