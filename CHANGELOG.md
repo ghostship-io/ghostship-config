@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.55] - 2026-06-04
+
+- **Developer SSH public key**: Manage `id_ed25519_dev.pub` through the
+  develop-host Home Manager profile alongside the encrypted private key.
+
 ## [2.1.54] - 2026-06-04
 
 - **Autoreview skill**: Vendor OpenClaw's MIT-licensed `autoreview` skill,

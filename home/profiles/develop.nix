@@ -41,6 +41,12 @@ in
       source = ../config/skills/grill-me;
       force = true;
     };
+    ".ssh/id_ed25519_dev.pub" = {
+      text = ''
+        ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMeeTWD0303kIaPcdYjWUGmGYh65TO9wd0kzayjaELhJ owner@dev
+      '';
+      force = true;
+    };
     ".gemini/GEMINI.md" = {
       source = ../config/AGENTS.md;
       force = true;
