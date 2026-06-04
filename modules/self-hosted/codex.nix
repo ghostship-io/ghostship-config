@@ -497,11 +497,7 @@ let
     chown -R codex:codex "$HOME" /workspace
   '';
 
-  codexDockerdRun = pkgs.writeTextFile {
-    name = "codex-svc-dockerd-run";
-    executable = true;
-    text = ''
-      #!/bin/sh
+  codexDockerdRun = pkgs.writeShellScriptBin "codex-svc-dockerd-run" ''
       set -eu
 
       ${codexRuntimeEnv}
@@ -514,14 +510,9 @@ let
         --iptables=false \
         --ip-masq=false \
         --bridge=none
-    '';
-  };
+  '';
 
-  codexOllamaProxyRun = pkgs.writeTextFile {
-    name = "codex-svc-ollama-proxy-run";
-    executable = true;
-    text = ''
-      #!/bin/sh
+  codexOllamaProxyRun = pkgs.writeShellScriptBin "codex-svc-ollama-proxy-run" ''
       set -eu
 
       ${codexRuntimeEnv}
@@ -537,14 +528,9 @@ let
         NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
         SSL_CERT_FILE="$SSL_CERT_FILE" \
         ${codexOllamaCloudProxy}/bin/codex-ollama-cloud-proxy
-    '';
-  };
+  '';
 
-  codexWebRun = pkgs.writeTextFile {
-    name = "codex-svc-web-run";
-    executable = true;
-    text = ''
-      #!/bin/sh
+  codexWebRun = pkgs.writeShellScriptBin "codex-svc-web-run" ''
       set -eu
 
       ${codexRuntimeEnv}
@@ -574,14 +560,9 @@ let
         OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
         OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
         ${codexWeb}/bin/codex-web --host 0.0.0.0 --port 8214
-    '';
-  };
+  '';
 
-  codexSupercronicRun = pkgs.writeTextFile {
-    name = "codex-svc-supercronic-run";
-    executable = true;
-    text = ''
-      #!/bin/sh
+  codexSupercronicRun = pkgs.writeShellScriptBin "codex-svc-supercronic-run" ''
       set -eu
 
       ${codexRuntimeEnv}
@@ -602,14 +583,9 @@ let
         OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
         CODEX_AUTOMATION_DIR="$CODEX_AUTOMATION_DIR" \
         supercronic -no-reap -inotify -passthrough-logs "$CODEX_AUTOMATION_DIR/crontab"
-    '';
-  };
+  '';
 
-  codexWebhookRun = pkgs.writeTextFile {
-    name = "codex-svc-webhook-run";
-    executable = true;
-    text = ''
-      #!/bin/sh
+  codexWebhookRun = pkgs.writeShellScriptBin "codex-svc-webhook-run" ''
       set -eu
 
       ${codexRuntimeEnv}
@@ -637,8 +613,7 @@ let
           -ip 0.0.0.0 \
           -port "$CODEX_WEBHOOK_PORT" \
           -verbose
-    '';
-  };
+  '';
 
   codexEntrypoint = pkgs.writeShellScriptBin "codex-s6-entrypoint" ''
     set -eu
@@ -672,11 +647,11 @@ let
       for service in dockerd ollama-proxy codex-web supercronic webhook; do
         mkdir -p "etc/s6/services/$service"
       done
-      ln -s ${codexDockerdRun} etc/s6/services/dockerd/run
-      ln -s ${codexOllamaProxyRun} etc/s6/services/ollama-proxy/run
-      ln -s ${codexWebRun} etc/s6/services/codex-web/run
-      ln -s ${codexSupercronicRun} etc/s6/services/supercronic/run
-      ln -s ${codexWebhookRun} etc/s6/services/webhook/run
+      ln -s ${codexDockerdRun}/bin/codex-svc-dockerd-run etc/s6/services/dockerd/run
+      ln -s ${codexOllamaProxyRun}/bin/codex-svc-ollama-proxy-run etc/s6/services/ollama-proxy/run
+      ln -s ${codexWebRun}/bin/codex-svc-web-run etc/s6/services/codex-web/run
+      ln -s ${codexSupercronicRun}/bin/codex-svc-supercronic-run etc/s6/services/supercronic/run
+      ln -s ${codexWebhookRun}/bin/codex-svc-webhook-run etc/s6/services/webhook/run
       chmod 1777 tmp
       cat > etc/passwd <<'EOF'
       root:x:0:0:root:/root:/bin/sh

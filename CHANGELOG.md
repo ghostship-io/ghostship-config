@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.58] - 2026-06-04
+
+- **Codex s6 service packaging**: Package Codex s6 service run scripts as
+  image-compatible binaries so the container image builds cleanly.
+
 ## [2.1.57] - 2026-06-04
 
 - **Codex container supervision**: Run the Codex container under s6, add
