@@ -21,6 +21,10 @@ in
   };
 
   home.file = {
+    ".agents/skills/autoreview" = {
+      source = ../config/skills/autoreview;
+      force = true;
+    };
     ".agents/skills/ghostship-audit-worktree" = {
       source = ../config/skills/ghostship-audit-worktree;
       force = true;

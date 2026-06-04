@@ -153,8 +153,10 @@ notes.
   into `~/.agents/skills/` on develop hosts. Managed external `skills` CLI
   installs also land under `~/.agents/skills/`, but they are maintained by
   `ghostship-agent-maintenance` instead of the repo-owned skill tree.
-- The curated shared set is `ghostship-audit-worktree`,
+- The curated shared set is `autoreview`, `ghostship-audit-worktree`,
   `ghostship-merge-worktree`, `ghostship-pull-worktree`, and `grill-me`.
+- `autoreview` is vendored from OpenClaw's MIT-licensed agent skills repo for
+  Codex structured review closeout.
 - `ghostship-audit-worktree` is the current Codex session audit workflow. It
   audits only session changes, checks for concrete issues including
   documentation and README gaps, and produces a fix plan without editing files

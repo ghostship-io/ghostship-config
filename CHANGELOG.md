@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.54] - 2026-06-04
+
+- **Autoreview skill**: Vendor OpenClaw's MIT-licensed `autoreview` skill,
+  tailor its instructions for Codex-only review closeout, and link it into
+  develop-host shared skills.
+
 ## [2.1.53] - 2026-06-04
 
 - **Developer SSH key secret**: Encrypt `id_ed25519_dev` as a develop-host
