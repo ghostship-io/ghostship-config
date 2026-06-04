@@ -116,6 +116,20 @@ in
       secrets-list-keys
     ];
 
+    age.identityPaths = lib.mkIf (config.networking.hostName == "launch-octopus") (
+      lib.mkDefault [ "/home/nixos/.ssh/id_ed25519_ragenix" ]
+    );
+
+    age.secrets = lib.mkIf (config.networking.hostName == "launch-octopus") {
+      id-ed25519-dev = {
+        file = catalog.units.id-ed25519-dev.path;
+        owner = "nixos";
+        group = "nixos";
+        mode = "0400";
+        path = "/home/nixos/.ssh/id_ed25519_dev";
+      };
+    };
+
     system.activationScripts.ghostship-ssh-host-public-key = {
       text = ''
         if [ -f /etc/ssh/ssh_host_ed25519_key.pub ]; then

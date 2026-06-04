@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   home.username = lib.mkDefault "nixos";
@@ -19,6 +24,7 @@
   programs.git = {
     enable = true;
     settings = {
+      core.sshCommand = "ssh -i ~/.ssh/id_ed25519_dev -o IdentitiesOnly=yes";
       init.defaultBranch = "main";
     };
   };

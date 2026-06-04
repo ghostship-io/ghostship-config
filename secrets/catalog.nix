@@ -79,6 +79,13 @@ in
       exports = [ "TOKEN" ];
     };
 
+    id-ed25519-dev = mkUnit {
+      relativeFile = "secrets/files/sources/home/id_ed25519_dev.age";
+      recipientGroup = "editors";
+      format = "raw";
+      exports = [ ];
+    };
+
     gluetun = mkUnit {
       relativeFile = "secrets/files/sources/services/gluetun.env.age";
       exports = [ "HTTP_CONTROL_SERVER_API_KEY" ];

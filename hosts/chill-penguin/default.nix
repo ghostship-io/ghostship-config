@@ -20,7 +20,8 @@ in
     enable = true;
     setupAsahiSound = false;
     extractPeripheralFirmware = hasAsahiFirmwareDirectory;
-  } // lib.optionalAttrs hasAsahiFirmwareDirectory {
+  }
+  // lib.optionalAttrs hasAsahiFirmwareDirectory {
     peripheralFirmwareDirectory = asahiFirmwareDirectory;
   };
   hardware.firmwareCompression = "none";
@@ -45,6 +46,10 @@ in
       "umac-128-etm@openssh.com"
     ];
   };
+
+  users.users.root.openssh.authorizedKeys.keys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMeeTWD0303kIaPcdYjWUGmGYh65TO9wd0kzayjaELhJ owner@dev"
+  ];
 
   # NFS support
   environment.systemPackages = with pkgs; [
