@@ -147,6 +147,7 @@ let
         client_max_body_size 0;
         resolver 10.89.0.1 valid=30s ipv6=off;
         set $romm_upstream romm:8080;
+        set $grimmory_upstream grimmory:6060;
         set $pyload_upstream pyload:8000;
 
       location = /romm-iframe-shim.js {
@@ -190,6 +191,35 @@ let
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_redirect / https://$host/pyload/;
         proxy_redirect http://$host/ https://$host/pyload/;
+      }
+
+      location = /grimmory {
+        return 308 /grimmory/;
+      }
+
+      location /grimmory/ {
+        rewrite ^/grimmory/(.*)$ /$1 break;
+        proxy_pass http://$grimmory_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host grimmory:6060;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Accept-Encoding "";
+        proxy_hide_header X-Frame-Options;
+        proxy_cookie_path / /grimmory/;
+        proxy_redirect / https://$host/grimmory/;
+        proxy_redirect http://$host/ https://$host/grimmory/;
+
+        sub_filter_once off;
+        sub_filter_types text/html application/javascript text/css;
+        sub_filter '<head>' '<head><base href="/grimmory/" />';
+        sub_filter 'href="/' 'href="/grimmory/';
+        sub_filter 'src="/' 'src="/grimmory/';
+        sub_filter '"/assets/' '"/grimmory/assets/';
+        sub_filter '"/api/' '"/grimmory/api/';
+        sub_filter "'/assets/" "'/grimmory/assets/";
+        sub_filter "'/api/" "'/grimmory/api/";
       }
 
       location /romm/ {
@@ -374,7 +404,7 @@ in
           Prowlarr.color=literal:"#e45124"
           Prowlarr.enabled=literal:"true"
           Grimmory.name=literal:"Grimmory"
-          Grimmory.url=literal:"https://grimmory.ghostship.io"
+          Grimmory.url=literal:"/grimmory/"
           Grimmory.scale=literal:1
           Grimmory.icon=literal:"muximux-book2"
           Grimmory.color=literal:"#49da7e"

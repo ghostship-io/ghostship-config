@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.51] - 2026-06-04
+
+- **Muximux Grimmory loading**: Route Grimmory through a same-origin
+  `/grimmory/` Muximux proxy, align its health check with the documented
+  `/api/v1/healthcheck` endpoint, and mount library/bookdrop paths at the
+  container paths expected by current Grimmory images.
+
 ## [2.1.50] - 2026-06-04
 
 - **NZBGet container startup**: Keep NZBGet behind Gluetun, seed the

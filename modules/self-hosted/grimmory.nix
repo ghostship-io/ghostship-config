@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   grimmory-secrets = config.ghostship.selfHostedSecrets.projections.grimmory.path;
@@ -12,7 +17,7 @@ in
     };
     extraOptions = [
       "--network=ghostship_net"
-      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:6060/ || exit 1"
+      "--health-cmd=wget -q -O /dev/null --tries=1 --timeout=5 http://127.0.0.1:6060/api/v1/healthcheck || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
@@ -31,15 +36,21 @@ in
     ];
     volumes = [
       "/srv/apps/grimmory/data:/app/data:rw"
-      "/mnt/share/Library/Books:/app/books:rw"
-      "/mnt/share/Library/Audiobooks:/app/audiobooks:rw"
-      "/mnt/share/Library/Books/.bookdrop:/app/bookdrop:rw"
+      "/mnt/share/Library/Books:/books:rw"
+      "/mnt/share/Library/Audiobooks:/audiobooks:rw"
+      "/mnt/share/Library/Books/.bookdrop:/bookdrop:rw"
     ];
   };
 
   systemd.services.podman-grimmory = {
-    after = [ "mnt-share.mount" "podman-grimmory-db.service" ];
-    wants = [ "mnt-share.mount" "podman-grimmory-db.service" ];
+    after = [
+      "mnt-share.mount"
+      "podman-grimmory-db.service"
+    ];
+    wants = [
+      "mnt-share.mount"
+      "podman-grimmory-db.service"
+    ];
   };
 
   systemd.tmpfiles.rules = [
