@@ -26,6 +26,8 @@
       TZ = "UTC";
       PUID = "3000";
       PGID = "3000";
+      NZBGET_USER = "ghostship";
+      NZBGET_PASS = "";
     };
     volumes = [
       "/srv/apps/nzbget:/config"
@@ -76,6 +78,7 @@
           Server1.Connections=literal:30
           ArticleCache=literal:500
           DirectWrite=literal:no
+          ScriptDir=literal:/scripts
           WriteBuffer=literal:4096
           PostStrategy=literal:aggressive
           ControlPort=literal:5001

@@ -200,7 +200,7 @@ in
             "[Services].[RSS-Bridge].server=literal:chill-penguin"
             "[Services].[RSS-Bridge].container=literal:rss-bridge"
 
-            "[Services].[Prefect].icon=literal:sh-prefect"
+            "[Services].[Prefect].icon=literal:si-prefect-#024dfd"
             "[Services].[Prefect].description=literal:Workflow Orchestrator"
             "[Services].[Prefect].server=literal:chill-penguin"
             "[Services].[Prefect].container=literal:prefect"

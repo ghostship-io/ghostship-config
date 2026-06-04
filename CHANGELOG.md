@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.50] - 2026-06-04
+
+- **NZBGet container startup**: Keep NZBGet behind Gluetun, seed the
+  LinuxServer container auth env to match Homepage, and pin `ScriptDir` to the
+  mounted scripts directory so newer NZBGet releases do not look under the app
+  install path.
+- **Homepage Prefect icon**: Replace the invalid selfh.st Prefect icon
+  reference with the Simple Icons Prefect glyph.
+
 ## [2.1.47] - 2026-06-02
 
 - **Muximux pyLoad API polling**: Proxy pyLoad's root `/json/` polling
