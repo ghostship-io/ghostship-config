@@ -800,8 +800,10 @@ EOF
         ${pkgs.podman}/bin/podman rm -f "$seed_container" >/dev/null
 
         if [ -e ${codexNix} ]; then
-          cp -a "$seed_tmp"/. ${codexNix}/
-          rm -rf "$seed_tmp"
+          old_nix="${codexNix}.old.$$"
+          mv ${codexNix} "$old_nix"
+          mv "$seed_tmp" ${codexNix}
+          rm -rf "$old_nix"
         else
           mv "$seed_tmp" ${codexNix}
         fi

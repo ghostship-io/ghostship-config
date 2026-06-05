@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.60] - 2026-06-05
+
+- **Codex Nix store seeding**: Replace the persisted Codex container `/nix`
+  tree when the image changes so new image store paths and symlink targets are
+  not lost during deployment.
+
 ## [2.1.59] - 2026-06-05
 
 - **Codex share mount**: Make `podman-codex` wait for the host
