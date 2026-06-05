@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.61] - 2026-06-05
+
+- **Codex Nix seed validation**: Reseed the persisted Codex container `/nix`
+  tree when required wrapper or Node runtime paths are missing, even if the
+  image marker already matches.
+
 ## [2.1.60] - 2026-06-05
 
 - **Codex Nix store seeding**: Replace the persisted Codex container `/nix`

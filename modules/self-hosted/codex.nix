@@ -691,6 +691,16 @@ let
       };
     };
   };
+
+  persistedNixPath = storePath: "${codexNix}${lib.removePrefix "/nix" (toString storePath)}";
+  codexNixRequiredPaths = [
+    "${persistedNixPath codexAppServerProxy}/bin/codex-app-server-proxy"
+    "${persistedNixPath codexOllamaCloudProxy}/bin/codex-ollama-cloud-proxy"
+    "${persistedNixPath pkgs.nodejs_24}/bin/node"
+  ];
+  codexNixSeedValidation = lib.concatMapStringsSep "\n" (
+    path: ''          [ -x ${lib.escapeShellArg path} ] || seed_needed=1''
+  ) codexNixRequiredPaths;
 in
 {
   virtualisation.oci-containers.containers."codex" = {
@@ -786,7 +796,15 @@ EOF
         chmod 0644 ${codexAutomation}/Taskfile.yml
       fi
 
+      seed_needed=0
       if [ ! -e ${codexNix}/.ghostship-seeded-image ] || [ "$(<${codexNix}/.ghostship-seeded-image)" != "${codexImage}" ]; then
+        seed_needed=1
+      fi
+      if [ "$seed_needed" -eq 0 ]; then
+${codexNixSeedValidation}
+      fi
+
+      if [ "$seed_needed" -eq 1 ]; then
         ${pkgs.podman}/bin/podman load -i ${codexImage}
 
         seed_container="codex-nix-seed-$$"
