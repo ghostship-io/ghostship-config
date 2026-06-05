@@ -101,14 +101,15 @@ changelog.
 
 ## WSL and Windows
 
-- Prefer `/mnt/c/...` for Windows files. Treat `/mnt/z` as a lazy mount that
+- Prefer `/mnt/c/...` for Windows files. Treat `/mnt/share` as a lazy mount that
   may need verification before use.
 - Windows PATH import is enabled on WSL hosts, but repo scripts should prefer
   explicit `/mnt/c/...` paths or repo-managed wrappers such as `wsl-open` and
   `win-powershell` when deterministic behavior matters.
-- WSL activation should stop `mnt-z.automount` and unmount any live `/mnt/z`
-  NFS mount before reloading generated mount units so switches do not fail on
-  stale `/mnt/z` mount state.
+- WSL activation should stop `mnt-share.automount`, clear any stale
+  `mnt-z.automount`, and unmount any live `/mnt/share` or `/mnt/z` NFS mount
+  before reloading generated mount units so switches do not fail on stale share
+  mount state.
 - `powershell.exe -File` does not accept WSL `/mnt/c/...` paths on this host.
   Use a Windows path such as `C:\...`.
 - When launched from a WSL path, `powershell.exe` sees the working directory as

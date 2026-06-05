@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.59] - 2026-06-05
+
+- **Codex share mount**: Make `podman-codex` wait for the host
+  `/mnt/share` NFS mount before starting so the container's `/mnt/share`
+  bind mount sees the live library share.
+- **WSL share mount path**: Move develop-host Synology NFS automounts from
+  `/mnt/z` to `/mnt/share`, while clearing stale `/mnt/z` mount state during
+  activation.
+
 ## [2.1.58] - 2026-06-04
 
 - **Codex s6 service packaging**: Package Codex s6 service run scripts as

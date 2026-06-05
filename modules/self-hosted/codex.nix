@@ -731,8 +731,14 @@ in
   ];
 
   systemd.services.podman-codex = {
-    after = [ "init-ghostship-net.service" ];
-    wants = [ "init-ghostship-net.service" ];
+    after = [
+      "init-ghostship-net.service"
+      "mnt-share.mount"
+    ];
+    wants = [
+      "init-ghostship-net.service"
+      "mnt-share.mount"
+    ];
     preStart = lib.mkAfter ''
       set -eu
 

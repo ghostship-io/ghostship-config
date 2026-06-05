@@ -395,15 +395,15 @@ Supported onboarding flow:
   repo is native `nix` and `nixos-rebuild`.
 - WSL hosts expose wrapped `wsl-open`, `win-powershell`, a Windows
   notification bridge for `notify-send`, and a `hard`-mounted NFS automount at
-  `/mnt/z`. Windows PATH import is enabled for desktop interop, and explicit
+  `/mnt/share`. Windows PATH import is enabled for desktop interop, and explicit
   WSL FHS shims provide the small set of hardcoded `/bin/...` and
   `/usr/bin/...` paths required by Windows-side tools. Keep `/usr/bin` writable
   so Docker Desktop can manage `/usr/bin/docker-credential-desktop.exe`
   itself; add future hardcoded FHS needs to `ghostship.wsl.fhsShims` instead of
   reintroducing `envfs`.
-  WSL activation stops the `/mnt/z` automount and unmounts any live NFS mount
-  before reloading the generated mount units so host switches do not fail on
-  stale `/mnt/z` mount state.
+  WSL activation stops the `/mnt/share` automount, clears stale `/mnt/z` unit
+  state, and unmounts any live NFS mount before reloading the generated mount
+  units so host switches do not fail on stale share mount state.
 - WSL hosts cap `nix.settings.max-jobs` at `8` so concurrent flake shells,
   agent sessions, and host builds do not wedge `nix-daemon` under `auto`
   parallelism.
