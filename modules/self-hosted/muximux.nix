@@ -220,6 +220,7 @@ let
         sub_filter '"/api/' '"/grimmory/api/';
         sub_filter "'/assets/" "'/grimmory/assets/";
         sub_filter "'/api/" "'/grimmory/api/";
+        sub_filter '}/api/' '}/grimmory/api/';
       }
 
       location /romm/ {

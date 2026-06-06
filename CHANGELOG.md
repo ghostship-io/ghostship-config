@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.1.62] - 2026-06-06
 
 - **Muximux Grimmory bundle rewrite**: Rewrite Grimmory's current
-  `text/javascript` bundles through the `/grimmory/` proxy so the UI calls the
-  proxied API path.
+  `text/javascript` bundles and runtime base-url API calls through the
+  `/grimmory/` proxy so the UI calls the proxied API path.
 
 ## [2.1.61] - 2026-06-05
 
