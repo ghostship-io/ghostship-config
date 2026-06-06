@@ -8,10 +8,10 @@
 
 let
   codexHome = "/srv/apps/codex/home";
-  codexNix = "/srv/apps/codex/nix";
   codexDocker = "/srv/apps/codex/docker";
   codexWorkspace = "/srv/apps/codex/workspace";
   codexAutomation = "${codexHome}/.automation";
+  codexImageStateMarker = "${codexHome}/.local/share/ghostship-codex/image-generation";
   codexSecrets = config.ghostship.selfHostedSecrets.projections.codex.path;
   imageName = "localhost/ghostship-codex";
   imageTag = "codex-web-${inputs.codex-web.shortRev or inputs.codex-web.rev}";
@@ -692,15 +692,6 @@ let
     };
   };
 
-  persistedNixPath = storePath: "${codexNix}${lib.removePrefix "/nix" (toString storePath)}";
-  codexNixRequiredPaths = [
-    "${persistedNixPath codexAppServerProxy}/bin/codex-app-server-proxy"
-    "${persistedNixPath codexOllamaCloudProxy}/bin/codex-ollama-cloud-proxy"
-    "${persistedNixPath pkgs.nodejs_24}/bin/node"
-  ];
-  codexNixSeedValidation = lib.concatMapStringsSep "\n" (
-    path: ''          [ -x ${lib.escapeShellArg path} ] || seed_needed=1''
-  ) codexNixRequiredPaths;
 in
 {
   virtualisation.oci-containers.containers."codex" = {
@@ -723,7 +714,6 @@ in
       "--health-on-failure=kill"
     ];
     volumes = [
-      "${codexNix}:/nix:rw"
       "${codexDocker}:/var/lib/docker:rw"
       "${codexWorkspace}:/workspace:rw"
       "${codexHome}:/home/codex:rw"
@@ -796,37 +786,21 @@ EOF
         chmod 0644 ${codexAutomation}/Taskfile.yml
       fi
 
-      seed_needed=0
-      if [ ! -e ${codexNix}/.ghostship-seeded-image ] || [ "$(<${codexNix}/.ghostship-seeded-image)" != "${codexImage}" ]; then
-        seed_needed=1
-      fi
-      if [ "$seed_needed" -eq 0 ]; then
-${codexNixSeedValidation}
+      current_image_state=""
+      if [ -e ${codexImageStateMarker} ]; then
+        current_image_state="$(cat ${codexImageStateMarker})"
       fi
 
-      if [ "$seed_needed" -eq 1 ]; then
-        ${pkgs.podman}/bin/podman load -i ${codexImage}
+      if [ "$current_image_state" != "${codexImage}" ]; then
+        rm -rf \
+          ${codexHome}/.cache/nix \
+          ${codexHome}/.local/share/nix \
+          ${codexHome}/.local/state/nix \
+          ${codexHome}/.nix-profile
 
-        seed_container="codex-nix-seed-$$"
-        seed_tmp="${codexNix}.seed.$$"
-        rm -rf "$seed_tmp"
-        mkdir -p "$seed_tmp"
-
-        ${pkgs.podman}/bin/podman rm -f "$seed_container" >/dev/null 2>&1 || true
-        ${pkgs.podman}/bin/podman create --pull=never --name "$seed_container" "${imageName}:${imageTag}" >/dev/null
-        ${pkgs.podman}/bin/podman cp "$seed_container:/nix/." "$seed_tmp/"
-        ${pkgs.podman}/bin/podman rm -f "$seed_container" >/dev/null
-
-        if [ -e ${codexNix} ]; then
-          old_nix="${codexNix}.old.$$"
-          mv ${codexNix} "$old_nix"
-          mv "$seed_tmp" ${codexNix}
-          rm -rf "$old_nix"
-        else
-          mv "$seed_tmp" ${codexNix}
-        fi
-        printf '%s\n' "${codexImage}" > ${codexNix}/.ghostship-seeded-image
-        chown -R 3000:3000 ${codexNix}
+        install -d -m0755 -o 3000 -g 3000 "$(dirname ${codexImageStateMarker})"
+        printf '%s\n' "${codexImage}" > ${codexImageStateMarker}
+        chown 3000:3000 ${codexImageStateMarker}
       fi
     '';
   };

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.63] - 2026-06-07
+
+- **Codex image-owned Nix store**: Stop bind-mounting and reseeding `/nix` for
+  the Codex container. The image now owns `/nix`, and startup clears the Codex
+  user's mutable Nix DB/profile/cache state when the image generation changes
+  so user metadata cannot point at paths from the previous image.
+
 ## [2.1.62] - 2026-06-06
 
 - **Muximux Grimmory bundle rewrite**: Rewrite Grimmory's current
