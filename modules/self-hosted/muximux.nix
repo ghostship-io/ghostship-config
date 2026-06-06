@@ -212,7 +212,7 @@ let
         proxy_redirect http://$host/ https://$host/grimmory/;
 
         sub_filter_once off;
-        sub_filter_types text/html application/javascript text/css;
+        sub_filter_types text/html application/javascript text/javascript text/css;
         sub_filter '<head>' '<head><base href="/grimmory/" />';
         sub_filter 'href="/' 'href="/grimmory/';
         sub_filter 'src="/' 'src="/grimmory/';
