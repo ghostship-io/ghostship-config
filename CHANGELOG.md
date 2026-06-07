@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.64] - 2026-06-07
+
+- **Codex container Git LFS**: Add `git-lfs` to the Codex container image so
+  hosted Codex sessions can fetch and work with LFS-backed repositories.
+
 ## [2.1.63] - 2026-06-07
 
 - **Codex image-owned Nix store**: Stop bind-mounting and reseeding `/nix` for

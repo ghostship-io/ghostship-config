@@ -168,6 +168,7 @@ let
     go-task
     bitwarden-cli
     git
+    git-lfs
     gh
     openssh
     curl
