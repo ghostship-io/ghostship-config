@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.71] - 2026-06-08
+
+- **Codex automation ownership**: Stop seeding the
+  `ghostship-agent-bootstrap` Taskfile and cron entry from the NixOS container
+  config. `nixos-config` now only provides the base image, `agent-browser`, and
+  persistent Supercronic/Taskfile framework; `/workspace/ghostship-agent` owns
+  its repo-specific persistent bootstrap through Home Manager activation.
+
 ## [2.1.70] - 2026-06-08
 
 - **Codex automation agent repo bootstrap**: Seed the existing Codex

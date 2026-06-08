@@ -832,48 +832,6 @@ in
               chmod 0644 ${codexAutomation}/Taskfile.yml
             fi
 
-            cat > ${codexAutomation}/ghostship-agent-bootstrap.Taskfile.yml <<'EOF'
-      version: '3'
-
-      tasks:
-        bootstrap:
-          desc: Install Ghostship agent user tooling from the workspace repo.
-          cmds:
-            - |
-              set -eu
-
-              repo="''${CODEX_AGENT_TOOLING_REPO:-/workspace/ghostship-agent}"
-              state_dir="$HOME/.local/state/ghostship-agent"
-              activation_link="$state_dir/home-manager-activation"
-              stamp="$state_dir/home-manager-activation.rev"
-
-              mkdir -p "$state_dir"
-
-              if [ ! -e "$repo/flake.nix" ]; then
-                printf 'warn: ghostship-agent flake checkout is missing: %s\n' "$repo" >&2
-                exit 0
-              fi
-
-              rev="$(git -C "$repo" rev-parse HEAD 2>/dev/null || printf 'unknown')"
-              if [ -x "$HOME/.nix-profile/bin/agent" ] && [ -e "$stamp" ] && [ "$(cat "$stamp")" = "$rev" ]; then
-                exit 0
-              fi
-
-              rm -f "$activation_link"
-              nix build "$repo#homeConfigurations.codex.activationPackage" -o "$activation_link"
-              "$activation_link/activate"
-              printf '%s\n' "$rev" > "$stamp"
-      EOF
-            chown 3000:3000 ${codexAutomation}/ghostship-agent-bootstrap.Taskfile.yml
-            chmod 0644 ${codexAutomation}/ghostship-agent-bootstrap.Taskfile.yml
-
-            managed_agent_bootstrap_cron='*/5 * * * * cd /home/codex/.automation && task -t ghostship-agent-bootstrap.Taskfile.yml bootstrap'
-            if ! grep -Fq 'ghostship-agent-bootstrap.Taskfile.yml bootstrap' ${codexAutomation}/crontab; then
-              printf '%s\n' "$managed_agent_bootstrap_cron" >> ${codexAutomation}/crontab
-              chown 3000:3000 ${codexAutomation}/crontab
-              chmod 0644 ${codexAutomation}/crontab
-            fi
-
             current_image_state=""
             if [ -e ${codexImageStateMarker} ]; then
               current_image_state="$(cat ${codexImageStateMarker})"

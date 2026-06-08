@@ -134,12 +134,11 @@ notes.
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
 - The self-hosted Codex container keeps `agent-browser` in the base image and
-  uses its existing Supercronic plus Taskfile automation to rehydrate the
-  external `/workspace/ghostship-agent` checkout. The managed
-  `ghostship-agent-bootstrap.Taskfile.yml` builds and activates
-  `homeConfigurations.codex.activationPackage` into `/home/codex`, so image
-  refreshes pick up shared `agent`, `gws`, `bw`, Git helpers, and repo skills
-  without rebuilding the image for every tooling update.
+  provides persistent Supercronic plus Taskfile automation under
+  `/home/codex/.automation`. The external `/workspace/ghostship-agent` checkout
+  owns its own persistent bootstrap task through its Home Manager activation,
+  so image refreshes can pick up shared `agent`, `gws`, `bw`, Git helpers, and
+  repo skills without baking mutable repo files into this image.
 - OpenCode remains an installed interactive CLI on develop hosts, but the repo
   no longer starts a managed WSL `opencode serve` user service.
 - Develop-host convergence also cleans the known stale `workmux set-window-status ...` entries from `~/.codex/hooks.json` so removed repo-managed tooling does not keep breaking Codex hooks. The cleanup preserves unrelated valid hooks, warns instead of rewriting malformed JSON, and takes effect after the relevant Home Manager or NixOS switch. Restart any already-running Codex sessions after the switch if they were holding the stale hook state open.
