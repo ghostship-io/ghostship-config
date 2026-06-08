@@ -21,6 +21,28 @@ let
     inherit pkgs inputs;
     userHome = "/home/codex";
   };
+  codexManagedSkills = [
+    {
+      name = "autoreview";
+      source = ../../home/config/skills/autoreview;
+    }
+    {
+      name = "ghostship-audit-worktree";
+      source = ../../home/config/skills/ghostship-audit-worktree;
+    }
+    {
+      name = "ghostship-merge-worktree";
+      source = ../../home/config/skills/ghostship-merge-worktree;
+    }
+    {
+      name = "ghostship-pull-worktree";
+      source = ../../home/config/skills/ghostship-pull-worktree;
+    }
+    {
+      name = "grill-me";
+      source = ../../home/config/skills/grill-me;
+    }
+  ];
   codexWebUnpatched = inputs.codex-web.packages.${system}.default;
   codexWebCli = inputs.codex-web.packages.${system}.codex;
 
@@ -499,68 +521,10 @@ let
 
     ${codexRuntimeEnv}
 
-    log_info() {
-      printf 'info: %s\n' "$1" >&2
-    }
-
-    log_warn() {
-      printf 'warn: %s\n' "$1" >&2
-    }
-
-    run_as_codex() {
-      exec_as_user="$1"
-      shift
-      su-exec codex:codex env \
-        HOME="$HOME" \
-        USER="$exec_as_user" \
-        PATH="$PATH" \
-        NIX_CONFIG="$NIX_CONFIG" \
-        NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
-        SSL_CERT_FILE="$SSL_CERT_FILE" \
-        "$@"
-    }
-
-    install_ghostship_agent_repo() {
-      repo="''${CODEX_AGENT_TOOLING_REPO:-}"
-      if [ -z "$repo" ]; then
-        for candidate in /workspace/ghostship-agent; do
-          if [ -e "$candidate/flake.nix" ]; then
-            repo="$candidate"
-            break
-          fi
-        done
-      fi
-
-      if [ -z "$repo" ] || [ ! -e "$repo/flake.nix" ]; then
-        log_warn "ghostship-agent flake checkout is missing; skipping repo tooling activation"
-        return 1
-      fi
-
-      state_dir="$HOME/.local/state/ghostship-agent"
-      activation_link="$state_dir/home-manager-activation"
-      install -d -m0755 -o codex -g codex "$state_dir"
-
-      rm -f "$activation_link"
-      if HOME=/root USER=root nix build "$repo#homeConfigurations.codex.activationPackage" -o "$activation_link"; then
-        chown -h codex:codex "$activation_link"
-        log_info "activating Ghostship agent tooling from $repo"
-        run_as_codex codex "$activation_link/activate"
-        return 0
-      fi
-
-      log_warn "Ghostship agent Home Manager activation build failed from $repo"
-      return 1
-    }
-
     mkdir -p "$HOME/.ollama/models" "$HOME/.codex" "$HOME/.agents/skills" "$HOME/.gemini" "$HOME/.config/opencode" "$CODEX_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
     chown -R codex:codex "$HOME" /workspace
-
-    if install_ghostship_agent_repo; then
-      exit 0
-    fi
-
     if [ -x "$HOME/.local/bin/ghostship-agent-maintenance" ]; then
-      run_as_codex codex "$HOME/.local/bin/ghostship-agent-maintenance"
+      exec su-exec codex:codex "$HOME/.local/bin/ghostship-agent-maintenance"
     fi
   '';
 
@@ -815,7 +779,21 @@ in
             install -d -m0755 -o 3000 -g 3000 ${codexWorkspace}
             install -d -m0755 -o 3000 -g 3000 ${codexAutomation}
             install -d -m0755 -o 3000 -g 3000 ${codexAutomation}/tasks
-            install -d -m0755 -o 3000 -g 3000 ${codexHome}/.local/state/ghostship-agent
+            install -d -m0755 -o 3000 -g 3000 ${codexHome}/.local/bin
+            install -d -m0755 -o 3000 -g 3000 ${codexHome}/.codex
+            install -d -m0755 -o 3000 -g 3000 ${codexHome}/.gemini
+            install -d -m0755 -o 3000 -g 3000 ${codexHome}/.config/opencode
+            install -d -m0755 -o 3000 -g 3000 ${codexHome}/.agents/skills
+
+            install -m0755 -o 3000 -g 3000 ${./codex-agent-maintenance.sh} ${codexHome}/.local/bin/ghostship-agent-maintenance
+            install -m0644 -o 3000 -g 3000 ${../../home/config/AGENTS.md} ${codexHome}/.codex/AGENTS.md
+            install -m0644 -o 3000 -g 3000 ${../../home/config/AGENTS.md} ${codexHome}/.gemini/GEMINI.md
+            install -m0644 -o 3000 -g 3000 ${../../home/config/AGENTS.md} ${codexHome}/.config/opencode/AGENTS.md
+            ${lib.concatMapStrings (skill: ''
+              rm -rf ${codexHome}/.agents/skills/${skill.name}
+              cp -R --no-preserve=ownership ${skill.source} ${codexHome}/.agents/skills/${skill.name}
+              chown -R 3000:3000 ${codexHome}/.agents/skills/${skill.name}
+            '') codexManagedSkills}
 
             if [ ! -e ${codexAutomation}/crontab ]; then
               cat > ${codexAutomation}/crontab <<'EOF'
@@ -852,6 +830,48 @@ in
       EOF
               chown 3000:3000 ${codexAutomation}/Taskfile.yml
               chmod 0644 ${codexAutomation}/Taskfile.yml
+            fi
+
+            cat > ${codexAutomation}/ghostship-agent-bootstrap.Taskfile.yml <<'EOF'
+      version: '3'
+
+      tasks:
+        bootstrap:
+          desc: Install Ghostship agent user tooling from the workspace repo.
+          cmds:
+            - |
+              set -eu
+
+              repo="''${CODEX_AGENT_TOOLING_REPO:-/workspace/ghostship-agent}"
+              state_dir="$HOME/.local/state/ghostship-agent"
+              activation_link="$state_dir/home-manager-activation"
+              stamp="$state_dir/home-manager-activation.rev"
+
+              mkdir -p "$state_dir"
+
+              if [ ! -e "$repo/flake.nix" ]; then
+                printf 'warn: ghostship-agent flake checkout is missing: %s\n' "$repo" >&2
+                exit 0
+              fi
+
+              rev="$(git -C "$repo" rev-parse HEAD 2>/dev/null || printf 'unknown')"
+              if [ -x "$HOME/.nix-profile/bin/agent" ] && [ -e "$stamp" ] && [ "$(cat "$stamp")" = "$rev" ]; then
+                exit 0
+              fi
+
+              rm -f "$activation_link"
+              nix build "$repo#homeConfigurations.codex.activationPackage" -o "$activation_link"
+              "$activation_link/activate"
+              printf '%s\n' "$rev" > "$stamp"
+      EOF
+            chown 3000:3000 ${codexAutomation}/ghostship-agent-bootstrap.Taskfile.yml
+            chmod 0644 ${codexAutomation}/ghostship-agent-bootstrap.Taskfile.yml
+
+            managed_agent_bootstrap_cron='*/5 * * * * cd /home/codex/.automation && task -t ghostship-agent-bootstrap.Taskfile.yml bootstrap'
+            if ! grep -Fq 'ghostship-agent-bootstrap.Taskfile.yml bootstrap' ${codexAutomation}/crontab; then
+              printf '%s\n' "$managed_agent_bootstrap_cron" >> ${codexAutomation}/crontab
+              chown 3000:3000 ${codexAutomation}/crontab
+              chmod 0644 ${codexAutomation}/crontab
             fi
 
             current_image_state=""

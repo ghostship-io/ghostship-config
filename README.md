@@ -133,11 +133,12 @@ notes.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
-- The self-hosted Codex container keeps `agent-browser` in the base image, then
-  runs the external `/workspace/ghostship-agent` flake at container startup.
-  Its `homeConfigurations.codex.activationPackage` installs the shared
-  repo-owned `agent`, `gws`, `bw`, Git helpers, and skills into
-  `/home/codex`, so image refreshes rehydrate user tooling from the checkout
+- The self-hosted Codex container keeps `agent-browser` in the base image and
+  uses its existing Supercronic plus Taskfile automation to rehydrate the
+  external `/workspace/ghostship-agent` checkout. The managed
+  `ghostship-agent-bootstrap.Taskfile.yml` builds and activates
+  `homeConfigurations.codex.activationPackage` into `/home/codex`, so image
+  refreshes pick up shared `agent`, `gws`, `bw`, Git helpers, and repo skills
   without rebuilding the image for every tooling update.
 - OpenCode remains an installed interactive CLI on develop hosts, but the repo
   no longer starts a managed WSL `opencode serve` user service.

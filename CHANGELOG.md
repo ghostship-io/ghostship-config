@@ -9,12 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.1.70] - 2026-06-08
 
-- **Codex startup agent repo activation**: Hook Codex container startup into
-  the external `/workspace/ghostship-agent` flake, building and activating its
-  `homeConfigurations.codex.activationPackage` as the `codex` user so new
-  images automatically reinstall the shared repo tooling and skills without
-  baking those mutable assets into the image. The image still carries
-  `agent-browser` as a base dependency.
+- **Codex automation agent repo bootstrap**: Seed the existing Codex
+  Supercronic and Taskfile automation with a managed
+  `ghostship-agent-bootstrap` task that builds and activates
+  `/workspace/ghostship-agent#homeConfigurations.codex.activationPackage` for
+  the `codex` user. This keeps mutable shared agent tooling and skills outside
+  the image while avoiding changes to the Codex container entrypoint/setup
+  path; `agent-browser` remains in the base image.
 
 ## [2.1.69] - 2026-06-08
 
