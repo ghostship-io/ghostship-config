@@ -205,8 +205,9 @@ CLI, Nix, Git, GitHub CLI, SSH, Docker-in-Docker, Ollama, Bitwarden CLI,
 Python, Node.js, `uv`, `direnv`, `agent-browser`, search tools, and basic build
 tools. The service is intended for `https://codex.ghostship.io`; it keeps
 `/workspace`, `/home/codex`, and Docker state under `/srv/apps/codex`, mounts
-`/mnt/share`, and leaves `/nix` image-owned so the runtime store and image stay
-consistent. Codex web starts from `/home/codex` so new sessions default to the
+`/mnt/share`, and leaves `/nix` image-owned with a populated Nix database so
+rootless in-container builds and Home Manager activations write to the same
+system-visible store. Codex web starts from `/home/codex` so new sessions default to the
 persisted Codex home. Host startup copies `ghostship-agent-maintenance`, the
 shared AGENTS files, and repo-managed skills into persisted `/home/codex`; container
 setup runs that external maintenance script as the `codex` user so Codex,

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.73] - 2026-06-08
+
+- **Codex container Nix store**: Build the Codex image with a populated Nix
+  database and make the image-owned `/nix/store` plus `/nix/var/nix` writable
+  by the `codex` user so rootless Nix and Home Manager activations produce
+  system-visible `/nix/store` paths instead of falling back to a per-user
+  chroot store.
+
 ## [2.1.72] - 2026-06-08
 
 - **Codex startup directory**: Start the Codex web service from `/home/codex`

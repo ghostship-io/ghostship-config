@@ -655,7 +655,7 @@ let
     exec s6-svscan /etc/s6/services
   '';
 
-  codexImage = pkgs.dockerTools.buildLayeredImage {
+  codexImage = pkgs.dockerTools.buildLayeredImageWithNixDb {
     name = imageName;
     tag = imageTag;
     contents = codexPackages ++ [
@@ -673,7 +673,7 @@ let
       pkgs.dockerTools.caCertificates
     ];
     extraCommands = ''
-      mkdir -p etc/nix etc/s6/services tmp workspace home/codex
+      mkdir -p etc/nix etc/s6/services nix/store nix/var/nix tmp workspace home/codex
       mkdir -p mnt/share var/lib/docker var/run
       for service in dockerd ollama-proxy codex-web supercronic webhook; do
         mkdir -p "etc/s6/services/$service"
@@ -696,6 +696,10 @@ let
       experimental-features = nix-command flakes
       sandbox = false
       EOF
+    '';
+    fakeRootCommands = ''
+      chown -R 3000:3000 nix/store nix/var/nix
+      chmod -R u+rwX,go+rX nix/store nix/var/nix
     '';
     config = {
       Cmd = [ "${codexEntrypoint}/bin/codex-s6-entrypoint" ];
