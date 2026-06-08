@@ -209,6 +209,15 @@ rebuilding the image. Mutable agent CLIs install under
 generation changes, startup clears the Codex user's mutable Nix state from
 `/home/codex` so Nix's per-user validity database and profiles cannot point at
 paths from the previous image.
+The same user tooling can be installed manually from this repo after a fresh
+image starts:
+
+```sh
+nix run .#install-codex-agent-tooling
+```
+
+Pass `-- --no-maintenance` to copy only the repo-managed files and wrappers
+without running the npm-backed maintenance refresh.
 Codex web and the local Ollama API proxy run as the `codex` user; the proxy
 forwards Codex CLI's native `ollama` provider traffic to `https://ollama.com`
 with the projected `OLLAMA_API_KEY`. The web picker appends the current

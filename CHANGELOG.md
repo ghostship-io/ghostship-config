@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.68] - 2026-06-08
+
+- **Codex agent tooling flake installer**: Add
+  `.#install-codex-agent-tooling`, a repo-local flake app/package that installs
+  shared AGENTS files, repo-managed skills, agent CLI wrappers, and
+  `ghostship-agent-maintenance` into a user home so a fresh Codex image can be
+  rehydrated without rebuilding the image.
+
 ## [2.1.67] - 2026-06-08
 
 - **Codex external agent tooling bootstrap**: Keep `agent-browser` in the Codex
