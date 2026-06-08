@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.67] - 2026-06-08
+
+- **Codex external agent tooling bootstrap**: Keep `agent-browser` in the Codex
+  container image, but move mutable agent CLI and skill maintenance outside the
+  image. Host startup now copies the maintenance script, shared AGENTS files,
+  and repo-managed skills into persisted `/home/codex`; container setup runs
+  that external script so Codex, Gemini, OpenCode, skills, and browser runtime
+  updates do not require rebuilding the image.
+
 ## [2.1.66] - 2026-06-08
 
 - **Codex agent tooling bootstrap**: Include shared agent maintenance tooling in

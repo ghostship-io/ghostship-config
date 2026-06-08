@@ -196,18 +196,19 @@ internal `http://pyload:8000` API and restarts failed queue links when present.
 
 Codex runs as a repo-built Podman OCI image with `0xcaff/codex-web`, the Codex
 CLI, Nix, Git, GitHub CLI, SSH, Docker-in-Docker, Ollama, Bitwarden CLI,
-Python, Node.js, `uv`, `direnv`, shared agent maintenance tooling, search
-tools, and basic build tools. The service is intended for
-`https://codex.ghostship.io`; it keeps `/workspace`, `/home/codex`, and Docker
-state under `/srv/apps/codex`, mounts `/mnt/share`, and leaves `/nix`
-image-owned so the runtime store and image stay consistent. Container setup
-runs `ghostship-agent-maintenance` as the `codex` user so the persisted
-`/home/codex` has Codex, Gemini, OpenCode, skills, and `agent-browser` tooling
-installed under `/home/codex/.local/share/ghostship-agent-tools/npm/bin`, and
-relinks the repo-managed shared AGENTS file plus shared skills under
-`/home/codex`. When the image generation changes, startup clears the Codex
-user's mutable Nix state from `/home/codex` so Nix's per-user validity database
-and profiles cannot point at paths from the previous image.
+Python, Node.js, `uv`, `direnv`, `agent-browser`, search tools, and basic build
+tools. The service is intended for `https://codex.ghostship.io`; it keeps
+`/workspace`, `/home/codex`, and Docker state under `/srv/apps/codex`, mounts
+`/mnt/share`, and leaves `/nix` image-owned so the runtime store and image stay
+consistent. Host startup copies `ghostship-agent-maintenance`, the shared
+AGENTS files, and repo-managed skills into persisted `/home/codex`; container
+setup runs that external maintenance script as the `codex` user so Codex,
+Gemini, OpenCode, skills, and browser runtime updates can land without
+rebuilding the image. Mutable agent CLIs install under
+`/home/codex/.local/share/ghostship-agent-tools/npm/bin`. When the image
+generation changes, startup clears the Codex user's mutable Nix state from
+`/home/codex` so Nix's per-user validity database and profiles cannot point at
+paths from the previous image.
 Codex web and the local Ollama API proxy run as the `codex` user; the proxy
 forwards Codex CLI's native `ollama` provider traffic to `https://ollama.com`
 with the projected `OLLAMA_API_KEY`. The web picker appends the current

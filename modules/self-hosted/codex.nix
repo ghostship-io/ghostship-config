@@ -226,7 +226,6 @@ let
     bashInteractive
     cacert
     codexAgentTooling.agentBrowser
-    codexAgentTooling.agentMaintenance
   ];
 
   codexPath = lib.makeBinPath codexPackages;
@@ -523,15 +522,10 @@ let
     ${codexRuntimeEnv}
 
     mkdir -p "$HOME/.ollama/models" "$HOME/.codex" "$HOME/.agents/skills" "$HOME/.gemini" "$HOME/.config/opencode" "$CODEX_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
-    ln -sfn ${../../home/config/AGENTS.md} "$HOME/.codex/AGENTS.md"
-    ln -sfn ${../../home/config/AGENTS.md} "$HOME/.gemini/GEMINI.md"
-    ln -sfn ${../../home/config/AGENTS.md} "$HOME/.config/opencode/AGENTS.md"
-    ${lib.concatMapStrings (skill: ''
-      rm -rf "$HOME/.agents/skills/${skill.name}"
-      ln -s ${skill.source} "$HOME/.agents/skills/${skill.name}"
-    '') codexManagedSkills}
     chown -R codex:codex "$HOME" /workspace
-    exec su-exec codex:codex ${codexAgentTooling.agentMaintenance}/bin/ghostship-agent-maintenance
+    if [ -x "$HOME/.local/bin/ghostship-agent-maintenance" ]; then
+      exec su-exec codex:codex "$HOME/.local/bin/ghostship-agent-maintenance"
+    fi
   '';
 
   codexDockerdRun = pkgs.writeShellScriptBin "codex-svc-dockerd-run" ''
@@ -785,6 +779,21 @@ in
       install -d -m0755 -o 3000 -g 3000 ${codexWorkspace}
       install -d -m0755 -o 3000 -g 3000 ${codexAutomation}
       install -d -m0755 -o 3000 -g 3000 ${codexAutomation}/tasks
+      install -d -m0755 -o 3000 -g 3000 ${codexHome}/.local/bin
+      install -d -m0755 -o 3000 -g 3000 ${codexHome}/.codex
+      install -d -m0755 -o 3000 -g 3000 ${codexHome}/.gemini
+      install -d -m0755 -o 3000 -g 3000 ${codexHome}/.config/opencode
+      install -d -m0755 -o 3000 -g 3000 ${codexHome}/.agents/skills
+
+      install -m0755 -o 3000 -g 3000 ${./codex-agent-maintenance.sh} ${codexHome}/.local/bin/ghostship-agent-maintenance
+      install -m0644 -o 3000 -g 3000 ${../../home/config/AGENTS.md} ${codexHome}/.codex/AGENTS.md
+      install -m0644 -o 3000 -g 3000 ${../../home/config/AGENTS.md} ${codexHome}/.gemini/GEMINI.md
+      install -m0644 -o 3000 -g 3000 ${../../home/config/AGENTS.md} ${codexHome}/.config/opencode/AGENTS.md
+      ${lib.concatMapStrings (skill: ''
+        rm -rf ${codexHome}/.agents/skills/${skill.name}
+        cp -R --no-preserve=ownership ${skill.source} ${codexHome}/.agents/skills/${skill.name}
+        chown -R 3000:3000 ${codexHome}/.agents/skills/${skill.name}
+      '') codexManagedSkills}
 
       if [ ! -e ${codexAutomation}/crontab ]; then
         cat > ${codexAutomation}/crontab <<'EOF'
