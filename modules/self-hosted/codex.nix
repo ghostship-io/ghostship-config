@@ -673,7 +673,7 @@ let
       pkgs.dockerTools.caCertificates
     ];
     extraCommands = ''
-      mkdir -p etc/nix etc/s6/services nix/store nix/var/nix tmp workspace home/codex
+      mkdir -p etc/nix etc/s6/services nix/store nix/var/log/nix nix/var/nix tmp workspace home/codex
       mkdir -p mnt/share var/lib/docker var/run
       for service in dockerd ollama-proxy codex-web supercronic webhook; do
         mkdir -p "etc/s6/services/$service"
@@ -698,8 +698,8 @@ let
       EOF
     '';
     fakeRootCommands = ''
-      chown -R 3000:3000 nix/store nix/var/nix
-      chmod -R u+rwX,go+rX nix/store nix/var/nix
+      chown -R 3000:3000 nix/store nix/var/log/nix nix/var/nix
+      chmod -R u+rwX,go+rX nix/store nix/var/log/nix nix/var/nix
     '';
     config = {
       Cmd = [ "${codexEntrypoint}/bin/codex-s6-entrypoint" ];

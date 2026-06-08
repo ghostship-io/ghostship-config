@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.74] - 2026-06-08
+
+- **Codex container Nix logs**: Make `/nix/var/log/nix` writable by the
+  `codex` user in the Codex image so rootless Nix can create derivation build
+  logs while building Home Manager activations.
+
 ## [2.1.73] - 2026-06-08
 
 - **Codex container Nix store**: Build the Codex image with a populated Nix
