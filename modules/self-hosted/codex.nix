@@ -21,28 +21,6 @@ let
     inherit pkgs inputs;
     userHome = "/home/codex";
   };
-  codexManagedSkills = [
-    {
-      name = "autoreview";
-      source = ../../home/config/skills/autoreview;
-    }
-    {
-      name = "ghostship-audit-worktree";
-      source = ../../home/config/skills/ghostship-audit-worktree;
-    }
-    {
-      name = "ghostship-merge-worktree";
-      source = ../../home/config/skills/ghostship-merge-worktree;
-    }
-    {
-      name = "ghostship-pull-worktree";
-      source = ../../home/config/skills/ghostship-pull-worktree;
-    }
-    {
-      name = "grill-me";
-      source = ../../home/config/skills/grill-me;
-    }
-  ];
   codexWebUnpatched = inputs.codex-web.packages.${system}.default;
   codexWebCli = inputs.codex-web.packages.${system}.codex;
 
@@ -521,129 +499,187 @@ let
 
     ${codexRuntimeEnv}
 
+    log_info() {
+      printf 'info: %s\n' "$1" >&2
+    }
+
+    log_warn() {
+      printf 'warn: %s\n' "$1" >&2
+    }
+
+    run_as_codex() {
+      exec_as_user="$1"
+      shift
+      su-exec codex:codex env \
+        HOME="$HOME" \
+        USER="$exec_as_user" \
+        PATH="$PATH" \
+        NIX_CONFIG="$NIX_CONFIG" \
+        NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
+        SSL_CERT_FILE="$SSL_CERT_FILE" \
+        "$@"
+    }
+
+    install_ghostship_agent_repo() {
+      repo="''${CODEX_AGENT_TOOLING_REPO:-}"
+      if [ -z "$repo" ]; then
+        for candidate in /workspace/ghostship-agent; do
+          if [ -e "$candidate/flake.nix" ]; then
+            repo="$candidate"
+            break
+          fi
+        done
+      fi
+
+      if [ -z "$repo" ] || [ ! -e "$repo/flake.nix" ]; then
+        log_warn "ghostship-agent flake checkout is missing; skipping repo tooling activation"
+        return 1
+      fi
+
+      state_dir="$HOME/.local/state/ghostship-agent"
+      activation_link="$state_dir/home-manager-activation"
+      install -d -m0755 -o codex -g codex "$state_dir"
+
+      rm -f "$activation_link"
+      if HOME=/root USER=root nix build "$repo#homeConfigurations.codex.activationPackage" -o "$activation_link"; then
+        chown -h codex:codex "$activation_link"
+        log_info "activating Ghostship agent tooling from $repo"
+        run_as_codex codex "$activation_link/activate"
+        return 0
+      fi
+
+      log_warn "Ghostship agent Home Manager activation build failed from $repo"
+      return 1
+    }
+
     mkdir -p "$HOME/.ollama/models" "$HOME/.codex" "$HOME/.agents/skills" "$HOME/.gemini" "$HOME/.config/opencode" "$CODEX_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
     chown -R codex:codex "$HOME" /workspace
+
+    if install_ghostship_agent_repo; then
+      exit 0
+    fi
+
     if [ -x "$HOME/.local/bin/ghostship-agent-maintenance" ]; then
-      exec su-exec codex:codex "$HOME/.local/bin/ghostship-agent-maintenance"
+      run_as_codex codex "$HOME/.local/bin/ghostship-agent-maintenance"
     fi
   '';
 
   codexDockerdRun = pkgs.writeShellScriptBin "codex-svc-dockerd-run" ''
-      set -eu
+    set -eu
 
-      ${codexRuntimeEnv}
+    ${codexRuntimeEnv}
 
-      rm -f /var/run/docker.pid
-      exec dockerd \
-        --host=unix:///var/run/docker.sock \
-        --data-root=/var/lib/docker \
-        --storage-driver=vfs \
-        --iptables=false \
-        --ip-masq=false \
-        --bridge=none
+    rm -f /var/run/docker.pid
+    exec dockerd \
+      --host=unix:///var/run/docker.sock \
+      --data-root=/var/lib/docker \
+      --storage-driver=vfs \
+      --iptables=false \
+      --ip-masq=false \
+      --bridge=none
   '';
 
   codexOllamaProxyRun = pkgs.writeShellScriptBin "codex-svc-ollama-proxy-run" ''
-      set -eu
+    set -eu
 
-      ${codexRuntimeEnv}
+    ${codexRuntimeEnv}
 
-      exec su-exec codex:codex env \
-        HOME="$HOME" \
-        USER="$USER" \
-        PATH="$PATH" \
-        OLLAMA_HOST="$OLLAMA_HOST" \
-        OLLAMA_MODELS="$OLLAMA_MODELS" \
-        OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
-        OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
-        NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
-        SSL_CERT_FILE="$SSL_CERT_FILE" \
-        ${codexOllamaCloudProxy}/bin/codex-ollama-cloud-proxy
+    exec su-exec codex:codex env \
+      HOME="$HOME" \
+      USER="$USER" \
+      PATH="$PATH" \
+      OLLAMA_HOST="$OLLAMA_HOST" \
+      OLLAMA_MODELS="$OLLAMA_MODELS" \
+      OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
+      OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
+      NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
+      SSL_CERT_FILE="$SSL_CERT_FILE" \
+      ${codexOllamaCloudProxy}/bin/codex-ollama-cloud-proxy
   '';
 
   codexWebRun = pkgs.writeShellScriptBin "codex-svc-web-run" ''
-      set -eu
+    set -eu
 
-      ${codexRuntimeEnv}
+    ${codexRuntimeEnv}
 
-      for _ in $(seq 1 30); do
-        if docker info >/dev/null 2>&1; then
-          break
-        fi
-        sleep 1
-      done
-      chmod 0666 /var/run/docker.sock || true
+    for _ in $(seq 1 30); do
+      if docker info >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+    chmod 0666 /var/run/docker.sock || true
 
-      cd /workspace
+    cd /workspace
 
-      exec su-exec codex:codex env \
-        HOME="$HOME" \
-        USER="$USER" \
-        PATH="$PATH" \
-        DOCKER_HOST="$DOCKER_HOST" \
-        NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
-        SSL_CERT_FILE="$SSL_CERT_FILE" \
-        NIX_CONFIG="$NIX_CONFIG" \
-        CODEX_REAL_CLI_PATH="$CODEX_REAL_CLI_PATH" \
-        CODEX_CLI_PATH="$CODEX_CLI_PATH" \
-        OLLAMA_HOST="$OLLAMA_HOST" \
-        OLLAMA_MODELS="$OLLAMA_MODELS" \
-        OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
-        OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
-        ${codexWeb}/bin/codex-web --host 0.0.0.0 --port 8214
+    exec su-exec codex:codex env \
+      HOME="$HOME" \
+      USER="$USER" \
+      PATH="$PATH" \
+      DOCKER_HOST="$DOCKER_HOST" \
+      NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
+      SSL_CERT_FILE="$SSL_CERT_FILE" \
+      NIX_CONFIG="$NIX_CONFIG" \
+      CODEX_REAL_CLI_PATH="$CODEX_REAL_CLI_PATH" \
+      CODEX_CLI_PATH="$CODEX_CLI_PATH" \
+      OLLAMA_HOST="$OLLAMA_HOST" \
+      OLLAMA_MODELS="$OLLAMA_MODELS" \
+      OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
+      OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
+      ${codexWeb}/bin/codex-web --host 0.0.0.0 --port 8214
   '';
 
   codexSupercronicRun = pkgs.writeShellScriptBin "codex-svc-supercronic-run" ''
-      set -eu
+    set -eu
 
-      ${codexRuntimeEnv}
+    ${codexRuntimeEnv}
 
-      exec su-exec codex:codex env \
-        HOME="$HOME" \
-        USER="$USER" \
-        PATH="$PATH" \
-        DOCKER_HOST="$DOCKER_HOST" \
-        NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
-        SSL_CERT_FILE="$SSL_CERT_FILE" \
-        NIX_CONFIG="$NIX_CONFIG" \
-        CODEX_REAL_CLI_PATH="$CODEX_REAL_CLI_PATH" \
-        CODEX_CLI_PATH="$CODEX_CLI_PATH" \
-        OLLAMA_HOST="$OLLAMA_HOST" \
-        OLLAMA_MODELS="$OLLAMA_MODELS" \
-        OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
-        OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
-        CODEX_AUTOMATION_DIR="$CODEX_AUTOMATION_DIR" \
-        supercronic -no-reap -inotify -passthrough-logs "$CODEX_AUTOMATION_DIR/crontab"
+    exec su-exec codex:codex env \
+      HOME="$HOME" \
+      USER="$USER" \
+      PATH="$PATH" \
+      DOCKER_HOST="$DOCKER_HOST" \
+      NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
+      SSL_CERT_FILE="$SSL_CERT_FILE" \
+      NIX_CONFIG="$NIX_CONFIG" \
+      CODEX_REAL_CLI_PATH="$CODEX_REAL_CLI_PATH" \
+      CODEX_CLI_PATH="$CODEX_CLI_PATH" \
+      OLLAMA_HOST="$OLLAMA_HOST" \
+      OLLAMA_MODELS="$OLLAMA_MODELS" \
+      OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
+      OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
+      CODEX_AUTOMATION_DIR="$CODEX_AUTOMATION_DIR" \
+      supercronic -no-reap -inotify -passthrough-logs "$CODEX_AUTOMATION_DIR/crontab"
   '';
 
   codexWebhookRun = pkgs.writeShellScriptBin "codex-svc-webhook-run" ''
-      set -eu
+    set -eu
 
-      ${codexRuntimeEnv}
+    ${codexRuntimeEnv}
 
-      cd "$CODEX_AUTOMATION_DIR"
+    cd "$CODEX_AUTOMATION_DIR"
 
-      exec su-exec codex:codex env \
-        HOME="$HOME" \
-        USER="$USER" \
-        PATH="$PATH" \
-        DOCKER_HOST="$DOCKER_HOST" \
-        NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
-        SSL_CERT_FILE="$SSL_CERT_FILE" \
-        NIX_CONFIG="$NIX_CONFIG" \
-        CODEX_REAL_CLI_PATH="$CODEX_REAL_CLI_PATH" \
-        CODEX_CLI_PATH="$CODEX_CLI_PATH" \
-        OLLAMA_HOST="$OLLAMA_HOST" \
-        OLLAMA_MODELS="$OLLAMA_MODELS" \
-        OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
-        OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
-        CODEX_AUTOMATION_DIR="$CODEX_AUTOMATION_DIR" \
-        webhook \
-          -hooks "$CODEX_AUTOMATION_DIR/hooks.json" \
-          -hotreload \
-          -ip 0.0.0.0 \
-          -port "$CODEX_WEBHOOK_PORT" \
-          -verbose
+    exec su-exec codex:codex env \
+      HOME="$HOME" \
+      USER="$USER" \
+      PATH="$PATH" \
+      DOCKER_HOST="$DOCKER_HOST" \
+      NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
+      SSL_CERT_FILE="$SSL_CERT_FILE" \
+      NIX_CONFIG="$NIX_CONFIG" \
+      CODEX_REAL_CLI_PATH="$CODEX_REAL_CLI_PATH" \
+      CODEX_CLI_PATH="$CODEX_CLI_PATH" \
+      OLLAMA_HOST="$OLLAMA_HOST" \
+      OLLAMA_MODELS="$OLLAMA_MODELS" \
+      OLLAMA_CLOUD_BASE_URL="$OLLAMA_CLOUD_BASE_URL" \
+      OLLAMA_API_KEY="''${OLLAMA_API_KEY:-}" \
+      CODEX_AUTOMATION_DIR="$CODEX_AUTOMATION_DIR" \
+      webhook \
+        -hooks "$CODEX_AUTOMATION_DIR/hooks.json" \
+        -hotreload \
+        -ip 0.0.0.0 \
+        -port "$CODEX_WEBHOOK_PORT" \
+        -verbose
   '';
 
   codexEntrypoint = pkgs.writeShellScriptBin "codex-s6-entrypoint" ''
@@ -771,83 +807,69 @@ in
       "mnt-share.mount"
     ];
     preStart = lib.mkAfter ''
-      set -eu
+            set -eu
 
-      install -d -m0755 -o root -g root /srv/apps/codex
-      install -d -m0755 -o root -g root ${codexDocker}
-      install -d -m0755 -o 3000 -g 3000 ${codexHome}
-      install -d -m0755 -o 3000 -g 3000 ${codexWorkspace}
-      install -d -m0755 -o 3000 -g 3000 ${codexAutomation}
-      install -d -m0755 -o 3000 -g 3000 ${codexAutomation}/tasks
-      install -d -m0755 -o 3000 -g 3000 ${codexHome}/.local/bin
-      install -d -m0755 -o 3000 -g 3000 ${codexHome}/.codex
-      install -d -m0755 -o 3000 -g 3000 ${codexHome}/.gemini
-      install -d -m0755 -o 3000 -g 3000 ${codexHome}/.config/opencode
-      install -d -m0755 -o 3000 -g 3000 ${codexHome}/.agents/skills
+            install -d -m0755 -o root -g root /srv/apps/codex
+            install -d -m0755 -o root -g root ${codexDocker}
+            install -d -m0755 -o 3000 -g 3000 ${codexHome}
+            install -d -m0755 -o 3000 -g 3000 ${codexWorkspace}
+            install -d -m0755 -o 3000 -g 3000 ${codexAutomation}
+            install -d -m0755 -o 3000 -g 3000 ${codexAutomation}/tasks
+            install -d -m0755 -o 3000 -g 3000 ${codexHome}/.local/state/ghostship-agent
 
-      install -m0755 -o 3000 -g 3000 ${./codex-agent-maintenance.sh} ${codexHome}/.local/bin/ghostship-agent-maintenance
-      install -m0644 -o 3000 -g 3000 ${../../home/config/AGENTS.md} ${codexHome}/.codex/AGENTS.md
-      install -m0644 -o 3000 -g 3000 ${../../home/config/AGENTS.md} ${codexHome}/.gemini/GEMINI.md
-      install -m0644 -o 3000 -g 3000 ${../../home/config/AGENTS.md} ${codexHome}/.config/opencode/AGENTS.md
-      ${lib.concatMapStrings (skill: ''
-        rm -rf ${codexHome}/.agents/skills/${skill.name}
-        cp -R --no-preserve=ownership ${skill.source} ${codexHome}/.agents/skills/${skill.name}
-        chown -R 3000:3000 ${codexHome}/.agents/skills/${skill.name}
-      '') codexManagedSkills}
+            if [ ! -e ${codexAutomation}/crontab ]; then
+              cat > ${codexAutomation}/crontab <<'EOF'
+      # Supercronic crontab for the Codex container.
+      # Run Taskfile jobs from this persistent automation directory, for example:
+      # */15 * * * * cd /home/codex/.automation && task -t Taskfile.yml cron:default
+      EOF
+              chown 3000:3000 ${codexAutomation}/crontab
+              chmod 0644 ${codexAutomation}/crontab
+            fi
 
-      if [ ! -e ${codexAutomation}/crontab ]; then
-        cat > ${codexAutomation}/crontab <<'EOF'
-# Supercronic crontab for the Codex container.
-# Run Taskfile jobs from this persistent automation directory, for example:
-# */15 * * * * cd /home/codex/.automation && task -t Taskfile.yml cron:default
-EOF
-        chown 3000:3000 ${codexAutomation}/crontab
-        chmod 0644 ${codexAutomation}/crontab
-      fi
+            if [ ! -e ${codexAutomation}/hooks.json ]; then
+              cat > ${codexAutomation}/hooks.json <<'EOF'
+      []
+      EOF
+              chown 3000:3000 ${codexAutomation}/hooks.json
+              chmod 0644 ${codexAutomation}/hooks.json
+            fi
 
-      if [ ! -e ${codexAutomation}/hooks.json ]; then
-        cat > ${codexAutomation}/hooks.json <<'EOF'
-[]
-EOF
-        chown 3000:3000 ${codexAutomation}/hooks.json
-        chmod 0644 ${codexAutomation}/hooks.json
-      fi
+            if [ ! -e ${codexAutomation}/Taskfile.yml ]; then
+              cat > ${codexAutomation}/Taskfile.yml <<'EOF'
+      version: '3'
 
-      if [ ! -e ${codexAutomation}/Taskfile.yml ]; then
-        cat > ${codexAutomation}/Taskfile.yml <<'EOF'
-version: '3'
+      tasks:
+        cron:default:
+          desc: Placeholder cron task for Codex container automation.
+          cmds:
+            - echo "Define cron automation in /home/codex/.automation/Taskfile.yml"
 
-tasks:
-  cron:default:
-    desc: Placeholder cron task for Codex container automation.
-    cmds:
-      - echo "Define cron automation in /home/codex/.automation/Taskfile.yml"
+        webhook:default:
+          desc: Placeholder webhook task for Codex container automation.
+          cmds:
+            - echo "Define webhook automation in /home/codex/.automation/Taskfile.yml"
+      EOF
+              chown 3000:3000 ${codexAutomation}/Taskfile.yml
+              chmod 0644 ${codexAutomation}/Taskfile.yml
+            fi
 
-  webhook:default:
-    desc: Placeholder webhook task for Codex container automation.
-    cmds:
-      - echo "Define webhook automation in /home/codex/.automation/Taskfile.yml"
-EOF
-        chown 3000:3000 ${codexAutomation}/Taskfile.yml
-        chmod 0644 ${codexAutomation}/Taskfile.yml
-      fi
+            current_image_state=""
+            if [ -e ${codexImageStateMarker} ]; then
+              current_image_state="$(cat ${codexImageStateMarker})"
+            fi
 
-      current_image_state=""
-      if [ -e ${codexImageStateMarker} ]; then
-        current_image_state="$(cat ${codexImageStateMarker})"
-      fi
+            if [ "$current_image_state" != "${codexImage}" ]; then
+              rm -rf \
+                ${codexHome}/.cache/nix \
+                ${codexHome}/.local/share/nix \
+                ${codexHome}/.local/state/nix \
+                ${codexHome}/.nix-profile
 
-      if [ "$current_image_state" != "${codexImage}" ]; then
-        rm -rf \
-          ${codexHome}/.cache/nix \
-          ${codexHome}/.local/share/nix \
-          ${codexHome}/.local/state/nix \
-          ${codexHome}/.nix-profile
-
-        install -d -m0755 -o 3000 -g 3000 "$(dirname ${codexImageStateMarker})"
-        printf '%s\n' "${codexImage}" > ${codexImageStateMarker}
-        chown 3000:3000 ${codexImageStateMarker}
-      fi
+              install -d -m0755 -o 3000 -g 3000 "$(dirname ${codexImageStateMarker})"
+              printf '%s\n' "${codexImage}" > ${codexImageStateMarker}
+              chown 3000:3000 ${codexImageStateMarker}
+            fi
     '';
   };
 }

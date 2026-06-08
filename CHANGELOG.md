@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.70] - 2026-06-08
+
+- **Codex startup agent repo activation**: Hook Codex container startup into
+  the external `/workspace/ghostship-agent` flake, building and activating its
+  `homeConfigurations.codex.activationPackage` as the `codex` user so new
+  images automatically reinstall the shared repo tooling and skills without
+  baking those mutable assets into the image. The image still carries
+  `agent-browser` as a base dependency.
+
 ## [2.1.69] - 2026-06-08
 
 - **OpenCode agent tooling fallback**: Teach Codex agent maintenance to fall

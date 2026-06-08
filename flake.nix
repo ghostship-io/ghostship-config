@@ -286,16 +286,13 @@
         }
       );
 
-      apps = forAllSystems (
-        system:
-        {
-          install-codex-agent-tooling = {
-            type = "app";
-            program = "${self.packages.${system}.install-codex-agent-tooling}/bin/install-codex-agent-tooling";
-          };
-          default = self.apps.${system}.install-codex-agent-tooling;
-        }
-      );
+      apps = forAllSystems (system: {
+        install-codex-agent-tooling = {
+          type = "app";
+          program = "${self.packages.${system}.install-codex-agent-tooling}/bin/install-codex-agent-tooling";
+        };
+        default = self.apps.${system}.install-codex-agent-tooling;
+      });
 
       nixosConfigurations = {
         launch-octopus = mkHost [
