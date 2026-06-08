@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.65] - 2026-06-08
+
+- **Codex web refresh**: Update the Codex container to the latest
+  `0xcaff/codex-web` flake input.
+
 ## [2.1.64] - 2026-06-07
 
 - **Codex container Git LFS**: Add `git-lfs` to the Codex container image so

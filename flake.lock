@@ -56,11 +56,11 @@
         "uv2nix": "uv2nix"
       },
       "locked": {
-        "lastModified": 1779234259,
-        "narHash": "sha256-g2Ibhr8FlRCRvFFnW6RNNN6U60PZDYZdY7OheqrriFE=",
+        "lastModified": 1780943380,
+        "narHash": "sha256-3X/IMNxyn/mip3xvqvy6U7U+1VVDrCm49jfTwlY83qE=",
         "owner": "0xcaff",
         "repo": "codex-web",
-        "rev": "818d2fa1cf0116237d5e9bfe384857f49c876c8b",
+        "rev": "8eaa93713b7e3ffc9b453229faa1b561492d1803",
         "type": "github"
       },
       "original": {
