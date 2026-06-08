@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.66] - 2026-06-08
+
+- **Codex agent tooling bootstrap**: Include shared agent maintenance tooling in
+  the Codex container image, target it at `/home/codex`, and run it during
+  container setup so rebuilt images refresh Codex, Gemini, OpenCode, skills,
+  and `agent-browser` tooling inside the hosted Codex environment. Container
+  setup also relinks the repo-managed shared AGENTS file and skills into
+  `/home/codex` so persisted homes cannot keep stale skill symlinks from older
+  images.
+
 ## [2.1.65] - 2026-06-08
 
 - **Codex web refresh**: Update the Codex container to the latest

@@ -17,6 +17,32 @@ let
   imageTag = "codex-web-${inputs.codex-web.shortRev or inputs.codex-web.rev}";
   system = pkgs.stdenv.hostPlatform.system;
 
+  codexAgentTooling = import ../develop/agent-tooling.nix {
+    inherit pkgs inputs;
+    userHome = "/home/codex";
+  };
+  codexManagedSkills = [
+    {
+      name = "autoreview";
+      source = ../../home/config/skills/autoreview;
+    }
+    {
+      name = "ghostship-audit-worktree";
+      source = ../../home/config/skills/ghostship-audit-worktree;
+    }
+    {
+      name = "ghostship-merge-worktree";
+      source = ../../home/config/skills/ghostship-merge-worktree;
+    }
+    {
+      name = "ghostship-pull-worktree";
+      source = ../../home/config/skills/ghostship-pull-worktree;
+    }
+    {
+      name = "grill-me";
+      source = ../../home/config/skills/grill-me;
+    }
+  ];
   codexWebUnpatched = inputs.codex-web.packages.${system}.default;
   codexWebCli = inputs.codex-web.packages.${system}.codex;
 
@@ -199,13 +225,15 @@ let
     file
     bashInteractive
     cacert
+    codexAgentTooling.agentBrowser
+    codexAgentTooling.agentMaintenance
   ];
 
   codexPath = lib.makeBinPath codexPackages;
   codexRuntimeEnv = ''
     export HOME=/home/codex
     export USER=codex
-    export PATH=${codexPath}:$PATH
+    export PATH=${codexAgentTooling.agentBinDir}:${codexPath}:$PATH
     export DOCKER_HOST=unix:///var/run/docker.sock
     export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     export SSL_CERT_FILE=$NIX_SSL_CERT_FILE
@@ -494,8 +522,16 @@ let
 
     ${codexRuntimeEnv}
 
-    mkdir -p "$HOME/.ollama/models" "$HOME/.codex" "$CODEX_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
+    mkdir -p "$HOME/.ollama/models" "$HOME/.codex" "$HOME/.agents/skills" "$HOME/.gemini" "$HOME/.config/opencode" "$CODEX_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
+    ln -sfn ${../../home/config/AGENTS.md} "$HOME/.codex/AGENTS.md"
+    ln -sfn ${../../home/config/AGENTS.md} "$HOME/.gemini/GEMINI.md"
+    ln -sfn ${../../home/config/AGENTS.md} "$HOME/.config/opencode/AGENTS.md"
+    ${lib.concatMapStrings (skill: ''
+      rm -rf "$HOME/.agents/skills/${skill.name}"
+      ln -s ${skill.source} "$HOME/.agents/skills/${skill.name}"
+    '') codexManagedSkills}
     chown -R codex:codex "$HOME" /workspace
+    exec su-exec codex:codex ${codexAgentTooling.agentMaintenance}/bin/ghostship-agent-maintenance
   '';
 
   codexDockerdRun = pkgs.writeShellScriptBin "codex-svc-dockerd-run" ''

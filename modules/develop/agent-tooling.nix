@@ -1,11 +1,11 @@
 {
   pkgs,
   lib ? pkgs.lib,
+  userHome ? "/home/nixos",
   ...
 }:
 
 let
-  userHome = "/home/nixos";
   agentToolsRoot = "${userHome}/.local/share/ghostship-agent-tools";
   agentNpmPrefix = "${agentToolsRoot}/npm";
   agentBinDir = "${agentNpmPrefix}/bin";
