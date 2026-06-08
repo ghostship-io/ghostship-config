@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.72] - 2026-06-08
+
+- **Codex startup directory**: Start the Codex web service from `/home/codex`
+  and set the container working directory to the persisted Codex home.
+
 ## [2.1.71] - 2026-06-08
 
 - **Codex automation ownership**: Stop seeding the

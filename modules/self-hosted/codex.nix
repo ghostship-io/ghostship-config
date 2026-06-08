@@ -574,7 +574,7 @@ let
     done
     chmod 0666 /var/run/docker.sock || true
 
-    cd /workspace
+    cd /home/codex
 
     exec su-exec codex:codex env \
       HOME="$HOME" \
@@ -715,7 +715,7 @@ let
         "CODEX_AUTOMATION_DIR=/home/codex/.automation"
         "CODEX_WEBHOOK_PORT=9000"
       ];
-      WorkingDir = "/workspace";
+      WorkingDir = "/home/codex";
       ExposedPorts = {
         "8214/tcp" = { };
         "9000/tcp" = { };
