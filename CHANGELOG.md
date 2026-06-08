@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.69] - 2026-06-08
+
+- **OpenCode agent tooling fallback**: Teach Codex agent maintenance to fall
+  back to OpenCode's architecture-specific npm package when `opencode-ai`
+  selects an incompatible platform package, and make the flake-installed
+  `opencode` wrapper tolerate that fallback binary layout in Nix images that
+  do not expose the glibc loader at the fallback binary's FHS path.
+
 ## [2.1.68] - 2026-06-08
 
 - **Codex agent tooling flake installer**: Add

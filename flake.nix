@@ -159,11 +159,55 @@
               cat > "$target_home/.local/bin/$name" <<EOF
             #!/usr/bin/env sh
             set -eu
+            find_nix_glibc_loader() {
+              case "\$(uname -m)" in
+                aarch64|arm64)
+                  loader_name="ld-linux-aarch64.so.1"
+                  ;;
+                x86_64|amd64)
+                  loader_name="ld-linux-x86-64.so.2"
+                  ;;
+                *)
+                  return 1
+                  ;;
+              esac
+
+              for store_dir in /nix/store "$target_home/.local/share/nix/root/nix/store"; do
+                if [ ! -d "\$store_dir" ]; then
+                  continue
+                fi
+
+                for candidate in "\$store_dir"/*-glibc-*/lib/"\$loader_name"; do
+                  if [ -x "\$candidate" ]; then
+                    printf '%s\n' "\$candidate"
+                    return 0
+                  fi
+                done
+              done
+
+              return 1
+            }
+
             agent_bin="$target_home/.local/share/ghostship-agent-tools/npm/bin/$binary"
+            if [ "$name" = "opencode" ]; then
+              for candidate in "$target_home"/.local/share/ghostship-agent-tools/npm/lib/node_modules/opencode-linux-*/bin/opencode; do
+                if [ -x "\$candidate" ]; then
+                  agent_bin="\$candidate"
+                  break
+                fi
+              done
+            fi
             if [ ! -x "\$agent_bin" ]; then
               printf 'error: %s is not installed yet; run ghostship-agent-maintenance\n' "$name" >&2
               exit 1
             fi
+            case "\$agent_bin" in
+              */opencode-linux-*/bin/opencode)
+                if loader="\$(find_nix_glibc_loader)"; then
+                  exec "\$loader" --library-path "\''${loader%/*}" "\$agent_bin" "\$@"
+                fi
+                ;;
+            esac
             exec "\$agent_bin" "\$@"
             EOF
               chmod 0755 "$target_home/.local/bin/$name"

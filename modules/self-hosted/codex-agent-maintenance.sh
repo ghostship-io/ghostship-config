@@ -37,6 +37,109 @@ install_agent_cli() {
   fi
 }
 
+opencode_loader_name() {
+  case "$(uname -m)" in
+    aarch64|arm64)
+      printf '%s\n' "ld-linux-aarch64.so.1"
+      ;;
+    x86_64|amd64)
+      printf '%s\n' "ld-linux-x86-64.so.2"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+find_nix_glibc_loader() {
+  loader_name="$(opencode_loader_name)" || return 1
+
+  for store_dir in /nix/store "$HOME/.local/share/nix/root/nix/store"; do
+    if [ ! -d "$store_dir" ]; then
+      continue
+    fi
+
+    for candidate in "$store_dir"/*-glibc-*/lib/"$loader_name"; do
+      if [ -x "$candidate" ]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done
+  done
+
+  return 1
+}
+
+install_opencode_platform_wrapper() {
+  platform_package="$1"
+  fallback_bin="$NPM_CONFIG_PREFIX/lib/node_modules/$platform_package/bin/opencode"
+
+  if [ ! -x "$fallback_bin" ]; then
+    log_warn "$platform_package binary is missing, continuing"
+    return 0
+  fi
+
+  loader="$(find_nix_glibc_loader || true)"
+
+  rm -f "$NPM_CONFIG_PREFIX/bin/opencode"
+  cat > "$NPM_CONFIG_PREFIX/bin/opencode" <<EOF
+#!/usr/bin/env sh
+set -eu
+fallback_bin='$fallback_bin'
+loader='$loader'
+if [ -n "\$loader" ]; then
+  exec "\$loader" --library-path "\${loader%/*}" "\$fallback_bin" "\$@"
+fi
+exec "\$fallback_bin" "\$@"
+EOF
+  chmod 0755 "$NPM_CONFIG_PREFIX/bin/opencode"
+}
+
+install_opencode_cli() {
+  log_info "installing or upgrading opencode"
+
+  rm -f "$NPM_CONFIG_PREFIX/bin/opencode"
+
+  if install_output="$(npm install -g --no-fund --no-audit opencode-ai@latest 2>&1)"; then
+    if [ -n "$install_output" ]; then
+      printf '%s\n' "$install_output" >&2
+    fi
+    return 0
+  fi
+
+  log_warn "opencode install failed, trying platform package"
+  if [ -n "$install_output" ]; then
+    printf '%s\n' "$install_output" >&2
+  fi
+
+  case "$(uname -m)" in
+    aarch64|arm64)
+      platform_package="opencode-linux-arm64"
+      ;;
+    x86_64|amd64)
+      platform_package="opencode-linux-x64"
+      ;;
+    *)
+      log_warn "unsupported opencode fallback architecture: $(uname -m)"
+      return 0
+      ;;
+  esac
+
+  if ! platform_output="$(npm install -g --no-fund --no-audit "$platform_package@latest" 2>&1)"; then
+    log_warn "$platform_package install failed, continuing"
+    if [ -n "$platform_output" ]; then
+      printf '%s\n' "$platform_output" >&2
+    fi
+    return 0
+  fi
+
+  if [ -n "$platform_output" ]; then
+    printf '%s\n' "$platform_output" >&2
+  fi
+
+  install_opencode_platform_wrapper "$platform_package"
+}
+
 remove_stale_openspec_cli() {
   log_info "removing stale openspec CLI"
   rm -f "$NPM_CONFIG_PREFIX/bin/openspec"
@@ -206,7 +309,7 @@ mkdir -p "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
 install_agent_cli "@openai/codex" "codex"
 install_agent_cli "@google/gemini-cli" "gemini"
-install_agent_cli "opencode-ai" "opencode"
+install_opencode_cli
 install_agent_cli "skills" "skills"
 remove_stale_openspec_cli
 refresh_global_skills
