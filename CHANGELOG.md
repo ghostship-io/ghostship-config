@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.75] - 2026-06-15
+
+- **Codex user tool path**: Expose mutable Codex-user tooling only through
+  `/home/codex/.local/bin`, keep npm-backed agent installs under internal
+  `ghostship-agent-tools` state, and initialize the standard XDG user
+  directories in the hosted Codex image.
+
 ## [2.1.74] - 2026-06-08
 
 - **Codex container Nix logs**: Make `/nix/var/log/nix` writable by the

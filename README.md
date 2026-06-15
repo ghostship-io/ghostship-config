@@ -213,8 +213,9 @@ persisted Codex home. Host startup copies `ghostship-agent-maintenance`, the
 shared AGENTS files, and repo-managed skills into persisted `/home/codex`; container
 setup runs that external maintenance script as the `codex` user so Codex,
 Gemini, OpenCode, skills, and browser runtime updates can land without
-rebuilding the image. Mutable agent CLIs install under
-`/home/codex/.local/share/ghostship-agent-tools/npm/bin`. When the image
+rebuilding the image. Codex exposes mutable user tooling through
+`/home/codex/.local/bin`; package-specific install state stays internal under
+`/home/codex/.local/share/ghostship-agent-tools`. When the image
 generation changes, startup clears the Codex user's mutable Nix state from
 `/home/codex` so Nix's per-user validity database and profiles cannot point at
 paths from the previous image.

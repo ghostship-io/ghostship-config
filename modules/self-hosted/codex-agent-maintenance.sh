@@ -6,9 +6,11 @@ export HOME=/home/codex
 export USER=codex
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 export NPM_CONFIG_PREFIX="$HOME/.local/share/ghostship-agent-tools/npm"
 export npm_config_prefix="$NPM_CONFIG_PREFIX"
-export PATH="$NPM_CONFIG_PREFIX/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 
 log_info() {
   printf 'info: %s\n' "$1" >&2
@@ -145,6 +147,23 @@ remove_stale_openspec_cli() {
   rm -f "$NPM_CONFIG_PREFIX/bin/openspec"
   rm -rf "$NPM_CONFIG_PREFIX/lib/node_modules/@fission-ai/openspec"
   rmdir "$NPM_CONFIG_PREFIX/lib/node_modules/@fission-ai" 2>/dev/null || true
+}
+
+install_user_shim() {
+  name="$1"
+  target="$2"
+
+  cat > "$HOME/.local/bin/$name" <<EOF
+#!/usr/bin/env sh
+set -eu
+target='$target'
+if [ ! -x "\$target" ]; then
+  printf 'error: %s is not installed yet; run ghostship-agent-maintenance\n' "$name" >&2
+  exit 1
+fi
+exec "\$target" "\$@"
+EOF
+  chmod 0755 "$HOME/.local/bin/$name"
 }
 
 refresh_global_skills() {
@@ -305,13 +324,18 @@ refresh_opencode_programming_free_models() {
   rm -f "$response_file"
 }
 
-mkdir -p "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
+mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
 install_agent_cli "@openai/codex" "codex"
 install_agent_cli "@google/gemini-cli" "gemini"
 install_opencode_cli
 install_agent_cli "skills" "skills"
 remove_stale_openspec_cli
+install_user_shim "codex" "$NPM_CONFIG_PREFIX/bin/codex"
+install_user_shim "gemini" "$NPM_CONFIG_PREFIX/bin/gemini"
+install_user_shim "gemini-cli" "$NPM_CONFIG_PREFIX/bin/gemini"
+install_user_shim "opencode" "$NPM_CONFIG_PREFIX/bin/opencode"
+install_user_shim "skills" "$NPM_CONFIG_PREFIX/bin/skills"
 refresh_global_skills
 ensure_agent_browser_runtime
 refresh_gemini_extension "gemini-cli-security" "https://github.com/gemini-cli-extensions/security"

@@ -232,7 +232,11 @@ let
   codexRuntimeEnv = ''
     export HOME=/home/codex
     export USER=codex
-    export PATH=${codexAgentTooling.agentBinDir}:${codexPath}:$PATH
+    export XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}"
+    export XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}"
+    export XDG_CACHE_HOME="''${XDG_CACHE_HOME:-$HOME/.cache}"
+    export XDG_DATA_HOME="''${XDG_DATA_HOME:-$HOME/.local/share}"
+    export PATH=$HOME/.local/bin:${codexPath}:$PATH
     export DOCKER_HOST=unix:///var/run/docker.sock
     export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     export SSL_CERT_FILE=$NIX_SSL_CERT_FILE
@@ -521,7 +525,7 @@ let
 
     ${codexRuntimeEnv}
 
-    mkdir -p "$HOME/.ollama/models" "$HOME/.codex" "$HOME/.agents/skills" "$HOME/.gemini" "$HOME/.config/opencode" "$CODEX_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
+    mkdir -p "$HOME/.local/bin" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$HOME/.ollama/models" "$HOME/.codex" "$HOME/.agents/skills" "$HOME/.gemini" "$HOME/.config/opencode" "$CODEX_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
     chown -R codex:codex "$HOME" /workspace
     if [ -x "$HOME/.local/bin/ghostship-agent-maintenance" ]; then
       exec su-exec codex:codex "$HOME/.local/bin/ghostship-agent-maintenance"
@@ -707,7 +711,11 @@ let
         "HOME=/home/codex"
         "USER=codex"
         "DOCKER_HOST=unix:///var/run/docker.sock"
-        "PATH=${codexPath}"
+        "XDG_CONFIG_HOME=/home/codex/.config"
+        "XDG_STATE_HOME=/home/codex/.local/state"
+        "XDG_CACHE_HOME=/home/codex/.cache"
+        "XDG_DATA_HOME=/home/codex/.local/share"
+        "PATH=/home/codex/.local/bin:${codexPath}"
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "NIX_CONFIG=experimental-features = nix-command flakes"
@@ -784,6 +792,9 @@ in
             install -d -m0755 -o 3000 -g 3000 ${codexAutomation}
             install -d -m0755 -o 3000 -g 3000 ${codexAutomation}/tasks
             install -d -m0755 -o 3000 -g 3000 ${codexHome}/.local/bin
+            install -d -m0755 -o 3000 -g 3000 ${codexHome}/.local/share
+            install -d -m0755 -o 3000 -g 3000 ${codexHome}/.local/state
+            install -d -m0755 -o 3000 -g 3000 ${codexHome}/.cache
             install -d -m0755 -o 3000 -g 3000 ${codexHome}/.codex
             install -d -m0755 -o 3000 -g 3000 ${codexHome}/.gemini
             install -d -m0755 -o 3000 -g 3000 ${codexHome}/.config/opencode
