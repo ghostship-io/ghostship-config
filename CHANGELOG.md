@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.92] - 2026-06-19
+
+- **OpenChamber agent state**: Stop deleting persisted `.agent-browser` and
+  `.agents` state during container startup so agent tooling can be managed
+  entirely from inside the container.
+
 ## [2.1.91] - 2026-06-19
 
 - **OpenChamber persisted tools**: Stop managing `/home/openchamber/.nix-profile`

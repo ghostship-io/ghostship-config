@@ -275,8 +275,6 @@ let
     mkdir -p "$HOME/.local/bin" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$HOME/.config/openchamber" "$HOME/.config/opencode" "$OPENCHAMBER_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
     rm -f "$OPENCHAMBER_AUTOMATION_DIR/ghostship-agent-bootstrap.Taskfile.yml"
     rm -rf \
-      "$HOME/.agent-browser" \
-      "$HOME/.agents" \
       "$HOME/.codex" \
       "$HOME/.gemini" \
       "$HOME/.local/state/codex" \
