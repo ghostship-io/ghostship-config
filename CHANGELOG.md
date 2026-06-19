@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.79] - 2026-06-19
+
+- **Homepage service grouping cleanup**: Prune stale Codex entries from
+  Homepage's Management group now that Codex belongs under Services.
+
 ## [2.1.78] - 2026-06-19
 
 - **Agent dashboard placement**: Move OpenChamber and Codex into Homepage's
