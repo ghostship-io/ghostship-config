@@ -57,6 +57,7 @@ let
   ];
 
   openchamberPath = lib.makeBinPath openchamberPackages;
+  openchamberProfileInstallArgs = lib.escapeShellArgs (map builtins.toString openchamberPackages);
   openchamberRuntimeEnv = ''
     export HOME=/home/openchamber
     export USER=openchamber
@@ -276,43 +277,11 @@ let
     if [ -d "$HOME/.nix-profile" ] && [ ! -L "$HOME/.nix-profile" ]; then
       mv "$HOME/.nix-profile" "$HOME/.nix-profile.empty.$(date +%s)"
     fi
-    bootstrap_taskfile="$OPENCHAMBER_AUTOMATION_DIR/ghostship-agent-bootstrap.Taskfile.yml"
-    if [ -L "$bootstrap_taskfile" ]; then
-      rm -f "$bootstrap_taskfile"
+    rm -f "$OPENCHAMBER_AUTOMATION_DIR/ghostship-agent-bootstrap.Taskfile.yml"
+    if [ ! -x "$HOME/.nix-profile/bin/git" ] || [ ! -x "$HOME/.nix-profile/bin/7z" ]; then
+      su-exec openchamber:openchamber \
+        nix profile install ${openchamberProfileInstallArgs}
     fi
-    cat > "$bootstrap_taskfile" <<'EOF'
-    version: '3'
-
-    tasks:
-      bootstrap:
-        desc: Install Ghostship agent user tooling from the workspace repo.
-        cmds:
-          - |
-            set -eu
-
-            repo="''${CODEX_AGENT_TOOLING_REPO:-/workspace/ghostship-agent}"
-            state_dir="$HOME/.local/state/ghostship-agent"
-            activation_link="$state_dir/home-manager-activation"
-            stamp="$state_dir/home-manager-activation.rev"
-
-            mkdir -p "$state_dir"
-            if [ -x "$HOME/.nix-profile/bin/agent" ]; then
-              exit 0
-            fi
-
-            if [ ! -e "$repo/flake.nix" ]; then
-              printf 'warn: ghostship-agent flake checkout is missing: %s\n' "$repo" >&2
-              exit 0
-            fi
-
-            rev="$(git -C "$repo" rev-parse HEAD 2>/dev/null || printf 'unknown')"
-            rm -f "$activation_link"
-            nix build "$repo#homeConfigurations.codex.activationPackage" -o "$activation_link"
-            "$activation_link/activate"
-            printf '%s\n' "$rev" > "$stamp"
-    EOF
-    chown openchamber:openchamber "$bootstrap_taskfile"
-    chmod 0644 "$bootstrap_taskfile"
     rm -rf \
       "$HOME/.agent-browser" \
       "$HOME/.agents" \
@@ -328,11 +297,6 @@ let
     chown -R openchamber:openchamber "$HOME" /workspace
     su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
 
-    if [ -e "$bootstrap_taskfile" ] && [ ! -x "$HOME/.nix-profile/bin/agent" ]; then
-      su-exec openchamber:openchamber \
-        task -t "$bootstrap_taskfile" bootstrap || \
-        printf 'warn: openchamber profile bootstrap failed; continuing startup\n' >&2
-    fi
   '';
 
   openchamberDockerdRun = pkgs.writeShellScriptBin "openchamber-svc-dockerd-run" ''
@@ -550,6 +514,7 @@ in
         chown 3000:3000 ${openchamberAutomation}/crontab
         chmod 0644 ${openchamberAutomation}/crontab
       fi
+      ${pkgs.gnused}/bin/sed -i '\|ghostship-agent-bootstrap.Taskfile.yml|d' ${openchamberAutomation}/crontab
 
       if [ ! -e ${openchamberAutomation}/hooks.json ]; then
         cat > ${openchamberAutomation}/hooks.json <<'EOF'

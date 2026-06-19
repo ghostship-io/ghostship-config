@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.88] - 2026-06-19
+
+- **OpenChamber Nix profile**: Seed `/home/openchamber/.nix-profile` from the
+  OpenChamber image package set instead of the Codex Home Manager activation,
+  and prune the migrated `ghostship-agent-bootstrap` cron entry.
+
 ## [2.1.87] - 2026-06-19
 
 - **OpenChamber bootstrap resilience**: Regenerate the fallback agent bootstrap
