@@ -517,7 +517,7 @@ in
                 continue
               }
               printf "%s", section_data[name]
-              if (name == "Homepage" && ("OpenChamber" in section_data)) {
+              if (name == "Grimmory" && ("OpenChamber" in section_data)) {
                 printf "%s", section_data["OpenChamber"]
               }
               if (name == "NZBGet" && ("qBittorrent" in section_data)) {
@@ -531,7 +531,7 @@ in
             if (!("Tautulli" in section_data) && ("Chaptarr" in section_data)) {
               printf "%s", section_data["Chaptarr"]
             }
-            if (!("Homepage" in section_data) && ("OpenChamber" in section_data)) {
+            if (!("Grimmory" in section_data) && ("OpenChamber" in section_data)) {
               printf "%s", section_data["OpenChamber"]
             }
           }

@@ -195,6 +195,18 @@ in
             "[Services].[pyLoad].server=literal:chill-penguin"
             "[Services].[pyLoad].container=literal:pyload"
 
+            "[Services].[OpenChamber].icon=literal:mdi-code-braces-#111827"
+            "[Services].[OpenChamber].href=literal:https://openchamber.ghostship.io"
+            "[Services].[OpenChamber].description=literal:OpenChamber Web"
+            "[Services].[OpenChamber].server=literal:chill-penguin"
+            "[Services].[OpenChamber].container=literal:openchamber"
+
+            "[Services].[Codex].icon=literal:si-openai-#10a37f"
+            "[Services].[Codex].href=literal:https://codex.ghostship.io"
+            "[Services].[Codex].description=literal:Codex Web"
+            "[Services].[Codex].server=literal:chill-penguin"
+            "[Services].[Codex].container=literal:codex"
+
             # Management group
             "[Management].[Homepage].icon=literal:sh-homepage"
             "[Management].[Homepage].description=literal:Dashboard"
@@ -205,12 +217,6 @@ in
             "[Management].[Muximux].description=literal:Lightweight Portal"
             "[Management].[Muximux].server=literal:chill-penguin"
             "[Management].[Muximux].container=literal:muximux"
-
-            "[Management].[Codex].icon=literal:si-openai-#10a37f"
-            "[Management].[Codex].href=literal:https://codex.ghostship.io"
-            "[Management].[Codex].description=literal:Codex Web"
-            "[Management].[Codex].server=literal:chill-penguin"
-            "[Management].[Codex].container=literal:codex"
 
             "[Management].[CloakBrowser].icon=literal:sh-google-chrome"
             "[Management].[CloakBrowser].href=literal:https://cloakbrowser.ghostship.io"

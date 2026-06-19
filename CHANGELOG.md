@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.78] - 2026-06-19
+
+- **Agent dashboard placement**: Move OpenChamber and Codex into Homepage's
+  Services group and order OpenChamber after Grimmory in Muximux.
+
 ## [2.1.77] - 2026-06-19
 
 - **RSS Bridge retirement**: Remove RSS Bridge from the active self-hosted

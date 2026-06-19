@@ -186,7 +186,7 @@ inventory. Services use Podman, native healthchecks, and registry auto-update.
 Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
-Key services include Plex, Homepage, Muximux, Codex, the `arr` stack,
+Key services include Plex, Homepage, Muximux, OpenChamber, Codex, the `arr` stack,
 qBittorrent, SearXNG, RomM, Grimmory, Chaptarr,
 PyLoad, PriceBuddy, and n8n.
 
