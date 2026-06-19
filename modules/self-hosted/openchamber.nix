@@ -10,7 +10,6 @@ let
   openchamberDocker = "/srv/apps/openchamber/docker";
   openchamberWorkspace = "/srv/apps/openchamber/workspace";
   openchamberAutomation = "${openchamberHome}/.automation";
-  openchamberImageStateMarker = "${openchamberHome}/.local/share/ghostship-openchamber/image-generation";
   imageName = "localhost/ghostship-openchamber";
   imageTag = "openchamber-${inputs.self.shortRev or inputs.self.rev or "dirty"}";
 
@@ -273,17 +272,13 @@ let
     ${openchamberRuntimeEnv}
 
     mkdir -p "$HOME/.local/bin" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$HOME/.config/openchamber" "$HOME/.config/opencode" "$OPENCHAMBER_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
-    rm -f "$OPENCHAMBER_AUTOMATION_DIR/ghostship-agent-bootstrap.Taskfile.yml"
     rm -rf \
       "$HOME/.codex" \
       "$HOME/.gemini" \
       "$HOME/.local/state/codex" \
       "$HOME/.local/bin/codex" \
       "$HOME/.local/bin/gemini" \
-      "$HOME/.local/bin/gemini-cli" \
-      "$HOME/.local/bin/skills" \
-      "$HOME/.config/opencode/AGENTS.md"
-    chown -R openchamber:openchamber "$HOME" /workspace
+      "$HOME/.local/bin/gemini-cli"
     su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
 
   '';
@@ -503,8 +498,6 @@ in
         chown 3000:3000 ${openchamberAutomation}/crontab
         chmod 0644 ${openchamberAutomation}/crontab
       fi
-      ${pkgs.gnused}/bin/sed -i 's/Codex container/OpenChamber container/g' ${openchamberAutomation}/crontab
-      ${pkgs.gnused}/bin/sed -i '\|ghostship-agent-bootstrap.Taskfile.yml|d' ${openchamberAutomation}/crontab
 
       if [ ! -e ${openchamberAutomation}/hooks.json ]; then
         cat > ${openchamberAutomation}/hooks.json <<'EOF'
@@ -531,23 +524,6 @@ in
       EOF
         chown 3000:3000 ${openchamberAutomation}/Taskfile.yml
         chmod 0644 ${openchamberAutomation}/Taskfile.yml
-      fi
-
-      current_image_state=""
-      if [ -e ${openchamberImageStateMarker} ]; then
-        current_image_state="$(cat ${openchamberImageStateMarker})"
-      fi
-
-      if [ "$current_image_state" != "${openchamberImage}" ]; then
-        rm -rf \
-          ${openchamberHome}/.cache/nix \
-          ${openchamberHome}/.local/share/nix \
-          ${openchamberHome}/.local/state/nix \
-          ${openchamberHome}/.nix-profile
-
-        install -d -m0755 -o 3000 -g 3000 "$(dirname ${openchamberImageStateMarker})"
-        printf '%s\n' "${openchamberImage}" > ${openchamberImageStateMarker}
-        chown 3000:3000 ${openchamberImageStateMarker}
       fi
     '';
   };

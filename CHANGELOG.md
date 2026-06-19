@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.93] - 2026-06-19
+
+- **OpenChamber agent ownership**: Stop deleting or rewriting persisted
+  Ghostship agent files, Nix state, cron entries, skills links, and OpenCode
+  `AGENTS.md`; only seed OpenChamber defaults when missing.
+
 ## [2.1.92] - 2026-06-19
 
 - **OpenChamber agent state**: Stop deleting persisted `.agent-browser` and
