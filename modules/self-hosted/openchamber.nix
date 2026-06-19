@@ -75,6 +75,14 @@ let
     export OPENCHAMBER_WEBHOOK_PORT="''${OPENCHAMBER_WEBHOOK_PORT:-9000}"
   '';
 
+  sourceHmSessionVarsIfPresent = ''
+    hm_session_vars="\$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
+    if [ -f "\$hm_session_vars" ]; then
+      # shellcheck disable=SC1090
+      . "\$hm_session_vars"
+    fi
+  '';
+
   openchamberToolMaintenance = pkgs.writeShellScriptBin "openchamber-tool-maintenance" ''
     set -eu
 
@@ -156,6 +164,7 @@ let
       cat > "$NPM_CONFIG_PREFIX/bin/opencode" <<EOF
     #!/usr/bin/env sh
     set -eu
+    ${sourceHmSessionVarsIfPresent}
     fallback_bin='$fallback_bin'
     loader='$loader'
     if [ -n "\$loader" ]; then
@@ -228,12 +237,29 @@ let
       chmod 0755 "$HOME/.local/bin/$name"
     }
 
+    install_opencode_user_shim() {
+      target="$1"
+
+      cat > "$HOME/.local/bin/opencode" <<EOF
+    #!/usr/bin/env sh
+    set -eu
+    ${sourceHmSessionVarsIfPresent}
+    target='$target'
+    if [ ! -x "\$target" ]; then
+      printf 'error: opencode is not installed yet; run openchamber-tool-maintenance\n' >&2
+      exit 1
+    fi
+    exec "\$target" "\$@"
+    EOF
+      chmod 0755 "$HOME/.local/bin/opencode"
+    }
+
     mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
     install_agent_cli "@openchamber/web" "openchamber"
     install_opencode_cli
     install_user_shim "openchamber" "$NPM_CONFIG_PREFIX/bin/openchamber"
-    install_user_shim "opencode" "$NPM_CONFIG_PREFIX/bin/opencode"
+    install_opencode_user_shim "$NPM_CONFIG_PREFIX/bin/opencode"
   '';
 
   openchamberContainerSetup = pkgs.writeShellScriptBin "openchamber-container-setup" ''

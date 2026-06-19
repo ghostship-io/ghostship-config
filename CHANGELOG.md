@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.80] - 2026-06-19
+
+- **OpenChamber OpenCode environment**: Make generated OpenCode wrappers source
+  `/home/openchamber/.nix-profile/etc/profile.d/hm-session-vars.sh` when it
+  exists, without requiring a Home Manager profile.
+
 ## [2.1.79] - 2026-06-19
 
 - **Homepage service grouping cleanup**: Prune stale Codex entries from
