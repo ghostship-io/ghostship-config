@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.77] - 2026-06-19
+
+- **RSS Bridge retirement**: Remove RSS Bridge from the active self-hosted
+  stack, Homepage, and Muximux, and add cleanup for its Podman unit, container,
+  image, and `/srv/apps/rss-bridge` config.
+
 ## [2.1.76] - 2026-06-19
 
 - **OpenChamber self-hosted service**: Add a repo-built OpenChamber image for

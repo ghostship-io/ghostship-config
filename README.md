@@ -188,7 +188,7 @@ internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, Codex, the `arr` stack,
 qBittorrent, SearXNG, RomM, Grimmory, Chaptarr,
-PyLoad, RSS-Bridge, PriceBuddy, and n8n.
+PyLoad, PriceBuddy, and n8n.
 
 Retired `chill-penguin` self-hosted service artifacts are cleaned from the
 allowlist in

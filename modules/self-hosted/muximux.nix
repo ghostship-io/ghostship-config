@@ -460,13 +460,6 @@ in
           pyLoad.color=literal:"#ffcc00"
           pyLoad.enabled=literal:"true"
           pyLoad.dd=literal:"true"
-          RSS-Bridge.name=literal:"RSS-Bridge"
-          RSS-Bridge.url=literal:"https://rss-bridge.ghostship.io"
-          RSS-Bridge.scale=literal:1
-          RSS-Bridge.icon=literal:"fa-rss-square"
-          RSS-Bridge.color=literal:"#f97316"
-          RSS-Bridge.enabled=literal:"true"
-          RSS-Bridge.dd=literal:"true"
         )
 
         ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${mux_args[@]}"

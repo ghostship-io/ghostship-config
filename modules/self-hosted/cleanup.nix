@@ -381,6 +381,16 @@ let
       ];
       muximuxSections = [ "Prefect" ];
     }
+    {
+      name = "rss-bridge";
+      paths = [ "/srv/apps/rss-bridge" ];
+      units = [ "podman-rss-bridge" ];
+      containers = [ "rss-bridge" ];
+      imageRefs = [ "docker.io/rssbridge/rss-bridge:latest" ];
+      imageRepositories = [ "docker.io/rssbridge/rss-bridge" ];
+      homepageEntries = [ "RSS-Bridge" ];
+      muximuxSections = [ "RSS-Bridge" ];
+    }
   ];
 
   renderCommands =

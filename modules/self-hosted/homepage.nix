@@ -195,11 +195,6 @@ in
             "[Services].[pyLoad].server=literal:chill-penguin"
             "[Services].[pyLoad].container=literal:pyload"
 
-            "[Services].[RSS-Bridge].icon=literal:rss-bridge"
-            "[Services].[RSS-Bridge].description=literal:Feed Bridge"
-            "[Services].[RSS-Bridge].server=literal:chill-penguin"
-            "[Services].[RSS-Bridge].container=literal:rss-bridge"
-
             # Management group
             "[Management].[Homepage].icon=literal:sh-homepage"
             "[Management].[Homepage].description=literal:Dashboard"
