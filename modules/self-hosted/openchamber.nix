@@ -57,7 +57,11 @@ let
   ];
 
   openchamberPath = lib.makeBinPath openchamberPackages;
-  openchamberProfileInstallArgs = lib.escapeShellArgs (map builtins.toString openchamberPackages);
+  openchamberProfile = pkgs.buildEnv {
+    name = "openchamber-profile";
+    paths = openchamberPackages;
+    ignoreCollisions = true;
+  };
   openchamberRuntimeEnv = ''
     export HOME=/home/openchamber
     export USER=openchamber
@@ -280,7 +284,7 @@ let
     rm -f "$OPENCHAMBER_AUTOMATION_DIR/ghostship-agent-bootstrap.Taskfile.yml"
     if [ ! -x "$HOME/.nix-profile/bin/git" ] || [ ! -x "$HOME/.nix-profile/bin/7z" ]; then
       su-exec openchamber:openchamber \
-        nix profile install ${openchamberProfileInstallArgs}
+        nix profile install ${openchamberProfile}
     fi
     rm -rf \
       "$HOME/.agent-browser" \

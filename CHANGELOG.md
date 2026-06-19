@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.89] - 2026-06-19
+
+- **OpenChamber profile package**: Install the seeded OpenChamber Nix profile
+  as one curated `buildEnv` package to avoid package-file collisions.
+
 ## [2.1.88] - 2026-06-19
 
 - **OpenChamber Nix profile**: Seed `/home/openchamber/.nix-profile` from the
