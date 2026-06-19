@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.76] - 2026-06-19
+
+- **OpenChamber self-hosted service**: Add a repo-built OpenChamber image for
+  `chill-penguin` with s6-managed Docker-in-Docker, OpenChamber, Supercronic,
+  and webhook services, persistent `/home/openchamber` state under
+  `/srv/apps/openchamber`, OpenCode installed for OpenChamber to start, no UI
+  password configuration, and Muximux updated to make OpenChamber the primary
+  agent link while moving Codex into the dropdown.
+
 ## [2.1.75] - 2026-06-15
 
 - **Codex user tool path**: Expose mutable Codex-user tooling only through

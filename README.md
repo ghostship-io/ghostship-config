@@ -236,6 +236,15 @@ ollama.com model list filtered to models tagged `tools`, `thinking`, and
 Bitwarden runtime variables `BW_CLIENTID`, `BW_CLIENTSECRET`, and `BW_PASSWORD`
 from the shared Bitwarden secret projection at startup.
 
+OpenChamber runs as a separate repo-built Podman OCI image for
+`https://openchamber.ghostship.io`. It uses the `openchamber` user at
+`3000:3000`, keeps `/workspace`, `/home/openchamber`, and Docker state under
+`/srv/apps/openchamber`, and starts s6-managed `dockerd`, OpenChamber,
+Supercronic, and webhook services. OpenChamber installs only `@openchamber/web`
+and `opencode-ai` into `/home/openchamber/.local/share/openchamber-tools`,
+exposes `/home/openchamber/.local/bin` first on `PATH`, and does not configure a
+UI password.
+
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts
 from the cached winner in `/srv/apps/gluetun/pia-wireguard-selection.json`, and

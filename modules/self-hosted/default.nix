@@ -32,6 +32,7 @@
     ./cloakbrowser.nix
     ./rss-bridge.nix
     ./codex.nix
+    ./openchamber.nix
 
     # Games
     ./romm-db.nix

@@ -354,13 +354,20 @@ in
           Homepage.color=literal:"#109f61"
           Homepage.enabled=literal:"true"
           Homepage.default=literal:"true"
+          OpenChamber.name=literal:"OpenChamber"
+          OpenChamber.url=literal:"https://openchamber.ghostship.io"
+          OpenChamber.scale=literal:1
+          OpenChamber.icon=literal:"muximux-code"
+          OpenChamber.color=literal:"#111827"
+          OpenChamber.enabled=literal:"true"
+          OpenChamber.dd=literal:"false"
           Codex.name=literal:"Codex"
           Codex.url=literal:"https://codex.ghostship.io"
           Codex.scale=literal:1
           Codex.icon=literal:"muximux-code"
           Codex.color=literal:"#111827"
           Codex.enabled=literal:"true"
-          Codex.dd=literal:"false"
+          Codex.dd=literal:"true"
           Synology.name=literal:"Synology"
           Synology.url=literal:"https://synology.ghostship.io"
           Synology.scale=literal:1
@@ -513,14 +520,13 @@ in
 
             for (i = 1; i <= section_count; i++) {
               name = section_order[i]
-              if (name == "Honcho" || name == "Codex" || name == "BookStack" || name == "Chaptarr" || name == "Hatchet" || name == "Prefect" || name == "Windmill" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection" || name == "OmniTools" || name == "MeTube" || name == "ConvertX" || name == "BentoPDF" || name == "IT Tools" || name == "SearXNG" || name == "qBittorrent" || name == "SSH") {
+              if (name == "Honcho" || name == "OpenChamber" || name == "BookStack" || name == "Chaptarr" || name == "Hatchet" || name == "Prefect" || name == "Windmill" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection" || name == "OmniTools" || name == "MeTube" || name == "ConvertX" || name == "BentoPDF" || name == "IT Tools" || name == "SearXNG" || name == "qBittorrent" || name == "SSH") {
                 continue
               }
-
-              if (name == "CloakBrowser" && ("Codex" in section_data)) {
-                printf "%s", section_data["Codex"]
-              }
               printf "%s", section_data[name]
+              if (name == "Homepage" && ("OpenChamber" in section_data)) {
+                printf "%s", section_data["OpenChamber"]
+              }
               if (name == "NZBGet" && ("qBittorrent" in section_data)) {
                 printf "%s", section_data["qBittorrent"]
               }
@@ -529,11 +535,11 @@ in
               }
             }
 
-            if (!("CloakBrowser" in section_data) && ("Codex" in section_data)) {
-              printf "%s", section_data["Codex"]
-            }
             if (!("Tautulli" in section_data) && ("Chaptarr" in section_data)) {
               printf "%s", section_data["Chaptarr"]
+            }
+            if (!("Homepage" in section_data) && ("OpenChamber" in section_data)) {
+              printf "%s", section_data["OpenChamber"]
             }
           }
         ' "$CONFIG_FILE" > "$temp_file"
