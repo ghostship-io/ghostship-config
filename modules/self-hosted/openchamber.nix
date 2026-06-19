@@ -277,6 +277,9 @@ let
       mv "$HOME/.nix-profile" "$HOME/.nix-profile.empty.$(date +%s)"
     fi
     bootstrap_taskfile="$OPENCHAMBER_AUTOMATION_DIR/ghostship-agent-bootstrap.Taskfile.yml"
+    if [ -L "$bootstrap_taskfile" ]; then
+      rm -f "$bootstrap_taskfile"
+    fi
     if [ ! -e "$bootstrap_taskfile" ]; then
       cat > "$bootstrap_taskfile" <<'EOF'
     version: '3'

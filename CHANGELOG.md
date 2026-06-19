@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.86] - 2026-06-19
+
+- **OpenChamber bootstrap repair**: Replace a stale
+  `.automation/ghostship-agent-bootstrap.Taskfile.yml` symlink with a regular
+  persisted Taskfile before running the startup bootstrap.
+
 ## [2.1.85] - 2026-06-19
 
 - **OpenChamber profile activation**: Stop creating a fake `.nix-profile`
