@@ -60,6 +60,11 @@ let
   openchamberRuntimeEnv = ''
     export HOME=/home/openchamber
     export USER=openchamber
+    hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
+    if [ -f "$hm_session_vars" ]; then
+      # shellcheck disable=SC1090
+      . "$hm_session_vars"
+    fi
     export XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}"
     export XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}"
     export XDG_CACHE_HOME="''${XDG_CACHE_HOME:-$HOME/.cache}"
@@ -319,16 +324,7 @@ let
       "$HOME/.config/openchamber/run/openchamber-3000.json" \
       "$HOME/.config/openchamber/run/openchamber-3000.pid"
 
-    exec su-exec openchamber:openchamber env \
-      HOME="$HOME" \
-      USER="$USER" \
-      PATH="$PATH" \
-      NPM_CONFIG_PREFIX="$NPM_CONFIG_PREFIX" \
-      npm_config_prefix="$NPM_CONFIG_PREFIX" \
-      DOCKER_HOST="$DOCKER_HOST" \
-      NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
-      SSL_CERT_FILE="$SSL_CERT_FILE" \
-      NIX_CONFIG="$NIX_CONFIG" \
+    exec su-exec openchamber:openchamber \
       openchamber serve --host 0.0.0.0 --port 3000 --foreground
   '';
 
@@ -337,15 +333,7 @@ let
 
     ${openchamberRuntimeEnv}
 
-    exec su-exec openchamber:openchamber env \
-      HOME="$HOME" \
-      USER="$USER" \
-      PATH="$PATH" \
-      DOCKER_HOST="$DOCKER_HOST" \
-      NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
-      SSL_CERT_FILE="$SSL_CERT_FILE" \
-      NIX_CONFIG="$NIX_CONFIG" \
-      OPENCHAMBER_AUTOMATION_DIR="$OPENCHAMBER_AUTOMATION_DIR" \
+    exec su-exec openchamber:openchamber \
       supercronic -no-reap -inotify -passthrough-logs "$OPENCHAMBER_AUTOMATION_DIR/crontab"
   '';
 
@@ -356,15 +344,7 @@ let
 
     cd "$OPENCHAMBER_AUTOMATION_DIR"
 
-    exec su-exec openchamber:openchamber env \
-      HOME="$HOME" \
-      USER="$USER" \
-      PATH="$PATH" \
-      DOCKER_HOST="$DOCKER_HOST" \
-      NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE" \
-      SSL_CERT_FILE="$SSL_CERT_FILE" \
-      NIX_CONFIG="$NIX_CONFIG" \
-      OPENCHAMBER_AUTOMATION_DIR="$OPENCHAMBER_AUTOMATION_DIR" \
+    exec su-exec openchamber:openchamber \
       webhook \
         -hooks "$OPENCHAMBER_AUTOMATION_DIR/hooks.json" \
         -hotreload \

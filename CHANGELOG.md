@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.82] - 2026-06-19
+
+- **OpenChamber runner environment**: Source Home Manager session variables
+  before OpenChamber services start and pass the inherited environment through
+  `su-exec` to OpenChamber, supercronic, and webhook.
+
 ## [2.1.81] - 2026-06-19
 
 - **OpenChamber startup cleanup**: Prune migrated agent artifacts from the
