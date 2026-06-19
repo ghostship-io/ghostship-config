@@ -266,6 +266,7 @@ let
 
     ${openchamberRuntimeEnv}
     unset OPENCHAMBER_UI_PASSWORD UI_PASSWORD
+    export OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN=true
 
     for _ in $(seq 1 30); do
       if docker info >/dev/null 2>&1; then
@@ -401,6 +402,7 @@ let
         "NIX_CONFIG=experimental-features = nix-command flakes"
         "OPENCHAMBER_AUTOMATION_DIR=/home/openchamber/.automation"
         "OPENCHAMBER_WEBHOOK_PORT=9000"
+        "OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN=true"
       ];
       WorkingDir = "/home/openchamber";
       ExposedPorts = {
