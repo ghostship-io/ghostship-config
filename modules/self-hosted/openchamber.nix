@@ -273,6 +273,22 @@ let
     ${openchamberRuntimeEnv}
 
     mkdir -p "$HOME/.local/bin" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$HOME/.config/openchamber" "$HOME/.config/opencode" "$OPENCHAMBER_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
+    if [ -L "$HOME/.nix-profile" ] && [ ! -e "$HOME/.nix-profile" ]; then
+      rm -f "$HOME/.nix-profile"
+    fi
+    mkdir -p "$HOME/.nix-profile/bin" "$HOME/.nix-profile/etc/profile.d"
+    cat > "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" <<'EOF'
+    export __HM_SESS_VARS_SOURCED=1
+    case ":''${PATH:-}:" in
+      *":$HOME/.nix-profile/bin:"*) ;;
+      *) export PATH="$HOME/.nix-profile/bin''${PATH:+:$PATH}" ;;
+    esac
+    case ":''${PATH:-}:" in
+      *":$HOME/.local/bin:"*) ;;
+      *) export PATH="$HOME/.local/bin''${PATH:+:$PATH}" ;;
+    esac
+    EOF
+    chmod 0644 "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     rm -rf \
       "$HOME/.agent-browser" \
       "$HOME/.agents" \

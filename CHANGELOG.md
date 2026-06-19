@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.84] - 2026-06-19
+
+- **OpenChamber session profile**: Seed a minimal
+  `/home/openchamber/.nix-profile/etc/profile.d/hm-session-vars.sh` before s6
+  starts OpenChamber so the web process inherits the expected Home Manager path.
+
 ## [2.1.83] - 2026-06-19
 
 - **OpenChamber runner PATH**: Source Home Manager session variables after the
