@@ -57,11 +57,6 @@ let
   ];
 
   openchamberPath = lib.makeBinPath openchamberPackages;
-  openchamberProfile = pkgs.buildEnv {
-    name = "openchamber-profile";
-    paths = openchamberPackages;
-    ignoreCollisions = true;
-  };
   openchamberRuntimeEnv = ''
     export HOME=/home/openchamber
     export USER=openchamber
@@ -71,12 +66,12 @@ let
     export XDG_DATA_HOME="''${XDG_DATA_HOME:-$HOME/.local/share}"
     export NPM_CONFIG_PREFIX="$HOME/.local/share/openchamber-tools/npm"
     export npm_config_prefix="$NPM_CONFIG_PREFIX"
-    export PATH=$HOME/.nix-profile/bin:$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${openchamberPath}:$PATH
     hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     if [ -f "$hm_session_vars" ]; then
       # shellcheck disable=SC1090
       . "$hm_session_vars"
     fi
+    export PATH=$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${openchamberPath}:$PATH
     export DOCKER_HOST=unix:///var/run/docker.sock
     export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     export SSL_CERT_FILE=$NIX_SSL_CERT_FILE
@@ -278,21 +273,13 @@ let
     ${openchamberRuntimeEnv}
 
     mkdir -p "$HOME/.local/bin" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$HOME/.config/openchamber" "$HOME/.config/opencode" "$OPENCHAMBER_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
-    if [ -d "$HOME/.nix-profile" ] && [ ! -L "$HOME/.nix-profile" ]; then
-      mv "$HOME/.nix-profile" "$HOME/.nix-profile.empty.$(date +%s)"
-    fi
     rm -f "$OPENCHAMBER_AUTOMATION_DIR/ghostship-agent-bootstrap.Taskfile.yml"
-    if [ ! -x "$HOME/.nix-profile/bin/git" ] || [ ! -x "$HOME/.nix-profile/bin/7z" ]; then
-      su-exec openchamber:openchamber \
-        nix profile install ${openchamberProfile}
-    fi
     rm -rf \
       "$HOME/.agent-browser" \
       "$HOME/.agents" \
       "$HOME/.codex" \
       "$HOME/.gemini" \
       "$HOME/.local/state/codex" \
-      "$HOME/.local/bin/agent-browser" \
       "$HOME/.local/bin/codex" \
       "$HOME/.local/bin/gemini" \
       "$HOME/.local/bin/gemini-cli" \
@@ -431,7 +418,7 @@ let
         "XDG_DATA_HOME=/home/openchamber/.local/share"
         "NPM_CONFIG_PREFIX=/home/openchamber/.local/share/openchamber-tools/npm"
         "npm_config_prefix=/home/openchamber/.local/share/openchamber-tools/npm"
-        "PATH=/home/openchamber/.nix-profile/bin:/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}"
+        "PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}"
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "NIX_CONFIG=experimental-features = nix-command flakes"

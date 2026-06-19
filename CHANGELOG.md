@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.91] - 2026-06-19
+
+- **OpenChamber persisted tools**: Stop managing `/home/openchamber/.nix-profile`
+  from the image startup path and preserve persisted `.local/bin` agent links
+  for tooling managed inside the container.
+
 ## [2.1.90] - 2026-06-19
 
 - **OpenChamber PATH cleanup**: Put `/home/openchamber/.nix-profile/bin` in
