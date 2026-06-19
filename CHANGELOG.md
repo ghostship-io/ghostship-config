@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.83] - 2026-06-19
+
+- **OpenChamber runner PATH**: Source Home Manager session variables after the
+  container tool path is assembled so `/home/openchamber/.nix-profile/bin`
+  remains visible to OpenChamber runners.
+
 ## [2.1.82] - 2026-06-19
 
 - **OpenChamber runner environment**: Source Home Manager session variables

@@ -60,11 +60,6 @@ let
   openchamberRuntimeEnv = ''
     export HOME=/home/openchamber
     export USER=openchamber
-    hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
-    if [ -f "$hm_session_vars" ]; then
-      # shellcheck disable=SC1090
-      . "$hm_session_vars"
-    fi
     export XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}"
     export XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}"
     export XDG_CACHE_HOME="''${XDG_CACHE_HOME:-$HOME/.cache}"
@@ -72,6 +67,11 @@ let
     export NPM_CONFIG_PREFIX="$HOME/.local/share/openchamber-tools/npm"
     export npm_config_prefix="$NPM_CONFIG_PREFIX"
     export PATH=$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${openchamberPath}:$PATH
+    hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
+    if [ -f "$hm_session_vars" ]; then
+      # shellcheck disable=SC1090
+      . "$hm_session_vars"
+    fi
     export DOCKER_HOST=unix:///var/run/docker.sock
     export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     export SSL_CERT_FILE=$NIX_SSL_CERT_FILE
