@@ -280,8 +280,7 @@ let
     if [ -L "$bootstrap_taskfile" ]; then
       rm -f "$bootstrap_taskfile"
     fi
-    if [ ! -e "$bootstrap_taskfile" ]; then
-      cat > "$bootstrap_taskfile" <<'EOF'
+    cat > "$bootstrap_taskfile" <<'EOF'
     version: '3'
 
     tasks:
@@ -297,6 +296,9 @@ let
             stamp="$state_dir/home-manager-activation.rev"
 
             mkdir -p "$state_dir"
+            if [ -x "$HOME/.nix-profile/bin/agent" ]; then
+              exit 0
+            fi
 
             if [ ! -e "$repo/flake.nix" ]; then
               printf 'warn: ghostship-agent flake checkout is missing: %s\n' "$repo" >&2
@@ -304,18 +306,13 @@ let
             fi
 
             rev="$(git -C "$repo" rev-parse HEAD 2>/dev/null || printf 'unknown')"
-            if [ -x "$HOME/.nix-profile/bin/agent" ] && [ -e "$stamp" ] && [ "$(cat "$stamp")" = "$rev" ]; then
-              exit 0
-            fi
-
             rm -f "$activation_link"
             nix build "$repo#homeConfigurations.codex.activationPackage" -o "$activation_link"
             "$activation_link/activate"
             printf '%s\n' "$rev" > "$stamp"
     EOF
-      chown openchamber:openchamber "$bootstrap_taskfile"
-      chmod 0644 "$bootstrap_taskfile"
-    fi
+    chown openchamber:openchamber "$bootstrap_taskfile"
+    chmod 0644 "$bootstrap_taskfile"
     rm -rf \
       "$HOME/.agent-browser" \
       "$HOME/.agents" \
@@ -333,7 +330,8 @@ let
 
     if [ -e "$bootstrap_taskfile" ] && [ ! -x "$HOME/.nix-profile/bin/agent" ]; then
       su-exec openchamber:openchamber \
-        task -t "$bootstrap_taskfile" bootstrap
+        task -t "$bootstrap_taskfile" bootstrap || \
+        printf 'warn: openchamber profile bootstrap failed; continuing startup\n' >&2
     fi
   '';
 

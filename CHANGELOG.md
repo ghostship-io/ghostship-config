@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.87] - 2026-06-19
+
+- **OpenChamber bootstrap resilience**: Regenerate the fallback agent bootstrap
+  Taskfile at startup, skip Home Manager activation when the existing profile
+  already has `agent`, and keep OpenChamber running if bootstrap activation is
+  incompatible with the `openchamber` user.
+
 ## [2.1.86] - 2026-06-19
 
 - **OpenChamber bootstrap repair**: Replace a stale
