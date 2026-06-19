@@ -71,7 +71,7 @@ let
     export XDG_DATA_HOME="''${XDG_DATA_HOME:-$HOME/.local/share}"
     export NPM_CONFIG_PREFIX="$HOME/.local/share/openchamber-tools/npm"
     export npm_config_prefix="$NPM_CONFIG_PREFIX"
-    export PATH=$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${openchamberPath}:$PATH
+    export PATH=$HOME/.nix-profile/bin:$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${openchamberPath}:$PATH
     hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     if [ -f "$hm_session_vars" ]; then
       # shellcheck disable=SC1090
@@ -431,7 +431,7 @@ let
         "XDG_DATA_HOME=/home/openchamber/.local/share"
         "NPM_CONFIG_PREFIX=/home/openchamber/.local/share/openchamber-tools/npm"
         "npm_config_prefix=/home/openchamber/.local/share/openchamber-tools/npm"
-        "PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}"
+        "PATH=/home/openchamber/.nix-profile/bin:/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}"
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "NIX_CONFIG=experimental-features = nix-command flakes"
@@ -518,6 +518,7 @@ in
         chown 3000:3000 ${openchamberAutomation}/crontab
         chmod 0644 ${openchamberAutomation}/crontab
       fi
+      ${pkgs.gnused}/bin/sed -i 's/Codex container/OpenChamber container/g' ${openchamberAutomation}/crontab
       ${pkgs.gnused}/bin/sed -i '\|ghostship-agent-bootstrap.Taskfile.yml|d' ${openchamberAutomation}/crontab
 
       if [ ! -e ${openchamberAutomation}/hooks.json ]; then

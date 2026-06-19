@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.90] - 2026-06-19
+
+- **OpenChamber PATH cleanup**: Put `/home/openchamber/.nix-profile/bin` in
+  the managed runtime PATH even without Home Manager session vars, and rewrite
+  migrated cron comments that still referenced the Codex container.
+
 ## [2.1.89] - 2026-06-19
 
 - **OpenChamber profile package**: Install the seeded OpenChamber Nix profile
