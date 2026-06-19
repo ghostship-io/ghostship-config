@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.85] - 2026-06-19
+
+- **OpenChamber profile activation**: Stop creating a fake `.nix-profile`
+  directory and run the persisted agent bootstrap before s6 starts so
+  Home Manager recreates `.nix-profile` as the real profile link.
+
 ## [2.1.84] - 2026-06-19
 
 - **OpenChamber session profile**: Seed a minimal

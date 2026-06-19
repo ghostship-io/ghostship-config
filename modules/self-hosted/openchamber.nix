@@ -273,22 +273,46 @@ let
     ${openchamberRuntimeEnv}
 
     mkdir -p "$HOME/.local/bin" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$HOME/.config/openchamber" "$HOME/.config/opencode" "$OPENCHAMBER_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
-    if [ -L "$HOME/.nix-profile" ] && [ ! -e "$HOME/.nix-profile" ]; then
-      rm -f "$HOME/.nix-profile"
+    if [ -d "$HOME/.nix-profile" ] && [ ! -L "$HOME/.nix-profile" ]; then
+      mv "$HOME/.nix-profile" "$HOME/.nix-profile.empty.$(date +%s)"
     fi
-    mkdir -p "$HOME/.nix-profile/bin" "$HOME/.nix-profile/etc/profile.d"
-    cat > "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" <<'EOF'
-    export __HM_SESS_VARS_SOURCED=1
-    case ":''${PATH:-}:" in
-      *":$HOME/.nix-profile/bin:"*) ;;
-      *) export PATH="$HOME/.nix-profile/bin''${PATH:+:$PATH}" ;;
-    esac
-    case ":''${PATH:-}:" in
-      *":$HOME/.local/bin:"*) ;;
-      *) export PATH="$HOME/.local/bin''${PATH:+:$PATH}" ;;
-    esac
+    bootstrap_taskfile="$OPENCHAMBER_AUTOMATION_DIR/ghostship-agent-bootstrap.Taskfile.yml"
+    if [ ! -e "$bootstrap_taskfile" ]; then
+      cat > "$bootstrap_taskfile" <<'EOF'
+    version: '3'
+
+    tasks:
+      bootstrap:
+        desc: Install Ghostship agent user tooling from the workspace repo.
+        cmds:
+          - |
+            set -eu
+
+            repo="''${CODEX_AGENT_TOOLING_REPO:-/workspace/ghostship-agent}"
+            state_dir="$HOME/.local/state/ghostship-agent"
+            activation_link="$state_dir/home-manager-activation"
+            stamp="$state_dir/home-manager-activation.rev"
+
+            mkdir -p "$state_dir"
+
+            if [ ! -e "$repo/flake.nix" ]; then
+              printf 'warn: ghostship-agent flake checkout is missing: %s\n' "$repo" >&2
+              exit 0
+            fi
+
+            rev="$(git -C "$repo" rev-parse HEAD 2>/dev/null || printf 'unknown')"
+            if [ -x "$HOME/.nix-profile/bin/agent" ] && [ -e "$stamp" ] && [ "$(cat "$stamp")" = "$rev" ]; then
+              exit 0
+            fi
+
+            rm -f "$activation_link"
+            nix build "$repo#homeConfigurations.codex.activationPackage" -o "$activation_link"
+            "$activation_link/activate"
+            printf '%s\n' "$rev" > "$stamp"
     EOF
-    chmod 0644 "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
+      chown openchamber:openchamber "$bootstrap_taskfile"
+      chmod 0644 "$bootstrap_taskfile"
+    fi
     rm -rf \
       "$HOME/.agent-browser" \
       "$HOME/.agents" \
@@ -302,7 +326,12 @@ let
       "$HOME/.local/bin/skills" \
       "$HOME/.config/opencode/AGENTS.md"
     chown -R openchamber:openchamber "$HOME" /workspace
-    exec su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
+    su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
+
+    if [ -e "$bootstrap_taskfile" ] && [ ! -x "$HOME/.nix-profile/bin/agent" ]; then
+      su-exec openchamber:openchamber \
+        task -t "$bootstrap_taskfile" bootstrap
+    fi
   '';
 
   openchamberDockerdRun = pkgs.writeShellScriptBin "openchamber-svc-dockerd-run" ''
