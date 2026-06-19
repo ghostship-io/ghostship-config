@@ -268,6 +268,18 @@ let
     ${openchamberRuntimeEnv}
 
     mkdir -p "$HOME/.local/bin" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$HOME/.config/openchamber" "$HOME/.config/opencode" "$OPENCHAMBER_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
+    rm -rf \
+      "$HOME/.agent-browser" \
+      "$HOME/.agents" \
+      "$HOME/.codex" \
+      "$HOME/.gemini" \
+      "$HOME/.local/state/codex" \
+      "$HOME/.local/bin/agent-browser" \
+      "$HOME/.local/bin/codex" \
+      "$HOME/.local/bin/gemini" \
+      "$HOME/.local/bin/gemini-cli" \
+      "$HOME/.local/bin/skills" \
+      "$HOME/.config/opencode/AGENTS.md"
     chown -R openchamber:openchamber "$HOME" /workspace
     exec su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
   '';
@@ -303,6 +315,9 @@ let
     chmod 0666 /var/run/docker.sock || true
 
     cd /home/openchamber
+    rm -f \
+      "$HOME/.config/openchamber/run/openchamber-3000.json" \
+      "$HOME/.config/openchamber/run/openchamber-3000.pid"
 
     exec su-exec openchamber:openchamber env \
       HOME="$HOME" \

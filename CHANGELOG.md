@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.81] - 2026-06-19
+
+- **OpenChamber startup cleanup**: Prune migrated agent artifacts from the
+  OpenChamber home and clear stale OpenChamber port run files before starting
+  the supervised web service.
+
 ## [2.1.80] - 2026-06-19
 
 - **OpenChamber OpenCode environment**: Make generated OpenCode wrappers source
