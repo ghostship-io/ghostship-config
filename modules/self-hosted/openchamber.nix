@@ -374,6 +374,9 @@ let
       Type=oneshot
       ExecStart=${openchamberContainerSetup}/bin/openchamber-container-setup
       RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
       EOF
       cat > etc/systemd/system/dockerd.service <<'EOF'
       [Unit]
@@ -406,6 +409,14 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/multi-user.target <<'EOF'
+      [Unit]
+      Description=OpenChamber Multi-User System
+      Wants=openchamber-container-setup.service dockerd.service openchamber-user-manager.service
+      After=openchamber-container-setup.service dockerd.service openchamber-user-manager.service
+      AllowIsolate=yes
+      EOF
+      ln -s multi-user.target etc/systemd/system/default.target
       ln -s ../openchamber-container-setup.service etc/systemd/system/multi-user.target.wants/openchamber-container-setup.service
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
       ln -s ../openchamber-user-manager.service etc/systemd/system/multi-user.target.wants/openchamber-user-manager.service

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.95] - 2026-06-20
+
+- **OpenChamber systemd boot target**: Add explicit `default.target` and
+  `multi-user.target` units to the OpenChamber image so systemd can boot the
+  generated container services as PID 1.
+
 ## [2.1.94] - 2026-06-20
 
 - **OpenChamber systemd supervision**: Replace the container's s6,
