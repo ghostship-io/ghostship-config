@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.103] - 2026-06-20
+
+- **OpenChamber user unit cleanup**: Remove stale repo-seeded
+  `ghostship-*` user systemd units from the persisted OpenChamber home so the
+  repo no longer leaves installed services in the OpenChamber user manager.
+
 ## [2.1.102] - 2026-06-20
 
 - **OpenChamber system web service**: Run the OpenChamber web process as a

@@ -555,6 +555,23 @@ in
       fi
       rm -f ${openchamberHome}/.config/systemd/user/default.target.wants/openchamber.service
       if [ -d ${openchamberHome}/.config/systemd/user ]; then
+        for unit in \
+          ghostship-agent-repair-install.service \
+          ghostship-agent-repair-install.timer \
+          ghostship-am-collect-browser.service \
+          ghostship-am-collect-browser.timer \
+          ghostship-am-collect-craigslist.service \
+          ghostship-am-collect-craigslist.timer \
+          ghostship-am-collect-public.service \
+          ghostship-am-collect-public.timer \
+          ghostship-am-generate.service \
+          ghostship-am-generate.timer \
+          ghostship-am-maintain-gmail-auth.service \
+          ghostship-am-maintain-gmail-auth.timer; do
+          rm -f \
+            ${openchamberHome}/.config/systemd/user/"$unit" \
+            ${openchamberHome}/.config/systemd/user/default.target.wants/"$unit"
+        done
         find ${openchamberHome}/.config/systemd/user -type l \
           -lname '/nix/store/*home-manager-files/.config/systemd/user/*' \
           -delete
