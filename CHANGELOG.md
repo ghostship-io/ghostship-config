@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.96] - 2026-06-20
+
+- **OpenChamber user service repair**: Run the seeded OpenChamber user service
+  through a stable `/home/openchamber/.local/bin/openchamber-web-run` shim,
+  repair old generated units that point at stale image store paths, and extend
+  the first-start health window for systemd-managed startup.
+
 ## [2.1.95] - 2026-06-20
 
 - **OpenChamber systemd boot target**: Add explicit `default.target` and

@@ -261,6 +261,28 @@ let
     install_opencode_user_shim "$NPM_CONFIG_PREFIX/bin/opencode"
   '';
 
+  openchamberWebRun = pkgs.writeShellScriptBin "openchamber-web-run" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+    export XDG_RUNTIME_DIR=/run/user/3000
+    unset OPENCHAMBER_UI_PASSWORD UI_PASSWORD
+    export OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN=true
+
+    for _ in $(seq 1 30); do
+      if docker info >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+    cd /home/openchamber
+    rm -f \
+      "$HOME/.config/openchamber/run/openchamber-3000.json" \
+      "$HOME/.config/openchamber/run/openchamber-3000.pid"
+
+    exec openchamber serve --host 0.0.0.0 --port 3000 --foreground
+  '';
+
   openchamberContainerSetup = pkgs.writeShellScriptBin "openchamber-container-setup" ''
     set -eu
 
@@ -277,6 +299,12 @@ let
       "$HOME/.local/bin/gemini" \
       "$HOME/.local/bin/gemini-cli"
     su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
+    cat > "$HOME/.local/bin/openchamber-web-run" <<'EOF'
+    #!/usr/bin/env sh
+    exec ${openchamberWebRun}/bin/openchamber-web-run "$@"
+    EOF
+    chown openchamber:openchamber "$HOME/.local/bin/openchamber-web-run"
+    chmod 0755 "$HOME/.local/bin/openchamber-web-run"
 
   '';
 
@@ -306,28 +334,6 @@ let
     exec su-exec openchamber:openchamber env \
       XDG_RUNTIME_DIR=/run/user/3000 \
       systemd --user
-  '';
-
-  openchamberWebRun = pkgs.writeShellScriptBin "openchamber-web-run" ''
-    set -eu
-
-    ${openchamberRuntimeEnv}
-    export XDG_RUNTIME_DIR=/run/user/3000
-    unset OPENCHAMBER_UI_PASSWORD UI_PASSWORD
-    export OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN=true
-
-    for _ in $(seq 1 30); do
-      if docker info >/dev/null 2>&1; then
-        break
-      fi
-      sleep 1
-    done
-    cd /home/openchamber
-    rm -f \
-      "$HOME/.config/openchamber/run/openchamber-3000.json" \
-      "$HOME/.config/openchamber/run/openchamber-3000.pid"
-
-    exec openchamber serve --host 0.0.0.0 --port 3000 --foreground
   '';
 
   openchamberEntrypoint = pkgs.writeShellScriptBin "openchamber-systemd-entrypoint" ''
@@ -413,7 +419,7 @@ let
       [Unit]
       Description=OpenChamber Multi-User System
       Wants=openchamber-container-setup.service dockerd.service openchamber-user-manager.service
-      After=openchamber-container-setup.service dockerd.service openchamber-user-manager.service
+      After=openchamber-container-setup.service dockerd.service
       AllowIsolate=yes
       EOF
       ln -s multi-user.target etc/systemd/system/default.target
@@ -469,7 +475,7 @@ in
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
-      "--health-start-period=2m"
+      "--health-start-period=5m"
       "--health-on-failure=kill"
     ];
     volumes = [
@@ -512,14 +518,15 @@ in
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/systemd/user
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/systemd/user/default.target.wants
 
-      if [ ! -e ${openchamberHome}/.config/systemd/user/openchamber.service ]; then
+      if [ ! -e ${openchamberHome}/.config/systemd/user/openchamber.service ] \
+        || grep -q '/nix/store/.*openchamber-web-run' ${openchamberHome}/.config/systemd/user/openchamber.service; then
         cat > ${openchamberHome}/.config/systemd/user/openchamber.service <<'EOF'
       [Unit]
       Description=OpenChamber Web
 
       [Service]
       Type=simple
-      ExecStart=${openchamberWebRun}/bin/openchamber-web-run
+      ExecStart=/home/openchamber/.local/bin/openchamber-web-run
       Restart=always
       RestartSec=5
 
