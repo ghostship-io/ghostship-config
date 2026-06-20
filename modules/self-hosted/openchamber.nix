@@ -333,7 +333,7 @@ let
 
     exec su-exec openchamber:openchamber env \
       XDG_RUNTIME_DIR=/run/user/3000 \
-      systemd --user
+      ${pkgs.systemd}/lib/systemd/systemd --user
   '';
 
   openchamberEntrypoint = pkgs.writeShellScriptBin "openchamber-systemd-entrypoint" ''

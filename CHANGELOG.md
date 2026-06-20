@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.98] - 2026-06-20
+
+- **OpenChamber user manager launch**: Start the persistent `openchamber` user
+  systemd manager through systemd's actual daemon path so the user service
+  manager comes up inside the container image.
+
 ## [2.1.97] - 2026-06-20
 
 - **OpenChamber systemd dependency repair**: Disable default systemd
