@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.100] - 2026-06-20
+
+- **OpenChamber process limits**: Remove the Podman PID cap and set the
+  generated OpenChamber system and user services to unlimited systemd tasks.
+
 ## [2.1.99] - 2026-06-20
 
 - **OpenChamber user systemd runtime**: Run the user manager as the

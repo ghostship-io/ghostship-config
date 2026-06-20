@@ -381,6 +381,7 @@ let
       Type=oneshot
       ExecStart=${openchamberContainerSetup}/bin/openchamber-container-setup
       RemainAfterExit=yes
+      TasksMax=infinity
 
       [Install]
       WantedBy=multi-user.target
@@ -397,6 +398,7 @@ let
       ExecStart=${openchamberDockerdRun}/bin/openchamber-dockerd-run
       Restart=always
       RestartSec=5
+      TasksMax=infinity
 
       [Install]
       WantedBy=multi-user.target
@@ -420,6 +422,7 @@ let
       RestartSec=5
       KillMode=mixed
       Delegate=yes
+      TasksMax=infinity
 
       [Install]
       WantedBy=multi-user.target
@@ -484,6 +487,7 @@ in
     extraOptions = [
       "--privileged"
       "--systemd=always"
+      "--pids-limit=-1"
       "--network=ghostship_net"
       "--health-cmd=curl -fsS http://127.0.0.1:3000/ >/dev/null || exit 1"
       "--health-interval=30s"
@@ -557,6 +561,7 @@ in
       ExecStart=/home/openchamber/.local/bin/openchamber-web-run
       Restart=always
       RestartSec=5
+      TasksMax=infinity
 
       [Install]
       WantedBy=default.target
