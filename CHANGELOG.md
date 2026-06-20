@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.97] - 2026-06-20
+
+- **OpenChamber systemd dependency repair**: Disable default systemd
+  dependencies on the minimal container units and remove packaged Docker units
+  from the boot target so OpenChamber services can start without a full NixOS
+  target tree.
+
 ## [2.1.96] - 2026-06-20
 
 - **OpenChamber user service repair**: Run the seeded OpenChamber user service

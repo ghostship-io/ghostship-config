@@ -375,6 +375,7 @@ let
       cat > etc/systemd/system/openchamber-container-setup.service <<'EOF'
       [Unit]
       Description=Prepare OpenChamber container state
+      DefaultDependencies=no
 
       [Service]
       Type=oneshot
@@ -387,6 +388,7 @@ let
       cat > etc/systemd/system/dockerd.service <<'EOF'
       [Unit]
       Description=OpenChamber Docker daemon
+      DefaultDependencies=no
       After=openchamber-container-setup.service
       Requires=openchamber-container-setup.service
 
@@ -402,6 +404,7 @@ let
       cat > etc/systemd/system/openchamber-user-manager.service <<'EOF'
       [Unit]
       Description=OpenChamber user systemd manager
+      DefaultDependencies=no
       After=openchamber-container-setup.service dockerd.service
       Requires=openchamber-container-setup.service dockerd.service
 
@@ -418,10 +421,15 @@ let
       cat > etc/systemd/system/multi-user.target <<'EOF'
       [Unit]
       Description=OpenChamber Multi-User System
+      DefaultDependencies=no
       Wants=openchamber-container-setup.service dockerd.service openchamber-user-manager.service
       After=openchamber-container-setup.service dockerd.service
       AllowIsolate=yes
       EOF
+      rm -f etc/systemd/system/docker.service \
+        etc/systemd/system/docker.socket \
+        etc/systemd/system/multi-user.target.wants/docker.service \
+        etc/systemd/system/sockets.target.wants/docker.socket
       ln -s multi-user.target etc/systemd/system/default.target
       ln -s ../openchamber-container-setup.service etc/systemd/system/multi-user.target.wants/openchamber-container-setup.service
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
