@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.102] - 2026-06-20
+
+- **OpenChamber system web service**: Run the OpenChamber web process as a
+  container systemd service, stop enabling the old user-level
+  `openchamber.service`, stop seeding repo-managed user systemd targets, and
+  clean up stale repo-managed user unit links.
+
 ## [2.1.101] - 2026-06-20
 
 - **OpenChamber user task limit repair**: Rewrite existing persisted

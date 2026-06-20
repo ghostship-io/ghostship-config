@@ -324,18 +324,6 @@ let
       --bridge=none
   '';
 
-  openchamberUserManagerRun = pkgs.writeShellScriptBin "openchamber-user-manager-run" ''
-    set -eu
-
-    ${openchamberRuntimeEnv}
-
-    install -d -m0700 -o openchamber -g openchamber /run/user/3000
-
-    exec su-exec openchamber:openchamber env \
-      XDG_RUNTIME_DIR=/run/user/3000 \
-      ${pkgs.systemd}/lib/systemd/systemd --user
-  '';
-
   openchamberEntrypoint = pkgs.writeShellScriptBin "openchamber-systemd-entrypoint" ''
     set -eu
 
@@ -349,7 +337,6 @@ let
       openchamberEntrypoint
       openchamberContainerSetup
       openchamberDockerdRun
-      openchamberUserManagerRun
       openchamberWebRun
       openchamberToolMaintenance
       pkgs.dockerTools.binSh
@@ -407,6 +394,7 @@ let
       [Unit]
       Description=OpenChamber user systemd manager
       DefaultDependencies=no
+      ConditionPathExists=/home/openchamber/.config/systemd/user/default.target
       After=openchamber-container-setup.service dockerd.service
       Requires=openchamber-container-setup.service dockerd.service
 
@@ -427,11 +415,33 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/openchamber-web.service <<'EOF'
+      [Unit]
+      Description=OpenChamber Web
+      DefaultDependencies=no
+      After=openchamber-container-setup.service dockerd.service
+      Requires=openchamber-container-setup.service dockerd.service
+
+      [Service]
+      Type=simple
+      User=openchamber
+      Group=openchamber
+      Environment=HOME=/home/openchamber
+      Environment=USER=openchamber
+      Environment=XDG_RUNTIME_DIR=/run/user/3000
+      ExecStart=${openchamberWebRun}/bin/openchamber-web-run
+      Restart=always
+      RestartSec=5
+      TasksMax=infinity
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/multi-user.target <<'EOF'
       [Unit]
       Description=OpenChamber Multi-User System
       DefaultDependencies=no
-      Wants=openchamber-container-setup.service dockerd.service openchamber-user-manager.service
+      Wants=openchamber-container-setup.service dockerd.service openchamber-user-manager.service openchamber-web.service
       After=openchamber-container-setup.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -443,6 +453,7 @@ let
       ln -s ../openchamber-container-setup.service etc/systemd/system/multi-user.target.wants/openchamber-container-setup.service
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
       ln -s ../openchamber-user-manager.service etc/systemd/system/multi-user.target.wants/openchamber-user-manager.service
+      ln -s ../openchamber-web.service etc/systemd/system/multi-user.target.wants/openchamber-web.service
       '';
     fakeRootCommands = ''
       chown -R 3000:3000 nix/store nix/var/log/nix nix/var/nix
@@ -533,47 +544,20 @@ in
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.cache
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/openchamber
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/opencode
-      install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/systemd/user
-      install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/systemd/user/default.target.wants
 
-      if [ ! -e ${openchamberHome}/.config/systemd/user/default.target ]; then
-        cat > ${openchamberHome}/.config/systemd/user/default.target <<'EOF'
-      [Unit]
-      Description=OpenChamber User Default Target
-      DefaultDependencies=no
-      Wants=openchamber.service
-      AllowIsolate=yes
-      EOF
-        chown 3000:3000 ${openchamberHome}/.config/systemd/user/default.target
-        chmod 0644 ${openchamberHome}/.config/systemd/user/default.target
+      if [ -e ${openchamberHome}/.config/systemd/user/openchamber.service ] \
+        && grep -q 'ExecStart=/home/openchamber/.local/bin/openchamber-web-run' ${openchamberHome}/.config/systemd/user/openchamber.service; then
+        rm -f ${openchamberHome}/.config/systemd/user/openchamber.service
       fi
-
-      if [ ! -e ${openchamberHome}/.config/systemd/user/openchamber.service ] \
-        || grep -q '/nix/store/.*openchamber-web-run' ${openchamberHome}/.config/systemd/user/openchamber.service \
-        || ! grep -q '^DefaultDependencies=no$' ${openchamberHome}/.config/systemd/user/openchamber.service \
-        || ! grep -q '^TasksMax=infinity$' ${openchamberHome}/.config/systemd/user/openchamber.service; then
-        cat > ${openchamberHome}/.config/systemd/user/openchamber.service <<'EOF'
-      [Unit]
-      Description=OpenChamber Web
-      DefaultDependencies=no
-
-      [Service]
-      Type=simple
-      ExecStart=/home/openchamber/.local/bin/openchamber-web-run
-      Restart=always
-      RestartSec=5
-      TasksMax=infinity
-
-      [Install]
-      WantedBy=default.target
-      EOF
-        chown 3000:3000 ${openchamberHome}/.config/systemd/user/openchamber.service
-        chmod 0644 ${openchamberHome}/.config/systemd/user/openchamber.service
+      if [ -e ${openchamberHome}/.config/systemd/user/default.target ] \
+        && grep -q 'OpenChamber User Default Target' ${openchamberHome}/.config/systemd/user/default.target; then
+        rm -f ${openchamberHome}/.config/systemd/user/default.target
       fi
-
-      if [ ! -e ${openchamberHome}/.config/systemd/user/default.target.wants/openchamber.service ]; then
-        ln -s ../openchamber.service ${openchamberHome}/.config/systemd/user/default.target.wants/openchamber.service
-        chown -h 3000:3000 ${openchamberHome}/.config/systemd/user/default.target.wants/openchamber.service
+      rm -f ${openchamberHome}/.config/systemd/user/default.target.wants/openchamber.service
+      if [ -d ${openchamberHome}/.config/systemd/user ]; then
+        find ${openchamberHome}/.config/systemd/user -type l \
+          -lname '/nix/store/*home-manager-files/.config/systemd/user/*' \
+          -delete
       fi
     '';
   };
