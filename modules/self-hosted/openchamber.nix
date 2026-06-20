@@ -550,7 +550,8 @@ in
 
       if [ ! -e ${openchamberHome}/.config/systemd/user/openchamber.service ] \
         || grep -q '/nix/store/.*openchamber-web-run' ${openchamberHome}/.config/systemd/user/openchamber.service \
-        || ! grep -q '^DefaultDependencies=no$' ${openchamberHome}/.config/systemd/user/openchamber.service; then
+        || ! grep -q '^DefaultDependencies=no$' ${openchamberHome}/.config/systemd/user/openchamber.service \
+        || ! grep -q '^TasksMax=infinity$' ${openchamberHome}/.config/systemd/user/openchamber.service; then
         cat > ${openchamberHome}/.config/systemd/user/openchamber.service <<'EOF'
       [Unit]
       Description=OpenChamber Web

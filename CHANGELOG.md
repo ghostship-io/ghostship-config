@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.101] - 2026-06-20
+
+- **OpenChamber user task limit repair**: Rewrite existing persisted
+  `openchamber.service` user units when they are missing the unlimited
+  `TasksMax` setting.
+
 ## [2.1.100] - 2026-06-20
 
 - **OpenChamber process limits**: Remove the Podman PID cap and set the
