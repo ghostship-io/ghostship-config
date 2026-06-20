@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.99] - 2026-06-20
+
+- **OpenChamber user systemd runtime**: Run the user manager as the
+  `openchamber` user with delegated cgroup control, seed a minimal user
+  `default.target`, and make the OpenChamber web shim independent of service
+  `PATH`.
+
 ## [2.1.98] - 2026-06-20
 
 - **OpenChamber user manager launch**: Start the persistent `openchamber` user

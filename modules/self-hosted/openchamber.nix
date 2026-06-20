@@ -300,7 +300,7 @@ let
       "$HOME/.local/bin/gemini-cli"
     su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
     cat > "$HOME/.local/bin/openchamber-web-run" <<'EOF'
-    #!/usr/bin/env sh
+    #!/bin/sh
     exec ${openchamberWebRun}/bin/openchamber-web-run "$@"
     EOF
     chown openchamber:openchamber "$HOME/.local/bin/openchamber-web-run"
@@ -410,10 +410,16 @@ let
 
       [Service]
       Type=simple
-      ExecStart=${openchamberUserManagerRun}/bin/openchamber-user-manager-run
+      User=openchamber
+      Group=openchamber
+      Environment=HOME=/home/openchamber
+      Environment=USER=openchamber
+      Environment=XDG_RUNTIME_DIR=/run/user/3000
+      ExecStart=${pkgs.systemd}/lib/systemd/systemd --user
       Restart=always
       RestartSec=5
       KillMode=mixed
+      Delegate=yes
 
       [Install]
       WantedBy=multi-user.target
@@ -526,11 +532,25 @@ in
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/systemd/user
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/systemd/user/default.target.wants
 
+      if [ ! -e ${openchamberHome}/.config/systemd/user/default.target ]; then
+        cat > ${openchamberHome}/.config/systemd/user/default.target <<'EOF'
+      [Unit]
+      Description=OpenChamber User Default Target
+      DefaultDependencies=no
+      Wants=openchamber.service
+      AllowIsolate=yes
+      EOF
+        chown 3000:3000 ${openchamberHome}/.config/systemd/user/default.target
+        chmod 0644 ${openchamberHome}/.config/systemd/user/default.target
+      fi
+
       if [ ! -e ${openchamberHome}/.config/systemd/user/openchamber.service ] \
-        || grep -q '/nix/store/.*openchamber-web-run' ${openchamberHome}/.config/systemd/user/openchamber.service; then
+        || grep -q '/nix/store/.*openchamber-web-run' ${openchamberHome}/.config/systemd/user/openchamber.service \
+        || ! grep -q '^DefaultDependencies=no$' ${openchamberHome}/.config/systemd/user/openchamber.service; then
         cat > ${openchamberHome}/.config/systemd/user/openchamber.service <<'EOF'
       [Unit]
       Description=OpenChamber Web
+      DefaultDependencies=no
 
       [Service]
       Type=simple
