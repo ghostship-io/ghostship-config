@@ -9,17 +9,13 @@ let
   openchamberHome = "/srv/apps/openchamber/home";
   openchamberDocker = "/srv/apps/openchamber/docker";
   openchamberWorkspace = "/srv/apps/openchamber/workspace";
-  openchamberAutomation = "${openchamberHome}/.automation";
   imageName = "localhost/ghostship-openchamber";
   imageTag = "openchamber-${inputs.self.shortRev or inputs.self.rev or "dirty"}";
 
   openchamberPackages = with pkgs; [
     nix
-    s6
+    systemd
     docker
-    supercronic
-    webhook
-    go-task
     git
     git-lfs
     gh
@@ -72,11 +68,10 @@ let
     fi
     export PATH=$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${openchamberPath}:$PATH
     export DOCKER_HOST=unix:///var/run/docker.sock
+    export XDG_RUNTIME_DIR=/run/user/3000
     export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     export SSL_CERT_FILE=$NIX_SSL_CERT_FILE
     export NIX_CONFIG="experimental-features = nix-command flakes"
-    export OPENCHAMBER_AUTOMATION_DIR=$HOME/.automation
-    export OPENCHAMBER_WEBHOOK_PORT="''${OPENCHAMBER_WEBHOOK_PORT:-9000}"
   '';
 
   sourceHmSessionVarsIfPresent = ''
@@ -271,7 +266,9 @@ let
 
     ${openchamberRuntimeEnv}
 
-    mkdir -p "$HOME/.local/bin" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$HOME/.config/openchamber" "$HOME/.config/opencode" "$OPENCHAMBER_AUTOMATION_DIR" /workspace /mnt/share /var/lib/docker /var/run /tmp
+    mkdir -p "$HOME/.local/bin" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$HOME/.config/openchamber" "$HOME/.config/opencode" /workspace /mnt/share /var/lib/docker /var/run /tmp /run/user/3000
+    chown openchamber:openchamber /run/user/3000
+    chmod 0700 /run/user/3000
     rm -rf \
       "$HOME/.codex" \
       "$HOME/.gemini" \
@@ -283,7 +280,7 @@ let
 
   '';
 
-  openchamberDockerdRun = pkgs.writeShellScriptBin "openchamber-svc-dockerd-run" ''
+  openchamberDockerdRun = pkgs.writeShellScriptBin "openchamber-dockerd-run" ''
     set -eu
 
     ${openchamberRuntimeEnv}
@@ -291,6 +288,7 @@ let
     rm -f /var/run/docker.pid
     exec dockerd \
       --host=unix:///var/run/docker.sock \
+      --group=openchamber \
       --data-root=/var/lib/docker \
       --storage-driver=vfs \
       --iptables=false \
@@ -298,10 +296,23 @@ let
       --bridge=none
   '';
 
-  openchamberWebRun = pkgs.writeShellScriptBin "openchamber-svc-web-run" ''
+  openchamberUserManagerRun = pkgs.writeShellScriptBin "openchamber-user-manager-run" ''
     set -eu
 
     ${openchamberRuntimeEnv}
+
+    install -d -m0700 -o openchamber -g openchamber /run/user/3000
+
+    exec su-exec openchamber:openchamber env \
+      XDG_RUNTIME_DIR=/run/user/3000 \
+      systemd --user
+  '';
+
+  openchamberWebRun = pkgs.writeShellScriptBin "openchamber-web-run" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+    export XDG_RUNTIME_DIR=/run/user/3000
     unset OPENCHAMBER_UI_PASSWORD UI_PASSWORD
     export OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN=true
 
@@ -311,49 +322,18 @@ let
       fi
       sleep 1
     done
-    chmod 0666 /var/run/docker.sock || true
-
     cd /home/openchamber
     rm -f \
       "$HOME/.config/openchamber/run/openchamber-3000.json" \
       "$HOME/.config/openchamber/run/openchamber-3000.pid"
 
-    exec su-exec openchamber:openchamber \
-      openchamber serve --host 0.0.0.0 --port 3000 --foreground
+    exec openchamber serve --host 0.0.0.0 --port 3000 --foreground
   '';
 
-  openchamberSupercronicRun = pkgs.writeShellScriptBin "openchamber-svc-supercronic-run" ''
+  openchamberEntrypoint = pkgs.writeShellScriptBin "openchamber-systemd-entrypoint" ''
     set -eu
 
-    ${openchamberRuntimeEnv}
-
-    exec su-exec openchamber:openchamber \
-      supercronic -no-reap -inotify -passthrough-logs "$OPENCHAMBER_AUTOMATION_DIR/crontab"
-  '';
-
-  openchamberWebhookRun = pkgs.writeShellScriptBin "openchamber-svc-webhook-run" ''
-    set -eu
-
-    ${openchamberRuntimeEnv}
-
-    cd "$OPENCHAMBER_AUTOMATION_DIR"
-
-    exec su-exec openchamber:openchamber \
-      webhook \
-        -hooks "$OPENCHAMBER_AUTOMATION_DIR/hooks.json" \
-        -hotreload \
-        -ip 0.0.0.0 \
-        -port "$OPENCHAMBER_WEBHOOK_PORT" \
-        -verbose
-  '';
-
-  openchamberEntrypoint = pkgs.writeShellScriptBin "openchamber-s6-entrypoint" ''
-    set -eu
-
-    ${openchamberRuntimeEnv}
-    ${openchamberContainerSetup}/bin/openchamber-container-setup
-
-    exec s6-svscan /etc/s6/services
+    exec ${pkgs.systemd}/lib/systemd/systemd
   '';
 
   openchamberImage = pkgs.dockerTools.buildLayeredImageWithNixDb {
@@ -363,24 +343,16 @@ let
       openchamberEntrypoint
       openchamberContainerSetup
       openchamberDockerdRun
+      openchamberUserManagerRun
       openchamberWebRun
-      openchamberSupercronicRun
-      openchamberWebhookRun
       openchamberToolMaintenance
       pkgs.dockerTools.binSh
       pkgs.dockerTools.usrBinEnv
       pkgs.dockerTools.caCertificates
     ];
     extraCommands = ''
-      mkdir -p etc/nix etc/s6/services nix/store nix/var/log/nix nix/var/nix tmp workspace home/openchamber
-      mkdir -p mnt/share var/lib/docker var/run
-      for service in dockerd openchamber-web supercronic webhook; do
-        mkdir -p "etc/s6/services/$service"
-      done
-      ln -s ${openchamberDockerdRun}/bin/openchamber-svc-dockerd-run etc/s6/services/dockerd/run
-      ln -s ${openchamberWebRun}/bin/openchamber-svc-web-run etc/s6/services/openchamber-web/run
-      ln -s ${openchamberSupercronicRun}/bin/openchamber-svc-supercronic-run etc/s6/services/supercronic/run
-      ln -s ${openchamberWebhookRun}/bin/openchamber-svc-webhook-run etc/s6/services/webhook/run
+      mkdir -p etc/nix etc/systemd/system/multi-user.target.wants nix/store nix/var/log/nix nix/var/nix tmp workspace home/openchamber
+      mkdir -p mnt/share run/user var/lib/docker var/log/journal var/run
       chmod 1777 tmp
       cat > etc/passwd <<'EOF'
       root:x:0:0:root:/root:/bin/sh
@@ -394,17 +366,61 @@ let
       experimental-features = nix-command flakes
       sandbox = false
       EOF
-    '';
+      cat > etc/systemd/system/openchamber-container-setup.service <<'EOF'
+      [Unit]
+      Description=Prepare OpenChamber container state
+
+      [Service]
+      Type=oneshot
+      ExecStart=${openchamberContainerSetup}/bin/openchamber-container-setup
+      RemainAfterExit=yes
+      EOF
+      cat > etc/systemd/system/dockerd.service <<'EOF'
+      [Unit]
+      Description=OpenChamber Docker daemon
+      After=openchamber-container-setup.service
+      Requires=openchamber-container-setup.service
+
+      [Service]
+      Type=simple
+      ExecStart=${openchamberDockerdRun}/bin/openchamber-dockerd-run
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+      cat > etc/systemd/system/openchamber-user-manager.service <<'EOF'
+      [Unit]
+      Description=OpenChamber user systemd manager
+      After=openchamber-container-setup.service dockerd.service
+      Requires=openchamber-container-setup.service dockerd.service
+
+      [Service]
+      Type=simple
+      ExecStart=${openchamberUserManagerRun}/bin/openchamber-user-manager-run
+      Restart=always
+      RestartSec=5
+      KillMode=mixed
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+      ln -s ../openchamber-container-setup.service etc/systemd/system/multi-user.target.wants/openchamber-container-setup.service
+      ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
+      ln -s ../openchamber-user-manager.service etc/systemd/system/multi-user.target.wants/openchamber-user-manager.service
+      '';
     fakeRootCommands = ''
       chown -R 3000:3000 nix/store nix/var/log/nix nix/var/nix
       chmod -R u+rwX,go+rX nix/store nix/var/log/nix nix/var/nix
     '';
     config = {
-      Cmd = [ "${openchamberEntrypoint}/bin/openchamber-s6-entrypoint" ];
+      Cmd = [ "${openchamberEntrypoint}/bin/openchamber-systemd-entrypoint" ];
       Env = [
         "HOME=/home/openchamber"
         "USER=openchamber"
         "DOCKER_HOST=unix:///var/run/docker.sock"
+        "XDG_RUNTIME_DIR=/run/user/3000"
         "XDG_CONFIG_HOME=/home/openchamber/.config"
         "XDG_STATE_HOME=/home/openchamber/.local/state"
         "XDG_CACHE_HOME=/home/openchamber/.cache"
@@ -415,14 +431,11 @@ let
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "NIX_CONFIG=experimental-features = nix-command flakes"
-        "OPENCHAMBER_AUTOMATION_DIR=/home/openchamber/.automation"
-        "OPENCHAMBER_WEBHOOK_PORT=9000"
         "OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN=true"
       ];
       WorkingDir = "/home/openchamber";
       ExposedPorts = {
         "3000/tcp" = { };
-        "9000/tcp" = { };
       };
     };
   };
@@ -439,6 +452,7 @@ in
     ports = [ ];
     extraOptions = [
       "--privileged"
+      "--systemd=always"
       "--network=ghostship_net"
       "--health-cmd=curl -fsS http://127.0.0.1:3000/ >/dev/null || exit 1"
       "--health-interval=30s"
@@ -460,8 +474,6 @@ in
     "d ${openchamberDocker} 0755 root root -"
     "d ${openchamberHome} 0755 3000 3000 -"
     "d ${openchamberWorkspace} 0755 3000 3000 -"
-    "d ${openchamberAutomation} 0755 3000 3000 -"
-    "d ${openchamberAutomation}/tasks 0755 3000 3000 -"
   ];
 
   systemd.services.podman-openchamber = {
@@ -480,50 +492,36 @@ in
       install -d -m0755 -o root -g root ${openchamberDocker}
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}
       install -d -m0755 -o 3000 -g 3000 ${openchamberWorkspace}
-      install -d -m0755 -o 3000 -g 3000 ${openchamberAutomation}
-      install -d -m0755 -o 3000 -g 3000 ${openchamberAutomation}/tasks
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.local/bin
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.local/share
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.local/state
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.cache
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/openchamber
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/opencode
+      install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/systemd/user
+      install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/systemd/user/default.target.wants
 
-      if [ ! -e ${openchamberAutomation}/crontab ]; then
-        cat > ${openchamberAutomation}/crontab <<'EOF'
-      # Supercronic crontab for the OpenChamber container.
-      # Run Taskfile jobs from this persistent automation directory, for example:
-      # */15 * * * * cd /home/openchamber/.automation && task -t Taskfile.yml cron:default
+      if [ ! -e ${openchamberHome}/.config/systemd/user/openchamber.service ]; then
+        cat > ${openchamberHome}/.config/systemd/user/openchamber.service <<'EOF'
+      [Unit]
+      Description=OpenChamber Web
+
+      [Service]
+      Type=simple
+      ExecStart=${openchamberWebRun}/bin/openchamber-web-run
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=default.target
       EOF
-        chown 3000:3000 ${openchamberAutomation}/crontab
-        chmod 0644 ${openchamberAutomation}/crontab
+        chown 3000:3000 ${openchamberHome}/.config/systemd/user/openchamber.service
+        chmod 0644 ${openchamberHome}/.config/systemd/user/openchamber.service
       fi
 
-      if [ ! -e ${openchamberAutomation}/hooks.json ]; then
-        cat > ${openchamberAutomation}/hooks.json <<'EOF'
-      []
-      EOF
-        chown 3000:3000 ${openchamberAutomation}/hooks.json
-        chmod 0644 ${openchamberAutomation}/hooks.json
-      fi
-
-      if [ ! -e ${openchamberAutomation}/Taskfile.yml ]; then
-        cat > ${openchamberAutomation}/Taskfile.yml <<'EOF'
-      version: '3'
-
-      tasks:
-        cron:default:
-          desc: Placeholder cron task for OpenChamber container automation.
-          cmds:
-            - echo "Define cron automation in /home/openchamber/.automation/Taskfile.yml"
-
-        webhook:default:
-          desc: Placeholder webhook task for OpenChamber container automation.
-          cmds:
-            - echo "Define webhook automation in /home/openchamber/.automation/Taskfile.yml"
-      EOF
-        chown 3000:3000 ${openchamberAutomation}/Taskfile.yml
-        chmod 0644 ${openchamberAutomation}/Taskfile.yml
+      if [ ! -e ${openchamberHome}/.config/systemd/user/default.target.wants/openchamber.service ]; then
+        ln -s ../openchamber.service ${openchamberHome}/.config/systemd/user/default.target.wants/openchamber.service
+        chown -h 3000:3000 ${openchamberHome}/.config/systemd/user/default.target.wants/openchamber.service
       fi
     '';
   };

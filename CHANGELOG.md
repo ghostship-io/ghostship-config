@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.94] - 2026-06-20
+
+- **OpenChamber systemd supervision**: Replace the container's s6,
+  Supercronic, webhook, and Taskfile automation stack with systemd as PID 1,
+  keep `dockerd` as a root system unit, and seed OpenChamber as a user-level
+  systemd service so the `openchamber` user can manage its own services and
+  timers.
+
 ## [2.1.93] - 2026-06-19
 
 - **OpenChamber agent ownership**: Stop deleting or rewriting persisted

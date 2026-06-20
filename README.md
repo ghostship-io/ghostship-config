@@ -239,12 +239,13 @@ from the shared Bitwarden secret projection at startup.
 OpenChamber runs as a separate repo-built Podman OCI image for
 `https://openchamber.ghostship.io`. It uses the `openchamber` user at
 `3000:3000`, keeps `/workspace`, `/home/openchamber`, and Docker state under
-`/srv/apps/openchamber`, and starts s6-managed `dockerd`, OpenChamber,
-Supercronic, and webhook services. OpenChamber installs only `@openchamber/web`
-and `opencode-ai` into `/home/openchamber/.local/share/openchamber-tools`,
-repairs stale empty `.nix-profile` directories before running the persisted
-agent bootstrap, exposes `/home/openchamber/.local/bin` on `PATH`, and does not
-configure a UI password.
+`/srv/apps/openchamber`, and starts systemd-managed `dockerd` plus a persistent
+`openchamber` user systemd manager. The OpenChamber web process is seeded as
+`/home/openchamber/.config/systemd/user/openchamber.service`, and additional
+user-owned services and timers can live under that same user unit directory.
+OpenChamber installs only `@openchamber/web` and `opencode-ai` into
+`/home/openchamber/.local/share/openchamber-tools`, exposes
+`/home/openchamber/.local/bin` on `PATH`, and does not configure a UI password.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts
