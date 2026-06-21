@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.105] - 2026-06-21
+
+- **OpenChamber tool auto-updates**: Add a container systemd timer that keeps
+  OpenChamber and OpenCode installed at their latest npm versions and restarts
+  the system web service only when a tool version changes.
+
 ## [2.1.104] - 2026-06-21
 
 - **OpenChamber graceful stops**: Increase the Podman stop timeout for the

@@ -261,6 +261,50 @@ let
     install_opencode_user_shim "$NPM_CONFIG_PREFIX/bin/opencode"
   '';
 
+  openchamberToolAutoUpdate = pkgs.writeShellScriptBin "openchamber-tool-auto-update" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+    export NODE_NO_WARNINGS=1
+
+    log_info() {
+      printf 'info: %s\n' "$1" >&2
+    }
+
+    user_version() {
+      tool="$1"
+      su-exec openchamber:openchamber sh -c '
+        tool="$1"
+        if ! command -v "$tool" >/dev/null 2>&1; then
+          exit 0
+        fi
+        "$tool" --version 2>/dev/null | sed -n "1p" || true
+      ' sh "$tool"
+    }
+
+    before_openchamber="$(user_version openchamber)"
+    before_opencode="$(user_version opencode)"
+
+    su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
+
+    after_openchamber="$(user_version openchamber)"
+    after_opencode="$(user_version opencode)"
+
+    log_info "openchamber: ''${before_openchamber:-missing} -> ''${after_openchamber:-missing}"
+    log_info "opencode: ''${before_opencode:-missing} -> ''${after_opencode:-missing}"
+
+    if [ "$before_openchamber" != "$after_openchamber" ] || [ "$before_opencode" != "$after_opencode" ]; then
+      if systemctl is-active --quiet openchamber-web.service; then
+        log_info "restarting openchamber-web.service after tool update"
+        systemctl restart openchamber-web.service
+      else
+        log_info "openchamber-web.service is not active; leaving it stopped"
+      fi
+    else
+      log_info "installed tool versions are unchanged"
+    fi
+  '';
+
   openchamberWebRun = pkgs.writeShellScriptBin "openchamber-web-run" ''
     set -eu
 
@@ -339,6 +383,7 @@ let
       openchamberDockerdRun
       openchamberWebRun
       openchamberToolMaintenance
+      openchamberToolAutoUpdate
       pkgs.dockerTools.binSh
       pkgs.dockerTools.usrBinEnv
       pkgs.dockerTools.caCertificates
@@ -437,11 +482,38 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/openchamber-tool-auto-update.service <<'EOF'
+      [Unit]
+      Description=Update OpenChamber and OpenCode tools
+      DefaultDependencies=no
+      After=openchamber-container-setup.service dockerd.service
+      Requires=openchamber-container-setup.service dockerd.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=${openchamberToolAutoUpdate}/bin/openchamber-tool-auto-update
+      TasksMax=infinity
+      EOF
+      cat > etc/systemd/system/openchamber-tool-auto-update.timer <<'EOF'
+      [Unit]
+      Description=Periodic OpenChamber and OpenCode tool updates
+      DefaultDependencies=no
+      After=openchamber-container-setup.service
+
+      [Timer]
+      OnBootSec=10m
+      OnUnitActiveSec=4h
+      Persistent=true
+      Unit=openchamber-tool-auto-update.service
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/multi-user.target <<'EOF'
       [Unit]
       Description=OpenChamber Multi-User System
       DefaultDependencies=no
-      Wants=openchamber-container-setup.service dockerd.service openchamber-user-manager.service openchamber-web.service
+      Wants=openchamber-container-setup.service dockerd.service openchamber-user-manager.service openchamber-web.service openchamber-tool-auto-update.timer
       After=openchamber-container-setup.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -454,6 +526,7 @@ let
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
       ln -s ../openchamber-user-manager.service etc/systemd/system/multi-user.target.wants/openchamber-user-manager.service
       ln -s ../openchamber-web.service etc/systemd/system/multi-user.target.wants/openchamber-web.service
+      ln -s ../openchamber-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/openchamber-tool-auto-update.timer
       '';
     fakeRootCommands = ''
       chown -R 3000:3000 nix/store nix/var/log/nix nix/var/nix
