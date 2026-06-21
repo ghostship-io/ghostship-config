@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.104] - 2026-06-21
+
+- **OpenChamber graceful stops**: Increase the Podman stop timeout for the
+  systemd-based OpenChamber container so deployment restarts have time to shut
+  down cleanly instead of falling back to SIGKILL.
+
 ## [2.1.103] - 2026-06-20
 
 - **OpenChamber user unit cleanup**: Remove stale repo-seeded

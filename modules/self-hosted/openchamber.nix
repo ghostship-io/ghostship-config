@@ -499,6 +499,7 @@ in
       "--privileged"
       "--systemd=always"
       "--pids-limit=-1"
+      "--stop-timeout=60"
       "--network=ghostship_net"
       "--health-cmd=curl -fsS http://127.0.0.1:3000/ >/dev/null || exit 1"
       "--health-interval=30s"
