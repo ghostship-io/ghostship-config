@@ -66,7 +66,7 @@ let
       # shellcheck disable=SC1090
       . "$hm_session_vars"
     fi
-    export PATH=$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${openchamberPath}:$PATH
+    export PATH=$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${openchamberPath}:/bin:/usr/bin:$PATH
     export DOCKER_HOST=unix:///var/run/docker.sock
     export XDG_RUNTIME_DIR=/run/user/3000
     export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
@@ -305,6 +305,50 @@ let
     fi
   '';
 
+  openchamberWebMonitor = pkgs.writeShellScriptBin "openchamber-web-monitor" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+
+    log_file="$HOME/.config/openchamber/logs/openchamber-web-monitor.log"
+    mkdir -p "$(dirname "$log_file")"
+
+    log_info() {
+      printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >> "$log_file"
+    }
+
+    unhealthy_reason=""
+
+    if ! systemctl is-active --quiet openchamber-web.service; then
+      unhealthy_reason="openchamber-web.service is not active"
+    elif ! curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null; then
+      unhealthy_reason="OpenChamber root endpoint is not responding"
+    fi
+
+    if [ -z "$unhealthy_reason" ]; then
+      found_opencode=0
+      for cmdline in /proc/[0-9]*/cmdline; do
+        if tr '\0' ' ' < "$cmdline" 2>/dev/null | grep -q 'opencode serve'; then
+          found_opencode=1
+          break
+        fi
+      done
+
+      if [ "$found_opencode" -ne 1 ]; then
+        unhealthy_reason="managed OpenCode server process is missing"
+      fi
+    fi
+
+    if [ -z "$unhealthy_reason" ]; then
+      log_info "healthy"
+      exit 0
+    fi
+
+    log_info "unhealthy: $unhealthy_reason; restarting openchamber-web.service"
+    systemctl reset-failed openchamber-web.service || true
+    systemctl restart openchamber-web.service
+  '';
+
   openchamberWebRun = pkgs.writeShellScriptBin "openchamber-web-run" ''
     set -eu
 
@@ -384,6 +428,7 @@ let
       openchamberWebRun
       openchamberToolMaintenance
       openchamberToolAutoUpdate
+      openchamberWebMonitor
       pkgs.dockerTools.binSh
       pkgs.dockerTools.usrBinEnv
       pkgs.dockerTools.caCertificates
@@ -474,9 +519,12 @@ let
       Environment=HOME=/home/openchamber
       Environment=USER=openchamber
       Environment=XDG_RUNTIME_DIR=/run/user/3000
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
       ExecStart=${openchamberWebRun}/bin/openchamber-web-run
       Restart=always
       RestartSec=5
+      StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
+      StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
       TasksMax=infinity
 
       [Install]
@@ -491,7 +539,10 @@ let
 
       [Service]
       Type=oneshot
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
       ExecStart=${openchamberToolAutoUpdate}/bin/openchamber-tool-auto-update
+      StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-tool-auto-update.log
+      StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-tool-auto-update.log
       TasksMax=infinity
       EOF
       cat > etc/systemd/system/openchamber-tool-auto-update.timer <<'EOF'
@@ -509,11 +560,40 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/openchamber-web-monitor.service <<'EOF'
+      [Unit]
+      Description=Monitor OpenChamber web and managed OpenCode
+      DefaultDependencies=no
+      After=openchamber-web.service
+      Wants=openchamber-web.service
+
+      [Service]
+      Type=oneshot
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      ExecStart=${openchamberWebMonitor}/bin/openchamber-web-monitor
+      StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-web-monitor.log
+      StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-web-monitor.log
+      TasksMax=infinity
+      EOF
+      cat > etc/systemd/system/openchamber-web-monitor.timer <<'EOF'
+      [Unit]
+      Description=Periodic OpenChamber web monitor
+      DefaultDependencies=no
+      After=openchamber-web.service
+
+      [Timer]
+      OnBootSec=2m
+      OnUnitActiveSec=1m
+      Unit=openchamber-web-monitor.service
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/multi-user.target <<'EOF'
       [Unit]
       Description=OpenChamber Multi-User System
       DefaultDependencies=no
-      Wants=openchamber-container-setup.service dockerd.service openchamber-user-manager.service openchamber-web.service openchamber-tool-auto-update.timer
+      Wants=openchamber-container-setup.service dockerd.service openchamber-user-manager.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-web-monitor.timer
       After=openchamber-container-setup.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -527,6 +607,7 @@ let
       ln -s ../openchamber-user-manager.service etc/systemd/system/multi-user.target.wants/openchamber-user-manager.service
       ln -s ../openchamber-web.service etc/systemd/system/multi-user.target.wants/openchamber-web.service
       ln -s ../openchamber-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/openchamber-tool-auto-update.timer
+      ln -s ../openchamber-web-monitor.timer etc/systemd/system/multi-user.target.wants/openchamber-web-monitor.timer
       '';
     fakeRootCommands = ''
       chown -R 3000:3000 nix/store nix/var/log/nix nix/var/nix
@@ -545,7 +626,7 @@ let
         "XDG_DATA_HOME=/home/openchamber/.local/share"
         "NPM_CONFIG_PREFIX=/home/openchamber/.local/share/openchamber-tools/npm"
         "npm_config_prefix=/home/openchamber/.local/share/openchamber-tools/npm"
-        "PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}"
+        "PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin"
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "NIX_CONFIG=experimental-features = nix-command flakes"

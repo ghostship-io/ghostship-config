@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.106] - 2026-06-21
+
+- **OpenChamber web monitor**: Add a container systemd monitor service and
+  timer that restarts the OpenChamber web service when the UI is up but the
+  managed OpenCode process is missing, and make the system service PATH stable
+  for npm-installed launchers.
+
 ## [2.1.105] - 2026-06-21
 
 - **OpenChamber tool auto-updates**: Add a container systemd timer that keeps
