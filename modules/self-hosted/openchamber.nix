@@ -569,30 +569,6 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
-      cat > etc/systemd/system/openchamber-user-manager.service <<'EOF'
-      [Unit]
-      Description=OpenChamber user systemd manager
-      DefaultDependencies=no
-      After=openchamber-container-setup.service dockerd.service
-      Requires=openchamber-container-setup.service dockerd.service
-
-      [Service]
-      Type=simple
-      User=openchamber
-      Group=openchamber
-      Environment=HOME=/home/openchamber
-      Environment=USER=openchamber
-      Environment=XDG_RUNTIME_DIR=/run/user/3000
-      ExecStart=${pkgs.systemd}/lib/systemd/systemd --user
-      Restart=always
-      RestartSec=5
-      KillMode=mixed
-      Delegate=yes
-      TasksMax=infinity
-
-      [Install]
-      WantedBy=multi-user.target
-      EOF
       cat > etc/systemd/system/openchamber-bootstrap.service <<'EOF'
       [Unit]
       Description=Run OpenChamber bootstrap hooks
