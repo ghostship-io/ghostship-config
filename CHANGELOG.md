@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.107] - 2026-06-22
+
+- **OpenChamber lifecycle hooks**: Add generic container bootstrap, pre-web,
+  and doctor hook directories that run before OpenChamber starts, keep the
+  `openchamber` user manager started from system systemd, and stop deleting
+  repo-installed user automation units from the persisted home.
+
 ## [2.1.106] - 2026-06-21
 
 - **OpenChamber web monitor**: Add a container systemd monitor service and
