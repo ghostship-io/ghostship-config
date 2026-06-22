@@ -349,6 +349,72 @@ let
     systemctl restart openchamber-web.service
   '';
 
+  openchamberRunHooks = pkgs.writeShellScriptBin "openchamber-run-hooks" ''
+    set -eu
+
+    hook_set="''${1:-}"
+    if [ -z "$hook_set" ]; then
+      printf 'usage: openchamber-run-hooks <hook-set>\n' >&2
+      exit 2
+    fi
+
+    ${openchamberRuntimeEnv}
+
+    hook_dir="$HOME/.openchamber/hooks/$hook_set"
+    log_file="$HOME/.config/openchamber/logs/openchamber-hooks.log"
+    mkdir -p "$(dirname "$log_file")" "$hook_dir"
+
+    log_info() {
+      printf '%s %s: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$hook_set" "$1" >> "$log_file"
+    }
+
+    if [ ! -d "$hook_dir" ]; then
+      log_info "missing hook directory; skipping"
+      exit 0
+    fi
+
+    found=0
+    for hook in "$hook_dir"/*; do
+      if [ ! -f "$hook" ] || [ ! -x "$hook" ]; then
+        continue
+      fi
+
+      found=1
+      log_info "running $(basename "$hook")"
+      "$hook" >> "$log_file" 2>&1
+      log_info "completed $(basename "$hook")"
+    done
+
+    if [ "$found" -eq 0 ]; then
+      log_info "no executable hooks"
+    fi
+  '';
+
+  openchamberDoctor = pkgs.writeShellScriptBin "openchamber-doctor" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+
+    su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
+    ${openchamberRunHooks}/bin/openchamber-run-hooks doctor.d
+  '';
+
+  openchamberBootstrap = pkgs.writeShellScriptBin "openchamber-bootstrap" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+
+    ${openchamberRunHooks}/bin/openchamber-run-hooks bootstrap.d
+  '';
+
+  openchamberBeforeWebStart = pkgs.writeShellScriptBin "openchamber-before-web-start" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+
+    ${openchamberRunHooks}/bin/openchamber-run-hooks before-openchamber.d
+  '';
+
   openchamberWebRun = pkgs.writeShellScriptBin "openchamber-web-run" ''
     set -eu
 
@@ -376,7 +442,26 @@ let
 
     ${openchamberRuntimeEnv}
 
-    mkdir -p "$HOME/.local/bin" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$HOME/.config/openchamber" "$HOME/.config/opencode" /workspace /mnt/share /var/lib/docker /var/run /tmp /run/user/3000
+    mkdir -p \
+      "$HOME/.local/bin" \
+      "$NPM_CONFIG_PREFIX/bin" \
+      "$NPM_CONFIG_PREFIX/lib" \
+      "$XDG_DATA_HOME" \
+      "$XDG_STATE_HOME" \
+      "$XDG_CACHE_HOME" \
+      "$HOME/.config/openchamber/logs" \
+      "$HOME/.config/opencode" \
+      "$HOME/.config/systemd/user" \
+      "$HOME/.openchamber/hooks/bootstrap.d" \
+      "$HOME/.openchamber/hooks/before-openchamber.d" \
+      "$HOME/.openchamber/hooks/doctor.d" \
+      /workspace \
+      /mnt/share \
+      /var/lib/docker \
+      /var/run \
+      /tmp \
+      /run/user/3000
+    chown -R openchamber:openchamber "$HOME/.openchamber" "$HOME/.config/systemd"
     chown openchamber:openchamber /run/user/3000
     chmod 0700 /run/user/3000
     rm -rf \
@@ -429,6 +514,10 @@ let
       openchamberToolMaintenance
       openchamberToolAutoUpdate
       openchamberWebMonitor
+      openchamberRunHooks
+      openchamberDoctor
+      openchamberBootstrap
+      openchamberBeforeWebStart
       pkgs.dockerTools.binSh
       pkgs.dockerTools.usrBinEnv
       pkgs.dockerTools.caCertificates
@@ -484,7 +573,6 @@ let
       [Unit]
       Description=OpenChamber user systemd manager
       DefaultDependencies=no
-      ConditionPathExists=/home/openchamber/.config/systemd/user/default.target
       After=openchamber-container-setup.service dockerd.service
       Requires=openchamber-container-setup.service dockerd.service
 
@@ -505,12 +593,34 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/openchamber-bootstrap.service <<'EOF'
+      [Unit]
+      Description=Run OpenChamber bootstrap hooks
+      DefaultDependencies=no
+      After=openchamber-container-setup.service dockerd.service
+      Requires=openchamber-container-setup.service dockerd.service
+
+      [Service]
+      Type=oneshot
+      Environment=HOME=/home/openchamber
+      Environment=USER=openchamber
+      Environment=XDG_RUNTIME_DIR=/run/user/3000
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      ExecStart=${openchamberBootstrap}/bin/openchamber-bootstrap
+      RemainAfterExit=yes
+      StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-bootstrap.log
+      StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-bootstrap.log
+      TasksMax=infinity
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/openchamber-web.service <<'EOF'
       [Unit]
       Description=OpenChamber Web
       DefaultDependencies=no
-      After=openchamber-container-setup.service dockerd.service
-      Requires=openchamber-container-setup.service dockerd.service
+      After=openchamber-bootstrap.service
+      Requires=openchamber-bootstrap.service
 
       [Service]
       Type=simple
@@ -520,9 +630,11 @@ let
       Environment=USER=openchamber
       Environment=XDG_RUNTIME_DIR=/run/user/3000
       Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      ExecStartPre=${openchamberBeforeWebStart}/bin/openchamber-before-web-start
       ExecStart=${openchamberWebRun}/bin/openchamber-web-run
       Restart=always
       RestartSec=5
+      SuccessExitStatus=0 143
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
       StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
       TasksMax=infinity
@@ -534,8 +646,8 @@ let
       [Unit]
       Description=Update OpenChamber and OpenCode tools
       DefaultDependencies=no
-      After=openchamber-container-setup.service dockerd.service
-      Requires=openchamber-container-setup.service dockerd.service
+      After=openchamber-bootstrap.service
+      Requires=openchamber-bootstrap.service
 
       [Service]
       Type=oneshot
@@ -549,7 +661,7 @@ let
       [Unit]
       Description=Periodic OpenChamber and OpenCode tool updates
       DefaultDependencies=no
-      After=openchamber-container-setup.service
+      After=openchamber-bootstrap.service
 
       [Timer]
       OnBootSec=10m
@@ -593,8 +705,8 @@ let
       [Unit]
       Description=OpenChamber Multi-User System
       DefaultDependencies=no
-      Wants=openchamber-container-setup.service dockerd.service openchamber-user-manager.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-web-monitor.timer
-      After=openchamber-container-setup.service dockerd.service
+      Wants=openchamber-container-setup.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-web-monitor.timer
+      After=openchamber-container-setup.service dockerd.service openchamber-bootstrap.service
       AllowIsolate=yes
       EOF
       rm -f etc/systemd/system/docker.service \
@@ -604,11 +716,11 @@ let
       ln -s multi-user.target etc/systemd/system/default.target
       ln -s ../openchamber-container-setup.service etc/systemd/system/multi-user.target.wants/openchamber-container-setup.service
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
-      ln -s ../openchamber-user-manager.service etc/systemd/system/multi-user.target.wants/openchamber-user-manager.service
+      ln -s ../openchamber-bootstrap.service etc/systemd/system/multi-user.target.wants/openchamber-bootstrap.service
       ln -s ../openchamber-web.service etc/systemd/system/multi-user.target.wants/openchamber-web.service
       ln -s ../openchamber-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/openchamber-tool-auto-update.timer
       ln -s ../openchamber-web-monitor.timer etc/systemd/system/multi-user.target.wants/openchamber-web-monitor.timer
-      '';
+    '';
     fakeRootCommands = ''
       chown -R 3000:3000 nix/store nix/var/log/nix nix/var/nix
       chmod -R u+rwX,go+rX nix/store nix/var/log/nix nix/var/nix
@@ -699,6 +811,10 @@ in
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.cache
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/openchamber
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/opencode
+      install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/systemd/user
+      install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.openchamber/hooks/bootstrap.d
+      install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.openchamber/hooks/before-openchamber.d
+      install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.openchamber/hooks/doctor.d
 
       if [ -e ${openchamberHome}/.config/systemd/user/openchamber.service ] \
         && grep -q 'ExecStart=/home/openchamber/.local/bin/openchamber-web-run' ${openchamberHome}/.config/systemd/user/openchamber.service; then
@@ -709,28 +825,6 @@ in
         rm -f ${openchamberHome}/.config/systemd/user/default.target
       fi
       rm -f ${openchamberHome}/.config/systemd/user/default.target.wants/openchamber.service
-      if [ -d ${openchamberHome}/.config/systemd/user ]; then
-        for unit in \
-          ghostship-agent-repair-install.service \
-          ghostship-agent-repair-install.timer \
-          ghostship-am-collect-browser.service \
-          ghostship-am-collect-browser.timer \
-          ghostship-am-collect-craigslist.service \
-          ghostship-am-collect-craigslist.timer \
-          ghostship-am-collect-public.service \
-          ghostship-am-collect-public.timer \
-          ghostship-am-generate.service \
-          ghostship-am-generate.timer \
-          ghostship-am-maintain-gmail-auth.service \
-          ghostship-am-maintain-gmail-auth.timer; do
-          rm -f \
-            ${openchamberHome}/.config/systemd/user/"$unit" \
-            ${openchamberHome}/.config/systemd/user/default.target.wants/"$unit"
-        done
-        find ${openchamberHome}/.config/systemd/user -type l \
-          -lname '/nix/store/*home-manager-files/.config/systemd/user/*' \
-          -delete
-      fi
     '';
   };
 }
