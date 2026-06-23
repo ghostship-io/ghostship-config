@@ -15,6 +15,8 @@ let
   openchamberPackages = with pkgs; [
     nix
     systemd
+    dbus
+    pam
     docker
     git
     git-lfs
@@ -64,11 +66,17 @@ let
     hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     if [ -f "$hm_session_vars" ]; then
       # shellcheck disable=SC1090
+      case "$-" in *u*) restore_nounset=1 ;; *) restore_nounset=0 ;; esac
+      set +u
       . "$hm_session_vars"
+      if [ "$restore_nounset" -eq 1 ]; then
+        set -u
+      fi
     fi
     export PATH=$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${openchamberPath}:/bin:/usr/bin:$PATH
     export DOCKER_HOST=unix:///var/run/docker.sock
     export XDG_RUNTIME_DIR=/run/user/3000
+    export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
     export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     export SSL_CERT_FILE=$NIX_SSL_CERT_FILE
     export NIX_CONFIG="experimental-features = nix-command flakes"
@@ -78,7 +86,12 @@ let
     hm_session_vars="\$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     if [ -f "\$hm_session_vars" ]; then
       # shellcheck disable=SC1090
+      case "\$-" in *u*) restore_nounset=1 ;; *) restore_nounset=0 ;; esac
+      set +u
       . "\$hm_session_vars"
+      if [ "\$restore_nounset" -eq 1 ]; then
+        set -u
+      fi
     fi
   '';
 
@@ -523,7 +536,7 @@ let
       pkgs.dockerTools.caCertificates
     ];
     extraCommands = ''
-      mkdir -p etc/nix etc/systemd/system/multi-user.target.wants nix/store nix/var/log/nix nix/var/nix tmp workspace home/openchamber
+      mkdir -p etc/nix etc/pam.d etc/systemd/system/multi-user.target.wants etc/systemd/user/sockets.target.wants usr/share/systemd/user nix/store nix/var/log/nix nix/var/nix tmp workspace home/openchamber
       mkdir -p mnt/share run/user var/lib/docker var/log/journal var/run
       chmod 1777 tmp
       cat > etc/passwd <<'EOF'
@@ -538,6 +551,38 @@ let
       experimental-features = nix-command flakes
       sandbox = false
       EOF
+      rm -f etc/pam.d/systemd-user
+      cat > etc/pam.d/systemd-user <<'EOF'
+      account required ${pkgs.pam}/lib/security/pam_permit.so
+      session required ${pkgs.pam}/lib/security/pam_permit.so
+      EOF
+      cp -a ${pkgs.systemd}/example/systemd/user/. usr/share/systemd/user/
+      rm -f etc/systemd/user/dbus.socket etc/systemd/user/dbus.service etc/systemd/user/sockets.target.wants/dbus.socket
+      cat > etc/systemd/user/dbus.socket <<'EOF'
+      [Unit]
+      Description=D-Bus User Message Bus Socket
+
+      [Socket]
+      ListenStream=%t/bus
+      ExecStartPost=-${pkgs.systemd}/bin/systemctl --user set-environment DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+
+      [Install]
+      WantedBy=sockets.target
+      EOF
+      cat > etc/systemd/user/dbus.service <<'EOF'
+      [Unit]
+      Description=D-Bus User Message Bus
+      Documentation=man:dbus-daemon(1)
+      Requires=dbus.socket
+
+      [Service]
+      Type=notify
+      NotifyAccess=main
+      ExecStart=${pkgs.dbus}/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+      ExecReload=${pkgs.dbus}/bin/dbus-send --print-reply --session --type=method_call --dest=org.freedesktop.DBus / org.freedesktop.DBus.ReloadConfig
+      Slice=session.slice
+      EOF
+      ln -s ../dbus.socket etc/systemd/user/sockets.target.wants/dbus.socket
       cat > etc/systemd/system/openchamber-container-setup.service <<'EOF'
       [Unit]
       Description=Prepare OpenChamber container state
@@ -548,6 +593,42 @@ let
       ExecStart=${openchamberContainerSetup}/bin/openchamber-container-setup
       RemainAfterExit=yes
       TasksMax=infinity
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+      cat > etc/systemd/system/user@.service <<'EOF'
+      [Unit]
+      Description=OpenChamber user manager for UID %i
+      Documentation=man:user@.service(5)
+      DefaultDependencies=no
+      After=openchamber-container-setup.service
+      Requires=openchamber-container-setup.service
+      Before=openchamber-bootstrap.service openchamber-web.service
+      IgnoreOnIsolate=yes
+
+      [Service]
+      User=%i
+      PAMName=systemd-user
+      Type=notify-reload
+      Environment=HOME=/home/openchamber
+      Environment=USER=openchamber
+      Environment=LOGNAME=openchamber
+      Environment=XDG_RUNTIME_DIR=/run/user/%i
+      Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%i/bus
+      ExecStart=${pkgs.systemd}/lib/systemd/systemd --user
+      Slice=user-%i.slice
+      ReloadSignal=RTMIN+25
+      KillMode=mixed
+      Delegate=pids memory cpu
+      DelegateSubgroup=init.scope
+      TasksMax=infinity
+      TimeoutStopSec=120s
+      KeyringMode=inherit
+      OOMScoreAdjust=100
+      MemoryPressureWatch=skip
+      Restart=always
+      RestartSec=5
 
       [Install]
       WantedBy=multi-user.target
@@ -573,14 +654,15 @@ let
       [Unit]
       Description=Run OpenChamber bootstrap hooks
       DefaultDependencies=no
-      After=openchamber-container-setup.service dockerd.service
-      Requires=openchamber-container-setup.service dockerd.service
+      After=openchamber-container-setup.service user@3000.service dockerd.service
+      Requires=openchamber-container-setup.service user@3000.service dockerd.service
 
       [Service]
       Type=oneshot
       Environment=HOME=/home/openchamber
       Environment=USER=openchamber
       Environment=XDG_RUNTIME_DIR=/run/user/3000
+      Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
       ExecStart=${openchamberBootstrap}/bin/openchamber-bootstrap
       RemainAfterExit=yes
@@ -605,6 +687,7 @@ let
       Environment=HOME=/home/openchamber
       Environment=USER=openchamber
       Environment=XDG_RUNTIME_DIR=/run/user/3000
+      Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
       ExecStartPre=${openchamberBeforeWebStart}/bin/openchamber-before-web-start
       ExecStart=${openchamberWebRun}/bin/openchamber-web-run
@@ -681,8 +764,8 @@ let
       [Unit]
       Description=OpenChamber Multi-User System
       DefaultDependencies=no
-      Wants=openchamber-container-setup.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-web-monitor.timer
-      After=openchamber-container-setup.service dockerd.service openchamber-bootstrap.service
+      Wants=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-web-monitor.timer
+      After=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service
       AllowIsolate=yes
       EOF
       rm -f etc/systemd/system/docker.service \
@@ -691,6 +774,7 @@ let
         etc/systemd/system/sockets.target.wants/docker.socket
       ln -s multi-user.target etc/systemd/system/default.target
       ln -s ../openchamber-container-setup.service etc/systemd/system/multi-user.target.wants/openchamber-container-setup.service
+      ln -s ../user@.service etc/systemd/system/multi-user.target.wants/user@3000.service
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
       ln -s ../openchamber-bootstrap.service etc/systemd/system/multi-user.target.wants/openchamber-bootstrap.service
       ln -s ../openchamber-web.service etc/systemd/system/multi-user.target.wants/openchamber-web.service
@@ -708,6 +792,7 @@ let
         "USER=openchamber"
         "DOCKER_HOST=unix:///var/run/docker.sock"
         "XDG_RUNTIME_DIR=/run/user/3000"
+        "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus"
         "XDG_CONFIG_HOME=/home/openchamber/.config"
         "XDG_STATE_HOME=/home/openchamber/.local/state"
         "XDG_CACHE_HOME=/home/openchamber/.cache"
