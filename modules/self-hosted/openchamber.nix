@@ -63,6 +63,7 @@ let
     export XDG_DATA_HOME="''${XDG_DATA_HOME:-$HOME/.local/share}"
     export NPM_CONFIG_PREFIX="$HOME/.local/share/openchamber-tools/npm"
     export npm_config_prefix="$NPM_CONFIG_PREFIX"
+    export OPENCODE_AUTOMATION_DIR="$HOME/.automation"
     hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     if [ -f "$hm_session_vars" ]; then
       # shellcheck disable=SC1090
@@ -464,6 +465,7 @@ let
       "$XDG_CACHE_HOME" \
       "$HOME/.config/openchamber/logs" \
       "$HOME/.config/opencode" \
+      "$HOME/.automation" \
       "$HOME/.config/systemd/user" \
       "$HOME/.openchamber/hooks/bootstrap.d" \
       "$HOME/.openchamber/hooks/before-openchamber.d" \
@@ -663,6 +665,7 @@ let
       Environment=USER=openchamber
       Environment=XDG_RUNTIME_DIR=/run/user/3000
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
+      Environment=OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation
       Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
       ExecStart=${openchamberBootstrap}/bin/openchamber-bootstrap
       RemainAfterExit=yes
@@ -688,6 +691,7 @@ let
       Environment=USER=openchamber
       Environment=XDG_RUNTIME_DIR=/run/user/3000
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
+      Environment=OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation
       Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
       ExecStartPre=${openchamberBeforeWebStart}/bin/openchamber-before-web-start
       ExecStart=${openchamberWebRun}/bin/openchamber-web-run
@@ -799,6 +803,7 @@ let
         "XDG_DATA_HOME=/home/openchamber/.local/share"
         "NPM_CONFIG_PREFIX=/home/openchamber/.local/share/openchamber-tools/npm"
         "npm_config_prefix=/home/openchamber/.local/share/openchamber-tools/npm"
+        "OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation"
         "PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin"
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
@@ -872,6 +877,7 @@ in
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.cache
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/openchamber
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/opencode
+      install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.automation
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.config/systemd/user
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.openchamber/hooks/bootstrap.d
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.openchamber/hooks/before-openchamber.d

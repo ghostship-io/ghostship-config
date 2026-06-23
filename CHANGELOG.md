@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.109] - 2026-06-23
+
+- **OpenChamber automation environment**: Export
+  `OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation` from the container
+  runtime and keep the persisted automation directory created for the
+  `openchamber` user.
+
 ## [2.1.108] - 2026-06-23
 
 - **OpenChamber user systemd runtime**: Start `user@3000.service` in the
