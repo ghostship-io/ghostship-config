@@ -395,8 +395,12 @@ let
 
       found=1
       log_info "running $(basename "$hook")"
-      "$hook" >> "$log_file" 2>&1
-      log_info "completed $(basename "$hook")"
+      if "$hook" >> "$log_file" 2>&1; then
+        log_info "completed $(basename "$hook")"
+      else
+        hook_status="$?"
+        log_info "failed $(basename "$hook") with status $hook_status; continuing"
+      fi
     done
 
     if [ "$found" -eq 0 ]; then
