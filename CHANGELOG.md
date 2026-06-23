@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.108] - 2026-06-23
+
+- **OpenChamber user systemd runtime**: Start `user@3000.service` in the
+  container image, provide the minimal user systemd targets and D-Bus user bus,
+  and order OpenChamber bootstrap after the user manager is available.
+
 ## [2.1.107] - 2026-06-22
 
 - **OpenChamber lifecycle hooks**: Add generic container bootstrap, pre-web,
