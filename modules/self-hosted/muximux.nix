@@ -361,13 +361,6 @@ in
           OpenChamber.color=literal:"#111827"
           OpenChamber.enabled=literal:"true"
           OpenChamber.dd=literal:"false"
-          Codex.name=literal:"Codex"
-          Codex.url=literal:"https://codex.ghostship.io"
-          Codex.scale=literal:1
-          Codex.icon=literal:"muximux-code"
-          Codex.color=literal:"#111827"
-          Codex.enabled=literal:"true"
-          Codex.dd=literal:"true"
           Synology.name=literal:"Synology"
           Synology.url=literal:"https://synology.ghostship.io"
           Synology.scale=literal:1

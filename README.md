@@ -133,12 +133,6 @@ notes.
 - For immediate bootstrap as the logged-in user, run
   `ghostship-agent-maintenance`. The system service is still what runs on boot
   and every `4h`.
-- The self-hosted Codex container keeps `agent-browser` in the base image and
-  provides persistent Supercronic plus Taskfile automation under
-  `/home/codex/.automation`. The external `/workspace/ghostship-agent` checkout
-  owns its own persistent bootstrap task through its Home Manager activation,
-  so image refreshes can pick up shared `agent`, `gws`, `bw`, Git helpers, and
-  repo skills without baking mutable repo files into this image.
 - OpenCode remains an installed interactive CLI on develop hosts, but the repo
   no longer starts a managed WSL `opencode serve` user service.
 - Develop-host convergence also cleans the known stale `workmux set-window-status ...` entries from `~/.codex/hooks.json` so removed repo-managed tooling does not keep breaking Codex hooks. The cleanup preserves unrelated valid hooks, warns instead of rewriting malformed JSON, and takes effect after the relevant Home Manager or NixOS switch. Restart any already-running Codex sessions after the switch if they were holding the stale hook state open.
@@ -186,9 +180,8 @@ inventory. Services use Podman, native healthchecks, and registry auto-update.
 Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
-Key services include Plex, Homepage, Muximux, OpenChamber, Codex, the `arr` stack,
-qBittorrent, SearXNG, RomM, Grimmory, Chaptarr,
-PyLoad, PriceBuddy, and n8n.
+Key services include Plex, Homepage, Muximux, OpenChamber, the `arr` stack,
+qBittorrent, SearXNG, RomM, Grimmory, Chaptarr, PyLoad, PriceBuddy, and n8n.
 
 Retired `chill-penguin` self-hosted service artifacts are cleaned from the
 allowlist in
@@ -199,42 +192,6 @@ service modules.
 
 PyLoad has a daily `04:00` `pyload-restart-failed` timer that checks the
 internal `http://pyload:8000` API and restarts failed queue links when present.
-
-Codex runs as a repo-built Podman OCI image with `0xcaff/codex-web`, the Codex
-CLI, Nix, Git, GitHub CLI, SSH, Docker-in-Docker, Ollama, Bitwarden CLI,
-Python, Node.js, `uv`, `direnv`, `agent-browser`, search tools, and basic build
-tools. The service is intended for `https://codex.ghostship.io`; it keeps
-`/workspace`, `/home/codex`, and Docker state under `/srv/apps/codex`, mounts
-`/mnt/share`, and leaves `/nix` image-owned with a populated Nix database and
-writable Nix state/log directories so rootless in-container builds and Home
-Manager activations write to the same system-visible store. Codex web starts
-from `/home/codex` so new sessions default to the
-persisted Codex home. Host startup copies `ghostship-agent-maintenance`, the
-shared AGENTS files, and repo-managed skills into persisted `/home/codex`; container
-setup runs that external maintenance script as the `codex` user so Codex,
-Gemini, OpenCode, skills, and browser runtime updates can land without
-rebuilding the image. Codex exposes mutable user tooling through
-`/home/codex/.local/bin`; package-specific install state stays internal under
-`/home/codex/.local/share/ghostship-agent-tools`. When the image
-generation changes, startup clears the Codex user's mutable Nix state from
-`/home/codex` so Nix's per-user validity database and profiles cannot point at
-paths from the previous image.
-The same user tooling can be installed manually from this repo after a fresh
-image starts:
-
-```sh
-nix run .#install-codex-agent-tooling
-```
-
-Pass `-- --no-maintenance` to copy only the repo-managed files and wrappers
-without running the npm-backed maintenance refresh.
-Codex web and the local Ollama API proxy run as the `codex` user; the proxy
-forwards Codex CLI's native `ollama` provider traffic to `https://ollama.com`
-with the projected `OLLAMA_API_KEY`. The web picker appends the current
-ollama.com model list filtered to models tagged `tools`, `thinking`, and
-`cloud` as an Ollama model block. The Codex container also receives the
-Bitwarden runtime variables `BW_CLIENTID`, `BW_CLIENTSECRET`, and `BW_PASSWORD`
-from the shared Bitwarden secret projection at startup.
 
 OpenChamber runs as a separate repo-built Podman OCI image for
 `https://openchamber.ghostship.io`. It uses the `openchamber` user at
