@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.110] - 2026-06-23
+
+- **Codex container retirement**: Remove the self-hosted Codex Podman service,
+  dashboard entries, secret projection, hosted tooling bootstrap, and
+  `codex-web` flake input, and add its live container, unit, image, and
+  `/srv/apps/codex` state to retired artifact cleanup.
+
 ## [2.1.109] - 2026-06-23
 
 - **OpenChamber automation environment**: Export

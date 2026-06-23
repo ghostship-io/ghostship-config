@@ -30,7 +30,6 @@
 
     # Apps and utilities
     ./cloakbrowser.nix
-    ./codex.nix
     ./openchamber.nix
 
     # Games
