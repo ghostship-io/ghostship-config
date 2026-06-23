@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.111] - 2026-06-23
+
+- **OpenChamber hook isolation**: Log failing lifecycle hooks and continue
+  startup so persisted user automations cannot prevent OpenChamber from
+  starting after image recreation.
+
 ## [2.1.110] - 2026-06-23
 
 - **Codex container retirement**: Remove the self-hosted Codex Podman service,
