@@ -436,9 +436,15 @@ let
               exit 1
             fi
 
-            wg_ip="$(jq -r '.winner.wg_ip' "$cache_file")"
-            wg_host="$(jq -r '.winner.wg_host' "$cache_file")"
-            if [ -z "$wg_ip" ] || [ "$wg_ip" = "null" ] || [ -z "$wg_host" ] || [ "$wg_host" = "null" ]; then
+            candidates_file="$(mktemp)"
+            trap 'rm -f "$candidates_file"' EXIT
+            jq -c '
+              [.winner] + (.fallbacks // []) + (.top_servers // [])
+              | map(select(.wg_ip != null and .wg_host != null))
+              | unique_by(.wg_host)
+              | .[]
+            ' "$cache_file" > "$candidates_file"
+            if [ ! -s "$candidates_file" ]; then
               echo "Cached PIA selection file is missing WireGuard winner data" >&2
               exit 1
             fi
@@ -463,20 +469,41 @@ let
             private_key="$(tr -d '\n' < "$private_key_file")"
             public_key="$(printf '%s' "$private_key" | ${pkgs.wireguard-tools}/bin/wg pubkey)"
 
-            wireguard_json="$(
-              curl -4 -fsSL \
-                --connect-to "$wg_host::$wg_ip:" \
-                --cacert "$ca_cert" \
-                --get \
-                --data-urlencode "pt=$token" \
-                --data-urlencode "pubkey=$public_key" \
-                "https://$wg_host:1337/addKey"
-            )"
+            selected_json=""
+            wireguard_json=""
+            while IFS= read -r candidate_json; do
+              wg_ip="$(printf '%s' "$candidate_json" | jq -r '.wg_ip')"
+              wg_host="$(printf '%s' "$candidate_json" | jq -r '.wg_host')"
+              if [ -z "$wg_ip" ] || [ "$wg_ip" = "null" ] || [ -z "$wg_host" ] || [ "$wg_host" = "null" ]; then
+                continue
+              fi
+              wireguard_json="$(
+                curl -4 -fsSL \
+                  --connect-timeout 10 \
+                  --max-time 20 \
+                  --connect-to "$wg_host::$wg_ip:" \
+                  --cacert "$ca_cert" \
+                  --get \
+                  --data-urlencode "pt=$token" \
+                  --data-urlencode "pubkey=$public_key" \
+                  "https://$wg_host:1337/addKey" 2>/dev/null
+              )" || {
+                echo "PIA WireGuard bootstrap failed for $wg_host ($wg_ip); trying next cached endpoint." >&2
+                continue
+              }
+              if [ "$(printf '%s' "$wireguard_json" | jq -r '.status // empty')" = "OK" ]; then
+                selected_json="$candidate_json"
+                break
+              fi
+              echo "PIA WireGuard bootstrap returned a non-OK status for $wg_host ($wg_ip); trying next cached endpoint." >&2
+            done < "$candidates_file"
 
-            if [ "$(printf '%s' "$wireguard_json" | jq -r '.status // empty')" != "OK" ]; then
-              echo "PIA WireGuard bootstrap failed for $wg_host" >&2
+            if [ -z "$selected_json" ]; then
+              echo "PIA WireGuard bootstrap failed for all cached Gluetun endpoints" >&2
               exit 1
             fi
+            wg_ip="$(printf '%s' "$selected_json" | jq -r '.wg_ip')"
+            wg_host="$(printf '%s' "$selected_json" | jq -r '.wg_host')"
 
             peer_ip="$(printf '%s' "$wireguard_json" | jq -r '.peer_ip')"
             server_key="$(printf '%s' "$wireguard_json" | jq -r '.server_key')"
@@ -504,6 +531,32 @@ let
       HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE={"auth":"apikey","apikey":"$api_key","routes":["GET /v1/publicip/ip","GET /v1/portforward","GET /v1/vpn/status"]}
       INNER_EOF
             chmod 600 "$runtime_env"
+
+            current_host="$(jq -r '.winner.wg_host // empty' "$cache_file" 2>/dev/null || true)"
+            if [ "$current_host" != "$wg_host" ]; then
+              echo "Updating cached Gluetun PIA winner from ''${current_host:-unknown} to $wg_host after bootstrap fallback."
+              now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              jq \
+                --arg selected_at "$now" \
+                --argjson winner "$selected_json" \
+                '.selected_at = $selected_at
+                  | .selection_mode = "bootstrap-fallback"
+                  | .winner = ($winner + {
+                      source: "bootstrap-fallback",
+                      download_bytes_per_second: null,
+                      bytes_transferred: null,
+                      elapsed_seconds: null,
+                      requests_attempted: null,
+                      requests_completed: null,
+                      benchmark_url: null
+                    })
+                  | .fallbacks = (((.fallbacks // []) + (.top_servers // []))
+                      | map(select(.wg_host != $winner.wg_host))
+                      | unique_by(.wg_host))' \
+                "$cache_file" > "$cache_file.tmp"
+              mv "$cache_file.tmp" "$cache_file"
+              chmod 600 "$cache_file"
+            fi
     '';
   };
 in
@@ -552,7 +605,6 @@ in
     description = "Benchmark and refresh the preferred PIA WireGuard server for Gluetun";
     after = [
       "network-online.target"
-      "podman-gluetun.service"
     ];
     wants = [ "network-online.target" ];
     serviceConfig = {

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.112] - 2026-06-27
+
+- **Gluetun endpoint fallback**: Rotate through cached PIA WireGuard fallback
+  endpoints during bootstrap and let the selector run without depending on a
+  healthy Gluetun container so dead VPN endpoints can self-repair.
+
 ## [2.1.111] - 2026-06-23
 
 - **OpenChamber hook isolation**: Log failing lifecycle hooks and continue
