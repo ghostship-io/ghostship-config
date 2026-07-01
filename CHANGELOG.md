@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.114] - 2026-07-01
+
+- **OpenChamber Bitwarden projection**: Include Bitwarden client and password
+  fields in the OpenChamber runtime secret projection.
+
 ## [2.1.113] - 2026-07-01
 
 - **OpenChamber env projection**: Project OpenCode, OpenRouter, and GitHub

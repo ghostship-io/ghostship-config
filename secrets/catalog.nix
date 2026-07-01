@@ -534,6 +534,18 @@ in
           unit = "github";
           key = "TOKEN";
         };
+        BW_CLIENTID = {
+          unit = "bitwarden";
+          key = "BW_CLIENTID";
+        };
+        BW_CLIENTSECRET = {
+          unit = "bitwarden";
+          key = "BW_CLIENTSECRET";
+        };
+        BW_PASSWORD = {
+          unit = "bitwarden";
+          key = "BW_PASSWORD";
+        };
       };
     };
 
