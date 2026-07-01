@@ -516,6 +516,27 @@ in
       };
     };
 
+    openchamber = {
+      fileName = "openchamber.env";
+      owner = "apps";
+      group = "apps";
+      mode = "0440";
+      fields = {
+        GO_API_KEY = {
+          unit = "opencode";
+          key = "GO_API_KEY";
+        };
+        OPENROUTER_API_KEY = {
+          unit = "openrouter";
+          key = "API_KEY";
+        };
+        GITHUB_TOKEN = {
+          unit = "github";
+          key = "TOKEN";
+        };
+      };
+    };
+
     plex = {
       fileName = "plex.env";
       owner = "apps";
