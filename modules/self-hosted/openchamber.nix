@@ -1,4 +1,5 @@
 {
+  config,
   inputs,
   lib,
   pkgs,
@@ -9,6 +10,8 @@ let
   openchamberHome = "/srv/apps/openchamber/home";
   openchamberDocker = "/srv/apps/openchamber/docker";
   openchamberWorkspace = "/srv/apps/openchamber/workspace";
+  openchamberSecrets = config.ghostship.selfHostedSecrets.projections.openchamber.path;
+  openchamberSecretsFile = "/run/secrets/openchamber.env";
   imageName = "localhost/ghostship-openchamber";
   imageTag = "openchamber-${inputs.self.shortRev or inputs.self.rev or "dirty"}";
 
@@ -55,6 +58,12 @@ let
 
   openchamberPath = lib.makeBinPath openchamberPackages;
   openchamberRuntimeEnv = ''
+    if [ -f ${openchamberSecretsFile} ]; then
+      set -a
+      # shellcheck disable=SC1091
+      . ${openchamberSecretsFile}
+      set +a
+    fi
     export HOME=/home/openchamber
     export USER=openchamber
     export XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -848,8 +857,10 @@ in
       "${openchamberDocker}:/var/lib/docker:rw"
       "${openchamberWorkspace}:/workspace:rw"
       "${openchamberHome}:/home/openchamber:rw"
+      "${openchamberSecrets}:${openchamberSecretsFile}:ro"
       "/mnt/share:/mnt/share:rw"
     ];
+    environmentFiles = [ openchamberSecrets ];
   };
 
   systemd.tmpfiles.rules = [
