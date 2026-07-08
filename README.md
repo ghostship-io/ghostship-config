@@ -203,6 +203,21 @@ user-owned services and timers can live under that same user unit directory.
 OpenChamber installs only `@openchamber/web` and `opencode-ai` into
 `/home/openchamber/.local/share/openchamber-tools`, exposes
 `/home/openchamber/.local/bin` on `PATH`, and does not configure a UI password.
+It also runs an in-container Caddy proxy on port `3080` for OpenChamber-launched
+local web apps under `*.test.openchamber.ghostship.io`. Use
+`openchamber-proxy add <name> <host> <port>` inside the container to route
+`https://<name>.test.openchamber.ghostship.io` to a loopback backend such as
+`http://127.0.0.1:<port>`; use `openchamber-proxy remove <name>` to remove the
+route. Cloudflare should point the wildcard tunnel hostname at
+`http://openchamber:3080`.
+Use `openchamber-apply-config` as the `openchamber` user after changing
+OpenChamber or OpenCode config. It validates OpenChamber JSON config and runs
+OpenCode's native `opencode debug config` check, restarts
+`openchamber-web.service` through a narrow container-local sudoers rule, waits
+for OpenChamber plus its managed `opencode serve` subprocess to recover, and
+restores the previous last-good config snapshot if the restart does not become
+healthy. `openchamber-web.service` refreshes that last-good snapshot whenever
+it starts successfully.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts

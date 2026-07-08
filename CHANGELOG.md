@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.116] - 2026-07-08
+
+- **OpenChamber config apply command**: Add `openchamber-apply-config` for
+  non-root OpenChamber JSON validation, native OpenCode config validation,
+  controlled web-service restart, health verification, and rollback to the
+  last-good runtime config snapshot refreshed by successful
+  `openchamber-web.service` starts.
+
+## [2.1.115] - 2026-07-08
+
+- **OpenChamber wildcard app proxy**: Add an in-container Caddy proxy and
+  `openchamber-proxy` helper so OpenChamber-launched local web servers can be
+  routed under `*.test.openchamber.ghostship.io` through the Cloudflare tunnel.
+
 ## [2.1.114] - 2026-07-01
 
 - **OpenChamber Bitwarden projection**: Include Bitwarden client and password
