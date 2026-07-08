@@ -938,6 +938,7 @@ let
       experimental-features = nix-command flakes
       sandbox = false
       EOF
+      rm -f etc/sudoers etc/sudoers.d/openchamber-apply-config etc/pam.d/sudo
       cat > etc/sudoers <<'EOF'
       root ALL=(ALL:ALL) ALL
       #includedir /etc/sudoers.d
