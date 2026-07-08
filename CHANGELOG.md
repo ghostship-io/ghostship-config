@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.118] - 2026-07-08
+
+- **OpenChamber Quick Tunnels**: Replace the in-container Caddy wildcard app
+  proxy with Cloudflared Quick Tunnel support and an `openchamber-tunnel`
+  helper for exposing OpenChamber-launched loopback web apps through ephemeral
+  `trycloudflare.com` URLs.
+
 ## [2.1.117] - 2026-07-08
 
 - **OpenChamber sudoers image build**: Remove packaged sudo defaults before

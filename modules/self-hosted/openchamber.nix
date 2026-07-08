@@ -12,8 +12,6 @@ let
   openchamberWorkspace = "/srv/apps/openchamber/workspace";
   openchamberSecrets = config.ghostship.selfHostedSecrets.projections.openchamber.path;
   openchamberSecretsFile = "/run/secrets/openchamber.env";
-  openchamberProxyDomain = "test.openchamber.ghostship.io";
-  openchamberProxyPort = 3080;
   imageName = "localhost/ghostship-openchamber";
   imageTag = "openchamber-${inputs.self.shortRev or inputs.self.rev or "dirty"}";
 
@@ -23,7 +21,7 @@ let
     dbus
     pam
     docker
-    caddy
+    cloudflared
     sudo
     git
     git-lfs
@@ -409,7 +407,6 @@ let
         ! -name logs \
         ! -name run \
         ! -name recovery \
-        ! -name proxy \
         -exec rm -rf {} +
 
       if [ -d "$src/openchamber" ]; then
@@ -440,7 +437,6 @@ let
         ! -path "$HOME/.config/openchamber/logs/*" \
         ! -path "$HOME/.config/openchamber/run/*" \
         ! -path "$HOME/.config/openchamber/recovery/*" \
-        ! -path "$HOME/.config/openchamber/proxy/*" \
         -print | while IFS= read -r file; do
           if ! jq -e . "$file" >/dev/null; then
             log_error "invalid JSON: $file"
@@ -616,7 +612,6 @@ let
         --exclude='openchamber/logs' \
         --exclude='openchamber/run' \
         --exclude='openchamber/recovery' \
-        --exclude='openchamber/proxy' \
         -cf - openchamber | tar -C "$tmp" -xf -
     fi
 
@@ -632,31 +627,31 @@ let
     mv "$tmp" "$last_good"
   '';
 
-  openchamberProxy = pkgs.writeShellScriptBin "openchamber-proxy" ''
+  openchamberTunnel = pkgs.writeShellScriptBin "openchamber-tunnel" ''
     set -eu
 
     ${openchamberRuntimeEnv}
 
-    proxy_dir="$HOME/.config/openchamber/proxy"
-    registry="$proxy_dir/routes.tsv"
-    caddyfile="$proxy_dir/Caddyfile"
-    domain="${openchamberProxyDomain}"
-    port="${toString openchamberProxyPort}"
+    tunnel_dir="$HOME/.config/openchamber/tunnels"
+    unit_dir="$HOME/.config/systemd/user"
+    log_dir="$HOME/.config/openchamber/logs/tunnels"
 
     usage() {
       cat >&2 <<EOF
     usage:
-      openchamber-proxy add <name> <host> <port>
-      openchamber-proxy remove <name>
-      openchamber-proxy list
-      openchamber-proxy render
+      openchamber-tunnel start <name> <port>
+      openchamber-tunnel stop <name>
+      openchamber-tunnel restart <name> <port>
+      openchamber-tunnel status <name>
+      openchamber-tunnel url <name>
+      openchamber-tunnel list
+      openchamber-tunnel remove <name>
     EOF
       exit 2
     }
 
     ensure_state() {
-      mkdir -p "$proxy_dir"
-      touch "$registry"
+      mkdir -p "$tunnel_dir" "$unit_dir" "$log_dir"
     }
 
     validate_name() {
@@ -673,17 +668,6 @@ let
       fi
     }
 
-    validate_host() {
-      case "$1" in
-        127.0.0.1|localhost|::1|\[::1\])
-          ;;
-        *)
-          printf 'error: host must be loopback: 127.0.0.1, localhost, ::1, or [::1]\n' >&2
-          exit 2
-          ;;
-      esac
-    }
-
     validate_port() {
       case "$1" in
         ""|*[!0-9]*)
@@ -697,100 +681,134 @@ let
       fi
     }
 
-    render() {
-      ensure_state
-      tmp="$caddyfile.tmp"
-      {
-        cat <<EOF
-    {
-      auto_https off
-      admin 127.0.0.1:2019
+    unit_name() {
+      printf 'openchamber-tunnel-%s.service' "$1"
     }
 
-    :$port {
-    EOF
-        while IFS="$(printf '\t')" read -r name host target_port; do
-          [ -n "$name" ] || continue
-          cat <<EOF
-      @$name host $name.$domain
-      handle @$name {
-        reverse_proxy http://$host:$target_port
-      }
-
-    EOF
-        done < "$registry"
-        cat <<'EOF'
-      handle {
-        respond "No OpenChamber proxy route for {host}" 404
-      }
-    }
-    EOF
-      } > "$tmp"
-      caddy fmt --overwrite "$tmp" >/dev/null
-      caddy validate --config "$tmp" --adapter caddyfile >/dev/null
-      mv "$tmp" "$caddyfile"
+    unit_path() {
+      printf '%s/%s' "$unit_dir" "$(unit_name "$1")"
     }
 
-    reload_if_running() {
-      if caddy reload --config "$caddyfile" --adapter caddyfile >/dev/null 2>&1; then
-        return 0
-      fi
-      printf 'warning: rendered proxy config, but Caddy is not accepting reloads yet\n' >&2
+    log_path() {
+      printf '%s/%s.log' "$log_dir" "$1"
     }
 
-    add_route() {
-      [ "$#" -eq 3 ] || usage
+    write_unit() {
       name="$1"
-      host="$2"
-      target_port="$3"
-      validate_name "$name"
-      validate_host "$host"
-      validate_port "$target_port"
-      if [ "$host" = "::1" ]; then
-        host="[::1]"
-      fi
+      port="$2"
       ensure_state
-      tmp="$registry.tmp"
-      awk -F '\t' -v name="$name" '$1 != name { print }' "$registry" > "$tmp"
-      printf '%s\t%s\t%s\n' "$name" "$host" "$target_port" >> "$tmp"
-      mv "$tmp" "$registry"
-      render
-      reload_if_running
-      printf 'https://%s.%s -> http://%s:%s\n' "$name" "$domain" "$host" "$target_port"
+      validate_name "$name"
+      validate_port "$port"
+      log_file="$(log_path "$name")"
+      cat > "$(unit_path "$name")" <<EOF
+    [Unit]
+    Description=OpenChamber quick tunnel: $name
+    After=default.target
+
+    [Service]
+    Type=simple
+    ExecStart=${pkgs.cloudflared}/bin/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:$port
+    Restart=always
+    RestartSec=5
+    StandardOutput=append:$log_file
+    StandardError=append:$log_file
+
+    [Install]
+    WantedBy=default.target
+    EOF
+      printf '%s\t%s\n' "$name" "$port" > "$tunnel_dir/$name.tsv"
     }
 
-    remove_route() {
+    systemctl_user() {
+      systemctl --user "$@"
+    }
+
+    start_tunnel() {
+      [ "$#" -eq 2 ] || usage
+      name="$1"
+      port="$2"
+      write_unit "$name" "$port"
+      systemctl_user daemon-reload
+      systemctl_user enable --now "$(unit_name "$name")"
+      printf 'started %s for http://127.0.0.1:%s\n' "$name" "$port"
+      printf 'logs: %s\n' "$(log_path "$name")"
+    }
+
+    stop_tunnel() {
       [ "$#" -eq 1 ] || usage
       name="$1"
       validate_name "$name"
-      ensure_state
-      tmp="$registry.tmp"
-      awk -F '\t' -v name="$name" '$1 != name { print }' "$registry" > "$tmp"
-      mv "$tmp" "$registry"
-      render
-      reload_if_running
+      systemctl_user stop "$(unit_name "$name")" || true
     }
 
-    list_routes() {
+    restart_tunnel() {
+      [ "$#" -eq 2 ] || usage
+      stop_tunnel "$1"
+      start_tunnel "$1" "$2"
+    }
+
+    status_tunnel() {
+      [ "$#" -eq 1 ] || usage
+      name="$1"
+      validate_name "$name"
+      systemctl_user status --no-pager "$(unit_name "$name")"
+    }
+
+    url_tunnel() {
+      [ "$#" -eq 1 ] || usage
+      name="$1"
+      validate_name "$name"
+      log_file="$(log_path "$name")"
+      if [ ! -f "$log_file" ]; then
+        printf 'error: no log file for tunnel %s\n' "$name" >&2
+        exit 1
+      fi
+      url="$(grep -Eo 'https://[-a-zA-Z0-9.]+\\.trycloudflare\\.com' "$log_file" | tail -n 1 || true)"
+      if [ -z "$url" ]; then
+        printf 'error: no quick tunnel URL found yet for %s\n' "$name" >&2
+        exit 1
+      fi
+      printf '%s\n' "$url"
+    }
+
+    list_tunnels() {
       [ "$#" -eq 0 ] || usage
       ensure_state
-      if [ ! -s "$registry" ]; then
-        exit 0
-      fi
-      while IFS="$(printf '\t')" read -r name host target_port; do
-        [ -n "$name" ] || continue
-        printf '%s.%s -> http://%s:%s\n' "$name" "$domain" "$host" "$target_port"
-      done < "$registry"
+      found=0
+      for entry in "$tunnel_dir"/*.tsv; do
+        [ -f "$entry" ] || continue
+        found=1
+        IFS="$(printf '\t')" read -r name port < "$entry"
+        state="$(systemctl_user is-active "$(unit_name "$name")" 2>/dev/null || true)"
+        printf '%s\t%s\t%s' "$name" "$port" "$state"
+        if url="$(openchamber-tunnel url "$name" 2>/dev/null)"; then
+          printf '\t%s' "$url"
+        fi
+        printf '\n'
+      done
+      [ "$found" -eq 1 ] || true
+    }
+
+    remove_tunnel() {
+      [ "$#" -eq 1 ] || usage
+      name="$1"
+      validate_name "$name"
+      systemctl_user disable --now "$(unit_name "$name")" || true
+      rm -f "$(unit_path "$name")" "$tunnel_dir/$name.tsv"
+      systemctl_user daemon-reload
     }
 
     [ "$#" -ge 1 ] || usage
     command="$1"
     shift
     case "$command" in
-      add) add_route "$@" ;;
-      remove|rm|delete) remove_route "$@" ;;
-      list|ls) list_routes "$@" ;;
-      render) [ "$#" -eq 0 ] || usage; render ;;
+      start) start_tunnel "$@" ;;
+      stop) stop_tunnel "$@" ;;
+      restart) restart_tunnel "$@" ;;
+      status) status_tunnel "$@" ;;
+      url) url_tunnel "$@" ;;
+      list|ls) list_tunnels "$@" ;;
+      remove|rm|delete) remove_tunnel "$@" ;;
       *) usage ;;
     esac
   '';
@@ -830,8 +848,9 @@ let
       "$XDG_STATE_HOME" \
       "$XDG_CACHE_HOME" \
       "$HOME/.config/openchamber/logs" \
-      "$HOME/.config/openchamber/proxy" \
       "$HOME/.config/openchamber/recovery" \
+      "$HOME/.config/openchamber/tunnels" \
+      "$HOME/.config/openchamber/logs/tunnels" \
       "$HOME/.config/opencode" \
       "$HOME/.automation" \
       "$HOME/.config/systemd/user" \
@@ -845,7 +864,7 @@ let
       /tmp \
       /run/user/3000
     chown -R openchamber:openchamber "$HOME/.openchamber" "$HOME/.config/systemd"
-    chown -R openchamber:openchamber "$HOME/.config/openchamber/logs" "$HOME/.config/openchamber/proxy" "$HOME/.config/openchamber/recovery"
+    chown -R openchamber:openchamber "$HOME/.config/openchamber/logs" "$HOME/.config/openchamber/recovery" "$HOME/.config/openchamber/tunnels"
     chown openchamber:openchamber /run/user/3000
     chmod 0700 /run/user/3000
     rm -rf \
@@ -862,19 +881,19 @@ let
     EOF
     chown openchamber:openchamber "$HOME/.local/bin/openchamber-web-run"
     chmod 0755 "$HOME/.local/bin/openchamber-web-run"
-    cat > "$HOME/.local/bin/openchamber-proxy" <<'EOF'
+    cat > "$HOME/.local/bin/openchamber-tunnel" <<'EOF'
     #!/bin/sh
-    exec ${openchamberProxy}/bin/openchamber-proxy "$@"
+    exec ${openchamberTunnel}/bin/openchamber-tunnel "$@"
     EOF
-    chown openchamber:openchamber "$HOME/.local/bin/openchamber-proxy"
-    chmod 0755 "$HOME/.local/bin/openchamber-proxy"
+    chown openchamber:openchamber "$HOME/.local/bin/openchamber-tunnel"
+    chmod 0755 "$HOME/.local/bin/openchamber-tunnel"
     cat > "$HOME/.local/bin/openchamber-apply-config" <<'EOF'
     #!/bin/sh
     exec ${openchamberApplyConfig}/bin/openchamber-apply-config "$@"
     EOF
     chown openchamber:openchamber "$HOME/.local/bin/openchamber-apply-config"
     chmod 0755 "$HOME/.local/bin/openchamber-apply-config"
-    su-exec openchamber:openchamber ${openchamberProxy}/bin/openchamber-proxy render
+    rm -f "$HOME/.local/bin/openchamber-proxy"
 
   '';
 
@@ -917,7 +936,7 @@ let
       openchamberBootstrap
       openchamberBeforeWebStart
       openchamberSnapshotConfig
-      openchamberProxy
+      openchamberTunnel
       pkgs.dockerTools.binSh
       pkgs.dockerTools.usrBinEnv
       pkgs.dockerTools.caCertificates
@@ -1107,33 +1126,6 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
-      cat > etc/systemd/system/openchamber-proxy.service <<'EOF'
-      [Unit]
-      Description=OpenChamber wildcard app proxy
-      DefaultDependencies=no
-      After=openchamber-container-setup.service
-      Requires=openchamber-container-setup.service
-
-      [Service]
-      Type=simple
-      User=openchamber
-      Group=openchamber
-      Environment=HOME=/home/openchamber
-      Environment=USER=openchamber
-      Environment=XDG_RUNTIME_DIR=/run/user/3000
-      Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
-      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
-      ExecStartPre=${openchamberProxy}/bin/openchamber-proxy render
-      ExecStart=${pkgs.caddy}/bin/caddy run --config /home/openchamber/.config/openchamber/proxy/Caddyfile --adapter caddyfile
-      Restart=always
-      RestartSec=5
-      StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-proxy.service.log
-      StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-proxy.service.log
-      TasksMax=infinity
-
-      [Install]
-      WantedBy=multi-user.target
-      EOF
       cat > etc/systemd/system/openchamber-tool-auto-update.service <<'EOF'
       [Unit]
       Description=Update OpenChamber and OpenCode tools
@@ -1197,7 +1189,7 @@ let
       [Unit]
       Description=OpenChamber Multi-User System
       DefaultDependencies=no
-      Wants=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-proxy.service openchamber-tool-auto-update.timer openchamber-web-monitor.timer
+      Wants=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-web-monitor.timer
       After=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service
       AllowIsolate=yes
       EOF
@@ -1211,7 +1203,6 @@ let
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
       ln -s ../openchamber-bootstrap.service etc/systemd/system/multi-user.target.wants/openchamber-bootstrap.service
       ln -s ../openchamber-web.service etc/systemd/system/multi-user.target.wants/openchamber-web.service
-      ln -s ../openchamber-proxy.service etc/systemd/system/multi-user.target.wants/openchamber-proxy.service
       ln -s ../openchamber-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/openchamber-tool-auto-update.timer
       ln -s ../openchamber-web-monitor.timer etc/systemd/system/multi-user.target.wants/openchamber-web-monitor.timer
     '';
@@ -1243,7 +1234,6 @@ let
       WorkingDir = "/home/openchamber";
       ExposedPorts = {
         "3000/tcp" = { };
-        "3080/tcp" = { };
       };
     };
   };
