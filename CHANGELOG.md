@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.121] - 2026-07-08
+
+- **OpenChamber apply command fix**: Preserve root setuid ownership on the
+  container-local `sudo` binary so `openchamber-apply-config` can restart
+  `openchamber-web.service` through its narrow sudoers rule as the
+  unprivileged `openchamber` user.
+
 ## [2.1.120] - 2026-07-08
 
 - **OpenChamber Ghostship agent compatibility**: Seed `/home/openchamber/tools`
