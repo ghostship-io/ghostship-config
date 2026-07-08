@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.120] - 2026-07-08
+
+- **OpenChamber Ghostship agent compatibility**: Seed `/home/openchamber/tools`
+  from `/workspace/ghostship-agent/tools` when present so installed
+  `ghostship-agent` command wrappers keep resolving their repo-local support
+  scripts after container rebuilds.
+
 ## [2.1.119] - 2026-07-08
 
 - **OpenChamber project runtime support**: Run startup project hooks as the

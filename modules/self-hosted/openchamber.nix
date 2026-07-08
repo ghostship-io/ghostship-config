@@ -928,6 +928,10 @@ let
     chown -R openchamber:openchamber "$HOME/.config/openchamber/logs" "$HOME/.config/openchamber/recovery" "$HOME/.config/openchamber/tunnels"
     chown openchamber:openchamber /run/user/3000
     chmod 0700 /run/user/3000
+    if [ ! -e "$HOME/tools" ] && [ -d /workspace/ghostship-agent/tools ]; then
+      ln -s /workspace/ghostship-agent/tools "$HOME/tools"
+      chown -h openchamber:openchamber "$HOME/tools"
+    fi
     rm -rf \
       "$HOME/.codex" \
       "$HOME/.gemini" \
