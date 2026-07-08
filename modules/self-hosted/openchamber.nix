@@ -524,6 +524,66 @@ let
     esac
   '';
 
+  openchamberUserUnits = pkgs.writeShellScriptBin "openchamber-user-units" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+
+    usage() {
+      cat >&2 <<EOF
+    usage:
+      openchamber-user-units reload
+      openchamber-user-units enable-now <unit>...
+      openchamber-user-units disable-now <unit>...
+      openchamber-user-units restart <unit>...
+      openchamber-user-units status <unit>...
+      openchamber-user-units list-timers
+    EOF
+      exit 2
+    }
+
+    systemctl_user() {
+      systemctl --user "$@"
+    }
+
+    [ "$#" -ge 1 ] || usage
+    command="$1"
+    shift
+
+    case "$command" in
+      reload)
+        [ "$#" -eq 0 ] || usage
+        systemctl_user daemon-reload
+        ;;
+      enable-now)
+        [ "$#" -ge 1 ] || usage
+        systemctl_user daemon-reload
+        systemctl_user enable --now "$@"
+        ;;
+      disable-now)
+        [ "$#" -ge 1 ] || usage
+        systemctl_user disable --now "$@"
+        systemctl_user daemon-reload
+        ;;
+      restart)
+        [ "$#" -ge 1 ] || usage
+        systemctl_user daemon-reload
+        systemctl_user restart "$@"
+        ;;
+      status)
+        [ "$#" -ge 1 ] || usage
+        systemctl_user status --no-pager "$@"
+        ;;
+      list-timers)
+        [ "$#" -eq 0 ] || usage
+        systemctl_user list-timers --all --no-pager
+        ;;
+      *)
+        usage
+        ;;
+    esac
+  '';
+
   openchamberRunHooks = pkgs.writeShellScriptBin "openchamber-run-hooks" ''
     set -eu
 
@@ -534,6 +594,7 @@ let
     fi
 
     ${openchamberRuntimeEnv}
+    export OPENCHAMBER_HOOK_SET="$hook_set"
 
     hook_dir="$HOME/.openchamber/hooks/$hook_set"
     log_file="$HOME/.config/openchamber/logs/openchamber-hooks.log"
@@ -887,6 +948,12 @@ let
     EOF
     chown openchamber:openchamber "$HOME/.local/bin/openchamber-tunnel"
     chmod 0755 "$HOME/.local/bin/openchamber-tunnel"
+    cat > "$HOME/.local/bin/openchamber-user-units" <<'EOF'
+    #!/bin/sh
+    exec ${openchamberUserUnits}/bin/openchamber-user-units "$@"
+    EOF
+    chown openchamber:openchamber "$HOME/.local/bin/openchamber-user-units"
+    chmod 0755 "$HOME/.local/bin/openchamber-user-units"
     cat > "$HOME/.local/bin/openchamber-apply-config" <<'EOF'
     #!/bin/sh
     exec ${openchamberApplyConfig}/bin/openchamber-apply-config "$@"
@@ -933,6 +1000,7 @@ let
       openchamberRunHooks
       openchamberDoctor
       openchamberApplyConfig
+      openchamberUserUnits
       openchamberBootstrap
       openchamberBeforeWebStart
       openchamberSnapshotConfig
@@ -1081,6 +1149,8 @@ let
 
       [Service]
       Type=oneshot
+      User=openchamber
+      Group=openchamber
       Environment=HOME=/home/openchamber
       Environment=USER=openchamber
       Environment=XDG_RUNTIME_DIR=/run/user/3000
