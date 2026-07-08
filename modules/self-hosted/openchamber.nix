@@ -12,6 +12,8 @@ let
   openchamberWorkspace = "/srv/apps/openchamber/workspace";
   openchamberSecrets = config.ghostship.selfHostedSecrets.projections.openchamber.path;
   openchamberSecretsFile = "/run/secrets/openchamber.env";
+  openchamberProxyDomain = "test.openchamber.ghostship.io";
+  openchamberProxyPort = 3080;
   imageName = "localhost/ghostship-openchamber";
   imageTag = "openchamber-${inputs.self.shortRev or inputs.self.rev or "dirty"}";
 
@@ -21,6 +23,7 @@ let
     dbus
     pam
     docker
+    caddy
     git
     git-lfs
     gh
@@ -442,6 +445,169 @@ let
     ${openchamberRunHooks}/bin/openchamber-run-hooks before-openchamber.d
   '';
 
+  openchamberProxy = pkgs.writeShellScriptBin "openchamber-proxy" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+
+    proxy_dir="$HOME/.config/openchamber/proxy"
+    registry="$proxy_dir/routes.tsv"
+    caddyfile="$proxy_dir/Caddyfile"
+    domain="${openchamberProxyDomain}"
+    port="${toString openchamberProxyPort}"
+
+    usage() {
+      cat >&2 <<EOF
+    usage:
+      openchamber-proxy add <name> <host> <port>
+      openchamber-proxy remove <name>
+      openchamber-proxy list
+      openchamber-proxy render
+    EOF
+      exit 2
+    }
+
+    ensure_state() {
+      mkdir -p "$proxy_dir"
+      touch "$registry"
+    }
+
+    validate_name() {
+      name="$1"
+      case "$name" in
+        ""|"-"*|*"-"|*[!a-z0-9-]*)
+          printf 'error: name must be a lowercase DNS label using a-z, 0-9, and hyphen\n' >&2
+          exit 2
+          ;;
+      esac
+      if [ "''${#name}" -gt 63 ]; then
+        printf 'error: name must be 63 characters or fewer\n' >&2
+        exit 2
+      fi
+    }
+
+    validate_host() {
+      case "$1" in
+        127.0.0.1|localhost|::1|\[::1\])
+          ;;
+        *)
+          printf 'error: host must be loopback: 127.0.0.1, localhost, ::1, or [::1]\n' >&2
+          exit 2
+          ;;
+      esac
+    }
+
+    validate_port() {
+      case "$1" in
+        ""|*[!0-9]*)
+          printf 'error: port must be numeric\n' >&2
+          exit 2
+          ;;
+      esac
+      if [ "$1" -lt 1 ] || [ "$1" -gt 65535 ]; then
+        printf 'error: port must be between 1 and 65535\n' >&2
+        exit 2
+      fi
+    }
+
+    render() {
+      ensure_state
+      tmp="$caddyfile.tmp"
+      {
+        cat <<EOF
+    {
+      auto_https off
+      admin 127.0.0.1:2019
+    }
+
+    :$port {
+    EOF
+        while IFS="$(printf '\t')" read -r name host target_port; do
+          [ -n "$name" ] || continue
+          cat <<EOF
+      @$name host $name.$domain
+      handle @$name {
+        reverse_proxy http://$host:$target_port
+      }
+
+    EOF
+        done < "$registry"
+        cat <<'EOF'
+      handle {
+        respond "No OpenChamber proxy route for {host}" 404
+      }
+    }
+    EOF
+      } > "$tmp"
+      caddy fmt --overwrite "$tmp" >/dev/null
+      caddy validate --config "$tmp" --adapter caddyfile >/dev/null
+      mv "$tmp" "$caddyfile"
+    }
+
+    reload_if_running() {
+      if caddy reload --config "$caddyfile" --adapter caddyfile >/dev/null 2>&1; then
+        return 0
+      fi
+      printf 'warning: rendered proxy config, but Caddy is not accepting reloads yet\n' >&2
+    }
+
+    add_route() {
+      [ "$#" -eq 3 ] || usage
+      name="$1"
+      host="$2"
+      target_port="$3"
+      validate_name "$name"
+      validate_host "$host"
+      validate_port "$target_port"
+      if [ "$host" = "::1" ]; then
+        host="[::1]"
+      fi
+      ensure_state
+      tmp="$registry.tmp"
+      awk -F '\t' -v name="$name" '$1 != name { print }' "$registry" > "$tmp"
+      printf '%s\t%s\t%s\n' "$name" "$host" "$target_port" >> "$tmp"
+      mv "$tmp" "$registry"
+      render
+      reload_if_running
+      printf 'https://%s.%s -> http://%s:%s\n' "$name" "$domain" "$host" "$target_port"
+    }
+
+    remove_route() {
+      [ "$#" -eq 1 ] || usage
+      name="$1"
+      validate_name "$name"
+      ensure_state
+      tmp="$registry.tmp"
+      awk -F '\t' -v name="$name" '$1 != name { print }' "$registry" > "$tmp"
+      mv "$tmp" "$registry"
+      render
+      reload_if_running
+    }
+
+    list_routes() {
+      [ "$#" -eq 0 ] || usage
+      ensure_state
+      if [ ! -s "$registry" ]; then
+        exit 0
+      fi
+      while IFS="$(printf '\t')" read -r name host target_port; do
+        [ -n "$name" ] || continue
+        printf '%s.%s -> http://%s:%s\n' "$name" "$domain" "$host" "$target_port"
+      done < "$registry"
+    }
+
+    [ "$#" -ge 1 ] || usage
+    command="$1"
+    shift
+    case "$command" in
+      add) add_route "$@" ;;
+      remove|rm|delete) remove_route "$@" ;;
+      list|ls) list_routes "$@" ;;
+      render) [ "$#" -eq 0 ] || usage; render ;;
+      *) usage ;;
+    esac
+  '';
+
   openchamberWebRun = pkgs.writeShellScriptBin "openchamber-web-run" ''
     set -eu
 
@@ -477,6 +643,7 @@ let
       "$XDG_STATE_HOME" \
       "$XDG_CACHE_HOME" \
       "$HOME/.config/openchamber/logs" \
+      "$HOME/.config/openchamber/proxy" \
       "$HOME/.config/opencode" \
       "$HOME/.automation" \
       "$HOME/.config/systemd/user" \
@@ -490,6 +657,7 @@ let
       /tmp \
       /run/user/3000
     chown -R openchamber:openchamber "$HOME/.openchamber" "$HOME/.config/systemd"
+    chown -R openchamber:openchamber "$HOME/.config/openchamber/proxy"
     chown openchamber:openchamber /run/user/3000
     chmod 0700 /run/user/3000
     rm -rf \
@@ -506,6 +674,13 @@ let
     EOF
     chown openchamber:openchamber "$HOME/.local/bin/openchamber-web-run"
     chmod 0755 "$HOME/.local/bin/openchamber-web-run"
+    cat > "$HOME/.local/bin/openchamber-proxy" <<'EOF'
+    #!/bin/sh
+    exec ${openchamberProxy}/bin/openchamber-proxy "$@"
+    EOF
+    chown openchamber:openchamber "$HOME/.local/bin/openchamber-proxy"
+    chmod 0755 "$HOME/.local/bin/openchamber-proxy"
+    su-exec openchamber:openchamber ${openchamberProxy}/bin/openchamber-proxy render
 
   '';
 
@@ -546,6 +721,7 @@ let
       openchamberDoctor
       openchamberBootstrap
       openchamberBeforeWebStart
+      openchamberProxy
       pkgs.dockerTools.binSh
       pkgs.dockerTools.usrBinEnv
       pkgs.dockerTools.caCertificates
@@ -718,6 +894,33 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/openchamber-proxy.service <<'EOF'
+      [Unit]
+      Description=OpenChamber wildcard app proxy
+      DefaultDependencies=no
+      After=openchamber-container-setup.service
+      Requires=openchamber-container-setup.service
+
+      [Service]
+      Type=simple
+      User=openchamber
+      Group=openchamber
+      Environment=HOME=/home/openchamber
+      Environment=USER=openchamber
+      Environment=XDG_RUNTIME_DIR=/run/user/3000
+      Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      ExecStartPre=${openchamberProxy}/bin/openchamber-proxy render
+      ExecStart=${pkgs.caddy}/bin/caddy run --config /home/openchamber/.config/openchamber/proxy/Caddyfile --adapter caddyfile
+      Restart=always
+      RestartSec=5
+      StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-proxy.service.log
+      StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-proxy.service.log
+      TasksMax=infinity
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/openchamber-tool-auto-update.service <<'EOF'
       [Unit]
       Description=Update OpenChamber and OpenCode tools
@@ -781,7 +984,7 @@ let
       [Unit]
       Description=OpenChamber Multi-User System
       DefaultDependencies=no
-      Wants=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-web-monitor.timer
+      Wants=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-proxy.service openchamber-tool-auto-update.timer openchamber-web-monitor.timer
       After=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service
       AllowIsolate=yes
       EOF
@@ -795,6 +998,7 @@ let
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
       ln -s ../openchamber-bootstrap.service etc/systemd/system/multi-user.target.wants/openchamber-bootstrap.service
       ln -s ../openchamber-web.service etc/systemd/system/multi-user.target.wants/openchamber-web.service
+      ln -s ../openchamber-proxy.service etc/systemd/system/multi-user.target.wants/openchamber-proxy.service
       ln -s ../openchamber-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/openchamber-tool-auto-update.timer
       ln -s ../openchamber-web-monitor.timer etc/systemd/system/multi-user.target.wants/openchamber-web-monitor.timer
     '';
@@ -826,6 +1030,7 @@ let
       WorkingDir = "/home/openchamber";
       ExposedPorts = {
         "3000/tcp" = { };
+        "3080/tcp" = { };
       };
     };
   };
