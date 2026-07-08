@@ -197,12 +197,21 @@ OpenChamber runs as a separate repo-built Podman OCI image for
 `https://openchamber.ghostship.io`. It uses the `openchamber` user at
 `3000:3000`, keeps `/workspace`, `/home/openchamber`, and Docker state under
 `/srv/apps/openchamber`, and starts systemd-managed `dockerd` plus a persistent
-`openchamber` user systemd manager. The OpenChamber web process is seeded as
-`/home/openchamber/.config/systemd/user/openchamber.service`, and additional
-user-owned services and timers can live under that same user unit directory.
-OpenChamber installs only `@openchamber/web` and `opencode-ai` into
+`openchamber` user systemd manager. The OpenChamber web process runs as the
+container system service `openchamber-web.service`. Project-owned services and
+recurring jobs should install persisted user units and timers under
+`/home/openchamber/.config/systemd/user`, then run
+`openchamber-user-units enable-now <unit>` or
+`openchamber-user-units reload` as the `openchamber` user. Image startup runs
+executable project hooks from
+`/home/openchamber/.openchamber/hooks/bootstrap.d` before OpenChamber starts,
+so repositories such as `ghostship-agent` can install or maintain their own
+persisted user units on every container rebuild. OpenChamber installs only
+`@openchamber/web` and `opencode-ai` into
 `/home/openchamber/.local/share/openchamber-tools`, exposes
-`/home/openchamber/.local/bin` on `PATH`, and does not configure a UI password.
+`/home/openchamber/.local/bin` on `PATH`, keeps them updated through the
+persistent `openchamber-tool-auto-update.timer`, and does not configure a UI
+password.
 It includes Cloudflared for ad hoc Quick Tunnels from inside the container. Use
 `openchamber-tunnel start <name> <port>` as the `openchamber` user to expose a
 loopback web app at `http://127.0.0.1:<port>` through a generated

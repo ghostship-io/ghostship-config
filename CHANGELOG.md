@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.119] - 2026-07-08
+
+- **OpenChamber project runtime support**: Run startup project hooks as the
+  `openchamber` user, add `openchamber-user-units` for persisted user
+  systemd services and timers, and document the supported hook, config apply,
+  recurring job, and tool auto-update contracts.
+
 ## [2.1.118] - 2026-07-08
 
 - **OpenChamber Quick Tunnels**: Replace the in-container Caddy wildcard app
