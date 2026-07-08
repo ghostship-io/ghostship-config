@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.117] - 2026-07-08
+
+- **OpenChamber sudoers image build**: Remove packaged sudo defaults before
+  writing the container-local sudoers and PAM files used by
+  `openchamber-apply-config`.
+
 ## [2.1.116] - 2026-07-08
 
 - **OpenChamber config apply command**: Add `openchamber-apply-config` for
