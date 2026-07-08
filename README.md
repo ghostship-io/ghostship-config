@@ -203,13 +203,13 @@ user-owned services and timers can live under that same user unit directory.
 OpenChamber installs only `@openchamber/web` and `opencode-ai` into
 `/home/openchamber/.local/share/openchamber-tools`, exposes
 `/home/openchamber/.local/bin` on `PATH`, and does not configure a UI password.
-It also runs an in-container Caddy proxy on port `3080` for OpenChamber-launched
-local web apps under `*.test.openchamber.ghostship.io`. Use
-`openchamber-proxy add <name> <host> <port>` inside the container to route
-`https://<name>.test.openchamber.ghostship.io` to a loopback backend such as
-`http://127.0.0.1:<port>`; use `openchamber-proxy remove <name>` to remove the
-route. Cloudflare should point the wildcard tunnel hostname at
-`http://openchamber:3080`.
+It includes Cloudflared for ad hoc Quick Tunnels from inside the container. Use
+`openchamber-tunnel start <name> <port>` as the `openchamber` user to expose a
+loopback web app at `http://127.0.0.1:<port>` through a generated
+`trycloudflare.com` URL, `openchamber-tunnel url <name>` to print the current
+URL, and `openchamber-tunnel stop <name>` or `openchamber-tunnel remove <name>`
+to stop or remove the user systemd tunnel service. Quick Tunnels are ephemeral
+and do not require Cloudflare account credentials.
 Use `openchamber-apply-config` as the `openchamber` user after changing
 OpenChamber or OpenCode config. It validates OpenChamber JSON config and runs
 OpenCode's native `opencode debug config` check, restarts
