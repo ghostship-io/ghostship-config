@@ -206,8 +206,11 @@ recurring jobs should install persisted user units and timers under
 executable project hooks from
 `/home/openchamber/.openchamber/hooks/bootstrap.d` before OpenChamber starts,
 so repositories such as `ghostship-agent` can install or maintain their own
-persisted user units on every container rebuild. OpenChamber installs only
-`@openchamber/web` and `opencode-ai` into
+persisted user units on every container rebuild. When
+`/workspace/ghostship-agent/tools` exists, startup also seeds
+`/home/openchamber/tools` as a compatibility link for the agent repo's
+installed command wrappers. OpenChamber installs only `@openchamber/web` and
+`opencode-ai` into
 `/home/openchamber/.local/share/openchamber-tools`, exposes
 `/home/openchamber/.local/bin` on `PATH`, keeps them updated through the
 persistent `openchamber-tool-auto-update.timer`, and does not configure a UI
