@@ -14,6 +14,7 @@ let
   openchamberSecretsFile = "/run/secrets/openchamber.env";
   imageName = "localhost/ghostship-openchamber";
   imageTag = "openchamber-${inputs.self.shortRev or inputs.self.rev or "dirty"}";
+  sudoStoreBin = lib.removePrefix "/" "${pkgs.sudo}/bin/sudo";
 
   openchamberPackages = with pkgs; [
     nix
@@ -1283,6 +1284,8 @@ let
     fakeRootCommands = ''
       chown -R 3000:3000 nix/store nix/var/log/nix nix/var/nix
       chmod -R u+rwX,go+rX nix/store nix/var/log/nix nix/var/nix
+      chown 0:0 ${sudoStoreBin}
+      chmod 4755 ${sudoStoreBin}
     '';
     config = {
       Cmd = [ "${openchamberEntrypoint}/bin/openchamber-systemd-entrypoint" ];
