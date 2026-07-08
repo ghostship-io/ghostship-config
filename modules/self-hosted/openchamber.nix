@@ -14,7 +14,6 @@ let
   openchamberSecretsFile = "/run/secrets/openchamber.env";
   imageName = "localhost/ghostship-openchamber";
   imageTag = "openchamber-${inputs.self.shortRev or inputs.self.rev or "dirty"}";
-  sudoStoreBin = lib.removePrefix "/" "${pkgs.sudo}/bin/sudo";
 
   openchamberPackages = with pkgs; [
     nix
@@ -384,7 +383,7 @@ let
     last_good="$recovery_dir/last-good"
     log_file="$HOME/.config/openchamber/logs/openchamber-apply-config.log"
     systemctl_bin="${pkgs.systemd}/bin/systemctl"
-    sudo_bin="${pkgs.sudo}/bin/sudo"
+    sudo_bin="/usr/bin/sudo"
 
     mkdir -p "$recovery_dir" "$(dirname "$log_file")"
 
@@ -1015,9 +1014,11 @@ let
       pkgs.dockerTools.caCertificates
     ];
     extraCommands = ''
-      mkdir -p etc/nix etc/pam.d etc/sudoers.d etc/systemd/system/multi-user.target.wants etc/systemd/user/sockets.target.wants usr/share/systemd/user nix/store nix/var/log/nix nix/var/nix tmp workspace home/openchamber
+      mkdir -p etc/nix etc/pam.d etc/sudoers.d etc/systemd/system/multi-user.target.wants etc/systemd/user/sockets.target.wants usr/bin usr/share/systemd/user nix/store nix/var/log/nix nix/var/nix tmp workspace home/openchamber
       mkdir -p mnt/share run/user var/lib/docker var/log/journal var/run
       chmod 1777 tmp
+      cp ${pkgs.sudo}/bin/sudo usr/bin/sudo
+      chmod 0755 usr/bin/sudo
       cat > etc/passwd <<'EOF'
       root:x:0:0:root:/root:/bin/sh
       openchamber:x:3000:3000:OpenChamber:/home/openchamber:/bin/sh
@@ -1284,8 +1285,8 @@ let
     fakeRootCommands = ''
       chown -R 3000:3000 nix/store nix/var/log/nix nix/var/nix
       chmod -R u+rwX,go+rX nix/store nix/var/log/nix nix/var/nix
-      chown 0:0 ${sudoStoreBin}
-      chmod 4755 ${sudoStoreBin}
+      chown 0:0 usr/bin/sudo
+      chmod 4755 usr/bin/sudo
     '';
     config = {
       Cmd = [ "${openchamberEntrypoint}/bin/openchamber-systemd-entrypoint" ];
