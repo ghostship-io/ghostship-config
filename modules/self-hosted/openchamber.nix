@@ -489,7 +489,9 @@ let
 
     read -r uptime _ < /proc/uptime
     uptime_seconds="''${uptime%%.*}"
-    manager_started_usec="$(${pkgs.systemd}/bin/systemctl show -p UserspaceTimestampMonotonic --value)"
+    if ! manager_started_usec="$(${pkgs.systemd}/bin/systemctl show -p UserspaceTimestampMonotonic --value)"; then
+      exit 0
+    fi
     case "$manager_started_usec" in
       ""|*[!0-9]*)
         container_age_seconds=1200
@@ -501,9 +503,15 @@ let
         fi
         ;;
     esac
-    setup_state="$(${pkgs.systemd}/bin/systemctl show openchamber-container-setup.service -p ActiveState --value)"
-    bootstrap_state="$(${pkgs.systemd}/bin/systemctl show openchamber-bootstrap.service -p ActiveState --value)"
-    web_state="$(${pkgs.systemd}/bin/systemctl show openchamber-web.service -p ActiveState --value)"
+    if ! setup_state="$(${pkgs.systemd}/bin/systemctl show openchamber-container-setup.service -p ActiveState --value)"; then
+      exit 0
+    fi
+    if ! bootstrap_state="$(${pkgs.systemd}/bin/systemctl show openchamber-bootstrap.service -p ActiveState --value)"; then
+      exit 0
+    fi
+    if ! web_state="$(${pkgs.systemd}/bin/systemctl show openchamber-web.service -p ActiveState --value)"; then
+      exit 0
+    fi
 
     if [ "$container_age_seconds" -lt 1200 ] \
       && { [ "$setup_state" = "activating" ] \
