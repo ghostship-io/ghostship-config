@@ -215,6 +215,15 @@ installed command wrappers. OpenChamber installs only `@openchamber/web` and
 `/home/openchamber/.local/bin` on `PATH`, keeps them updated through the
 persistent `openchamber-tool-auto-update.timer`, and does not configure a UI
 password.
+Downloaded tool updates queue a restart instead of restarting immediately;
+`openchamber-tool-update-restart.timer` applies the queued restart only after
+OpenChamber's aggregate session activity reports that all work is idle.
+The web monitor uses the same idle gate before restarting an active but
+unhealthy OpenChamber runtime, and the container health policy uses it before
+killing an otherwise active container.
+The web service also throttles its workload above 32 GiB and caps it at 40 GiB
+so a runaway child process is contained without forcing a host-wide OOM or a
+full OpenChamber restart.
 It includes Cloudflared for ad hoc Quick Tunnels from inside the container. Use
 `openchamber-tunnel start <name> <port>` as the `openchamber` user to expose a
 loopback web app at `http://127.0.0.1:<port>` through a generated

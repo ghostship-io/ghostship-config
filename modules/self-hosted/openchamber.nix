@@ -107,6 +107,22 @@ let
     fi
   '';
 
+  openchamberIdleCheck = ''
+    is_openchamber_idle() {
+      if ! activity="$(curl -fsS --max-time 5 http://127.0.0.1:3000/api/session-activity)"; then
+        return 1
+      fi
+
+      printf '%s\n' "$activity" | jq -e '
+        if type != "object" then
+          false
+        else
+          all(.[]; type == "object" and .type == "idle")
+        end
+      ' >/dev/null 2>&1
+    }
+  '';
+
   openchamberToolMaintenance = pkgs.writeShellScriptBin "openchamber-tool-maintenance" ''
     set -eu
 
@@ -292,6 +308,13 @@ let
     ${openchamberRuntimeEnv}
     export NODE_NO_WARNINGS=1
 
+    state_dir="/run/openchamber-tool-update"
+    pending_restart="$state_dir/restart.pending"
+    install -d -m 0700 "$state_dir"
+
+    exec 9>"$state_dir/tool-update.lock"
+    ${pkgs.util-linux}/bin/flock 9
+
     log_info() {
       printf 'info: %s\n' "$1" >&2
     }
@@ -319,15 +342,66 @@ let
     log_info "opencode: ''${before_opencode:-missing} -> ''${after_opencode:-missing}"
 
     if [ "$before_openchamber" != "$after_openchamber" ] || [ "$before_opencode" != "$after_opencode" ]; then
-      if systemctl is-active --quiet openchamber-web.service; then
-        log_info "restarting openchamber-web.service after tool update"
-        systemctl restart openchamber-web.service
-      else
-        log_info "openchamber-web.service is not active; leaving it stopped"
-      fi
+      pending_tmp="$pending_restart.tmp"
+      {
+        printf 'openchamber=%s\n' "$after_openchamber"
+        printf 'opencode=%s\n' "$after_opencode"
+      } > "$pending_tmp"
+      mv "$pending_tmp" "$pending_restart"
+      log_info "tool update downloaded; queued restart until OpenChamber is idle"
     else
       log_info "installed tool versions are unchanged"
     fi
+  '';
+
+  openchamberToolUpdateRestart = pkgs.writeShellScriptBin "openchamber-tool-update-restart" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+
+    state_dir="/run/openchamber-tool-update"
+    pending_restart="$state_dir/restart.pending"
+
+    log_info() {
+      printf 'info: %s\n' "$1" >&2
+    }
+
+    ${openchamberIdleCheck}
+
+    [ -f "$pending_restart" ] || exit 0
+
+    exec 9>"$state_dir/tool-update.lock"
+    if ! ${pkgs.util-linux}/bin/flock -n 9; then
+      log_info "tool maintenance is still running; leaving restart queued"
+      exit 0
+    fi
+
+    if ! systemctl is-active --quiet openchamber-web.service; then
+      log_info "openchamber-web.service is stopped; clearing queued restart"
+      rm -f "$pending_restart"
+      exit 0
+    fi
+
+    if ! is_openchamber_idle; then
+      log_info "OpenChamber reports active or unknown work; leaving restart queued"
+      exit 0
+    fi
+
+    sleep 5
+
+    if [ ! -f "$pending_restart" ]; then
+      log_info "queued restart was already applied by another service start"
+      exit 0
+    fi
+
+    if ! is_openchamber_idle; then
+      log_info "OpenChamber is no longer idle; leaving restart queued"
+      exit 0
+    fi
+
+    log_info "OpenChamber reports all work complete; restarting openchamber-web.service"
+    systemctl restart openchamber-web.service
+    rm -f "$pending_restart"
   '';
 
   openchamberWebMonitor = pkgs.writeShellScriptBin "openchamber-web-monitor" ''
@@ -342,10 +416,14 @@ let
       printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >> "$log_file"
     }
 
+    ${openchamberIdleCheck}
+
     unhealthy_reason=""
+    web_was_active=1
 
     if ! systemctl is-active --quiet openchamber-web.service; then
       unhealthy_reason="openchamber-web.service is not active"
+      web_was_active=0
     elif ! curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null; then
       unhealthy_reason="OpenChamber root endpoint is not responding"
     fi
@@ -369,9 +447,44 @@ let
       exit 0
     fi
 
+    if [ "$web_was_active" -eq 1 ] && ! is_openchamber_idle; then
+      log_info "unhealthy: $unhealthy_reason; OpenChamber activity is active or unknown; restart deferred"
+      exit 0
+    fi
+
+    state_dir="/run/openchamber-tool-update"
+    install -d -m 0700 "$state_dir"
+    exec 9>"$state_dir/tool-update.lock"
+    if ! ${pkgs.util-linux}/bin/flock -n 9; then
+      log_info "unhealthy: $unhealthy_reason; tool maintenance or restart is in progress; restart deferred"
+      exit 0
+    fi
+
     log_info "unhealthy: $unhealthy_reason; restarting openchamber-web.service"
     systemctl reset-failed openchamber-web.service || true
     systemctl restart openchamber-web.service
+  '';
+
+  openchamberContainerHealth = pkgs.writeShellScriptBin "openchamber-container-health" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+    ${openchamberIdleCheck}
+
+    if curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null; then
+      exit 0
+    fi
+
+    if ! systemctl is-active --quiet openchamber-web.service; then
+      exit 1
+    fi
+
+    if is_openchamber_idle; then
+      exit 1
+    fi
+
+    printf 'warning: OpenChamber health is degraded but activity is active or unknown; container kill deferred\n' >&2
+    exit 0
   '';
 
   openchamberApplyConfig = pkgs.writeShellScriptBin "openchamber-apply-config" ''
@@ -1000,7 +1113,9 @@ let
       openchamberWebRun
       openchamberToolMaintenance
       openchamberToolAutoUpdate
+      openchamberToolUpdateRestart
       openchamberWebMonitor
+      openchamberContainerHealth
       openchamberRunHooks
       openchamberDoctor
       openchamberApplyConfig
@@ -1190,6 +1305,7 @@ let
       Environment=OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation
       Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
       ExecStartPre=${openchamberBeforeWebStart}/bin/openchamber-before-web-start
+      ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/openchamber-tool-update/restart.pending
       ExecStart=${openchamberWebRun}/bin/openchamber-web-run
       ExecStartPost=${openchamberSnapshotConfig}/bin/openchamber-snapshot-config
       Restart=always
@@ -1197,6 +1313,9 @@ let
       SuccessExitStatus=0 143
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
       StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
+      MemoryHigh=32G
+      MemoryMax=40G
+      OOMPolicy=continue
       TasksMax=infinity
 
       [Install]
@@ -1228,6 +1347,35 @@ let
       OnUnitActiveSec=4h
       Persistent=true
       Unit=openchamber-tool-auto-update.service
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+      cat > etc/systemd/system/openchamber-tool-update-restart.service <<'EOF'
+      [Unit]
+      Description=Restart OpenChamber after a queued tool update becomes idle
+      DefaultDependencies=no
+      After=openchamber-bootstrap.service
+      Requires=openchamber-bootstrap.service
+
+      [Service]
+      Type=oneshot
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      ExecStart=${openchamberToolUpdateRestart}/bin/openchamber-tool-update-restart
+      StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-tool-update-restart.log
+      StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-tool-update-restart.log
+      TasksMax=infinity
+      EOF
+      cat > etc/systemd/system/openchamber-tool-update-restart.timer <<'EOF'
+      [Unit]
+      Description=Apply queued OpenChamber and OpenCode updates when idle
+      DefaultDependencies=no
+      After=openchamber-bootstrap.service
+
+      [Timer]
+      OnBootSec=2m
+      OnUnitActiveSec=1m
+      Unit=openchamber-tool-update-restart.service
 
       [Install]
       WantedBy=multi-user.target
@@ -1265,7 +1413,7 @@ let
       [Unit]
       Description=OpenChamber Multi-User System
       DefaultDependencies=no
-      Wants=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-web-monitor.timer
+      Wants=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-tool-update-restart.timer openchamber-web-monitor.timer
       After=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service
       AllowIsolate=yes
       EOF
@@ -1280,6 +1428,7 @@ let
       ln -s ../openchamber-bootstrap.service etc/systemd/system/multi-user.target.wants/openchamber-bootstrap.service
       ln -s ../openchamber-web.service etc/systemd/system/multi-user.target.wants/openchamber-web.service
       ln -s ../openchamber-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/openchamber-tool-auto-update.timer
+      ln -s ../openchamber-tool-update-restart.timer etc/systemd/system/multi-user.target.wants/openchamber-tool-update-restart.timer
       ln -s ../openchamber-web-monitor.timer etc/systemd/system/multi-user.target.wants/openchamber-web-monitor.timer
     '';
     fakeRootCommands = ''
@@ -1332,9 +1481,9 @@ in
       "--pids-limit=-1"
       "--stop-timeout=60"
       "--network=ghostship_net"
-      "--health-cmd=curl -fsS http://127.0.0.1:3000/ >/dev/null || exit 1"
+      "--health-cmd=${openchamberContainerHealth}/bin/openchamber-container-health"
       "--health-interval=30s"
-      "--health-timeout=10s"
+      "--health-timeout=15s"
       "--health-retries=5"
       "--health-start-period=5m"
       "--health-on-failure=kill"
