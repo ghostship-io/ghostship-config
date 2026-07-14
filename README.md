@@ -233,7 +233,12 @@ Before each start, the host incrementally seeds the current image closures into
 that isolated store and refreshes GC roots; an internal root-owned `nix-daemon`
 serves builds to the unprivileged OpenChamber user. Container-built agent
 packages therefore survive image replacement without granting the container
-write access to the host's primary Nix store.
+write access to the host's primary Nix store. The web and user manager have
+10-second stop limits, Docker and Nix have 30 seconds, and package maintenance
+keeps a longer allowance. Podman's 180-second aggregate stop window leaves all
+paths enough time to stop cleanly during an authorized idle restart. The host
+unit allows 210 seconds and the minimal container units are explicitly ordered
+into systemd shutdown.
 It includes Cloudflared for ad hoc Quick Tunnels from inside the container. Use
 `openchamber-tunnel start <name> <port>` as the `openchamber` user to expose a
 loopback web app at `http://127.0.0.1:<port>` through a generated

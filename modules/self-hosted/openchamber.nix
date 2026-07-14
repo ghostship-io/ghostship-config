@@ -1261,6 +1261,8 @@ let
       [Unit]
       Description=Prepare OpenChamber container state
       DefaultDependencies=no
+      Conflicts=shutdown.target
+      Before=shutdown.target
 
       [Service]
       Type=oneshot
@@ -1278,16 +1280,18 @@ let
       DefaultDependencies=no
       After=openchamber-container-setup.service nix-daemon.socket
       Requires=openchamber-container-setup.service nix-daemon.socket
-      Before=user@3000.service openchamber-bootstrap.service openchamber-web.service
+      Conflicts=shutdown.target
+      Before=user@3000.service openchamber-bootstrap.service openchamber-web.service shutdown.target
 
       [Service]
       Type=simple
       ExecStart=@${pkgs.nix}/bin/nix-daemon nix-daemon --daemon
-      KillMode=process
+      KillMode=mixed
       LimitNOFILE=1048576
       Delegate=yes
       Restart=always
       RestartSec=5
+      TimeoutStopSec=30s
       TasksMax=infinity
 
       [Install]
@@ -1299,7 +1303,8 @@ let
       DefaultDependencies=no
       After=openchamber-container-setup.service
       Requires=openchamber-container-setup.service
-      Before=nix-daemon.service user@3000.service openchamber-bootstrap.service openchamber-web.service
+      Conflicts=shutdown.target
+      Before=nix-daemon.service user@3000.service openchamber-bootstrap.service openchamber-web.service shutdown.target
 
       [Socket]
       ListenStream=/nix/var/nix/daemon-socket/socket
@@ -1317,7 +1322,8 @@ let
       DefaultDependencies=no
       After=openchamber-container-setup.service nix-daemon.socket
       Requires=openchamber-container-setup.service nix-daemon.socket
-      Before=openchamber-bootstrap.service openchamber-web.service
+      Conflicts=shutdown.target
+      Before=openchamber-bootstrap.service openchamber-web.service shutdown.target
       IgnoreOnIsolate=yes
 
       [Service]
@@ -1337,7 +1343,7 @@ let
       Delegate=pids memory cpu
       DelegateSubgroup=init.scope
       TasksMax=infinity
-      TimeoutStopSec=120s
+      TimeoutStopSec=10s
       KeyringMode=inherit
       OOMScoreAdjust=100
       MemoryPressureWatch=skip
@@ -1353,12 +1359,15 @@ let
       DefaultDependencies=no
       After=openchamber-container-setup.service
       Requires=openchamber-container-setup.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
 
       [Service]
       Type=simple
       ExecStart=${openchamberDockerdRun}/bin/openchamber-dockerd-run
       Restart=always
       RestartSec=5
+      TimeoutStopSec=30s
       TasksMax=infinity
 
       [Install]
@@ -1371,6 +1380,8 @@ let
       After=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service openchamber-web.service
       Requires=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       Wants=openchamber-web.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
 
       [Service]
       Type=oneshot
@@ -1399,6 +1410,8 @@ let
       DefaultDependencies=no
       After=openchamber-container-setup.service user@3000.service dockerd.service
       Requires=openchamber-container-setup.service user@3000.service dockerd.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
 
       [Service]
       Type=simple
@@ -1416,6 +1429,7 @@ let
       Restart=always
       RestartSec=5
       TimeoutStartSec=20m
+      TimeoutStopSec=10s
       SuccessExitStatus=0 143
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
       StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
@@ -1433,6 +1447,8 @@ let
       DefaultDependencies=no
       After=openchamber-bootstrap.service
       Requires=openchamber-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
 
       [Service]
       Type=oneshot
@@ -1447,6 +1463,8 @@ let
       Description=Periodic OpenChamber and OpenCode tool updates
       DefaultDependencies=no
       After=openchamber-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
 
       [Timer]
       OnBootSec=10m
@@ -1463,6 +1481,8 @@ let
       DefaultDependencies=no
       After=openchamber-bootstrap.service
       Requires=openchamber-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
 
       [Service]
       Type=oneshot
@@ -1477,6 +1497,8 @@ let
       Description=Apply queued OpenChamber maintenance when idle
       DefaultDependencies=no
       After=openchamber-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
 
       [Timer]
       OnBootSec=2m
@@ -1492,6 +1514,8 @@ let
       DefaultDependencies=no
       After=openchamber-web.service
       Wants=openchamber-web.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
 
       [Service]
       Type=oneshot
@@ -1506,6 +1530,8 @@ let
       Description=Periodic OpenChamber web monitor
       DefaultDependencies=no
       After=openchamber-web.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
 
       [Timer]
       OnBootSec=2m
@@ -1588,7 +1614,7 @@ in
       "--privileged"
       "--systemd=always"
       "--pids-limit=-1"
-      "--stop-timeout=60"
+      "--stop-timeout=180"
       "--network=ghostship_net"
       "--health-cmd=${openchamberContainerHealth}/bin/openchamber-container-health"
       "--health-interval=30s"
@@ -1626,6 +1652,7 @@ in
       "init-ghostship-net.service"
       "mnt-share.mount"
     ];
+    serviceConfig.TimeoutStopSec = lib.mkForce "210s";
     preStart = lib.mkAfter ''
       set -eu
 
