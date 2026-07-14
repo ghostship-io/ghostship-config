@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.126] - 2026-07-14
+
+- **OpenChamber bounded shutdown**: Cap the web and user manager at 10 seconds
+  and the Docker and Nix daemons at 30 seconds while preserving systemd's
+  longer stop allowance for package updates and bootstrap hooks that mutate
+  persistent state. Nix shutdown now includes connection and build workers.
+  Podman's 180-second aggregate stop window leaves enough headroom for either
+  path, the host unit allows 210 seconds, and explicit `shutdown.target`
+  ordering ensures the container services receive their stop jobs without a
+  container-wide SIGKILL.
+
 ## [2.1.125] - 2026-07-14
 
 - **OpenChamber initial health probe**: Treat the brief interval before the
