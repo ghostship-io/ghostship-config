@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.125] - 2026-07-14
+
+- **OpenChamber initial health probe**: Treat the brief interval before the
+  container system manager accepts unit queries as startup rather than a
+  failed health check, avoiding false failed transient health units during
+  deployment.
+
 ## [2.1.124] - 2026-07-14
 
 - **OpenChamber persistent store seeding**: Trust paths copied directly from
