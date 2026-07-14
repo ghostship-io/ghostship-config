@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.122] - 2026-07-14
+
+- **OpenChamber idle-gated tool updates**: Queue OpenChamber and OpenCode tool
+  restarts only after an installed version changes, and apply them through a
+  separate timer only when OpenChamber's aggregate session activity reports
+  that all work is idle. The web monitor now applies the same gate before
+  restarting an active but unhealthy runtime, and the outer container health
+  policy observes the same gate before killing the container. The web service
+  now throttles above 32 GiB and caps its workload at 40 GiB with a
+  continue-on-OOM policy, preventing a runaway child process from escalating
+  into a host-wide OOM and full OpenChamber restart.
+
 ## [2.1.121] - 2026-07-08
 
 - **OpenChamber apply command fix**: Preserve root setuid ownership on the
