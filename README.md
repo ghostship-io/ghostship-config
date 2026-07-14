@@ -202,11 +202,14 @@ container system service `openchamber-web.service`. Project-owned services and
 recurring jobs should install persisted user units and timers under
 `/home/openchamber/.config/systemd/user`, then run
 `openchamber-user-units enable-now <unit>` or
-`openchamber-user-units reload` as the `openchamber` user. Image startup runs
+`openchamber-user-units reload` as the `openchamber` user. Image startup starts
+OpenChamber and OpenCode after only minimal container setup, then runs
 executable project hooks from
-`/home/openchamber/.openchamber/hooks/bootstrap.d` before OpenChamber starts,
-so repositories such as `ghostship-agent` can install or maintain their own
-persisted user units on every container rebuild. When
+`/home/openchamber/.openchamber/hooks/{bootstrap.d,before-openchamber.d}` in a
+background system service. When those hooks finish, a maintenance restart is
+queued and applied only after OpenChamber reports all sessions idle, so
+repositories such as `ghostship-agent` can install or maintain their own
+persisted user units without holding the web service offline. When
 `/workspace/ghostship-agent/tools` exists, startup also seeds
 `/home/openchamber/tools` as a compatibility link for the agent repo's
 installed command wrappers. OpenChamber installs only `@openchamber/web` and
@@ -215,7 +218,8 @@ installed command wrappers. OpenChamber installs only `@openchamber/web` and
 `/home/openchamber/.local/bin` on `PATH`, keeps them updated through the
 persistent `openchamber-tool-auto-update.timer`, and does not configure a UI
 password.
-Downloaded tool updates queue a restart instead of restarting immediately;
+Downloaded tool updates and completed background bootstrap hooks queue a
+restart instead of restarting immediately;
 `openchamber-tool-update-restart.timer` applies the queued restart only after
 OpenChamber's aggregate session activity reports that all work is idle.
 The web monitor uses the same idle gate before restarting an active but
@@ -224,6 +228,12 @@ killing an otherwise active container.
 The web service also throttles its workload above 32 GiB and caps it at 40 GiB
 so a runaway child process is contained without forcing a host-wide OOM or a
 full OpenChamber restart.
+The container Nix store persists under `/srv/apps/openchamber/nix-root/nix`.
+Before each start, the host incrementally seeds the current image closures into
+that isolated store and refreshes GC roots; an internal root-owned `nix-daemon`
+serves builds to the unprivileged OpenChamber user. Container-built agent
+packages therefore survive image replacement without granting the container
+write access to the host's primary Nix store.
 It includes Cloudflared for ad hoc Quick Tunnels from inside the container. Use
 `openchamber-tunnel start <name> <port>` as the `openchamber` user to expose a
 loopback web app at `http://127.0.0.1:<port>` through a generated

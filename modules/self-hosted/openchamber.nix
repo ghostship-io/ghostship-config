@@ -9,6 +9,7 @@
 let
   openchamberHome = "/srv/apps/openchamber/home";
   openchamberDocker = "/srv/apps/openchamber/docker";
+  openchamberNixRoot = "/srv/apps/openchamber/nix-root";
   openchamberWorkspace = "/srv/apps/openchamber/workspace";
   openchamberSecrets = config.ghostship.selfHostedSecrets.projections.openchamber.path;
   openchamberSecretsFile = "/run/secrets/openchamber.env";
@@ -92,6 +93,7 @@ let
     export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     export SSL_CERT_FILE=$NIX_SSL_CERT_FILE
     export NIX_CONFIG="experimental-features = nix-command flakes"
+    export NIX_REMOTE=daemon
   '';
 
   sourceHmSessionVarsIfPresent = ''
@@ -109,11 +111,11 @@ let
 
   openchamberIdleCheck = ''
     is_openchamber_idle() {
-      if ! activity="$(curl -fsS --max-time 5 http://127.0.0.1:3000/api/session-activity)"; then
+      if ! activity="$(${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:3000/api/session-activity)"; then
         return 1
       fi
 
-      printf '%s\n' "$activity" | jq -e '
+      printf '%s\n' "$activity" | ${pkgs.jq}/bin/jq -e '
         if type != "object" then
           false
         else
@@ -399,9 +401,24 @@ let
       exit 0
     fi
 
-    log_info "OpenChamber reports all work complete; restarting openchamber-web.service"
+    log_info "OpenChamber reports all work complete; applying queued maintenance restart"
     systemctl restart openchamber-web.service
     rm -f "$pending_restart"
+  '';
+
+  openchamberQueueBootstrapRestart = pkgs.writeShellScriptBin "openchamber-queue-bootstrap-restart" ''
+    set -eu
+
+    state_dir="/run/openchamber-tool-update"
+    pending_restart="$state_dir/restart.pending"
+    ${pkgs.coreutils}/bin/install -d -m 0700 "$state_dir"
+
+    exec 9>"$state_dir/tool-update.lock"
+    ${pkgs.util-linux}/bin/flock 9
+
+    pending_tmp="$pending_restart.tmp"
+    printf 'source=bootstrap\n' > "$pending_tmp"
+    ${pkgs.coreutils}/bin/mv "$pending_tmp" "$pending_restart"
   '';
 
   openchamberWebMonitor = pkgs.writeShellScriptBin "openchamber-web-monitor" ''
@@ -468,14 +485,38 @@ let
   openchamberContainerHealth = pkgs.writeShellScriptBin "openchamber-container-health" ''
     set -eu
 
-    ${openchamberRuntimeEnv}
     ${openchamberIdleCheck}
 
-    if curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null; then
+    read -r uptime _ < /proc/uptime
+    uptime_seconds="''${uptime%%.*}"
+    manager_started_usec="$(${pkgs.systemd}/bin/systemctl show -p UserspaceTimestampMonotonic --value)"
+    case "$manager_started_usec" in
+      ""|*[!0-9]*)
+        container_age_seconds=1200
+        ;;
+      *)
+        container_age_seconds=$((uptime_seconds - (manager_started_usec / 1000000)))
+        if [ "$container_age_seconds" -lt 0 ]; then
+          container_age_seconds=1200
+        fi
+        ;;
+    esac
+    setup_state="$(${pkgs.systemd}/bin/systemctl show openchamber-container-setup.service -p ActiveState --value)"
+    bootstrap_state="$(${pkgs.systemd}/bin/systemctl show openchamber-bootstrap.service -p ActiveState --value)"
+    web_state="$(${pkgs.systemd}/bin/systemctl show openchamber-web.service -p ActiveState --value)"
+
+    if [ "$container_age_seconds" -lt 1200 ] \
+      && { [ "$setup_state" = "activating" ] \
+        || [ "$bootstrap_state" = "activating" ] \
+        || [ "$web_state" = "activating" ]; }; then
       exit 0
     fi
 
-    if ! systemctl is-active --quiet openchamber-web.service; then
+    if ${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null; then
+      exit 0
+    fi
+
+    if ! ${pkgs.systemd}/bin/systemctl is-active --quiet openchamber-web.service; then
       exit 1
     fi
 
@@ -758,13 +799,6 @@ let
     ${openchamberRuntimeEnv}
 
     ${openchamberRunHooks}/bin/openchamber-run-hooks bootstrap.d
-  '';
-
-  openchamberBeforeWebStart = pkgs.writeShellScriptBin "openchamber-before-web-start" ''
-    set -eu
-
-    ${openchamberRuntimeEnv}
-
     ${openchamberRunHooks}/bin/openchamber-run-hooks before-openchamber.d
   '';
 
@@ -1052,7 +1086,10 @@ let
       "$HOME/.local/bin/codex" \
       "$HOME/.local/bin/gemini" \
       "$HOME/.local/bin/gemini-cli"
-    su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
+    if [ ! -x "$NPM_CONFIG_PREFIX/bin/openchamber" ] \
+      || [ ! -x "$NPM_CONFIG_PREFIX/bin/opencode" ]; then
+      su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
+    fi
     cat > "$HOME/.local/bin/openchamber-web-run" <<'EOF'
     #!/bin/sh
     exec ${openchamberWebRun}/bin/openchamber-web-run "$@"
@@ -1103,10 +1140,7 @@ let
     exec ${pkgs.systemd}/lib/systemd/systemd
   '';
 
-  openchamberImage = pkgs.dockerTools.buildLayeredImageWithNixDb {
-    name = imageName;
-    tag = imageTag;
-    contents = openchamberPackages ++ [
+  openchamberImageContents = openchamberPackages ++ [
       openchamberEntrypoint
       openchamberContainerSetup
       openchamberDockerdRun
@@ -1114,6 +1148,7 @@ let
       openchamberToolMaintenance
       openchamberToolAutoUpdate
       openchamberToolUpdateRestart
+      openchamberQueueBootstrapRestart
       openchamberWebMonitor
       openchamberContainerHealth
       openchamberRunHooks
@@ -1121,17 +1156,22 @@ let
       openchamberApplyConfig
       openchamberUserUnits
       openchamberBootstrap
-      openchamberBeforeWebStart
       openchamberSnapshotConfig
       openchamberTunnel
       pkgs.dockerTools.binSh
       pkgs.dockerTools.usrBinEnv
       pkgs.dockerTools.caCertificates
     ];
+
+  openchamberImage = pkgs.dockerTools.buildLayeredImageWithNixDb {
+    name = imageName;
+    tag = imageTag;
+    contents = openchamberImageContents;
     extraCommands = ''
       mkdir -p etc/nix etc/pam.d etc/sudoers.d etc/systemd/system/multi-user.target.wants etc/systemd/user/sockets.target.wants usr/bin usr/share/systemd/user nix/store nix/var/log/nix nix/var/nix tmp workspace home/openchamber
-      mkdir -p mnt/share run/user var/lib/docker var/log/journal var/run
+      mkdir -p mnt/share run/user var/empty var/lib/docker var/log/journal var/run
       chmod 1777 tmp
+      chmod 0555 var/empty
       cp ${pkgs.sudo}/bin/sudo usr/bin/sudo
       chmod 0755 usr/bin/sudo
       cat > etc/passwd <<'EOF'
@@ -1142,9 +1182,24 @@ let
       root:x:0:
       openchamber:x:3000:
       EOF
+      nixbld_members=""
+      nixbld_index=1
+      while [ "$nixbld_index" -le 32 ]; do
+        printf 'nixbld%s:x:%s:30000:Nix build user %s:/var/empty:/bin/sh\n' \
+          "$nixbld_index" "$((30000 + nixbld_index))" "$nixbld_index" >> etc/passwd
+        if [ -n "$nixbld_members" ]; then
+          nixbld_members="$nixbld_members,"
+        fi
+        nixbld_members="$nixbld_members""nixbld$nixbld_index"
+        nixbld_index="$((nixbld_index + 1))"
+      done
+      printf 'nixbld:x:30000:%s\n' "$nixbld_members" >> etc/group
       cat > etc/nix/nix.conf <<'EOF'
       experimental-features = nix-command flakes
       sandbox = false
+      allowed-users = root openchamber
+      trusted-users = root
+      build-users-group = nixbld
       EOF
       rm -f etc/sudoers etc/sudoers.d/openchamber-apply-config etc/pam.d/sudo
       cat > etc/sudoers <<'EOF'
@@ -1203,7 +1258,46 @@ let
       Type=oneshot
       ExecStart=${openchamberContainerSetup}/bin/openchamber-container-setup
       RemainAfterExit=yes
+      TimeoutStartSec=20m
       TasksMax=infinity
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+      cat > etc/systemd/system/nix-daemon.service <<'EOF'
+      [Unit]
+      Description=Nix package manager daemon
+      DefaultDependencies=no
+      After=openchamber-container-setup.service nix-daemon.socket
+      Requires=openchamber-container-setup.service nix-daemon.socket
+      Before=user@3000.service openchamber-bootstrap.service openchamber-web.service
+
+      [Service]
+      Type=simple
+      ExecStart=@${pkgs.nix}/bin/nix-daemon nix-daemon --daemon
+      KillMode=process
+      LimitNOFILE=1048576
+      Delegate=yes
+      Restart=always
+      RestartSec=5
+      TasksMax=infinity
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+      cat > etc/systemd/system/nix-daemon.socket <<'EOF'
+      [Unit]
+      Description=Nix package manager daemon socket
+      DefaultDependencies=no
+      After=openchamber-container-setup.service
+      Requires=openchamber-container-setup.service
+      Before=nix-daemon.service user@3000.service openchamber-bootstrap.service openchamber-web.service
+
+      [Socket]
+      ListenStream=/nix/var/nix/daemon-socket/socket
+      SocketMode=0666
+      DirectoryMode=0755
+      RemoveOnStop=true
 
       [Install]
       WantedBy=multi-user.target
@@ -1213,8 +1307,8 @@ let
       Description=OpenChamber user manager for UID %i
       Documentation=man:user@.service(5)
       DefaultDependencies=no
-      After=openchamber-container-setup.service
-      Requires=openchamber-container-setup.service
+      After=openchamber-container-setup.service nix-daemon.socket
+      Requires=openchamber-container-setup.service nix-daemon.socket
       Before=openchamber-bootstrap.service openchamber-web.service
       IgnoreOnIsolate=yes
 
@@ -1227,6 +1321,7 @@ let
       Environment=LOGNAME=openchamber
       Environment=XDG_RUNTIME_DIR=/run/user/%i
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%i/bus
+      Environment=NIX_REMOTE=daemon
       ExecStart=${pkgs.systemd}/lib/systemd/systemd --user
       Slice=user-%i.slice
       ReloadSignal=RTMIN+25
@@ -1265,8 +1360,9 @@ let
       [Unit]
       Description=Run OpenChamber bootstrap hooks
       DefaultDependencies=no
-      After=openchamber-container-setup.service user@3000.service dockerd.service
-      Requires=openchamber-container-setup.service user@3000.service dockerd.service
+      After=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service openchamber-web.service
+      Requires=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service
+      Wants=openchamber-web.service
 
       [Service]
       Type=oneshot
@@ -1279,7 +1375,9 @@ let
       Environment=OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation
       Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
       ExecStart=${openchamberBootstrap}/bin/openchamber-bootstrap
+      ExecStartPost=+${openchamberQueueBootstrapRestart}/bin/openchamber-queue-bootstrap-restart
       RemainAfterExit=yes
+      TimeoutStartSec=20m
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-bootstrap.log
       StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-bootstrap.log
       TasksMax=infinity
@@ -1291,8 +1389,8 @@ let
       [Unit]
       Description=OpenChamber Web
       DefaultDependencies=no
-      After=openchamber-bootstrap.service
-      Requires=openchamber-bootstrap.service
+      After=openchamber-container-setup.service user@3000.service dockerd.service
+      Requires=openchamber-container-setup.service user@3000.service dockerd.service
 
       [Service]
       Type=simple
@@ -1304,12 +1402,12 @@ let
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation
       Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
-      ExecStartPre=${openchamberBeforeWebStart}/bin/openchamber-before-web-start
       ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/openchamber-tool-update/restart.pending
       ExecStart=${openchamberWebRun}/bin/openchamber-web-run
       ExecStartPost=${openchamberSnapshotConfig}/bin/openchamber-snapshot-config
       Restart=always
       RestartSec=5
+      TimeoutStartSec=20m
       SuccessExitStatus=0 143
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
       StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
@@ -1353,7 +1451,7 @@ let
       EOF
       cat > etc/systemd/system/openchamber-tool-update-restart.service <<'EOF'
       [Unit]
-      Description=Restart OpenChamber after a queued tool update becomes idle
+      Description=Restart OpenChamber after queued maintenance becomes idle
       DefaultDependencies=no
       After=openchamber-bootstrap.service
       Requires=openchamber-bootstrap.service
@@ -1368,7 +1466,7 @@ let
       EOF
       cat > etc/systemd/system/openchamber-tool-update-restart.timer <<'EOF'
       [Unit]
-      Description=Apply queued OpenChamber and OpenCode updates when idle
+      Description=Apply queued OpenChamber maintenance when idle
       DefaultDependencies=no
       After=openchamber-bootstrap.service
 
@@ -1413,8 +1511,8 @@ let
       [Unit]
       Description=OpenChamber Multi-User System
       DefaultDependencies=no
-      Wants=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-tool-update-restart.timer openchamber-web-monitor.timer
-      After=openchamber-container-setup.service user@3000.service dockerd.service openchamber-bootstrap.service
+      Wants=openchamber-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-tool-update-restart.timer openchamber-web-monitor.timer
+      After=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       AllowIsolate=yes
       EOF
       rm -f etc/systemd/system/docker.service \
@@ -1423,6 +1521,8 @@ let
         etc/systemd/system/sockets.target.wants/docker.socket
       ln -s multi-user.target etc/systemd/system/default.target
       ln -s ../openchamber-container-setup.service etc/systemd/system/multi-user.target.wants/openchamber-container-setup.service
+      ln -s ../nix-daemon.socket etc/systemd/system/multi-user.target.wants/nix-daemon.socket
+      ln -s ../nix-daemon.service etc/systemd/system/multi-user.target.wants/nix-daemon.service
       ln -s ../user@.service etc/systemd/system/multi-user.target.wants/user@3000.service
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
       ln -s ../openchamber-bootstrap.service etc/systemd/system/multi-user.target.wants/openchamber-bootstrap.service
@@ -1432,7 +1532,7 @@ let
       ln -s ../openchamber-web-monitor.timer etc/systemd/system/multi-user.target.wants/openchamber-web-monitor.timer
     '';
     fakeRootCommands = ''
-      chown -R 3000:3000 nix/store nix/var/log/nix nix/var/nix
+      chown -R root:root nix/store nix/var/log/nix nix/var/nix
       chmod -R u+rwX,go+rX nix/store nix/var/log/nix nix/var/nix
       chown 0:0 usr/bin/sudo
       chmod 4755 usr/bin/sudo
@@ -1456,6 +1556,7 @@ let
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "NIX_CONFIG=experimental-features = nix-command flakes"
+        "NIX_REMOTE=daemon"
         "OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN=true"
       ];
       WorkingDir = "/home/openchamber";
@@ -1492,6 +1593,7 @@ in
       "${openchamberDocker}:/var/lib/docker:rw"
       "${openchamberWorkspace}:/workspace:rw"
       "${openchamberHome}:/home/openchamber:rw"
+      "${openchamberNixRoot}/nix:/nix:rw"
       "${openchamberSecrets}:${openchamberSecretsFile}:ro"
       "/mnt/share:/mnt/share:rw"
     ];
@@ -1502,6 +1604,8 @@ in
     "d /srv/apps/openchamber 0755 root root -"
     "d ${openchamberDocker} 0755 root root -"
     "d ${openchamberHome} 0755 3000 3000 -"
+    "d ${openchamberNixRoot} 0755 root root -"
+    "d ${openchamberNixRoot}/nix 0755 root root -"
     "d ${openchamberWorkspace} 0755 3000 3000 -"
   ];
 
@@ -1520,7 +1624,23 @@ in
       install -d -m0755 -o root -g root /srv/apps/openchamber
       install -d -m0755 -o root -g root ${openchamberDocker}
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}
+      install -d -m0755 -o root -g root ${openchamberNixRoot}
       install -d -m0755 -o 3000 -g 3000 ${openchamberWorkspace}
+
+      nix_store_uri='local?root=${openchamberNixRoot}'
+      ${pkgs.nix}/bin/nix copy \
+        --to "$nix_store_uri" \
+        ${lib.escapeShellArgs (map toString openchamberImageContents)}
+
+      gcroot_dir=${openchamberNixRoot}/nix/var/nix/gcroots/ghostship-openchamber-image
+      rm -rf "$gcroot_dir"
+      install -d -m0755 -o root -g root "$gcroot_dir"
+      for store_path in ${lib.escapeShellArgs (map toString openchamberImageContents)}; do
+        ln -s "$store_path" "$gcroot_dir/$(basename "$store_path")"
+      done
+
+      rm -f ${openchamberNixRoot}/nix/var/nix/temproots/*
+      rm -rf ${openchamberNixRoot}/nix/var/nix/builds/*
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.local/bin
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.local/share
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}/.local/state

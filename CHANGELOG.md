@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.123] - 2026-07-14
+
+- **OpenChamber startup health gate**: Treat activating container setup,
+  bootstrap, and web startup as healthy for up to 20 minutes of container
+  system-manager uptime so long first-start tooling builds cannot exhaust the
+  Podman health start period and enter a container kill/restart loop. Root
+  health probes now use absolute Nix-store tool paths. Normal
+  restarts now skip tool maintenance when the persisted OpenChamber and
+  OpenCode binaries already exist, start the web service before project hooks,
+  run bootstrap and before-web hooks in the background, and queue one
+  idle-gated maintenance restart after those hooks finish. The container now
+  uses an isolated persistent Nix store seeded incrementally from the image
+  closure and served through a root-owned internal `nix-daemon`, so
+  container-built agent packages survive image replacement without exposing
+  the host's primary store to container writes.
+
 ## [2.1.122] - 2026-07-14
 
 - **OpenChamber idle-gated tool updates**: Queue OpenChamber and OpenCode tool
