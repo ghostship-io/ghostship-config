@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.127] - 2026-07-14
+
+- **OpenChamber systemd shutdown targets**: Install systemd's upstream halt,
+  shutdown, final, unmount, and halt-service unit chain in the minimal image's
+  active unit search path so Podman's `SIGRTMIN+3` stop signal can shut down
+  instead of waiting for the outer timeout and forcing a container-wide
+  SIGKILL.
+
 ## [2.1.126] - 2026-07-14
 
 - **OpenChamber bounded shutdown**: Cap the web and user manager at 10 seconds

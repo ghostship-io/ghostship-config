@@ -1230,6 +1230,9 @@ let
       account required ${pkgs.pam}/lib/security/pam_permit.so
       session required ${pkgs.pam}/lib/security/pam_permit.so
       EOF
+      for system_unit in halt.target shutdown.target final.target systemd-halt.service umount.target; do
+        cp -a "${pkgs.systemd}/example/systemd/system/$system_unit" etc/systemd/system/
+      done
       cp -a ${pkgs.systemd}/example/systemd/user/. usr/share/systemd/user/
       rm -f etc/systemd/user/dbus.socket etc/systemd/user/dbus.service etc/systemd/user/sockets.target.wants/dbus.socket
       cat > etc/systemd/user/dbus.socket <<'EOF'
