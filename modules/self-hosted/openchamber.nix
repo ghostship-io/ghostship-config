@@ -1629,6 +1629,7 @@ in
 
       nix_store_uri='local?root=${openchamberNixRoot}'
       ${pkgs.nix}/bin/nix copy \
+        --no-check-sigs \
         --to "$nix_store_uri" \
         ${lib.escapeShellArgs (map toString openchamberImageContents)}
 

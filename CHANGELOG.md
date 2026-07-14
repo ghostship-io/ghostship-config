@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.124] - 2026-07-14
+
+- **OpenChamber persistent store seeding**: Trust paths copied directly from
+  the host's local Nix store when incrementally seeding the isolated container
+  store, including locally built image closures that have no binary-cache
+  signature.
+
 ## [2.1.123] - 2026-07-14
 
 - **OpenChamber startup health gate**: Treat activating container setup,
