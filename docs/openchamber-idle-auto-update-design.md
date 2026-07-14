@@ -43,6 +43,29 @@ container remains healthy for supervision purposes until OpenChamber reports
 all activity idle; active or unknown activity cannot trigger
 `--health-on-failure=kill`. An inactive web service still fails the container
 health check because there is no running work for a recovery to interrupt.
+Container setup and web activation are treated as healthy while they are still
+activating during the container system manager's startup grace period. The
+background bootstrap may also use that grace while the web service starts
+independently. This keeps a long first-start tooling build from being killed
+and restarted in a loop. That exception and the unit start timeouts are bounded
+at 20 minutes so a genuine deadlock remains recoverable.
+
+On normal container starts, minimal setup reuses the persisted OpenChamber and
+OpenCode binaries and starts the web service without waiting for project
+hooks. Bootstrap and before-web hook sets then run in the background. Their
+completion writes the same root-owned pending marker used by tool updates, so
+the restart gate applies their changes only after OpenChamber reports every
+session idle. First-ever startup still installs missing tool binaries before
+the web service starts.
+
+Persist `/nix` in an isolated alternate store rooted at
+`/srv/apps/openchamber/nix-root`, not by bind-mounting the host's primary Nix
+store. The host seeds the image content closures into that store with
+`nix copy` before container creation and refreshes image GC roots. Inside the
+container, a root-owned `nix-daemon` owns the store database and accepts builds
+from the allowed `openchamber` user. This retains container-built closures
+across image changes while preventing the application user from controlling a
+store database later consumed by host root.
 
 Keep memory-intensive child work in the web service cgroup. Set
 `MemoryHigh=32G`, `MemoryMax=40G`, and `OOMPolicy=continue` so the cgroup is
