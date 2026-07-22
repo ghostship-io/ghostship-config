@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.4.5] - 2026-07-22
+
+- **Paseo reverse proxy connection**: Trust the loopback and Ghostship Podman
+  proxy networks so the bundled HTTPS web UI derives a secure `wss://`
+  connection from Cloudflare's forwarded protocol.
+
 ## [2.4.4] - 2026-07-22
 
 - **Paseo user services**: Start the persistent user D-Bus from its packaged

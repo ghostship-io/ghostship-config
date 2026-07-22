@@ -82,6 +82,7 @@ let
     export OPENCODE_AUTOMATION_DIR="$HOME/.automation"
     export PASEO_HOME="$HOME/.paseo"
     export PASEO_LISTEN="0.0.0.0:6767"
+    export PASEO_TRUSTED_PROXIES="loopback,10.89.0.0/24"
     export PASEO_WEB_UI_ENABLED=true
     export AGY_CLI_DISABLE_AUTO_UPDATE=true
     hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
