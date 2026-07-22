@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.3.0] - 2026-07-22
+
+- **Codex Android installation**: Patch every pinned or automatically updated
+  Codex Web generation at runtime with a complete standalone manifest, 192px
+  and 512px maskable icons, mobile web-app metadata, and a root-scoped service
+  worker so Chrome on Android offers the same install flow as OpenChamber.
+
 ## [2.2.1] - 2026-07-22
 
 - **Codex Ollama credential handling**: Keep the Ollama.com authorization

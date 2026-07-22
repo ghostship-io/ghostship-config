@@ -276,6 +276,11 @@ cloud model's declared capabilities. Only models advertising `tools` are
 added to the Codex Web model picker; `thinking` and `vision` are reflected as
 optional model metadata rather than selection requirements.
 
+Each Codex Web generation is also overlaid at startup with a standalone web
+app manifest, 192px and 512px maskable icons, mobile application metadata, and
+a root-scoped service worker. This keeps **Install app** available in Chrome on
+Android after both pinned deployments and automatic Codex Web updates.
+
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts
 from the cached winner in `/srv/apps/gluetun/pia-wireguard-selection.json`, and

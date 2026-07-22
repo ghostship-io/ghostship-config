@@ -15,6 +15,7 @@ let
   codexSecretsFile = "/run/secrets/codex.env";
   imageName = "localhost/ghostship-codex";
   imageTag = "codex-${inputs.self.shortRev or inputs.self.rev or "dirty"}";
+  repoVersion = lib.removeSuffix "\n" (builtins.readFile ../../VERSION);
   system = pkgs.stdenv.hostPlatform.system;
 
   codexWebFallback = inputs.codex-web.packages.${system}.default;
@@ -34,6 +35,133 @@ let
       path = codexRemoteProxyFallback;
     }
   ];
+
+  codexPwaManifest = pkgs.writeText "codex-manifest.webmanifest" ''
+    {
+      "id": "/",
+      "name": "Codex",
+      "short_name": "Codex",
+      "description": "Ghostship Codex",
+      "start_url": "/",
+      "scope": "/",
+      "display": "standalone",
+      "display_override": ["standalone"],
+      "background_color": "#0d0d0d",
+      "theme_color": "#0d0d0d",
+      "categories": ["developer", "productivity", "tools"],
+      "lang": "en",
+      "prefer_related_applications": false,
+      "icons": [
+        {
+          "src": "/assets/pwa-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any maskable"
+        },
+        {
+          "src": "/assets/pwa-icon-512.png",
+          "sizes": "512x512",
+          "type": "image/png",
+          "purpose": "any maskable"
+        }
+      ]
+    }
+  '';
+
+  codexPwaRegister = pkgs.writeText "codex-pwa-register.js" ''
+    (() => {
+      if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+      });
+    })();
+  '';
+
+  codexServiceWorker = pkgs.writeText "codex-sw.js" ''
+    self.addEventListener("install", (event) => {
+      event.waitUntil(self.skipWaiting());
+    });
+
+    self.addEventListener("activate", (event) => {
+      event.waitUntil(self.clients.claim());
+    });
+
+    self.addEventListener("fetch", (event) => {
+      if (event.request.method === "GET") {
+        event.respondWith(fetch(event.request));
+      }
+    });
+  '';
+
+  codexPwaPrepare = pkgs.writeShellScriptBin "codex-pwa-prepare" ''
+    set -eu
+
+    source_web="''${1:?usage: codex-pwa-prepare WEB_PACKAGE}"
+    resolved_source="$(readlink -f "$source_web")"
+    case "$resolved_source" in
+      /nix/store/*) ;;
+      *)
+        printf 'error: Codex Web package is outside the Nix store: %s\n' "$resolved_source" >&2
+        exit 1
+        ;;
+    esac
+
+    target_root="$CODEX_TOOL_ROOT/pwa"
+    target="$target_root/${repoVersion}-$(basename "$resolved_source")"
+    marker="$target/.ghostship-pwa-source"
+    if [ -x "$target/bin/codex-web" ] \
+      && [ -f "$target/lib/node_modules/codex-web/scratch/asar/webview/manifest.webmanifest" ] \
+      && [ -f "$target/lib/node_modules/codex-web/scratch/asar/webview/sw.js" ] \
+      && [ "$(cat "$marker" 2>/dev/null || true)" = "$resolved_source" ]; then
+      printf '%s\n' "$target"
+      exit 0
+    fi
+
+    mkdir -p "$target_root"
+    work_dir="$(mktemp -d "$target_root/.pwa.XXXXXX")"
+    trap 'rm -rf "$work_dir"' EXIT
+    cp -a "$resolved_source/." "$work_dir/"
+    chmod -R u+w "$work_dir"
+
+    launcher="$work_dir/bin/codex-web"
+    webview="$work_dir/lib/node_modules/codex-web/scratch/asar/webview"
+    index="$webview/index.html"
+    [ -x "$launcher" ]
+    [ -f "$index" ]
+    [ -f "$webview/assets/pwa-icon-512.png" ]
+
+    sed -i "s|$resolved_source|$target|g" "$launcher"
+    sed -i \
+      -e 's|href="/manifest.json"|href="/manifest.webmanifest"|g' \
+      -e 's|</head>|    <meta name="theme-color" content="#0d0d0d" />\n    <meta name="mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-title" content="Codex" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <link rel="apple-touch-icon" sizes="180x180" href="/assets/pwa-icon-180.png" />\n    <script src="/pwa-register.js"></script>\n  </head>|' \
+      "$index"
+
+    install -m 0644 ${codexPwaManifest} "$webview/manifest.webmanifest"
+    install -m 0644 ${codexPwaRegister} "$webview/pwa-register.js"
+    install -m 0644 ${codexServiceWorker} "$webview/sw.js"
+    ${pkgs.imagemagick}/bin/magick "$webview/assets/pwa-icon-512.png" \
+      -resize 192x192 "$webview/assets/pwa-icon-192.png"
+    ${pkgs.imagemagick}/bin/magick "$webview/assets/pwa-icon-512.png" \
+      -resize 180x180 "$webview/assets/pwa-icon-180.png"
+
+    jq -e '
+      (.name == "Codex")
+      and (.start_url == "/")
+      and (.display == "standalone")
+      and (any(.icons[]; .sizes == "192x192"))
+      and (any(.icons[]; .sizes == "512x512"))
+    ' "$webview/manifest.webmanifest" >/dev/null
+    ${pkgs.imagemagick}/bin/identify "$webview/assets/pwa-icon-192.png" \
+      | grep -q '192x192'
+    grep -q '/pwa-register.js' "$index"
+    grep -q '/manifest.webmanifest' "$index"
+
+    printf '%s\n' "$resolved_source" > "$work_dir/.ghostship-pwa-source"
+    rm -rf "$target"
+    mv "$work_dir" "$target"
+    trap - EXIT
+    printf '%s\n' "$target"
+  '';
 
   codexPackages = with pkgs; [
     nix
@@ -1208,7 +1336,8 @@ let
       sleep 1
     done
     cd /home/codex
-    exec "$CODEX_TOOL_CURRENT/web/bin/codex-web" --host 0.0.0.0 --port 8214
+    patched_web="$(${codexPwaPrepare}/bin/codex-pwa-prepare "$CODEX_TOOL_CURRENT/web")"
+    exec "$patched_web/bin/codex-web" --host 0.0.0.0 --port 8214
   '';
 
   codexContainerSetup = pkgs.writeShellScriptBin "codex-container-setup" ''
