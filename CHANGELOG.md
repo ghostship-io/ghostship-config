@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.4.2] - 2026-07-22
+
+- **Paseo Antigravity migration**: Treat a persisted `agy` binary as installed
+  only when it can execute, so upgrades automatically replace the unusable raw
+  aarch64 binary from the initial deployment with the managed glibc wrapper.
+
 ## [2.4.1] - 2026-07-22
 
 - **Paseo cold bootstrap**: Assign first-created npm and XDG directories to the

@@ -1155,7 +1155,7 @@ let
     if [ ! -x "$NPM_CONFIG_PREFIX/bin/paseo" ] \
       || [ ! -x "$NPM_CONFIG_PREFIX/bin/codex" ] \
       || [ ! -x "$NPM_CONFIG_PREFIX/bin/opencode" ] \
-      || [ ! -x "$HOME/.local/bin/agy" ]; then
+      || ! su-exec paseo:paseo "$HOME/.local/bin/agy" --version >/dev/null 2>&1; then
       su-exec paseo:paseo ${paseoToolMaintenance}/bin/paseo-tool-maintenance
     fi
     cat > "$HOME/.local/bin/paseo-daemon-run" <<'EOF'
