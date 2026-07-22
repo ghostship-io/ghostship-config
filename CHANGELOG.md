@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.4.1] - 2026-07-22
+
+- **Paseo cold bootstrap**: Assign first-created npm and XDG directories to the
+  unprivileged Paseo user before tool installation, and launch the official
+  dynamically linked aarch64 Antigravity binary through Nix's glibc loader.
+
 ## [2.4.0] - 2026-07-22
 
 - **Self-hosted Paseo**: Add a repo-built systemd Podman image with Paseo,

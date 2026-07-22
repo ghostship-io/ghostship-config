@@ -319,6 +319,7 @@ let
       staging_dir="$(mktemp -d "$XDG_CACHE_HOME/antigravity-install.XXXXXX")"
       trap 'rm -rf "$staging_dir"' EXIT HUP INT TERM
       mkdir -p "$staging_dir/home" "$staging_dir/config"
+      antigravity_dir="$XDG_DATA_HOME/paseo-tools/antigravity"
 
       log_info "installing or upgrading Antigravity CLI"
       if ! ${pkgs.curl}/bin/curl -fsSL https://antigravity.google/cli/install.sh \
@@ -331,8 +332,20 @@ let
         log_warn "Antigravity installer did not produce agy"
         return 1
       fi
-      install -m 0755 "$staging_dir/agy" "$HOME/.local/bin/agy.new"
-      mv "$HOME/.local/bin/agy.new" "$HOME/.local/bin/agy"
+      loader="$(find_nix_glibc_loader || true)"
+      if [ -z "$loader" ]; then
+        log_warn "Nix glibc loader is unavailable for Antigravity CLI"
+        return 1
+      fi
+      mkdir -p "$antigravity_dir"
+      install -m 0755 "$staging_dir/agy" "$antigravity_dir/agy.new"
+      mv "$antigravity_dir/agy.new" "$antigravity_dir/agy"
+      cat > "$HOME/.local/bin/agy" <<EOF
+    #!/usr/bin/env sh
+    set -eu
+    exec '$loader' --library-path "''${loader%/*}" '$antigravity_dir/agy' "\$@"
+    EOF
+      chmod 0755 "$HOME/.local/bin/agy"
       rm -rf "$staging_dir"
       trap - EXIT HUP INT TERM
     }
@@ -1123,6 +1136,10 @@ let
       /tmp \
       /run/user/3000
     chown -R paseo:paseo \
+      "$HOME/.local" \
+      "$HOME/.config" \
+      "$HOME/.cache" \
+      "$HOME/.automation" \
       "$HOME/.paseo" \
       "$HOME/.paseo-container" \
       "$HOME/.codex" \
