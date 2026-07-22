@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.4.4] - 2026-07-22
+
+- **Paseo user services**: Start the persistent user D-Bus from its packaged
+  session configuration so user units and Secret Service remain reachable.
+
 ## [2.4.3] - 2026-07-22
 
 - **Paseo maintenance safety**: Defer package mutation while Paseo reports

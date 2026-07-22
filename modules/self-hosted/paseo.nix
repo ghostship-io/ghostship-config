@@ -1324,7 +1324,7 @@ let
       [Service]
       Type=notify
       NotifyAccess=main
-      ExecStart=${pkgs.dbus}/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+      ExecStart=${pkgs.dbus}/bin/dbus-daemon --config-file=${pkgs.dbus}/share/dbus-1/session.conf --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
       ExecReload=${pkgs.dbus}/bin/dbus-send --print-reply --session --type=method_call --dest=org.freedesktop.DBus / org.freedesktop.DBus.ReloadConfig
       Slice=session.slice
       EOF
