@@ -52,6 +52,18 @@ let
       codexHookCommands = [ ];
     }
     {
+      name = "autoreview";
+      paths = [
+        ".agents/skills/autoreview"
+      ];
+      pathGlobs = [ ];
+      geminiExtensionKeys = [ ];
+      skillLockNames = [
+        "autoreview"
+      ];
+      codexHookCommands = [ ];
+    }
+    {
       name = "browser-use";
       paths = [
         ".config/browseruse"

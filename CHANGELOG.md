@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.1.128] - 2026-07-22
+
+- **Autoreview skill retirement**: Remove the repo-managed `autoreview` skill
+  and its Codex configuration, and clean stale installations from develop
+  hosts.
+
 ## [2.1.127] - 2026-07-14
 
 - **OpenChamber systemd shutdown targets**: Install systemd's upstream halt,

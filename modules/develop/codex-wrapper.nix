@@ -30,7 +30,6 @@ let
   '';
 
   skills = [
-    { name = "autoreview"; }
     { name = "ghostship-audit-worktree"; }
     { name = "ghostship-merge-worktree"; }
     { name = "ghostship-pull-worktree"; }
