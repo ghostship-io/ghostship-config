@@ -8,17 +8,6 @@
 let
   retiredArtifacts = [
     {
-      name = "codex";
-      paths = [ "/srv/apps/codex" ];
-      units = [ "podman-codex" ];
-      containers = [ "codex" ];
-      imageRepositories = [
-        "localhost/ghostship-codex"
-      ];
-      homepageEntries = [ "Codex" ];
-      muximuxSections = [ "Codex" ];
-    }
-    {
       name = "bookstack";
       paths = [
         "/srv/apps/bookstack"

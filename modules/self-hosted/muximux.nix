@@ -361,6 +361,13 @@ in
           OpenChamber.color=literal:"#111827"
           OpenChamber.enabled=literal:"true"
           OpenChamber.dd=literal:"false"
+          Codex.name=literal:"Codex"
+          Codex.url=literal:"https://codex.ghostship.io"
+          Codex.scale=literal:1
+          Codex.icon=literal:"muximux-code"
+          Codex.color=literal:"#10a37f"
+          Codex.enabled=literal:"true"
+          Codex.dd=literal:"false"
           Synology.name=literal:"Synology"
           Synology.url=literal:"https://synology.ghostship.io"
           Synology.scale=literal:1
@@ -506,12 +513,15 @@ in
 
             for (i = 1; i <= section_count; i++) {
               name = section_order[i]
-              if (name == "Honcho" || name == "OpenChamber" || name == "BookStack" || name == "Chaptarr" || name == "Hatchet" || name == "Prefect" || name == "Windmill" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection" || name == "OmniTools" || name == "MeTube" || name == "ConvertX" || name == "BentoPDF" || name == "IT Tools" || name == "SearXNG" || name == "qBittorrent" || name == "SSH") {
+              if (name == "Honcho" || name == "OpenChamber" || name == "Codex" || name == "BookStack" || name == "Chaptarr" || name == "Hatchet" || name == "Prefect" || name == "Windmill" || name == "N8N" || name == "PriceBuddy" || name == "Changedetection" || name == "OmniTools" || name == "MeTube" || name == "ConvertX" || name == "BentoPDF" || name == "IT Tools" || name == "SearXNG" || name == "qBittorrent" || name == "SSH") {
                 continue
               }
               printf "%s", section_data[name]
               if (name == "Grimmory" && ("OpenChamber" in section_data)) {
                 printf "%s", section_data["OpenChamber"]
+                if ("Codex" in section_data) {
+                  printf "%s", section_data["Codex"]
+                }
               }
               if (name == "NZBGet" && ("qBittorrent" in section_data)) {
                 printf "%s", section_data["qBittorrent"]
@@ -526,6 +536,12 @@ in
             }
             if (!("Grimmory" in section_data) && ("OpenChamber" in section_data)) {
               printf "%s", section_data["OpenChamber"]
+              if ("Codex" in section_data) {
+                printf "%s", section_data["Codex"]
+              }
+            }
+            if (!("OpenChamber" in section_data) && ("Codex" in section_data)) {
+              printf "%s", section_data["Codex"]
             }
           }
         ' "$CONFIG_FILE" > "$temp_file"

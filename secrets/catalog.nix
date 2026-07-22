@@ -549,6 +549,35 @@ in
       };
     };
 
+    codex = {
+      fileName = "codex.env";
+      owner = "apps";
+      group = "apps";
+      mode = "0440";
+      fields = {
+        GITHUB_TOKEN = {
+          unit = "github";
+          key = "TOKEN";
+        };
+        BW_CLIENTID = {
+          unit = "bitwarden";
+          key = "BW_CLIENTID";
+        };
+        BW_CLIENTSECRET = {
+          unit = "bitwarden";
+          key = "BW_CLIENTSECRET";
+        };
+        BW_PASSWORD = {
+          unit = "bitwarden";
+          key = "BW_PASSWORD";
+        };
+        OLLAMA_API_KEY = {
+          unit = "ollama";
+          key = "API_KEY";
+        };
+      };
+    };
+
     plex = {
       fileName = "plex.env";
       owner = "apps";

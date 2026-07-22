@@ -201,6 +201,12 @@ in
             "[Services].[OpenChamber].server=literal:chill-penguin"
             "[Services].[OpenChamber].container=literal:openchamber"
 
+            "[Services].[Codex].icon=literal:si-openai-#10a37f"
+            "[Services].[Codex].href=literal:https://codex.ghostship.io"
+            "[Services].[Codex].description=literal:Codex Web"
+            "[Services].[Codex].server=literal:chill-penguin"
+            "[Services].[Codex].container=literal:codex"
+
             # Management group
             "[Management].[Homepage].icon=literal:sh-homepage"
             "[Management].[Homepage].description=literal:Dashboard"
@@ -234,7 +240,7 @@ in
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
 
           ${pkgs.yq-go}/bin/yq -i '
-            (.[] | select(has("Services")) | .Services) |= map(select((has("Codex") or has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy Scraper") or has("Changedetection") or has("n8n") or has("SearXNG") or has("Windmill") or has("Hatchet") or has("Prefect")) | not))
+            (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy Scraper") or has("Changedetection") or has("n8n") or has("SearXNG") or has("Windmill") or has("Hatchet") or has("Prefect")) | not))
             | (.[] | select(has("Downloads")) | .Downloads) |= map(select((has("VueTorrent")) | not))
             | (.[] | select(has("Management")) | .Management) |= map(select((has("Codex") or has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG") or has("Plex Auto Languages") or has("PriceBuddy Scraper")) | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("BentoPDF") or has("ConvertX") or has("IT-Tools") or has("MeTube") or has("OmniTools")) | not))

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.2.0] - 2026-07-22
+
+- **Self-hosted Codex Web**: Add a systemd-based Codex container with a
+  persistent app server, disposable `codex-web` bridge, persistent user
+  services, Docker and Nix state, activity-gated four-hour updates, guarded
+  recovery, clean shutdown, Quick Tunnels, and config validation with rollback.
+- **Ollama.com models**: Project `OLLAMA_API_KEY` through the secret catalog,
+  proxy cloud inference over loopback, and add only models advertising tool
+  capability to the Codex Web picker.
+
 ## [2.1.128] - 2026-07-22
 
 - **Autoreview skill retirement**: Remove the repo-managed `autoreview` skill

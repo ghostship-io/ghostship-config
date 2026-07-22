@@ -253,6 +253,29 @@ restores the previous last-good config snapshot if the restart does not become
 healthy. `openchamber-web.service` refreshes that last-good snapshot whenever
 it starts successfully.
 
+Codex runs at `https://codex.ghostship.io` in a separate systemd-based Podman
+image built from `0xcaff/codex-web`. A persistent `codex-app-server.service`
+owns task state and execution, while the disposable `codex-web.service` bridge
+can restart without interrupting active work. The `codex` user at `3000:3000`
+keeps its home, workspace, Docker state, user systemd units, and isolated Nix
+store under `/srv/apps/codex`. Use `codex-user-units` for persisted user
+services, `codex-tunnel` for ad hoc Quick Tunnels, and `codex-apply-config`
+after editing Codex TOML or hook configuration.
+
+Every four hours the container builds the current `codex-web` main revision
+and its pinned Codex CLI into a new persistent generation. Activation waits
+until the app server reports every task idle, then switches the generation and
+rolls back automatically if the app server or web bridge fails its health
+check. The same activity-aware policy protects monitor recovery and outer
+container health actions. The app server is throttled above 32 GiB and capped
+at 40 GiB.
+
+`OLLAMA_API_KEY` is projected from the secret catalog. A loopback-only proxy
+adds it to Ollama.com requests, and a four-hour catalog refresh inspects each
+cloud model's declared capabilities. Only models advertising `tools` are
+added to the Codex Web model picker; `thinking` and `vision` are reflected as
+optional model metadata rather than selection requirements.
+
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts
 from the cached winner in `/srv/apps/gluetun/pia-wireguard-selection.json`, and
