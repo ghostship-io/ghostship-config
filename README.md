@@ -258,9 +258,11 @@ Paseo runs at `https://paseo.ghostship.io` in a separate repo-built,
 systemd-based Podman image. It listens only on the internal container network
 at `paseo:6767`; the Cloudflare route is managed outside this repo. Paseo has
 no application password, so Cloudflare Access must remain the external
-authentication boundary. The persistent `paseo` user, home, workspace, nested
-Docker state, user systemd units, and isolated Nix store live under
-`/srv/apps/paseo`.
+authentication boundary. The bundled web UI receives a same-origin daemon
+connection hint with the default edge port so it connects through Cloudflare
+instead of falling back to `localhost:6767`. The persistent `paseo` user, home,
+workspace, nested Docker state, user systemd units, and isolated Nix store live
+under `/srv/apps/paseo`.
 
 The container installs current Paseo, Codex, OpenCode, and Antigravity `agy`
 CLIs on first boot and refreshes them every four hours. Paseo orchestrates the

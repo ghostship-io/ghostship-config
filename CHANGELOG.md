@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.4.6] - 2026-07-22
+
+- **Paseo web UI bootstrap**: Patch Paseo's same-origin connection hint to
+  include the default HTTP or HTTPS edge port, preventing the bundled client
+  from rejecting a portless hostname and falling back to `localhost:6767`.
+
 ## [2.4.5] - 2026-07-22
 
 - **Paseo reverse proxy connection**: Trust the loopback and Ghostship Podman
