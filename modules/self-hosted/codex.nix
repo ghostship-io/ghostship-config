@@ -138,8 +138,14 @@ let
         home + "/.local/share/codex-tools/current/proxy/bin/codex_remote_proxy";
       const catalogPath = process.env.CODEX_OLLAMA_CATALOG ||
         home + "/.local/state/codex-ollama/catalog.json";
+      const childEnv = {
+        ...process.env,
+        CODEX_UNIX_SOCKET: process.env.CODEX_UNIX_SOCKET ||
+          process.env.CODEX_APP_SERVER_SOCKET ||
+          "/run/codex-app-server/codex-app-server.sock",
+      };
       const child = spawn(proxy, process.argv.slice(2), {
-        env: process.env,
+        env: childEnv,
         stdio: ["pipe", "pipe", "pipe"],
       });
       const requests = new Map();
@@ -241,6 +247,9 @@ let
       });
 
       child.stderr.pipe(process.stderr);
+      child.stdin.on("error", (error) => {
+        if (error.code !== "EPIPE") process.stderr.write(String(error) + "\n");
+      });
       child.on("exit", (code, signal) => {
         if (signal) process.kill(process.pid, signal);
         process.exit(code === null ? 1 : code);
@@ -263,7 +272,13 @@ let
       const proxy = process.env.CODEX_REMOTE_PROXY_PATH ||
         home + "/.local/share/codex-tools/current/proxy/bin/codex_remote_proxy";
       const mode = process.argv.includes("--idle") ? "idle" : "health";
-      const child = spawn(proxy, ["app-server"], { env: process.env, stdio: ["pipe", "pipe", "pipe"] });
+      const childEnv = {
+        ...process.env,
+        CODEX_UNIX_SOCKET: process.env.CODEX_UNIX_SOCKET ||
+          process.env.CODEX_APP_SERVER_SOCKET ||
+          "/run/codex-app-server/codex-app-server.sock",
+      };
+      const child = spawn(proxy, ["app-server"], { env: childEnv, stdio: ["pipe", "pipe", "pipe"] });
       const threads = [];
       let nextId = 2;
       let finished = false;
@@ -318,6 +333,9 @@ let
         }
       });
       child.stderr.on("data", () => {});
+      child.stdin.on("error", (error) => {
+        if (error.code !== "EPIPE") fail(String(error));
+      });
       child.on("error", (error) => fail(String(error)));
       child.on("exit", (code) => {
         if (!finished) fail("app-server proxy exited with " + code);
@@ -1127,9 +1145,11 @@ let
     work_dir="$(mktemp -d "$catalog_dir/.refresh.XXXXXX")"
     trap 'rm -rf "$work_dir"' EXIT
 
-    auth_header="Authorization: Bearer $OLLAMA_API_KEY"
+    auth_header_file="$work_dir/authorization.header"
+    printf 'Authorization: Bearer %s\n' "$OLLAMA_API_KEY" > "$auth_header_file"
+    chmod 0600 "$auth_header_file"
     curl -fsS --retry 3 --connect-timeout 15 --max-time 60 \
-      -H "$auth_header" https://ollama.com/api/tags > "$work_dir/tags.json"
+      -H "@$auth_header_file" https://ollama.com/api/tags > "$work_dir/tags.json"
 
     jq -r '.models[]? | .model // .name // empty' "$work_dir/tags.json" \
       | sort -u > "$work_dir/models"
@@ -1138,7 +1158,7 @@ let
       [ -n "$model" ] || continue
       payload="$(jq -cn --arg model "$model" '{model: $model}')"
       if ! curl -fsS --retry 2 --connect-timeout 15 --max-time 60 \
-        -H "$auth_header" -H 'Content-Type: application/json' \
+        -H "@$auth_header_file" -H 'Content-Type: application/json' \
         --data "$payload" https://ollama.com/api/show > "$work_dir/show.json"; then
         printf 'warning: failed to inspect Ollama model %s\n' "$model" >&2
         continue

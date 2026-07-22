@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.2.1] - 2026-07-22
+
+- **Codex Ollama credential handling**: Keep the Ollama.com authorization
+  header out of catalog-refresh process arguments, and let app-server protocol
+  helpers discover the managed Unix socket without caller-provided environment.
+
 ## [2.2.0] - 2026-07-22
 
 - **Self-hosted Codex Web**: Add a systemd-based Codex container with a
