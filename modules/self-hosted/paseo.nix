@@ -49,8 +49,10 @@ let
     gnused
     gnutar
     gzip
+    lbzip2
     unzip
     p7zip
+    procps
     iptables
     iproute2
     kmod
@@ -377,6 +379,13 @@ let
     log_info() {
       printf 'info: %s\n' "$1" >&2
     }
+
+    ${paseoIdleCheck}
+
+    if systemctl is-active --quiet paseo-daemon.service && ! is_paseo_idle; then
+      log_info "Paseo reports active or unknown work; tool update deferred"
+      exit 0
+    fi
 
     user_version() {
       tool="$1"

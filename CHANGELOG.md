@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.4.3] - 2026-07-22
+
+- **Paseo maintenance safety**: Defer package mutation while Paseo reports
+  active or unknown work, and add `ps` for managed-provider process
+  reconciliation plus bzip2 support for bundled speech model extraction.
+
 ## [2.4.2] - 2026-07-22
 
 - **Paseo Antigravity migration**: Treat a persisted `agy` binary as installed
