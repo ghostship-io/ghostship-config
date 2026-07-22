@@ -207,6 +207,12 @@ in
             "[Services].[Codex].server=literal:chill-penguin"
             "[Services].[Codex].container=literal:codex"
 
+            "[Services].[Paseo].icon=literal:mdi-walk-#7c3aed"
+            "[Services].[Paseo].href=literal:https://paseo.ghostship.io"
+            "[Services].[Paseo].description=literal:Agent Orchestration"
+            "[Services].[Paseo].server=literal:chill-penguin"
+            "[Services].[Paseo].container=literal:paseo"
+
             # Management group
             "[Management].[Homepage].icon=literal:sh-homepage"
             "[Management].[Homepage].description=literal:Dashboard"

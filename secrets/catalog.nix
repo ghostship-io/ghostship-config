@@ -549,6 +549,39 @@ in
       };
     };
 
+    paseo = {
+      fileName = "paseo.env";
+      owner = "apps";
+      group = "apps";
+      mode = "0440";
+      fields = {
+        GO_API_KEY = {
+          unit = "opencode";
+          key = "GO_API_KEY";
+        };
+        OPENROUTER_API_KEY = {
+          unit = "openrouter";
+          key = "API_KEY";
+        };
+        GITHUB_TOKEN = {
+          unit = "github";
+          key = "TOKEN";
+        };
+        BW_CLIENTID = {
+          unit = "bitwarden";
+          key = "BW_CLIENTID";
+        };
+        BW_CLIENTSECRET = {
+          unit = "bitwarden";
+          key = "BW_CLIENTSECRET";
+        };
+        BW_PASSWORD = {
+          unit = "bitwarden";
+          key = "BW_PASSWORD";
+        };
+      };
+    };
+
     codex = {
       fileName = "codex.env";
       owner = "apps";

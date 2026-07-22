@@ -32,6 +32,7 @@
     ./cloakbrowser.nix
     ./codex.nix
     ./openchamber.nix
+    ./paseo.nix
 
     # Games
     ./romm-db.nix

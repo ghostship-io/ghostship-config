@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.4.0] - 2026-07-22
+
+- **Self-hosted Paseo**: Add a repo-built systemd Podman image with Paseo,
+  Codex, OpenCode, and Antigravity, persistent user services, Docker and Nix
+  state, activity-gated four-hour updates and recovery, Quick Tunnels, config
+  validation with rollback, clean shutdown, and Homepage/Muximux entries.
+- **Paseo exposure contract**: Listen on the internal network at port 6767
+  without an application password, leaving the external route and mandatory
+  authentication boundary to Cloudflare Access.
+
 ## [2.3.0] - 2026-07-22
 
 - **Codex Android installation**: Patch every pinned or automatically updated

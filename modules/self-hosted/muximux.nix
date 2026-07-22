@@ -368,6 +368,13 @@ in
           Codex.color=literal:"#10a37f"
           Codex.enabled=literal:"true"
           Codex.dd=literal:"false"
+          Paseo.name=literal:"Paseo"
+          Paseo.url=literal:"https://paseo.ghostship.io"
+          Paseo.scale=literal:1
+          Paseo.icon=literal:"muximux-code"
+          Paseo.color=literal:"#7c3aed"
+          Paseo.enabled=literal:"true"
+          Paseo.dd=literal:"false"
           Synology.name=literal:"Synology"
           Synology.url=literal:"https://synology.ghostship.io"
           Synology.scale=literal:1

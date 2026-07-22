@@ -178,8 +178,9 @@ inventory. Services use Podman, native healthchecks, and registry auto-update.
 Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
-Key services include Plex, Homepage, Muximux, OpenChamber, the `arr` stack,
-qBittorrent, SearXNG, RomM, Grimmory, Chaptarr, PyLoad, PriceBuddy, and n8n.
+Key services include Plex, Homepage, Muximux, OpenChamber, Paseo, the `arr`
+stack, qBittorrent, SearXNG, RomM, Grimmory, Chaptarr, PyLoad, PriceBuddy, and
+n8n.
 
 Retired `chill-penguin` self-hosted service artifacts are cleaned from the
 allowlist in
@@ -252,6 +253,31 @@ for OpenChamber plus its managed `opencode serve` subprocess to recover, and
 restores the previous last-good config snapshot if the restart does not become
 healthy. `openchamber-web.service` refreshes that last-good snapshot whenever
 it starts successfully.
+
+Paseo runs at `https://paseo.ghostship.io` in a separate repo-built,
+systemd-based Podman image. It listens only on the internal container network
+at `paseo:6767`; the Cloudflare route is managed outside this repo. Paseo has
+no application password, so Cloudflare Access must remain the external
+authentication boundary. The persistent `paseo` user, home, workspace, nested
+Docker state, user systemd units, and isolated Nix store live under
+`/srv/apps/paseo`.
+
+The container installs current Paseo, Codex, OpenCode, and Antigravity `agy`
+CLIs on first boot and refreshes them every four hours. Paseo orchestrates the
+Codex and OpenCode providers; `agy` is installed alongside for direct use but
+is not presented as a Paseo provider. Updates queue a daemon restart and apply
+only when `paseo ls --global --json` reports no running or initializing work.
+The daemon is throttled above 12 GiB and capped at 16 GiB. Its monitor and
+outer Podman health policy use the same activity gate before recovery.
+
+Use `paseo-user-units` for persisted user services, `paseo-tunnel` for ad hoc
+Quick Tunnels, and `paseo-apply-config` after editing Paseo JSON, Codex TOML,
+OpenCode JSON, or Antigravity settings. The apply command validates the files,
+restarts `paseo-daemon.service` through a narrow container-local sudoers rule,
+and restores the last-known-good config if Paseo or its Codex/OpenCode
+providers fail to recover. Codex and Antigravity subscription credentials need
+one interactive login each after first deployment; their state persists in
+`/home/paseo` across image replacements.
 
 Codex runs at `https://codex.ghostship.io` in a separate systemd-based Podman
 image built from `0xcaff/codex-web`. A persistent `codex-app-server.service`
