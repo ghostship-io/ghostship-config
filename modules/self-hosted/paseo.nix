@@ -147,6 +147,51 @@ let
     }
   '';
 
+  paseoWebUiHintPatch = pkgs.writeShellScriptBin "paseo-web-ui-hint-patch" ''
+    set -eu
+
+    ${paseoRuntimeEnv}
+
+    log_info() {
+      printf 'info: %s\n' "$1" >&2
+    }
+
+    log_warn() {
+      printf 'warn: %s\n' "$1" >&2
+    }
+
+    web_ui_js="$NPM_CONFIG_PREFIX/lib/node_modules/@getpaseo/cli/node_modules/@getpaseo/server/dist/server/server/web-ui.js"
+    original_line='    const host = typeof req.headers.host === "string" ? req.headers.host : "";'
+    patched_line='    const requestHost = typeof req.headers.host === "string" ? req.headers.host : "";'
+
+    if [ ! -f "$web_ui_js" ]; then
+      log_warn "Paseo web UI bootstrap implementation was not found; compatibility patch skipped"
+      exit 0
+    fi
+    if ${pkgs.gnugrep}/bin/grep -Fq "$patched_line" "$web_ui_js"; then
+      log_info "Paseo web UI connection hint compatibility patch is present"
+      exit 0
+    fi
+    if ! ${pkgs.gnugrep}/bin/grep -Fq "$original_line" "$web_ui_js"; then
+      log_warn "Paseo web UI bootstrap implementation changed; compatibility patch skipped"
+      exit 0
+    fi
+
+    ${pkgs.gnused}/bin/sed -i \
+      '/^    const host = typeof req\.headers\.host === "string" ? req\.headers\.host : "";$/c\
+    const requestHost = typeof req.headers.host === "string" ? req.headers.host : "";\
+    const host = requestHost && !requestHost.includes(":")\
+        ? requestHost + ":" + (req.protocol === "https" ? "443" : "80")\
+        : requestHost;' \
+      "$web_ui_js"
+
+    if ! ${pkgs.gnugrep}/bin/grep -Fq "$patched_line" "$web_ui_js"; then
+      log_warn "Paseo web UI connection hint compatibility patch failed"
+      exit 1
+    fi
+    log_info "patched Paseo web UI connection hint for default proxy ports"
+  '';
+
   paseoToolMaintenance = pkgs.writeShellScriptBin "paseo-tool-maintenance" ''
     set -eu
 
@@ -178,39 +223,6 @@ let
       if [ -n "$install_output" ]; then
         printf '%s\n' "$install_output" >&2
       fi
-    }
-
-    patch_paseo_web_ui_hint() {
-      web_ui_js="$NPM_CONFIG_PREFIX/lib/node_modules/@getpaseo/cli/node_modules/@getpaseo/server/dist/server/server/web-ui.js"
-      original_line='    const host = typeof req.headers.host === "string" ? req.headers.host : "";'
-      patched_line='    const requestHost = typeof req.headers.host === "string" ? req.headers.host : "";'
-
-      if [ ! -f "$web_ui_js" ]; then
-        log_warn "Paseo web UI bootstrap implementation was not found; compatibility patch skipped"
-        return 0
-      fi
-      if ${pkgs.gnugrep}/bin/grep -Fq "$patched_line" "$web_ui_js"; then
-        log_info "Paseo web UI connection hint compatibility patch is present"
-        return 0
-      fi
-      if ! ${pkgs.gnugrep}/bin/grep -Fq "$original_line" "$web_ui_js"; then
-        log_warn "Paseo web UI bootstrap implementation changed; compatibility patch skipped"
-        return 0
-      fi
-
-      ${pkgs.gnused}/bin/sed -i \
-        '/^    const host = typeof req\.headers\.host === "string" ? req\.headers\.host : "";$/c\
-    const requestHost = typeof req.headers.host === "string" ? req.headers.host : "";\
-    const host = requestHost && !requestHost.includes(":")\
-        ? requestHost + ":" + (req.protocol === "https" ? "443" : "80")\
-        : requestHost;' \
-        "$web_ui_js"
-
-      if ! ${pkgs.gnugrep}/bin/grep -Fq "$patched_line" "$web_ui_js"; then
-        log_warn "Paseo web UI connection hint compatibility patch failed"
-        return 1
-      fi
-      log_info "patched Paseo web UI connection hint for default proxy ports"
     }
 
     opencode_loader_name() {
@@ -389,7 +401,7 @@ let
     mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
     install_agent_cli "@getpaseo/cli" "paseo"
-    patch_paseo_web_ui_hint
+    ${paseoWebUiHintPatch}/bin/paseo-web-ui-hint-patch
     install_agent_cli "@openai/codex" "codex"
     install_opencode_cli
     install_antigravity_cli
@@ -1139,6 +1151,8 @@ let
     export XDG_RUNTIME_DIR=/run/user/3000
     unset PASEO_PASSWORD
     cd /home/paseo
+
+    ${paseoWebUiHintPatch}/bin/paseo-web-ui-hint-patch
 
     exec paseo daemon start \
       --foreground \

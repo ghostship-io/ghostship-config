@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.4.7] - 2026-07-22
+
+- **Paseo persisted bootstrap fix**: Apply the web UI connection-hint
+  compatibility patch on every daemon start, including when the persisted agent
+  tools are already current and cold bootstrap skips package maintenance.
+
 ## [2.4.6] - 2026-07-22
 
 - **Paseo web UI bootstrap**: Patch Paseo's same-origin connection hint to
