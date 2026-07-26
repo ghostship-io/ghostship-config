@@ -95,6 +95,26 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   assert.equal((await firstEvent).args[0], "same");
   assert.equal((await secondEvent).args[0], "same");
 
+  const firstBootstrapUpdate = nextMessage(first);
+  const secondBootstrapUpdate = nextMessage(second);
+  relay.send(encode({
+    type: "bootstrap-update",
+    bootstrap: {
+      "codex_desktop:get-initial-sidebar-bootstrap": {
+        projects: ["new-project"],
+      },
+    },
+  }));
+  assert.equal((await firstBootstrapUpdate).action, "update-bootstrap");
+  assert.deepEqual(
+    (await secondBootstrapUpdate).bootstrap[
+      "codex_desktop:get-initial-sidebar-bootstrap"
+    ],
+    { projects: ["new-project"] },
+  );
+  const refreshedIndex = await (await fetch(origin)).text();
+  assert.match(refreshedIndex, /new-project/);
+
   const firstDialog = nextMessage(first);
   const secondDialog = nextMessage(second);
   const dialogResult = gateway.requestDialog("open", {

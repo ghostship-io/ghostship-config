@@ -548,6 +548,8 @@
         void closeBrowserNotification(message.notificationId);
       } else if (message.action === "set-fullscreen") {
         void setBrowserFullscreen(message.enabled === true);
+      } else if (message.action === "update-bootstrap") {
+        Object.assign(bootstrap, message.bootstrap || {});
       }
     }
   }
@@ -780,12 +782,6 @@
       enabled: Boolean(document.fullscreenElement),
     });
   });
-  document.addEventListener("pointerdown", (event) => {
-    const item = event.target?.closest?.('[role="menuitem"]');
-    if (item?.textContent?.includes("Toggle Full Screen")) {
-      void setBrowserFullscreen(!document.fullscreenElement);
-    }
-  }, true);
   window.addEventListener("keydown", (event) => {
     if (event.key !== "F11") return;
     event.preventDefault();
@@ -798,6 +794,16 @@
   } else {
     ensureNotificationPrompt();
   }
+
+  const browserUsabilityStyle = document.createElement("style");
+  browserUsabilityStyle.textContent = `
+    button[aria-label="Add new project"],
+    div:has(> div > button[aria-label="Add new project"]) {
+      opacity: 1 !important;
+      pointer-events: auto !important;
+    }
+  `;
+  document.head.append(browserUsabilityStyle);
 
   connect();
 })();

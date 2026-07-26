@@ -623,6 +623,14 @@ async function createGateway(options) {
       }
       return;
     }
+    if (message.type === "bootstrap-update") {
+      Object.assign(relayBootstrap, message.bootstrap || {});
+      broadcastControl({
+        type: "update-bootstrap",
+        bootstrap: message.bootstrap || {},
+      });
+      return;
+    }
     if (message.type === "result") {
       const client = browserClients.get(message.clientId);
       send(client?.socket, message);

@@ -9,6 +9,8 @@ The gateway multiplexes every browser onto one native app host. IPC events,
 app-server MessagePorts, terminal state, and task updates are fanned out to all
 connected devices. Native file dialogs become a container-side picker confined
 to `CODEX_WEB_FILE_ROOTS`, which defaults to `/workspace,/home/codex`.
+Project bootstrap updates are relayed before invalidation events so a project
+created on one device appears immediately on every connected device.
 Native secondary windows, including About and the desktop pet, are rendered by
 the unchanged upstream app and relayed as synchronized interactive surfaces.
 Full-screen state is mapped to the browser Fullscreen API.

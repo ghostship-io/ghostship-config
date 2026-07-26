@@ -12,6 +12,12 @@ const relayPort = process.env.CODEX_WEB_PORT || "8214";
 const relayUrl = `ws://127.0.0.1:${relayPort}/__bridge/relay`;
 const channelListeners = new Map();
 const messagePorts = new Map();
+const bootstrapRefreshMessageTypes = new Set([
+  "active-workspace-roots-updated",
+  "global-state-updated",
+  "workspace-root-option-added",
+  "workspace-root-options-updated",
+]);
 let socket;
 let reconnectTimer;
 
@@ -56,6 +62,14 @@ function subscribe(channel) {
     return;
   }
   const listener = (_event, ...args) => {
+    if (
+      channel === "codex_desktop:message-for-view" &&
+      bootstrapRefreshMessageTypes.has(args[0]?.type)
+    ) {
+      const nextBootstrap = readBootstrap();
+      Object.assign(bootstrap, nextBootstrap);
+      send({ type: "bootstrap-update", bootstrap: nextBootstrap });
+    }
     send({ type: "event", channel, args });
   };
   channelListeners.set(channel, listener);
