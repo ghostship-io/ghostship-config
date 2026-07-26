@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.3.2] - 2026-07-26
+
+- **Codex project folder picker**: Keep the native Create Project modal mounted
+  while the browser folder picker is open so selecting a source folder returns
+  to the project form instead of dismissing it.
+
 ## [3.3.1] - 2026-07-26
 
 - **Codex project synchronization**: Keep the project bootstrap current across

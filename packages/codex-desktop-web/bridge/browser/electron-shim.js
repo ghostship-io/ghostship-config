@@ -75,7 +75,6 @@
 
   function closeDialog(dialogId) {
     if (activeDialog && activeDialog.dialogId === dialogId) {
-      if (activeDialog.overlay.open) activeDialog.overlay.close();
       activeDialog.overlay.remove();
       activeDialog = undefined;
     }
@@ -88,7 +87,9 @@
 
   function showMessageDialog(message) {
     const options = message.options || {};
-    const overlay = document.createElement("dialog");
+    const overlay = document.createElement("div");
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
     const panel = document.createElement("div");
     const title = document.createElement("h2");
     const body = document.createElement("div");
@@ -133,7 +134,6 @@
     panel.append(footer);
     overlay.append(panel);
     document.body.append(overlay);
-    overlay.showModal();
     overlay.style.display = "grid";
     activeDialog = { dialogId: message.dialogId, overlay };
   }
@@ -147,7 +147,9 @@
     const directoryMode =
       message.dialogType === "open" &&
       (message.options?.properties || []).includes("openDirectory");
-    const overlay = document.createElement("dialog");
+    const overlay = document.createElement("div");
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
     const panel = document.createElement("div");
     const title = document.createElement("h2");
     const locationRow = document.createElement("div");
@@ -256,7 +258,6 @@
     panel.append(title, locationRow, entries, footer);
     overlay.append(panel);
     document.body.append(overlay);
-    overlay.showModal();
     overlay.style.display = "grid";
     activeDialog = { dialogId: message.dialogId, overlay };
     void loadDirectory(currentPath);
