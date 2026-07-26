@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright-core";
 
@@ -46,9 +53,9 @@ async function waitForApp(page) {
 
 async function openAppMenu(page, name) {
   await page.getByRole("menuitem", { exact: true, name }).click();
-  const menu = page.getByRole("menu");
+  const menu = page.getByRole("menu").last();
   await menu.waitFor();
-  assert.ok((await menu.getByRole("menuitem").count()) > 0);
+  await menu.getByRole("menuitem").first().waitFor();
   await page.keyboard.press("Escape");
 }
 
@@ -63,32 +70,56 @@ async function removeProject(page) {
   await remove.click();
   const confirm = page.getByRole("button", { name: /Remove|Delete/i }).last();
   if (await confirm.isVisible().catch(() => false)) await confirm.click();
-  await page.getByText(projectName, { exact: true }).waitFor({
+  await actions.first().waitFor({
     state: "detached",
     timeout: 15_000,
   });
 }
 
-const browser = await chromium.launch({
-  executablePath: findBrowserExecutable(),
+const browserExecutable = findBrowserExecutable();
+const profileDirectory = mkdtempSync(
+  path.join(os.tmpdir(), "codex-web-acceptance-"),
+);
+const androidContextOptions = {
+  deviceScaleFactor: 2.625,
+  hasTouch: true,
+  isMobile: true,
+  userAgent:
+    "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 " +
+    "(KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36",
+  viewport: { height: 915, width: 412 },
+};
+const pwaContext = await chromium.launchPersistentContext(profileDirectory, {
+  ...androidContextOptions,
+  executablePath: browserExecutable,
   headless: true,
 });
-const errors = [];
-const contextA = await browser.newContext({
-  viewport: { height: 915, width: 412 },
+const secondaryBrowser = await chromium.launch({
+  executablePath: browserExecutable,
+  headless: true,
 });
-const contextB = await browser.newContext({
-  viewport: { height: 915, width: 412 },
+const desktopContext = await secondaryBrowser.newContext({
+  viewport: { height: 1000, width: 1440 },
 });
-const pageA = await contextA.newPage();
+const contextB = await secondaryBrowser.newContext({
+  ...androidContextOptions,
+});
+const pwaPage = pwaContext.pages()[0] || (await pwaContext.newPage());
+const pageA = await desktopContext.newPage();
 const pageB = await contextB.newPage();
+const errors = [];
+recordPageErrors(pwaPage, errors);
 recordPageErrors(pageA, errors);
 recordPageErrors(pageB, errors);
 
 try {
-  await Promise.all([waitForApp(pageA), waitForApp(pageB)]);
+  await Promise.all([
+    waitForApp(pwaPage),
+    waitForApp(pageA),
+    waitForApp(pageB),
+  ]);
 
-  const manifest = await pageA.evaluate(async () => {
+  const manifest = await pwaPage.evaluate(async () => {
     const response = await fetch("/manifest.webmanifest");
     return response.json();
   });
@@ -106,19 +137,49 @@ try {
       "512x512:maskable",
     ],
   );
-  await pageA.evaluate(async () => {
+  await pwaPage.evaluate(async () => {
     await navigator.serviceWorker.ready;
     if (!navigator.serviceWorker.controller) location.reload();
   });
-  await pageA.waitForFunction(() => navigator.serviceWorker.controller, null, {
-    timeout: 15_000,
-  });
-  const devtools = await contextA.newCDPSession(pageA);
+  await pwaPage.waitForFunction(
+    () => navigator.serviceWorker.controller,
+    null,
+    { timeout: 15_000 },
+  );
+  const devtools = await pwaContext.newCDPSession(pwaPage);
   const { installabilityErrors } = await devtools.send(
     "Page.getInstallabilityErrors",
   );
   assert.deepEqual(installabilityErrors, []);
   console.log("ok PWA manifest, worker, and Chrome installability");
+
+  await pwaContext.grantPermissions(["notifications"], {
+    origin: new URL(targetUrl).origin,
+  });
+  const notificationResult = await pwaPage.evaluate(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    await registration.showNotification("Codex browser acceptance", {
+      body: "Service-worker notification test",
+      tag: "codex-browser-acceptance",
+    });
+    const notifications = await registration.getNotifications({
+      tag: "codex-browser-acceptance",
+    });
+    notifications.forEach((notification) => notification.close());
+    return {
+      count: notifications.length,
+      permission: Notification.permission,
+    };
+  });
+  assert.equal(notificationResult.permission, "granted");
+  assert.equal(notificationResult.count, 1);
+  console.log("ok notification permission and service-worker delivery");
+  const notificationPromptDismiss = pageA.getByRole("button", {
+    name: "Not now",
+  });
+  if (await notificationPromptDismiss.isVisible().catch(() => false)) {
+    await notificationPromptDismiss.click();
+  }
 
   for (const menuName of ["File", "Edit", "View", "Help"]) {
     await openAppMenu(pageA, menuName);
@@ -128,24 +189,18 @@ try {
     await pageA.getByRole("menu").waitFor();
     await pageA.keyboard.press("Escape");
   }
-  const modelButton = pageA.locator("button").filter({
-    hasText: /(?:5\.\d|GPT|Ollama)/,
-  }).last();
-  await modelButton.click();
-  const modelMenu = pageA.getByRole("menu");
-  await modelMenu.waitFor();
-  assert.match(await modelMenu.innerText(), /Ollama/i);
-  await pageA.keyboard.press("Escape");
-  console.log("ok application, profile, help, and model dropdowns");
+  console.log("ok application, profile, and help dropdowns");
 
-  await pageA.getByRole("button", { name: "Scheduled" }).click();
+  await pageA.getByRole("button", { exact: true, name: "Scheduled" }).click();
   await pageA.getByRole("heading", { name: "Scheduled tasks" }).waitFor();
   await pageA.getByRole("button", { name: "Create" }).waitFor();
   await pageA.getByRole("button", { name: "Back" }).click();
   await pageA.getByRole("button", { name: "Add new project" }).waitFor();
   console.log("ok scheduled-task navigation and creation entrypoint");
 
-  await pageA.getByRole("button", { name: "Add new project" }).dispatchEvent("click");
+  await pageA
+    .getByRole("button", { name: "Add new project" })
+    .dispatchEvent("click");
   await pageA.getByRole("heading", { name: "Create project" }).waitFor();
   await pageA.getByRole("textbox", { name: "Project name" }).fill(projectName);
   await pageA.getByRole("button", { name: "Choose source folders" }).click();
@@ -159,16 +214,56 @@ try {
   await pageA.getByRole("heading", { name: "Create project" }).waitFor();
   await pageA.getByRole("button", { name: "Create project" }).click();
   await Promise.all([
-    pageA.getByText(projectName, { exact: true }).waitFor({ timeout: 20_000 }),
-    pageB.getByText(projectName, { exact: true }).waitFor({ timeout: 20_000 }),
+    pageA
+      .getByRole("button", {
+        exact: true,
+        name: projectName,
+      })
+      .first()
+      .waitFor({ timeout: 20_000 }),
+    pageB
+      .getByRole("button", {
+        exact: true,
+        name: projectName,
+      })
+      .first()
+      .waitFor({ timeout: 20_000 }),
   ]);
   console.log("ok project creation, folder selection, and multi-device sync");
 
-  await pageA.getByRole("button", { name: "Toggle bottom panel" }).dispatchEvent("click");
-  await pageA.getByText(/Terminal/i).first().waitFor();
+  await pageA.getByRole("button", {
+    name: `Start new chat in ${projectName}`,
+  }).click();
+  const modelButton = pageA.locator("button:visible").filter({
+    hasText: /(?:5\.\d|GPT|Ollama)/,
+  }).last();
+  await modelButton.click();
+  const modelMenu = pageA.getByRole("menu").last();
+  await modelMenu.getByRole("menuitem").first().waitFor();
+  await modelMenu.getByText("5.6 Sol", { exact: true }).click();
+  const providerMenu = pageA.getByRole("menu").last();
+  await providerMenu.getByText(/Ollama/i).first().waitFor();
+  assert.match(await providerMenu.innerText(), /Ollama/i);
+  await pageA.keyboard.press("Escape");
+  console.log("ok model dropdown and Ollama model availability");
+
+  const existingThread = pageA.locator(
+    '[data-app-action-sidebar-thread-row]:visible',
+  ).first();
+  await existingThread.waitFor();
+  await existingThread.click();
+  await pageA.getByRole("menuitem", { exact: true, name: "View" }).click();
+  await pageA.getByRole("menuitem", { name: /Terminal/i }).click();
+  await pageA.locator(".xterm").first().waitFor();
   await pageA.getByRole("menuitem", { exact: true, name: "Help" }).click();
   await pageA.getByRole("menuitem", { name: "About ChatGPT" }).click();
-  await pageA.locator('[data-codex-auxiliary-window] img[alt="About ChatGPT"]').waitFor();
+  await pageA
+    .locator('[data-codex-auxiliary-window] img[alt="About ChatGPT"]')
+    .waitFor();
+  await pageA.getByRole("button", { name: "Close About ChatGPT" }).click();
+  await pageA
+    .locator('[data-codex-auxiliary-window] img[alt="About ChatGPT"]')
+    .waitFor({ state: "detached" });
   console.log("ok terminal panel and About native window");
 
   await pageA.getByRole("button", { name: "Open profile menu" }).click();
@@ -182,20 +277,29 @@ try {
   await pageA.getByRole("menuitem", { exact: true, name: "View" }).click();
   await pageA.getByRole("menuitem", { name: "Toggle Full Screen" }).click();
   await pageA.waitForFunction(
-    () => document.documentElement.dataset.codexWebFullscreen === "true",
+    () =>
+      Boolean(document.fullscreenElement) ||
+      document.documentElement.dataset.codexWebFullscreen === "true",
   );
   console.log("ok browser full-screen bridge");
 
   await removeProject(pageA);
-  await pageB.getByText(projectName, { exact: true }).waitFor({
-    state: "detached",
-    timeout: 20_000,
-  });
+  await pageB
+    .getByRole("button", {
+      name: `Project actions for ${projectName}`,
+    })
+    .first()
+    .waitFor({
+      state: "detached",
+      timeout: 20_000,
+    });
   assert.deepEqual(errors, []);
   console.log("ok project cleanup, multi-device removal, and page errors");
 } finally {
   await removeProject(pageA).catch(() => {});
-  await contextA.close();
+  await pwaContext.close();
+  await desktopContext.close();
   await contextB.close();
-  await browser.close();
+  await secondaryBrowser.close();
+  rmSync(profileDirectory, { force: true, recursive: true });
 }

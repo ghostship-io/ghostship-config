@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.3.10] - 2026-07-26
+
+- **Codex auxiliary window lifecycle**: Give opaque browser-bridged desktop
+  windows an accessible close control so About does not remain above and block
+  the native app after it is opened.
+- **Codex live browser coverage**: Exercise the deployed app from fresh
+  Android and desktop Chrome profiles, including installability, notifications,
+  menus, projects, shared state, Ollama models, terminal, About, pet, and full
+  screen.
+
 ## [3.3.9] - 2026-07-26
 
 - **Codex project picker browser fix**: Mount the bridged folder picker inside

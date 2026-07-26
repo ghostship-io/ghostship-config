@@ -36,10 +36,15 @@ function findBrowserExecutable() {
   );
 }
 
-test("folder picker stays inside the upstream project modal", async () => {
+test("browser-native dialogs preserve modal and window lifecycles", async () => {
   const shim = readFileSync(
     path.join(packageRoot, "bridge", "browser", "electron-shim.js"),
   );
+  const browserMessages = [];
+  let resolveAuxiliaryClose;
+  const auxiliaryClose = new Promise((resolve) => {
+    resolveAuxiliaryClose = resolve;
+  });
   const sockets = new Set();
   const server = createServer((request, response) => {
     if (request.url === "/electron-shim.js") {
@@ -81,6 +86,17 @@ test("folder picker stays inside the upstream project modal", async () => {
     webSockets.handleUpgrade(request, socket, head, (client) => {
       sockets.add(client);
       client.on("close", () => sockets.delete(client));
+      client.on("message", (payload) => {
+        const message = JSON.parse(payload.toString());
+        browserMessages.push(message);
+        if (
+          message.type === "auxiliary-window-command" &&
+          message.windowId === "about" &&
+          message.command === "close"
+        ) {
+          resolveAuxiliaryClose();
+        }
+      });
       client.send(JSON.stringify({ type: "hello" }));
       webSockets.emit("connection", client, request);
     });
@@ -120,11 +136,35 @@ test("folder picker stays inside the upstream project modal", async () => {
       1,
     );
     await page.getByRole("button", { name: "Select this folder" }).click();
-    await page.locator('[data-codex-web-dialog=""]').waitFor({ state: "detached" });
+    await page
+      .locator('[data-codex-web-dialog=""]')
+      .waitFor({ state: "detached" });
     assert.equal(await page.locator("#project-modal").count(), 1);
     assert.equal(
       await page.getByRole("heading", { name: "Create project" }).isVisible(),
       true,
+    );
+    for (const socket of sockets) {
+      socket.send(JSON.stringify({
+        action: "auxiliary-window-state",
+        bounds: { height: 250, width: 400 },
+        modal: true,
+        title: "About ChatGPT",
+        transparent: false,
+        type: "control",
+        visible: true,
+        windowId: "about",
+      }));
+    }
+    await page.getByRole("button", { name: "Close About ChatGPT" }).click();
+    await auxiliaryClose;
+    assert.ok(
+      browserMessages.some(
+        (message) =>
+          message.type === "auxiliary-window-command" &&
+          message.windowId === "about" &&
+          message.command === "close",
+      ),
     );
   } finally {
     await browser.close();

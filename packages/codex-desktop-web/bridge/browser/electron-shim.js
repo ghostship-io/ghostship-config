@@ -311,6 +311,27 @@
     image.style.cssText =
       "display:block;width:100%;height:100%;object-fit:fill;user-select:none;-webkit-user-drag:none";
     element.append(image);
+    if (message.modal || !message.transparent) {
+      const close = document.createElement("button");
+      close.ariaLabel = `Close ${message.title || "window"}`;
+      close.textContent = "×";
+      close.style.cssText =
+        "position:absolute;z-index:1;top:8px;right:8px;width:28px;height:28px;padding:0;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:rgba(20,20,20,.78);color:#fff;font:22px/24px system-ui,sans-serif;cursor:pointer";
+      for (const eventName of ["click", "pointerdown", "pointerup"]) {
+        close.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (eventName === "click") {
+            send({
+              type: "auxiliary-window-command",
+              windowId: surface.windowId,
+              command: "close",
+            });
+          }
+        });
+      }
+      element.append(close);
+    }
     document.body.append(element);
     element.addEventListener("pointerdown", (event) => {
       element.focus();
