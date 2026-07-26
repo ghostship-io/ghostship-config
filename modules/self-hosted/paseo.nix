@@ -337,6 +337,30 @@ let
     exec ${paseoOllamaProxy}/bin/paseo-ollama-cloud-proxy
   '';
 
+  paseoCodexRgRepair = pkgs.writeShellScriptBin "paseo-codex-rg-repair" ''
+    set -eu
+
+    npm_prefix="''${NPM_CONFIG_PREFIX:-/home/paseo/.local/share/paseo-tools/npm}"
+    codex_root="$npm_prefix/lib/node_modules/@openai/codex"
+    repaired=0
+
+    for vendor_rg in \
+      "$codex_root"/node_modules/@openai/codex-linux-*/vendor/*/codex-path/rg; do
+      if [ ! -e "$vendor_rg" ] && [ ! -L "$vendor_rg" ]; then
+        continue
+      fi
+      ln -sfn ${pkgs.ripgrep}/bin/rg "$vendor_rg"
+      repaired=1
+    done
+
+    if [ "$repaired" -ne 1 ]; then
+      printf 'warning: Codex bundled rg was not found; repair skipped\n' >&2
+      exit 0
+    fi
+
+    ${pkgs.ripgrep}/bin/rg --version >/dev/null
+  '';
+
   paseoToolMaintenance = pkgs.writeShellScriptBin "paseo-tool-maintenance" ''
     set -eu
 
@@ -548,6 +572,7 @@ let
     install_agent_cli "@getpaseo/cli" "paseo"
     ${paseoWebUiHintPatch}/bin/paseo-web-ui-hint-patch
     install_agent_cli "@openai/codex" "codex"
+    ${paseoCodexRgRepair}/bin/paseo-codex-rg-repair
     install_opencode_cli
     install_antigravity_cli
     install_user_shim "paseo" "$NPM_CONFIG_PREFIX/bin/paseo"
@@ -1441,6 +1466,7 @@ let
       || ! su-exec paseo:paseo "$HOME/.local/bin/agy" --version >/dev/null 2>&1; then
       su-exec paseo:paseo ${paseoToolMaintenance}/bin/paseo-tool-maintenance
     fi
+    su-exec paseo:paseo ${paseoCodexRgRepair}/bin/paseo-codex-rg-repair
     cat > "$HOME/.local/bin/paseo-daemon-run" <<'EOF'
     #!/bin/sh
     exec ${paseoDaemonRun}/bin/paseo-daemon-run "$@"

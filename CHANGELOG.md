@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.6.2] - 2026-07-26
+
+- **Paseo Codex ripgrep compatibility**: Replace Codex's bundled glibc-path
+  `rg` with the Nix-packaged ripgrep after container setup and every Codex
+  update so agent shell commands do not fail on the minimal image.
+
 ## [2.6.1] - 2026-07-26
 
 - **Paseo Ollama provider routing**: Route derived Ollama Codex threads through
