@@ -1,6 +1,5 @@
 {
   config,
-  inputs,
   lib,
   pkgs,
   ...
@@ -13,8 +12,21 @@ let
   openchamberWorkspace = "/srv/apps/openchamber/workspace";
   openchamberSecrets = config.ghostship.selfHostedSecrets.projections.openchamber.path;
   openchamberSecretsFile = "/run/secrets/openchamber.env";
+  openchamberDeploymentState = "/var/lib/ghostship/openchamber-deployment";
   imageName = "localhost/ghostship-openchamber";
-  imageTag = "openchamber-${inputs.self.shortRev or inputs.self.rev or "dirty"}";
+  imageTag = "openchamber-runtime";
+  openchamberOpenCodeConfig = builtins.toJSON {
+    provider.openai.options = {
+      headerTimeout = 60000;
+      timeout = 600000;
+      chunkTimeout = 60000;
+    };
+    compaction = {
+      auto = true;
+      prune = true;
+      reserved = 20000;
+    };
+  };
 
   openchamberPackages = with pkgs; [
     nix
@@ -76,6 +88,7 @@ let
     export NPM_CONFIG_PREFIX="$HOME/.local/share/openchamber-tools/npm"
     export npm_config_prefix="$NPM_CONFIG_PREFIX"
     export OPENCODE_AUTOMATION_DIR="$HOME/.automation"
+    export OPENCODE_CONFIG_CONTENT=${lib.escapeShellArg openchamberOpenCodeConfig}
     hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     if [ -f "$hm_session_vars" ]; then
       # shellcheck disable=SC1090
@@ -132,7 +145,7 @@ let
     export NODE_NO_WARNINGS=1
 
     log_info() {
-      printf 'info: %s\n' "$1" >&2
+      printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >&2
     }
 
     log_warn() {
@@ -318,7 +331,7 @@ let
     ${pkgs.util-linux}/bin/flock 9
 
     log_info() {
-      printf 'info: %s\n' "$1" >&2
+      printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >&2
     }
 
     user_version() {
@@ -346,6 +359,10 @@ let
     if [ "$before_openchamber" != "$after_openchamber" ] || [ "$before_opencode" != "$after_opencode" ]; then
       pending_tmp="$pending_restart.tmp"
       {
+        printf 'source=tool-update\n'
+        printf 'queued_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        printf 'previous_openchamber=%s\n' "$before_openchamber"
+        printf 'previous_opencode=%s\n' "$before_opencode"
         printf 'openchamber=%s\n' "$after_openchamber"
         printf 'opencode=%s\n' "$after_opencode"
       } > "$pending_tmp"
@@ -363,9 +380,17 @@ let
 
     state_dir="/run/openchamber-tool-update"
     pending_restart="$state_dir/restart.pending"
+    audit_log="$HOME/.config/openchamber/logs/restart-audit.log"
+    mkdir -p "$(dirname "$audit_log")"
 
     log_info() {
-      printf 'info: %s\n' "$1" >&2
+      printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >&2
+    }
+
+    audit_restart() {
+      reason="$(tr '\n' ' ' < "$pending_restart")"
+      printf '%s source=queued-maintenance action=restart-web %s\n' \
+        "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$reason" >> "$audit_log"
     }
 
     ${openchamberIdleCheck}
@@ -389,7 +414,8 @@ let
       exit 0
     fi
 
-    sleep 5
+    log_info "OpenChamber is idle; requiring 30 seconds of continuous idle before restart"
+    sleep 30
 
     if [ ! -f "$pending_restart" ]; then
       log_info "queued restart was already applied by another service start"
@@ -401,24 +427,137 @@ let
       exit 0
     fi
 
-    log_info "OpenChamber reports all work complete; applying queued maintenance restart"
+    log_info "OpenChamber remained idle for 30 seconds; applying queued maintenance restart"
+    audit_restart
     systemctl restart openchamber-web.service
     rm -f "$pending_restart"
   '';
 
-  openchamberQueueBootstrapRestart = pkgs.writeShellScriptBin "openchamber-queue-bootstrap-restart" ''
+  openchamberRetryGuard = pkgs.writeShellScriptBin "openchamber-retry-guard" ''
     set -eu
 
-    state_dir="/run/openchamber-tool-update"
-    pending_restart="$state_dir/restart.pending"
-    ${pkgs.coreutils}/bin/install -d -m 0700 "$state_dir"
+    ${openchamberRuntimeEnv}
 
-    exec 9>"$state_dir/tool-update.lock"
-    ${pkgs.util-linux}/bin/flock 9
+    state_dir="/run/openchamber-retry-guard"
+    state_file="$state_dir/state.json"
+    log_file="$HOME/.config/openchamber/logs/openchamber-retry-guard.log"
+    install -d -m 0700 "$state_dir"
+    mkdir -p "$(dirname "$log_file")"
 
-    pending_tmp="$pending_restart.tmp"
-    printf 'source=bootstrap\n' > "$pending_tmp"
-    ${pkgs.coreutils}/bin/mv "$pending_tmp" "$pending_restart"
+    log_info() {
+      printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >> "$log_file"
+    }
+
+    if ! snapshot="$(curl -fsS --max-time 10 http://127.0.0.1:3000/api/sessions/status)"; then
+      log_info "session status unavailable; retry guard deferred"
+      exit 0
+    fi
+
+    previous='{}'
+    if [ -f "$state_file" ] && jq -e 'type == "object"' "$state_file" >/dev/null 2>&1; then
+      previous="$(cat "$state_file")"
+    fi
+
+    now_ms="$(($(date -u '+%s') * 1000))"
+    next_state="$(
+      printf '%s\n' "$snapshot" | jq -c \
+        --argjson now "$now_ms" \
+        --argjson previous "$previous" '
+          reduce (
+            .sessions
+            | to_entries[]
+            | select(.value.status == "retry")
+          ) as $item (
+            {};
+            .[$item.key] = {
+              firstSeen: ($previous[$item.key].firstSeen // $now),
+              attempt: ($item.value.metadata.attempt // 0),
+              message: ($item.value.metadata.message // "provider retry")
+            }
+          )
+        '
+    )"
+
+    printf '%s\n' "$next_state" > "$state_file.tmp"
+    mv "$state_file.tmp" "$state_file"
+
+    printf '%s\n' "$next_state" | jq -r 'to_entries[] | @base64' |
+      while IFS= read -r encoded; do
+        entry="$(printf '%s' "$encoded" | base64 -d)"
+        session_id="$(printf '%s' "$entry" | jq -r '.key')"
+        first_seen="$(printf '%s' "$entry" | jq -r '.value.firstSeen')"
+        attempt="$(printf '%s' "$entry" | jq -r '.value.attempt')"
+        message="$(printf '%s' "$entry" | jq -r '.value.message')"
+        age_ms="$((now_ms - first_seen))"
+
+        if [ "$attempt" -lt 10 ] && [ "$age_ms" -lt 600000 ]; then
+          continue
+        fi
+
+        if ! session="$(curl -fsS --max-time 10 "http://127.0.0.1:3000/api/session/$session_id")"; then
+          log_info "session=$session_id retry guard could not resolve session directory"
+          continue
+        fi
+        directory="$(printf '%s\n' "$session" | jq -r '.directory // empty')"
+        if [ -z "$directory" ]; then
+          log_info "session=$session_id retry guard found no session directory"
+          continue
+        fi
+        encoded_directory="$(printf '%s' "$directory" | jq -sRr @uri)"
+
+        if curl -fsS --max-time 15 -X POST \
+          "http://127.0.0.1:3000/api/session/$session_id/abort?directory=$encoded_directory" >/dev/null; then
+          log_info "session=$session_id action=abort-provider-retry attempt=$attempt age_ms=$age_ms reason=$message"
+        else
+          log_info "session=$session_id provider retry abort failed; will retry"
+        fi
+      done
+  '';
+
+  openchamberReconcileInterruptedTools = pkgs.writeShellScriptBin "openchamber-reconcile-interrupted-tools" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+
+    if systemctl is-active --quiet openchamber-web.service; then
+      printf 'info: OpenChamber web is active; orphan reconciliation skipped\n'
+      exit 0
+    fi
+
+    count_query="$(cat <<'SQL'
+    SELECT count(*) AS count
+    FROM part
+    WHERE json_extract(data, '$.type') = 'tool'
+      AND json_extract(data, '$.state.status') IN ('running', 'pending');
+    SQL
+    )"
+    count="$(
+      opencode db --format json "$count_query" |
+        jq -r '.[0].count // 0'
+    )"
+
+    case "$count" in
+      0) exit 0 ;;
+      ""|*[!0-9]*)
+        printf 'warning: could not count orphaned OpenCode tools\n' >&2
+        exit 0
+        ;;
+    esac
+
+    update_query="$(cat <<'SQL'
+    UPDATE part
+    SET data = json_set(
+      data,
+      '$.state.status', 'error',
+      '$.state.error', 'Interrupted by an OpenChamber service restart',
+      '$.state.time.end', CAST(strftime('%s', 'now') AS INTEGER) * 1000
+    )
+    WHERE json_extract(data, '$.type') = 'tool'
+      AND json_extract(data, '$.state.status') IN ('running', 'pending');
+    SQL
+    )"
+    opencode db "$update_query" >/dev/null
+    printf 'info: reconciled %s orphaned OpenCode tool records\n' "$count"
   '';
 
   openchamberWebMonitor = pkgs.writeShellScriptBin "openchamber-web-monitor" ''
@@ -427,7 +566,10 @@ let
     ${openchamberRuntimeEnv}
 
     log_file="$HOME/.config/openchamber/logs/openchamber-web-monitor.log"
+    state_dir="/run/openchamber-web-monitor"
+    state_file="$state_dir/failure-state"
     mkdir -p "$(dirname "$log_file")"
+    install -d -m 0700 "$state_dir"
 
     log_info() {
       printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >> "$log_file"
@@ -460,7 +602,26 @@ let
     fi
 
     if [ -z "$unhealthy_reason" ]; then
+      rm -f "$state_file"
       log_info "healthy"
+      exit 0
+    fi
+
+    previous_reason=""
+    previous_count=0
+    if [ -f "$state_file" ]; then
+      IFS="$(printf '\t')" read -r previous_count previous_reason < "$state_file" || true
+    fi
+    if [ "$previous_reason" = "$unhealthy_reason" ]; then
+      failure_count="$((previous_count + 1))"
+    else
+      failure_count=1
+    fi
+    printf '%s\t%s\n' "$failure_count" "$unhealthy_reason" > "$state_file.tmp"
+    mv "$state_file.tmp" "$state_file"
+
+    if [ "$failure_count" -lt 3 ]; then
+      log_info "unhealthy: $unhealthy_reason; consecutive failure $failure_count/3; restart deferred"
       exit 0
     fi
 
@@ -478,8 +639,12 @@ let
     fi
 
     log_info "unhealthy: $unhealthy_reason; restarting openchamber-web.service"
+    printf '%s source=health-monitor action=restart-web reason=%s failures=%s\n' \
+      "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$unhealthy_reason" "$failure_count" \
+      >> "$HOME/.config/openchamber/logs/restart-audit.log"
     systemctl reset-failed openchamber-web.service || true
     systemctl restart openchamber-web.service
+    rm -f "$state_file"
   '';
 
   openchamberContainerHealth = pkgs.writeShellScriptBin "openchamber-container-health" ''
@@ -806,6 +971,7 @@ let
 
     ${openchamberRuntimeEnv}
 
+    ${openchamberReconcileInterruptedTools}/bin/openchamber-reconcile-interrupted-tools
     ${openchamberRunHooks}/bin/openchamber-run-hooks bootstrap.d
     ${openchamberRunHooks}/bin/openchamber-run-hooks before-openchamber.d
   '';
@@ -1149,27 +1315,28 @@ let
   '';
 
   openchamberImageContents = openchamberPackages ++ [
-      openchamberEntrypoint
-      openchamberContainerSetup
-      openchamberDockerdRun
-      openchamberWebRun
-      openchamberToolMaintenance
-      openchamberToolAutoUpdate
-      openchamberToolUpdateRestart
-      openchamberQueueBootstrapRestart
-      openchamberWebMonitor
-      openchamberContainerHealth
-      openchamberRunHooks
-      openchamberDoctor
-      openchamberApplyConfig
-      openchamberUserUnits
-      openchamberBootstrap
-      openchamberSnapshotConfig
-      openchamberTunnel
-      pkgs.dockerTools.binSh
-      pkgs.dockerTools.usrBinEnv
-      pkgs.dockerTools.caCertificates
-    ];
+    openchamberEntrypoint
+    openchamberContainerSetup
+    openchamberDockerdRun
+    openchamberWebRun
+    openchamberToolMaintenance
+    openchamberToolAutoUpdate
+    openchamberToolUpdateRestart
+    openchamberRetryGuard
+    openchamberReconcileInterruptedTools
+    openchamberWebMonitor
+    openchamberContainerHealth
+    openchamberRunHooks
+    openchamberDoctor
+    openchamberApplyConfig
+    openchamberUserUnits
+    openchamberBootstrap
+    openchamberSnapshotConfig
+    openchamberTunnel
+    pkgs.dockerTools.binSh
+    pkgs.dockerTools.usrBinEnv
+    pkgs.dockerTools.caCertificates
+  ];
 
   openchamberImage = pkgs.dockerTools.buildLayeredImageWithNixDb {
     name = imageName;
@@ -1380,11 +1547,10 @@ let
       [Unit]
       Description=Run OpenChamber bootstrap hooks
       DefaultDependencies=no
-      After=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service openchamber-web.service
+      After=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       Requires=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service
-      Wants=openchamber-web.service
       Conflicts=shutdown.target
-      Before=shutdown.target
+      Before=openchamber-web.service shutdown.target
 
       [Service]
       Type=oneshot
@@ -1397,7 +1563,6 @@ let
       Environment=OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation
       Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
       ExecStart=${openchamberBootstrap}/bin/openchamber-bootstrap
-      ExecStartPost=+${openchamberQueueBootstrapRestart}/bin/openchamber-queue-bootstrap-restart
       RemainAfterExit=yes
       TimeoutStartSec=20m
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-bootstrap.log
@@ -1411,8 +1576,8 @@ let
       [Unit]
       Description=OpenChamber Web
       DefaultDependencies=no
-      After=openchamber-container-setup.service user@3000.service dockerd.service
-      Requires=openchamber-container-setup.service user@3000.service dockerd.service
+      After=openchamber-bootstrap.service
+      Requires=openchamber-bootstrap.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -1432,7 +1597,7 @@ let
       Restart=always
       RestartSec=5
       TimeoutStartSec=20m
-      TimeoutStopSec=10s
+      TimeoutStopSec=30s
       SuccessExitStatus=0 143
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
       StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
@@ -1511,6 +1676,39 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/openchamber-retry-guard.service <<'EOF'
+      [Unit]
+      Description=Bound repeated OpenCode provider retries
+      DefaultDependencies=no
+      After=openchamber-web.service
+      Wants=openchamber-web.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Service]
+      Type=oneshot
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      ExecStart=${openchamberRetryGuard}/bin/openchamber-retry-guard
+      StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-retry-guard.log
+      StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-retry-guard.log
+      TasksMax=infinity
+      EOF
+      cat > etc/systemd/system/openchamber-retry-guard.timer <<'EOF'
+      [Unit]
+      Description=Periodic OpenCode provider retry guard
+      DefaultDependencies=no
+      After=openchamber-web.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Timer]
+      OnBootSec=2m
+      OnUnitActiveSec=1m
+      Unit=openchamber-retry-guard.service
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/openchamber-web-monitor.service <<'EOF'
       [Unit]
       Description=Monitor OpenChamber web and managed OpenCode
@@ -1548,7 +1746,7 @@ let
       [Unit]
       Description=OpenChamber Multi-User System
       DefaultDependencies=no
-      Wants=openchamber-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-tool-update-restart.timer openchamber-web-monitor.timer
+      Wants=openchamber-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-tool-update-restart.timer openchamber-retry-guard.timer openchamber-web-monitor.timer
       After=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -1566,6 +1764,7 @@ let
       ln -s ../openchamber-web.service etc/systemd/system/multi-user.target.wants/openchamber-web.service
       ln -s ../openchamber-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/openchamber-tool-auto-update.timer
       ln -s ../openchamber-tool-update-restart.timer etc/systemd/system/multi-user.target.wants/openchamber-tool-update-restart.timer
+      ln -s ../openchamber-retry-guard.timer etc/systemd/system/multi-user.target.wants/openchamber-retry-guard.timer
       ln -s ../openchamber-web-monitor.timer etc/systemd/system/multi-user.target.wants/openchamber-web-monitor.timer
     '';
     fakeRootCommands = ''
@@ -1602,6 +1801,90 @@ let
       };
     };
   };
+
+  openchamberDeploymentId = builtins.hashString "sha256" (toString openchamberImage);
+  openchamberDeployWhenIdle = pkgs.writeShellScriptBin "openchamber-deploy-when-idle" ''
+    set -eu
+
+    state_dir=${openchamberDeploymentState}
+    desired_file="$state_dir/desired"
+    applied_file="$state_dir/applied"
+    applying_file="$state_dir/applying"
+    audit_log=${openchamberHome}/.config/openchamber/logs/restart-audit.log
+
+    install -d -m 0755 "$state_dir"
+    install -d -m 0755 -o 3000 -g 3000 "$(dirname "$audit_log")"
+    [ -f "$desired_file" ] || exit 0
+
+    desired="$(cat "$desired_file")"
+    applied=""
+    applying=""
+    [ ! -f "$applied_file" ] || applied="$(cat "$applied_file")"
+    [ ! -f "$applying_file" ] || applying="$(cat "$applying_file")"
+    [ "$desired" != "$applied" ] || exit 0
+
+    log_info() {
+      message="$1"
+      printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$message"
+      printf '%s source=host-deployment %s\n' \
+        "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$message" >> "$audit_log"
+    }
+
+    is_live_idle() {
+      if ! activity="$(${pkgs.podman}/bin/podman exec openchamber \
+        curl -fsS --max-time 5 http://127.0.0.1:3000/api/session-activity 2>/dev/null)"; then
+        return 1
+      fi
+      printf '%s\n' "$activity" | ${pkgs.jq}/bin/jq -e '
+        type == "object"
+        and all(.[]; type == "object" and .type == "idle")
+      ' >/dev/null 2>&1
+    }
+
+    if ${pkgs.systemd}/bin/systemctl is-active --quiet podman-openchamber.service \
+      && [ "$applying" != "$desired" ]; then
+      if ! is_live_idle; then
+        log_info "action=defer desired=$desired reason=active-or-unknown"
+        exit 0
+      fi
+
+      log_info "action=idle-confirmation desired=$desired wait_seconds=30"
+      sleep 30
+      if ! is_live_idle; then
+        log_info "action=defer desired=$desired reason=activity-resumed"
+        exit 0
+      fi
+    fi
+
+    printf '%s\n' "$desired" > "$applying_file.tmp"
+    mv "$applying_file.tmp" "$applying_file"
+    log_info "action=restart-container desired=$desired"
+    ${pkgs.systemd}/bin/systemctl restart podman-openchamber.service
+
+    healthy=0
+    for _ in $(seq 1 120); do
+      if [ "$(${pkgs.podman}/bin/podman inspect openchamber \
+        --format '{{.State.Health.Status}}' 2>/dev/null || true)" = "healthy" ] \
+        && ${pkgs.podman}/bin/podman exec openchamber \
+          systemctl is-active --quiet openchamber-web.service \
+        && ${pkgs.podman}/bin/podman exec openchamber \
+          curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null 2>&1; then
+        healthy=1
+        break
+      fi
+      sleep 10
+    done
+
+    if [ "$healthy" -ne 1 ]; then
+      log_info "action=deployment-failed desired=$desired"
+      exit 1
+    fi
+
+    printf '%s\n' "$desired" > "$applied_file.tmp"
+    mv "$applied_file.tmp" "$applied_file"
+    rm -f "$applying_file"
+    log_info "action=deployment-complete desired=$desired"
+  '';
 
 in
 {
@@ -1646,7 +1929,40 @@ in
     "d ${openchamberWorkspace} 0755 3000 3000 -"
   ];
 
+  system.activationScripts.openchamber-deployment = {
+    text = ''
+      install -d -m 0755 ${openchamberDeploymentState}
+      printf '%s\n' ${lib.escapeShellArg openchamberDeploymentId} \
+        > ${openchamberDeploymentState}/desired.tmp
+      mv ${openchamberDeploymentState}/desired.tmp ${openchamberDeploymentState}/desired
+    '';
+    supportsDryActivation = false;
+  };
+
+  systemd.services.openchamber-deploy-when-idle = {
+    description = "Deploy a changed OpenChamber image after sustained idle";
+    after = [ "podman.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${openchamberDeployWhenIdle}/bin/openchamber-deploy-when-idle";
+      TimeoutStartSec = "25m";
+    };
+  };
+
+  systemd.timers.openchamber-deploy-when-idle = {
+    description = "Check for a queued OpenChamber image deployment";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "2m";
+      OnUnitActiveSec = "1m";
+      Persistent = true;
+      Unit = "openchamber-deploy-when-idle.service";
+    };
+  };
+
   systemd.services.podman-openchamber = {
+    restartIfChanged = false;
+    stopIfChanged = false;
     after = [
       "init-ghostship-net.service"
       "mnt-share.mount"
@@ -1655,7 +1971,13 @@ in
       "init-ghostship-net.service"
       "mnt-share.mount"
     ];
-    serviceConfig.TimeoutStopSec = lib.mkForce "210s";
+    serviceConfig = {
+      TimeoutStopSec = lib.mkForce "210s";
+      SuccessExitStatus = [
+        0
+        130
+      ];
+    };
     preStart = lib.mkAfter ''
       set -eu
 

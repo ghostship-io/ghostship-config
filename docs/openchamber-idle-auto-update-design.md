@@ -23,19 +23,20 @@ must:
    reported session has `type = "idle"`. An empty object is idle.
 5. Defer the restart when OpenChamber reports `busy`, `cooldown`, or any
    unknown state, or when the request or JSON validation fails.
-6. Query OpenChamber again immediately before restarting, then restart only if
-   the second response is also idle.
+6. Require 30 seconds of continuous idle, then query OpenChamber again and
+   restart only if the second response is also idle.
 7. Remove the pending marker only after a successful restart.
 
 OpenChamber is the activity authority. The restart gate must not discover the
 managed OpenCode port, read its generated password, or interpret OpenCode
 session state directly.
 
-The existing web monitor uses the same idle check before restarting an active
-but unhealthy web service. If the activity endpoint is unavailable, the
-monitor defers because it cannot prove that work is complete. It may still
-start `openchamber-web.service` when that service is already stopped, because
-there is no running work left for that start to interrupt.
+The existing web monitor requires three consecutive failures and uses the same
+idle check before restarting an active but unhealthy web service. If the
+activity endpoint is unavailable, the monitor defers because it cannot prove
+that work is complete. It may still start `openchamber-web.service` when that
+service is already stopped, because there is no running work left for that
+start to interrupt.
 
 The Podman health command follows the same rule. A healthy root endpoint
 passes. If the web service is active but the root endpoint is unhealthy, the
@@ -43,20 +44,26 @@ container remains healthy for supervision purposes until OpenChamber reports
 all activity idle; active or unknown activity cannot trigger
 `--health-on-failure=kill`. An inactive web service still fails the container
 health check because there is no running work for a recovery to interrupt.
-Container setup and web activation are treated as healthy while they are still
-activating during the container system manager's startup grace period. The
-background bootstrap may also use that grace while the web service starts
-independently. This keeps a long first-start tooling build from being killed
-and restarted in a loop. That exception and the unit start timeouts are bounded
-at 20 minutes so a genuine deadlock remains recoverable.
+Container setup, bootstrap, and web activation are treated as healthy while
+they are still activating during the container system manager's startup grace
+period. This keeps a long first-start tooling build from being killed and
+restarted in a loop. That exception and the unit start timeouts are bounded at
+20 minutes so a genuine deadlock remains recoverable.
 
 On normal container starts, minimal setup reuses the persisted OpenChamber and
-OpenCode binaries and starts the web service without waiting for project
-hooks. Bootstrap and before-web hook sets then run in the background. Their
-completion writes the same root-owned pending marker used by tool updates, so
-the restart gate applies their changes only after OpenChamber reports every
-session idle. First-ever startup still installs missing tool binaries before
-the web service starts.
+OpenCode binaries, reconciles tool calls orphaned by an earlier process stop,
+and runs the bootstrap and before-web hook sets before starting the web
+service. The web runtime therefore starts once with completed setup instead of
+being restarted after every container boot. First-ever startup still installs
+missing tool binaries before the hooks and web service start.
+
+Host activation writes the desired OpenChamber image identity to persistent
+deployment state but does not restart the running Podman unit. A one-minute
+host timer compares the desired identity with the last healthy applied image,
+requires the same 30 seconds of continuous OpenChamber-reported idle, restarts
+the container, and records the image as applied only after container health,
+the web service, and the root endpoint all recover. The OCI image has a stable
+tag, so unrelated repository revisions do not change this desired identity.
 
 Persist `/nix` in an isolated alternate store rooted at
 `/srv/apps/openchamber/nix-root`, not by bind-mounting the host's primary Nix
@@ -89,10 +96,12 @@ one failed child process into a full OpenChamber service stop.
 Store the pending marker and updater lock under the root-owned
 `/run/openchamber-tool-update/` directory. They survive timer invocations but
 remain runtime state, and the unprivileged application cannot redirect root
-file operations through symlinks. The marker records the installed
-OpenChamber and OpenCode versions for diagnostic logging. Any normal web
-service start clears it because that start already loads the downloaded
-versions.
+file operations through symlinks. The marker records its source, queue time,
+previous versions, and installed OpenChamber and OpenCode versions for
+diagnostic logging. Any normal web service start clears it because that start
+already loads the downloaded versions. Container deployments, maintenance
+restarts, and health-monitor restarts append their source and reason to the
+persistent restart audit log.
 
 A failed activity probe is not evidence of idleness. It leaves the marker in
 place for the next timer run. If the web service is already stopped, the gate
@@ -113,5 +122,9 @@ will already load the downloaded versions without another restart.
 - Deploy on `chill-penguin` and verify both timers and services are loaded.
 - Verify a pending marker is retained while OpenChamber reports active work.
 - Verify no restart occurs when installed versions are unchanged.
+- Verify unrelated repository changes leave the applied OpenChamber image
+  identity unchanged and do not restart the container.
+- Verify bootstrap completes before the first web start and does not queue a
+  second restart.
 - Verify an actual queued update restarts only after OpenChamber reports idle,
   then clears the marker and returns healthy.

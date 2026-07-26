@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.0.2] - 2026-07-26
+
+- **OpenChamber interruption prevention**: Decouple container deployments from
+  unrelated repository revisions, apply changed images only after sustained
+  OpenChamber-reported idle, and run bootstrap hooks before the single web
+  service start.
+- **OpenChamber session resilience**: Bound provider retries and timeouts,
+  enable tool-output pruning during compaction, reconcile orphaned tool calls,
+  require consecutive monitor failures, and add restart-source auditing.
+
 ## [3.0.1] - 2026-07-26
 
 - **T3 Code migration cleanup**: Remove the retired Paseo npm package during

@@ -203,14 +203,11 @@ container system service `openchamber-web.service`. Project-owned services and
 recurring jobs should install persisted user units and timers under
 `/home/openchamber/.config/systemd/user`, then run
 `openchamber-user-units enable-now <unit>` or
-`openchamber-user-units reload` as the `openchamber` user. Image startup starts
-OpenChamber and OpenCode after only minimal container setup, then runs
+`openchamber-user-units reload` as the `openchamber` user. Image startup runs
 executable project hooks from
-`/home/openchamber/.openchamber/hooks/{bootstrap.d,before-openchamber.d}` in a
-background system service. When those hooks finish, a maintenance restart is
-queued and applied only after OpenChamber reports all sessions idle, so
-repositories such as `ghostship-agent` can install or maintain their own
-persisted user units without holding the web service offline. When
+`/home/openchamber/.openchamber/hooks/{bootstrap.d,before-openchamber.d}` before
+starting OpenChamber and OpenCode, so the web runtime starts once with the
+completed setup. When
 `/workspace/ghostship-agent/tools` exists, startup also seeds
 `/home/openchamber/tools` as a compatibility link for the agent repo's
 installed command wrappers. OpenChamber installs only `@openchamber/web` and
@@ -219,13 +216,18 @@ installed command wrappers. OpenChamber installs only `@openchamber/web` and
 `/home/openchamber/.local/bin` on `PATH`, keeps them updated through the
 persistent `openchamber-tool-auto-update.timer`, and does not configure a UI
 password.
-Downloaded tool updates and completed background bootstrap hooks queue a
-restart instead of restarting immediately;
+Downloaded tool updates queue a restart instead of restarting immediately;
 `openchamber-tool-update-restart.timer` applies the queued restart only after
-OpenChamber's aggregate session activity reports that all work is idle.
-The web monitor uses the same idle gate before restarting an active but
-unhealthy OpenChamber runtime, and the container health policy uses it before
-killing an otherwise active container.
+OpenChamber's aggregate session activity reports 30 seconds of continuous
+idle. Host deployments use a content-stable image tag and a separate
+idle-gated deployment timer, so unrelated repository commits do not recreate
+the container. The web monitor requires three consecutive failures and uses
+the same idle gate before restarting an active but unhealthy runtime; the
+container health policy uses it before killing an otherwise active container.
+OpenCode runs with bounded provider timeouts, output-pruning compaction, and a
+retry guard that aborts only the affected session after ten attempts or ten
+minutes. Startup marks orphaned running tool calls from a previous process as
+interrupted before accepting new work.
 The web service also throttles its workload above 32 GiB and caps it at 40 GiB
 so a runaway child process is contained without forcing a host-wide OOM or a
 full OpenChamber restart.
@@ -234,12 +236,12 @@ Before each start, the host incrementally seeds the current image closures into
 that isolated store and refreshes GC roots; an internal root-owned `nix-daemon`
 serves builds to the unprivileged OpenChamber user. Container-built agent
 packages therefore survive image replacement without granting the container
-write access to the host's primary Nix store. The web and user manager have
-10-second stop limits, Docker and Nix have 30 seconds, and package maintenance
-keeps a longer allowance. Podman's 180-second aggregate stop window leaves all
-paths enough time to stop cleanly during an authorized idle restart. The host
-unit allows 210 seconds and the minimal container units are explicitly ordered
-into systemd shutdown.
+write access to the host's primary Nix store. The web, Docker, and Nix services
+have 30-second stop limits; the user manager has 10 seconds, and package
+maintenance keeps a longer allowance. Podman's 180-second aggregate stop
+window leaves all paths enough time to stop cleanly during an authorized idle
+restart. The host unit allows 210 seconds and the minimal container units are
+explicitly ordered into systemd shutdown.
 It includes Cloudflared for ad hoc Quick Tunnels from inside the container. Use
 `openchamber-tunnel start <name> <port>` as the `openchamber` user to expose a
 loopback web app at `http://127.0.0.1:<port>` through a generated
