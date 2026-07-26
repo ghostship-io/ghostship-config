@@ -8,6 +8,24 @@ const { URL } = require("node:url");
 const { WebSocketServer, WebSocket } = require("ws");
 const { decode, encode } = require("./codec.cjs");
 
+const SIDEBAR_CHANNEL = "codex_desktop:get-initial-sidebar-bootstrap";
+const PROJECT_STATE_KEYS = new Set([
+  "local-projects",
+  "remote-projects",
+  "project-order",
+  "connection-group-order",
+]);
+
+function projectStateSignature(sidebar) {
+  const projectEntries = Array.isArray(sidebar?.globalStateEntries)
+    ? sidebar.globalStateEntries.filter((entry) => PROJECT_STATE_KEYS.has(entry?.key))
+    : [];
+  return JSON.stringify({
+    projectEntries,
+    workspaceRootOptions: sidebar?.workspaceRootOptions,
+  });
+}
+
 const MIME_TYPES = new Map([
   [".css", "text/css; charset=utf-8"],
   [".gif", "image/gif"],
@@ -115,6 +133,7 @@ async function createGateway(options) {
     .map((value) => fs.realpathSync(value));
   let eventSequence = 0;
   let relayBootstrap = {};
+  let relayProjectState = projectStateSignature();
   let relaySocket;
   let surfaceGeneration = 0;
   let auxiliaryWindowGeneration = 0;
@@ -618,17 +637,28 @@ async function createGateway(options) {
   function handleRelayMessage(message) {
     if (message.type === "relay-ready") {
       relayBootstrap = message.bootstrap || {};
+      relayProjectState = projectStateSignature(relayBootstrap[SIDEBAR_CHANNEL]);
       for (const queued of pendingRelayMessages.splice(0)) {
         sendRelay(queued);
       }
       return;
     }
     if (message.type === "bootstrap-update") {
+      const nextSidebar = message.bootstrap?.[SIDEBAR_CHANNEL];
+      let projectsChanged = false;
+      if (nextSidebar !== undefined) {
+        const nextProjectState = projectStateSignature(nextSidebar);
+        projectsChanged = nextProjectState !== relayProjectState;
+        relayProjectState = nextProjectState;
+      }
       Object.assign(relayBootstrap, message.bootstrap || {});
       broadcastControl({
         type: "update-bootstrap",
         bootstrap: message.bootstrap || {},
       });
+      if (projectsChanged) {
+        broadcastControl({ type: "project-state-changed" });
+      }
       return;
     }
     if (message.type === "result") {

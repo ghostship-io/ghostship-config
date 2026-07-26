@@ -1,4 +1,4 @@
-const CACHE_NAME = "codex-desktop-web-v5";
+const CACHE_NAME = "codex-desktop-web-v6";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());

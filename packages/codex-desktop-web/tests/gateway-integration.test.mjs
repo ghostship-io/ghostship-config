@@ -101,7 +101,14 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
     type: "bootstrap-update",
     bootstrap: {
       "codex_desktop:get-initial-sidebar-bootstrap": {
-        projects: ["new-project"],
+        globalStateEntries: [
+          {
+            key: "local-projects",
+            value: {
+              "project-id": { id: "project-id", name: "new-project" },
+            },
+          },
+        ],
       },
     },
   }));
@@ -109,9 +116,11 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   assert.deepEqual(
     (await secondBootstrapUpdate).bootstrap[
       "codex_desktop:get-initial-sidebar-bootstrap"
-    ],
-    { projects: ["new-project"] },
+    ].globalStateEntries[0].value["project-id"],
+    { id: "project-id", name: "new-project" },
   );
+  assert.equal((await nextMessage(first)).action, "project-state-changed");
+  assert.equal((await nextMessage(second)).action, "project-state-changed");
   const refreshedIndex = await (await fetch(origin)).text();
   assert.match(refreshedIndex, /new-project/);
 
