@@ -1277,7 +1277,7 @@ let
     chown -R codex:codex \
       "$HOME/.codex" \
       "$HOME/.codex-container" \
-      "$HOME/.config/systemd" \
+      "$XDG_CONFIG_HOME" \
       "$HOME/.local" \
       /run/codex-app-server
     chown codex:codex /run/user/3000 /workspace

@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.1.2] - 2026-07-26
+
+- **Codex ARM runtime stability**: Give the persisted XDG configuration tree
+  back to the Codex user during container setup so Electron can initialize its
+  crash database instead of repeatedly terminating on `chill-penguin`.
+
 ## [3.1.1] - 2026-07-26
 
 - **Codex package evaluation**: Permit the versioned official desktop package
