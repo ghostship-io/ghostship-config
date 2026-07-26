@@ -1210,6 +1210,13 @@ let
     export CODEX_WEB_HOST=0.0.0.0
     export CODEX_WEB_PORT=8214
     export CODEX_WEB_UPLOAD_ROOT=/tmp/codex-web-uploads
+    export LD_LIBRARY_PATH=${
+      lib.makeLibraryPath [
+        pkgs.stdenv.cc.cc.lib
+        pkgs.libglvnd
+      ]
+    }
+    export FONTCONFIG_FILE=${pkgs.fontconfig.out}/etc/fonts/fonts.conf
     export DISPLAY=:99
 
     for _ in $(seq 1 90); do
@@ -1464,7 +1471,7 @@ let
       [Service]
       Type=notify
       NotifyAccess=main
-      ExecStart=${pkgs.dbus}/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+      ExecStart=${pkgs.dbus}/bin/dbus-daemon --config-file=${pkgs.dbus}/share/dbus-1/session.conf --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
       ExecReload=${pkgs.dbus}/bin/dbus-send --print-reply --session --type=method_call --dest=org.freedesktop.DBus / org.freedesktop.DBus.ReloadConfig
       Slice=session.slice
       EOF

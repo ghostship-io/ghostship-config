@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.1.3] - 2026-07-26
+
+- **Codex native startup dependencies**: Start the user D-Bus daemon with its
+  real session configuration and expose the C++ and graphics runtime libraries
+  needed by the official desktop native modules on ARM.
+
 ## [3.1.2] - 2026-07-26
 
 - **Codex ARM runtime stability**: Give the persisted XDG configuration tree
