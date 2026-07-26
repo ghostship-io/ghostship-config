@@ -59,9 +59,9 @@ async function openAppMenu(page, name) {
   await page.keyboard.press("Escape");
 }
 
-async function removeProject(page) {
+async function removeProject(page, name = projectName) {
   const actions = page.getByRole("button", {
-    name: `Project actions for ${projectName}`,
+    name: `Project actions for ${name}`,
   });
   if (await actions.count() === 0) return;
   const action = actions.first();
@@ -90,7 +90,7 @@ async function removeProject(page) {
           ?.closest("button")
           ?.getAttribute("aria-label") === label,
       {
-        label: `Project actions for ${projectName}`,
+        label: `Project actions for ${name}`,
         ...point,
       },
     );
@@ -100,7 +100,9 @@ async function removeProject(page) {
     break;
   }
   assert.equal(clicked, true, "project actions never became pointer-accessible");
-  const remove = page.getByRole("menuitem", { name: /Remove project/i });
+  const remove = page.getByRole("menuitem", {
+    name: /^Remove(?: project)?$/i,
+  });
   await remove.waitFor();
   await remove.click();
   const confirm = page.getByRole("button", { name: /Remove|Delete/i }).last();
@@ -109,6 +111,21 @@ async function removeProject(page) {
     state: "detached",
     timeout: 15_000,
   });
+}
+
+async function removeAcceptanceProjects(page) {
+  for (let remaining = 25; remaining > 0; remaining -= 1) {
+    const action = page
+      .getByRole("button", {
+        name: /^Project actions for Browser acceptance /,
+      })
+      .first();
+    if ((await action.count()) === 0) return;
+    const label = await action.getAttribute("aria-label");
+    assert.ok(label);
+    await removeProject(page, label.replace(/^Project actions for /, ""));
+  }
+  assert.fail("too many stale browser acceptance projects");
 }
 
 const browserExecutable = findBrowserExecutable();
@@ -153,6 +170,8 @@ try {
     waitForApp(pageA),
     waitForApp(pageB),
   ]);
+  await removeAcceptanceProjects(pageA);
+  await Promise.all([waitForApp(pageA), waitForApp(pageB)]);
 
   const manifest = await pwaPage.evaluate(async () => {
     const response = await fetch("/manifest.webmanifest");
@@ -339,7 +358,7 @@ try {
   assert.deepEqual(errors, []);
   console.log("ok project cleanup, multi-device removal, and page errors");
 } finally {
-  await removeProject(pageA).catch(() => {});
+  await removeAcceptanceProjects(pageA).catch(() => {});
   await pwaContext.close();
   await desktopContext.close();
   await contextB.close();
