@@ -1,12 +1,25 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const { EventEmitter } = require("node:events");
 const Module = require("node:module");
 const path = require("node:path");
 
 function installElectronProxy(realElectron, gateway) {
   const originalLoad = Module._load;
   const OriginalBrowserWindow = realElectron.BrowserWindow;
+  let browserPrimaryWindow;
+  let browserFullscreen = false;
+  let notificationCounter = 0;
+  let applicationMenu;
+
+  gateway.setBrowserFullscreenStateHandler((enabled) => {
+    if (browserFullscreen === enabled) return;
+    browserFullscreen = enabled;
+    browserPrimaryWindow?.emit(
+      enabled ? "enter-full-screen" : "leave-full-screen",
+    );
+  });
 
   gateway.setBrowserGuestFactory(async ({ browserTabId, conversationId }) => {
     const ownerWindow = new OriginalBrowserWindow({
@@ -41,7 +54,9 @@ function installElectronProxy(realElectron, gateway) {
       const preloadName = webPreferences.preload
         ? path.basename(webPreferences.preload)
         : "";
-      if (preloadName === "preload.js") {
+      const isBrowserPrimary =
+        preloadName === "preload.js" && !browserPrimaryWindow;
+      if (isBrowserPrimary) {
         webPreferences.preload = path.join(__dirname, "combined-preload.cjs");
         webPreferences.sandbox = false;
       }
@@ -51,10 +66,42 @@ function installElectronProxy(realElectron, gateway) {
         skipTaskbar: true,
         webPreferences,
       });
+      if (isBrowserPrimary) {
+        browserPrimaryWindow = this;
+      } else {
+        gateway.registerAuxiliaryWindow(this, {
+          modal: options.modal === true || Boolean(options.parent),
+          title: options.title || "",
+          transparent: options.transparent === true,
+        });
+      }
       console.log("[codex-web] upstream BrowserWindow created", {
         preload: preloadName || null,
         title: options.title || null,
       });
+    }
+
+    static getFocusedWindow() {
+      return browserPrimaryWindow && !browserPrimaryWindow.isDestroyed()
+        ? browserPrimaryWindow
+        : OriginalBrowserWindow.getFocusedWindow();
+    }
+
+    isFullScreen() {
+      return this === browserPrimaryWindow
+        ? browserFullscreen
+        : super.isFullScreen();
+    }
+
+    setFullScreen(enabled) {
+      if (this !== browserPrimaryWindow) {
+        return super.setFullScreen(enabled);
+      }
+      const next = enabled === true;
+      if (browserFullscreen === next) return;
+      browserFullscreen = next;
+      gateway.broadcastControl({ type: "set-fullscreen", enabled: next });
+      this.emit(next ? "enter-full-screen" : "leave-full-screen");
     }
   }
 
@@ -64,6 +111,21 @@ function installElectronProxy(realElectron, gateway) {
         return async (url) => {
           gateway.broadcastControl({ type: "open-external", url });
         };
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  const menu = new Proxy(realElectron.Menu, {
+    get(target, property, receiver) {
+      if (property === "setApplicationMenu") {
+        return (nextMenu) => {
+          applicationMenu = nextMenu;
+          return target.setApplicationMenu(nextMenu);
+        };
+      }
+      if (property === "getApplicationMenu") {
+        return () => target.getApplicationMenu() || applicationMenu || null;
       }
       return Reflect.get(target, property, receiver);
     },
@@ -82,6 +144,40 @@ function installElectronProxy(realElectron, gateway) {
     const options = args.length > 1 ? args[1] : args[0];
     return gateway.requestDialog("save", options || {});
   };
+  dialog.showMessageBox = async (...args) => {
+    const options = args.length > 1 ? args[1] : args[0];
+    return gateway.requestDialog("message", options || {});
+  };
+
+  class WebBridgeNotification extends EventEmitter {
+    static isSupported() {
+      return true;
+    }
+
+    constructor(options = {}) {
+      super();
+      notificationCounter += 1;
+      this.id = `notification-${notificationCounter}`;
+      this.options = options;
+    }
+
+    show() {
+      gateway.showNotification(this.id, this.options, (event) => {
+        if (event.type === "close") {
+          this.emit("close");
+        } else if (event.actionIndex == null) {
+          this.emit("click");
+        } else {
+          this.emit("action", {}, event.actionIndex);
+        }
+      });
+    }
+
+    close() {
+      gateway.closeNotification(this.id);
+      this.emit("close");
+    }
+  }
 
   const electronProxy = new Proxy(realElectron, {
     get(target, property, receiver) {
@@ -93,6 +189,12 @@ function installElectronProxy(realElectron, gateway) {
       }
       if (property === "dialog") {
         return dialog;
+      }
+      if (property === "Menu") {
+        return menu;
+      }
+      if (property === "Notification") {
+        return WebBridgeNotification;
       }
       return Reflect.get(target, property, receiver);
     },

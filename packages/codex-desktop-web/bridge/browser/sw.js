@@ -1,4 +1,4 @@
-const CACHE_NAME = "codex-desktop-web-v1";
+const CACHE_NAME = "codex-desktop-web-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -36,5 +36,25 @@ self.addEventListener("fetch", (event) => {
       if (response.ok) cache.put(event.request, response.clone());
       return response;
     }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  const notificationId = event.notification.data?.codexNotificationId;
+  const actionId = event.action || null;
+  event.notification.close();
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then(async (windowClients) => {
+        const client = windowClients[0];
+        if (!client) return;
+        client.postMessage({
+          type: "codex-notification-action",
+          notificationId,
+          actionId,
+        });
+        await client.focus();
+      }),
   );
 });

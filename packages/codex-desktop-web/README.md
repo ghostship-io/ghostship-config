@@ -9,6 +9,15 @@ The gateway multiplexes every browser onto one native app host. IPC events,
 app-server MessagePorts, terminal state, and task updates are fanned out to all
 connected devices. Native file dialogs become a container-side picker confined
 to `CODEX_WEB_FILE_ROOTS`, which defaults to `/workspace,/home/codex`.
+Native secondary windows, including About and the desktop pet, are rendered by
+the unchanged upstream app and relayed as synchronized interactive surfaces.
+Full-screen state is mapped to the browser Fullscreen API.
+
+Desktop task notifications are delivered through the root PWA service worker.
+The app presents an explicit permission request, and notification actions are
+returned to the native host. The upstream automation scheduler remains in the
+persistent desktop process, so scheduled tasks continue running without an
+open browser tab and notify installed Android clients when complete.
 
 The upstream Browser panel keeps its native tabs, toolbar, and lifecycle
 messages. Each materialized tab is backed by a persistent offscreen Electron

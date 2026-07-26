@@ -100,6 +100,8 @@ function browserSurfaceKey(conversationId, browserTabId) {
 async function createGateway(options) {
   const browserClients = new Map();
   const browserSurfaces = new Map();
+  const auxiliaryWindows = new Map();
+  const browserNotifications = new Map();
   const pendingBrowserSurfaces = new Map();
   const pendingRelayMessages = [];
   const channelSubscribers = new Map();
@@ -115,7 +117,9 @@ async function createGateway(options) {
   let relayBootstrap = {};
   let relaySocket;
   let surfaceGeneration = 0;
+  let auxiliaryWindowGeneration = 0;
   let browserGuestFactory;
+  let browserFullscreenStateHandler;
 
   fs.mkdirSync(uploadRoot, { recursive: true, mode: 0o700 });
 
@@ -138,6 +142,146 @@ async function createGateway(options) {
     for (const client of browserClients.values()) {
       send(client.socket, { type: "control", action, ...details });
     }
+  }
+
+  function sendAuxiliaryWindowState(client, surface, includeFrame = true) {
+    send(client?.socket, {
+      type: "control",
+      action: "auxiliary-window-state",
+      windowId: surface.id,
+      visible: surface.visible,
+      modal: surface.modal,
+      transparent: surface.transparent,
+      title: surface.window.isDestroyed() ? surface.title : surface.window.getTitle(),
+      bounds: surface.window.isDestroyed()
+        ? surface.bounds
+        : surface.window.getContentBounds(),
+    });
+    if (includeFrame && surface.visible && surface.frame) {
+      send(client?.socket, {
+        type: "control",
+        action: "auxiliary-window-frame",
+        windowId: surface.id,
+        frame: surface.frame,
+      });
+    }
+  }
+
+  function publishAuxiliaryWindowState(surface, includeFrame = true) {
+    for (const client of browserClients.values()) {
+      sendAuxiliaryWindowState(client, surface, includeFrame);
+    }
+  }
+
+  async function captureAuxiliaryWindow(surface) {
+    if (
+      surface.capturePending ||
+      !surface.visible ||
+      browserClients.size === 0 ||
+      surface.window.isDestroyed() ||
+      surface.webContents.isDestroyed()
+    ) {
+      return;
+    }
+    surface.capturePending = true;
+    try {
+      const image = await surface.webContents.capturePage();
+      if (image.isEmpty()) return;
+      const size = image.getSize();
+      surface.frame = {
+        data: image.toPNG().toString("base64"),
+        height: size.height,
+        mimeType: "image/png",
+        width: size.width,
+      };
+      surface.bounds = surface.window.getContentBounds();
+      surface.captureErrorLogged = false;
+      publishAuxiliaryWindowState(surface);
+    } catch (error) {
+      if (!surface.window.isDestroyed() && !surface.captureErrorLogged) {
+        surface.captureErrorLogged = true;
+        console.error("[codex-web] auxiliary window capture failed", error);
+      }
+    } finally {
+      surface.capturePending = false;
+    }
+  }
+
+  function registerAuxiliaryWindow(window, metadata = {}) {
+    auxiliaryWindowGeneration += 1;
+    const id = `window-${auxiliaryWindowGeneration}`;
+    const surface = {
+      bounds: window.getContentBounds(),
+      captureErrorLogged: false,
+      capturePending: false,
+      frame: null,
+      id,
+      modal: metadata.modal === true,
+      title: metadata.title || "",
+      transparent: metadata.transparent === true,
+      visible: false,
+      webContents: window.webContents,
+      window,
+    };
+    auxiliaryWindows.set(id, surface);
+    const update = () => {
+      if (auxiliaryWindows.get(id) !== surface || window.isDestroyed()) return;
+      surface.visible = window.isVisible();
+      surface.bounds = window.getContentBounds();
+      publishAuxiliaryWindowState(surface, false);
+      void captureAuxiliaryWindow(surface);
+    };
+    for (const eventName of ["show", "hide", "resize", "move"]) {
+      window.on(eventName, update);
+    }
+    for (const eventName of [
+      "did-finish-load",
+      "did-navigate",
+      "did-navigate-in-page",
+      "page-title-updated",
+    ]) {
+      window.webContents.on(eventName, update);
+    }
+    window.once("closed", () => {
+      surface.visible = false;
+      publishAuxiliaryWindowState(surface, false);
+      auxiliaryWindows.delete(id);
+    });
+    console.log("[codex-web] auxiliary window registered", {
+      id,
+      modal: surface.modal,
+      title: surface.title || null,
+      transparent: surface.transparent,
+    });
+    return id;
+  }
+
+  function showNotification(notificationId, options, onEvent) {
+    browserNotifications.set(notificationId, onEvent);
+    broadcastControl({
+      type: "show-notification",
+      notificationId,
+      options: {
+        actions: Array.isArray(options.actions)
+          ? options.actions.map((action, index) => ({
+              action: String(index),
+              title: action.text || action.title || `Action ${index + 1}`,
+            }))
+          : [],
+        body: options.body || "",
+        icon:
+          typeof options.icon === "string" && options.icon.startsWith("data:")
+            ? options.icon
+            : "/__bridge/icon-192.png",
+        silent: options.silent === true,
+        title: options.title || "Codex",
+      },
+    });
+  }
+
+  function closeNotification(notificationId) {
+    browserNotifications.delete(notificationId);
+    broadcastControl({ type: "close-notification", notificationId });
   }
 
   function sendBrowserSurface(client, surface, includeFrame = true) {
@@ -410,10 +554,14 @@ async function createGateway(options) {
   function requestDialog(dialogType, dialogOptions = {}) {
     if (browserClients.size === 0) {
       return Promise.resolve(
-        dialogType === "save" ? { canceled: true, filePath: undefined } : {
-          canceled: true,
-          filePaths: [],
-        },
+        dialogType === "message"
+          ? {
+              response: dialogOptions.cancelId ?? dialogOptions.defaultId ?? 0,
+              checkboxChecked: false,
+            }
+          : dialogType === "save"
+            ? { canceled: true, filePath: undefined }
+            : { canceled: true, filePaths: [] },
       );
     }
     const dialogId = crypto.randomUUID();
@@ -421,10 +569,15 @@ async function createGateway(options) {
       const timer = setTimeout(() => {
         pendingDialogs.delete(dialogId);
         resolve(
-          dialogType === "save" ? { canceled: true, filePath: undefined } : {
-            canceled: true,
-            filePaths: [],
-          },
+          dialogType === "message"
+            ? {
+                response:
+                  dialogOptions.cancelId ?? dialogOptions.defaultId ?? 0,
+                checkboxChecked: false,
+              }
+            : dialogType === "save"
+              ? { canceled: true, filePath: undefined }
+              : { canceled: true, filePaths: [] },
         );
         broadcastControl({ type: "dialog-complete", dialogId });
       }, 5 * 60 * 1000);
@@ -525,6 +678,20 @@ async function createGateway(options) {
     if (message.type === "dialog-result") {
       const pending = pendingDialogs.get(message.dialogId);
       if (pending) {
+        if (pending.dialogType === "message") {
+          pendingDialogs.delete(message.dialogId);
+          pending.resolve({
+            response: Number.isInteger(message.result?.response)
+              ? message.result.response
+              : 0,
+            checkboxChecked: message.result?.checkboxChecked === true,
+          });
+          broadcastControl({
+            type: "dialog-complete",
+            dialogId: message.dialogId,
+          });
+          return;
+        }
         const selectedPaths = Array.isArray(message.result?.filePaths)
           ? message.result.filePaths
           : message.result?.filePath
@@ -546,6 +713,63 @@ async function createGateway(options) {
         );
         broadcastControl({ type: "dialog-complete", dialogId: message.dialogId });
       }
+      return;
+    }
+    if (message.type === "notification-action") {
+      const notify = browserNotifications.get(message.notificationId);
+      if (notify) {
+        notify({
+          type: message.action === "close" ? "close" : "click",
+          actionIndex:
+            message.action === "click" && /^\d+$/.test(message.actionId || "")
+              ? Number(message.actionId)
+              : null,
+        });
+        if (message.action !== "close") {
+          browserNotifications.delete(message.notificationId);
+        }
+      }
+      return;
+    }
+    if (message.type === "browser-fullscreen-state") {
+      browserFullscreenStateHandler?.(message.enabled === true);
+      return;
+    }
+    if (message.type === "auxiliary-window-command") {
+      const surface = auxiliaryWindows.get(message.windowId);
+      if (!surface || !surface.visible || surface.window.isDestroyed()) return;
+      if (message.command === "close") {
+        surface.window.close();
+        return;
+      }
+      if (message.command !== "input" || !message.input) return;
+      const input = { ...message.input };
+      const allowedTypes = new Set([
+        "char",
+        "keyDown",
+        "keyUp",
+        "mouseDown",
+        "mouseMove",
+        "mouseUp",
+        "mouseWheel",
+      ]);
+      if (!allowedTypes.has(input.type)) return;
+      if (
+        typeof input.xRatio === "number" &&
+        typeof input.yRatio === "number"
+      ) {
+        const size = surface.frame || surface.bounds || { width: 1, height: 1 };
+        input.x = Math.round(
+          Math.max(0, Math.min(1, input.xRatio)) * size.width,
+        );
+        input.y = Math.round(
+          Math.max(0, Math.min(1, input.yRatio)) * size.height,
+        );
+      }
+      delete input.xRatio;
+      delete input.yRatio;
+      surface.webContents.sendInputEvent(input);
+      void captureAuxiliaryWindow(surface);
       return;
     }
     if (message.type === "browser-surface-subscribe") {
@@ -811,6 +1035,9 @@ async function createGateway(options) {
       sequence: eventSequence,
       relayConnected: relaySocket?.readyState === WebSocket.OPEN,
     });
+    for (const surface of auxiliaryWindows.values()) {
+      if (surface.visible) sendAuxiliaryWindowState(client, surface);
+    }
     for (const event of eventHistory) {
       if (event.sequence > since) {
         send(socket, event);
@@ -853,6 +1080,9 @@ async function createGateway(options) {
     for (const surface of browserSurfaces.values()) {
       void captureBrowserSurface(surface);
     }
+    for (const surface of auxiliaryWindows.values()) {
+      void captureAuxiliaryWindow(surface);
+    }
   }, 250);
   captureTimer.unref();
   return {
@@ -870,11 +1100,17 @@ async function createGateway(options) {
       ]);
     },
     registerBrowserGuest,
+    registerAuxiliaryWindow,
     requestDialog,
+    closeNotification,
     nativeServer,
+    setBrowserFullscreenStateHandler(handler) {
+      browserFullscreenStateHandler = handler;
+    },
     setBrowserGuestFactory(factory) {
       browserGuestFactory = factory;
     },
+    showNotification,
     server,
   };
 }

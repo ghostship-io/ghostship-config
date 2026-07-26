@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.3.0] - 2026-07-26
+
+- **Codex browser desktop contracts**: Make project folder selection tappable
+  inside native modals, preserve the upstream application menu, relay native
+  About and pet windows to every browser, and bridge full-screen state.
+- **Codex web notifications and schedules**: Request browser notification
+  permission explicitly and route desktop notifications through the PWA
+  service worker so task and scheduled-run completion works on Android.
+
 ## [3.2.1] - 2026-07-26
 
 - **Codex Browser release packaging**: Copy and validate the Browser surface

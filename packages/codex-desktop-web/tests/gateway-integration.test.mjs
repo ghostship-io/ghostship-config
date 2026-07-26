@@ -115,6 +115,95 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   assert.equal((await nextMessage(first)).action, "dialog-complete");
   assert.equal((await nextMessage(second)).action, "dialog-complete");
 
+  const firstMessageDialog = nextMessage(first);
+  const secondMessageDialog = nextMessage(second);
+  const messageDialogResult = gateway.requestDialog("message", {
+    buttons: ["OK", "Cancel"],
+    cancelId: 1,
+    message: "Confirm",
+  });
+  const messageDialog = await firstMessageDialog;
+  assert.equal(messageDialog.action, "show-dialog");
+  assert.equal(messageDialog.dialogType, "message");
+  assert.equal((await secondMessageDialog).dialogId, messageDialog.dialogId);
+  first.send(encode({
+    type: "dialog-result",
+    dialogId: messageDialog.dialogId,
+    result: { checkboxChecked: false, response: 0 },
+  }));
+  assert.deepEqual(await messageDialogResult, {
+    checkboxChecked: false,
+    response: 0,
+  });
+  assert.equal((await nextMessage(first)).action, "dialog-complete");
+  assert.equal((await nextMessage(second)).action, "dialog-complete");
+
+  let resolveNotificationEvent;
+  const notificationEvent = new Promise((resolve) => {
+    resolveNotificationEvent = resolve;
+  });
+  const firstNotification = nextMessage(first);
+  const secondNotification = nextMessage(second);
+  gateway.showNotification(
+    "test-notification",
+    { title: "Scheduled task complete", body: "Done" },
+    (event) => {
+      resolveNotificationEvent(event);
+    },
+  );
+  assert.equal((await firstNotification).action, "show-notification");
+  assert.equal((await secondNotification).notificationId, "test-notification");
+  first.send(encode({
+    type: "notification-action",
+    notificationId: "test-notification",
+    action: "click",
+  }));
+  assert.deepEqual(await notificationEvent, { type: "click", actionIndex: null });
+
+  let resolveFullscreenState;
+  const fullscreenState = new Promise((resolve) => {
+    resolveFullscreenState = resolve;
+  });
+  gateway.setBrowserFullscreenStateHandler((enabled) => {
+    resolveFullscreenState(enabled);
+  });
+  first.send(encode({ type: "browser-fullscreen-state", enabled: true }));
+  assert.equal(await fullscreenState, true);
+
+  const auxiliary = new EventEmitter();
+  const auxiliaryContents = new EventEmitter();
+  auxiliary.destroyed = false;
+  auxiliary.visible = false;
+  auxiliary.getContentBounds = () => ({ height: 240, width: 420, x: 0, y: 0 });
+  auxiliary.getTitle = () => "About ChatGPT";
+  auxiliary.isDestroyed = () => auxiliary.destroyed;
+  auxiliary.isVisible = () => auxiliary.visible;
+  auxiliary.webContents = auxiliaryContents;
+  auxiliaryContents.capturePage = async () => ({
+    getSize: () => ({ height: 240, width: 420 }),
+    isEmpty: () => false,
+    toPNG: () => Buffer.from("auxiliary-frame"),
+  });
+  auxiliaryContents.isDestroyed = () => false;
+  auxiliaryContents.sendInputEvent = () => {};
+  gateway.registerAuxiliaryWindow(auxiliary, { modal: true });
+  const firstAuxiliaryState = nextMessage(first);
+  const secondAuxiliaryState = nextMessage(second);
+  auxiliary.visible = true;
+  auxiliary.emit("show");
+  assert.equal((await firstAuxiliaryState).action, "auxiliary-window-state");
+  assert.equal((await secondAuxiliaryState).title, "About ChatGPT");
+  assert.equal((await nextMessage(first)).action, "auxiliary-window-state");
+  assert.equal((await nextMessage(first)).action, "auxiliary-window-frame");
+  assert.equal((await nextMessage(second)).action, "auxiliary-window-state");
+  assert.equal((await nextMessage(second)).action, "auxiliary-window-frame");
+  const firstAuxiliaryClosed = nextMessage(first);
+  const secondAuxiliaryClosed = nextMessage(second);
+  auxiliary.destroyed = true;
+  auxiliary.emit("closed");
+  assert.equal((await firstAuxiliaryClosed).visible, false);
+  assert.equal((await secondAuxiliaryClosed).visible, false);
+
   const guest = new EventEmitter();
   guest.currentUrl = "about:blank";
   guest.inputEvents = [];
