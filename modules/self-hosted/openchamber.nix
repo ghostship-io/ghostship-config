@@ -519,8 +519,21 @@ let
 
     ${openchamberRuntimeEnv}
 
-    if systemctl is-active --quiet openchamber-web.service; then
-      printf 'info: OpenChamber web is active; orphan reconciliation skipped\n'
+    web_is_running=0
+    if curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null 2>&1; then
+      web_is_running=1
+    else
+      for cmdline in /proc/[0-9]*/cmdline; do
+        if tr '\0' ' ' < "$cmdline" 2>/dev/null |
+          grep -Eq '(/| )openchamber serve|opencode serve'; then
+          web_is_running=1
+          break
+        fi
+      done
+    fi
+
+    if [ "$web_is_running" -eq 1 ]; then
+      printf 'info: OpenChamber runtime is active; orphan reconciliation skipped\n'
       exit 0
     fi
 
@@ -1562,6 +1575,7 @@ let
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation
       Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      ExecCondition=+${pkgs.runtimeShell} -c 'state="$(${pkgs.systemd}/bin/systemctl show openchamber-web.service -p ActiveState --value)" && { [ "$state" = inactive ] || [ "$state" = failed ]; }'
       ExecStart=${openchamberBootstrap}/bin/openchamber-bootstrap
       RemainAfterExit=yes
       TimeoutStartSec=20m
@@ -1810,6 +1824,7 @@ let
     desired_file="$state_dir/desired"
     applied_file="$state_dir/applied"
     applying_file="$state_dir/applying"
+    failed_file="$state_dir/failed"
     audit_log=${openchamberHome}/.config/openchamber/logs/restart-audit.log
 
     install -d -m 0755 "$state_dir"
@@ -1818,10 +1833,14 @@ let
 
     desired="$(cat "$desired_file")"
     applied=""
-    applying=""
+    failed=""
     [ ! -f "$applied_file" ] || applied="$(cat "$applied_file")"
-    [ ! -f "$applying_file" ] || applying="$(cat "$applying_file")"
-    [ "$desired" != "$applied" ] || exit 0
+    [ ! -f "$failed_file" ] || failed="$(cat "$failed_file")"
+    if [ "$desired" = "$applied" ]; then
+      rm -f "$applying_file" "$failed_file"
+      exit 0
+    fi
+    [ "$desired" != "$failed" ] || exit 0
 
     log_info() {
       message="$1"
@@ -1841,8 +1860,13 @@ let
       ' >/dev/null 2>&1
     }
 
-    if ${pkgs.systemd}/bin/systemctl is-active --quiet podman-openchamber.service \
-      && [ "$applying" != "$desired" ]; then
+    mark_failed() {
+      printf '%s\n' "$desired" > "$failed_file.tmp"
+      mv "$failed_file.tmp" "$failed_file"
+      rm -f "$applying_file"
+    }
+
+    if ${pkgs.systemd}/bin/systemctl is-active --quiet podman-openchamber.service; then
       if ! is_live_idle; then
         log_info "action=defer desired=$desired reason=active-or-unknown"
         exit 0
@@ -1859,7 +1883,11 @@ let
     printf '%s\n' "$desired" > "$applying_file.tmp"
     mv "$applying_file.tmp" "$applying_file"
     log_info "action=restart-container desired=$desired"
-    ${pkgs.systemd}/bin/systemctl restart podman-openchamber.service
+    if ! ${pkgs.systemd}/bin/systemctl restart podman-openchamber.service; then
+      mark_failed
+      log_info "action=deployment-failed desired=$desired reason=container-restart"
+      exit 1
+    fi
 
     healthy=0
     for _ in $(seq 1 120); do
@@ -1876,13 +1904,14 @@ let
     done
 
     if [ "$healthy" -ne 1 ]; then
-      log_info "action=deployment-failed desired=$desired"
+      mark_failed
+      log_info "action=deployment-failed desired=$desired reason=health-timeout"
       exit 1
     fi
 
     printf '%s\n' "$desired" > "$applied_file.tmp"
     mv "$applied_file.tmp" "$applied_file"
-    rm -f "$applying_file"
+    rm -f "$applying_file" "$failed_file"
     log_info "action=deployment-complete desired=$desired"
   '';
 

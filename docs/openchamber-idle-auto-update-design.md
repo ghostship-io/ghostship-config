@@ -63,7 +63,17 @@ host timer compares the desired identity with the last healthy applied image,
 requires the same 30 seconds of continuous OpenChamber-reported idle, restarts
 the container, and records the image as applied only after container health,
 the web service, and the root endpoint all recover. The OCI image has a stable
-tag, so unrelated repository revisions do not change this desired identity.
+tag, so unrelated repository revisions do not change this desired identity. A
+failed deployment records its desired identity in persistent state and is not
+retried until the identity changes or an operator removes the `failed` marker.
+Every new attempt rechecks sustained idle; an interrupted `applying` marker
+never bypasses that gate.
+
+The bootstrap service has a privileged systemd condition that permits orphan
+tool reconciliation only while the web service is definitely inactive. The
+reconciliation command also checks the loopback endpoint and live OpenChamber
+and OpenCode process command lines, protecting direct invocation without
+requiring the unprivileged service user to access the system bus.
 
 Persist `/nix` in an isolated alternate store rooted at
 `/srv/apps/openchamber/nix-root`, not by bind-mounting the host's primary Nix
@@ -124,7 +134,11 @@ will already load the downloaded versions without another restart.
 - Verify no restart occurs when installed versions are unchanged.
 - Verify unrelated repository changes leave the applied OpenChamber image
   identity unchanged and do not restart the container.
+- Verify a failed desired image is latched without repeated restarts and that a
+  stale `applying` marker cannot bypass the idle check.
 - Verify bootstrap completes before the first web start and does not queue a
   second restart.
+- Verify restarting bootstrap while the web service is active skips orphan
+  reconciliation without changing live tool records.
 - Verify an actual queued update restarts only after OpenChamber reports idle,
   then clears the marker and returns healthy.

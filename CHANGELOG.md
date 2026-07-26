@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.1.4] - 2026-07-26
+
+- **OpenChamber deployment retry safety**: Latch failed image deployments,
+  preserve the idle gate across interrupted attempts, and prevent a failed
+  deployment from repeatedly restarting the container.
+- **OpenChamber bootstrap reconciliation safety**: Gate orphan reconciliation
+  on the root-visible web service state and add unprivileged runtime checks so
+  a manual bootstrap cannot rewrite active tool records.
+
 ## [3.1.3] - 2026-07-26
 
 - **Codex native startup dependencies**: Start the user D-Bus daemon with its
