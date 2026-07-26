@@ -14,8 +14,25 @@
   const bootstrap = window.__CODEX_WEB_BOOTSTRAP__ || {};
   const deviceKey = "codex-web-device-id";
   const sequenceKey = "codex-web-event-sequence";
+  const sidebarChannel = "codex_desktop:get-initial-sidebar-bootstrap";
+  const projectStateKeys = new Set([
+    "local-projects",
+    "remote-projects",
+    "project-order",
+    "connection-group-order",
+  ]);
   const nativeRandomUUID =
     typeof crypto.randomUUID === "function" ? crypto.randomUUID.bind(crypto) : null;
+
+  function projectStateSignature(sidebar) {
+    const projectEntries = Array.isArray(sidebar?.globalStateEntries)
+      ? sidebar.globalStateEntries.filter((entry) => projectStateKeys.has(entry?.key))
+      : [];
+    return JSON.stringify({
+      projectEntries,
+      workspaceRootOptions: sidebar?.workspaceRootOptions,
+    });
+  }
 
   function randomId() {
     if (nativeRandomUUID) return nativeRandomUUID();
@@ -38,6 +55,7 @@
   let activeDialog;
   let notificationPrompt;
   let projectMutationReloadTimer;
+  let projectState = projectStateSignature(bootstrap[sidebarChannel]);
 
   function nextId(prefix) {
     requestCounter += 1;
@@ -557,23 +575,13 @@
       } else if (message.action === "set-fullscreen") {
         void setBrowserFullscreen(message.enabled === true);
       } else if (message.action === "update-bootstrap") {
-        const sidebarChannel = "codex_desktop:get-initial-sidebar-bootstrap";
-        const previousSidebar = JSON.stringify(bootstrap[sidebarChannel]);
-        const projectMutationDialogOpen = [...document.querySelectorAll(
-          '[role="dialog"] h2',
-        )].some((heading) =>
-          heading.textContent === "Create project" ||
-          /^Remove .+\?$/.test(heading.textContent || "")
-        );
+        const nextSidebar = message.bootstrap?.[sidebarChannel];
         Object.assign(bootstrap, message.bootstrap || {});
-        if (
-          projectMutationDialogOpen &&
-          Object.prototype.hasOwnProperty.call(
-            message.bootstrap || {},
-            sidebarChannel,
-          ) &&
-          JSON.stringify(bootstrap[sidebarChannel]) !== previousSidebar
-        ) {
+        if (nextSidebar !== undefined) {
+          const nextProjectState = projectStateSignature(nextSidebar);
+          const projectsChanged = nextProjectState !== projectState;
+          projectState = nextProjectState;
+          if (!projectsChanged) return;
           clearTimeout(projectMutationReloadTimer);
           projectMutationReloadTimer = setTimeout(() => location.reload(), 1500);
         }
@@ -829,7 +837,7 @@
       opacity: 1 !important;
       pointer-events: auto !important;
     }
-    button[aria-haspopup] > * {
+    button[aria-haspopup] * {
       pointer-events: none !important;
     }
   `;

@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.3.6] - 2026-07-26
+
+- **Codex project synchronization**: Refresh every connected browser after the
+  shared project list changes while preserving the completion delay that keeps
+  create and remove transactions intact.
+- **Codex dropdown controls**: Treat all nested trigger content as part of its
+  parent button so icon-based menus remain reliable on touch and in browsers.
+
 ## [3.3.5] - 2026-07-26
 
 - **Codex notification prompt**: Keep the browser notification permission
