@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.3.3] - 2026-07-26
+
+- **Codex project picker events**: Isolate browser picker pointer events from
+  the native app modal so selecting a folder cannot trigger its outside-click
+  dismissal.
+- **Codex project synchronization**: Reload connected browser renderers when
+  the native project sidebar bootstrap changes so created and removed projects
+  appear immediately on every device.
+
 ## [3.3.2] - 2026-07-26
 
 - **Codex project folder picker**: Keep the native Create Project modal mounted

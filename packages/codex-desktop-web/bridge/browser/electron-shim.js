@@ -90,6 +90,9 @@
     const overlay = document.createElement("div");
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
+    for (const eventName of ["pointerdown", "mousedown", "click"]) {
+      overlay.addEventListener(eventName, (event) => event.stopPropagation());
+    }
     const panel = document.createElement("div");
     const title = document.createElement("h2");
     const body = document.createElement("div");
@@ -150,6 +153,9 @@
     const overlay = document.createElement("div");
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
+    for (const eventName of ["pointerdown", "mousedown", "click"]) {
+      overlay.addEventListener(eventName, (event) => event.stopPropagation());
+    }
     const panel = document.createElement("div");
     const title = document.createElement("h2");
     const locationRow = document.createElement("div");
@@ -550,7 +556,18 @@
       } else if (message.action === "set-fullscreen") {
         void setBrowserFullscreen(message.enabled === true);
       } else if (message.action === "update-bootstrap") {
+        const sidebarChannel = "codex_desktop:get-initial-sidebar-bootstrap";
+        const previousSidebar = JSON.stringify(bootstrap[sidebarChannel]);
         Object.assign(bootstrap, message.bootstrap || {});
+        if (
+          Object.prototype.hasOwnProperty.call(
+            message.bootstrap || {},
+            sidebarChannel,
+          ) &&
+          JSON.stringify(bootstrap[sidebarChannel]) !== previousSidebar
+        ) {
+          location.reload();
+        }
       }
     }
   }
