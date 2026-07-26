@@ -421,7 +421,7 @@
     const enable = document.createElement("button");
     const dismiss = document.createElement("button");
     prompt.style.cssText =
-      "position:fixed;z-index:2147483646;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;max-width:calc(100vw - 24px);padding:11px 12px;border:1px solid #444;border-radius:10px;background:#202020;color:#ececec;box-shadow:0 12px 40px rgba(0,0,0,.5);font:13px system-ui,sans-serif;pointer-events:auto";
+      "position:fixed;z-index:2147483646;top:max(48px,calc(env(safe-area-inset-top) + 12px));right:max(12px,env(safe-area-inset-right));display:flex;flex-wrap:wrap;align-items:center;gap:10px;max-width:calc(100vw - 24px);padding:11px 12px;border:1px solid #444;border-radius:10px;background:#202020;color:#ececec;box-shadow:0 12px 40px rgba(0,0,0,.5);font:13px system-ui,sans-serif;pointer-events:auto";
     label.textContent = "Enable Codex notifications for completed and scheduled tasks.";
     enable.textContent = "Enable";
     dismiss.textContent = "Not now";

@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.3.5] - 2026-07-26
+
+- **Codex notification prompt**: Keep the browser notification permission
+  prompt clear of the composer controls so model and tool dropdowns remain
+  usable before the prompt is answered.
+
 ## [3.3.4] - 2026-07-26
 
 - **Codex project creation**: Let native project creation finish before
