@@ -64,7 +64,42 @@ async function removeProject(page) {
     name: `Project actions for ${projectName}`,
   });
   if (await actions.count() === 0) return;
-  await actions.first().click();
+  const action = actions.first();
+  const row = action.locator('xpath=ancestor::div[@role="button"][1]');
+  const deadline = Date.now() + 15_000;
+  let clicked = false;
+  while (Date.now() < deadline) {
+    const rowBox = await row.boundingBox().catch(() => null);
+    if (rowBox) {
+      await page.mouse.move(
+        rowBox.x + Math.min(100, rowBox.width / 2),
+        rowBox.y + rowBox.height / 2,
+      );
+      await page.waitForTimeout(50);
+    }
+    const actionBox = await action.boundingBox().catch(() => null);
+    if (!actionBox) continue;
+    const point = {
+      x: actionBox.x + actionBox.width / 2,
+      y: actionBox.y + actionBox.height / 2,
+    };
+    const topmost = await page.evaluate(
+      ({ label, x, y }) =>
+        document
+          .elementFromPoint(x, y)
+          ?.closest("button")
+          ?.getAttribute("aria-label") === label,
+      {
+        label: `Project actions for ${projectName}`,
+        ...point,
+      },
+    );
+    if (!topmost) continue;
+    await page.mouse.click(point.x, point.y);
+    clicked = true;
+    break;
+  }
+  assert.equal(clicked, true, "project actions never became pointer-accessible");
   const remove = page.getByRole("menuitem", { name: /Remove project/i });
   await remove.waitFor();
   await remove.click();
@@ -281,6 +316,13 @@ try {
     () =>
       Boolean(document.fullscreenElement) ||
       document.documentElement.dataset.codexWebFullscreen === "true",
+  );
+  await pageA.getByRole("menuitem", { exact: true, name: "View" }).click();
+  await pageA.getByRole("menuitem", { name: "Toggle Full Screen" }).click();
+  await pageA.waitForFunction(
+    () =>
+      !document.fullscreenElement &&
+      document.documentElement.dataset.codexWebFullscreen !== "true",
   );
   console.log("ok browser full-screen bridge");
 

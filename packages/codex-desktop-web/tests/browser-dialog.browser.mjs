@@ -192,6 +192,12 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
         Boolean(document.fullscreenElement) ||
         document.documentElement.dataset.codexWebFullscreen === "true",
     );
+    await page.locator("#fullscreen-command").click();
+    await page.waitForFunction(
+      () =>
+        !document.fullscreenElement &&
+        document.documentElement.dataset.codexWebFullscreen !== "true",
+    );
   } finally {
     await browser.close();
     for (const socket of sockets) socket.close();

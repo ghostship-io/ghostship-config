@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.3.13] - 2026-07-26
+
+- **Codex full-screen fallback**: Keep browser-local full-screen state
+  deterministic when Chrome declines the native Fullscreen API, and cover both
+  entering and leaving full screen in real-browser tests.
+
 ## [3.3.12] - 2026-07-26
 
 - **Codex per-device full screen**: Handle the native full-screen menu action

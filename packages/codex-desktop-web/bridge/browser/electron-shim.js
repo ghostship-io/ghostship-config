@@ -538,11 +538,23 @@
       } else if (!enabled && document.fullscreenElement) {
         await document.exitFullscreen();
       }
+      if (Boolean(document.fullscreenElement) === enabled) {
+        document.documentElement.removeAttribute("data-codex-web-fullscreen");
+      } else {
+        document.documentElement.setAttribute(
+          "data-codex-web-fullscreen",
+          enabled ? "true" : "false",
+        );
+      }
     } catch {
-      document.documentElement.toggleAttribute(
-        "data-codex-web-fullscreen",
-        enabled,
-      );
+      if (enabled) {
+        document.documentElement.setAttribute(
+          "data-codex-web-fullscreen",
+          "true",
+        );
+      } else {
+        document.documentElement.removeAttribute("data-codex-web-fullscreen");
+      }
     }
   }
 
