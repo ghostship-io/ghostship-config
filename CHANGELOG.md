@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.3.4] - 2026-07-26
+
+- **Codex project creation**: Let native project creation finish before
+  refreshing connected browser project state instead of interrupting it with an
+  immediate reload.
+- **Codex dropdown controls**: Make menu-trigger buttons own their complete
+  pointer target and refresh the PWA asset cache for existing installations.
+
 ## [3.3.3] - 2026-07-26
 
 - **Codex project picker events**: Isolate browser picker pointer events from

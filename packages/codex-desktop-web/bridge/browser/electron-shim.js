@@ -37,6 +37,7 @@
   let socket;
   let activeDialog;
   let notificationPrompt;
+  let projectMutationReloadTimer;
 
   function nextId(prefix) {
     requestCounter += 1;
@@ -558,15 +559,23 @@
       } else if (message.action === "update-bootstrap") {
         const sidebarChannel = "codex_desktop:get-initial-sidebar-bootstrap";
         const previousSidebar = JSON.stringify(bootstrap[sidebarChannel]);
+        const projectMutationDialogOpen = [...document.querySelectorAll(
+          '[role="dialog"] h2',
+        )].some((heading) =>
+          heading.textContent === "Create project" ||
+          /^Remove .+\?$/.test(heading.textContent || "")
+        );
         Object.assign(bootstrap, message.bootstrap || {});
         if (
+          projectMutationDialogOpen &&
           Object.prototype.hasOwnProperty.call(
             message.bootstrap || {},
             sidebarChannel,
           ) &&
           JSON.stringify(bootstrap[sidebarChannel]) !== previousSidebar
         ) {
-          location.reload();
+          clearTimeout(projectMutationReloadTimer);
+          projectMutationReloadTimer = setTimeout(() => location.reload(), 1500);
         }
       }
     }
@@ -819,6 +828,9 @@
     div:has(> div > button[aria-label="Add new project"]) {
       opacity: 1 !important;
       pointer-events: auto !important;
+    }
+    button[aria-haspopup] > * {
+      pointer-events: none !important;
     }
   `;
   document.head.append(browserUsabilityStyle);
