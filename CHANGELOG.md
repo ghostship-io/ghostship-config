@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.3.8] - 2026-07-26
+
+- **Codex project removal propagation**: Recognize the native local-project
+  fetch response as an authoritative sidebar-state change so removals refresh
+  the shared bootstrap and every connected browser.
+
 ## [3.3.7] - 2026-07-26
 
 - **Codex multi-device project state**: Detect project-list changes once in the

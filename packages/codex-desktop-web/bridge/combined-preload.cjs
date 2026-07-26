@@ -21,6 +21,31 @@ const bootstrapRefreshMessageTypes = new Set([
 let socket;
 let reconnectTimer;
 
+function isProjectStateFetchResponse(message) {
+  if (
+    message?.type !== "fetch-response" ||
+    message.responseType !== "success" ||
+    typeof message.bodyJsonString !== "string"
+  ) {
+    return false;
+  }
+  try {
+    const value = JSON.parse(message.bodyJsonString)?.value;
+    if (!value || Array.isArray(value) || typeof value !== "object") {
+      return false;
+    }
+    return Object.values(value).every(
+      (project) =>
+        project &&
+        typeof project.id === "string" &&
+        typeof project.name === "string" &&
+        Array.isArray(project.rootPaths),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function readBootstrap() {
   const channels = [
     "codex_desktop:get-sentry-init-options",
@@ -64,7 +89,10 @@ function subscribe(channel) {
   const listener = (_event, ...args) => {
     if (
       channel === "codex_desktop:message-for-view" &&
-      bootstrapRefreshMessageTypes.has(args[0]?.type)
+      (
+        bootstrapRefreshMessageTypes.has(args[0]?.type) ||
+        isProjectStateFetchResponse(args[0])
+      )
     ) {
       const nextBootstrap = readBootstrap();
       Object.assign(bootstrap, nextBootstrap);
