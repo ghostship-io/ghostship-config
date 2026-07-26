@@ -6,6 +6,8 @@
   const outbound = [];
   const virtualPorts = new Map();
   const pendingUploads = new Set();
+  const controlListeners = new Set();
+  const outboundMessageListeners = new Set();
   const nativeFetch = window.fetch.bind(window);
   const bootstrap = window.__CODEX_WEB_BOOTSTRAP__ || {};
   const deviceKey = "codex-web-device-id";
@@ -227,6 +229,9 @@
       return;
     }
     if (message.type === "control") {
+      for (const listener of controlListeners) {
+        listener(message);
+      }
       if (message.action === "open-external" && message.url) {
         window.open(message.url, "_blank", "noopener,noreferrer");
       } else if (message.action === "show-dialog") {
@@ -290,6 +295,11 @@
   const ipcRenderer = {
     async invoke(channel, ...args) {
       await waitForUploads();
+      if (channel === "codex_desktop:message-from-view") {
+        for (const listener of outboundMessageListeners) {
+          listener(args[0]);
+        }
+      }
       const requestId = nextId("invoke");
       return new Promise((resolve, reject) => {
         pendingInvokes.set(requestId, { resolve, reject });
@@ -413,6 +423,21 @@
   Object.defineProperty(window, "__codexElectronModule", {
     configurable: false,
     value: electronModule,
+    writable: false,
+  });
+  Object.defineProperty(window, "__codexWebTransport", {
+    configurable: false,
+    value: {
+      onControl(listener) {
+        controlListeners.add(listener);
+        return () => controlListeners.delete(listener);
+      },
+      onMessageFromView(listener) {
+        outboundMessageListeners.add(listener);
+        return () => outboundMessageListeners.delete(listener);
+      },
+      send,
+    },
     writable: false,
   });
   Object.defineProperty(window, "process", {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -110,6 +111,84 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   assert.deepEqual(await dialogResult, {
     canceled: false,
     filePaths: [sharedRoot],
+  });
+  assert.equal((await nextMessage(first)).action, "dialog-complete");
+  assert.equal((await nextMessage(second)).action, "dialog-complete");
+
+  const guest = new EventEmitter();
+  guest.currentUrl = "about:blank";
+  guest.inputEvents = [];
+  guest.capturePage = async () => ({
+    getSize: () => ({ height: 720, width: 1280 }),
+    isEmpty: () => false,
+    toJPEG: () => Buffer.from("frame"),
+  });
+  guest.getTitle = () => guest.currentUrl;
+  guest.getURL = () => guest.currentUrl;
+  guest.isDestroyed = () => false;
+  guest.isLoading = () => false;
+  guest.loadURL = async (url) => {
+    guest.currentUrl = url;
+    guest.emit("did-navigate");
+  };
+  guest.navigationHistory = {
+    canGoBack: () => false,
+    canGoForward: () => false,
+  };
+  guest.sendInputEvent = (event) => guest.inputEvents.push(event);
+  guest.stop = () => {};
+  guest.reload = () => {};
+  guest.focus = () => {};
+  gateway.registerBrowserGuest(
+    { browserTabId: "tab", conversationId: "conversation" },
+    guest,
+  );
+
+  first.send(encode({
+    type: "browser-surface-subscribe",
+    browserTabId: "tab",
+    conversationId: "conversation",
+  }));
+  second.send(encode({
+    type: "browser-surface-subscribe",
+    browserTabId: "tab",
+    conversationId: "conversation",
+  }));
+  assert.equal((await nextMessage(first)).action, "browser-surface-state");
+  assert.equal((await nextMessage(second)).action, "browser-surface-state");
+  assert.equal((await nextMessage(first)).action, "browser-surface-frame");
+  assert.equal((await nextMessage(second)).action, "browser-surface-frame");
+
+  first.send(encode({
+    type: "browser-surface-command",
+    browserTabId: "tab",
+    command: "navigate",
+    conversationId: "conversation",
+    url: "https://example.com/",
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(guest.currentUrl, "https://example.com/");
+
+  first.send(encode({
+    type: "browser-surface-command",
+    browserTabId: "tab",
+    command: "input",
+    conversationId: "conversation",
+    input: {
+      button: "left",
+      clickCount: 1,
+      type: "mouseDown",
+      xRatio: 0.25,
+      yRatio: 0.5,
+    },
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(guest.inputEvents.at(-1), {
+    button: "left",
+    clickCount: 1,
+    type: "mouseDown",
+    x: 320,
+    y: 360,
   });
 
   first.close();

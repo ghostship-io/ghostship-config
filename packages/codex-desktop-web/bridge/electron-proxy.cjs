@@ -1,11 +1,39 @@
 "use strict";
 
+const crypto = require("node:crypto");
 const Module = require("node:module");
 const path = require("node:path");
 
 function installElectronProxy(realElectron, gateway) {
   const originalLoad = Module._load;
   const OriginalBrowserWindow = realElectron.BrowserWindow;
+
+  gateway.setBrowserGuestFactory(async ({ browserTabId, conversationId }) => {
+    const ownerWindow = new OriginalBrowserWindow({
+      backgroundColor: "#ffffff",
+      height: 720,
+      show: false,
+      skipTaskbar: true,
+      webPreferences: {
+        backgroundThrottling: false,
+        contextIsolation: true,
+        nodeIntegration: false,
+        offscreen: true,
+        partition: `persist:codex-web-browser-${crypto
+          .createHash("sha256")
+          .update(`${conversationId}\0${browserTabId}`)
+          .digest("hex")}`,
+        sandbox: true,
+      },
+      width: 1280,
+    });
+    ownerWindow.webContents.setWindowOpenHandler(({ url }) => {
+      gateway.broadcastControl({ type: "open-external", url });
+      return { action: "deny" };
+    });
+    await ownerWindow.loadURL("about:blank");
+    return { ownerWindow, webContents: ownerWindow.webContents };
+  });
 
   class WebBridgeBrowserWindow extends OriginalBrowserWindow {
     constructor(options = {}) {
@@ -71,6 +99,20 @@ function installElectronProxy(realElectron, gateway) {
   });
 
   realElectron.app.on("web-contents-created", (_event, webContents) => {
+    const pendingWebviews = [];
+    webContents.on("will-attach-webview", (_event, _webPreferences, params) => {
+      pendingWebviews.push({
+        browserTabId:
+          params["data-browser-sidebar-browser-tab-id"] ??
+          params.attributes?.["data-browser-sidebar-browser-tab-id"],
+        conversationId:
+          params["data-browser-sidebar-conversation-id"] ??
+          params.attributes?.["data-browser-sidebar-conversation-id"],
+      });
+    });
+    webContents.on("did-attach-webview", (_event, guestWebContents) => {
+      gateway.registerBrowserGuest(pendingWebviews.shift(), guestWebContents);
+    });
     webContents.on("did-fail-load", (_event, code, description, url) => {
       console.error("[codex-web] upstream renderer failed to load", {
         code,

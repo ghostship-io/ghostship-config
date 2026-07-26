@@ -10,6 +10,13 @@ app-server MessagePorts, terminal state, and task updates are fanned out to all
 connected devices. Native file dialogs become a container-side picker confined
 to `CODEX_WEB_FILE_ROOTS`, which defaults to `/workspace,/home/codex`.
 
+The upstream Browser panel keeps its native tabs, toolbar, and lifecycle
+messages. Each materialized tab is backed by a persistent offscreen Electron
+surface in the container; compressed frames and normalized input events are
+relayed to every device viewing that task. A loopback-only renderer endpoint on
+port 5175 preserves the upstream main process's renderer-origin checks without
+exposing another container port.
+
 ## Supported releases
 
 Release descriptors live under `releases/`. Each descriptor binds the desktop
@@ -30,6 +37,10 @@ docker run --rm -p 8214:8214 \
 Open `http://localhost:8214`. The image keeps the upstream renderer assets
 unchanged and adds only the browser transport, PWA metadata, Linux runtime
 adapters, and persistent storage mounts.
+
+Chrome on Android can install the HTTPS deployment from **Install app**. The
+manifest, maskable icons, standalone display mode, and root-scoped service
+worker are served by the gateway rather than patched into upstream assets.
 
 For a fresh CLI login, the upstream callback listener still binds to loopback
 ports 1455 or 1457. If authentication occurs on another device, replace the

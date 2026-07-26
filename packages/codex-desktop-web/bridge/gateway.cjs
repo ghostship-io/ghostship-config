@@ -46,6 +46,7 @@ function transformIndex(source, bootstrap = {}) {
     '<link rel="apple-touch-icon" href="/__bridge/icon-192.png">',
     `<script>window.__CODEX_WEB_BOOTSTRAP__=${JSON.stringify(bootstrap).replaceAll("<", "\\u003c")}</script>`,
     '<script src="/__bridge/electron-shim.js"></script>',
+    '<script src="/__bridge/webview-bridge.js"></script>',
     '<script src="/__bridge/browser-preload.js"></script>',
     '<script defer src="/__bridge/pwa-register.js"></script>',
   ].join("\n    ");
@@ -82,8 +83,24 @@ function jsonResponse(response, statusCode, value) {
   response.end(body);
 }
 
+function browserSurfaceKey(conversationId, browserTabId) {
+  if (
+    typeof conversationId !== "string" ||
+    typeof browserTabId !== "string" ||
+    conversationId.length === 0 ||
+    browserTabId.length === 0 ||
+    conversationId.length > 512 ||
+    browserTabId.length > 512
+  ) {
+    return null;
+  }
+  return `${conversationId}\0${browserTabId}`;
+}
+
 async function createGateway(options) {
   const browserClients = new Map();
+  const browserSurfaces = new Map();
+  const pendingBrowserSurfaces = new Map();
   const pendingRelayMessages = [];
   const channelSubscribers = new Map();
   const eventHistory = [];
@@ -97,6 +114,8 @@ async function createGateway(options) {
   let eventSequence = 0;
   let relayBootstrap = {};
   let relaySocket;
+  let surfaceGeneration = 0;
+  let browserGuestFactory;
 
   fs.mkdirSync(uploadRoot, { recursive: true, mode: 0o700 });
 
@@ -119,6 +138,246 @@ async function createGateway(options) {
     for (const client of browserClients.values()) {
       send(client.socket, { type: "control", action, ...details });
     }
+  }
+
+  function sendBrowserSurface(client, surface, includeFrame = true) {
+    send(client?.socket, {
+      type: "control",
+      action: "browser-surface-state",
+      conversationId: surface.conversationId,
+      browserTabId: surface.browserTabId,
+      generation: surface.generation,
+      state: surface.state,
+    });
+    if (includeFrame && surface.frame) {
+      send(client?.socket, {
+        type: "control",
+        action: "browser-surface-frame",
+        conversationId: surface.conversationId,
+        browserTabId: surface.browserTabId,
+        generation: surface.generation,
+        frame: surface.frame,
+      });
+    }
+  }
+
+  function publishBrowserSurfaceState(surface) {
+    surface.state = {
+      canGoBack: surface.webContents.navigationHistory?.canGoBack?.() || false,
+      canGoForward:
+        surface.webContents.navigationHistory?.canGoForward?.() || false,
+      isLoading: surface.webContents.isLoading(),
+      title: surface.webContents.getTitle(),
+      url: surface.webContents.getURL(),
+    };
+    for (const client of browserClients.values()) {
+      if (client.surfaceKeys.has(surface.key)) {
+        sendBrowserSurface(client, surface, false);
+      }
+    }
+  }
+
+  async function captureBrowserSurface(surface) {
+    if (
+      surface.capturePending ||
+      surface.webContents.isDestroyed() ||
+      ![...browserClients.values()].some((client) =>
+        client.surfaceKeys.has(surface.key)
+      )
+    ) {
+      return;
+    }
+    surface.capturePending = true;
+    try {
+      const image = await surface.webContents.capturePage();
+      if (image.isEmpty()) return;
+      const size = image.getSize();
+      surface.frame = {
+        data: image.toJPEG(72).toString("base64"),
+        height: size.height,
+        mimeType: "image/jpeg",
+        width: size.width,
+      };
+      surface.captureErrorLogged = false;
+      for (const client of browserClients.values()) {
+        if (client.surfaceKeys.has(surface.key)) {
+          send(client.socket, {
+            type: "control",
+            action: "browser-surface-frame",
+            conversationId: surface.conversationId,
+            browserTabId: surface.browserTabId,
+            generation: surface.generation,
+            frame: surface.frame,
+          });
+        }
+      }
+    } catch (error) {
+      if (!surface.webContents.isDestroyed() && !surface.captureErrorLogged) {
+        surface.captureErrorLogged = true;
+        console.error("[codex-web] browser surface capture failed", error);
+      }
+    } finally {
+      surface.capturePending = false;
+    }
+  }
+
+  function registerBrowserGuest(metadata, webContents) {
+    const key = browserSurfaceKey(
+      metadata?.conversationId,
+      metadata?.browserTabId,
+    );
+    if (!key) return;
+    surfaceGeneration += 1;
+    const surface = {
+      browserTabId: metadata.browserTabId,
+      captureErrorLogged: false,
+      capturePending: false,
+      conversationId: metadata.conversationId,
+      frame: null,
+      generation: surfaceGeneration,
+      key,
+      ownerWindow: metadata.ownerWindow || null,
+      state: {},
+      webContents,
+    };
+    browserSurfaces.set(key, surface);
+    const update = () => {
+      if (browserSurfaces.get(key) !== surface) return;
+      publishBrowserSurfaceState(surface);
+      void captureBrowserSurface(surface);
+    };
+    for (const eventName of [
+      "did-finish-load",
+      "did-navigate",
+      "did-navigate-in-page",
+      "did-start-loading",
+      "did-stop-loading",
+      "page-title-updated",
+    ]) {
+      webContents.on(eventName, update);
+    }
+    webContents.once("destroyed", () => {
+      if (browserSurfaces.get(key) === surface) {
+        browserSurfaces.delete(key);
+      }
+    });
+    publishBrowserSurfaceState(surface);
+    for (const client of browserClients.values()) {
+      if (client.surfaceKeys.has(key)) {
+        sendBrowserSurface(client, surface, false);
+      }
+    }
+    console.log("[codex-web] browser surface attached", {
+      browserTabId: metadata.browserTabId,
+      conversationId: metadata.conversationId,
+      webContentsId: webContents.id,
+    });
+    void captureBrowserSurface(surface);
+  }
+
+  function ensureBrowserGuest(conversationId, browserTabId) {
+    const key = browserSurfaceKey(conversationId, browserTabId);
+    if (
+      !key ||
+      browserSurfaces.has(key) ||
+      pendingBrowserSurfaces.has(key) ||
+      !browserGuestFactory
+    ) {
+      return;
+    }
+    const pending = Promise.resolve(
+      browserGuestFactory({ browserTabId, conversationId }),
+    )
+      .then((guest) => {
+        if (!guest || browserSurfaces.has(key)) {
+          guest?.ownerWindow?.close();
+          return;
+        }
+        registerBrowserGuest(
+          { browserTabId, conversationId, ownerWindow: guest.ownerWindow },
+          guest.webContents,
+        );
+      })
+      .catch((error) => {
+        console.error("[codex-web] browser surface creation failed", error);
+      })
+      .finally(() => {
+        pendingBrowserSurfaces.delete(key);
+      });
+    pendingBrowserSurfaces.set(key, pending);
+  }
+
+  async function handleBrowserSurfaceCommand(client, message) {
+    const key = browserSurfaceKey(message.conversationId, message.browserTabId);
+    const surface = key ? browserSurfaces.get(key) : null;
+    if (!surface || !client.surfaceKeys.has(key)) return;
+    const guest = surface.webContents;
+    switch (message.command) {
+      case "navigate": {
+        let target;
+        try {
+          target = new URL(message.url);
+        } catch {
+          return;
+        }
+        if (!["http:", "https:", "about:"].includes(target.protocol)) return;
+        await guest.loadURL(target.href);
+        break;
+      }
+      case "go-back":
+        if (guest.navigationHistory?.canGoBack()) {
+          guest.navigationHistory.goBack();
+        }
+        break;
+      case "go-forward":
+        if (guest.navigationHistory?.canGoForward()) {
+          guest.navigationHistory.goForward();
+        }
+        break;
+      case "reload":
+        guest.reload();
+        break;
+      case "stop":
+        guest.stop();
+        break;
+      case "focus":
+        guest.focus();
+        break;
+      case "input": {
+        const input = message.input;
+        if (!input || typeof input.type !== "string") return;
+        const allowedTypes = new Set([
+          "char",
+          "keyDown",
+          "keyUp",
+          "mouseDown",
+          "mouseMove",
+          "mouseUp",
+          "mouseWheel",
+        ]);
+        if (!allowedTypes.has(input.type)) return;
+        if (
+          typeof input.xRatio === "number" &&
+          typeof input.yRatio === "number"
+        ) {
+          const size = surface.frame || { width: 1280, height: 720 };
+          input.x = Math.round(
+            Math.max(0, Math.min(1, input.xRatio)) * size.width,
+          );
+          input.y = Math.round(
+            Math.max(0, Math.min(1, input.yRatio)) * size.height,
+          );
+        }
+        delete input.xRatio;
+        delete input.yRatio;
+        guest.sendInputEvent(input);
+        break;
+      }
+      default:
+        return;
+    }
+    publishBrowserSurfaceState(surface);
+    void captureBrowserSurface(surface);
   }
 
   function confinedFilePath(candidate, allowMissing = false) {
@@ -287,10 +546,35 @@ async function createGateway(options) {
         );
         broadcastControl({ type: "dialog-complete", dialogId: message.dialogId });
       }
+      return;
+    }
+    if (message.type === "browser-surface-subscribe") {
+      const key = browserSurfaceKey(message.conversationId, message.browserTabId);
+      if (!key) return;
+      client.surfaceKeys.add(key);
+      const surface = browserSurfaces.get(key);
+      if (surface) {
+        sendBrowserSurface(client, surface);
+        void captureBrowserSurface(surface);
+      } else {
+        ensureBrowserGuest(message.conversationId, message.browserTabId);
+      }
+      return;
+    }
+    if (message.type === "browser-surface-unsubscribe") {
+      const key = browserSurfaceKey(message.conversationId, message.browserTabId);
+      if (key) client.surfaceKeys.delete(key);
+      return;
+    }
+    if (message.type === "browser-surface-command") {
+      void handleBrowserSurfaceCommand(client, message).catch((error) => {
+        console.error("[codex-web] browser surface command failed", error);
+      });
     }
   }
 
-  const server = http.createServer(async (request, response) => {
+  const nativeHostPort = Number(process.env.CODEX_WEB_NATIVE_HOST_PORT || "5175");
+  const handleHttpRequest = async (request, response) => {
     const requestUrl = new URL(request.url || "/", "http://localhost");
     if (requestUrl.pathname === "/health") {
       jsonResponse(response, 200, {
@@ -443,7 +727,11 @@ async function createGateway(options) {
     }
     let body = fs.readFileSync(target);
     if (target.endsWith("index.html")) {
-      body = Buffer.from(transformIndex(body.toString("utf8"), relayBootstrap));
+      body = Buffer.from(
+        request.socket.localPort === nativeHostPort
+          ? body.toString("utf8")
+          : transformIndex(body.toString("utf8"), relayBootstrap),
+      );
     }
     response.writeHead(200, {
       "content-type": MIME_TYPES.get(path.extname(target)) || "application/octet-stream",
@@ -453,7 +741,9 @@ async function createGateway(options) {
         : "public, max-age=31536000, immutable",
     });
     response.end(body);
-  });
+  };
+  const server = http.createServer(handleHttpRequest);
+  const nativeServer = http.createServer(handleHttpRequest);
 
   const browserWebSockets = new WebSocketServer({ noServer: true });
   const relayWebSockets = new WebSocketServer({ noServer: true });
@@ -510,6 +800,7 @@ async function createGateway(options) {
       deviceId,
       socket,
       portIds: new Set(),
+      surfaceKeys: new Set(),
     };
     browserClients.set(clientId, client);
     const since = Number(requestUrl.searchParams.get("since") || "0");
@@ -543,16 +834,47 @@ async function createGateway(options) {
     });
   });
 
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(options.port, options.host, resolve);
-  });
+  await Promise.all([
+    new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(options.port, options.host, resolve);
+    }),
+    new Promise((resolve, reject) => {
+      nativeServer.once("error", reject);
+      nativeServer.listen(nativeHostPort, "127.0.0.1", resolve);
+    }),
+  ]);
 
   console.log(`[codex-web] listening on http://${options.host}:${options.port}`);
+  console.log(
+    `[codex-web] native renderer host listening on http://127.0.0.1:${nativeHostPort}`,
+  );
+  const captureTimer = setInterval(() => {
+    for (const surface of browserSurfaces.values()) {
+      void captureBrowserSurface(surface);
+    }
+  }, 250);
+  captureTimer.unref();
   return {
     broadcastControl,
-    close: () => new Promise((resolve) => server.close(resolve)),
+    close: () => {
+      clearInterval(captureTimer);
+      for (const surface of browserSurfaces.values()) {
+        if (surface.ownerWindow && !surface.ownerWindow.isDestroyed?.()) {
+          surface.ownerWindow.close();
+        }
+      }
+      return Promise.all([
+        new Promise((resolve) => server.close(resolve)),
+        new Promise((resolve) => nativeServer.close(resolve)),
+      ]);
+    },
+    registerBrowserGuest,
     requestDialog,
+    nativeServer,
+    setBrowserGuestFactory(factory) {
+      browserGuestFactory = factory;
+    },
     server,
   };
 }

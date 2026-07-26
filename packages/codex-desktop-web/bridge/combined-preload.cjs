@@ -137,11 +137,7 @@ function connect() {
   socket = new WebSocket(relayUrl, {
     headers: {
       "x-codex-relay-secret": relaySecret,
-      "x-codex-relay-primary": bootstrap[
-        "codex_desktop:get-initial-sidebar-bootstrap"
-      ]
-        ? "1"
-        : "0",
+      "x-codex-relay-primary": "1",
     },
   });
   socket.on("open", () => {
@@ -160,8 +156,7 @@ function connect() {
       });
     }
   });
-  socket.on("close", (code) => {
-    if (code === 1008) return;
+  socket.on("close", () => {
     clearTimeout(reconnectTimer);
     reconnectTimer = setTimeout(connect, 500);
   });

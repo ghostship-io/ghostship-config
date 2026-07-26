@@ -301,8 +301,10 @@ A persistent `codex-app-server.service` owns task state and execution. Every
 browser device connects to that single app host, so open tasks and updates are
 shared across desktop and mobile clients. The disposable `codex-web.service`
 can restart without interrupting active work. Browser file dialogs expose only
-the persisted `/workspace` and `/home/codex` trees. The built-in browser and
-computer-use surfaces are intentionally unsupported.
+the persisted `/workspace` and `/home/codex` trees. The built-in Browser panel
+uses a persistent container-side Electron surface: page frames and mouse,
+touch, keyboard, navigation, and scroll input are relayed through the same
+multi-device gateway. Computer-use remains intentionally unsupported.
 
 The `codex` user at `3000:3000` keeps its home, workspace, Docker state, user
 systemd units, and isolated Nix store under `/srv/apps/codex`. Use

@@ -21,6 +21,7 @@ test("index transformation injects transport and PWA without replacing renderer"
     `<head><meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://chatgpt.com;"><script type="module" src="./assets/index.js"></script></head>`;
   const transformed = transformIndex(source);
   assert.match(transformed, /electron-shim\.js/);
+  assert.match(transformed, /webview-bridge\.js/);
   assert.match(transformed, /browser-preload\.js/);
   assert.match(transformed, /manifest\.webmanifest/);
   assert.match(transformed, /src="\.\/assets\/index\.js"/);

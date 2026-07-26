@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.2.0] - 2026-07-26
+
+- **Codex built-in browser**: Host Codex's expected native renderer origin,
+  relay persistent browser surfaces and input through the unchanged desktop
+  Browser panel, and share each tab across connected devices.
+- **Codex Android app installation**: Keep the official responsive renderer
+  behind a root-scoped service worker and standalone manifest, with fresh
+  Chrome installability coverage for the container image.
+
 ## [3.1.4] - 2026-07-26
 
 - **OpenChamber deployment retry safety**: Latch failed image deployments,
