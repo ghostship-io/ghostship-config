@@ -32,7 +32,7 @@
     ./cloakbrowser.nix
     ./codex.nix
     ./openchamber.nix
-    ./paseo.nix
+    ./t3code.nix
 
     # Games
     ./romm-db.nix

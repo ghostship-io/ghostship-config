@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.0.0] - 2026-07-26
+
+- **T3 Code replacement**: Replace the Paseo daemon and web UI with upstream
+  T3 Code at `t3code.ghostship.io` on its native port `3773`, while preserving
+  the existing workspace, credentials, nested Docker, Nix, user services,
+  Codex, OpenCode, Antigravity, and Ollama Cloud integration.
+- **T3 Code operations**: Add project registration, one-time remote pairing,
+  provider-aware health checks, idle-gated updates, and last-good settings
+  recovery for the new server.
+
 ## [2.6.2] - 2026-07-26
 
 - **Paseo Codex ripgrep compatibility**: Replace Codex's bundled glibc-path

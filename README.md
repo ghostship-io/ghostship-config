@@ -180,7 +180,7 @@ inventory. Services use Podman, native healthchecks, and registry auto-update.
 Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
-Key services include Plex, Homepage, Muximux, OpenChamber, Paseo, the `arr`
+Key services include Plex, Homepage, Muximux, OpenChamber, T3 Code, the `arr`
 stack, qBittorrent, SearXNG, RomM, Grimmory, Chaptarr, PyLoad, PriceBuddy, and
 n8n.
 
@@ -256,38 +256,34 @@ restores the previous last-good config snapshot if the restart does not become
 healthy. `openchamber-web.service` refreshes that last-good snapshot whenever
 it starts successfully.
 
-Paseo runs at `https://paseo.ghostship.io` in a separate repo-built,
-systemd-based Podman image. It listens only on the internal container network
-at `paseo:6767`; the Cloudflare route is managed outside this repo. Paseo has
-no application password, so Cloudflare Access must remain the external
-authentication boundary. The bundled web UI receives a same-origin daemon
-connection hint with the default edge port so it connects through Cloudflare
-instead of falling back to `localhost:6767`. The persistent `paseo` user, home,
-workspace, nested Docker state, user systemd units, and isolated Nix store live
-under `/srv/apps/paseo`.
+T3 Code runs at `https://t3code.ghostship.io` in a repo-built, systemd-based
+Podman image. It listens only on the internal container network at
+`t3code:3773`; the Cloudflare route is managed outside this repo. Upstream T3
+Code requires one-time device pairing for remote clients, after which the
+browser keeps a session cookie. Run `t3code-pair` inside the container to issue
+a one-hour pairing link. The existing persistent `paseo` user home, workspace,
+nested Docker state, user systemd units, and isolated Nix store remain under
+`/srv/apps/paseo` so the replacement preserves credentials and projects.
 
-The container installs current Paseo, Codex, OpenCode, and Antigravity `agy`
-CLIs on first boot and refreshes them every four hours. Paseo orchestrates the
-Codex and OpenCode providers; `agy` is installed alongside for direct use but
-is not presented as a Paseo provider. The image also includes the Ollama CLI
-with the projected `OLLAMA_API_KEY`. A separate `Codex (Ollama Cloud)` Paseo
-provider launches Codex through `ollama launch codex`, with a loopback-only
-authenticated proxy to ollama.com. Its tool-capable model catalog refreshes
-with the normal four-hour maintenance cycle. Paseo's MCP server, agent tool
-injection, and browser-tool broker are enabled; browser tabs still require a
-connected Paseo browser host or the separately managed CloakBrowser tooling.
-Updates queue a daemon restart and apply only when
-`paseo ls --global --json` reports no running or initializing work. The daemon
-is throttled above 12 GiB and capped at 16 GiB. Its monitor and outer Podman
-health policy use the same activity gate before recovery.
+The container installs current T3 Code, Codex, OpenCode, and Antigravity `agy`
+CLIs on first boot and refreshes them every four hours. T3 Code natively exposes
+Codex and OpenCode; `agy` remains installed alongside for direct use. The image
+also includes the Ollama CLI with the projected `OLLAMA_API_KEY`. A separate
+`Codex (Ollama Cloud)` provider instance launches Codex with
+`--local-provider=ollama` through the loopback-only authenticated Ollama proxy,
+and its tool-capable ollama.com model catalog refreshes with normal maintenance.
+All top-level Git repositories in `/workspace` are registered as T3 Code
+projects during setup. Updates queue a server restart and apply only when the
+T3 Code state database reports no pending or running turns. The server is
+throttled above 12 GiB and capped at 16 GiB; its monitor and outer Podman health
+policy use the same activity gate before recovery.
 
-Use `paseo-user-units` for persisted user services, `paseo-tunnel` for ad hoc
-Quick Tunnels, and `paseo-apply-config` after editing Paseo JSON, Codex TOML,
-OpenCode JSON, or Antigravity settings. The apply command validates the files,
-restarts `paseo-daemon.service` through a narrow container-local sudoers rule,
-and restores the last-known-good config if Paseo or its Codex/OpenCode
-providers fail to recover. Codex and Antigravity subscription credentials need
-one interactive login each after first deployment; their state persists in
+Use `t3code-user-units` for persisted user services, `t3code-tunnel` for ad hoc
+Quick Tunnels, and `t3code-apply-config` after editing T3 Code settings, Codex
+TOML, OpenCode JSON, or Antigravity settings. The apply command validates the
+files, restarts `t3code-server.service` through a narrow container-local
+sudoers rule, and restores the last-known-good config if the T3 Code providers
+fail to recover. Codex and Antigravity credentials remain under
 `/home/paseo` across image replacements.
 
 Codex runs at `https://codex.ghostship.io` in a separate systemd-based Podman

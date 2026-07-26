@@ -207,11 +207,11 @@ in
             "[Services].[Codex].server=literal:chill-penguin"
             "[Services].[Codex].container=literal:codex"
 
-            "[Services].[Paseo].icon=literal:mdi-walk-#7c3aed"
-            "[Services].[Paseo].href=literal:https://paseo.ghostship.io"
-            "[Services].[Paseo].description=literal:Agent Orchestration"
-            "[Services].[Paseo].server=literal:chill-penguin"
-            "[Services].[Paseo].container=literal:paseo"
+            "[Services].[T3 Code].icon=literal:mdi-code-braces-#7c3aed"
+            "[Services].[T3 Code].href=literal:https://t3code.ghostship.io"
+            "[Services].[T3 Code].description=literal:AI Coding Interface"
+            "[Services].[T3 Code].server=literal:chill-penguin"
+            "[Services].[T3 Code].container=literal:t3code"
 
             # Management group
             "[Management].[Homepage].icon=literal:sh-homepage"
@@ -246,7 +246,7 @@ in
           ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
 
           ${pkgs.yq-go}/bin/yq -i '
-            (.[] | select(has("Services")) | .Services) |= map(select((has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy Scraper") or has("Changedetection") or has("n8n") or has("SearXNG") or has("Windmill") or has("Hatchet") or has("Prefect")) | not))
+            (.[] | select(has("Services")) | .Services) |= map(select((has("Paseo") or has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy Scraper") or has("Changedetection") or has("n8n") or has("SearXNG") or has("Windmill") or has("Hatchet") or has("Prefect")) | not))
             | (.[] | select(has("Downloads")) | .Downloads) |= map(select((has("VueTorrent")) | not))
             | (.[] | select(has("Management")) | .Management) |= map(select((has("Codex") or has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG") or has("Plex Auto Languages") or has("PriceBuddy Scraper")) | not))
             | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("BentoPDF") or has("ConvertX") or has("IT-Tools") or has("MeTube") or has("OmniTools")) | not))
