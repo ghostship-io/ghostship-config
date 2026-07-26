@@ -166,6 +166,23 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
           message.command === "close",
       ),
     );
+    for (const socket of sockets) {
+      socket.send(JSON.stringify({
+        action: "auxiliary-window-state",
+        bounds: { height: 300, width: 300 },
+        modal: false,
+        title: "Codex",
+        transparent: true,
+        type: "control",
+        visible: true,
+        windowId: "pet",
+      }));
+    }
+    const pet = page.locator('[data-codex-auxiliary-window="pet"]');
+    await pet.waitFor();
+    assert.equal(await pet.evaluate((element) => {
+      return getComputedStyle(element).pointerEvents;
+    }), "none");
   } finally {
     await browser.close();
     for (const socket of sockets) socket.close();

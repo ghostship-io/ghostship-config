@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.3.11] - 2026-07-26
+
+- **Codex pet overlay usability**: Make the transparent native pet surface
+  click-through in browsers so it remains visible without blocking composer or
+  model-picker controls.
+- **Codex repeatable browser tests**: Reset and restore pet state during live
+  acceptance so repeated fresh-profile runs do not inherit an obstructing
+  auxiliary window.
+
 ## [3.3.10] - 2026-07-26
 
 - **Codex auxiliary window lifecycle**: Give opaque browser-bridged desktop

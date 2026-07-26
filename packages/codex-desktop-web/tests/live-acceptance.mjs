@@ -180,6 +180,14 @@ try {
   if (await notificationPromptDismiss.isVisible().catch(() => false)) {
     await notificationPromptDismiss.click();
   }
+  const existingPet = pageA
+    .locator('[data-codex-auxiliary-window] img[alt="Codex"]')
+    .first();
+  if (await existingPet.isVisible().catch(() => false)) {
+    await pageA.getByRole("button", { name: "Open profile menu" }).click();
+    await pageA.getByRole("menuitem", { name: /Hide pet/i }).click();
+    await existingPet.waitFor({ state: "detached" });
+  }
 
   for (const menuName of ["File", "Edit", "View", "Help"]) {
     await openAppMenu(pageA, menuName);
@@ -273,6 +281,9 @@ try {
   });
   await pet.first().waitFor();
   console.log("ok desktop pet surface");
+  await pageA.getByRole("button", { name: "Open profile menu" }).click();
+  await pageA.getByRole("menuitem", { name: /Hide pet/i }).click();
+  await pet.first().waitFor({ state: "detached" });
 
   await pageA.getByRole("menuitem", { exact: true, name: "View" }).click();
   await pageA.getByRole("menuitem", { name: "Toggle Full Screen" }).click();

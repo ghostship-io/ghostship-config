@@ -306,6 +306,9 @@
     element.tabIndex = 0;
     element.style.cssText =
       "position:fixed;z-index:2147483645;display:none;overflow:hidden;outline:none;pointer-events:auto;background:transparent";
+    if (message.transparent) {
+      element.style.pointerEvents = "none";
+    }
     image.alt = message.title || "";
     image.draggable = false;
     image.style.cssText =
