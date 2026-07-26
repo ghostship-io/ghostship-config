@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.6.1] - 2026-07-26
+
+- **Paseo Ollama provider routing**: Route derived Ollama Codex threads through
+  the authenticated loopback endpoint instead of allowing Paseo's Codex adapter
+  to reset them to the default OpenAI API.
+
 ## [2.6.0] - 2026-07-26
 
 - **Paseo Ollama Codex provider**: Add a distinct `Codex (Ollama Cloud)`

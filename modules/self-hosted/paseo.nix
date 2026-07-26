@@ -1365,6 +1365,10 @@ let
               label: "Codex (Ollama Cloud)",
               description: "Codex launched through Ollama against ollama.com",
               command: ["${paseoOllamaCodex}/bin/paseo-ollama-codex"],
+              env: {
+                OPENAI_BASE_URL: "http://127.0.0.1:11434",
+                OPENAI_API_KEY: "ollama"
+              },
               models: $providerModels[0],
               enabled: true
             }
