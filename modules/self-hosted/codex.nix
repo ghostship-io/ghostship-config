@@ -1910,6 +1910,8 @@ let
 
 in
 {
+  nixpkgs.config.allowUnfreePredicate = pkg: lib.getName pkg == "ghostship-codex-desktop-web";
+
   virtualisation.oci-containers.containers."codex" = {
     image = "${imageName}:${imageTag}";
     imageFile = codexImage;

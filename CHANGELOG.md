@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.1.1] - 2026-07-26
+
+- **Codex package evaluation**: Permit the versioned official desktop package
+  as the Codex container's sole unfree dependency.
+
 ## [3.1.0] - 2026-07-26
 
 - **Official Codex desktop web port**: Replace `0xcaff/codex-web` with a
