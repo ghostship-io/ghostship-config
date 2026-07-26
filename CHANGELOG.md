@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.0.6] - 2026-07-26
+
+- **T3 server browser inheritance**: Attach the CloakBrowser route to the T3
+  server unit that spawns provider sessions.
+
 ## [3.0.5] - 2026-07-26
 
 - **T3 provider browser environment**: Propagate the internal CloakBrowser URL

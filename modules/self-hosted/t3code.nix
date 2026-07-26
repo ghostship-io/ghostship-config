@@ -1774,7 +1774,6 @@ let
       Environment=XDG_RUNTIME_DIR=/run/user/3000
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=OPENCODE_AUTOMATION_DIR=/home/paseo/.automation
-      Environment=AGENT_CLOAK_BASE_URL=http://cloakbrowser:8080
       Environment=PATH=/home/paseo/.local/bin:/home/paseo/.local/share/paseo-tools/npm/bin:${paseoPath}:/bin:/usr/bin
       ExecStart=${paseoBootstrap}/bin/paseo-bootstrap
       ExecStartPost=+${paseoQueueBootstrapRestart}/bin/paseo-queue-bootstrap-restart
@@ -1805,6 +1804,7 @@ let
       Environment=XDG_RUNTIME_DIR=/run/user/3000
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=OPENCODE_AUTOMATION_DIR=/home/paseo/.automation
+      Environment=AGENT_CLOAK_BASE_URL=http://cloakbrowser:8080
       Environment=PATH=/home/paseo/.local/bin:/home/paseo/.local/share/paseo-tools/npm/bin:${paseoPath}:/bin:/usr/bin
       ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/t3code-tool-update/restart.pending
       ExecStart=${paseoDaemonRun}/bin/t3code-server-run
