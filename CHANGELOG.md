@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.6.0] - 2026-07-26
+
+- **Paseo Ollama Codex provider**: Add a distinct `Codex (Ollama Cloud)`
+  provider that uses the supported `ollama launch codex` flow through an
+  authenticated loopback proxy, with a refreshed catalog of tool-capable
+  ollama.com models.
+
 ## [2.5.0] - 2026-07-26
 
 - **Paseo agent tooling**: Enable Paseo's MCP server, agent tool injection, and

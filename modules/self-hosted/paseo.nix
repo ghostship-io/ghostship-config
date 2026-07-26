@@ -82,9 +82,11 @@ let
     export npm_config_prefix="$NPM_CONFIG_PREFIX"
     export OPENCODE_AUTOMATION_DIR="$HOME/.automation"
     export PASEO_HOME="$HOME/.paseo"
+    export PASEO_OLLAMA_CATALOG="$XDG_STATE_HOME/paseo-ollama/catalog.json"
     export PASEO_LISTEN="0.0.0.0:6767"
     export PASEO_TRUSTED_PROXIES="loopback,10.89.0.0/24"
     export PASEO_WEB_UI_ENABLED=true
+    export OLLAMA_HOST=http://127.0.0.1:11434
     export AGY_CLI_DISABLE_AUTO_UPDATE=true
     hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     if [ -f "$hm_session_vars" ]; then
@@ -143,7 +145,10 @@ let
       printf '%s\n' "$providers" | ${pkgs.jq}/bin/jq -e '
         def ready($name):
           any(.[]; .provider == $name and .status == "available" and .enabled == "Enabled");
-        type == "array" and ready("codex") and ready("opencode")
+        type == "array"
+        and ready("codex")
+        and ready("codex-ollama")
+        and ready("opencode")
       ' >/dev/null 2>&1
     }
   '';
@@ -194,6 +199,142 @@ let
       exit 1
     fi
     log_info "patched Paseo web UI connection hint for default proxy ports"
+  '';
+
+  paseoOllamaProxy = pkgs.writeTextFile {
+    name = "paseo-ollama-cloud-proxy";
+    destination = "/bin/paseo-ollama-cloud-proxy";
+    executable = true;
+    text = ''
+      #!${pkgs.nodejs_24}/bin/node
+      const http = require("node:http");
+      const https = require("node:https");
+
+      const apiKey = process.env.OLLAMA_API_KEY || "";
+      const maxBody = 64 * 1024 * 1024;
+      const server = http.createServer((request, response) => {
+        if (!apiKey) {
+          response.writeHead(503, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "Ollama API key is not configured" }));
+          return;
+        }
+
+        const headers = { ...request.headers };
+        delete headers.host;
+        delete headers.connection;
+        delete headers["proxy-connection"];
+        delete headers["transfer-encoding"];
+        headers.authorization = "Bearer " + apiKey;
+        let size = 0;
+        const upstreamRequest = https.request({
+          hostname: "ollama.com",
+          port: 443,
+          method: request.method,
+          path: request.url || "/",
+          headers,
+        }, (upstreamResponse) => {
+          response.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
+          upstreamResponse.pipe(response);
+        });
+        upstreamRequest.on("error", (error) => {
+          if (response.headersSent) {
+            response.destroy(error);
+            return;
+          }
+          response.writeHead(502, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: String(error && error.message || error) }));
+        });
+        request.on("data", (chunk) => {
+          size += chunk.length;
+          if (size > maxBody) {
+            upstreamRequest.destroy(new Error("request body exceeds 64 MiB"));
+            request.destroy();
+            if (!response.headersSent) {
+              response.writeHead(413, { "content-type": "application/json" });
+              response.end(JSON.stringify({ error: "request body exceeds 64 MiB" }));
+            }
+            return;
+          }
+          upstreamRequest.write(chunk);
+        });
+        request.on("end", () => upstreamRequest.end());
+        request.on("error", (error) => upstreamRequest.destroy(error));
+      });
+      server.listen(11434, "127.0.0.1", () => {
+        process.stderr.write("Ollama cloud proxy listening on 127.0.0.1:11434\n");
+      });
+    '';
+  };
+
+  paseoOllamaCodex = pkgs.writeShellScriptBin "paseo-ollama-codex" ''
+    set -eu
+
+    ${paseoRuntimeEnv}
+
+    if [ "''${1:-}" = "--version" ]; then
+      exec codex --version
+    fi
+
+    exec ollama launch codex \
+      --yes \
+      --model gpt-oss:120b \
+      -- \
+      --local-provider=ollama \
+      "$@"
+  '';
+
+  paseoOllamaCatalogRefresh = pkgs.writeShellScriptBin "paseo-ollama-catalog-refresh" ''
+    set -eu
+
+    ${paseoRuntimeEnv}
+
+    if [ -z "''${OLLAMA_API_KEY:-}" ]; then
+      printf 'error: OLLAMA_API_KEY is not configured\n' >&2
+      exit 1
+    fi
+
+    catalog_dir="$(dirname "$PASEO_OLLAMA_CATALOG")"
+    mkdir -p "$catalog_dir"
+    work_dir="$(mktemp -d "$catalog_dir/.refresh.XXXXXX")"
+    trap 'rm -rf "$work_dir"' EXIT
+
+    auth_header_file="$work_dir/authorization.header"
+    printf 'Authorization: Bearer %s\n' "$OLLAMA_API_KEY" > "$auth_header_file"
+    chmod 0600 "$auth_header_file"
+    curl -fsS --retry 3 --connect-timeout 15 --max-time 60 \
+      -H "@$auth_header_file" https://ollama.com/api/tags > "$work_dir/tags.json"
+
+    jq -r '.models[]? | .model // .name // empty' "$work_dir/tags.json" \
+      | sort -u > "$work_dir/models"
+    : > "$work_dir/catalog.jsonl"
+    while IFS= read -r model; do
+      [ -n "$model" ] || continue
+      payload="$(jq -cn --arg model "$model" '{model: $model}')"
+      if ! curl -fsS --retry 2 --connect-timeout 15 --max-time 60 \
+        -H "@$auth_header_file" -H 'Content-Type: application/json' \
+        --data "$payload" https://ollama.com/api/show > "$work_dir/show.json"; then
+        printf 'warning: failed to inspect Ollama model %s\n' "$model" >&2
+        continue
+      fi
+      jq -c --arg name "$model" '
+        (.capabilities // []) as $capabilities
+        | select($capabilities | index("tools"))
+        | {name: $name, capabilities: $capabilities}
+      ' "$work_dir/show.json" >> "$work_dir/catalog.jsonl"
+    done < "$work_dir/models"
+
+    jq -s 'sort_by(.name)' "$work_dir/catalog.jsonl" > "$work_dir/catalog.json"
+    jq -e 'length > 0 and all(.[]; (.capabilities | index("tools")) != null)' \
+      "$work_dir/catalog.json" >/dev/null
+    install -m 0600 "$work_dir/catalog.json" "$PASEO_OLLAMA_CATALOG.tmp"
+    mv "$PASEO_OLLAMA_CATALOG.tmp" "$PASEO_OLLAMA_CATALOG"
+  '';
+
+  paseoOllamaProxyRun = pkgs.writeShellScriptBin "paseo-ollama-cloud-proxy-run" ''
+    set -eu
+
+    ${paseoRuntimeEnv}
+    exec ${paseoOllamaProxy}/bin/paseo-ollama-cloud-proxy
   '';
 
   paseoToolMaintenance = pkgs.writeShellScriptBin "paseo-tool-maintenance" ''
@@ -453,13 +594,19 @@ let
     before_codex="$(user_version codex)"
     before_opencode="$(user_version opencode)"
     before_agy="$(user_version agy)"
+    before_config="$(${pkgs.coreutils}/bin/sha256sum "$PASEO_HOME/config.json" 2>/dev/null || true)"
+    before_catalog="$(${pkgs.coreutils}/bin/sha256sum "$PASEO_OLLAMA_CATALOG" 2>/dev/null || true)"
 
     su-exec paseo:paseo ${paseoToolMaintenance}/bin/paseo-tool-maintenance
+    su-exec paseo:paseo ${paseoOllamaCatalogRefresh}/bin/paseo-ollama-catalog-refresh
+    su-exec paseo:paseo ${paseoManagedConfig}/bin/paseo-managed-config
 
     after_paseo="$(user_version paseo)"
     after_codex="$(user_version codex)"
     after_opencode="$(user_version opencode)"
     after_agy="$(user_version agy)"
+    after_config="$(${pkgs.coreutils}/bin/sha256sum "$PASEO_HOME/config.json" 2>/dev/null || true)"
+    after_catalog="$(${pkgs.coreutils}/bin/sha256sum "$PASEO_OLLAMA_CATALOG" 2>/dev/null || true)"
 
     log_info "paseo: ''${before_paseo:-missing} -> ''${after_paseo:-missing}"
     log_info "codex: ''${before_codex:-missing} -> ''${after_codex:-missing}"
@@ -469,13 +616,16 @@ let
     if [ "$before_paseo" != "$after_paseo" ] \
       || [ "$before_codex" != "$after_codex" ] \
       || [ "$before_opencode" != "$after_opencode" ] \
-      || [ "$before_agy" != "$after_agy" ]; then
+      || [ "$before_agy" != "$after_agy" ] \
+      || [ "$before_config" != "$after_config" ] \
+      || [ "$before_catalog" != "$after_catalog" ]; then
       pending_tmp="$pending_restart.tmp"
       {
         printf 'paseo=%s\n' "$after_paseo"
         printf 'codex=%s\n' "$after_codex"
         printf 'opencode=%s\n' "$after_opencode"
         printf 'agy=%s\n' "$after_agy"
+        printf 'ollama_catalog=%s\n' "$after_catalog"
       } > "$pending_tmp"
       mv "$pending_tmp" "$pending_restart"
       log_info "tool update downloaded; queued restart until Paseo is idle"
@@ -1172,7 +1322,8 @@ let
 
     config_file="$PASEO_HOME/config.json"
     config_tmp="$(mktemp "$PASEO_HOME/config.json.tmp.XXXXXX")"
-    trap 'rm -f "$config_tmp" "$config_tmp.source"' EXIT HUP INT TERM
+    provider_models_tmp="$(mktemp "$PASEO_HOME/provider-models.json.tmp.XXXXXX")"
+    trap 'rm -f "$config_tmp" "$config_tmp.source" "$provider_models_tmp"' EXIT HUP INT TERM
 
     if [ -f "$config_file" ]; then
       ${pkgs.jq}/bin/jq -e 'type == "object"' "$config_file" >/dev/null
@@ -1182,7 +1333,22 @@ let
       config_source="$config_tmp.source"
     fi
 
-    ${pkgs.jq}/bin/jq '
+    if [ -f "$PASEO_OLLAMA_CATALOG" ]; then
+      ${pkgs.jq}/bin/jq '
+        map({
+          id: .name,
+          label: .name,
+          isDefault: (.name == "gpt-oss:120b")
+        })
+      ' "$PASEO_OLLAMA_CATALOG" > "$provider_models_tmp"
+    else
+      printf '%s\n' \
+        '[{"id":"gpt-oss:120b","label":"gpt-oss:120b","isDefault":true}]' \
+        > "$provider_models_tmp"
+    fi
+    ${pkgs.jq}/bin/jq -e 'type == "array" and length > 0' "$provider_models_tmp" >/dev/null
+
+    ${pkgs.jq}/bin/jq --slurpfile providerModels "$provider_models_tmp" '
       .daemon = ((.daemon // {}) + {
         mcp: ((.daemon.mcp // {}) + {
           enabled: true,
@@ -1192,10 +1358,22 @@ let
           enabled: true
         })
       })
+      | .agents = ((.agents // {}) + {
+          providers: ((.agents.providers // {}) + {
+            "codex-ollama": {
+              extends: "codex",
+              label: "Codex (Ollama Cloud)",
+              description: "Codex launched through Ollama against ollama.com",
+              command: ["${paseoOllamaCodex}/bin/paseo-ollama-codex"],
+              models: $providerModels[0],
+              enabled: true
+            }
+          })
+        })
     ' "$config_source" > "$config_tmp"
     chmod 0600 "$config_tmp"
     mv "$config_tmp" "$config_file"
-    rm -f "$config_tmp.source"
+    rm -f "$config_tmp.source" "$provider_models_tmp"
     trap - EXIT HUP INT TERM
   '';
 
@@ -1210,6 +1388,7 @@ let
       "$NPM_CONFIG_PREFIX/lib" \
       "$XDG_DATA_HOME" \
       "$XDG_STATE_HOME" \
+      "$XDG_STATE_HOME/paseo-ollama" \
       "$XDG_CACHE_HOME" \
       "$HOME/.paseo" \
       "$HOME/.paseo-container/logs" \
@@ -1244,6 +1423,9 @@ let
       "$HOME/.config/systemd"
     chown paseo:paseo /run/user/3000
     chmod 0700 /run/user/3000
+    if ! su-exec paseo:paseo ${paseoOllamaCatalogRefresh}/bin/paseo-ollama-catalog-refresh; then
+      printf 'warning: Ollama catalog refresh failed; preserving the existing catalog\n' >&2
+    fi
     su-exec paseo:paseo ${paseoManagedConfig}/bin/paseo-managed-config
     if [ ! -e "$HOME/tools" ] && [ -d /workspace/ghostship-agent/tools ]; then
       ln -s /workspace/ghostship-agent/tools "$HOME/tools"
@@ -1310,6 +1492,7 @@ let
     paseoContainerSetup
     paseoDockerdRun
     paseoDaemonRun
+    paseoOllamaProxyRun
     paseoToolMaintenance
     paseoToolAutoUpdate
     paseoToolUpdateRestart
@@ -1593,8 +1776,8 @@ let
       [Unit]
       Description=Paseo daemon and bundled web UI
       DefaultDependencies=no
-      After=paseo-container-setup.service user@3000.service paseo-secret-service.service dockerd.service
-      Requires=paseo-container-setup.service user@3000.service paseo-secret-service.service dockerd.service
+      After=paseo-container-setup.service user@3000.service paseo-secret-service.service dockerd.service paseo-ollama-cloud-proxy.service
+      Requires=paseo-container-setup.service user@3000.service paseo-secret-service.service dockerd.service paseo-ollama-cloud-proxy.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -1621,6 +1804,33 @@ let
       MemoryHigh=12G
       MemoryMax=16G
       OOMPolicy=continue
+      TasksMax=infinity
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+      cat > etc/systemd/system/paseo-ollama-cloud-proxy.service <<'EOF'
+      [Unit]
+      Description=Ollama.com API compatibility proxy
+      DefaultDependencies=no
+      After=paseo-container-setup.service
+      Requires=paseo-container-setup.service
+      Conflicts=shutdown.target
+      Before=paseo-daemon.service shutdown.target
+
+      [Service]
+      Type=simple
+      User=paseo
+      Group=paseo
+      Environment=HOME=/home/paseo
+      Environment=USER=paseo
+      Environment=PATH=/home/paseo/.local/bin:${paseoPath}:/bin:/usr/bin
+      ExecStart=${paseoOllamaProxyRun}/bin/paseo-ollama-cloud-proxy-run
+      Restart=always
+      RestartSec=5
+      TimeoutStopSec=10s
+      StandardOutput=append:/home/paseo/.paseo-container/logs/paseo-ollama-cloud-proxy.log
+      StandardError=append:/home/paseo/.paseo-container/logs/paseo-ollama-cloud-proxy.log
       TasksMax=infinity
 
       [Install]
@@ -1730,7 +1940,7 @@ let
       [Unit]
       Description=Paseo Multi-User System
       DefaultDependencies=no
-      Wants=paseo-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service paseo-secret-service.service dockerd.service paseo-bootstrap.service paseo-daemon.service paseo-tool-auto-update.timer paseo-tool-update-restart.timer paseo-daemon-monitor.timer
+      Wants=paseo-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service paseo-secret-service.service dockerd.service paseo-ollama-cloud-proxy.service paseo-bootstrap.service paseo-daemon.service paseo-tool-auto-update.timer paseo-tool-update-restart.timer paseo-daemon-monitor.timer
       After=paseo-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -1745,6 +1955,7 @@ let
       ln -s ../user@.service etc/systemd/system/multi-user.target.wants/user@3000.service
       ln -s ../paseo-secret-service.service etc/systemd/system/multi-user.target.wants/paseo-secret-service.service
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
+      ln -s ../paseo-ollama-cloud-proxy.service etc/systemd/system/multi-user.target.wants/paseo-ollama-cloud-proxy.service
       ln -s ../paseo-bootstrap.service etc/systemd/system/multi-user.target.wants/paseo-bootstrap.service
       ln -s ../paseo-daemon.service etc/systemd/system/multi-user.target.wants/paseo-daemon.service
       ln -s ../paseo-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/paseo-tool-auto-update.timer
