@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.0.3] - 2026-07-26
+
+- **T3 Code CloakBrowser tools**: Put the preserved Ghostship `agent` and
+  `ghostship-cloakbrowser` launchers on the container user's PATH so T3-launched
+  Codex and OpenCode sessions can manage CloakBrowser without `agent-browser`.
+
 ## [3.0.2] - 2026-07-26
 
 - **OpenChamber interruption prevention**: Decouple container deployments from

@@ -1422,6 +1422,12 @@ let
       ln -s /workspace/ghostship-agent/tools "$HOME/tools"
       chown -h paseo:paseo "$HOME/tools"
     fi
+    for tool in agent ghostship-cloakbrowser; do
+      if [ -x "$HOME/tools/bin/$tool" ]; then
+        ln -sfn "$HOME/tools/bin/$tool" "$HOME/.local/bin/$tool"
+        chown -h paseo:paseo "$HOME/.local/bin/$tool"
+      fi
+    done
     if [ ! -x "$NPM_CONFIG_PREFIX/bin/t3" ] \
       || [ ! -x "$NPM_CONFIG_PREFIX/bin/codex" ] \
       || [ ! -x "$NPM_CONFIG_PREFIX/bin/opencode" ] \
