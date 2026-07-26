@@ -266,11 +266,10 @@ let
         if changed:
             write_json(path, data)
 
-    def clean_skill_lock() -> None:
+    def clean_skill_lock(path: Path) -> None:
         if not skill_lock_names:
             return
 
-        path = home / ".agents/.skill-lock.json"
         if not path.is_file():
             return
 
@@ -293,7 +292,16 @@ let
 
     clean_gemini_enablement()
     clean_codex_hooks()
-    clean_skill_lock()
+    skill_lock_paths = [
+        home / ".agents/.skill-lock.json",
+        home / ".local/state/skills/.skill-lock.json",
+    ]
+    xdg_state_home = os.environ.get("XDG_STATE_HOME")
+    if xdg_state_home:
+        skill_lock_paths.append(Path(xdg_state_home) / "skills/.skill-lock.json")
+
+    for path in dict.fromkeys(skill_lock_paths):
+        clean_skill_lock(path)
   '';
 
   renderPathCleanup =

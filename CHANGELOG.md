@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.4.9] - 2026-07-26
+
+- **Retired skill lock cleanup**: Remove retired skills from the XDG-state
+  global skill lock used by agent maintenance, preventing `brainstorming` from
+  being reinstalled after cleanup.
+
 ## [2.4.8] - 2026-07-22
 
 - **Paseo web UI patch quoting**: Use a single-line JavaScript replacement and

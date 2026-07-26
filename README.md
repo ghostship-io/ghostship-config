@@ -153,6 +153,8 @@ notes.
   into `~/.agents/skills/` on develop hosts. Managed external `skills` CLI
   installs also land under `~/.agents/skills/`, but they are maintained by
   `ghostship-agent-maintenance` instead of the repo-owned skill tree.
+- Develop-host cleanup removes retired skills from both the legacy and
+  XDG-state global skill locks before maintenance refreshes installed skills.
 - The curated shared set is `ghostship-audit-worktree`,
   `ghostship-merge-worktree`, `ghostship-pull-worktree`, and `grill-me`.
 - `ghostship-audit-worktree` is the current Codex session audit workflow. It

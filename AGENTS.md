@@ -26,6 +26,10 @@ changelog.
   inventory unless the skill model is explicitly revisited.
 - Develop hosts rely on the installed global `skills` CLI and linked local
   Ghostship workflow skills under `home/config/skills/ghostship-*`.
+- The global `skills` CLI uses
+  `$XDG_STATE_HOME/skills/.skill-lock.json` during agent maintenance; retired
+  skill cleanup must scrub that lock as well as legacy
+  `~/.agents/.skill-lock.json` state or maintenance will reinstall the skill.
 - Develop-host convergence should scrub the known stale `workmux
   set-window-status ...` commands from `~/.codex/hooks.json` so removed
   repo-managed tooling does not keep breaking Codex hooks, while preserving
