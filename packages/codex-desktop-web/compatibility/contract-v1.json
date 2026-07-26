@@ -1,0 +1,23 @@
+{
+  "name": "contract-v1",
+  "preloadGlobals": [
+    "codexWindowType",
+    "electronBridge"
+  ],
+  "requiredPreloadChannels": [
+    "codex_desktop:connect-app-host",
+    "codex_desktop:get-build-flavor",
+    "codex_desktop:get-sentry-init-options",
+    "codex_desktop:get-shared-object-snapshot",
+    "codex_desktop:get-system-theme-variant",
+    "codex_desktop:message-for-view",
+    "codex_desktop:message-from-view"
+  ],
+  "requiredRendererFiles": [
+    "webview/index.html"
+  ],
+  "unsupportedCapabilities": [
+    "browser-use",
+    "computer-use"
+  ]
+}

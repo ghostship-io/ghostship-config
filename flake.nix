@@ -4,8 +4,6 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    codex-web.url = "github:0xcaff/codex-web";
-
     home-manager = {
       url = "github:nix-community/home-manager/master";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -73,6 +71,16 @@
         };
     in
     {
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = pkgsFor system;
+        in
+        {
+          codex-desktop-web = pkgs.callPackage ./packages/codex-desktop-web/package.nix { };
+        }
+      );
+
       devShells = forAllSystems (
         system:
         let
@@ -87,6 +95,7 @@
               gnused
               jq
               nixfmt
+              prefetch-npm-deps
               ragenix.packages.${system}.default
               ssh-to-age
             ];

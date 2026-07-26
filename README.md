@@ -289,20 +289,28 @@ fail to recover. Codex and Antigravity credentials remain under
 `/home/paseo` across image replacements.
 
 Codex runs at `https://codex.ghostship.io` in a separate systemd-based Podman
-image built from `0xcaff/codex-web`. A persistent `codex-app-server.service`
-owns task state and execution, while the disposable `codex-web.service` bridge
-can restart without interrupting active work. The `codex` user at `3000:3000`
-keeps its home, workspace, Docker state, user systemd units, and isolated Nix
-store under `/srv/apps/codex`. Use `codex-user-units` for persisted user
-services, `codex-tunnel` for ad hoc Quick Tunnels, and `codex-apply-config`
-after editing Codex TOML or hook configuration.
+image. The repo verifies the signed official Codex desktop archive, runs its
+matching Linux Electron main process, and serves the original renderer and
+preload through a small browser transport. The desktop UI, terminal, projects,
+plugins, task views, settings, and model picker therefore come from the same
+upstream application code instead of a separately maintained web clone.
 
-Every four hours the container builds the current `codex-web` main revision
-and its pinned Codex CLI into a new persistent generation. Activation waits
-until the app server reports every task idle, then switches the generation and
-rolls back automatically if the app server or web bridge fails its health
-check. The same activity-aware policy protects monitor recovery and outer
-container health actions. The app server is throttled above 32 GiB and capped
+A persistent `codex-app-server.service` owns task state and execution. Every
+browser device connects to that single app host, so open tasks and updates are
+shared across desktop and mobile clients. The disposable `codex-web.service`
+can restart without interrupting active work. Browser file dialogs expose only
+the persisted `/workspace` and `/home/codex` trees. The built-in browser and
+computer-use surfaces are intentionally unsupported.
+
+The `codex` user at `3000:3000` keeps its home, workspace, Docker state, user
+systemd units, and isolated Nix store under `/srv/apps/codex`. Use
+`codex-user-units` for persisted user services, `codex-tunnel` for ad hoc Quick
+Tunnels, and `codex-apply-config` after editing Codex TOML or hook
+configuration. Updates still use the existing idle-gated activation and
+last-good rollback path. The four-hour maintenance check compares the deployed
+signed desktop release with OpenAI's appcast; a newer release must pass the
+repo's versioned preload/IPC compatibility contract before the next NixOS
+deployment activates it. The app server is throttled above 32 GiB and capped
 at 40 GiB.
 
 `OLLAMA_API_KEY` is projected from the secret catalog. A loopback-only proxy
@@ -311,10 +319,10 @@ cloud model's declared capabilities. Only models advertising `tools` are
 added to the Codex Web model picker; `thinking` and `vision` are reflected as
 optional model metadata rather than selection requirements.
 
-Each Codex Web generation is also overlaid at startup with a standalone web
-app manifest, 192px and 512px maskable icons, mobile application metadata, and
-a root-scoped service worker. This keeps **Install app** available in Chrome on
-Android after both pinned deployments and automatic Codex Web updates.
+The bridge serves a standalone web app manifest, 192px and 512px maskable
+icons, mobile application metadata, and a root-scoped service worker. This
+keeps **Install app** available in Chrome on Android across compatible desktop
+releases.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts

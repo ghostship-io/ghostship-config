@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.1.0] - 2026-07-26
+
+- **Official Codex desktop web port**: Replace `0xcaff/codex-web` with a
+  versioned bridge around the signed official Codex desktop renderer, preload,
+  main process, Linux Electron runtime, terminal, and persistent app server.
+- **Shared browser and mobile runtime**: Fan one native app host out to
+  multiple browser devices, add confined server-side file dialogs and uploads,
+  and ship a Chrome-installable Android PWA.
+- **Durable compatibility and operations**: Verify upstream signatures and IPC
+  contracts, preserve idle-gated updates and rollback, supervise Electron and
+  Xvfb cleanly, and keep only tool-capable Ollama.com models in the picker.
+
 ## [3.0.6] - 2026-07-26
 
 - **T3 server browser inheritance**: Attach the CloakBrowser route to the T3

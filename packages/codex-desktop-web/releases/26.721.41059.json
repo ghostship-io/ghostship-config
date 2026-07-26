@@ -1,0 +1,15 @@
+{
+  "desktopVersion": "26.721.41059",
+  "buildNumber": "5848",
+  "url": "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-arm64-26.721.41059.zip",
+  "sha256": "e2b45056f3d1f8ab90f7f16249bfb5a40d09d0f8099f12ca0d8d7a8fdf9108ce",
+  "ed25519Signature": "OQnmyxiSUXfz19nPM/bbpz+As/VxBX79Gx5EdquoIp1q67mG6FMkVjzEKyTNvzwW71o/J1stRoCngu2iJue9AQ==",
+  "ed25519PublicKey": "mNfr1v9t63BfgDtlw4C8lRvSY6uMggIXABDOCi3tS6k=",
+  "electronVersion": "42.3.0",
+  "codexCliVersion": "0.146.0-alpha.3.1",
+  "nativeModuleOverrides": {
+    "better-sqlite3": "13.0.1",
+    "node-pty": "1.1.0"
+  },
+  "compatibilityFamily": "contract-v1"
+}
