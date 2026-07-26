@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.0.5] - 2026-07-26
+
+- **T3 provider browser environment**: Propagate the internal CloakBrowser URL
+  into the T3 server process so Codex and OpenCode sessions inherit it.
+
 ## [3.0.4] - 2026-07-26
 
 - **T3 Code CloakBrowser routing**: Configure T3-launched agents to use the
