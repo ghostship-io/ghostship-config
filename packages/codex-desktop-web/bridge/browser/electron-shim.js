@@ -828,6 +828,17 @@
       enabled: Boolean(document.fullscreenElement),
     });
   });
+  document.addEventListener("click", (event) => {
+    const menuItem = event.target.closest?.('[role="menuitem"]');
+    const label = menuItem?.textContent?.replace(/\s+/g, " ").trim();
+    if (label !== "Toggle Full Screen") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const locallyFullscreen =
+      Boolean(document.fullscreenElement) ||
+      document.documentElement.dataset.codexWebFullscreen === "true";
+    void setBrowserFullscreen(!locallyFullscreen);
+  }, true);
   window.addEventListener("keydown", (event) => {
     if (event.key !== "F11") return;
     event.preventDefault();

@@ -68,6 +68,9 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
           <h1>Create project</h1>
           <p id="project-state">open</p>
         </div>
+        <button id="fullscreen-command" role="menuitem">
+          Toggle Full Screen
+        </button>
         <script>
           for (const type of ["pointerdown", "mousedown", "click"]) {
             document.addEventListener(type, (event) => {
@@ -183,6 +186,12 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
     assert.equal(await pet.evaluate((element) => {
       return getComputedStyle(element).pointerEvents;
     }), "none");
+    await page.locator("#fullscreen-command").click();
+    await page.waitForFunction(
+      () =>
+        Boolean(document.fullscreenElement) ||
+        document.documentElement.dataset.codexWebFullscreen === "true",
+    );
   } finally {
     await browser.close();
     for (const socket of sockets) socket.close();

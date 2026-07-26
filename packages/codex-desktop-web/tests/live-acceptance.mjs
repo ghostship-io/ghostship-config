@@ -64,7 +64,7 @@ async function removeProject(page) {
     name: `Project actions for ${projectName}`,
   });
   if (await actions.count() === 0) return;
-  await actions.first().dispatchEvent("click");
+  await actions.first().click();
   const remove = page.getByRole("menuitem", { name: /Remove project/i });
   await remove.waitFor();
   await remove.click();
@@ -180,15 +180,6 @@ try {
   if (await notificationPromptDismiss.isVisible().catch(() => false)) {
     await notificationPromptDismiss.click();
   }
-  const existingPet = pageA
-    .locator('[data-codex-auxiliary-window] img[alt="Codex"]')
-    .first();
-  if (await existingPet.isVisible().catch(() => false)) {
-    await pageA.getByRole("button", { name: "Open profile menu" }).click();
-    await pageA.getByRole("menuitem", { name: /Hide pet/i }).click();
-    await existingPet.waitFor({ state: "detached" });
-  }
-
   for (const menuName of ["File", "Edit", "View", "Help"]) {
     await openAppMenu(pageA, menuName);
   }
@@ -201,7 +192,7 @@ try {
 
   await pageA.getByRole("button", { exact: true, name: "Scheduled" }).click();
   await pageA.getByRole("heading", { name: "Scheduled tasks" }).waitFor();
-  await pageA.getByRole("button", { name: "Create" }).waitFor();
+  await pageA.getByRole("button", { exact: true, name: "Create" }).waitFor();
   await pageA.getByRole("button", { name: "Back" }).click();
   await pageA.getByRole("button", { name: "Add new project" }).waitFor();
   console.log("ok scheduled-task navigation and creation entrypoint");
@@ -274,16 +265,15 @@ try {
     .waitFor({ state: "detached" });
   console.log("ok terminal panel and About native window");
 
-  await pageA.getByRole("button", { name: "Open profile menu" }).click();
-  await pageA.getByRole("menuitem", { name: "Show pet" }).click();
   const pet = pageA.locator("[data-codex-auxiliary-window]").filter({
     hasNot: pageA.locator('img[alt="About ChatGPT"]'),
   });
+  if (!(await pet.first().isVisible().catch(() => false))) {
+    await pageA.getByRole("button", { name: "Open profile menu" }).click();
+    await pageA.getByRole("menuitem", { name: "Show pet" }).click();
+  }
   await pet.first().waitFor();
   console.log("ok desktop pet surface");
-  await pageA.getByRole("button", { name: "Open profile menu" }).click();
-  await pageA.getByRole("menuitem", { name: /Hide pet/i }).click();
-  await pet.first().waitFor({ state: "detached" });
 
   await pageA.getByRole("menuitem", { exact: true, name: "View" }).click();
   await pageA.getByRole("menuitem", { name: "Toggle Full Screen" }).click();
