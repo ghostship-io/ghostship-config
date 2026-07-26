@@ -162,30 +162,33 @@ let
 
     web_ui_js="$NPM_CONFIG_PREFIX/lib/node_modules/@getpaseo/cli/node_modules/@getpaseo/server/dist/server/server/web-ui.js"
     original_line='    const host = typeof req.headers.host === "string" ? req.headers.host : "";'
-    patched_line='    const requestHost = typeof req.headers.host === "string" ? req.headers.host : "";'
+    patched_line='    const requestHost = typeof req.headers.host === "string" ? req.headers.host : ""; const host = requestHost && !requestHost.includes(":") ? requestHost + ":" + (req.protocol === "https" ? "443" : "80") : requestHost;'
 
     if [ ! -f "$web_ui_js" ]; then
       log_warn "Paseo web UI bootstrap implementation was not found; compatibility patch skipped"
       exit 0
     fi
-    if ${pkgs.gnugrep}/bin/grep -Fq "$patched_line" "$web_ui_js"; then
+    if ${pkgs.gnugrep}/bin/grep -Fxq "$patched_line" "$web_ui_js"; then
       log_info "Paseo web UI connection hint compatibility patch is present"
       exit 0
     fi
+    if ${pkgs.gnugrep}/bin/grep -Fq '\n    const host = requestHost' "$web_ui_js"; then
+      ${pkgs.gnused}/bin/sed -i \
+        's|^    const requestHost = typeof req.headers.host.*$|    const requestHost = typeof req.headers.host === "string" ? req.headers.host : ""; const host = requestHost \&\& !requestHost.includes(":") ? requestHost + ":" + (req.protocol === "https" ? "443" : "80") : requestHost;|' \
+        "$web_ui_js"
+    fi
     if ! ${pkgs.gnugrep}/bin/grep -Fq "$original_line" "$web_ui_js"; then
-      log_warn "Paseo web UI bootstrap implementation changed; compatibility patch skipped"
-      exit 0
+      if ! ${pkgs.gnugrep}/bin/grep -Fxq "$patched_line" "$web_ui_js"; then
+        log_warn "Paseo web UI bootstrap implementation changed; compatibility patch skipped"
+        exit 0
+      fi
+    else
+      ${pkgs.gnused}/bin/sed -i \
+        's|    const host = typeof req.headers.host === "string" ? req.headers.host : "";|    const requestHost = typeof req.headers.host === "string" ? req.headers.host : ""; const host = requestHost \&\& !requestHost.includes(":") ? requestHost + ":" + (req.protocol === "https" ? "443" : "80") : requestHost;|' \
+        "$web_ui_js"
     fi
 
-    ${pkgs.gnused}/bin/sed -i \
-      '/^    const host = typeof req\.headers\.host === "string" ? req\.headers\.host : "";$/c\
-    const requestHost = typeof req.headers.host === "string" ? req.headers.host : "";\
-    const host = requestHost && !requestHost.includes(":")\
-        ? requestHost + ":" + (req.protocol === "https" ? "443" : "80")\
-        : requestHost;' \
-      "$web_ui_js"
-
-    if ! ${pkgs.gnugrep}/bin/grep -Fq "$patched_line" "$web_ui_js"; then
+    if ! ${pkgs.gnugrep}/bin/grep -Fxq "$patched_line" "$web_ui_js"; then
       log_warn "Paseo web UI connection hint compatibility patch failed"
       exit 1
     fi

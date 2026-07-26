@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.4.8] - 2026-07-22
+
+- **Paseo web UI patch quoting**: Use a single-line JavaScript replacement and
+  repair the malformed escaped-newline form left by version 2.4.7 before the
+  daemon starts.
+
 ## [2.4.7] - 2026-07-22
 
 - **Paseo persisted bootstrap fix**: Apply the web UI connection-hint
