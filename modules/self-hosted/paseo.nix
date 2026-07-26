@@ -29,6 +29,7 @@ let
     git
     git-lfs
     gh
+    ollama
     openssh
     curl
     jq
@@ -1164,6 +1165,40 @@ let
       --hostnames paseo,paseo.ghostship.io,127.0.0.1,localhost
   '';
 
+  paseoManagedConfig = pkgs.writeShellScriptBin "paseo-managed-config" ''
+    set -eu
+
+    ${paseoRuntimeEnv}
+
+    config_file="$PASEO_HOME/config.json"
+    config_tmp="$(mktemp "$PASEO_HOME/config.json.tmp.XXXXXX")"
+    trap 'rm -f "$config_tmp" "$config_tmp.source"' EXIT HUP INT TERM
+
+    if [ -f "$config_file" ]; then
+      ${pkgs.jq}/bin/jq -e 'type == "object"' "$config_file" >/dev/null
+      config_source="$config_file"
+    else
+      printf '{}\n' > "$config_tmp.source"
+      config_source="$config_tmp.source"
+    fi
+
+    ${pkgs.jq}/bin/jq '
+      .daemon = ((.daemon // {}) + {
+        mcp: ((.daemon.mcp // {}) + {
+          enabled: true,
+          injectIntoAgents: true
+        }),
+        browserTools: ((.daemon.browserTools // {}) + {
+          enabled: true
+        })
+      })
+    ' "$config_source" > "$config_tmp"
+    chmod 0600 "$config_tmp"
+    mv "$config_tmp" "$config_file"
+    rm -f "$config_tmp.source"
+    trap - EXIT HUP INT TERM
+  '';
+
   paseoContainerSetup = pkgs.writeShellScriptBin "paseo-container-setup" ''
     set -eu
 
@@ -1209,6 +1244,7 @@ let
       "$HOME/.config/systemd"
     chown paseo:paseo /run/user/3000
     chmod 0700 /run/user/3000
+    su-exec paseo:paseo ${paseoManagedConfig}/bin/paseo-managed-config
     if [ ! -e "$HOME/tools" ] && [ -d /workspace/ghostship-agent/tools ]; then
       ln -s /workspace/ghostship-agent/tools "$HOME/tools"
       chown -h paseo:paseo "$HOME/tools"
@@ -1768,6 +1804,7 @@ in
       "--systemd=always"
       "--pids-limit=-1"
       "--stop-timeout=180"
+      "--hostname=paseo.ghostship.io"
       "--network=ghostship_net"
       "--health-cmd=${paseoContainerHealth}/bin/paseo-container-health"
       "--health-interval=30s"

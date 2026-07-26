@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [2.5.0] - 2026-07-26
+
+- **Paseo agent tooling**: Enable Paseo's MCP server, agent tool injection, and
+  browser-tool broker while preserving the rest of the persisted daemon config.
+- **Paseo Ollama access**: Install the Ollama CLI and project the existing
+  ollama.com API key into the container as `OLLAMA_API_KEY`.
+- **Paseo hostname**: Give the container the stable
+  `paseo.ghostship.io` hostname instead of a generated container ID.
+
 ## [2.4.9] - 2026-07-26
 
 - **Retired skill lock cleanup**: Remove retired skills from the XDG-state

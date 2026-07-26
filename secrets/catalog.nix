@@ -567,6 +567,10 @@ in
           unit = "github";
           key = "TOKEN";
         };
+        OLLAMA_API_KEY = {
+          unit = "ollama";
+          key = "API_KEY";
+        };
         BW_CLIENTID = {
           unit = "bitwarden";
           key = "BW_CLIENTID";

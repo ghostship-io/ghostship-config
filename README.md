@@ -269,10 +269,14 @@ under `/srv/apps/paseo`.
 The container installs current Paseo, Codex, OpenCode, and Antigravity `agy`
 CLIs on first boot and refreshes them every four hours. Paseo orchestrates the
 Codex and OpenCode providers; `agy` is installed alongside for direct use but
-is not presented as a Paseo provider. Updates queue a daemon restart and apply
-only when `paseo ls --global --json` reports no running or initializing work.
-The daemon is throttled above 12 GiB and capped at 16 GiB. Its monitor and
-outer Podman health policy use the same activity gate before recovery.
+is not presented as a Paseo provider. The image also includes the Ollama CLI
+with the projected `OLLAMA_API_KEY`. Paseo's MCP server, agent tool injection,
+and browser-tool broker are enabled; browser tabs still require a connected
+Paseo browser host or the separately managed CloakBrowser tooling. Updates
+queue a daemon restart and apply only when `paseo ls --global --json` reports
+no running or initializing work. The daemon is throttled above 12 GiB and
+capped at 16 GiB. Its monitor and outer Podman health policy use the same
+activity gate before recovery.
 
 Use `paseo-user-units` for persisted user services, `paseo-tunnel` for ad hoc
 Quick Tunnels, and `paseo-apply-config` after editing Paseo JSON, Codex TOML,
