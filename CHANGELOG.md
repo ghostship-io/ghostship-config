@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.2.1] - 2026-07-26
+
+- **Codex Browser release packaging**: Copy and validate the Browser surface
+  bridge explicitly when preparing the Nix ASAR so live containers cannot
+  start with Browser chrome but no page surface.
+
 ## [3.2.0] - 2026-07-26
 
 - **Codex built-in browser**: Host Codex's expected native renderer origin,

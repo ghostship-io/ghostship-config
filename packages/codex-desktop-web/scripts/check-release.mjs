@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { listPackage } from "@electron/asar";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = process.env.CODEX_DESKTOP_OUTPUT || path.join(packageRoot, "dist");
@@ -18,6 +19,10 @@ if (!release.preloadChannels.includes("codex_desktop:message-from-view")) {
 }
 if (!release.preloadChannels.includes("codex_desktop:connect-app-host")) {
   throw new Error("preload contract is missing transferred app-host port");
+}
+const appAsar = path.join(output, "runtime", "resources", "app.asar");
+if (!listPackage(appAsar).includes("/bridge/browser/webview-bridge.js")) {
+  throw new Error("release is missing the browser surface bridge");
 }
 
 const manifestHash = createHash("sha256")

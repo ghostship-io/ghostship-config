@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { createPackageWithOptions, extractAll } from "@electron/asar";
+import { createPackageWithOptions, extractAll, listPackage } from "@electron/asar";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -246,6 +246,10 @@ async function buildRelease(release, archive, output) {
   await cp(path.join(packageRoot, "bridge"), path.join(extractedAsar, "bridge"), {
     recursive: true,
   });
+  await copyFile(
+    path.join(packageRoot, "bridge", "browser", "webview-bridge.js"),
+    path.join(extractedAsar, "bridge", "browser", "webview-bridge.js"),
+  );
   const generatedPreload = `(() => {
   const require = (specifier) => {
     if (specifier === "electron") return window.__codexElectronModule;
@@ -277,11 +281,13 @@ ${upstreamPreload}
   await rm(path.join(resourcesOutput, "default_app.asar"), { force: true });
   await rm(path.join(resourcesOutput, "electron.asar"), { force: true });
 
-  await createPackageWithOptions(
-    extractedAsar,
-    path.join(resourcesOutput, "app.asar"),
-    { unpack: "**/*.node" },
-  );
+  const appAsar = path.join(resourcesOutput, "app.asar");
+  await createPackageWithOptions(extractedAsar, appAsar, {
+    unpack: "**/*.node",
+  });
+  if (!listPackage(appAsar).includes("/bridge/browser/webview-bridge.js")) {
+    throw new Error("prepared ASAR is missing the browser surface bridge");
+  }
 
   for (const resourceName of ["plugins", "skills"]) {
     const source = path.join(sourceResources, resourceName);
