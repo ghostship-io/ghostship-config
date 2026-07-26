@@ -2006,6 +2006,7 @@ let
         "T3CODE_HOST=0.0.0.0"
         "T3CODE_PORT=3773"
         "T3CODE_NO_BROWSER=true"
+        "AGENT_CLOAK_BASE_URL=http://cloakbrowser:8080"
         "AGY_CLI_DISABLE_AUTO_UPDATE=true"
       ];
       WorkingDir = "/home/paseo";

@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.0.4] - 2026-07-26
+
+- **T3 Code CloakBrowser routing**: Configure T3-launched agents to use the
+  internal CloakBrowser service so the installed browser tools work without
+  per-session setup.
+
 ## [3.0.3] - 2026-07-26
 
 - **T3 Code CloakBrowser tools**: Put the preserved Ghostship `agent` and
