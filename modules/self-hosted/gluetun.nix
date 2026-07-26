@@ -12,7 +12,7 @@ let
   gluetun-selection-cache = "${gluetun-state-dir}/pia-wireguard-selection.json";
   pia-ca-cert = ./gluetun/ca.rsa.4096.crt;
   gluetun-web-benchmark-script = ./gluetun/web-benchmark.py;
-  gluetun-web-benchmark-url = "https://speed.cloudflare.com/__down?bytes=8388608";
+  gluetun-web-benchmark-url = "https://nbg1-speed.hetzner.com/100MB.bin";
   gluetun-web-benchmark-total-bytes = 67108864;
   gluetun-web-benchmark-time-limit = 15;
   gluetun-preferred-region-name = "Vancouver";
@@ -128,7 +128,7 @@ let
               fi
 
               env_file="$tmp_dir/''${region_id}-candidate.env"
-              printf '%s\n'                       "VPN_SERVICE_PROVIDER=custom"                       "VPN_TYPE=wireguard"                       "WIREGUARD_ENDPOINT_IP=$wg_ip"                       "WIREGUARD_ENDPOINT_PORT=$server_port"                       "WIREGUARD_PUBLIC_KEY=$server_key"                       "WIREGUARD_PRIVATE_KEY=$private_key"                       "WIREGUARD_ADDRESSES=$peer_ip"                       "SERVER_NAMES=$wg_host"                       "VPN_PORT_FORWARDING=off"                       "HTTPPROXY=off"                       "DOT=off"                       "TZ=UTC"                       > "$env_file"
+              printf '%s\n'                       "VPN_SERVICE_PROVIDER=custom"                       "VPN_TYPE=wireguard"                       "WIREGUARD_ENDPOINT_IP=$wg_ip"                       "WIREGUARD_ENDPOINT_PORT=$server_port"                       "WIREGUARD_PUBLIC_KEY=$server_key"                       "WIREGUARD_PRIVATE_KEY=$private_key"                       "WIREGUARD_ADDRESSES=$peer_ip"                       "SERVER_NAMES=$wg_host"                       "VPN_PORT_FORWARDING=off"                       "HTTPPROXY=off"                       "DNS_SERVER=on"                       "TZ=UTC"                       > "$env_file"
 
               container_name="gluetun-bench-''${region_id//_/-}-$$-''${RANDOM}"
               ${pkgs.podman}/bin/podman rm -f "$container_name" >/dev/null 2>&1 || true
@@ -317,6 +317,7 @@ let
             current_mode=""
             current_selected_at=""
             current_region_name=""
+            current_benchmark_url=""
             current_winner_json='null'
             if have_cache; then
               current_host="$(jq -r '.winner.wg_host // empty' "$cache_file" 2>/dev/null || true)"
@@ -324,6 +325,7 @@ let
               current_mode="$(jq -r '.selection_mode // empty' "$cache_file" 2>/dev/null || true)"
               current_selected_at="$(jq -r '.selected_at // empty' "$cache_file" 2>/dev/null || true)"
               current_region_name="$(jq -r '.winner.region_name // empty' "$cache_file" 2>/dev/null || true)"
+              current_benchmark_url="$(jq -r '.winner.benchmark_url // .benchmark.benchmark_url // empty' "$cache_file" 2>/dev/null || true)"
               current_winner_json="$(jq -c '.winner // null' "$cache_file" 2>/dev/null || printf 'null')"
             fi
 
@@ -331,6 +333,8 @@ let
             if [ -z "$current_host" ]; then
               switch_required=1
             elif [ "$current_region_name" != "$preferred_region_name" ]; then
+              switch_required=1
+            elif [ "$current_benchmark_url" != "$benchmark_url" ]; then
               switch_required=1
             elif [ "$challenger_host" = "$current_host" ]; then
               switch_required=0

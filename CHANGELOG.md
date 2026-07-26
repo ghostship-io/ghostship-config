@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+- **Gluetun benchmark reliability**: Use Gluetun's DNS server for candidate
+  containers, benchmark against Hetzner's bounded download endpoint, and
+  invalidate cached winner speeds when the benchmark source changes.
+
 ## [2.6.2] - 2026-07-26
 
 - **Paseo Codex ripgrep compatibility**: Replace Codex's bundled glibc-path
@@ -187,7 +191,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now throttles above 32 GiB and caps its workload at 40 GiB with a
   continue-on-OOM policy, preventing a runaway child process from escalating
   into a host-wide OOM and full OpenChamber restart.
-
 ## [2.1.121] - 2026-07-08
 
 - **OpenChamber apply command fix**: Preserve root setuid ownership on the
