@@ -407,6 +407,10 @@ changelog.
 
 ## Containers and Config Generation
 
+- Codex browser file pickers opened from an upstream modal must be mounted
+  inside that modal. Stopping bubble-phase events is insufficient because the
+  upstream outside-click handler observes document capture events; verify the
+  physical folder-selection round trip in a real browser.
 - The NixOS OCI container module does not expose a generic `healthcheck`
   option. Keep healthchecks in Podman `extraOptions`.
 - For Gluetun namespace dependents, declare both

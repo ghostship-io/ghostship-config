@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.3.9] - 2026-07-26
+
+- **Codex project picker browser fix**: Mount the bridged folder picker inside
+  the upstream project modal so capture-phase outside-click handling cannot
+  dismiss project creation.
+- **Codex installable app parity**: Match OpenChamber's install metadata with
+  separate standard and maskable Android icons, an Apple touch icon, mobile app
+  metadata, language, and related-app policy.
+- **Codex browser acceptance tests**: Add real-Chrome regression coverage for
+  project picker containment and live full-function/PWA acceptance.
+
 ## [3.3.8] - 2026-07-26
 
 - **Codex project removal propagation**: Recognize the native local-project

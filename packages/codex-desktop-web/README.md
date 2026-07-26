@@ -69,3 +69,25 @@ desktop listener.
 
 A missing required preload channel or mismatched Electron version fails the
 candidate build without modifying the active generation.
+
+## Browser acceptance
+
+The capture-phase project-picker regression runs in a real browser:
+
+```sh
+CODEX_BROWSER_EXECUTABLE=/path/to/chrome-wrapper npm run test:browser
+```
+
+Run the live compatibility suite against a healthy deployed gateway:
+
+```sh
+CODEX_WEB_URL=http://127.0.0.1:8214 \
+CODEX_BROWSER_EXECUTABLE=/path/to/chrome-wrapper \
+npm run test:live
+```
+
+The live suite checks Chrome installability, service-worker control, application
+and model menus, the full project-folder creation round trip on two browser
+devices, scheduled-task navigation, terminal-panel controls, About, the desktop
+pet, full screen, and clean page errors. It creates and removes a temporary
+logical project backed by `/workspace`.

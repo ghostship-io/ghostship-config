@@ -24,6 +24,9 @@ test("index transformation injects transport and PWA without replacing renderer"
   assert.match(transformed, /webview-bridge\.js/);
   assert.match(transformed, /browser-preload\.js/);
   assert.match(transformed, /manifest\.webmanifest/);
+  assert.match(transformed, /apple-mobile-web-app-capable/);
+  assert.match(transformed, /apple-mobile-web-app-title/);
+  assert.match(transformed, /icon-180\.png/);
   assert.match(transformed, /src="\.\/assets\/index\.js"/);
   assert.match(transformed, /connect-src ws: wss: 'self' https:\/\/chatgpt\.com/);
 });

@@ -95,10 +95,12 @@
               gnused
               jq
               nixfmt
+              playwright-driver.browsers
               prefetch-npm-deps
               ragenix.packages.${system}.default
               ssh-to-age
             ];
+            PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
           };
         }
       );

@@ -72,6 +72,26 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   const serviceWorker = await fetch(`${origin}/__bridge/sw.js`);
   assert.equal(serviceWorker.status, 200);
   assert.equal(serviceWorker.headers.get("service-worker-allowed"), "/");
+  const manifestResponse = await fetch(`${origin}/manifest.webmanifest`);
+  assert.equal(
+    manifestResponse.headers.get("content-type"),
+    "application/json; charset=utf-8",
+  );
+  const manifest = await manifestResponse.json();
+  assert.equal(manifest.id, "/");
+  assert.equal(manifest.start_url, "/");
+  assert.equal(manifest.scope, "/");
+  assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.prefer_related_applications, false);
+  assert.deepEqual(
+    manifest.icons.map(({ purpose, sizes }) => ({ purpose, sizes })),
+    [
+      { purpose: "any", sizes: "192x192" },
+      { purpose: "any", sizes: "512x512" },
+      { purpose: "maskable", sizes: "192x192" },
+      { purpose: "maskable", sizes: "512x512" },
+    ],
+  );
   const first = await openSocket(`${origin}/__bridge/ipc?device=first`, {
     headers: { origin },
   });

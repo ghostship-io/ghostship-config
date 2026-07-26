@@ -270,8 +270,33 @@ ${upstreamPreload}
 
   const iconSource = path.join(sourceResources, "icon-chatgpt.png");
   const browserAssets = path.join(extractedAsar, "bridge", "browser");
+  run("convert", [iconSource, "-resize", "180x180", path.join(browserAssets, "icon-180.png")]);
   run("convert", [iconSource, "-resize", "192x192", path.join(browserAssets, "icon-192.png")]);
   run("convert", [iconSource, "-resize", "512x512", path.join(browserAssets, "icon-512.png")]);
+  run("convert", [
+    iconSource,
+    "-resize",
+    "154x154",
+    "-background",
+    "#0d0d0d",
+    "-gravity",
+    "center",
+    "-extent",
+    "192x192",
+    path.join(browserAssets, "icon-maskable-192.png"),
+  ]);
+  run("convert", [
+    iconSource,
+    "-resize",
+    "410x410",
+    "-background",
+    "#0d0d0d",
+    "-gravity",
+    "center",
+    "-extent",
+    "512x512",
+    path.join(browserAssets, "icon-maskable-512.png"),
+  ]);
 
   const resourcesOutput = path.join(stagedOutput, "runtime", "resources");
   await cp(path.join(packageRoot, "node_modules", "electron", "dist"), path.join(stagedOutput, "runtime"), {

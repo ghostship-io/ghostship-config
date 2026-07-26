@@ -81,6 +81,15 @@
     }
   }
 
+  function dialogMountTarget() {
+    const nativeDialogs = [...document.querySelectorAll('[role="dialog"]')]
+      .filter((candidate) =>
+        !candidate.hasAttribute("data-codex-web-dialog") &&
+        getComputedStyle(candidate).display !== "none"
+      );
+    return nativeDialogs.at(-1) || document.body;
+  }
+
   function sendDialogResult(dialogId, result) {
     send({ type: "dialog-result", dialogId, result });
     closeDialog(dialogId);
@@ -91,6 +100,7 @@
     const overlay = document.createElement("div");
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("data-codex-web-dialog", "");
     for (const eventName of ["pointerdown", "mousedown", "click"]) {
       overlay.addEventListener(eventName, (event) => event.stopPropagation());
     }
@@ -137,7 +147,7 @@
     if (options.detail) panel.append(detail);
     panel.append(footer);
     overlay.append(panel);
-    document.body.append(overlay);
+    dialogMountTarget().append(overlay);
     overlay.style.display = "grid";
     activeDialog = { dialogId: message.dialogId, overlay };
   }
@@ -154,6 +164,7 @@
     const overlay = document.createElement("div");
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("data-codex-web-dialog", "");
     for (const eventName of ["pointerdown", "mousedown", "click"]) {
       overlay.addEventListener(eventName, (event) => event.stopPropagation());
     }
@@ -264,7 +275,7 @@
     footer.append(cancel, select);
     panel.append(title, locationRow, entries, footer);
     overlay.append(panel);
-    document.body.append(overlay);
+    dialogMountTarget().append(overlay);
     overlay.style.display = "grid";
     activeDialog = { dialogId: message.dialogId, overlay };
     void loadDirectory(currentPath);

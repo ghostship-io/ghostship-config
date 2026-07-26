@@ -60,7 +60,7 @@ buildNpmPackage {
   inherit version;
   src = source;
 
-  npmDepsHash = "sha256-BA1ukjkzBMjtaZvsQPJEgFSkCRXjmtNXzgMzuZHOJdQ=";
+  npmDepsHash = "sha256-jQyQCGOoNMi/yyWUiEKoXpvxY9Frnj4nWRPQ81b+iNw=";
   npmInstallFlags = [ "--ignore-scripts" ];
   dontNpmBuild = true;
 
