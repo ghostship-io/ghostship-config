@@ -1428,6 +1428,7 @@ let
       || ! su-exec paseo:paseo "$HOME/.local/bin/agy" --version >/dev/null 2>&1; then
       su-exec paseo:paseo ${paseoToolMaintenance}/bin/t3code-tool-maintenance
     fi
+    su-exec paseo:paseo npm uninstall -g --no-fund --no-audit @getpaseo/cli >/dev/null 2>&1 || true
     su-exec paseo:paseo ${paseoCodexRgRepair}/bin/paseo-codex-rg-repair
     su-exec paseo:paseo ${paseoProjectBootstrap}/bin/t3code-project-bootstrap
     cat > "$HOME/.local/bin/t3code-server-run" <<'EOF'

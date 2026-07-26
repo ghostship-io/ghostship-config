@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.0.1] - 2026-07-26
+
+- **T3 Code migration cleanup**: Remove the retired Paseo npm package during
+  every container setup, including when all replacement tools are already
+  current and package maintenance is skipped.
+
 ## [3.0.0] - 2026-07-26
 
 - **T3 Code replacement**: Replace the Paseo daemon and web UI with upstream
