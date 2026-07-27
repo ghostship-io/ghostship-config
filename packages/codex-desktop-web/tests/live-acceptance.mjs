@@ -45,10 +45,20 @@ function recordPageErrors(page, errors) {
 }
 
 async function waitForApp(page) {
-  await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Add new project" }).waitFor({
-    timeout: 30_000,
-  });
+  try {
+    await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
+  } catch (error) {
+    if (!String(error).includes("net::ERR_ABORTED")) throw error;
+  }
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[aria-label="Add new project"]') ||
+      document.body.innerText.includes("What should we build?"),
+    undefined,
+    {
+      timeout: 30_000,
+    },
+  );
 }
 
 async function openAppMenu(page, name) {
