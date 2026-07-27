@@ -75,7 +75,7 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   const manifestResponse = await fetch(`${origin}/manifest.webmanifest`);
   assert.equal(
     manifestResponse.headers.get("content-type"),
-    "application/json; charset=utf-8",
+    "application/manifest+json; charset=utf-8",
   );
   const manifest = await manifestResponse.json();
   assert.equal(manifest.id, "/");

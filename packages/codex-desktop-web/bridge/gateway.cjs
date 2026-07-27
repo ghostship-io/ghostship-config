@@ -94,10 +94,15 @@ function isBrowserOriginAllowed(request, configuredOrigins = "") {
   }
 }
 
-function jsonResponse(response, statusCode, value) {
+function jsonResponse(
+  response,
+  statusCode,
+  value,
+  contentType = "application/json; charset=utf-8",
+) {
   const body = JSON.stringify(value);
   response.writeHead(statusCode, {
-    "content-type": "application/json; charset=utf-8",
+    "content-type": contentType,
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
   });
@@ -912,7 +917,7 @@ async function createGateway(options) {
             purpose: "maskable",
           },
         ],
-      });
+      }, "application/manifest+json; charset=utf-8");
       return;
     }
     if (requestUrl.pathname === "/__bridge/files" && request.method === "GET") {

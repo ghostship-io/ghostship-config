@@ -326,7 +326,9 @@ optional model metadata rather than selection requirements.
 The bridge serves a standalone web app manifest, 192px and 512px maskable
 icons, mobile application metadata, and a root-scoped service worker. This
 keeps **Install app** available in Chrome on Android across compatible desktop
-releases.
+releases. Like OpenChamber, Codex captures Chrome's `beforeinstallprompt` event
+and presents a persistent **Install Codex** offer with Install and Dismiss
+actions instead of depending on Chrome's engagement-based automatic prompt.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts

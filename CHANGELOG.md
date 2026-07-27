@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.4.0] - 2026-07-27
+
+- **Codex Android install offer**: Match OpenChamber by capturing Chrome's
+  `beforeinstallprompt` event and presenting a persistent native-styled Install
+  or Dismiss offer. Serve the manifest with its standard media type and verify
+  the real Chrome event in the live acceptance suite.
+
 ## [3.3.13] - 2026-07-26
 
 - **Codex full-screen fallback**: Keep browser-local full-screen state

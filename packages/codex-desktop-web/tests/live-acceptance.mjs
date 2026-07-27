@@ -173,10 +173,15 @@ try {
   await removeAcceptanceProjects(pageA);
   await Promise.all([waitForApp(pageA), waitForApp(pageB)]);
 
-  const manifest = await pwaPage.evaluate(async () => {
+  const manifestResponse = await pwaPage.evaluate(async () => {
     const response = await fetch("/manifest.webmanifest");
-    return response.json();
+    return {
+      contentType: response.headers.get("content-type"),
+      manifest: await response.json(),
+    };
   });
+  const { manifest } = manifestResponse;
+  assert.match(manifestResponse.contentType, /^application\/manifest\+json\b/);
   assert.equal(manifest.id, "/");
   assert.equal(manifest.scope, "/");
   assert.equal(manifest.start_url, "/");
@@ -205,7 +210,14 @@ try {
     "Page.getInstallabilityErrors",
   );
   assert.deepEqual(installabilityErrors, []);
-  console.log("ok PWA manifest, worker, and Chrome installability");
+  const installOffer = pwaPage.locator("[data-codex-install-prompt]");
+  await installOffer.waitFor();
+  await installOffer.getByRole("button", { name: "Install" }).waitFor();
+  await installOffer.getByRole("button", { name: "Dismiss" }).click();
+  await installOffer.waitFor({ state: "detached" });
+  console.log(
+    "ok PWA manifest, worker, Chrome installability, and install offer",
+  );
 
   await pwaContext.grantPermissions(["notifications"], {
     origin: new URL(targetUrl).origin,
