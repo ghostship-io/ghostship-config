@@ -59,47 +59,37 @@ async function openAppMenu(page, name) {
   await page.keyboard.press("Escape");
 }
 
+async function ensureProjectsExpanded(page) {
+  const toggle = page.getByRole("button", {
+    exact: true,
+    name: "Projects",
+  });
+  await toggle.waitFor();
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+  await page.waitForFunction(
+    () => {
+      const toggles = document.querySelectorAll(
+        "[data-app-action-sidebar-section-toggle]",
+      );
+      return [...toggles].some(
+        (element) =>
+          element.textContent?.trim().startsWith("Projects") &&
+          element.getAttribute("aria-expanded") === "true",
+      );
+    },
+  );
+}
+
 async function removeProject(page, name = projectName) {
   const actions = page.getByRole("button", {
     name: `Project actions for ${name}`,
   });
   if (await actions.count() === 0) return;
   const action = actions.first();
-  const row = action.locator('xpath=ancestor::div[@role="button"][1]');
-  const deadline = Date.now() + 15_000;
-  let clicked = false;
-  while (Date.now() < deadline) {
-    const rowBox = await row.boundingBox().catch(() => null);
-    if (rowBox) {
-      await page.mouse.move(
-        rowBox.x + Math.min(100, rowBox.width / 2),
-        rowBox.y + rowBox.height / 2,
-      );
-      await page.waitForTimeout(50);
-    }
-    const actionBox = await action.boundingBox().catch(() => null);
-    if (!actionBox) continue;
-    const point = {
-      x: actionBox.x + actionBox.width / 2,
-      y: actionBox.y + actionBox.height / 2,
-    };
-    const topmost = await page.evaluate(
-      ({ label, x, y }) =>
-        document
-          .elementFromPoint(x, y)
-          ?.closest("button")
-          ?.getAttribute("aria-label") === label,
-      {
-        label: `Project actions for ${name}`,
-        ...point,
-      },
-    );
-    if (!topmost) continue;
-    await page.mouse.click(point.x, point.y);
-    clicked = true;
-    break;
-  }
-  assert.equal(clicked, true, "project actions never became pointer-accessible");
+  await action.focus();
+  await page.keyboard.press("Enter");
   const remove = page.getByRole("menuitem", {
     name: /^Remove(?: project)?$/i,
   });
@@ -114,6 +104,7 @@ async function removeProject(page, name = projectName) {
 }
 
 async function removeAcceptanceProjects(page) {
+  await ensureProjectsExpanded(page);
   for (let remaining = 25; remaining > 0; remaining -= 1) {
     const action = page
       .getByRole("button", {
@@ -171,7 +162,12 @@ try {
     waitForApp(pageB),
   ]);
   await removeAcceptanceProjects(pageA);
-  await Promise.all([waitForApp(pageA), waitForApp(pageB)]);
+  await pageA.waitForTimeout(2_000);
+  await Promise.all([
+    waitForApp(pwaPage),
+    waitForApp(pageA),
+    waitForApp(pageB),
+  ]);
 
   const manifestResponse = await pwaPage.evaluate(async () => {
     const response = await fetch("/manifest.webmanifest");
@@ -278,6 +274,10 @@ try {
   await pageA.getByRole("button", { name: "Select this folder" }).click();
   await pageA.getByRole("heading", { name: "Create project" }).waitFor();
   await pageA.getByRole("button", { name: "Create project" }).click();
+  await Promise.all([
+    ensureProjectsExpanded(pageA),
+    ensureProjectsExpanded(pageB),
+  ]);
   await Promise.all([
     pageA
       .getByRole("button", {
