@@ -33,6 +33,16 @@
     installPrompt = null;
   }
 
+  function positionInstallPrompt() {
+    if (!installPrompt) return;
+    const notificationPrompt = document.querySelector(
+      "[data-codex-notification-prompt]",
+    );
+    installPrompt.style.top = notificationPrompt
+      ? `${Math.ceil(notificationPrompt.getBoundingClientRect().bottom + 12)}px`
+      : "max(48px, calc(env(safe-area-inset-top) + 12px))";
+  }
+
   function installButton(label, primary = false) {
     const button = document.createElement("button");
     button.type = "button";
@@ -83,7 +93,6 @@
       border:
         "1px solid var(--color-token-border-default, rgba(252, 252, 252, 0.16))",
       borderRadius: "14px",
-      bottom: "max(16px, env(safe-area-inset-bottom))",
       boxShadow: "var(--shadow-2xl, 0 16px 32px -8px rgba(0, 0, 0, 0.4))",
       color: "var(--color-token-text-primary, #fcfcfc)",
       display: "flex",
@@ -138,7 +147,13 @@
     prompt.append(description, actions);
     document.body.append(prompt);
     installPrompt = prompt;
+    positionInstallPrompt();
   }
+
+  new MutationObserver(positionInstallPrompt).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
 
   window.addEventListener("beforeinstallprompt", (event) => {
     if (typeof event.prompt !== "function" || isStandalone()) return;

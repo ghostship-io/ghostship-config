@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.4.1] - 2026-07-27
+
+- **Codex Android prompt layout**: Stack the Chrome install offer beneath the
+  notification permission offer so both remain readable and clear of the
+  native Codex pet on small screens.
+
 ## [3.4.0] - 2026-07-27
 
 - **Codex Android install offer**: Match OpenChamber by capturing Chrome's

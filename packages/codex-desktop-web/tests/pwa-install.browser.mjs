@@ -72,6 +72,10 @@ test("Codex offers and invokes Chrome PWA installation", async () => {
     response.end(`<!doctype html>
       <html><body>
         <main>Codex</main>
+        <div data-codex-notification-prompt
+          style="position:fixed;top:20px;right:20px;height:60px">
+          Enable notifications
+        </div>
         <script src="/pwa-register.js"></script>
       </body></html>`);
   });
@@ -89,6 +93,29 @@ test("Codex offers and invokes Chrome PWA installation", async () => {
     const offer = page.getByRole("status", { name: "Install Codex" });
     await offer.waitFor();
     assert.match(await offer.innerText(), /Install Codex for quicker access/);
+    const stackedPosition = await page.evaluate(() => {
+      const notification = document.querySelector(
+        "[data-codex-notification-prompt]",
+      );
+      const install = document.querySelector("[data-codex-install-prompt]");
+      return {
+        notificationBottom: notification.getBoundingClientRect().bottom,
+        installTop: install.getBoundingClientRect().top,
+      };
+    });
+    assert.ok(
+      stackedPosition.installTop >= stackedPosition.notificationBottom + 11,
+    );
+    await page.evaluate(() =>
+      document.querySelector("[data-codex-notification-prompt]").remove(),
+    );
+    await page.waitForFunction(
+      (previousTop) =>
+        document
+          .querySelector("[data-codex-install-prompt]")
+          .getBoundingClientRect().top < previousTop,
+      stackedPosition.installTop,
+    );
     await offer.getByRole("button", { name: "Install" }).click();
     await page.waitForFunction(
       () => document.documentElement.dataset.codexInstallPrompt === "requested",
