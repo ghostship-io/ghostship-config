@@ -150,7 +150,13 @@
     positionInstallPrompt();
   }
 
-  new MutationObserver(positionInstallPrompt).observe(document.documentElement, {
+  new MutationObserver(() => {
+    if (installPrompt && !installPrompt.isConnected) {
+      installPrompt = null;
+    }
+    showInstallPrompt();
+    positionInstallPrompt();
+  }).observe(document.documentElement, {
     childList: true,
     subtree: true,
   });

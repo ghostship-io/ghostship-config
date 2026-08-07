@@ -107,6 +107,10 @@ test("Codex offers and invokes Chrome PWA installation", async () => {
       stackedPosition.installTop >= stackedPosition.notificationBottom + 11,
     );
     await page.evaluate(() =>
+      document.querySelector("[data-codex-install-prompt]").remove(),
+    );
+    await offer.waitFor();
+    await page.evaluate(() =>
       document.querySelector("[data-codex-notification-prompt]").remove(),
     );
     await page.waitForFunction(

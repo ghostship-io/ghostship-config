@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.4.3] - 2026-08-07
+
+- **Codex Android install recovery**: Restore the browser-owned install offer
+  when a shared native-renderer refresh replaces its DOM node.
+
 ## [3.4.2] - 2026-08-07
 
 - **Codex auxiliary-window recovery**: Make opaque bridged desktop windows
