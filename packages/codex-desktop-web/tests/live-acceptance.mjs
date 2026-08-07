@@ -45,10 +45,13 @@ function recordPageErrors(page, errors) {
 }
 
 async function waitForApp(page) {
-  try {
-    await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
-  } catch (error) {
-    if (!String(error).includes("net::ERR_ABORTED")) throw error;
+  const currentUrl = new URL(page.url());
+  if (currentUrl.origin !== new URL(targetUrl).origin) {
+    try {
+      await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
+    } catch (error) {
+      if (!String(error).includes("net::ERR_ABORTED")) throw error;
+    }
   }
   await page.waitForFunction(
     () =>
@@ -327,11 +330,6 @@ try {
   await pageA.keyboard.press("Escape");
   console.log("ok model dropdown and Ollama model availability");
 
-  const existingThread = pageA.locator(
-    '[data-app-action-sidebar-thread-row]:visible',
-  ).first();
-  await existingThread.waitFor();
-  await existingThread.click();
   await pageA.getByRole("menuitem", { exact: true, name: "View" }).click();
   await pageA.getByRole("menuitem", { name: /Terminal/i }).click();
   await pageA.locator(".xterm").first().waitFor();

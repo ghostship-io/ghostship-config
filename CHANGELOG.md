@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.4.4] - 2026-08-07
+
+- **Codex live acceptance reliability**: Keep repeated readiness checks on the
+  existing browser session so they do not discard Chrome's one-shot install
+  event, and test the terminal without requiring pre-existing task history.
+
 ## [3.4.3] - 2026-08-07
 
 - **Codex Android install recovery**: Restore the browser-owned install offer
