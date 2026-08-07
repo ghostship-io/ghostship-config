@@ -86,8 +86,23 @@ CODEX_BROWSER_EXECUTABLE=/path/to/chrome-wrapper \
 npm run test:live
 ```
 
+Run the live UI surface sweep against the same gateway:
+
+```sh
+CODEX_WEB_URL=http://127.0.0.1:8214 \
+CODEX_BROWSER_EXECUTABLE=/path/to/chrome-wrapper \
+npm run test:live-ui
+```
+
 The live suite checks Chrome installability, service-worker control, application
 and model menus, the full project-folder creation round trip on two browser
 devices, scheduled-task navigation, terminal-panel controls, About, the desktop
 pet, full screen, and clean page errors. It creates and removes a temporary
 logical project backed by `/workspace`.
+
+The UI surface sweep physically opens the desktop application menus, safe native
+windows, project and folder-picker modals, primary screens, every settings
+category, desktop dropdowns, and the Android sidebar/dropdowns. It verifies the
+result of each safe action and closes every surface it opens. Destructive or
+externally consequential actions such as logout, quit, deletion, feedback,
+plugin installation, and task execution are inventoried but not invoked.

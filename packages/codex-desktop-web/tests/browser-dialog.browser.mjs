@@ -45,6 +45,10 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
   const auxiliaryClose = new Promise((resolve) => {
     resolveAuxiliaryClose = resolve;
   });
+  let resolveAuxiliaryEscape;
+  const auxiliaryEscape = new Promise((resolve) => {
+    resolveAuxiliaryEscape = resolve;
+  });
   const sockets = new Set();
   const server = createServer((request, response) => {
     if (request.url === "/electron-shim.js") {
@@ -98,6 +102,19 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
           message.command === "close"
         ) {
           resolveAuxiliaryClose();
+        }
+        if (
+          message.type === "auxiliary-window-command" &&
+          message.windowId === "new-window" &&
+          message.command === "close"
+        ) {
+          client.send(JSON.stringify({
+            action: "auxiliary-window-state",
+            type: "control",
+            visible: false,
+            windowId: "new-window",
+          }));
+          resolveAuxiliaryEscape();
         }
       });
       client.send(JSON.stringify({ type: "hello" }));
@@ -161,11 +178,46 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
     }
     await page.getByRole("button", { name: "Close About ChatGPT" }).click();
     await auxiliaryClose;
+    await page
+      .getByRole("dialog", { name: "About ChatGPT" })
+      .waitFor({ state: "detached" });
     assert.ok(
       browserMessages.some(
         (message) =>
           message.type === "auxiliary-window-command" &&
           message.windowId === "about" &&
+          message.command === "close",
+      ),
+    );
+    for (const socket of sockets) {
+      socket.send(JSON.stringify({
+        action: "auxiliary-window-state",
+        bounds: { height: 700, width: 1200 },
+        modal: false,
+        title: "ChatGPT",
+        transparent: false,
+        type: "control",
+        visible: true,
+        windowId: "new-window",
+      }));
+    }
+    const newWindow = page.getByRole("dialog", { name: "ChatGPT" });
+    await newWindow.waitFor();
+    assert.equal(await newWindow.evaluate((element) => {
+      return document.activeElement === element;
+    }), true);
+    await page.locator("#fullscreen-command").focus();
+    await page.keyboard.press("Escape");
+    await auxiliaryEscape;
+    await newWindow.waitFor({ state: "detached" });
+    assert.equal(await page.locator("#fullscreen-command").evaluate((element) => {
+      return document.activeElement === element;
+    }), true);
+    assert.ok(
+      browserMessages.some(
+        (message) =>
+          message.type === "auxiliary-window-command" &&
+          message.windowId === "new-window" &&
           message.command === "close",
       ),
     );

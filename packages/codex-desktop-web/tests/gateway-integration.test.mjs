@@ -115,6 +115,81 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   assert.equal((await firstEvent).args[0], "same");
   assert.equal((await secondEvent).args[0], "same");
 
+  const localSubscription = nextMessage(relay);
+  first.send(encode({
+    type: "subscribe",
+    channel: "codex_desktop:message-for-view",
+  }));
+  second.send(encode({
+    type: "subscribe",
+    channel: "codex_desktop:message-for-view",
+  }));
+  assert.deepEqual(await localSubscription, {
+    type: "subscribe",
+    channel: "codex_desktop:message-for-view",
+  });
+  first.send(encode({
+    type: "claim-device-local-command",
+    commandId: "showKeyboardShortcuts",
+  }));
+  second.send(encode({
+    type: "claim-device-local-command",
+    commandId: "showKeyboardShortcuts",
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const firstCommand = nextMessage(first);
+  relay.send(encode({
+    type: "event",
+    channel: "codex_desktop:message-for-view",
+    args: [{ type: "run-command", id: "showKeyboardShortcuts" }],
+  }));
+  assert.deepEqual((await firstCommand).args, [
+    { type: "run-command", id: "showKeyboardShortcuts" },
+  ]);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(
+    second.messageQueue.some(
+      (message) => message.args?.[0]?.type === "run-command",
+    ),
+    false,
+  );
+  const secondCommand = nextMessage(second);
+  relay.send(encode({
+    type: "event",
+    channel: "codex_desktop:message-for-view",
+    args: [{ type: "run-command", id: "showKeyboardShortcuts" }],
+  }));
+  assert.deepEqual((await secondCommand).args, [
+    { type: "run-command", id: "showKeyboardShortcuts" },
+  ]);
+  relay.send(encode({
+    type: "event",
+    channel: "codex_desktop:message-for-view",
+    args: [{ type: "run-command", id: "showKeyboardShortcuts" }],
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(
+    [first, second].some((socket) =>
+      socket.messageQueue.some(
+        (message) => message.args?.[0]?.id === "showKeyboardShortcuts",
+      )
+    ),
+    false,
+  );
+  const firstUnclaimedCommand = nextMessage(first);
+  const secondUnclaimedCommand = nextMessage(second);
+  relay.send(encode({
+    type: "event",
+    channel: "codex_desktop:message-for-view",
+    args: [{ type: "run-command", id: "newChat" }],
+  }));
+  assert.deepEqual((await firstUnclaimedCommand).args, [
+    { type: "run-command", id: "newChat" },
+  ]);
+  assert.deepEqual((await secondUnclaimedCommand).args, [
+    { type: "run-command", id: "newChat" },
+  ]);
+
   const firstBootstrapUpdate = nextMessage(first);
   const secondBootstrapUpdate = nextMessage(second);
   relay.send(encode({

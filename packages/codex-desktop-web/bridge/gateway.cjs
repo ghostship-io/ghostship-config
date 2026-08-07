@@ -15,6 +15,8 @@ const PROJECT_STATE_KEYS = new Set([
   "project-order",
   "connection-group-order",
 ]);
+const DEVICE_LOCAL_COMMAND_IDS = new Set(["showKeyboardShortcuts"]);
+const DEVICE_LOCAL_COMMAND_CLAIM_TTL_MS = 2_000;
 
 function projectStateSignature(sidebar) {
   const projectEntries = Array.isArray(sidebar?.globalStateEntries)
@@ -147,6 +149,7 @@ async function createGateway(options) {
   let auxiliaryWindowGeneration = 0;
   let browserGuestFactory;
   let browserFullscreenStateHandler;
+  const pendingDeviceLocalCommands = new Map();
 
   fs.mkdirSync(uploadRoot, { recursive: true, mode: 0o700 });
 
@@ -632,6 +635,36 @@ async function createGateway(options) {
       channel,
       args,
     };
+    if (args?.[0]?.type === "run-command") {
+      const commandId = args[0].id;
+      if (!DEVICE_LOCAL_COMMAND_IDS.has(commandId)) {
+        eventHistory.push(message);
+        if (eventHistory.length > 1000) {
+          eventHistory.shift();
+        }
+        for (const clientId of channelSubscribers.get(channel) || []) {
+          const client = browserClients.get(clientId);
+          send(client?.socket, message);
+        }
+        return;
+      }
+      const pendingClients = pendingDeviceLocalCommands.get(commandId) || [];
+      let client;
+      const now = Date.now();
+      while (!client && pendingClients.length > 0) {
+        const claim = pendingClients.shift();
+        if (claim.expiresAt >= now) {
+          client = browserClients.get(claim.clientId);
+        }
+      }
+      if (pendingClients.length === 0) {
+        pendingDeviceLocalCommands.delete(commandId);
+      }
+      if (channelSubscribers.get(channel)?.has(client?.id)) {
+        send(client.socket, message);
+      }
+      return;
+    }
     eventHistory.push(message);
     if (eventHistory.length > 1000) {
       eventHistory.shift();
@@ -689,6 +722,25 @@ async function createGateway(options) {
   }
 
   function handleBrowserMessage(client, message) {
+    if (
+      message.type === "claim-device-local-command" &&
+      typeof message.commandId === "string" &&
+      DEVICE_LOCAL_COMMAND_IDS.has(message.commandId)
+    ) {
+      const pendingClients =
+        pendingDeviceLocalCommands.get(message.commandId) || [];
+      const now = Date.now();
+      while (pendingClients[0]?.expiresAt < now) pendingClients.shift();
+      pendingClients.push({
+        clientId: client.id,
+        expiresAt: now + DEVICE_LOCAL_COMMAND_CLAIM_TTL_MS,
+      });
+      if (pendingClients.length > 8) {
+        pendingClients.shift();
+      }
+      pendingDeviceLocalCommands.set(message.commandId, pendingClients);
+      return;
+    }
     if (message.type === "invoke" || message.type === "send") {
       sendRelay({ ...message, clientId: client.id });
       return;

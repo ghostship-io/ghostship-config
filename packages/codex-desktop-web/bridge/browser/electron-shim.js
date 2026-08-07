@@ -298,10 +298,46 @@
     });
   }
 
+  function removeAuxiliaryWindow(surface) {
+    const focusedElement = document.activeElement;
+    const ownedFocus =
+      focusedElement === surface.element ||
+      surface.element.contains(focusedElement);
+    surface.element.style.display = "none";
+    surface.element.remove();
+    if (auxiliaryWindows.get(surface.windowId) === surface) {
+      auxiliaryWindows.delete(surface.windowId);
+    }
+    if (!ownedFocus) return;
+    const nextSurface = [...auxiliaryWindows.values()]
+      .reverse()
+      .find(
+        (candidate) =>
+          candidate.element.role === "dialog" &&
+          candidate.element.style.display !== "none",
+      );
+    if (nextSurface) nextSurface.element.focus();
+    else if (surface.previousFocus?.isConnected) surface.previousFocus.focus();
+  }
+
+  function closeAuxiliaryWindow(surface) {
+    send({
+      type: "auxiliary-window-command",
+      windowId: surface.windowId,
+      command: "close",
+    });
+    removeAuxiliaryWindow(surface);
+  }
+
   function createAuxiliaryWindow(message) {
     const element = document.createElement("div");
     const image = document.createElement("img");
-    const surface = { element, image, windowId: message.windowId };
+    const surface = {
+      element,
+      image,
+      previousFocus: null,
+      windowId: message.windowId,
+    };
     element.dataset.codexAuxiliaryWindow = message.windowId;
     element.tabIndex = 0;
     element.style.cssText =
@@ -315,6 +351,9 @@
       "display:block;width:100%;height:100%;object-fit:fill;user-select:none;-webkit-user-drag:none";
     element.append(image);
     if (message.modal || !message.transparent) {
+      element.role = "dialog";
+      element.ariaLabel = message.title || "Codex window";
+      element.setAttribute("aria-modal", message.modal ? "true" : "false");
       const close = document.createElement("button");
       close.ariaLabel = `Close ${message.title || "window"}`;
       close.textContent = "×";
@@ -325,11 +364,7 @@
           event.preventDefault();
           event.stopPropagation();
           if (eventName === "click") {
-            send({
-              type: "auxiliary-window-command",
-              windowId: surface.windowId,
-              command: "close",
-            });
+            closeAuxiliaryWindow(surface);
           }
         });
       }
@@ -396,16 +431,16 @@
 
   function updateAuxiliaryWindow(message) {
     let surface = auxiliaryWindows.get(message.windowId);
+    if (!message.visible && !surface) return;
     if (!surface) {
       surface = createAuxiliaryWindow(message);
       auxiliaryWindows.set(message.windowId, surface);
     }
     if (!message.visible) {
-      surface.element.style.display = "none";
-      surface.element.remove();
-      auxiliaryWindows.delete(message.windowId);
+      removeAuxiliaryWindow(surface);
       return;
     }
+    const becameVisible = surface.element.style.display === "none";
     const width = Math.min(
       Number(message.bounds?.width) || 420,
       Math.max(240, window.innerWidth - 24),
@@ -425,6 +460,10 @@
       surface.element.style.transform = "translate(-50%,-50%)";
       surface.element.style.borderRadius = "10px";
       surface.element.style.boxShadow = "0 20px 70px rgba(0,0,0,.55)";
+      if (becameVisible) {
+        surface.previousFocus = document.activeElement;
+        surface.element.focus();
+      }
     } else {
       surface.element.style.left = "auto";
       surface.element.style.top = "auto";
@@ -844,6 +883,12 @@
   document.addEventListener("click", (event) => {
     const menuItem = event.target.closest?.('[role="menuitem"]');
     const label = menuItem?.textContent?.replace(/\s+/g, " ").trim();
+    if (label?.startsWith("Keyboard Shortcuts")) {
+      send({
+        type: "claim-device-local-command",
+        commandId: "showKeyboardShortcuts",
+      });
+    }
     if (label !== "Toggle Full Screen") return;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -853,6 +898,28 @@
     void setBrowserFullscreen(!locallyFullscreen);
   }, true);
   window.addEventListener("keydown", (event) => {
+    const opaqueSurface = [...auxiliaryWindows.values()]
+      .reverse()
+      .find(
+        (surface) =>
+          surface.element.role === "dialog" &&
+          surface.element.style.display !== "none",
+      );
+    if (event.key === "Escape" && opaqueSurface) {
+      closeAuxiliaryWindow(opaqueSurface);
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      event.key === "/"
+    ) {
+      send({
+        type: "claim-device-local-command",
+        commandId: "showKeyboardShortcuts",
+      });
+    }
     if (event.key !== "F11") return;
     event.preventDefault();
     void setBrowserFullscreen(!document.fullscreenElement);

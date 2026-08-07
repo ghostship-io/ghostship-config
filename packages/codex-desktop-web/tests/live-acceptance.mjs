@@ -63,7 +63,7 @@ async function waitForApp(page) {
 
 async function openAppMenu(page, name) {
   await page.getByRole("menuitem", { exact: true, name }).click();
-  const menu = page.getByRole("menu").last();
+  const menu = page.locator('[role="menu"]:visible').last();
   await menu.waitFor();
   await menu.getByRole("menuitem").first().waitFor();
   await page.keyboard.press("Escape");
@@ -212,12 +212,17 @@ try {
     { timeout: 15_000 },
   );
   const devtools = await pwaContext.newCDPSession(pwaPage);
-  const { installabilityErrors } = await devtools.send(
-    "Page.getInstallabilityErrors",
-  );
-  assert.deepEqual(installabilityErrors, []);
   const installOffer = pwaPage.locator("[data-codex-install-prompt]");
   await installOffer.waitFor();
+  let installabilityErrors = [];
+  for (let remaining = 30; remaining > 0; remaining -= 1) {
+    ({ installabilityErrors } = await devtools.send(
+      "Page.getInstallabilityErrors",
+    ));
+    if (installabilityErrors.length === 0) break;
+    await pwaPage.waitForTimeout(500);
+  }
+  assert.deepEqual(installabilityErrors, []);
   await installOffer.getByRole("button", { name: "Install" }).waitFor();
   await installOffer.getByRole("button", { name: "Dismiss" }).click();
   await installOffer.waitFor({ state: "detached" });

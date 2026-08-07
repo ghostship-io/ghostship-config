@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
 
+## [3.4.2] - 2026-08-07
+
+- **Codex auxiliary-window recovery**: Make opaque bridged desktop windows
+  accessible dialogs and let Escape close them so a stale About or New Window
+  surface cannot permanently intercept browser input.
+- **Codex multi-device menu isolation**: Keep the keyboard-shortcuts modal on
+  the browser device that requested it instead of opening or replaying it on
+  every connected device.
+- **Codex UI surface coverage**: Add a real-Chrome desktop and Android sweep for
+  application menus, native windows, project dialogs, primary screens, every
+  settings screen, and safe dropdown controls.
+
 ## [3.4.1] - 2026-07-27
 
 - **Codex Android prompt layout**: Stack the Chrome install offer beneath the
