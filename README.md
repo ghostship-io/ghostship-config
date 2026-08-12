@@ -219,13 +219,13 @@ password.
 Downloaded tool updates queue a restart instead of restarting immediately;
 `openchamber-tool-update-restart.timer` applies the queued restart only after
 OpenChamber's aggregate session activity reports 30 seconds of continuous
-idle. Host deployments use a content-stable image tag and a separate
-idle-gated deployment timer, so unrelated repository commits do not recreate
-the container. A failed image is latched instead of being restarted repeatedly;
-the next changed image or an explicit operator retry clears that block. The web
-monitor requires three consecutive failures and uses the same idle gate before
-restarting an active but unhealthy runtime; the container health policy uses it
-before killing an otherwise active container.
+idle. Operator-approved host deployments may interrupt active sessions and use
+a content-stable image tag, so unrelated repository commits do not recreate the
+container. A failed image is latched instead of being restarted repeatedly; the
+next changed image or an explicit operator retry clears that block. Automated
+web-monitor recovery requires three consecutive failures and uses the idle gate
+before restarting an active but unhealthy runtime; the container health policy
+uses it before killing an otherwise active container.
 OpenCode runs with bounded provider timeouts, output-pruning compaction, and a
 retry guard that aborts only the affected session after ten attempts or ten
 minutes. Startup marks orphaned running tool calls from a previous process as

@@ -60,14 +60,14 @@ missing tool binaries before the hooks and web service start.
 Host activation writes the desired OpenChamber image identity to persistent
 deployment state but does not restart the running Podman unit. A one-minute
 host timer compares the desired identity with the last healthy applied image,
-requires the same 30 seconds of continuous OpenChamber-reported idle, restarts
-the container, and records the image as applied only after container health,
-the web service, and the root endpoint all recover. The OCI image has a stable
-tag, so unrelated repository revisions do not change this desired identity. A
-failed deployment records its desired identity in persistent state and is not
-retried until the identity changes or an operator removes the `failed` marker.
-Every new attempt rechecks sustained idle; an interrupted `applying` marker
-never bypasses that gate.
+restarts the container without an activity gate because host deployments are
+operator-approved, and records the image as applied only after container
+health, the web service, and the root endpoint all recover. The OCI image has a
+stable tag, so unrelated repository revisions do not change this desired
+identity. A failed deployment records its desired identity in persistent state
+and is not retried until the identity changes or an operator removes the
+`failed` marker. Idle gating remains mandatory for automated tool maintenance,
+web-monitor recovery, and container health recovery.
 
 The bootstrap service has a privileged systemd condition that permits orphan
 tool reconciliation only while the web service is definitely inactive. The
@@ -135,7 +135,9 @@ will already load the downloaded versions without another restart.
 - Verify unrelated repository changes leave the applied OpenChamber image
   identity unchanged and do not restart the container.
 - Verify a failed desired image is latched without repeated restarts and that a
-  stale `applying` marker cannot bypass the idle check.
+  stale `applying` marker does not bypass the failed-image latch.
+- Verify an operator-approved changed image deploys even while OpenChamber
+  reports active work.
 - Verify bootstrap completes before the first web start and does not queue a
   second restart.
 - Verify restarting bootstrap while the web service is active skips orphan

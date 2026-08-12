@@ -1817,7 +1817,7 @@ let
   };
 
   openchamberDeploymentId = builtins.hashString "sha256" (toString openchamberImage);
-  openchamberDeployWhenIdle = pkgs.writeShellScriptBin "openchamber-deploy-when-idle" ''
+  openchamberDeployQueued = pkgs.writeShellScriptBin "openchamber-deploy-queued" ''
     set -eu
 
     state_dir=${openchamberDeploymentState}
@@ -1849,35 +1849,18 @@ let
         "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$message" >> "$audit_log"
     }
 
-    is_live_idle() {
-      if ! activity="$(${pkgs.podman}/bin/podman exec openchamber \
-        curl -fsS --max-time 5 http://127.0.0.1:3000/api/session-activity 2>/dev/null)"; then
-        return 1
-      fi
-      printf '%s\n' "$activity" | ${pkgs.jq}/bin/jq -e '
-        type == "object"
-        and all(.[]; type == "object" and .type == "idle")
-      ' >/dev/null 2>&1
-    }
-
     mark_failed() {
       printf '%s\n' "$desired" > "$failed_file.tmp"
       mv "$failed_file.tmp" "$failed_file"
       rm -f "$applying_file"
     }
 
-    if ${pkgs.systemd}/bin/systemctl is-active --quiet podman-openchamber.service; then
-      if ! is_live_idle; then
-        log_info "action=defer desired=$desired reason=active-or-unknown"
-        exit 0
-      fi
-
-      log_info "action=idle-confirmation desired=$desired wait_seconds=30"
-      sleep 30
-      if ! is_live_idle; then
-        log_info "action=defer desired=$desired reason=activity-resumed"
-        exit 0
-      fi
+    if ! ${pkgs.systemd}/bin/systemctl show podman-openchamber.service \
+      --property=Environment --value \
+      | ${pkgs.gnugrep}/bin/grep -Fq \
+        "GHOSTSHIP_OPENCHAMBER_DEPLOYMENT_ID=$desired"; then
+      log_info "action=defer desired=$desired reason=unit-not-reloaded"
+      exit 0
     fi
 
     printf '%s\n' "$desired" > "$applying_file.tmp"
@@ -1909,6 +1892,15 @@ let
       exit 1
     fi
 
+    running="$(${pkgs.podman}/bin/podman inspect openchamber \
+      --format '{{index .Config.Labels "io.ghostship.openchamber.deployment"}}' \
+      2>/dev/null || true)"
+    if [ "$running" != "$desired" ]; then
+      mark_failed
+      log_info "action=deployment-failed desired=$desired reason=image-identity-mismatch running=$running"
+      exit 1
+    fi
+
     printf '%s\n' "$desired" > "$applied_file.tmp"
     mv "$applied_file.tmp" "$applied_file"
     rm -f "$applying_file" "$failed_file"
@@ -1923,6 +1915,7 @@ in
     pull = "never";
     labels = {
       "io.containers.autoupdate" = "disabled";
+      "io.ghostship.openchamber.deployment" = openchamberDeploymentId;
     };
     ports = [ ];
     extraOptions = [
@@ -1969,17 +1962,18 @@ in
   };
 
   systemd.services.openchamber-deploy-when-idle = {
-    description = "Deploy a changed OpenChamber image after sustained idle";
+    # Retain the unit name so existing timers and deployment state converge.
+    description = "Deploy an operator-approved OpenChamber image";
     after = [ "podman.service" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${openchamberDeployWhenIdle}/bin/openchamber-deploy-when-idle";
+      ExecStart = "${openchamberDeployQueued}/bin/openchamber-deploy-queued";
       TimeoutStartSec = "25m";
     };
   };
 
   systemd.timers.openchamber-deploy-when-idle = {
-    description = "Check for a queued OpenChamber image deployment";
+    description = "Apply a queued operator-approved OpenChamber deployment";
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnBootSec = "2m";
@@ -2001,6 +1995,10 @@ in
       "mnt-share.mount"
     ];
     serviceConfig = {
+      Environment = lib.mkForce [
+        "PODMAN_SYSTEMD_UNIT=%n"
+        "GHOSTSHIP_OPENCHAMBER_DEPLOYMENT_ID=${openchamberDeploymentId}"
+      ];
       TimeoutStopSec = lib.mkForce "210s";
       SuccessExitStatus = [
         0

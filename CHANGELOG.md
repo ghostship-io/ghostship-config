@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.4.6] - 2026-08-12
+
+- **OpenChamber deployment policy**: Let operator-approved host deployments
+  apply changed OpenChamber images without waiting for session idle, while
+  preserving idle gates for automated tool updates and health recovery.
+
 ## [3.4.5] - 2026-08-12
 
 - **Gluetun benchmark reliability**: Use Gluetun's DNS server for candidate
