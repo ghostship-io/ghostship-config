@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   romm-secrets = config.ghostship.selfHostedSecrets.projections."romm-db".path;
@@ -27,6 +32,7 @@ in
       MYSQL_ROOT_HOST = "127.0.0.1";
       MYSQL_ALLOW_EMPTY_PASSWORD = "yes";
       MYSQL_DATABASE = "romm";
+      CLI_OPTS = "--log-bin-trust-function-creators=1";
     };
     environmentFiles = [
       "/srv/apps/romm-db/romm-db.env"

@@ -1,4 +1,9 @@
-{ config, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   romm-secrets = config.ghostship.selfHostedSecrets.projections.romm.path;
@@ -23,7 +28,7 @@ in
       "--health-on-failure=kill"
     ];
     environment = {
-      # Most environment is now managed via env file in preStart to ensure consistency with secrets
+      GUNICORN_CMD_ARGS = "--no-control-socket";
     };
     environmentFiles = [
       "/srv/apps/romm/romm.env"
@@ -38,8 +43,22 @@ in
   };
 
   systemd.services.podman-romm = {
-    after = [ "mnt-share.mount" ];
-    wants = [ "mnt-share.mount" ];
+    after = [
+      "mnt-share.mount"
+      "podman-romm-db.service"
+    ];
+    wants = [
+      "mnt-share.mount"
+      "podman-romm-db.service"
+    ];
+    unitConfig = {
+      StartLimitIntervalSec = "1d";
+      StartLimitBurst = 5;
+    };
+    serviceConfig = {
+      RestartSec = "30s";
+      TimeoutStartSec = lib.mkForce "5m";
+    };
   };
 
   systemd.tmpfiles.rules = [
@@ -53,6 +72,24 @@ in
     CONFIG_DIR="/srv/apps/romm"
     CONFIG_FILE="$CONFIG_DIR/config/config.yml"
     ENV_FILE="$CONFIG_DIR/romm.env"
+
+    db_ready=false
+    db_deadline=$((SECONDS + 240))
+    while ((SECONDS < db_deadline)); do
+      if ${pkgs.coreutils}/bin/timeout 2s \
+        ${pkgs.podman}/bin/podman exec romm-db \
+        sh -c \
+        '/usr/bin/s6-svstat /run/service/svc-mariadb | /bin/grep -q "^up .* ready" && /usr/bin/mariadb-admin --connect-timeout=1 ping -h 127.0.0.1' \
+        >/dev/null 2>&1; then
+        db_ready=true
+        break
+      fi
+      sleep 2
+    done
+    if [ "$db_ready" != true ]; then
+      echo "RomM database did not become ready within 4 minutes" >&2
+      exit 1
+    fi
 
     if [ ! -d "${romm-library}" ]; then
       echo "Missing RomM library path at ${romm-library}" >&2

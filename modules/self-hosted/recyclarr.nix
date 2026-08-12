@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   recyclarr-secrets = config.ghostship.selfHostedSecrets.projections.recyclarr.path;
@@ -6,7 +11,7 @@ let
 in
 {
   virtualisation.oci-containers.containers."recyclarr" = {
-    image = "ghcr.io/recyclarr/recyclarr:latest";
+    image = "ghcr.io/recyclarr/recyclarr:8";
     pull = "always";
     labels = {
       "io.containers.autoupdate" = "registry";
@@ -31,7 +36,7 @@ in
   system.activationScripts.recyclarr-config = {
     text = ''
       CONFIG_FILE="/srv/apps/recyclarr/recyclarr.yml"
-      
+
       ${render-recyclarr-secrets}
       if [ -f "$CONFIG_FILE" ] && [ -f "${recyclarr-secrets}" ]; then
         echo "Surgically updating Recyclarr config..."

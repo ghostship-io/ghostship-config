@@ -376,6 +376,12 @@ their own images with `humanize=True`.
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions
 against a live unpatched container before reintroducing any frontend patch.
+Its MariaDB configuration permits the trigger and function changes required by
+RomM migrations, and systemd limits repeated failed starts so a bad migration
+cannot become a rapid restart storm. RomM waits for the final supervised
+MariaDB service to become ready before starting, so a normal database restart
+does not exhaust that limit. RomM also disables Gunicorn's control socket
+because its non-root container user cannot write under `/romm`.
 The live NAS ROM library is mounted into RomM from
 `/mnt/share/Library/ROMS/ROMS`; the service creates the sibling `.romm` assets
 directory before Podman starts.
@@ -389,6 +395,10 @@ asset base and left RomM looping on chunk imports.
 The proxy also injects a real `<base href="/romm/">` into RomM's HTML so newer
 bundles that ship an empty Vite `BASE_URL` still boot the router under `/romm/`
 instead of briefly landing on the in-app not-found route.
+
+Recyclarr follows the supported major `:8` image tag. Upstream removed the
+floating `latest` tag, so using `:8` keeps registry auto-updates and the daily
+Radarr/Sonarr synchronization working without pinning a stale patch release.
 
 SearXNG is intended to run as an internal-only search hub on `ghostship_net`;
 internal consumers should use the container-network address

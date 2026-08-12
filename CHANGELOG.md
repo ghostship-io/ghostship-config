@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.4.5] - 2026-08-12
+
 - **Gluetun benchmark reliability**: Use Gluetun's DNS server for candidate
   containers, benchmark against Hetzner's bounded download endpoint, and
   invalidate cached winner speeds when the benchmark source changes.
+- **RomM migration recovery**: Allow binary-logged MariaDB migrations to manage
+  functions and triggers, wait for database readiness, disable Gunicorn's
+  unwritable control socket, and rate-limit failed RomM starts across a full
+  day so a migration error cannot cause a rapid restart storm.
+- **Recyclarr update recovery**: Follow the supported Recyclarr 8 major image
+  tag after upstream removed `latest`, restoring Podman registry auto-update
+  checks and moving daily synchronization off the stale 8.3.2 release.
 
 ## [3.4.4] - 2026-08-07
 
