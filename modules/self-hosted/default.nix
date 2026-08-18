@@ -30,9 +30,7 @@
 
     # Apps and utilities
     ./cloakbrowser.nix
-    ./codex.nix
     ./openchamber.nix
-    ./t3code.nix
 
     # Games
     ./romm-db.nix

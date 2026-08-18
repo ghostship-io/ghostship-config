@@ -30,6 +30,24 @@ let
       muximuxSections = [ "BookStack" ];
     }
     {
+      name = "codex";
+      paths = [ "/srv/apps/codex" ];
+      units = [ "podman-codex" ];
+      containers = [ "codex" ];
+      imageRepositories = [ "localhost/ghostship-codex" ];
+      homepageEntries = [ "Codex" ];
+      muximuxSections = [ "Codex" ];
+    }
+    {
+      name = "t3code";
+      paths = [ "/srv/apps/paseo" ];
+      units = [ "podman-t3code" ];
+      containers = [ "t3code" ];
+      imageRepositories = [ "localhost/ghostship-t3code" ];
+      homepageEntries = [ "T3 Code" ];
+      muximuxSections = [ "T3Code" ];
+    }
+    {
       name = "jdownloader";
       paths = [ "/srv/apps/jdownloader" ];
       units = [ "podman-jdownloader" ];
