@@ -355,6 +355,9 @@ clear of qBittorrent partfiles. A `qbittorrent-auto-resume` timer retries
 errored qBittorrent torrents every 5 minutes through qBittorrent's internal
 Web API start action without a per-torrent retry cap. NZBGet runs directly on
 `ghostship_net`, and internal callers should reach it at `http://nzbget:5001`.
+An Nginx sidecar in Gluetun's namespace forwards the legacy
+`http://gluetun:5001` Cloudflare origin to that direct service address without
+routing Usenet provider traffic through the VPN.
 Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
 legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`, and does not
 require any application-specific benchmark credentials.

@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **NZBGet direct networking**: Move NZBGet out of Gluetun's Vancouver VPN
   namespace and onto `ghostship_net`, update Homepage to use the direct
-  service address, and explicitly disable the retired UsenetPrime server.
+  service address, explicitly disable the retired UsenetPrime server, and
+  preserve the existing Cloudflare origin through a local Nginx edge proxy.
 
 ## [3.4.6] - 2026-08-12
 

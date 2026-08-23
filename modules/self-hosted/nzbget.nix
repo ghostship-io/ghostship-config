@@ -5,6 +5,26 @@
   ...
 }:
 
+let
+  edge-proxy-config = pkgs.writeText "nzbget-edge-proxy.conf" ''
+    events { }
+
+    http {
+      server {
+        listen 5001;
+
+        location / {
+          proxy_pass http://nzbget:5001;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+      }
+    }
+  '';
+in
+
 {
   virtualisation.oci-containers.containers."nzbget" = {
     image = "lscr.io/linuxserver/nzbget:latest";
@@ -36,6 +56,28 @@
     ];
   };
 
+  # Preserve the remotely managed Cloudflare origin at gluetun:5001 while
+  # keeping NZBGet's provider traffic directly on ghostship_net.
+  virtualisation.oci-containers.containers."nzbget-edge-proxy" = {
+    image = "docker.io/library/nginx:alpine";
+    pull = "always";
+    labels = {
+      "io.containers.autoupdate" = "registry";
+    };
+    extraOptions = [
+      "--network=container:gluetun"
+      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:5001/ || exit 1"
+      "--health-interval=30s"
+      "--health-timeout=10s"
+      "--health-retries=5"
+      "--health-start-period=30s"
+      "--health-on-failure=kill"
+    ];
+    volumes = [
+      "${edge-proxy-config}:/etc/nginx/nginx.conf:ro"
+    ];
+  };
+
   systemd.services.podman-nzbget = {
     after = [
       "network-online.target"
@@ -47,6 +89,20 @@
       "mnt-share.mount"
     ];
     requires = [ "init-ghostship-net.service" ];
+  };
+
+  systemd.services.podman-nzbget-edge-proxy = {
+    after = [
+      "podman-gluetun.service"
+      "podman-nzbget.service"
+    ];
+    wants = [ "podman-nzbget.service" ];
+    bindsTo = [ "podman-gluetun.service" ];
+    partOf = [
+      "podman-gluetun.service"
+      "podman-nzbget.service"
+    ];
+    requires = [ "podman-gluetun.service" ];
   };
 
   systemd.tmpfiles.rules = [
