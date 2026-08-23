@@ -353,8 +353,8 @@ post-completion recheck enabled. Torrent data is rooted at
 `/downloads/Torrent/.incomplete`, so the shared `/downloads` mount root stays
 clear of qBittorrent partfiles. A `qbittorrent-auto-resume` timer retries
 errored qBittorrent torrents every 5 minutes through qBittorrent's internal
-Web API start action without a per-torrent retry cap. NZBGet shares Gluetun's
-VPN namespace and internal callers should reach it at `http://gluetun:5001`.
+Web API start action without a per-torrent retry cap. NZBGet runs directly on
+`ghostship_net`, and internal callers should reach it at `http://nzbget:5001`.
 Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
 legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`, and does not
 require any application-specific benchmark credentials.
