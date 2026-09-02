@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `flame-mammoth`'s new `192.168.4.241` reservation, and update Plex to
   advertise `chill-penguin` at `192.168.4.240` while recognizing the new
   `192.168.4.0/22` LAN.
+- **NZBGet direct networking**: Move NZBGet out of Gluetun's Vancouver VPN
+  namespace and onto `ghostship_net`, update Homepage to use the direct
+  service address, explicitly disable the retired UsenetPrime server, and
+  preserve the existing Cloudflare origin through a local Nginx edge proxy.
 
 ## [3.4.6] - 2026-08-12
 
