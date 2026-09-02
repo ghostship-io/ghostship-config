@@ -15,10 +15,10 @@ let
       
       plex_args=(
         Preferences.@FriendlyName=literal:"Ghostship Plex"
-        Preferences.@LanNetworksBandwidth=literal:"192.168.200.0/255.255.255.0,10.89.0.0/255.255.255.0"
-        Preferences.@customConnections=literal:http://192.168.200.135:32400
-        Preferences.@allowedNetworks=literal:"192.168.200.0/255.255.255.0,10.89.0.0/255.255.255.0"
-        Preferences.@lanNetworks=literal:192.168.200.0/255.255.255.0
+        Preferences.@LanNetworksBandwidth=literal:"192.168.4.0/255.255.252.0,10.89.0.0/255.255.255.0"
+        Preferences.@customConnections=literal:http://192.168.4.240:32400
+        Preferences.@allowedNetworks=literal:"192.168.4.0/255.255.252.0,10.89.0.0/255.255.255.0"
+        Preferences.@lanNetworks=literal:192.168.4.0/255.255.252.0
         Preferences.@ManualPortMappingMode=literal:1
         Preferences.@TranscoderQuality=literal:1
         Preferences.@ButlerStartHour=literal:3

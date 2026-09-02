@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.4.7] - 2026-09-02
+
+- **LAN address migration**: Point the `chill-penguin` and WSL NFS mounts at
+  `flame-mammoth`'s new `192.168.4.241` reservation, and update Plex to
+  advertise `chill-penguin` at `192.168.4.240` while recognizing the new
+  `192.168.4.0/22` LAN.
+
 ## [3.4.6] - 2026-08-12
 
 - **OpenChamber deployment policy**: Let operator-approved host deployments

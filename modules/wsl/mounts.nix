@@ -29,7 +29,7 @@ lib.mkIf (config.wsl.enable or false) {
   };
 
   fileSystems."/mnt/share" = {
-    device = "192.168.200.106:/volume1/share";
+    device = "192.168.4.241:/volume1/share";
     fsType = "nfs";
     options = [
       "nofail"
