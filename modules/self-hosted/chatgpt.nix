@@ -63,6 +63,7 @@ in
     extraOptions = [
       "--network=ghostship_net"
       "--network-alias=codex-web"
+      "--network-alias=codex"
       "--privileged"
       "--shm-size=2g"
       "--pids-limit=-1"
