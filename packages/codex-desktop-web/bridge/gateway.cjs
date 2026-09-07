@@ -145,6 +145,12 @@ async function createGateway(options) {
   let relayBootstrap = {};
   let relayProjectState = projectStateSignature();
   let relaySocket;
+  let relayHeartbeat = 0;
+
+  function isRelayHealthy() {
+    return relaySocket?.readyState === WebSocket.OPEN &&
+      relayHeartbeat > 0 && Date.now() - relayHeartbeat < 15000;
+  }
   let surfaceGeneration = 0;
   let auxiliaryWindowGeneration = 0;
   let browserGuestFactory;
@@ -679,7 +685,12 @@ async function createGateway(options) {
   }
 
   function handleRelayMessage(message) {
+    if (message.type === "relay-heartbeat") {
+      if (relayHeartbeat > 0) relayHeartbeat = Date.now();
+      return;
+    }
     if (message.type === "relay-ready") {
+      relayHeartbeat = Date.now();
       relayBootstrap = message.bootstrap || {};
       relayProjectState = projectStateSignature(relayBootstrap[SIDEBAR_CHANNEL]);
       // A native renderer reload loses its IPC listeners while browser tabs
@@ -908,9 +919,9 @@ async function createGateway(options) {
     const requestUrl = new URL(request.url || "/", "http://localhost");
     if (requestUrl.pathname === "/health") {
       jsonResponse(response, 200, {
-        status: relaySocket?.readyState === WebSocket.OPEN ? "ok" : "starting",
+        status: isRelayHealthy() ? "ok" : "starting",
         version: options.appVersion,
-        relayConnected: relaySocket?.readyState === WebSocket.OPEN,
+        relayConnected: isRelayHealthy(),
         browserClients: browserClients.size,
         pendingDialogs: pendingDialogs.size,
       });
@@ -1128,6 +1139,7 @@ async function createGateway(options) {
       return;
     }
     relaySocket = socket;
+    relayHeartbeat = 0;
     socket.on("message", (payload) => {
       handleRelayMessage(decode(payload));
     });
@@ -1155,7 +1167,7 @@ async function createGateway(options) {
       clientId,
       deviceId,
       sequence: eventSequence,
-      relayConnected: relaySocket?.readyState === WebSocket.OPEN,
+      relayConnected: isRelayHealthy(),
     });
     for (const surface of auxiliaryWindows.values()) {
       if (surface.visible) sendAuxiliaryWindowState(client, surface);

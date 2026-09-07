@@ -73,6 +73,7 @@ let
     git-lfs
     gnupg
     gnome-keyring
+    bubblewrap
     gh
     openssh
     curl
@@ -161,7 +162,16 @@ let
       #!${pkgs.nodejs_24}/bin/node
       const fs = require("node:fs");
       const readline = require("node:readline");
-      const { spawn } = require("node:child_process");
+      const { spawn, spawnSync } = require("node:child_process");
+
+      const parsedConfig = spawnSync("${pkgs.python3}/bin/python3", [
+        "${../../packages/codex-desktop-web/bridge/cli-config.py}",
+      ], { input: JSON.stringify(process.argv.slice(2)), encoding: "utf8" });
+      if (parsedConfig.status !== 0) {
+        process.stderr.write("Unable to parse desktop app-server configuration\n");
+        process.exit(1);
+      }
+      const launchConfig = JSON.parse(parsedConfig.stdout);
 
       const home = process.env.HOME || "/home/codex";
       const proxy = process.env.CODEX_REMOTE_PROXY_PATH ||
@@ -231,6 +241,9 @@ let
         if (!["thread/start", "thread/resume", "thread/fork"].includes(message.method)) {
           return message;
         }
+        // The Unix-socket proxy cannot apply CLI -c flags to an already-running
+        // server. Preserve desktop MCP credentials and features per thread.
+        message.params.config = { ...launchConfig, ...message.params.config };
         if (typeof message.params.model !== "string" ||
             !message.params.model.startsWith("ollama/")) return message;
         const model = message.params.model.slice("ollama/".length);
@@ -614,18 +627,17 @@ let
     rm -f "$current_tmp"
     ln -s "$generation" "$current_tmp"
     mv -Tf "$current_tmp" "$CODEX_TOOL_CURRENT"
-    systemctl restart codex-app-server.service
-    systemctl restart codex-web.service
-
     healthy=0
-    for _ in $(seq 1 90); do
-      if su-exec codex:codex ${codexAppServerStatus}/bin/codex-app-server-status --health >/dev/null 2>&1 \
-        && ${codexWebHealth}/bin/codex-web-health; then
-        healthy=1
-        break
-      fi
-      sleep 1
-    done
+    if systemctl restart codex-app-server.service && systemctl restart codex-web.service; then
+      for _ in $(seq 1 90); do
+        if su-exec codex:codex ${codexAppServerStatus}/bin/codex-app-server-status --health >/dev/null 2>&1 \
+          && ${codexWebHealth}/bin/codex-web-health; then
+          healthy=1
+          break
+        fi
+        sleep 1
+      done
+    fi
     if [ "$healthy" -eq 1 ]; then
       rm -f "$pending_restart"
       log_info "queued Codex generation is healthy"
@@ -637,8 +649,8 @@ let
       rm -f "$current_tmp"
       ln -s "$previous" "$current_tmp"
       mv -Tf "$current_tmp" "$CODEX_TOOL_CURRENT"
-      systemctl restart codex-app-server.service
-      systemctl restart codex-web.service
+      systemctl restart codex-app-server.service || log_info "last-good app-server restart failed"
+      systemctl restart codex-web.service || log_info "last-good web restart failed"
     fi
     rm -f "$pending_restart"
     exit 1

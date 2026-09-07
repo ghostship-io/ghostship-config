@@ -69,6 +69,7 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
       "x-codex-relay-secret": "test-secret",
     },
   });
+  assert.equal((await (await fetch(`http://127.0.0.1:${port}/health`)).json()).status, "starting");
   relay.send(encode({ type: "relay-ready", bootstrap: {} }));
 
   const origin = `http://127.0.0.1:${port}`;
@@ -431,6 +432,17 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
     x: 320,
     y: 360,
   });
+
+  const realNow = Date.now;
+  try {
+    Date.now = () => realNow() + 16000;
+    assert.equal((await (await fetch(`${origin}/health`)).json()).status, "starting");
+    relay.send(encode({ type: "relay-heartbeat" }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal((await (await fetch(`${origin}/health`)).json()).status, "ok");
+  } finally {
+    Date.now = realNow;
+  }
 
   first.close();
   second.close();

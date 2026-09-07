@@ -114,7 +114,8 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(`<!doctype html>
       <html><body>
-        <div id="project-modal" role="dialog" aria-label="Create project">
+        <div id="project-modal" role="dialog" aria-label="Create project"
+          style="position:fixed;left:130px;top:64px;width:520px;height:310px;overflow:hidden;contain:paint;border-radius:20px">
           <h1>Create project</h1>
           <p id="project-state">open</p>
         </div>
@@ -215,6 +216,17 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
       }));
     }
     await page.getByRole("heading", { name: "Select Project Root" }).waitFor();
+    assert.equal(await page.locator('[data-codex-web-dialog]').evaluate(
+      (element) => element.matches(':modal')), true);
+    for (const size of [{ width: 780, height: 437 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(size);
+      const select = page.getByRole("button", { name: "Select this folder" });
+      const bounds = await select.boundingBox();
+      assert.ok(bounds.x >= 0 && bounds.y >= 0 &&
+        bounds.x + bounds.width <= size.width && bounds.y + bounds.height <= size.height);
+      await select.click({ trial: true });
+      await page.getByRole("button", { name: /project$/ }).click({ trial: true });
+    }
     assert.equal(
       await page.locator(
         '#project-modal > [data-codex-web-dialog=""]',

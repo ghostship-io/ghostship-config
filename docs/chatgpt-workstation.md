@@ -37,7 +37,8 @@ privileged for nested Docker and Nix; retain the existing protected ingress.
 
 The adapter serves upstream HTML/CSS/JavaScript and transports Electron IPC
 through a same-origin WebSocket. Container file pickers appear inside the app's
-modal so selecting a directory does not dismiss the parent dialog. Clipboard,
+modal so selecting a directory does not dismiss the parent dialog, and use the
+browser top layer to escape clipping by the project picker's dialog. Clipboard,
 file uploads, notifications and fullscreen use browser APIs where available.
 Native secondary windows and embedded browser content use dedicated surfaces;
 the main application remains an ordinary browser DOM.
@@ -46,6 +47,8 @@ web menus instead of native OS popups, and reconnects from fresh application
 state rather than replaying stale responses and partial chunk streams. Bundled
 plugins remain sealed in the Nix store; their runtime copies are writable so
 upstream can apply Linux-specific plugin variants.
+Desktop launch overrides are applied to each app-server thread so its tool-server
+transport and credentials survive the persistent server connection.
 
 On another device, an upstream login callback may still target localhost on
 port 1455 or 1457. Replace the failed callback URL's host with this app's host,
@@ -65,7 +68,9 @@ startup must connect the native relay before a candidate is queued.
 tabs before activation, protecting drafts and sign-in flows. Closing all app tabs
 allows a queued update to apply. Image deployment applies matching-version
 transport fixes at startup while preserving newer automatically installed releases.
-Failed health checks restore the previous generation. Application package rollback
+Failed service starts or health checks restore the previous generation. Health
+requires a recent heartbeat from the native renderer, including after a crash.
+Application package rollback
 does not reverse upstream profile migrations. No compatibility test guarantees
 that every feature of an unknown future release will work: account-dependent
 features and significant upstream API changes require live acceptance.

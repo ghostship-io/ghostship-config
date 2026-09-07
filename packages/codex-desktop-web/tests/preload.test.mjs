@@ -7,6 +7,7 @@ import test from 'node:test';
 test('native relay works with only the sandbox Electron API and rejects private channels', async () => {
   const ipc = new EventEmitter();
   const sent = [];
+  let heartbeat;
   ipc.sendSync = () => null;
   ipc.send = (...args) => sent.push(args);
   ipc.invoke = async (channel) => ({ result: channel });
@@ -18,10 +19,13 @@ test('native relay works with only the sandbox Electron API and rejects private 
     },
     process: { platform: 'linux', arch: 'arm64', versions: { electron: '42.3.0' } },
     console,
+    setInterval: (callback) => { heartbeat = callback; },
   });
   assert.equal(sent[0][0], 'ghostship-native:relay-open');
   ipc.emit('ghostship-native:relay-state', {}, true);
   assert.equal(sent.at(-1)[1].type, 'relay-ready');
+  heartbeat();
+  assert.equal(sent.at(-1)[1].type, 'relay-heartbeat');
   ipc.emit('ghostship-native:relay-message', {}, {
     type: 'invoke', channel: 'codex_desktop:test', args: [], clientId: 'client', requestId: 'request',
   });

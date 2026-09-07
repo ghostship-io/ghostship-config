@@ -182,3 +182,4 @@ ipcRenderer.on("ghostship-native:relay-message", (_event, message) => {
   void handle(message).catch((error) => send({ type: "relay-error", error: String(error) }));
 });
 ipcRenderer.send("ghostship-native:relay-open");
+setInterval(() => send({ type: "relay-heartbeat" }), 5000);

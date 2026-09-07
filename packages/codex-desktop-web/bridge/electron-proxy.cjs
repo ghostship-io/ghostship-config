@@ -101,6 +101,7 @@ function installElectronProxy(realElectron, gateway) {
       if (isBrowserPrimary) {
         webPreferences.preload = path.join(__dirname, "combined-preload.cjs");
         webPreferences.sandbox = true;
+        webPreferences.backgroundThrottling = false;
       }
       super({
         ...options,
@@ -110,6 +111,12 @@ function installElectronProxy(realElectron, gateway) {
       });
       if (isBrowserPrimary) {
         browserPrimaryWindow = this;
+        this.webContents.on("render-process-gone", () => {
+          clearTimeout(nativeRelayRetry);
+          const previous = nativeRelay;
+          nativeRelay = undefined;
+          previous?.close();
+        });
         this.on("closed", () => {
           clearTimeout(nativeRelayRetry);
           const previous = nativeRelay;

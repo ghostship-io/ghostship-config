@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   be materialized from sealed Nix resources.
 - **Restart reliability**: Keep the updater alive through its own restart and
   health checks, and defer automatic activation while browser tabs are connected.
+- **Chat startup**: Forward desktop tool-server configuration to each persistent
+  app-server thread and provide the Linux sandbox helper.
+- **Folder picking**: Keep file dialogs above clipped project modals while
+  preserving the parent dialog during selection.
+- **Recovery checks**: Require renderer heartbeats and roll back failed service
+  starts as well as failed health checks.
 
 ## [3.4.7] - 2026-09-02
 

@@ -105,7 +105,7 @@
 
   function showMessageDialog(message) {
     const options = message.options || {};
-    const overlay = document.createElement("div");
+    const overlay = document.createElement("dialog");
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("data-codex-web-dialog", "");
@@ -157,6 +157,8 @@
     overlay.append(panel);
     dialogMountTarget().append(overlay);
     overlay.style.display = "grid";
+    overlay.addEventListener("cancel", (event) => event.preventDefault());
+    overlay.showModal();
     activeDialog = { dialogId: message.dialogId, overlay };
   }
 
@@ -169,7 +171,7 @@
     const directoryMode =
       message.dialogType === "open" &&
       (message.options?.properties || []).includes("openDirectory");
-    const overlay = document.createElement("div");
+    const overlay = document.createElement("dialog");
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("data-codex-web-dialog", "");
@@ -285,6 +287,10 @@
     overlay.append(panel);
     dialogMountTarget().append(overlay);
     overlay.style.display = "grid";
+    // The top layer escapes the parent's clipping/containing block while DOM
+    // nesting keeps upstream capture-phase outside-click handlers satisfied.
+    overlay.addEventListener("cancel", (event) => event.preventDefault());
+    overlay.showModal();
     activeDialog = { dialogId: message.dialogId, overlay };
     void loadDirectory(currentPath);
   }
