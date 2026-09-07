@@ -53,6 +53,13 @@ test("embedded browser resizes and releases keyboard focus to application contro
     });
     await page.addScriptTag({ path: path.join(packageRoot, 'bridge/browser/webview-bridge.js') });
     await page.evaluate(() => {
+      window.shortcutKeys = [];
+      window.addEventListener('keydown', (event) => {
+        window.shortcutKeys.push(event.key);
+        if (event.key.length === 1) document.querySelector('#outside').focus();
+      }, true);
+    });
+    await page.evaluate(() => {
       const view = document.createElement('webview');
       view.setAttribute('data-browser-sidebar-conversation-id', 'conversation');
       view.setAttribute('data-browser-sidebar-browser-tab-id', 'tab');
@@ -68,6 +75,20 @@ test("embedded browser resizes and releases keyboard focus to application contro
     const inputs = await page.evaluate(() => window.messages.filter((m) => m.command === 'input').map((m) => m.input));
     assert.ok(inputs.some((input) => input.keyCode === 'a' && input.modifiers?.includes('control')));
     assert.equal(inputs.filter((input) => input.type === 'char').map((input) => input.keyCode).join(''), 'browser-input');
+    assert.deepEqual(await page.evaluate(() => window.shortcutKeys), []);
+    await page.evaluate(() => {
+      document.body.tabIndex = 0;
+      const overlay = document.createElement('div');
+      overlay.id = 'cursor-overlay';
+      overlay.setAttribute('data-browser-sidebar-webview', 'conversation\0tab');
+      overlay.style.cssText = 'position:absolute;left:8px;top:8px;width:600px;height:400px';
+      document.body.append(overlay);
+    });
+    await page.locator('#cursor-overlay').click();
+    assert.equal(await view.evaluate((element) => document.activeElement === element), true);
+    await page.keyboard.type('overlay-input');
+    assert.deepEqual(await page.evaluate(() => window.shortcutKeys), []);
+    await page.locator('#cursor-overlay').evaluate((element) => element.remove());
     await page.getByRole('button', { name: 'Application action' }).focus();
     const count = await page.evaluate(() => window.messages.length);
     await page.keyboard.press('Space');

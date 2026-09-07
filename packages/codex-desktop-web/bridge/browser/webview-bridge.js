@@ -155,9 +155,12 @@
       .filter(([, pressed]) => pressed).map(([name]) => name);
   }
 
-  function surfaceAtPoint(x, y) {
+  function surfaceAtPoint(x, y, target) {
     for (const surface of [...surfaces.values()].reverse()) {
       if (getComputedStyle(surface.element).display === "none") continue;
+      if (!surface.element.contains(target) &&
+          target.closest?.('[data-browser-sidebar-webview]')?.getAttribute(
+            'data-browser-sidebar-webview') !== surface.key) continue;
       const bounds = surface.element.getBoundingClientRect();
       if (
         x >= bounds.left &&
@@ -393,12 +396,15 @@
     document.addEventListener(
       eventName,
       (event) => {
-        const surface = surfaceAtPoint(event.clientX, event.clientY);
+        const surface = surfaceAtPoint(event.clientX, event.clientY, event.target);
         if (eventName === "pointerdown" && !surface) keyboardSurface = null;
         if (!surface || surface.element.contains(event.target)) return;
         if (eventName === "pointerdown") {
           keyboardSurface = surface;
           surface.element.focus();
+          // The upstream cursor overlay sits above the emulated webview.
+          // Suppress its default mousedown focus change back to the body.
+          event.preventDefault();
         }
         sendCommand(surface, "input", {
           input: {
@@ -425,7 +431,7 @@
   document.addEventListener(
     "wheel",
     (event) => {
-      const surface = surfaceAtPoint(event.clientX, event.clientY);
+      const surface = surfaceAtPoint(event.clientX, event.clientY, event.target);
       if (!surface || surface.element.contains(event.target)) return;
       sendCommand(surface, "input", {
         input: {
@@ -469,14 +475,13 @@
   );
 
   for (const eventName of ["keydown", "keyup"]) {
-    document.addEventListener(
+    window.addEventListener(
       eventName,
       (event) => {
         if (
           !keyboardSurface ||
           !keyboardSurface.element.isConnected ||
           keyboardSurface.element.getClientRects().length === 0 ||
-          keyboardSurface.element.contains(event.target) ||
           event.target instanceof HTMLInputElement ||
           event.target instanceof HTMLTextAreaElement ||
           event.target?.isContentEditable
@@ -501,7 +506,8 @@
           });
         }
         event.preventDefault();
-        event.stopPropagation();
+        // Intercept before upstream window shortcuts can focus the composer.
+        event.stopImmediatePropagation();
       },
       true,
     );
