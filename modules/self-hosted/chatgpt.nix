@@ -74,7 +74,6 @@ in
       CUSTOM_PORT = "8214";
       GHOSTSHIP_TOOLS = toString tools;
       TITLE = "ChatGPT";
-      NO_FULL = "true";
     };
     volumes = [
       "${root}/home:/config:rw"

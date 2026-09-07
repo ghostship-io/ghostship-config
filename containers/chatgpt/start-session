@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+keyring=/config/.local/share/keyrings
+install -d -m0700 "$keyring"
+# This private unattended-unlock key travels with the persistent profile.
+# Protect/back up the entire home volume as credential-bearing data.
+if [[ ! -f "$keyring/.unlock" ]]; then
+  (umask 077; head -c 48 /dev/urandom | base64 > "$keyring/.unlock")
+fi
+gnome-keyring-daemon --unlock --components=secrets < "$keyring/.unlock"
+exec launch-chatgpt

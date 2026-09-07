@@ -16,7 +16,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 
 COPY . /opt/ghostship-chatgpt/source
 RUN cd /opt/ghostship-chatgpt/source \
-    && install -m0755 launch-chatgpt update-chatgpt /usr/local/bin/ \
+    && install -m0755 launch-chatgpt start-session update-chatgpt /usr/local/bin/ \
     && install -m0755 autostart /defaults/autostart \
     && cp -a web /opt/ghostship-chatgpt/web \
     && install -m0755 init-workstation /custom-cont-init.d/10-workstation \
