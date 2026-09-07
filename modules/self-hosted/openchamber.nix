@@ -136,6 +136,31 @@ let
         end
       ' >/dev/null 2>&1
     }
+
+    has_active_openchamber_work() {
+      count_query="$(cat <<'SQL'
+      SELECT count(*) AS count
+      FROM part
+      WHERE json_extract(data, '$.type') = 'tool'
+        AND json_extract(data, '$.state.status') IN ('running', 'pending');
+      SQL
+      )"
+
+      count="$(
+        opencode db --format json "$count_query" 2>/dev/null \
+          | ${pkgs.jq}/bin/jq -r '.[0].count // 0' || true
+      )"
+
+      case "$count" in
+        ""|*[!0-9]*)
+          return 0
+          ;;
+        0)
+          return 1
+          ;;
+      esac
+      return 0
+    }
   '';
 
   openchamberToolMaintenance = pkgs.writeShellScriptBin "openchamber-tool-maintenance" ''
@@ -643,6 +668,11 @@ let
       exit 0
     fi
 
+    if [ "$web_was_active" -ne 1 ] && has_active_openchamber_work; then
+      log_info "unhealthy: $unhealthy_reason; active OpenCode work is still running; restart deferred"
+      exit 0
+    fi
+
     state_dir="/run/openchamber-tool-update"
     install -d -m 0700 "$state_dir"
     exec 9>"$state_dir/tool-update.lock"
@@ -703,6 +733,10 @@ let
     fi
 
     if ! ${pkgs.systemd}/bin/systemctl is-active --quiet openchamber-web.service; then
+      if has_active_openchamber_work; then
+        printf 'warning: OpenChamber web is not active while OpenCode work is running\n'
+        exit 0
+      fi
       exit 1
     fi
 
@@ -1608,11 +1642,11 @@ let
       ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/openchamber-tool-update/restart.pending
       ExecStart=${openchamberWebRun}/bin/openchamber-web-run
       ExecStartPost=${openchamberSnapshotConfig}/bin/openchamber-snapshot-config
-      Restart=always
+      Restart=on-failure
       RestartSec=5
       TimeoutStartSec=20m
       TimeoutStopSec=30s
-      SuccessExitStatus=0 143
+      SuccessExitStatus=143
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
       StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-web.service.log
       MemoryHigh=32G
@@ -1909,6 +1943,21 @@ let
 
 in
 {
+  ghostship.apps.openchamber = {
+    name = "OpenChamber";
+    group = "Services";
+    description = "OpenChamber Web";
+    icon = "mdi-code-braces-#111827";
+    order = 100;
+    hostname = "openchamber.ghostship.io";
+    origin = "http://openchamber:3000";
+    muximux = {
+      icon = "muximux-code";
+      color = "#111827";
+      dropdown = false;
+    };
+  };
+
   virtualisation.oci-containers.containers."openchamber" = {
     image = "${imageName}:${imageTag}";
     imageFile = openchamberImage;
@@ -1939,7 +1988,7 @@ in
       "${openchamberSecrets}:${openchamberSecretsFile}:ro"
       "/mnt/share:/mnt/share:rw"
     ];
-    environmentFiles = [ openchamberSecrets ];
+    environmentFiles = [ config.ghostship.selfHostedSecrets.projections.openchamber.containerPath ];
   };
 
   systemd.tmpfiles.rules = [

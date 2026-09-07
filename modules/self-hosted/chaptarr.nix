@@ -1,10 +1,36 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   chaptarr-secrets = config.ghostship.selfHostedSecrets.projections.chaptarr.path;
 in
 {
+  ghostship.apps.chaptarr = {
+    healthPath = "/ping";
+    name = "Chaptarr";
+    group = "Automation";
+    description = "Book Manager";
+    icon = "sh-readarr";
+    order = 140;
+    hostname = "chaptarr.ghostship.io";
+    origin = "http://chaptarr:8789";
+    widget = {
+      type = "readarr";
+      key = "env:CHAPTARR_API_KEY";
+    };
+    muximux = {
+      icon = "fa-book";
+      color = "#4f8ef7";
+      dropdown = true;
+    };
+  };
+
   virtualisation.oci-containers.containers."chaptarr" = {
+    podman.sdnotify = "healthy";
     image = "docker.io/robertlordhood/chaptarr:latest";
     pull = "always";
     labels = {

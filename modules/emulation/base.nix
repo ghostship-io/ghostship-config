@@ -229,6 +229,7 @@ in
           in
           lib.hasPrefix "libretro-" name
           || builtins.elem name [
+            "pico" # requireFile archive name is parsed as pico by current nixpkgs.
             "pico-8"
             "steam-run"
             "steam-unwrapped"

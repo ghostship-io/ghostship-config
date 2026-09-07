@@ -566,7 +566,21 @@ let
 in
 
 {
+  ghostship.apps.gluetun = {
+    name = "Gluetun";
+    group = "Downloads";
+    description = "VPN Client";
+    icon = "sh-gluetun";
+    order = 250;
+    widget = {
+      type = "gluetun";
+      url = "http://gluetun:8000";
+      key = "env:HTTP_CONTROL_SERVER_API_KEY";
+    };
+  };
+
   virtualisation.oci-containers.containers."gluetun" = {
+    podman.sdnotify = "healthy";
     image = "docker.io/qmcgaw/gluetun:latest";
     pull = "always";
     labels = {
@@ -595,7 +609,7 @@ in
       TZ = "UTC";
     };
     environmentFiles = [
-      gluetun-secrets
+      config.ghostship.selfHostedSecrets.projections.gluetun.containerPath
       gluetun-runtime-env
     ];
     volumes = [

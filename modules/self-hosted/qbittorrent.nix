@@ -198,83 +198,107 @@ let
   '';
 in
 {
-  virtualisation.oci-containers.containers."qbittorrent" = {
-    image = "lscr.io/linuxserver/qbittorrent:latest";
-    pull = "always";
-    labels = {
-      "io.containers.autoupdate" = "registry";
-    };
-    extraOptions = [
-      "--network=container:gluetun"
-      "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:5000/ || exit 1"
-      "--health-interval=30s"
-      "--health-timeout=10s"
-      "--health-retries=5"
-      "--health-start-period=1m"
-      "--health-on-failure=kill"
-    ];
-    environment = {
-      TZ = "UTC";
-      PUID = "3000";
-      PGID = "3000";
-      WEBUI_PORT = "5000";
-    };
-    volumes = [
-      "/srv/apps/qbittorrent:/config"
-      "/mnt/share/Downloads:/downloads"
-      "${vuetorrent-ui}:/vuetorrent:ro"
-    ];
-  };
+  config = lib.mkMerge [
+    {
+      ghostship.apps.qbittorrent = {
+        healthPath = "/";
+        name = "qBittorrent";
+        group = "Downloads";
+        description = "Torrent Downloader";
+        icon = "sh-qbittorrent";
+        order = 50;
+        hostname = "qbittorrent.ghostship.io";
+        origin = "http://gluetun:5000";
+        widget = {
+          type = "qbittorrent";
+        };
+        muximux = {
+          icon = "fa-magnet";
+          color = "#63cda9";
+          dropdown = true;
+        };
+      };
 
-  systemd.services.podman-qbittorrent = {
-    after = [
-      "mnt-share.mount"
-      "podman-gluetun.service"
-    ];
-    bindsTo = [ "podman-gluetun.service" ];
-    partOf = [ "podman-gluetun.service" ];
-    requires = [ "podman-gluetun.service" ];
-    wants = [ "mnt-share.mount" ];
-    preStart = lib.mkAfter ''
-      ${qbittorrent-prestart-script}/bin/qbittorrent-prestart.sh
-    '';
-  };
+      virtualisation.oci-containers.containers."qbittorrent" = {
+        podman.sdnotify = "healthy";
+        image = "lscr.io/linuxserver/qbittorrent:latest";
+        pull = "always";
+        labels = {
+          "io.containers.autoupdate" = "registry";
+        };
+        extraOptions = [
+          "--network=container:gluetun"
+          "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:5000/ || exit 1"
+          "--health-interval=30s"
+          "--health-timeout=10s"
+          "--health-retries=5"
+          "--health-start-period=1m"
+          "--health-on-failure=kill"
+        ];
+        environment = {
+          TZ = "UTC";
+          PUID = "3000";
+          PGID = "3000";
+          WEBUI_PORT = "5000";
+        };
+        volumes = [
+          "/srv/apps/qbittorrent:/config"
+          "/mnt/share/Downloads:/downloads"
+          "${vuetorrent-ui}:/vuetorrent:ro"
+        ];
+      };
 
-  systemd.services.qbittorrent-auto-resume = {
-    description = "Resume errored qBittorrent torrents indefinitely";
-    after = [
-      "podman-gluetun.service"
-      "podman-qbittorrent.service"
-    ];
-    wants = [
-      "podman-gluetun.service"
-      "podman-qbittorrent.service"
-    ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${qbittorrent-auto-resume-script}/bin/qbittorrent-auto-resume";
-    };
-  };
+      systemd.services.podman-qbittorrent = {
+        after = [
+          "mnt-share.mount"
+          "podman-gluetun.service"
+        ];
+        bindsTo = [ "podman-gluetun.service" ];
+        partOf = [ "podman-gluetun.service" ];
+        requires = [ "podman-gluetun.service" ];
+        wants = [ "mnt-share.mount" ];
+        preStart = lib.mkAfter ''
+          ${qbittorrent-prestart-script}/bin/qbittorrent-prestart.sh
+        '';
+      };
 
-  systemd.timers.qbittorrent-auto-resume = {
-    description = "Periodically resume errored qBittorrent torrents";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "10m";
-      OnUnitActiveSec = "5m";
-      Persistent = true;
-      Unit = "qbittorrent-auto-resume.service";
-    };
-  };
+      systemd.services.qbittorrent-auto-resume = {
+        description = "Resume errored qBittorrent torrents indefinitely";
+        after = [
+          "podman-gluetun.service"
+          "podman-qbittorrent.service"
+        ];
+        wants = [
+          "podman-gluetun.service"
+          "podman-qbittorrent.service"
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${qbittorrent-auto-resume-script}/bin/qbittorrent-auto-resume";
+        };
+      };
 
-  systemd.tmpfiles.rules = [
-    "d /srv/apps/qbittorrent 0755 apps apps -"
-    "d /srv/apps/qbittorrent/qBittorrent 0755 apps apps -"
+      systemd.timers.qbittorrent-auto-resume = {
+        description = "Periodically resume errored qBittorrent torrents";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "10m";
+          OnUnitActiveSec = "5m";
+          Persistent = true;
+          Unit = "qbittorrent-auto-resume.service";
+        };
+      };
+
+      systemd.tmpfiles.rules = [
+        "d /srv/apps/qbittorrent 0755 apps apps -"
+        "d /srv/apps/qbittorrent/qBittorrent 0755 apps apps -"
+      ];
+
+    }
+    {
+      systemd.services.podman-qbittorrent.preStart = lib.mkAfter ''
+        ${qbittorrent-config-script}/bin/qbittorrent-config.sh
+      '';
+    }
   ];
-
-  system.activationScripts.qbittorrent-config = {
-    text = ''
-      ${qbittorrent-config-script}/bin/qbittorrent-config.sh
-    '';
-  };
 }

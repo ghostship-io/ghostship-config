@@ -1,11 +1,37 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   bazarr-secrets = config.ghostship.selfHostedSecrets.projections.bazarr.path;
   render-bazarr-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project bazarr";
 in
 {
+  ghostship.apps.bazarr = {
+    healthPath = "/";
+    name = "Bazarr";
+    group = "Automation";
+    description = "Subtitle Manager";
+    icon = "sh-bazarr";
+    order = 150;
+    hostname = "bazarr.ghostship.io";
+    origin = "http://bazarr:6767";
+    widget = {
+      type = "bazarr";
+      key = "env:BAZARR_API_KEY";
+    };
+    muximux = {
+      icon = "muximux-bazarr";
+      color = "#9c36b5";
+      dropdown = true;
+    };
+  };
+
   virtualisation.oci-containers.containers."bazarr" = {
+    podman.sdnotify = "healthy";
     image = "lscr.io/linuxserver/bazarr:latest";
     pull = "always";
     labels = {
@@ -39,49 +65,47 @@ in
   };
 
   systemd.tmpfiles.rules = [
-    "d /srv/apps/bazarr 0755 apps apps -"
+    "d /srv/apps/bazarr 0700 apps apps -"
   ];
 
-  system.activationScripts.bazarr-config = {
-    text = ''
-      CONFIG_DIR="/srv/apps/bazarr/config"
-      CONFIG_FILE="$CONFIG_DIR/config.yaml"
-      LEGACY_CONFIG_FILE="/srv/apps/bazarr/config.yaml"
+  systemd.services.podman-bazarr.preStart = lib.mkAfter ''
+    CONFIG_DIR="/srv/apps/bazarr/config"
+    CONFIG_FILE="$CONFIG_DIR/config.yaml"
+    LEGACY_CONFIG_FILE="/srv/apps/bazarr/config.yaml"
 
-      mkdir -p "$CONFIG_DIR"
+    install -d -m0700 -o apps -g apps "$CONFIG_DIR"
 
-      if [ ! -f "$CONFIG_FILE" ] && [ -f "$LEGACY_CONFIG_FILE" ]; then
-        cp "$LEGACY_CONFIG_FILE" "$CONFIG_FILE"
+    if [ ! -f "$CONFIG_FILE" ] && [ -f "$LEGACY_CONFIG_FILE" ]; then
+      cp "$LEGACY_CONFIG_FILE" "$CONFIG_FILE"
+    fi
+
+    ${render-bazarr-secrets}
+    if [ -f "$CONFIG_FILE" ] && [ -f "${bazarr-secrets}" ]; then
+      echo "Surgically updating Bazarr config..."
+      set -a
+      . "${bazarr-secrets}"
+      set +a
+
+      bazarr_args=(
+        --secrets-file "${bazarr-secrets}"
+        auth.apikey=env:BAZARR_API_KEY
+        general.flask_secret_key=env:BAZARR_FLASK_SECRET_KEY
+        opensubtitlescom.password=env:BAZARR_OPENSUBTITLES_PASS
+        radarr.apikey=env:RADARR_API_KEY
+        sonarr.apikey=env:SONARR_API_KEY
+        subdl.api_key=env:BAZARR_SUBDL_API_KEY
+        general.instance_name=literal:"Ghostship Bazarr"
+        analytics.enabled=literal:false
+      )
+
+      ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${bazarr_args[@]}"
+
+      chown 3000:3000 "$CONFIG_FILE"
+      chmod 600 "$CONFIG_FILE"
+
+      if [ -f "$LEGACY_CONFIG_FILE" ]; then
+        rm -f "$LEGACY_CONFIG_FILE"
       fi
-
-      ${render-bazarr-secrets}
-      if [ -f "$CONFIG_FILE" ] && [ -f "${bazarr-secrets}" ]; then
-        echo "Surgically updating Bazarr config..."
-        set -a
-        . "${bazarr-secrets}"
-        set +a
-
-        bazarr_args=(
-          --secrets-file "${bazarr-secrets}"
-          auth.apikey=env:BAZARR_API_KEY
-          general.flask_secret_key=env:BAZARR_FLASK_SECRET_KEY
-          opensubtitlescom.password=env:BAZARR_OPENSUBTITLES_PASS
-          radarr.apikey=env:RADARR_API_KEY
-          sonarr.apikey=env:SONARR_API_KEY
-          subdl.api_key=env:BAZARR_SUBDL_API_KEY
-          general.instance_name=literal:"Ghostship Bazarr"
-          analytics.enabled=literal:false
-        )
-
-        ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${bazarr_args[@]}"
-
-        chown 3000:3000 "$CONFIG_FILE"
-        chmod 644 "$CONFIG_FILE"
-
-        if [ -f "$LEGACY_CONFIG_FILE" ]; then
-          rm -f "$LEGACY_CONFIG_FILE"
-        fi
-      fi
-    '';
-  };
+    fi
+  '';
 }

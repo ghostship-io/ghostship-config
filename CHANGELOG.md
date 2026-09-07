@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.5.0] - 2026-09-07
+
+- Declare service hostnames, origins, and dashboard metadata with each container;
+  automatically reconcile Cloudflare routes/DNS and both dashboards while
+  preserving unrelated entries and Google Access policies.
+
+- Add Uptime Kuma, authenticated Android ntfy notifications, and Seerr with
+  approval-required requests using existing Plex/Sonarr/Radarr settings.
+- Add encrypted Restic backups, isolated restore checks, retention, stale-job
+  alerts, and a recent-backup gate for automatic container updates. Pin the
+  current MariaDB image digests for reviewed engine migrations.
+- Refresh coordinated Nix inputs; adapt Home Manager SSH option names without
+  changing policy, and use the compatible nixpkgs ragenix CLI.
+- Render application configuration at service startup, preserve native secret
+  values in Podman env files, require critical secrets, and write configs atomically.
+- Add readiness notifications, network/NAS/database ordering, and non-destructive
+  retirement quarantine while preserving the active agent environment.
+- Preserve the pending OpenChamber idle-recovery change and fix its Nix quoting.
+- Add fleet CI and weekly validated input-update PRs; system upgrades consume
+  the committed lock file. Correct stale inventory docs and document recovery.
+
 ## [3.4.7] - 2026-09-02
 
 - **LAN address migration**: Point the `chill-penguin` and WSL NFS mounts at

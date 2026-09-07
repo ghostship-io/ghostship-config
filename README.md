@@ -45,9 +45,8 @@ logical-unit secret files.
 ## Boomer Kuwanger Emulation
 
 `boomer-kuwanger` imports the split `modules/emulation/` module set and boots a
-`kiosk` user to a tty during hardware bring-up. ES-DE with Art Book Next is
-launched manually with `start-esde`; emulator launches still use the
-Gamescope fullscreen wrapper, RetroAchievements-aligned RetroArch cores,
+directly into the ES-DE/Gamescope kiosk session. `start-esde` remains a
+manual maintenance command. Emulator launches reuse that display session, with RetroAchievements-aligned RetroArch cores,
 bundled shader packs, controller tooling, smoke-test tooling, dynamic display
 discovery, performance-test tooling, and ScreenScraper/RetroAchievements secret
 wiring. Gamescope FSR is disabled; scaling is handled by RetroArch shaders or
@@ -77,7 +76,7 @@ HDMI audio is routed through PipeWire by selecting the currently available AMD
 HDMI/DP profile before ES-DE and emulator launches, with stable 48 kHz/1024
 frame PipeWire buffers for emulator audio. Runtime state
 lives under `/srv/emulation`;
-the future 4TB ROM SSD
+the ROM SSD
 mounts at `/srv/emulation/roms` from the Btrfs filesystem labeled `roms`.
 The OS disk uses one Btrfs filesystem labeled `nixos` mounted at `/`.
 
@@ -175,18 +174,26 @@ notes.
 ## Self-Hosted Stack
 
 The container stack lives in the flat
-[`modules/self-hosted/default.nix`](/home/nixos/nixos-config/modules/self-hosted/default.nix)
+[`modules/self-hosted/default.nix`](modules/self-hosted/default.nix)
 inventory. Services use Podman, native healthchecks, and registry auto-update.
 Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
-Key services include Plex, Homepage, Muximux, OpenChamber, T3 Code, the `arr`
-stack, qBittorrent, SearXNG, RomM, Grimmory, Chaptarr, PyLoad, PriceBuddy, and
-n8n.
+Key services include Plex, Homepage, Muximux, OpenChamber, the `arr` stack,
+qBittorrent, NZBGet, RomM, Grimmory, Chaptarr, PyLoad, and CloakBrowser.
+Uptime Kuma, ntfy, and Seerr add monitoring, Android notifications, and
+approval-required media requests.
+
+See [fleet operations](docs/fleet-operations.md) for the architecture, audit
+findings, backup/restore commands, update policy, and staged deployment checks.
+Each container's `ghostship.apps` declaration synchronizes its Cloudflare tunnel
+route, DNS name, Homepage entry, and Muximux link. Registry changes apply after
+the host generation is activated. Unrelated Cloudflare records and personal
+dashboard entries remain intact.
 
 Retired `chill-penguin` self-hosted service artifacts are cleaned from the
 allowlist in
-[`modules/self-hosted/cleanup.nix`](/home/nixos/nixos-config/modules/self-hosted/cleanup.nix).
+[`modules/self-hosted/cleanup.nix`](modules/self-hosted/cleanup.nix).
 Add old `/srv/apps` paths, Podman containers/images, systemd units, and
 dashboard rows there instead of scattering one-off cleanup snippets through
 service modules.
@@ -260,35 +267,13 @@ restores the previous last-good config snapshot if the restart does not become
 healthy. `openchamber-web.service` refreshes that last-good snapshot whenever
 it starts successfully.
 
-T3 Code runs at `https://t3code.ghostship.io` in a repo-built, systemd-based
-Podman image. It listens only on the internal container network at
-`t3code:3773`; the Cloudflare route is managed outside this repo. Upstream T3
-Code requires one-time device pairing for remote clients, after which the
-browser keeps a session cookie. Run `t3code-pair` inside the container to issue
-a one-hour pairing link. The existing persistent `paseo` user home, workspace,
-nested Docker state, user systemd units, and isolated Nix store remain under
-`/srv/apps/paseo` so the replacement preserves credentials and projects.
+T3 Code, n8n, SearXNG, and PriceBuddy are retired from the declared stack.
+Retirement quarantines inactive app directories under `/srv/retired-apps`;
+active services and Codex state are excluded. Quarantine has no automatic purge.
 
-The container installs current T3 Code, Codex, OpenCode, and Antigravity `agy`
-CLIs on first boot and refreshes them every four hours. T3 Code natively exposes
-Codex and OpenCode; `agy` remains installed alongside for direct use. The image
-also includes the Ollama CLI with the projected `OLLAMA_API_KEY`. A separate
-`Codex (Ollama Cloud)` provider instance launches Codex with
-`--local-provider=ollama` through the loopback-only authenticated Ollama proxy,
-and its tool-capable ollama.com model catalog refreshes with normal maintenance.
-All top-level Git repositories in `/workspace` are registered as T3 Code
-projects during setup. Updates queue a server restart and apply only when the
-T3 Code state database reports no pending or running turns. The server is
-throttled above 12 GiB and capped at 16 GiB; its monitor and outer Podman health
-policy use the same activity gate before recovery.
-
-Use `t3code-user-units` for persisted user services, `t3code-tunnel` for ad hoc
-Quick Tunnels, and `t3code-apply-config` after editing T3 Code settings, Codex
-TOML, OpenCode JSON, or Antigravity settings. The apply command validates the
-files, restarts `t3code-server.service` through a narrow container-local
-sudoers rule, and restores the last-known-good config if the T3 Code providers
-fail to recover. Codex and Antigravity credentials remain under
-`/home/paseo` across image replacements.
+The Codex container below is maintained in a separate development thread.
+OpenChamber is the active personal agent environment pending that migration;
+reconcile both configurations before deploying this fleet update.
 
 Codex runs at `https://codex.ghostship.io` in a separate systemd-based Podman
 image. The repo verifies the signed official Codex desktop archive, runs its
@@ -362,19 +347,12 @@ Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
 legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`, and does not
 require any application-specific benchmark credentials.
 
-n8n runs as a single SQLite-backed workflow orchestrator in this repo and is
-intended to stay behind Cloudflare for browser access. The live Muximux entry
-still needs a manual reorder on `chill-penguin` after deployment so it sits
-directly under Bazarr.
-
 Chaptarr now extends the arr stack to books and audiobooks. It should mount the shared downloads root at `/downloads`, manage `/mnt/share/Library/Books` and `/mnt/share/Library/Audiobooks` as separate library roots, and stay visible in Homepage plus the Muximux dropdown immediately before Bazarr. Grimmory is still the primary reading and listening surface, so it also mounts both library roots. Public `chaptarr.ghostship.io` exposure remains part of the external Cloudflare/tunnel workflow rather than repo-managed ingress.
 
 CloakBrowser runs again as a standalone manager on `chill-penguin` for direct
 profile management, alongside the embedded browser contract used by
 repo-managed scraping images. The manager stays on the internal
-`ghostship_net` network and does not use Gluetun. `pricebuddy-scraper` and
-`changedetection` still launch local CloakBrowser Playwright sessions inside
-their own images with `humanize=True`.
+`ghostship_net` network and does not use Gluetun. Retired scraper services are not part of this declared inventory.
 
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions
@@ -402,37 +380,6 @@ instead of briefly landing on the in-app not-found route.
 Recyclarr follows the supported major `:8` image tag. Upstream removed the
 floating `latest` tag, so using `:8` keeps registry auto-updates and the daily
 Radarr/Sonarr synchronization working without pinning a stale patch release.
-
-SearXNG is intended to run as an internal-only search hub on `ghostship_net`;
-internal consumers should use the container-network address
-`http://searxng:8080`. The managed `podman-searxng` `preStart` path now renders
-the full `settings.yml` plus `limiter.toml`, requires the projected
-`SEARXNG_SECRET_KEY` instead of generating one on the fly, and keeps a
-persistent cache at `/srv/apps/searxng-cache` mounted to `/var/cache/searxng`
-so cache-backed engines like Startpage retain useful state across restarts. The
-active internal engine surface is performance-first: the promoted web pool is
-`startpage`, `qwant`, `presearch`, `wikipedia`, and `wikidata`; the technical
-pool is `arch linux wiki`, `nixos wiki`, `askubuntu`, `stackoverflow`,
-`superuser`, `mankier`, `mdn`, `github`, `gitlab`, `gitea.com`, `sourcehut`,
-`huggingface`, `repology`, `pypi`, `npm`, `crates.io`, `pkg.go.dev`,
-`packagist`, `pub.dev`, `rubygems`, `hex`, and `lib.rs`; the research pool is
-`openalex`, `semantic scholar`, `pubmed`, `arxiv`, and `crossref`; and the news
-pool is `reuters`, `tagesschau`, and `wikinews`. Internal callers should use
-explicit `/search?q=...&format=json&engines=...` pools instead of relying on the
-full active engine list. The latest lightweight direct probes promoted
-`presearch`, while `brave` and `karmasearch` stayed out of the default web pool
-after immediate `429` and `403` responses respectively.
-
-PriceBuddy seeds a `pricebuddy@ghostship.io` / `pricebuddy` login and reads a
-persistent agent API token from the `pricebuddy` source projection. The live
-`/srv/apps/pricebuddy/pricebuddy-agent.env` file contains a shell-safe
-`PRICEBUDDY_API_TOKEN="id|token"` bearer line for direct API use. The host
-token-sync now strips any previously persisted token ID before rewriting that
-file, and the managed `podman-pricebuddy` post-start path verifies the app env
-files, scraper reachability, and final bearer-token shape without treating
-upstream auth-route bugs or third-party Cloudflare challenges as Ghostship env
-regressions.
-
 
 ## Usage
 

@@ -9,9 +9,15 @@ let
   recipients = import ../../secrets/recipients.nix;
   catalog = import ../../secrets/catalog.nix { inherit recipients; };
   unitCatalog = lib.filterAttrs (
-    _: meta: builtins.elem meta.recipientGroup [ "self-hosted-runtime" "shared-runtime" ]
+    _: meta:
+    builtins.elem meta.recipientGroup [
+      "self-hosted-runtime"
+      "shared-runtime"
+    ]
   ) catalog.units;
-  projectionCatalog = lib.filterAttrs (name: _: !(lib.hasPrefix "emulation-" name)) catalog.projections;
+  projectionCatalog = lib.filterAttrs (
+    name: _: !(lib.hasPrefix "emulation-" name)
+  ) catalog.projections;
   projectionDir = "/run/ghostship-secrets";
 
   mkAgeSecret =
@@ -45,69 +51,18 @@ let
               path = (builtins.getAttr name config.age.secrets).path;
             }) unitCatalog;
             projections = lib.mapAttrs (
-              name: meta: meta // { path = "${projectionDir}/" + meta.fileName; }
+              name: meta:
+              meta
+              // {
+                path = "${projectionDir}/" + meta.fileName;
+                containerPath = "${projectionDir}/" + meta.fileName + ".container";
+              }
             ) projectionCatalog;
           }
         )
       })
 
-      def parse_env_file(path_str):
-          path = Path(path_str)
-          values = {}
-          if not path.is_file():
-              return values
-          for raw_line in path.read_text().splitlines():
-              line = raw_line.strip()
-              if not line or line.startswith('#'):
-                  continue
-              if line.startswith('export '):
-                  line = line[7:].lstrip()
-              if '=' not in line:
-                  continue
-              key, value = line.split('=', 1)
-              key = key.strip()
-              value = value.strip()
-              if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-                  value = value[1:-1]
-              values[key] = value
-          return values
-
-      def write_projection(name):
-          projection = SPEC['projections'][name]
-          rendered = {}
-          cache = {}
-          for target_key, source in projection['fields'].items():
-              unit_name = source['unit']
-              source_key = source['key']
-              if unit_name not in cache:
-                  cache[unit_name] = parse_env_file(SPEC['units'][unit_name]['path'])
-              value = cache[unit_name].get(source_key)
-              if value is not None and value != "":
-                  rendered[target_key] = value
-
-          output_path = Path(projection['path'])
-          output_path.parent.mkdir(parents=True, exist_ok=True)
-          fd, tmp_name = tempfile.mkstemp(dir=str(output_path.parent), prefix=f"{name}.")
-          tmp_path = Path(tmp_name)
-          with os.fdopen(fd, 'w') as handle:
-              for key, value in rendered.items():
-                  handle.write(f"{key}={shlex.quote(value)}\n")
-          os.chmod(tmp_path, int(projection['mode'], 8))
-          os.chown(tmp_path, pwd.getpwnam(projection['owner']).pw_uid, grp.getgrnam(projection['group']).gr_gid)
-          tmp_path.replace(output_path)
-
-      def main():
-          if len(sys.argv) != 2:
-              print('Usage: ghostship-secret-project <projection-name>', file=sys.stderr)
-              return 1
-          name = sys.argv[1]
-          if name not in SPEC['projections']:
-              print(f'Unknown projection: {name}', file=sys.stderr)
-              return 1
-          write_projection(name)
-          return 0
-
-      raise SystemExit(main())
+      ${builtins.readFile ./secret-project.py}
     '';
   };
 in
@@ -128,7 +83,12 @@ in
         name: meta: meta // { path = (builtins.getAttr name config.age.secrets).path; }
       ) unitCatalog;
       projections = lib.mapAttrs (
-        name: meta: meta // { path = "${projectionDir}/" + meta.fileName; }
+        name: meta:
+        meta
+        // {
+          path = "${projectionDir}/" + meta.fileName;
+          containerPath = "${projectionDir}/" + meta.fileName + ".container";
+        }
       ) projectionCatalog;
       render = projectionRenderer;
     };
@@ -138,11 +98,14 @@ in
     ];
 
     system.activationScripts.ghostship-secret-projections = {
-      deps = [ "agenixInstall" "users" ];
+      deps = [
+        "agenixInstall"
+        "users"
+      ];
       text = lib.concatStringsSep "\n" (
-        map
-          (name: "${projectionRenderer}/bin/ghostship-secret-project ${lib.escapeShellArg name}")
-          (builtins.attrNames projectionCatalog)
+        map (name: "${projectionRenderer}/bin/ghostship-secret-project ${lib.escapeShellArg name}") (
+          builtins.attrNames projectionCatalog
+        )
       );
       supportsDryActivation = false;
     };

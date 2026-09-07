@@ -1,4 +1,9 @@
-{ config, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   plex-config-script = pkgs.writeShellScriptBin "plex-config.sh" ''
@@ -43,6 +48,26 @@ let
   '';
 in
 {
+  ghostship.apps.plex = {
+    healthPath = "/identity";
+    name = "Plex";
+    group = "Media";
+    description = "Media Server";
+    icon = "sh-plex";
+    order = 30;
+    hostname = "plex.ghostship.io";
+    origin = "http://plex:32400";
+    widget = {
+      type = "plex";
+      key = "env:PLEX_API_KEY";
+    };
+    muximux = {
+      icon = "muximux-plex";
+      color = "#ebaf00";
+      dropdown = true;
+    };
+  };
+
   virtualisation.oci-containers.containers."plex" = {
     image = "lscr.io/linuxserver/plex:latest";
     pull = "always";
@@ -72,7 +97,7 @@ in
       VERSION = "latest";
     };
     environmentFiles = [
-      config.ghostship.selfHostedSecrets.projections.plex.path
+      config.ghostship.selfHostedSecrets.projections.plex.containerPath
     ];
     devices = [
       "/dev/dri:/dev/dri"
@@ -97,9 +122,7 @@ in
     "d '/srv/apps/plex/Library/Application Support/Plex Media Server/Plug-in Support/Databases' 0755 apps apps -"
   ];
 
-  system.activationScripts.plex-config = {
-    text = ''
-      ${plex-config-script}/bin/plex-config.sh
-    '';
-  };
+  systemd.services.podman-plex.preStart = lib.mkAfter ''
+    ${plex-config-script}/bin/plex-config.sh
+  '';
 }

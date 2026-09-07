@@ -33,3 +33,7 @@ secrets.dec.yaml
 *.attempt*
 *.bak
 :Zone.Identifier
+
+# Python test artifacts
+__pycache__/
+*.pyc

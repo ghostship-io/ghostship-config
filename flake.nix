@@ -9,7 +9,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    nixos-hardware.url = "github:NixOS/nixos-hardware/master";
+    nixos-hardware = {
+      url = "github:NixOS/nixos-hardware/master";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
     ragenix = {
       url = "github:yaxitech/ragenix";
@@ -71,12 +74,21 @@
         };
     in
     {
+      checks = forAllSystems (
+        system:
+        import ./checks.nix {
+          pkgs = pkgsFor system;
+          inherit self;
+        }
+      );
+
       packages = forAllSystems (
         system:
         let
           pkgs = pkgsFor system;
         in
         {
+          ghostship-config = (pkgs.extend (import ./modules/common/ghostship-pkg.nix)).ghostship-config;
           codex-desktop-web = pkgs.callPackage ./packages/codex-desktop-web/package.nix { };
         }
       );
@@ -87,6 +99,16 @@
           pkgs = pkgsFor system;
         in
         {
+          # CI needs no downloaded browsers or agent-maintenance tools.
+          ci = pkgs.mkShellNoCC {
+            packages = with pkgs; [
+              git
+              actionlint
+              shellcheck
+              gitleaks
+              python3
+            ];
+          };
           default = pkgs.mkShellNoCC {
             packages = with pkgs; [
               git
@@ -95,9 +117,21 @@
               gnused
               jq
               nixfmt
+              shellcheck
+              actionlint
+              gitleaks
+              ruff
+              (python3.withPackages (ps: [
+                ps.lxml
+                ps.ruamel-yaml
+                ps.bcrypt
+                ps.python-socketio
+                ps.requests
+                ps.websocket-client
+              ]))
               playwright-driver.browsers
               prefetch-npm-deps
-              ragenix.packages.${system}.default
+              pkgs.ragenix
               ssh-to-age
             ];
             PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";

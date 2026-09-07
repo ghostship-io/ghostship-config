@@ -11,7 +11,28 @@ let
   romm-assets = "${romm-library}/.romm";
 in
 {
+  ghostship.apps.romm = {
+    healthPath = "/";
+    name = "RomM";
+    group = "Media";
+    description = "ROM Manager";
+    icon = "sh-romm";
+    order = 120;
+    hostname = "romm.ghostship.io";
+    origin = "http://romm:8080";
+    widget = {
+      type = "romm";
+    };
+    muximux = {
+      icon = "muximux-gamepad";
+      color = "#553f99";
+      dropdown = false;
+      url = "/romm/";
+    };
+  };
+
   virtualisation.oci-containers.containers."romm" = {
+    podman.sdnotify = "healthy";
     image = "docker.io/rommapp/romm:latest";
     pull = "always";
     labels = {
@@ -62,7 +83,7 @@ in
   };
 
   systemd.tmpfiles.rules = [
-    "d /srv/apps/romm 0755 apps apps -"
+    "d /srv/apps/romm 0700 apps apps -"
     "d /srv/apps/romm/resources 0755 apps apps -"
     "d /srv/apps/romm/redis-data 0755 apps apps -"
     "d /srv/apps/romm/config 0755 apps apps -"

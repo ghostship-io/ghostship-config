@@ -4,6 +4,12 @@
   imports = [
     # Infra
     ./common.nix
+    ./app-registry.nix
+    ./cloudflare-sync.nix
+    ./reliability.nix
+    ./backup.nix
+    ./monitoring.nix
+    ./seerr.nix
     ./cleanup.nix
     ./secrets.nix
     ./gluetun.nix

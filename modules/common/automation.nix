@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.myOptions.autoUpgrade;
@@ -13,10 +18,8 @@ in
       system.autoUpgrade = {
         enable = true;
         flake = "git+ssh://git@github.com/ghostship-io/ghostship-config.git?ref=main";
-        flags = [
-          "--update-input"
-          "nixpkgs"
-        ];
+        # Deploy the tested committed lock; CI proposes coordinated input updates.
+        flags = [ "--no-write-lock-file" ];
         dates = "04:00";
         randomizedDelaySec = "45min";
         allowReboot = false;

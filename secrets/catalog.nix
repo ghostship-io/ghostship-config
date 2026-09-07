@@ -26,6 +26,21 @@ let
 in
 {
   units = {
+    backup = mkUnit {
+      relativeFile = "secrets/files/sources/services/backup.env.age";
+      exports = [ "RESTIC_PASSWORD" ];
+    };
+    monitoring = mkUnit {
+      relativeFile = "secrets/files/sources/services/monitoring.env.age";
+      exports = [
+        "KUMA_PASSWORD"
+        "NTFY_ADMIN_HASH"
+        "NTFY_PUBLISH_HASH"
+        "NTFY_READER_HASH"
+        "NTFY_PUBLISH_PASSWORD"
+        "NTFY_READER_PASSWORD"
+      ];
+    };
     bazarr = mkUnit {
       relativeFile = "secrets/files/sources/services/bazarr.env.age";
       exports = [
@@ -232,6 +247,40 @@ in
   };
 
   projections = {
+    backup = {
+      fileName = "backup.env";
+      owner = "root";
+      group = "root";
+      mode = "0400";
+      fields.RESTIC_PASSWORD = {
+        unit = "backup";
+        key = "RESTIC_PASSWORD";
+      };
+    };
+    monitoring = {
+      fileName = "monitoring.env";
+      owner = "root";
+      group = "root";
+      mode = "0400";
+      fields = builtins.listToAttrs (
+        map
+          (key: {
+            name = key;
+            value = {
+              unit = "monitoring";
+              inherit key;
+            };
+          })
+          [
+            "KUMA_PASSWORD"
+            "NTFY_ADMIN_HASH"
+            "NTFY_PUBLISH_HASH"
+            "NTFY_READER_HASH"
+            "NTFY_PUBLISH_PASSWORD"
+            "NTFY_READER_PASSWORD"
+          ]
+      );
+    };
     bazarr = {
       fileName = "bazarr.env";
       owner = "apps";
@@ -288,6 +337,23 @@ in
           unit = "cloudflare";
           key = "TUNNEL_TOKEN";
         };
+        CLOUDFLARED_ACCOUNT_ID = {
+          unit = "cloudflare";
+          key = "ACCOUNT_ID";
+        };
+        CLOUDFLARED_TUNNEL_ID = {
+          unit = "cloudflare";
+          key = "TUNNEL_ID";
+        };
+      };
+    };
+
+    cloudflare-management = {
+      fileName = "cloudflare-management.env";
+      owner = "root";
+      group = "root";
+      mode = "0400";
+      fields = {
         CLOUDFLARED_ACCOUNT_ID = {
           unit = "cloudflare";
           key = "ACCOUNT_ID";
@@ -483,10 +549,6 @@ in
         CLOUDFLARED_TUNNEL_ID = {
           unit = "cloudflare";
           key = "TUNNEL_ID";
-        };
-        CLOUDFLARED_API_TOKEN = {
-          unit = "cloudflare";
-          key = "API_TOKEN";
         };
         GRIMMORY_USER = {
           unit = "grimmory";

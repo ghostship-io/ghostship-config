@@ -33,23 +33,21 @@
     enable = true;
     enableDefaultConfig = false;
     includes = [ "conf.d/*" ];
-    matchBlocks = {
+    settings = {
       "*" = {
-        user = "nixos";
-        identityFile = "~/.ssh/id_ed25519";
-        forwardAgent = true;
-        compression = true;
-        serverAliveInterval = 60;
-        serverAliveCountMax = 30;
-        addKeysToAgent = "yes";
-        controlMaster = "auto";
-        controlPath = "~/.ssh/+%h-%p-%r";
-        controlPersist = "5m";
-        hashKnownHosts = false;
-        userKnownHostsFile = "~/.ssh/known_hosts";
-        extraOptions = {
-          "StrictHostKeyChecking" = "accept-new";
-        };
+        User = "nixos";
+        IdentityFile = "~/.ssh/id_ed25519";
+        ForwardAgent = true;
+        Compression = true;
+        ServerAliveInterval = 60;
+        ServerAliveCountMax = 30;
+        AddKeysToAgent = "yes";
+        ControlMaster = "auto";
+        ControlPath = "~/.ssh/+%h-%p-%r";
+        ControlPersist = "5m";
+        HashKnownHosts = false;
+        UserKnownHostsFile = "~/.ssh/known_hosts";
+        StrictHostKeyChecking = "accept-new";
       };
     };
   };
