@@ -113,8 +113,6 @@ buildNpmPackage {
     vulkan-loader
     libusb1
     zlib
-    qt5.qtbase
-    qt6.qtbase
   ];
   # Electron loads these libraries dynamically; retain them in the runtime path.
   runtimeDependencies = [
@@ -140,7 +138,12 @@ buildNpmPackage {
   '';
   # Preserve native code and resource data; only ELF loader/library paths change.
   dontStrip = true;
-  dontWrapQtApps = true;
+  preFixup = ''
+    # Chromium ships optional Qt 5 and Qt 6 shims. Search both libraries without
+    # activating mutually exclusive Qt application build hooks.
+    addAutoPatchelfSearchPath ${qt5.qtbase}/lib
+    addAutoPatchelfSearchPath ${qt6.qtbase}/lib
+  '';
   meta = {
     description = "Web-native transport for the official ChatGPT Linux desktop app";
     homepage = "https://learn.chatgpt.com/docs/linux/linux-app";
