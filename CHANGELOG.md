@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   IPC payloads and initialize the upstream renderer's application version.
 - **Web controls**: Use upstream web menus, keep project actions visible, refresh
   chunked state updates and reconnect without replaying an application backlog.
+- **Embedded browser**: Resize pages to their panel, preserve keyboard modifiers,
+  and keep typing focused without announcing navigation on each keystroke.
 - **Bundled plugins**: Make runtime copies writable so Linux plugin variants can
   be materialized from sealed Nix resources.
 - **Restart reliability**: Keep the updater alive through its own restart and

@@ -368,8 +368,11 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   guest.stop = () => {};
   guest.reload = () => {};
   guest.focus = () => {};
+  let viewport;
   gateway.registerBrowserGuest(
-    { browserTabId: "tab", conversationId: "conversation" },
+    { browserTabId: "tab", conversationId: "conversation",
+      ownerWindow: { close: () => {},
+        setContentSize: (width, height) => { viewport = { width, height }; } } },
     guest,
   );
 
@@ -397,6 +400,15 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   }));
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(guest.currentUrl, "https://example.com/");
+
+  first.send(encode({ type: "browser-surface-command", browserTabId: "tab",
+    conversationId: "conversation", command: "resize", width: 794, height: 878 }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(viewport, { width: 794, height: 878 });
+  first.send(encode({ type: "browser-surface-command", browserTabId: "tab",
+    conversationId: "conversation", command: "resize", width: 1000000, height: -1 }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(viewport, { width: 794, height: 878 });
 
   first.send(encode({
     type: "browser-surface-command",

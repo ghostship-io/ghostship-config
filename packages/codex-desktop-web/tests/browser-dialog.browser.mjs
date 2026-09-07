@@ -36,6 +36,52 @@ function findBrowserExecutable() {
   );
 }
 
+test("embedded browser resizes and releases keyboard focus to application controls", async () => {
+  const browser = await chromium.launch({ executablePath: findBrowserExecutable(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<div id="host" style="position:relative;width:600px;height:400px"></div><button id="outside">Application action</button>');
+    await page.evaluate(() => {
+      window.messages = [];
+      window.__codexWebTransport = {
+        send: (message) => window.messages.push(message),
+        onControl: (callback) => { window.control = callback; },
+        onMessageFromView: () => {},
+      };
+      window.clicks = 0;
+      document.querySelector('#outside').onclick = () => { window.clicks++; };
+    });
+    await page.addScriptTag({ path: path.join(packageRoot, 'bridge/browser/webview-bridge.js') });
+    await page.evaluate(() => {
+      const view = document.createElement('webview');
+      view.setAttribute('data-browser-sidebar-conversation-id', 'conversation');
+      view.setAttribute('data-browser-sidebar-browser-tab-id', 'tab');
+      document.querySelector('#host').append(view);
+    });
+    await page.waitForFunction(() => window.messages.some((m) => m.type === 'browser-surface-subscribe'));
+    await page.evaluate(() => window.control({ action: 'browser-surface-state', conversationId: 'conversation', browserTabId: 'tab', generation: 1, state: {} }));
+    await page.waitForFunction(() => window.messages.some((m) => m.command === 'resize' && m.width === 600 && m.height === 400));
+    const view = page.locator('[data-codex-webview-bridge]');
+    await view.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('browser-input');
+    const inputs = await page.evaluate(() => window.messages.filter((m) => m.command === 'input').map((m) => m.input));
+    assert.ok(inputs.some((input) => input.keyCode === 'a' && input.modifiers?.includes('control')));
+    assert.equal(inputs.filter((input) => input.type === 'char').map((input) => input.keyCode).join(''), 'browser-input');
+    await page.getByRole('button', { name: 'Application action' }).focus();
+    const count = await page.evaluate(() => window.messages.length);
+    await page.keyboard.press('Space');
+    assert.equal(await page.evaluate(() => window.clicks), 1);
+    assert.equal(await page.evaluate(() => window.messages.length), count);
+    await view.click();
+    await view.evaluate((element) => { element.style.display = 'none'; });
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => window.messages.at(-1)?.input?.keyCode === 'Enter'), false);
+  } finally {
+    await browser.close();
+  }
+});
+
 test("browser-native dialogs preserve modal and window lifecycles", async () => {
   const shim = readFileSync(
     path.join(packageRoot, "bridge", "browser", "electron-shim.js"),

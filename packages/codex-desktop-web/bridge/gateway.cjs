@@ -487,6 +487,14 @@ async function createGateway(options) {
     if (!surface || !client.surfaceKeys.has(key)) return;
     const guest = surface.webContents;
     switch (message.command) {
+      case "resize": {
+        const { width, height } = message;
+        if (!Number.isInteger(width) || !Number.isInteger(height) ||
+            width < 1 || height < 1 || width > 4096 || height > 4096) return;
+        surface.ownerWindow?.setContentSize(width, height);
+        void captureBrowserSurface(surface);
+        return;
+      }
       case "navigate": {
         let target;
         try {
@@ -516,7 +524,7 @@ async function createGateway(options) {
         break;
       case "focus":
         guest.focus();
-        break;
+        return;
       case "input": {
         const input = message.input;
         if (!input || typeof input.type !== "string") return;
@@ -545,7 +553,10 @@ async function createGateway(options) {
         delete input.xRatio;
         delete input.yRatio;
         guest.sendInputEvent(input);
-        break;
+        // Navigation events publish state themselves. Re-announcing navigation
+        // on every keystroke makes upstream refocus/recreate browser controls.
+        void captureBrowserSurface(surface);
+        return;
       }
       default:
         return;

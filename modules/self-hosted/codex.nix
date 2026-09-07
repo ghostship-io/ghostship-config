@@ -1300,6 +1300,11 @@ let
     # before launching the app so authentication can run without a desktop prompt.
     ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock --components=secrets \
       < "$XDG_DATA_HOME/keyrings/.unlock"
+    # Repair copies left by earlier builds that inherited sealed Nix modes.
+    # chmod -R skips symlinks encountered inside this runtime-only directory.
+    if [ -d "$CODEX_HOME/.tmp/bundled-marketplaces" ]; then
+      chmod -R u+rwX "$CODEX_HOME/.tmp/bundled-marketplaces"
+    fi
     cd /home/codex
     "$CODEX_TOOL_CURRENT/web/runtime/electron" \
       --no-sandbox \

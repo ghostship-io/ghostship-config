@@ -133,8 +133,26 @@
     };
   }
 
+  function resizeSurface(surface) {
+    if (!surface.generation || !surface.element.isConnected) return;
+    const bounds = surface.element.getBoundingClientRect();
+    const width = Math.round(bounds.width);
+    const height = Math.round(bounds.height);
+    if (width <= 0 || height <= 0) return;
+    const size = `${width}:${height}`;
+    if (surface.viewportSize === size) return;
+    surface.viewportSize = size;
+    sendCommand(surface, "resize", { width, height });
+  }
+
   function buttonName(button) {
     return button === 1 ? "middle" : button === 2 ? "right" : "left";
+  }
+
+  function keyModifiers(event) {
+    return [["shift", event.shiftKey], ["control", event.ctrlKey],
+      ["alt", event.altKey], ["meta", event.metaKey]]
+      .filter(([, pressed]) => pressed).map(([name]) => name);
   }
 
   function surfaceAtPoint(x, y) {
@@ -181,6 +199,8 @@
     image.style.cssText =
       "display:block;width:100%;height:100%;object-fit:fill;user-select:none;-webkit-user-drag:none";
     element.append(image);
+    const resizeObserver = new ResizeObserver(() => resizeSurface(surface));
+    resizeObserver.observe(element);
 
     const nativeSetAttribute = element.setAttribute.bind(element);
     element.setAttribute = (name, value) => {
@@ -211,6 +231,8 @@
     element.executeJavaScript = async () => undefined;
     element.send = () => {};
     element.destroy = () => {
+      resizeObserver.disconnect();
+      if (keyboardSurface === surface) keyboardSurface = null;
       if (!surface.key) return;
       surfaces.delete(surface.key);
       transport.send({
@@ -222,6 +244,7 @@
     };
 
     element.addEventListener("pointerdown", (event) => {
+      keyboardSurface = surface;
       element.focus();
       element.setPointerCapture?.(event.pointerId);
       sendCommand(surface, "input", {
@@ -269,8 +292,9 @@
       { passive: false },
     );
     element.addEventListener("keydown", (event) => {
+      if (!element.isConnected || element.getClientRects().length === 0) return;
       sendCommand(surface, "input", {
-        input: { type: "keyDown", keyCode: event.key },
+        input: { type: "keyDown", keyCode: event.key, modifiers: keyModifiers(event) },
       });
       if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
         sendCommand(surface, "input", {
@@ -281,8 +305,9 @@
       event.stopPropagation();
     });
     element.addEventListener("keyup", (event) => {
+      if (!element.isConnected || element.getClientRects().length === 0) return;
       sendCommand(surface, "input", {
-        input: { type: "keyUp", keyCode: event.key },
+        input: { type: "keyUp", keyCode: event.key, modifiers: keyModifiers(event) },
       });
       event.preventDefault();
       event.stopPropagation();
@@ -369,6 +394,7 @@
       eventName,
       (event) => {
         const surface = surfaceAtPoint(event.clientX, event.clientY);
+        if (eventName === "pointerdown" && !surface) keyboardSurface = null;
         if (!surface || surface.element.contains(event.target)) return;
         if (eventName === "pointerdown") {
           keyboardSurface = surface;
@@ -448,6 +474,8 @@
       (event) => {
         if (
           !keyboardSurface ||
+          !keyboardSurface.element.isConnected ||
+          keyboardSurface.element.getClientRects().length === 0 ||
           keyboardSurface.element.contains(event.target) ||
           event.target instanceof HTMLInputElement ||
           event.target instanceof HTMLTextAreaElement ||
@@ -459,6 +487,7 @@
           input: {
             type: eventName === "keydown" ? "keyDown" : "keyUp",
             keyCode: event.key,
+            modifiers: keyModifiers(event),
           },
         });
         if (
@@ -478,6 +507,12 @@
     );
   }
 
+  document.addEventListener("focusin", (event) => {
+    if (keyboardSurface && !keyboardSurface.element.contains(event.target)) {
+      keyboardSurface = null;
+    }
+  }, true);
+
   transport.onControl((message) => {
     if (
       message.action !== "browser-surface-state" &&
@@ -488,7 +523,11 @@
     const key = surfaceKey(message.conversationId, message.browserTabId);
     const surface = key ? surfaces.get(key) : null;
     if (!surface) return;
-    surface.generation = message.generation || surface.generation;
+    if (message.generation && message.generation !== surface.generation) {
+      surface.generation = message.generation;
+      surface.viewportSize = null;
+    }
+    resizeSurface(surface);
     if (message.action === "browser-surface-state") {
       const wasLoading = surface.state.isLoading === true;
       surface.state = message.state || {};
