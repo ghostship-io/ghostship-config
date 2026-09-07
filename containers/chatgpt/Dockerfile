@@ -14,20 +14,23 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     && mv /tmp/chatgpt.deb /opt/ghostship-chatgpt/packages/chatgpt.deb \
     && rm -rf /var/lib/apt/lists/*
 
-COPY launch-chatgpt /usr/local/bin/launch-chatgpt
-COPY autostart /defaults/autostart
-COPY web /opt/ghostship-chatgpt/web
-COPY init-workstation /custom-cont-init.d/10-workstation
-COPY nix-daemon-run /etc/s6-overlay/s6-rc.d/svc-nix/run
-COPY user-services-run /etc/s6-overlay/s6-rc.d/svc-user-services/run
-COPY supervisor.conf /etc/chatgpt-supervisor.conf
-RUN for service in svc-nix svc-user-services; do \
+COPY . /opt/ghostship-chatgpt/source
+RUN cd /opt/ghostship-chatgpt/source \
+    && install -m0755 launch-chatgpt update-chatgpt /usr/local/bin/ \
+    && install -m0755 autostart /defaults/autostart \
+    && cp -a web /opt/ghostship-chatgpt/web \
+    && install -m0755 init-workstation /custom-cont-init.d/10-workstation \
+    && install -Dm0755 nix-daemon-run /etc/s6-overlay/s6-rc.d/svc-nix/run \
+    && install -Dm0755 user-services-run /etc/s6-overlay/s6-rc.d/svc-user-services/run \
+    && install -Dm0755 update-run /etc/s6-overlay/s6-rc.d/svc-chatgpt-update/run \
+    && install -m0644 supervisor.conf /etc/chatgpt-supervisor.conf \
+    && for service in svc-nix svc-user-services svc-chatgpt-update; do \
       echo longrun > /etc/s6-overlay/s6-rc.d/$service/type; \
       mkdir -p /etc/s6-overlay/s6-rc.d/$service/dependencies.d; \
       touch /etc/s6-overlay/s6-rc.d/$service/dependencies.d/init-services; \
       touch /etc/s6-overlay/s6-rc.d/user/contents.d/$service; \
     done
-ENV PATH="/opt/ghostship-tools/bin:/config/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+ENV PATH="/opt/ghostship-tools/bin:/config/.local/bin:/lsiopy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     NIX_REMOTE=daemon NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 ENV TITLE="ChatGPT" PUID=3000 PGID=3000 TZ=Pacific/Honolulu \
     START_DOCKER=true PIXELFLUX_WAYLAND=false NO_GAMEPAD=true \

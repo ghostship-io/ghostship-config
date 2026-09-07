@@ -80,6 +80,7 @@ in
       "${root}/home:/config:rw"
       "${root}/workspace:/workspace:rw"
       "${root}/docker:/var/lib/docker:rw"
+      "${root}/updates:/var/lib/chatgpt-updates:rw"
       "${root}/nix-root/nix:/nix:rw"
       "/mnt/share:/mnt/share:rw"
     ];
@@ -98,7 +99,7 @@ in
     preStart = lib.mkBefore ''
       set -eu
       install -d -m0755 -o 3000 -g 3000 ${root}/home ${root}/workspace
-      install -d -m0755 ${root}/docker ${root}/nix-root
+      install -d -m0755 ${root}/docker ${root}/nix-root ${root}/updates
       ${pkgs.nix}/bin/nix copy --no-check-sigs --to 'local?root=${root}/nix-root' ${tools}
       install -d -m0755 ${root}/nix-root/nix/var/nix/gcroots
       ln -sfn ${tools} ${root}/nix-root/nix/var/nix/gcroots/chatgpt-workstation

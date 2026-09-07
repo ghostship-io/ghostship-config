@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+state=/var/lib/chatgpt-updates
+install -d -m0755 "$state" /run/chatgpt
+touch /run/chatgpt/app.lock
+chmod 0644 /run/chatgpt/app.lock
+exec 9>/run/chatgpt/update.lock
+flock -n 9 || exit 0
+
+version() { dpkg-deb -f "$1" Version; }
+if [[ ! -f "$state/current.deb" ]]; then
+  cp /opt/ghostship-chatgpt/packages/chatgpt.deb "$state/current.deb"
+fi
+
+apply() {
+  exec 8</run/chatgpt/app.lock
+  flock -n -x 8 || return 0
+  local installed target
+  installed=$(dpkg-query -W -f='${Version}' chatgpt)
+  target=$(version "$state/current.deb")
+  # Reapply the last installed update when the OCI image is recreated.
+  if dpkg --compare-versions "$target" gt "$installed"; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "$state/current.deb"
+  fi
+  if [[ -f "$state/pending.deb" ]]; then
+    target=$(version "$state/pending.deb")
+    installed=$(dpkg-query -W -f='${Version}' chatgpt)
+    if dpkg --compare-versions "$target" gt "$installed"; then
+      DEBIAN_FRONTEND=noninteractive apt-get install -y "$state/pending.deb"
+      cp "$state/current.deb" "$state/previous.deb"
+      mv "$state/pending.deb" "$state/current.deb"
+      echo "Installed ChatGPT $target" > "$state/status"
+    else
+      rm "$state/pending.deb"
+    fi
+  fi
+  flock -u 8
+}
+
+check() {
+  # apt authenticates repository metadata and validates the downloaded package.
+  # Never fall back to trusted=yes, --allow-unauthenticated, or an unsigned URL.
+  apt-get update
+  local candidate current temporary
+  candidate=$(apt-cache policy chatgpt | awk '/Candidate:/ {print $2}')
+  current=$(version "$state/current.deb")
+  dpkg --compare-versions "$candidate" gt "$current" || return 0
+  temporary=$(mktemp -d "$state/download.XXXXXX")
+  if (cd "$temporary" && apt-get download "chatgpt=$candidate"); then
+    local package=("$temporary"/*.deb)
+    [[ ${#package[@]} == 1 && $(dpkg-deb -f "${package[0]}" Package) == chatgpt ]]
+    [[ $(dpkg-deb -f "${package[0]}" Architecture) == arm64 ]]
+    [[ $(version "${package[0]}") == "$candidate" ]]
+    mv "${package[0]}" "$state/pending.deb"
+    chmod 0644 "$state/pending.deb"
+    echo "ChatGPT $candidate ready; installs after ChatGPT exits." > "$state/status"
+  else
+    rm -rf "$temporary"
+    return 1
+  fi
+  rmdir "$temporary"
+}
+
+case "${1:-check}" in
+  apply) apply ;;
+  check) check; apply ;;
+  *) echo 'Usage: update-chatgpt [check|apply]' >&2; exit 2 ;;
+esac

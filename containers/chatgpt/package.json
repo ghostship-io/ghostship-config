@@ -1,0 +1,12 @@
+{
+  "name": "ghostship-chatgpt-workstation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:web": "node --test tests/web.browser.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.62.0"
+  }
+}

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p /config/.local/state/chatgpt /config/Transfers /workspace
-exec chatgpt --ozone-platform=x11 --remote-debugging-address=127.0.0.1 \
-  --remote-debugging-port=9222 >> /config/.local/state/chatgpt/desktop.log 2>&1
+exec 8</run/chatgpt/app.lock
+flock --shared 8
+exec chatgpt --ozone-platform=x11 \
+  --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 \
+  >> /config/.local/state/chatgpt/desktop.log 2>&1
