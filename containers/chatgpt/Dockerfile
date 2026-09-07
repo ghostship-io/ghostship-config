@@ -3,7 +3,7 @@ FROM ghcr.io/linuxserver/baseimage-selkies@sha256:7bdf3c1cc57e80b1c4e192d64a2053
 ARG CHATGPT_VERSION=26.901.51231
 ARG CHATGPT_SHA256=02a2f5c6cb69509c62abcbdd13c76b139cdb2ca9edde7537239ddde024077ea0
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      bubblewrap chromium dbus-x11 git gh gnome-keyring libsecret-1-0 nodejs npm \
+      bubblewrap chromium dbus-x11 git gh gnome-keyring libsecret-1-0 \
       python3-venv build-essential scrot wmctrl xdotool xterm supervisor \
     && curl -fL --retry 3 -o /tmp/chatgpt.deb \
       "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_${CHATGPT_VERSION}_arm64.deb" \
@@ -16,6 +16,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 
 COPY launch-chatgpt /usr/local/bin/launch-chatgpt
 COPY autostart /defaults/autostart
+COPY web /opt/ghostship-chatgpt/web
 COPY init-workstation /custom-cont-init.d/10-workstation
 COPY nix-daemon-run /etc/s6-overlay/s6-rc.d/svc-nix/run
 COPY user-services-run /etc/s6-overlay/s6-rc.d/svc-user-services/run
