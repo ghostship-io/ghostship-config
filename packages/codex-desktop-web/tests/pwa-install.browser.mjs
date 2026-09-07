@@ -4,9 +4,11 @@ import { createServer } from "node:http";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { chromium } from "playwright-core";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const { transformIndex } = createRequire(import.meta.url)("../bridge/gateway.cjs");
 
 function findBrowserExecutable() {
   if (process.env.CODEX_BROWSER_EXECUTABLE) {
@@ -60,7 +62,15 @@ test("Codex offers and invokes Chrome PWA installation", async () => {
   const register = readFileSync(
     path.join(packageRoot, "bridge", "browser", "pwa-register.js"),
   );
+  const manifestLink = transformIndex('<script type="module">', {})
+    .match(/<link rel="manifest"[^>]+>/)[0];
   const server = createServer((request, response) => {
+    if (request.url === '/manifest.webmanifest') {
+      const authorized = request.headers.cookie?.includes('acceptance_access=allowed');
+      response.writeHead(authorized ? 200 : 401, { 'content-type': 'application/manifest+json' });
+      response.end(JSON.stringify(authorized ? { name: 'Authenticated Codex', start_url: '/', display: 'standalone' } : {}));
+      return;
+    }
     if (request.url === "/pwa-register.js") {
       response.writeHead(200, {
         "content-type": "text/javascript; charset=utf-8",
@@ -68,9 +78,10 @@ test("Codex offers and invokes Chrome PWA installation", async () => {
       response.end(register);
       return;
     }
-    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8",
+      'set-cookie': 'acceptance_access=allowed; Path=/; SameSite=Lax; HttpOnly' });
     response.end(`<!doctype html>
-      <html><body>
+      <html><head>${manifestLink}</head><body>
         <main>Codex</main>
         <div data-codex-notification-prompt
           style="position:fixed;top:20px;right:20px;height:60px">
@@ -88,6 +99,10 @@ test("Codex offers and invokes Chrome PWA installation", async () => {
   try {
     const page = await browser.newPage();
     await page.goto(origin);
+    const devtools = await page.context().newCDPSession(page);
+    const manifest = await devtools.send('Page.getAppManifest');
+    assert.equal(JSON.parse(manifest.data).name, 'Authenticated Codex',
+      'Chrome must include access cookies when fetching the installation manifest');
 
     assert.equal(await dispatchInstallEvent(page, "accepted"), true);
     const offer = page.getByRole("status", { name: "Install Codex" });

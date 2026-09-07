@@ -39,7 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and isolate transport channels between tabs sharing browser storage.
 - **Browser startup**: Compress large HTTP and WebSocket payloads, route request
   replies to their originating tab, and avoid resending the full startup
-  snapshot for project updates. Relay complete native chunked messages.
+  snapshot for project updates. Relay complete native chunked messages and
+  acknowledge them independently of the hidden renderer to keep state updates flowing.
+- **Authenticated app installation**: Include access cookies when Chrome fetches
+  the web app manifest behind Cloudflare Access.
 
 ## [3.4.7] - 2026-09-02
 

@@ -67,8 +67,8 @@ function readBootstrap() {
 
 const bootstrap = readBootstrap();
 
-// The native renderer owns acknowledgements. Browser sessions receive complete
-// messages, so joining mid-transfer cannot leave a partial stream in their UI.
+// The relay owns acknowledgements even when the hidden native view has stopped
+// consuming messages. Browser sessions receive only complete transfers.
 function readChunk(part, channel) {
   if (part.kind === "start") {
     for (const [id, transfer] of chunkTransfers) {
@@ -136,6 +136,10 @@ function subscribe(channel) {
   }
   const listener = (_event, ...args) => {
     if (args[0]?.marker === "codex-host-chunked-message-v1") {
+      // Electron queues inline state updates behind this transfer. Acknowledge
+      // every part locally; upstream ignores duplicate acknowledgements from
+      // its renderer. Browser connections must never own native flow control.
+      ipcRenderer.send("codex_desktop:chunked-message-ack", args[0].transferId, args[0].sequence);
       try {
         const value = readChunk(args[0], channel);
         if (value === undefined) return;

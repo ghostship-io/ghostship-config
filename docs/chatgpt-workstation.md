@@ -53,13 +53,16 @@ On narrow screens the sidebar is a drawer and closes after selecting a chat.
 The layout tracks the visible viewport so browser chrome and the software
 keyboard do not push the composer below the screen. Chrome can install the
 same-origin web app using its install action or the app's installation prompt.
+The manifest fetch includes credentials so installation works behind the
+existing Cloudflare Access login.
 Project changes invalidate upstream state in place in every connected browser,
 preserving the current conversation and unsent draft instead of reloading tabs.
 Each tab has distinct native transport channels, including tabs sharing the
 same browser profile. Saved projects, chat history, live replies, pins, and
 upstream persisted state are shared. Drafts survive transport reconnects.
 Request replies go only to the requesting tab; shared events still fan out.
-The native renderer owns chunk acknowledgements, and the relay forwards complete
+The relay acknowledges native chunks itself, so a stalled hidden renderer cannot
+block later state updates. It forwards complete
 messages. Project updates refresh only the sidebar snapshot. Large HTTP and
 WebSocket payloads use compression to reduce startup traffic on slower links.
 

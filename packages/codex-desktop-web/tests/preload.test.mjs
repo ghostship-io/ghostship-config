@@ -7,13 +7,17 @@ import test from 'node:test';
 test('native relay works with only the sandbox Electron API and rejects private channels', async () => {
   const ipc = new EventEmitter();
   const sent = [];
+  const acknowledgements = [];
   let heartbeat;
   const syncChannels = [];
   ipc.sendSync = (channel) => {
     syncChannels.push(channel);
     return channel === 'codex_desktop:get-shared-object-snapshot' ? {} : null;
   };
-  ipc.send = (...args) => sent.push(args);
+  ipc.send = (...args) => {
+    if (args[0] === "codex_desktop:chunked-message-ack") acknowledgements.push(args.slice(1));
+    else sent.push(args);
+  };
   ipc.invoke = async (channel) => ({ result: channel });
   const source = await readFile(new URL('../bridge/combined-preload.cjs', import.meta.url), 'utf8');
   vm.runInNewContext(source, {
@@ -61,6 +65,8 @@ test('native relay works with only the sandbox Electron API and rejects private 
     { type: 'string-end' }, { type: 'container-end' }]);
   syncChannels.length = 0;
   chunk(3, 'end');
+  assert.deepEqual(acknowledgements, [['state', 0], ['state', 1], ['state', 2], ['state', 3]],
+    'the relay drains every part without a native renderer or browser acknowledgement');
   assert.deepEqual(sent.slice(before).map(([, message]) => message.type), ['bootstrap-update', 'event']);
   assert.deepEqual(syncChannels, ['codex_desktop:get-initial-sidebar-bootstrap']);
   assert.deepEqual(JSON.parse(JSON.stringify(sent.at(-1)[1].args[0])), {
@@ -73,7 +79,8 @@ test('native relay works with only the sandbox Electron API and rejects private 
     type: 'send', channel: 'codex_desktop:chunked-message-ack', args: ['state', 3],
   });
   await new Promise(setImmediate);
-  assert.equal(sent.length, complete, 'the native renderer owns acknowledgements');
+  assert.equal(sent.length, complete, 'browser acknowledgements are not forwarded');
+  assert.equal(acknowledgements.length, 5, 'only the relay acknowledges native transfers');
   chunk(0, 'start');
   chunk(1, 'chunk', [{ type: 'object-start' }]);
   ipc.emit('codex_desktop:message-for-view', {}, {

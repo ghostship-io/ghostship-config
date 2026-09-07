@@ -88,7 +88,7 @@ function safeStaticPath(root, requestPath) {
 
 function transformIndex(source, bootstrap = {}, appVersion = "0.0.0") {
   const bridgeScripts = [
-    '<link rel="manifest" href="/manifest.webmanifest">',
+    '<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">',
     '<meta name="theme-color" content="#0d0d0d">',
     '<meta name="mobile-web-app-capable" content="yes">',
     '<meta name="apple-mobile-web-app-capable" content="yes">',
