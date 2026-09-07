@@ -136,6 +136,20 @@ function installElectronProxy(realElectron, gateway) {
         : OriginalBrowserWindow.getFocusedWindow();
     }
 
+    loadURL(url, options) {
+      // Use the same renderer origin that upstream accepts in development.
+      // The packaged app:// handler belongs to the desktop shell; our native
+      // relay host needs the gateway's initialized HTML as well as its assets.
+      if (this === browserPrimaryWindow && new URL(url).protocol === "app:") {
+        const target = new URL(`http://localhost:${process.env.CODEX_WEB_NATIVE_HOST_PORT || "5175"}/`);
+        const source = new URL(url);
+        target.search = source.search;
+        target.hash = source.hash;
+        return super.loadURL(target.href, options);
+      }
+      return super.loadURL(url, options);
+    }
+
     isFullScreen() {
       return this === browserPrimaryWindow
         ? browserFullscreen

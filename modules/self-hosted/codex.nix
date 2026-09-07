@@ -98,6 +98,7 @@ let
     xz
     p7zip
     util-linux
+    procps
     websocat
     iptables
     iproute2

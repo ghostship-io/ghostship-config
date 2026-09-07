@@ -47,7 +47,7 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   await mkdir(sharedRoot);
   await writeFile(
     path.join(webviewRoot, "index.html"),
-    '<script type="module" src="/assets/index.js"></script>',
+    '<html data-build="<!-- PROD_BUILD_TAG_HERE -->"><script type="module" src="/assets/index.js"></script></html>',
   );
   process.env.CODEX_WEB_FILE_ROOTS = sharedRoot;
   process.env.CODEX_WEB_UPLOAD_ROOT = path.join(root, "uploads");
@@ -60,6 +60,9 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
     webviewRoot,
   });
   const port = gateway.server.address().port;
+  const nativeIndex = await (await fetch("http://127.0.0.1:5175/")).text();
+  assert.match(nativeIndex, /data-build="test"/);
+  assert.doesNotMatch(nativeIndex, /PROD_BUILD_TAG_HERE|electron-shim/);
   const relay = await openSocket(`ws://127.0.0.1:${port}/__bridge/relay`, {
     headers: {
       "x-codex-relay-primary": "1",

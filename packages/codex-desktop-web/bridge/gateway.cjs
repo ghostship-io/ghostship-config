@@ -914,12 +914,14 @@ async function createGateway(options) {
         try {
           const callback = await fetch(
             `http://127.0.0.1:${port}${requestUrl.pathname}${requestUrl.search}`,
+            { redirect: "manual", signal: AbortSignal.timeout(30_000) },
           );
           const body = Buffer.from(await callback.arrayBuffer());
           response.writeHead(callback.status, {
             "content-type": callback.headers.get("content-type") || "text/html; charset=utf-8",
             "content-length": body.length,
             "cache-control": "no-store",
+            ...(callback.headers.has("location") ? { location: callback.headers.get("location") } : {}),
           });
           response.end(body);
           return;
@@ -1066,7 +1068,7 @@ async function createGateway(options) {
     if (target.endsWith("index.html")) {
       body = Buffer.from(
         request.socket.localPort === nativeHostPort
-          ? body.toString("utf8")
+          ? body.toString("utf8").replaceAll("<!-- PROD_BUILD_TAG_HERE -->", options.appVersion)
           : transformIndex(body.toString("utf8"), { ...relayBootstrap, __codexWebRelease: options.releaseId }, options.appVersion),
       );
     }

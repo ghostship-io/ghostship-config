@@ -15,6 +15,20 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 mkdir -m0700 "$work/home" "$work/run"
+cat > "$work/session.conf" <<'EOF'
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>unix:tmpdir=/tmp</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*"/>
+    <allow receive_sender="*"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+EOF
 Xvfb :98 -screen 0 1440x1000x24 -nolisten tcp > "$work/display.log" 2>&1 &
 display_pid=$!
 for _ in $(seq 1 100); do
@@ -28,7 +42,7 @@ setsid env -i HOME="$work/home" PATH="$PATH" DISPLAY=:98 \
   XDG_RUNTIME_DIR="$work/run" CODEX_HOME="$work/home/.codex" \
   CODEX_WEB_HOST=127.0.0.1 CODEX_WEB_PORT=18214 CODEX_WEB_NATIVE_HOST_PORT=15175 \
   FONTCONFIG_FILE="${FONTCONFIG_FILE:-}" \
-  dbus-run-session -- "$runtime/electron" --no-sandbox --disable-gpu --disable-dev-shm-usage \
+  dbus-run-session --config-file="$work/session.conf" -- "$runtime/electron" --no-sandbox --disable-gpu --disable-dev-shm-usage \
   > "$work/app.log" 2>&1 &
 app_pid=$!
 for _ in $(seq 1 60); do
