@@ -43,6 +43,8 @@
   vulkan-loader,
   libusb1,
   zlib,
+  qt5,
+  qt6,
 }:
 let
   release = builtins.fromJSON (builtins.readFile ./releases/26.901.51231.json);
@@ -111,6 +113,8 @@ buildNpmPackage {
     vulkan-loader
     libusb1
     zlib
+    qt5.qtbase
+    qt6.qtbase
   ];
   # Electron loads these libraries dynamically; retain them in the runtime path.
   runtimeDependencies = [
@@ -129,10 +133,14 @@ buildNpmPackage {
   installPhase = ''
     runHook preInstall
     cp -a prepared "$out"
+    # Android prebuilds share the CPU architecture but target a different libc.
+    # They are never selected by the Linux runtime and cannot be ELF-patched here.
+    find "$out/runtime" -type d -path '*/prebuilds/android-*' -prune -exec rm -r {} +
     runHook postInstall
   '';
   # Preserve native code and resource data; only ELF loader/library paths change.
   dontStrip = true;
+  dontWrapQtApps = true;
   meta = {
     description = "Web-native transport for the official ChatGPT Linux desktop app";
     homepage = "https://learn.chatgpt.com/docs/linux/linux-app";
