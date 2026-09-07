@@ -5,6 +5,7 @@ const { EventEmitter } = require("node:events");
 const Module = require("node:module");
 const path = require("node:path");
 const WebSocket = require("ws");
+const { trackNotificationPort, currentNotificationPath } = require("./notification-context.cjs");
 const { encode, decode } = require("./codec.cjs");
 
 function installElectronProxy(realElectron, gateway) {
@@ -12,7 +13,6 @@ function installElectronProxy(realElectron, gateway) {
   const OriginalBrowserWindow = realElectron.BrowserWindow;
   let browserPrimaryWindow;
   let browserFullscreen = false;
-  let notificationCounter = 0;
   let applicationMenu;
   let nativeRelay;
   let nativeRelayRetry;
@@ -55,6 +55,15 @@ function installElectronProxy(realElectron, gateway) {
     }
   });
 
+  realElectron.ipcMain.prependListener("codex_desktop:connect-app-host", (event) => {
+    for (const port of event.ports || []) trackNotificationPort(port);
+  });
+
+  gateway.setBrowserFocusStateHandler((focused) => {
+    if (browserPrimaryWindow && !browserPrimaryWindow.isDestroyed()) {
+      browserPrimaryWindow.emit(focused ? "focus" : "blur");
+    }
+  });
   gateway.setBrowserFullscreenStateHandler((enabled) => {
     if (browserFullscreen === enabled) return;
     browserFullscreen = enabled;
@@ -159,6 +168,10 @@ function installElectronProxy(realElectron, gateway) {
       return super.loadURL(url, options);
     }
 
+    isFocused() {
+      return this === browserPrimaryWindow ? gateway.isBrowserFocused() : super.isFocused();
+    }
+
     isFullScreen() {
       return this === browserPrimaryWindow
         ? browserFullscreen
@@ -228,9 +241,8 @@ function installElectronProxy(realElectron, gateway) {
 
     constructor(options = {}) {
       super();
-      notificationCounter += 1;
-      this.id = `notification-${notificationCounter}`;
-      this.options = options;
+      this.id = `notification-${crypto.randomUUID()}`;
+      this.options = { ...options, navigationPath: currentNotificationPath() };
     }
 
     show() {

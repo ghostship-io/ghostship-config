@@ -458,6 +458,43 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
     y: 360,
   });
 
+  first.send(encode({ type: 'notification-action', notificationId: 'from-previous-generation',
+    action: 'click', navigationPath: '/thread/shared' }));
+  let navigation;
+  do { navigation = await nextMessage(first); } while (navigation.type === 'control');
+  assert.deepEqual(navigation, { type: 'event', channel: 'codex_desktop:message-for-view',
+    args: [{ type: 'navigate-to-route', path: '/thread/shared' }] });
+
+  const focusChanges = [];
+  gateway.setBrowserFocusStateHandler((focused) => focusChanges.push(focused));
+  const presence = async (socket, values = {}) => {
+    socket.send(encode({ type: 'browser-presence', focused: false, activeMedia: false, terminalOpen: false, ...values }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  };
+  const updateReady = async () => (await (await fetch(`${origin}/health`)).json()).updateReady;
+  assert.equal(await updateReady(), false, 'unknown clients block automatic restart');
+  await presence(first, { focused: true });
+  await presence(second, { focused: true });
+  await presence(first);
+  assert.equal(gateway.isBrowserFocused(), true, 'one focused device keeps the app focused');
+  await presence(second);
+  assert.deepEqual(focusChanges, [true, false]);
+  assert.equal(await updateReady(), false, 'recently connected clients are active');
+  const activityClock = Date.now;
+  try {
+    Date.now = () => activityClock() + 16 * 60 * 1000;
+    assert.equal(await updateReady(), true, 'idle open tabs allow updates');
+    await presence(first, { activeMedia: true });
+    assert.equal(await updateReady(), false, 'recording blocks updates');
+    await presence(first, { terminalOpen: true });
+    assert.equal(await updateReady(), false, 'open terminals block updates');
+    await presence(first);
+    assert.equal(await updateReady(), true);
+    first.send(encode({ type: 'user-activity' }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(await updateReady(), false, 'new input postpones updates');
+  } finally { Date.now = activityClock; }
+
   const realNow = Date.now;
   try {
     Date.now = () => realNow() + 16000;

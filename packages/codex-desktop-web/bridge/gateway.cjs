@@ -8,6 +8,8 @@ const zlib = require("node:zlib");
 const { URL } = require("node:url");
 const { WebSocketServer, WebSocket } = require("ws");
 const { decode, encode } = require("./codec.cjs");
+const { validNavigationPath } = require("./notification-context.cjs");
+const { createPushNotifications } = require("./push-notifications.cjs");
 
 const SIDEBAR_CHANNEL = "codex_desktop:get-initial-sidebar-bootstrap";
 const PROJECT_STATE_KEYS = new Set([
@@ -157,6 +159,7 @@ function browserSurfaceKey(conversationId, browserTabId) {
 
 async function createGateway(options) {
   const browserClients = new Map();
+  const push = options.stateDirectory ? createPushNotifications(options.stateDirectory) : null;
   const browserSurfaces = new Map();
   const auxiliaryWindows = new Map();
   const browserNotifications = new Map();
@@ -184,6 +187,15 @@ async function createGateway(options) {
   let auxiliaryWindowGeneration = 0;
   let browserGuestFactory;
   let browserFullscreenStateHandler;
+  let browserFocusStateHandler;
+  let browserFocused = false;
+  function updateBrowserFocus() {
+    const next = [...browserClients.values()].some((client) => client.focused);
+    if (next !== browserFocused) {
+      browserFocused = next;
+      browserFocusStateHandler?.(next);
+    }
+  }
   const pendingDeviceLocalCommands = new Map();
   const responseOwners = new Map();
 
@@ -324,9 +336,10 @@ async function createGateway(options) {
 
   function showNotification(notificationId, options, onEvent) {
     browserNotifications.set(notificationId, onEvent);
-    broadcastControl({
+    const message = {
       type: "show-notification",
       notificationId,
+      navigationPath: options.navigationPath,
       options: {
         actions: Array.isArray(options.actions)
           ? options.actions.map((action, index) => ({
@@ -342,7 +355,9 @@ async function createGateway(options) {
         silent: options.silent === true,
         title: options.title || "Codex",
       },
-    });
+    };
+    broadcastControl(message);
+    void push?.notify(message);
   }
 
   function closeNotification(notificationId) {
@@ -790,6 +805,29 @@ async function createGateway(options) {
   }
 
   function handleBrowserMessage(client, message) {
+    if (message.type === "user-activity") {
+      client.lastActivity = Date.now();
+      return;
+    }
+    if (message.type === "browser-presence") {
+      client.presenceKnown = true;
+      client.focused = message.focused === true;
+      client.activeMedia = message.activeMedia === true;
+      client.terminalOpen = message.terminalOpen === true;
+      updateBrowserFocus();
+      return;
+    }
+    if (message.type === "push-subscribe" || message.type === "push-unsubscribe") {
+      try {
+        if (!push) throw new Error("Background notifications are unavailable");
+        if (message.type === "push-subscribe") push.subscribe(client.deviceId, message.subscription);
+        else push.unsubscribe(client.deviceId);
+        send(client.socket, { type: "control", action: "push-status", enabled: push.has(client.deviceId) });
+      } catch (error) {
+        send(client.socket, { type: "control", action: "push-status", enabled: false, error: error.message });
+      }
+      return;
+    }
     if (
       message.type === "claim-device-local-command" &&
       typeof message.commandId === "string" &&
@@ -890,6 +928,12 @@ async function createGateway(options) {
     }
     if (message.type === "notification-action") {
       const notify = browserNotifications.get(message.notificationId);
+      if (message.action === "click" && validNavigationPath(message.navigationPath) &&
+          (!notify || !/^\d+$/.test(message.actionId || ""))) {
+        send(client.socket, { type: "event", channel: "codex_desktop:message-for-view",
+          args: [{ type: "navigate-to-route", path: message.navigationPath }] });
+        return;
+      }
       if (notify) {
         notify({
           type: message.action === "close" ? "close" : "click",
@@ -979,6 +1023,8 @@ async function createGateway(options) {
         version: options.appVersion,
         relayConnected: isRelayHealthy(),
         browserClients: browserClients.size,
+        updateReady: [...browserClients.values()].every((client) => client.presenceKnown &&
+          !client.activeMedia && !client.terminalOpen && Date.now() - client.lastActivity >= 15 * 60 * 1000),
         pendingDialogs: pendingDialogs.size,
       });
       return;
@@ -1215,6 +1261,9 @@ async function createGateway(options) {
     const client = {
       id: clientId,
       deviceId,
+      lastActivity: Date.now(),
+      presenceKnown: false,
+      focused: false,
       socket,
       portIds: new Set(),
       surfaceKeys: new Set(),
@@ -1222,6 +1271,7 @@ async function createGateway(options) {
     browserClients.set(clientId, client);
     send(socket, {
       type: "hello",
+      pushPublicKey: push?.publicKey,
       releaseId: options.releaseId,
       clientId,
       deviceId,
@@ -1236,6 +1286,7 @@ async function createGateway(options) {
     });
     socket.on("close", () => {
       browserClients.delete(clientId);
+      updateBrowserFocus();
       for (const [key, owner] of responseOwners) {
         if (owner === clientId) responseOwners.delete(key);
       }
@@ -1295,6 +1346,8 @@ async function createGateway(options) {
     requestDialog,
     closeNotification,
     nativeServer,
+    isBrowserFocused: () => browserFocused,
+    setBrowserFocusStateHandler(handler) { browserFocusStateHandler = handler; },
     setBrowserFullscreenStateHandler(handler) {
       browserFullscreenStateHandler = handler;
     },

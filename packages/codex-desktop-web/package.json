@@ -1,6 +1,6 @@
 {
   "name": "ghostship-codex-desktop-web",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "Browser transport for the upstream ChatGPT Codex desktop renderer",
   "type": "module",
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@electron/asar": "4.2.1",
+    "web-push": "3.6.7",
     "ws": "8.21.1"
   },
   "devDependencies": {

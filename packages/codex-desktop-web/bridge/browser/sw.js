@@ -27,19 +27,40 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(fetch(event.request));
 });
 
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  const message = event.data.json();
+  const options = message.options || {};
+  event.waitUntil(self.registration.showNotification(options.title || "Codex", {
+    body: options.body || "", icon: "/__bridge/icon-192.png",
+    actions: options.actions || [], silent: options.silent === true,
+    tag: `codex-${message.notificationId}`,
+    data: { codexNotificationId: message.notificationId, navigationPath: message.navigationPath },
+  }));
+});
+
 self.addEventListener("notificationclick", (event) => {
   const notificationId = event.notification.data?.codexNotificationId;
   const actionId = event.action || null;
+  const navigationPath = event.notification.data?.navigationPath;
   event.notification.close();
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then(async (windowClients) => {
         const client = windowClients[0];
-        if (!client) return;
+        if (!client) {
+          const url = new URL("/", self.location.origin);
+          if (notificationId) url.searchParams.set("codex-notification", notificationId);
+          if (navigationPath) url.searchParams.set("codex-path", navigationPath);
+          if (actionId) url.searchParams.set("codex-action", actionId);
+          await self.clients.openWindow(url.href);
+          return;
+        }
         client.postMessage({
           type: "codex-notification-action",
           notificationId,
+          navigationPath,
           actionId,
         });
         await client.focus();

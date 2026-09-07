@@ -160,3 +160,37 @@ test("Codex offers and invokes Chrome PWA installation", async () => {
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('background push wakes the service worker and displays a notification', async () => {
+  const worker = readFileSync(path.join(packageRoot, 'bridge/browser/sw.js'));
+  const server = createServer((request, response) => {
+    response.writeHead(200, { 'content-type': request.url === '/sw.js' ? 'text/javascript' : 'text/html' });
+    response.end(request.url === '/sw.js' ? worker : '<script>navigator.serviceWorker.register("/sw.js")</script>');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const browser = await chromium.launch({ executablePath: findBrowserExecutable(), headless: true });
+  try {
+    const context = await browser.newContext({ permissions: ['notifications'] });
+    const page = await context.newPage();
+    const cdp = await context.newCDPSession(page);
+    let registrationId;
+    cdp.on('ServiceWorker.workerRegistrationUpdated', ({ registrations }) => {
+      registrationId = registrations.find((r) => r.scopeURL === origin + '/')?.registrationId || registrationId;
+    });
+    await cdp.send('ServiceWorker.enable');
+    await page.goto(origin);
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    assert.ok(registrationId);
+    await cdp.send('ServiceWorker.stopAllWorkers');
+    await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId,
+      data: JSON.stringify({ notificationId: 'background-proof', navigationPath: '/thread/shared', options: { title: 'Task finished', body: 'Available on every device' } }) });
+    await page.waitForFunction(async () => (await (await navigator.serviceWorker.ready).getNotifications()).length === 1);
+    const shown = await page.evaluate(async () => {
+      const [n] = await (await navigator.serviceWorker.ready).getNotifications();
+      const result = { title: n.title, body: n.body, tag: n.tag, data: n.data }; n.close(); return result;
+    });
+    assert.deepEqual(shown, { title: 'Task finished', body: 'Available on every device',
+      tag: 'codex-background-proof', data: { codexNotificationId: 'background-proof', navigationPath: '/thread/shared' } });
+  } finally { await browser.close(); await new Promise((resolve) => server.close(resolve)); }
+});

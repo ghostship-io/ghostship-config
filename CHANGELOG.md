@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.6.0] - 2026-09-07
+
+- **Background notifications**: Persist per-device Web Push subscriptions and
+  VAPID keys, encrypt completion alerts, wake the service worker for closed-tab
+  delivery, and open the app from notification clicks. Report registration
+  failures with a retry action.
+- **Idle upgrades**: Check the signed ChatGPT Linux repository every 15 minutes
+  and allow activation after 15 minutes without browser input, while protecting
+  active tasks, recordings, open terminals and dialogs.
+- **Project selection**: Disable folder selection during navigation so a quick
+  click cannot select the previous directory. Document the OpenChamber project,
+  Git authentication and Nix profile migration.
+- **Mobile project screen**: Fit the inner zoomed frame to the visible viewport
+  and remove the desktop suggestion overlap so project headings and composer
+  controls stay separate below Android browser chrome.
+- **Browser verification**: Exercise encrypted push payloads, stopped-worker
+  notifications, multi-device focus and update deferral, plus the folder-loading
+  race. Include a local speech fixture tool for microphone acceptance.
+
 ## [3.5.0] - 2026-09-07
 
 - **ChatGPT Linux workstation**: Restore the web-native desktop renderer using

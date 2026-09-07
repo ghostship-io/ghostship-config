@@ -66,7 +66,7 @@ buildNpmPackage {
         "node_modules"
       ]);
   };
-  npmDepsHash = "sha256-yTubtHOrfBUH301tZxSzwFdKLENQk5iGUfjwS5VdfWI=";
+  npmDepsHash = "sha256-y7UAMYe7F4o7lSyyYspqmCFQ41OsHDMqMm9wvqZNw/Q=";
   npmInstallFlags = [ "--ignore-scripts" ];
   dontNpmBuild = true;
   nativeBuildInputs = [

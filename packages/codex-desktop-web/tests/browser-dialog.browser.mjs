@@ -113,7 +113,7 @@ test("mobile drawer preserves chat width and follows the visible viewport", asyn
       aside { width: 240px; flex-shrink: 0; overflow: hidden; }
       main { flex: 1; display: flex; flex-direction: column; }
       #composer { margin-top: auto; height: 100px; }
-    </style><div id="root"><div id="layout">
+    </style><div id="root"><div id="layout" style="--codex-window-zoom:1;height:calc(100vh / var(--codex-window-zoom))">
       <aside class="app-shell-left-panel"><button data-app-action-sidebar-thread-row>Shared chat</button></aside>
       <main data-app-shell-main-surface><button aria-label="Seitenleiste ausblenden" aria-controls="app-shell-sidebar" aria-expanded="true">Hide</button><input id="composer"></main>
     </div></div>`);
@@ -168,11 +168,12 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
     }
     if (request.url?.startsWith("/__bridge/files")) {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-      response.end(JSON.stringify({
+      const target = new URL(request.url, 'http://localhost').searchParams.get('path');
+      setTimeout(() => response.end(JSON.stringify({
         entries: [{ name: "project", type: "directory" }],
         parent: null,
-        path: "/workspace",
-      }));
+        path: target,
+      })), target === '/workspace/project' ? 300 : 0);
       return;
     }
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -314,6 +315,7 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
         type: "control",
       }));
     }
+    assert.doesNotMatch(await page.locator('[data-codex-notification-prompt]').innerText(), /object Event/);
     await page.getByRole("heading", { name: "Select Project Root" }).waitFor();
     assert.equal(await page.locator('[data-codex-web-dialog]').evaluate(
       (element) => element.matches(':modal')), true);
@@ -332,7 +334,11 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
       ).count(),
       1,
     );
+    await page.getByRole("button", { name: /project$/ }).click();
+    assert.equal(await page.getByRole("button", { name: "Select this folder" }).isDisabled(), true);
     await page.getByRole("button", { name: "Select this folder" }).click();
+    assert.ok(browserMessages.some((message) => message.type === 'dialog-result' &&
+      message.result?.filePaths?.[0] === '/workspace/project'));
     await page
       .locator('[data-codex-web-dialog=""]')
       .waitFor({ state: "detached" });

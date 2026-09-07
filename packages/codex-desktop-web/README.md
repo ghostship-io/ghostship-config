@@ -17,7 +17,8 @@ Release descriptors under `releases/` bind the official Linux package URL and
 checksum. `discover-linux-release.mjs` authenticates OpenAI's repository using
 the pinned public key. `prepare-linux.mjs` extracts the package, preserves its
 native runtime and Linux modules, checks required preload channels, and installs
-the transport. Nix resolves the runtime's ELF dependencies.
+the transport with its own production dependencies under `bridge/node_modules`.
+Upstream dependency versions are preserved. Nix resolves the runtime's ELF dependencies.
 
 ```sh
 nix develop -c npm --prefix packages/codex-desktop-web ci --ignore-scripts
@@ -34,7 +35,9 @@ still require new adapters and authenticated browser acceptance.
 ## Browser acceptance
 
 The fixture suite exercises binary IPC, file-picker modal containment, secondary
-window lifecycle, fullscreen and the install prompt. It does not prove Android
+window lifecycle, fullscreen, the install prompt and notification delivery to a
+stopped service worker. Unit tests cover push encryption/persistence and update
+deferral across devices. It does not prove Android
 installation or authenticated app features.
 
 `tests/live-acceptance.mjs` and `tests/live-ui-surface.mjs` contain the earlier

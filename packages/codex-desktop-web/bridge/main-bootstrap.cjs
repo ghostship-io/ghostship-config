@@ -36,6 +36,7 @@ async function start() {
   const release = require(path.join(process.resourcesPath, "codex-web-compatibility.json"));
   const gateway = await createGateway({
     appVersion: require("../package.json").version,
+    stateDirectory: path.join(electron.app.getPath("home"), ".local/state/codex-web"),
     releaseId: `${release.desktopVersion}:${release.transportSha256 || release.preloadSha256}`,
     host: process.env.CODEX_WEB_HOST,
     port: Number(process.env.CODEX_WEB_PORT),

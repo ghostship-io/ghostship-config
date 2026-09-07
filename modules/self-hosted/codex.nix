@@ -478,7 +478,7 @@ let
     text = ''
       filter='.status == "ok" and .relayConnected == true'
       if [[ "''${1:-}" == --idle ]]; then
-        filter="$filter and .browserClients == 0 and .pendingDialogs == 0"
+        filter="$filter and .updateReady == true and .pendingDialogs == 0"
       fi
       curl -fsS --max-time 5 http://127.0.0.1:8214/health \
         | jq -e "$filter" >/dev/null
@@ -606,7 +606,7 @@ let
     }
 
     if ! is_codex_idle || ! ${codexWebHealth}/bin/codex-web-health --idle; then
-      log_info "Codex has active work, connected browsers, or unknown state; leaving restart queued"
+      log_info "Codex has active work, recent browser activity, recording, terminals, or unknown state; leaving restart queued"
       exit 0
     fi
 
@@ -1869,7 +1869,7 @@ let
 
       [Timer]
       OnBootSec=10m
-      OnUnitActiveSec=4h
+      OnUnitActiveSec=15m
       Persistent=true
       Unit=codex-tool-auto-update.service
 

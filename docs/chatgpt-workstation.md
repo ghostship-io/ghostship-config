@@ -51,7 +51,9 @@ Desktop launch overrides are applied to each app-server thread so its tool-serve
 transport and credentials survive the persistent server connection.
 On narrow screens the sidebar is a drawer and closes after selecting a chat.
 The layout tracks the visible viewport so browser chrome and the software
-keyboard do not push the composer below the screen. Chrome can install the
+keyboard do not push the composer below the screen. The inner zoomed app frame
+also follows the visual viewport, and mobile home suggestions do not retain the
+desktop negative margin that overlaps project headings. Chrome can install the
 same-origin web app using its install action or the app's installation prompt.
 The manifest fetch includes credentials so installation works behind the
 existing Cloudflare Access login.
@@ -73,18 +75,60 @@ port 1455 or 1457. Replace the failed callback URL's host with this app's host,
 keeping `/auth/callback` and its query string, to reach the pending listener.
 Do not share the callback URL: it contains login state.
 
+## Notifications and microphone
+
+Enable notifications on each browser/device using the app's permission offer.
+Completion alerts use both the live connection and encrypted Web Push, with a
+shared notification tag to avoid duplicate entries. Push can wake the service
+worker without an open app tab; clicking an alert focuses an existing tab or
+opens the app at the task route, which survives runtime upgrades. Background
+alerts open the task for its current approval controls instead of retaining
+process-local action callbacks. Browser/OS notification settings and background restrictions
+still control delivery. A failed push registration displays a retry action.
+Subscriptions and VAPID keys persist in `~/.local/state/codex-web/push.json`;
+include that private file in home backups. Push sends only to supported browser
+vendor endpoints and removes expired subscriptions.
+
+Use the public HTTPS address for microphone access. The Dictate control records
+from the current device and inserts the returned transcript in its composer;
+grant microphone permission separately on each device. Local acceptance uses
+`espeak-ng` and Chrome's fake audio capture to test recording and transcription
+without accessing the operator's microphone. The separate live Voice mode still
+uses audio devices in the hidden native avatar window and is not bridged to the
+client microphone; dictation is the verified browser voice-input path. Physical audio devices and OS
+permission prompts require their own device check.
+
+## OpenChamber migration
+
+The September 7 migration copied `ghostship-agent`, `ghostship-newsletter`,
+`ghostship-roms`, `OneConfig` and `nixos-config` into `/workspace`, retaining Git
+metadata and uncommitted/untracked files. These are independent copies; later
+filesystem edits in OpenChamber do not mirror into Codex. All Codex browser
+sessions use the same copied repositories and project registrations.
+
+Git identity, templates/hooks, SSH keys/config and GitHub CLI settings were
+copied into `/home/codex`, with home paths adjusted. The imported Nix profile's
+closure is registered in Codex's own store and rooted under
+`~/.local/state/codex-imports/openchamber-profile`. Its tools are available through
+`~/.nix-profile`; `~/tools` points to `/workspace/ghostship-agent/tools`.
+OpenChamber-specific maintenance jobs were not enabled in Codex.
+The protected migration backup is
+`/srv/apps/chatgpt/migration-openchamber-20260907T085424Z` on the host.
+
 ## Updates and recovery
 
 `codex-tool-auto-update.service` checks OpenAI's signed Linux repository every
-four hours. The pinned OpenAI public key verifies InRelease, which authenticates
+15 minutes. The pinned OpenAI public key verifies InRelease, which authenticates
 the package index and package checksum. A candidate is built against this repo's
 pinned Nix package set, with the official runtime and Linux native modules.
 Missing required preload channels fail preparation. An isolated empty-profile
 startup must connect the native relay before a candidate is queued.
 
-`codex-tool-update-restart.service` waits for idle tasks and no connected browser
-tabs before activation, protecting drafts and sign-in flows. Closing all app tabs
-allows a queued update to apply. Image deployment applies matching-version
+`codex-tool-update-restart.service` waits for idle tasks and 15 minutes without
+input in every connected browser. Open terminals, active microphone/camera
+tracks, pending dialogs and clients that have not reported presence block
+activation. Idle open tabs can remain connected and reload after the update;
+closing all tabs also allows a queued update to apply. Image deployment applies matching-version
 transport fixes at startup while preserving newer automatically installed releases.
 Failed service starts or health checks restore the previous generation. Health
 requires a recent heartbeat from the native renderer, including after a crash.

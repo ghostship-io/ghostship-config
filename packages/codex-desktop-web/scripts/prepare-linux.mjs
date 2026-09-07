@@ -46,7 +46,12 @@ try {
   await cp(path.join(packageRoot, 'bridge'), path.join(extracted, 'bridge'), { recursive: true });
   const relayPreload = await readFile(path.join(extracted, 'bridge/combined-preload.cjs'), 'utf8');
   await writeFile(path.join(extracted, 'bridge/combined-preload.cjs'), `(() => {\n${preload}\n})();\n${relayPreload}`);
-  await cp(path.join(packageRoot, 'node_modules/ws'), path.join(extracted, 'node_modules/ws'), { recursive: true });
+  // Keep transport dependencies private so they cannot replace upstream modules.
+  const lock = JSON.parse(await readFile(path.join(packageRoot, 'package-lock.json'), 'utf8'));
+  for (const [relative, entry] of Object.entries(lock.packages)) {
+    if (!relative.startsWith('node_modules/') || entry.dev) continue;
+    await cp(path.join(packageRoot, relative), path.join(extracted, 'bridge', relative), { recursive: true });
+  }
   const browserAssets = path.join(extracted, 'bridge/browser');
   await writeFile(path.join(browserAssets, 'browser-preload.js'), `(() => {
 const require = (name) => {

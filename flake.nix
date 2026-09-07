@@ -100,6 +100,7 @@
               shellcheck
               util-linux
               gnupg
+              espeak-ng
               playwright-driver.browsers
               prefetch-npm-deps
               ragenix.packages.${system}.default

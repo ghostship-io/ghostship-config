@@ -34,6 +34,7 @@ test('bridged windows remain discoverable by Electron for native state broadcast
   try {
     installElectronProxy(electron, {
       setBrowserFullscreenStateHandler() {}, setBrowserGuestFactory() {},
+      setBrowserFocusStateHandler() {}, isBrowserFocused: () => false,
       registerAuxiliaryWindow() {},
     });
     const proxy = Module._load('electron', { filename: '/upstream/main.cjs' });

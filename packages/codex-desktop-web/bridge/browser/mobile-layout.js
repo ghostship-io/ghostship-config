@@ -82,6 +82,9 @@
         max-height: var(--codex-web-viewport-height, 100dvh) !important;
       }
       body { overflow: hidden; }
+      #root > [style*="--codex-window-zoom"] {
+        height: calc(var(--codex-web-viewport-height, 100dvh) / var(--codex-window-zoom, 1)) !important;
+      }
       .app-shell-left-panel {
         position: absolute !important;
         inset-block: 0;
@@ -117,6 +120,9 @@
       [class*="home-main-content"] [class~="items-end"][class~="grow"] {
         overflow: auto;
         padding-bottom: 16px;
+      }
+      [class*="home-main-content"] :has(> [data-home-ambient-suggestions]) {
+        margin-top: 0 !important;
       }
     }
   `;

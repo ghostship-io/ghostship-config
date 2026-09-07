@@ -303,17 +303,20 @@ and daemon, nested Docker, and persistent home and workspace storage under
 `/workspace`. Use project Nix flakes for dependencies and systemd user services
 for persistent development servers.
 
-Every four hours, the updater authenticates OpenAI's Linux package index,
+Every 15 minutes, the updater authenticates OpenAI's Linux package index,
 builds a candidate against the pinned Nix environment, checks its preload
 contract and starts it with an isolated profile. Successful candidates are
-queued for an idle restart; failed activation restores the previous generation.
+queued for an idle restart, including when idle browser tabs remain open; failed
+activation restores the previous generation.
 The renderer is not rewritten by minified bundle searches. Web transport
 changes have their own release identity so connected pages reload on upgrades.
 
 Sign in through the web interface. The persistent home includes credentials and
 the private key used to unlock the desktop keyring on unattended boots. Native
 desktop Computer Use is unavailable in the official Linux preview. Android
-device testing is outside this task's scope. See the
+installation eligibility and mobile layouts are browser-tested; physical device
+installation remains a separate check. Background Web Push alerts and browser
+microphone capture require permission on each device. See the
 [workstation guide](docs/chatgpt-workstation.md) and
 [research and platform boundaries](docs/research/chatgpt-linux-container.md).
 
