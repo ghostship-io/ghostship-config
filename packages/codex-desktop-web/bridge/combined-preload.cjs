@@ -3,6 +3,8 @@
 const { ipcRenderer } = require("electron");
 const channelListeners = new Map();
 const messagePorts = new Map();
+const chunkTransfers = new Map();
+const sidebarChannel = "codex_desktop:get-initial-sidebar-bootstrap";
 const bootstrapRefreshMessageTypes = new Set([
   "active-workspace-roots-updated",
   "global-state-updated",
@@ -65,6 +67,65 @@ function readBootstrap() {
 
 const bootstrap = readBootstrap();
 
+// The native renderer owns acknowledgements. Browser sessions receive complete
+// messages, so joining mid-transfer cannot leave a partial stream in their UI.
+function readChunk(part, channel) {
+  if (part.kind === "start") {
+    for (const [id, transfer] of chunkTransfers) {
+      if (transfer.channel === channel) chunkTransfers.delete(id);
+    }
+    chunkTransfers.set(part.transferId, { channel, sequence: part.sequence, stack: [], value: undefined });
+    return;
+  }
+  const transfer = chunkTransfers.get(part.transferId);
+  if (!transfer) return;
+  if (part.sequence !== transfer.sequence + 1) {
+    chunkTransfers.delete(part.transferId);
+    throw new Error("Out-of-order native chunk transfer");
+  }
+  transfer.sequence = part.sequence;
+  function append(value) {
+    const parent = transfer.stack.at(-1);
+    if (!parent) transfer.value = value;
+    else if (Array.isArray(parent.value)) parent.value.push(value);
+    else {
+      Object.defineProperty(parent.value, parent.key, {
+        configurable: true, enumerable: true, writable: true, value,
+      });
+      parent.key = undefined;
+    }
+  }
+  for (const token of part.tokens || []) {
+    switch (token.type) {
+      case "object-start":
+      case "array-start": {
+        const value = token.type === "array-start" ? [] : {};
+        append(value);
+        transfer.stack.push({ value });
+        break;
+      }
+      case "container-end": transfer.stack.pop(); break;
+      case "key": transfer.stack.at(-1).key = token.value; break;
+      case "value": append(token.value); break;
+      case "string-start": transfer.string = { target: token.target, parts: [] }; break;
+      case "string-chunk": transfer.string.parts.push(token.value); break;
+      case "string-end": {
+        const value = transfer.string.parts.join("");
+        if (transfer.string.target === "key") transfer.stack.at(-1).key = value;
+        else append(value);
+        transfer.string = undefined;
+        break;
+      }
+      default: throw new Error(`Unsupported native chunk token: ${token.type}`);
+    }
+  }
+  if (part.kind === "end") {
+    chunkTransfers.delete(part.transferId);
+    if (transfer.stack.length || transfer.string) throw new Error("Incomplete native chunk transfer");
+    return transfer.value;
+  }
+}
+
 function send(message) {
   if (connected) ipcRenderer.send("ghostship-native:relay-send", message);
 }
@@ -74,17 +135,34 @@ function subscribe(channel) {
     return;
   }
   const listener = (_event, ...args) => {
+    if (args[0]?.marker === "codex-host-chunked-message-v1") {
+      try {
+        const value = readChunk(args[0], channel);
+        if (value === undefined) return;
+        args = [value];
+      } catch (error) {
+        chunkTransfers.delete(args[0].transferId);
+        console.error("[codex-web] native chunk decode failed", error);
+        return;
+      }
+    }
+    if (channel === "codex_desktop:message-for-view" && args[0]?.type === "shared-object-updated") {
+      const snapshot = bootstrap["codex_desktop:get-shared-object-snapshot"];
+      if (snapshot) {
+        if (args[0].value === undefined) delete snapshot[args[0].key];
+        else snapshot[args[0].key] = args[0].value;
+      }
+    }
     if (
       channel === "codex_desktop:message-for-view" &&
       (
         bootstrapRefreshMessageTypes.has(args[0]?.type) ||
-        isProjectStateFetchResponse(args[0]) ||
-        // Current Linux builds also deliver state notifications through the
-        // chunked transport. Refresh after the complete message arrives.
-        (args[0]?.marker === "codex-host-chunked-message-v1" && args[0]?.kind === "end")
+        isProjectStateFetchResponse(args[0])
       )
     ) {
-      const nextBootstrap = readBootstrap();
+      // Project updates need only the sidebar, not the multi-megabyte shared
+      // object snapshot, diagnostics, and other unchanged startup metadata.
+      const nextBootstrap = { [sidebarChannel]: ipcRenderer.sendSync(sidebarChannel) };
       Object.assign(bootstrap, nextBootstrap);
       send({ type: "bootstrap-update", bootstrap: nextBootstrap });
     }
@@ -95,12 +173,17 @@ function subscribe(channel) {
 }
 
 function unsubscribe(channel) {
+  // Keep startup snapshots current even while no browser is connected.
+  if (channel === "codex_desktop:message-for-view") return;
   const listener = channelListeners.get(channel);
   if (!listener) {
     return;
   }
   ipcRenderer.removeListener(channel, listener);
   channelListeners.delete(channel);
+  for (const [id, transfer] of chunkTransfers) {
+    if (transfer.channel === channel) chunkTransfers.delete(id);
+  }
 }
 
 function createTransferredPort(message) {
@@ -144,6 +227,7 @@ async function handle(message) {
     return;
   }
   if (message.type === "send") {
+    if (message.channel === "codex_desktop:chunked-message-ack") return;
     ipcRenderer.send(message.channel, ...message.args);
     return;
   }
@@ -169,6 +253,7 @@ async function handle(message) {
   }
 }
 
+subscribe("codex_desktop:message-for-view");
 ipcRenderer.on("ghostship-native:relay-state", (_event, ready) => {
   connected = ready === true;
   if (connected) {

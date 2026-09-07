@@ -47,7 +47,8 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   await mkdir(sharedRoot);
   await writeFile(
     path.join(webviewRoot, "index.html"),
-    '<html data-build="<!-- PROD_BUILD_TAG_HERE -->"><script type="module" src="/assets/index.js"></script></html>',
+    '<html data-build="<!-- PROD_BUILD_TAG_HERE -->"><script type="module" src="/assets/index.js"></script></html>' +
+      `<!--${'compressible'.repeat(1000)}-->`,
   );
   process.env.CODEX_WEB_FILE_ROOTS = sharedRoot;
   process.env.CODEX_WEB_UPLOAD_ROOT = path.join(root, "uploads");
@@ -60,7 +61,9 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
     webviewRoot,
   });
   const port = gateway.server.address().port;
-  const nativeIndex = await (await fetch("http://127.0.0.1:5175/")).text();
+  const nativeResponse = await fetch("http://127.0.0.1:5175/", { headers: { 'accept-encoding': 'gzip' } });
+  assert.equal(nativeResponse.headers.get('content-encoding'), 'gzip');
+  const nativeIndex = await nativeResponse.text();
   assert.match(nativeIndex, /data-build="test"/);
   assert.doesNotMatch(nativeIndex, /PROD_BUILD_TAG_HERE|electron-shim/);
   const relay = await openSocket(`ws://127.0.0.1:${port}/__bridge/relay`, {
@@ -104,6 +107,7 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   });
   assert.equal((await nextMessage(first)).type, "hello");
   assert.equal((await nextMessage(second)).type, "hello");
+  assert.equal(first.extensions, 'permessage-deflate');
 
   const relaySubscription = nextMessage(relay);
   first.send(encode({ type: "subscribe", channel: "shared-event" }));
@@ -128,6 +132,27 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   relay.send(encode({ type: "result", clientId: freshRequest.clientId,
     requestId: "fresh", ok: true, result: "current" }));
   assert.equal((await nextMessage(fresh)).type, "result", "fresh clients must not replay stale events");
+  first.send(encode({ type: 'invoke', channel: 'codex_desktop:message-from-view',
+    requestId: 'transport-fetch', args: [{ type: 'fetch', requestId: 'owned-fetch' }] }));
+  await nextMessage(relay);
+  const largeBody = JSON.stringify({ value: 'repeated state '.repeat(10000) });
+  const bytesBefore = first._socket.bytesRead;
+  relay.send(encode({ type: 'event', channel: 'codex_desktop:message-for-view',
+    args: [{ type: 'fetch-response', requestId: 'owned-fetch', bodyJsonString: largeBody }] }));
+  assert.equal((await nextMessage(first)).args[0].bodyJsonString, largeBody);
+  assert.ok(first._socket.bytesRead - bytesBefore < largeBody.length / 4,
+    'large state responses must be compressed on the wire');
+  second.send(encode({ type: 'invoke', channel: 'fence', requestId: 'response-fence', args: [] }));
+  const fence = await nextMessage(relay);
+  relay.send(encode({ type: 'result', clientId: fence.clientId, requestId: fence.requestId, ok: true }));
+  assert.equal((await nextMessage(second)).type, 'result', 'another tab must not receive request-specific state');
+  first.send(encode({ type: 'invoke', channel: 'codex_desktop:message-from-view',
+    requestId: 'transport-prewarm', args: [{ type: 'thread-prewarm-start', hostId: 'local',
+      request: { id: 'prewarm-request', method: 'thread/start' } }] }));
+  await nextMessage(relay);
+  relay.send(encode({ type: 'event', channel: 'codex_desktop:message-for-view',
+    args: [{ type: 'mcp-response', hostId: 'local', message: { id: 'prewarm-request', result: {} } }] }));
+  assert.equal((await nextMessage(first)).args[0].message.id, 'prewarm-request');
   fresh.close();
   relay.send(encode({ type: "relay-ready", bootstrap: {} }));
   assert.deepEqual(await nextMessage(relay), { type: "subscribe", channel: "shared-event" });

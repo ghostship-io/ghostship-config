@@ -56,8 +56,12 @@ same-origin web app using its install action or the app's installation prompt.
 Project changes invalidate upstream state in place in every connected browser,
 preserving the current conversation and unsent draft instead of reloading tabs.
 Each tab has distinct native transport channels, including tabs sharing the
-same browser profile. Saved projects, chat history, live replies, and pins are
-shared; each tab keeps its own draft and navigation.
+same browser profile. Saved projects, chat history, live replies, pins, and
+upstream persisted state are shared. Drafts survive transport reconnects.
+Request replies go only to the requesting tab; shared events still fan out.
+The native renderer owns chunk acknowledgements, and the relay forwards complete
+messages. Project updates refresh only the sidebar snapshot. Large HTTP and
+WebSocket payloads use compression to reduce startup traffic on slower links.
 
 On another device, an upstream login callback may still target localhost on
 port 1455 or 1457. Replace the failed callback URL's host with this app's host,

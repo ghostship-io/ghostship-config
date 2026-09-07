@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const zlib = require("node:zlib");
 const { URL } = require("node:url");
 const { WebSocketServer, WebSocket } = require("ws");
 const { decode, encode } = require("./codec.cjs");
@@ -17,6 +18,33 @@ const PROJECT_STATE_KEYS = new Set([
 ]);
 const DEVICE_LOCAL_COMMAND_IDS = new Set(["showKeyboardShortcuts"]);
 const DEVICE_LOCAL_COMMAND_CLAIM_TTL_MS = 2_000;
+
+function sendHttpBody(request, response, headers, body) {
+  const acceptsGzip = String(request.headers["accept-encoding"] || "").split(",")
+    .some((entry) => /^gzip(?:\s*;|\s*$)/i.test(entry.trim()) &&
+      !/;\s*q=0(?:\.0*)?\s*$/i.test(entry));
+  if (body.length >= 1024 && acceptsGzip && /text\/|javascript|json/.test(headers["content-type"])) {
+    zlib.gzip(body, { level: 3 }, (error, compressed) => {
+      if (response.destroyed) return;
+      const payload = error ? body : compressed;
+      response.writeHead(200, { ...headers, vary: "Accept-Encoding",
+        ...(error ? {} : { "content-encoding": "gzip" }), "content-length": payload.length });
+      response.end(payload);
+    });
+    return;
+  }
+  response.writeHead(200, { ...headers, vary: "Accept-Encoding", "content-length": body.length });
+  response.end(body);
+}
+
+function responseKey(message) {
+  if (message?.type === "fetch" || message?.type === "fetch-response" || message?.type === "cancel-fetch") {
+    return message.requestId == null ? null : `fetch:${message.requestId}`;
+  }
+  const request = message?.type === "mcp-request" || message?.type === "thread-prewarm-start" ? message.request
+    : message?.type === "mcp-response" ? message.message : null;
+  return request?.id == null ? null : `mcp:${message.hostId}:${request.id}`;
+}
 
 function projectStateSignature(sidebar) {
   const projectEntries = Array.isArray(sidebar?.globalStateEntries)
@@ -157,6 +185,7 @@ async function createGateway(options) {
   let browserGuestFactory;
   let browserFullscreenStateHandler;
   const pendingDeviceLocalCommands = new Map();
+  const responseOwners = new Map();
 
   fs.mkdirSync(uploadRoot, { recursive: true, mode: 0o700 });
 
@@ -653,6 +682,25 @@ async function createGateway(options) {
       channel,
       args,
     };
+    if (channel === "codex_desktop:message-for-view") {
+      const value = args?.[0];
+      if (value?.type === "fetch-response" || value?.type === "mcp-response") {
+        const key = responseKey(value);
+        const client = browserClients.get(responseOwners.get(key));
+        responseOwners.delete(key);
+        send(client?.socket, message);
+        return;
+      }
+      if (value?.type === "shared-object-updated") {
+        const snapshot = relayBootstrap["codex_desktop:get-shared-object-snapshot"];
+        if (snapshot) {
+          if (value.value === undefined) delete snapshot[value.key];
+          else Object.defineProperty(snapshot, value.key, {
+            configurable: true, enumerable: true, writable: true, value: value.value,
+          });
+        }
+      }
+    }
     if (args?.[0]?.type === "run-command") {
       const commandId = args[0].id;
       if (!DEVICE_LOCAL_COMMAND_IDS.has(commandId)) {
@@ -762,6 +810,13 @@ async function createGateway(options) {
       return;
     }
     if (message.type === "invoke" || message.type === "send") {
+      if (message.channel === "codex_desktop:message-from-view") {
+        const key = responseKey(message.args?.[0]);
+        if (key) {
+          if (message.args[0].type === "cancel-fetch") responseOwners.delete(key);
+          else responseOwners.set(key, client.id);
+        }
+      }
       sendRelay({ ...message, clientId: client.id });
       return;
     }
@@ -1074,8 +1129,7 @@ async function createGateway(options) {
       if (bridgeFile === "sw.js") {
         headers["service-worker-allowed"] = "/";
       }
-      response.writeHead(200, headers);
-      response.end(body);
+      sendHttpBody(request, response, headers, body);
       return;
     }
 
@@ -1091,19 +1145,23 @@ async function createGateway(options) {
           : transformIndex(body.toString("utf8"), { ...relayBootstrap, __codexWebRelease: options.releaseId }, options.appVersion),
       );
     }
-    response.writeHead(200, {
+    sendHttpBody(request, response, {
       "content-type": MIME_TYPES.get(path.extname(target)) || "application/octet-stream",
       "content-length": body.length,
       "cache-control": target.endsWith("index.html")
         ? "no-cache"
         : "public, max-age=31536000, immutable",
-    });
-    response.end(body);
+    }, body);
   };
   const server = http.createServer(handleHttpRequest);
   const nativeServer = http.createServer(handleHttpRequest);
 
-  const browserWebSockets = new WebSocketServer({ noServer: true });
+  const browserWebSockets = new WebSocketServer({ noServer: true,
+    perMessageDeflate: {
+      zlibDeflateOptions: { level: 3 }, concurrencyLimit: 2, threshold: 1024,
+      serverNoContextTakeover: true, clientNoContextTakeover: true,
+    },
+  });
   const relayWebSockets = new WebSocketServer({ noServer: true });
 
   server.on("upgrade", (request, socket, head) => {
@@ -1178,6 +1236,9 @@ async function createGateway(options) {
     });
     socket.on("close", () => {
       browserClients.delete(clientId);
+      for (const [key, owner] of responseOwners) {
+        if (owner === clientId) responseOwners.delete(key);
+      }
       for (const [channel, subscribers] of channelSubscribers) {
         subscribers.delete(clientId);
         if (subscribers.size === 0) {

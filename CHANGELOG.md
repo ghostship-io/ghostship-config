@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Session synchronization**: Refresh project state in place across browsers,
   preserving the current conversation and unsent draft during project changes,
   and isolate transport channels between tabs sharing browser storage.
+- **Browser startup**: Compress large HTTP and WebSocket payloads, route request
+  replies to their originating tab, and avoid resending the full startup
+  snapshot for project updates. Relay complete native chunked messages.
 
 ## [3.4.7] - 2026-09-02
 
