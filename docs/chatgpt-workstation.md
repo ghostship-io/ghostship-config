@@ -53,6 +53,11 @@ On narrow screens the sidebar is a drawer and closes after selecting a chat.
 The layout tracks the visible viewport so browser chrome and the software
 keyboard do not push the composer below the screen. Chrome can install the
 same-origin web app using its install action or the app's installation prompt.
+Project changes invalidate upstream state in place in every connected browser,
+preserving the current conversation and unsent draft instead of reloading tabs.
+Each tab has distinct native transport channels, including tabs sharing the
+same browser profile. Saved projects, chat history, live replies, and pins are
+shared; each tab keeps its own draft and navigation.
 
 On another device, an upstream login callback may still target localhost on
 port 1455 or 1457. Replace the failed callback URL's host with this app's host,

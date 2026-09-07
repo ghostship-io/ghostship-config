@@ -207,6 +207,10 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
       client.on("message", (payload) => {
         const message = JSON.parse(payload.toString());
         browserMessages.push(message);
+        if (message.type === "post-message-port") {
+          client.send(JSON.stringify({ type: "port-message", portId: message.portId,
+            data: message.message }));
+        }
         if (message.type === "invoke" && message.channel === "codex_desktop:binary-test") {
           client.send(JSON.stringify({
             type: "result", requestId: message.requestId, ok: true,
@@ -246,13 +250,44 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
     headless: true,
   });
   try {
-    const page = await browser.newPage();
+    const context = await browser.newContext();
+    const page = await context.newPage();
     await page.goto(origin);
     await assert.doesNotReject(async () => {
       await page.waitForFunction(() => window.__codexElectronModule, null, {
         timeout: 5_000,
       });
     });
+    const otherTab = await page.context().newPage();
+    await otherTab.goto(origin);
+    assert.equal(await page.evaluate(() => localStorage.getItem('codex-web-device-id')),
+      await otherTab.evaluate(() => localStorage.getItem('codex-web-device-id')));
+    for (const [index, tab] of [page, otherTab].entries()) {
+      assert.equal(await tab.evaluate((value) => new Promise((resolve) => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = (event) => resolve(event.data);
+        window.__codexElectronModule.ipcRenderer.postMessage('tab-test', value, [channel.port2]);
+      }), index), index);
+    }
+    const portIds = browserMessages.filter((message) => message.type === 'post-message-port')
+      .map((message) => message.portId);
+    assert.equal(new Set(portIds).size, 2, 'tabs sharing storage must have distinct native ports');
+    await otherTab.close();
+    await page.evaluate(() => {
+      window.projectEvents = [];
+      window.documentMarker = true;
+      window.__codexElectronModule.ipcRenderer.on('codex_desktop:message-for-view',
+        (_event, message) => window.projectEvents.push(message.type));
+    });
+    for (const socket of sockets) {
+      if (socket.readyState === 1) socket.send(JSON.stringify({
+        type: 'control', action: 'project-state-changed',
+      }));
+    }
+    await page.waitForFunction(() => window.projectEvents.length === 2);
+    assert.deepEqual(await page.evaluate(() => window.projectEvents),
+      ['global-state-updated', 'workspace-root-options-updated']);
+    assert.equal(await page.evaluate(() => window.documentMarker), true);
     assert.deepEqual(await page.evaluate(async () => {
       const value = await window.__codexElectronModule.ipcRenderer.invoke("codex_desktop:binary-test");
       return { bytes: value.bytes instanceof Uint8Array ? [...value.bytes] : null,

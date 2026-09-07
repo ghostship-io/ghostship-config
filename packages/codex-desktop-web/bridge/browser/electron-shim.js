@@ -39,17 +39,19 @@
 
   const deviceId = localStorage.getItem(deviceKey) || randomId();
   localStorage.setItem(deviceKey, deviceId);
+  // Tabs share device storage, but native message ports must be unique even
+  // when another tab starts or the previous connection is still closing.
+  const sessionId = randomId();
   let requestCounter = 0;
   let reconnectTimer;
   let socket;
   let hasConnected = false;
   let activeDialog;
   let notificationPrompt;
-  let projectMutationReloadTimer;
 
   function nextId(prefix) {
     requestCounter += 1;
-    return `${prefix}-${deviceId}-${requestCounter}`;
+    return `${prefix}-${sessionId}-${requestCounter}`;
   }
 
   function send(message) {
@@ -670,8 +672,13 @@
       } else if (message.action === "update-bootstrap") {
         Object.assign(bootstrap, message.bootstrap || {});
       } else if (message.action === "project-state-changed") {
-        clearTimeout(projectMutationReloadTimer);
-        projectMutationReloadTimer = setTimeout(() => location.reload(), 1500);
+        // Use upstream invalidation events so other sessions update their
+        // projects without replacing the current document or losing a draft.
+        emit("codex_desktop:message-for-view", [{
+          type: "global-state-updated",
+          keys: ["local-projects", "remote-projects", "project-order", "connection-group-order"],
+        }]);
+        emit("codex_desktop:message-for-view", [{ type: "workspace-root-options-updated" }]);
       }
     }
   }

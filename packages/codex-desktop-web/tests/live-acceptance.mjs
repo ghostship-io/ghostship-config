@@ -154,13 +154,24 @@ const desktopContext = await secondaryBrowser.newContext({
 const contextB = await secondaryBrowser.newContext({
   ...narrowContextOptions,
 });
+await contextB.addInitScript(() => {
+  const NativeWebSocket = window.WebSocket;
+  window.WebSocket = class extends NativeWebSocket {
+    constructor(...args) {
+      super(...args);
+      if (String(args[0]).includes('/__bridge/ipc')) window.acceptanceSocket = this;
+    }
+  };
+});
 const pwaPage = pwaContext.pages()[0] || (await pwaContext.newPage());
 const pageA = await desktopContext.newPage();
 const pageB = await contextB.newPage();
+const pageC = await desktopContext.newPage();
 const errors = [];
 recordPageErrors(pwaPage, errors);
 recordPageErrors(pageA, errors);
 recordPageErrors(pageB, errors);
+recordPageErrors(pageC, errors);
 
 try {
   await Promise.all([
@@ -168,6 +179,10 @@ try {
     waitForApp(pageA),
     waitForApp(pageB),
   ]);
+  // Load after A has established its device ID so C shares the same identity.
+  await waitForApp(pageC);
+  assert.equal(await pageA.evaluate(() => localStorage.getItem('codex-web-device-id')),
+    await pageC.evaluate(() => localStorage.getItem('codex-web-device-id')));
   await removeAcceptanceProjects(pageA);
   await pageA.waitForTimeout(2_000);
   await Promise.all([
@@ -271,6 +286,9 @@ try {
   await pageA.getByRole("button", { name: "Add new project" }).waitFor();
   console.log("ok scheduled-task navigation and creation entrypoint");
 
+  const preservedDraft = "Unsent draft during project synchronization";
+  await pageB.locator('[contenteditable="true"]').fill(preservedDraft);
+  await pageB.evaluate(() => { window.projectSyncDocument = true; });
   await pageA
     .getByRole("button", { name: "Add new project" })
     .click();
@@ -309,6 +327,17 @@ try {
       .waitFor({ timeout: 20_000 }),
   ]);
   console.log("ok project creation, folder selection, and multi-device sync");
+  assert.equal(await pageB.evaluate(() => window.projectSyncDocument), true);
+  assert.equal(await pageB.locator('[contenteditable="true"]').innerText(), preservedDraft);
+  console.log("ok project synchronization preserves the other session's draft and document");
+  await pageC.getByRole('button', { name: `Project actions for ${projectName}` }).first().waitFor();
+  console.log('ok project synchronization into a second tab sharing browser storage');
+  await pageB.evaluate(() => window.acceptanceSocket.close());
+  await pageB.waitForFunction(() => !window.projectSyncDocument, null, { timeout: 15_000 });
+  await pageB.locator('[contenteditable="true"]').waitFor();
+  assert.equal(await pageB.locator('[contenteditable="true"]').innerText(), preservedDraft);
+  await pageB.getByRole('button', { name: `Project actions for ${projectName}` }).first().waitFor();
+  console.log('ok forced transport reconnect restores current projects and the unsent draft');
 
   await pageA.getByRole("button", {
     name: `Start new chat in ${projectName}`,
@@ -372,6 +401,8 @@ try {
       state: "detached",
       timeout: 20_000,
     });
+  await pageC.getByRole('button', { name: `Project actions for ${projectName}` })
+    .first().waitFor({ state: 'detached', timeout: 20_000 });
   assert.deepEqual(errors, []);
   console.log("ok project cleanup, multi-device removal, and page errors");
 } finally {

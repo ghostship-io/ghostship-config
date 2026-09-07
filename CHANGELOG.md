@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   starts as well as failed health checks.
 - **Mobile layout**: Keep navigation in a drawer and size the app to the visible
   viewport so the composer stays reachable with browser chrome and keyboards.
+- **Session synchronization**: Refresh project state in place across browsers,
+  preserving the current conversation and unsent draft during project changes,
+  and isolate transport channels between tabs sharing browser storage.
 
 ## [3.4.7] - 2026-09-02
 
