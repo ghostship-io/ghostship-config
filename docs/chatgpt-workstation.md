@@ -61,6 +61,8 @@ Each tab has distinct native transport channels, including tabs sharing the
 same browser profile. Saved projects, chat history, live replies, pins, and
 upstream persisted state are shared. Drafts survive transport reconnects.
 Request replies go only to the requesting tab; shared events still fan out.
+The window adapter preserves Electron's `BrowserWindow` constructor name so
+native window enumeration includes the application in state broadcasts.
 The relay acknowledges native chunks itself, so a stalled hidden renderer cannot
 block later state updates. It forwards complete
 messages. Project updates refresh only the sidebar snapshot. Large HTTP and

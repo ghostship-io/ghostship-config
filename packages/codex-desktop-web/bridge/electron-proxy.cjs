@@ -90,7 +90,9 @@ function installElectronProxy(realElectron, gateway) {
     return { ownerWindow, webContents: ownerWindow.webContents };
   });
 
-  class WebBridgeBrowserWindow extends OriginalBrowserWindow {
+  // Electron filters getAllWindows/fromId by constructor.name, so preserve it
+  // or upstream broadcasts silently skip every bridged application window.
+  class BrowserWindow extends OriginalBrowserWindow {
     constructor(options = {}) {
       const webPreferences = { ...(options.webPreferences || {}) };
       const preloadName = webPreferences.preload
@@ -252,7 +254,7 @@ function installElectronProxy(realElectron, gateway) {
   const electronProxy = new Proxy(realElectron, {
     get(target, property, receiver) {
       if (property === "BrowserWindow") {
-        return WebBridgeBrowserWindow;
+        return BrowserWindow;
       }
       if (property === "shell") {
         return shell;

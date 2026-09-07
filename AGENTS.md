@@ -407,6 +407,9 @@ changelog.
 
 ## Containers and Config Generation
 
+- Electron filters `BrowserWindow.getAllWindows/fromId` by constructor name.
+  Keep wrapper classes named `BrowserWindow` or native state broadcasts omit them.
+
 - Codex browser file pickers opened from an upstream modal must be mounted
   inside that modal. Stopping bubble-phase events is insufficient because the
   upstream outside-click handler observes document capture events; verify the
