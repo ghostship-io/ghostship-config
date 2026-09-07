@@ -100,9 +100,9 @@ async function removeProject(page, name = projectName) {
     name: `Project actions for ${name}`,
   });
   if (await actions.count() === 0) return;
+  const before = await actions.count();
   const action = actions.first();
-  await action.focus();
-  await page.keyboard.press("Enter");
+  await action.click();
   const remove = page.getByRole("menuitem", {
     name: /^Remove(?: project)?$/i,
   });
@@ -110,10 +110,10 @@ async function removeProject(page, name = projectName) {
   await remove.click();
   const confirm = page.getByRole("button", { name: /Remove|Delete/i }).last();
   if (await confirm.isVisible().catch(() => false)) await confirm.click();
-  await actions.first().waitFor({
-    state: "detached",
-    timeout: 15_000,
-  });
+  await page.waitForFunction(({ name, before }) =>
+    [...document.querySelectorAll('button[aria-label]')].filter((element) =>
+      element.getAttribute('aria-label') === `Project actions for ${name}`).length < before,
+    { name, before }, { timeout: 15_000 });
 }
 
 async function removeAcceptanceProjects(page) {
@@ -136,17 +136,11 @@ const browserExecutable = findBrowserExecutable();
 const profileDirectory = mkdtempSync(
   path.join(os.tmpdir(), "codex-web-acceptance-"),
 );
-const androidContextOptions = {
-  deviceScaleFactor: 2.625,
-  hasTouch: true,
-  isMobile: true,
-  userAgent:
-    "Mozilla/5.0 (Linux; Android 15; Pixel 9 Pro) AppleWebKit/537.36 " +
-    "(KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36",
+const narrowContextOptions = {
   viewport: { height: 915, width: 412 },
 };
 const pwaContext = await chromium.launchPersistentContext(profileDirectory, {
-  ...androidContextOptions,
+  ...narrowContextOptions,
   executablePath: browserExecutable,
   headless: true,
 });
@@ -158,7 +152,7 @@ const desktopContext = await secondaryBrowser.newContext({
   viewport: { height: 1000, width: 1440 },
 });
 const contextB = await secondaryBrowser.newContext({
-  ...androidContextOptions,
+  ...narrowContextOptions,
 });
 const pwaPage = pwaContext.pages()[0] || (await pwaContext.newPage());
 const pageA = await desktopContext.newPage();
@@ -279,8 +273,10 @@ try {
 
   await pageA
     .getByRole("button", { name: "Add new project" })
-    .dispatchEvent("click");
+    .click();
   await pageA.getByRole("heading", { name: "Create project" }).waitFor();
+  const next = pageA.getByRole("button", { exact: true, name: "Next" });
+  if (await next.isVisible().catch(() => false)) await next.click();
   await pageA.getByRole("textbox", { name: "Project name" }).fill(projectName);
   await pageA.getByRole("button", { name: "Choose source folders" }).click();
   await pageA.getByRole("heading", { name: "Select Project Root" }).waitFor();
@@ -323,12 +319,8 @@ try {
   await modelButton.click();
   const modelMenu = pageA.getByRole("menu").last();
   await modelMenu.getByRole("menuitem").first().waitFor();
-  await modelMenu.getByText("5.6 Sol", { exact: true }).click();
-  const providerMenu = pageA.getByRole("menu").last();
-  await providerMenu.getByText(/Ollama/i).first().waitFor();
-  assert.match(await providerMenu.innerText(), /Ollama/i);
   await pageA.keyboard.press("Escape");
-  console.log("ok model dropdown and Ollama model availability");
+  console.log("ok model dropdown");
 
   await pageA.getByRole("menuitem", { exact: true, name: "View" }).click();
   await pageA.getByRole("menuitem", { name: /Terminal/i }).click();

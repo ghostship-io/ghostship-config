@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   generation after failed startup. Refresh browser assets on transport changes.
 - **Browser compatibility**: Support sandboxed Linux preloads, preserve binary
   IPC payloads and initialize the upstream renderer's application version.
+- **Web controls**: Use upstream web menus, keep project actions visible, refresh
+  chunked state updates and reconnect without replaying an application backlog.
+- **Bundled plugins**: Make runtime copies writable so Linux plugin variants can
+  be materialized from sealed Nix resources.
 - **Restart reliability**: Keep the updater alive through its own restart and
   health checks, and defer automatic activation while browser tabs are connected.
 

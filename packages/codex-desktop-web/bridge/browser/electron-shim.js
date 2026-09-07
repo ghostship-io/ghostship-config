@@ -21,7 +21,6 @@
     ].map((name) => [name, () => {}])),
   };
   const deviceKey = "codex-web-device-id";
-  const sequenceKey = "codex-web-event-sequence";
   const nativeRandomUUID =
     typeof crypto.randomUUID === "function" ? crypto.randomUUID.bind(crypto) : null;
 
@@ -43,6 +42,7 @@
   let requestCounter = 0;
   let reconnectTimer;
   let socket;
+  let hasConnected = false;
   let activeDialog;
   let notificationPrompt;
   let projectMutationReloadTimer;
@@ -608,6 +608,13 @@
 
   function handle(message) {
     if (message.type === "hello") {
+      // A new connection needs fresh app-host ports and state. Replaying old
+      // responses and partial chunk streams both stalls and corrupts the UI.
+      if (hasConnected) {
+        location.reload();
+        return;
+      }
+      hasConnected = true;
       if (message.releaseId && bootstrap.__codexWebRelease && message.releaseId !== bootstrap.__codexWebRelease) {
         location.reload();
         return;
@@ -627,7 +634,6 @@
       return;
     }
     if (message.type === "event") {
-      sessionStorage.setItem(sequenceKey, String(message.sequence));
       emit(message.channel, message.args);
       return;
     }
@@ -673,9 +679,8 @@
       return;
     }
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const since = sessionStorage.getItem(sequenceKey) || "0";
     socket = new WebSocket(
-      `${protocol}//${location.host}/__bridge/ipc?device=${encodeURIComponent(deviceId)}&since=${encodeURIComponent(since)}`,
+      `${protocol}//${location.host}/__bridge/ipc?device=${encodeURIComponent(deviceId)}`,
     );
     socket.addEventListener("message", (event) => {
       try {
@@ -824,6 +829,9 @@
   const electronModule = {
     contextBridge: {
       exposeInMainWorld(key, api) {
+        // The upstream renderer provides accessible web menus when the native
+        // popup capability is absent. Keep those menus in the browser DOM.
+        if (key === "electronBridge") api = { ...api, showContextMenu: undefined };
         Object.defineProperty(window, key, {
           configurable: false,
           enumerable: true,
@@ -956,6 +964,14 @@
 
   const browserUsabilityStyle = document.createElement("style");
   browserUsabilityStyle.textContent = `
+    [data-app-action-sidebar-project-row] [class~="w-0"]:has(button) {
+      width: auto !important;
+      overflow: visible !important;
+      flex-shrink: 0 !important;
+    }
+    [data-app-action-sidebar-project-row] [class~="opacity-0"]:has(button) {
+      opacity: 1 !important;
+    }
     button[aria-label="Add new project"],
     div:has(> div > button[aria-label="Add new project"]) {
       opacity: 1 !important;

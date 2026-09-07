@@ -118,6 +118,19 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   assert.equal((await firstEvent).args[0], "same");
   assert.equal((await secondEvent).args[0], "same");
 
+  const fresh = await openSocket(`${origin}/__bridge/ipc?device=fresh&since=0`, {
+    headers: { origin },
+  });
+  assert.equal((await nextMessage(fresh)).type, "hello");
+  fresh.send(encode({ type: "invoke", channel: "fence", requestId: "fresh", args: [] }));
+  const freshRequest = await nextMessage(relay);
+  relay.send(encode({ type: "result", clientId: freshRequest.clientId,
+    requestId: "fresh", ok: true, result: "current" }));
+  assert.equal((await nextMessage(fresh)).type, "result", "fresh clients must not replay stale events");
+  fresh.close();
+  relay.send(encode({ type: "relay-ready", bootstrap: {} }));
+  assert.deepEqual(await nextMessage(relay), { type: "subscribe", channel: "shared-event" });
+
   const localSubscription = nextMessage(relay);
   first.send(encode({
     type: "subscribe",

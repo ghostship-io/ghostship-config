@@ -41,6 +41,11 @@ modal so selecting a directory does not dismiss the parent dialog. Clipboard,
 file uploads, notifications and fullscreen use browser APIs where available.
 Native secondary windows and embedded browser content use dedicated surfaces;
 the main application remains an ordinary browser DOM.
+Project actions remain visible without hovering. The adapter selects upstream
+web menus instead of native OS popups, and reconnects from fresh application
+state rather than replaying stale responses and partial chunk streams. Bundled
+plugins remain sealed in the Nix store; their runtime copies are writable so
+upstream can apply Linux-specific plugin variants.
 
 On another device, an upstream login callback may still target localhost on
 port 1455 or 1457. Replace the failed callback URL's host with this app's host,

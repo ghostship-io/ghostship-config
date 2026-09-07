@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -77,13 +77,16 @@ exec "$(dirname "$0")/codex-real" "$@"
 `);
   await chmod(path.join(resources, 'codex'), 0o755);
   await symlink('ChatGPT', path.join(staged, 'runtime/electron'));
+  const transportHash = createHash('sha256');
+  const bridgeRoot = path.join(extracted, 'bridge');
+  for (const entry of (await readdir(bridgeRoot, { recursive: true, withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.relative(bridgeRoot, path.join(entry.parentPath, entry.name))).sort()) {
+    transportHash.update(entry).update('\0').update(await readFile(path.join(bridgeRoot, entry)));
+  }
   const manifest = {
     ...release, electronVersion: pkg.devDependencies?.electron, archiveSha256: archiveHash,
-    transportSha256: createHash('sha256').update(await readFile(path.join(extracted, 'bridge/combined-preload.cjs')))
-      .update(await readFile(path.join(extracted, 'bridge/electron-proxy.cjs')))
-      .update(await readFile(path.join(extracted, 'bridge/gateway.cjs')))
-      .update(await readFile(path.join(browserAssets, 'electron-shim.js')))
-      .update(await readFile(path.join(browserAssets, 'webview-bridge.js'))).digest('hex'),
+    transportSha256: transportHash.digest('hex'),
     preloadSha256: createHash('sha256').update(preload).digest('hex'),
     rendererIndexSha256: createHash('sha256').update(await readFile(path.join(extracted, 'webview/index.html'))).digest('hex'),
     preloadChannels: channels,

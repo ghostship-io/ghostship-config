@@ -78,7 +78,10 @@ function subscribe(channel) {
       channel === "codex_desktop:message-for-view" &&
       (
         bootstrapRefreshMessageTypes.has(args[0]?.type) ||
-        isProjectStateFetchResponse(args[0])
+        isProjectStateFetchResponse(args[0]) ||
+        // Current Linux builds also deliver state notifications through the
+        // chunked transport. Refresh after the complete message arrives.
+        (args[0]?.marker === "codex-host-chunked-message-v1" && args[0]?.kind === "end")
       )
     ) {
       const nextBootstrap = readBootstrap();

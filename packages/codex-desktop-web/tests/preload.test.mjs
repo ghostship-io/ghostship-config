@@ -31,4 +31,12 @@ test('native relay works with only the sandbox Electron API and rejects private 
   await new Promise(setImmediate);
   assert.equal(sent.at(-1)[1].type, 'relay-error');
   assert.equal(sent.filter(([channel]) => channel === 'ghostship-native:relay-open').length, 1);
+  ipc.emit('ghostship-native:relay-message', {}, {
+    type: 'subscribe', channel: 'codex_desktop:message-for-view',
+  });
+  const before = sent.length;
+  ipc.emit('codex_desktop:message-for-view', {}, {
+    marker: 'codex-host-chunked-message-v1', transferId: 'state', sequence: 2, kind: 'end',
+  });
+  assert.deepEqual(sent.slice(before).map(([, message]) => message.type), ['bootstrap-update', 'event']);
 });

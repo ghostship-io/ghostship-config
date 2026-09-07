@@ -147,6 +147,14 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
       return { bytes: value.bytes instanceof Uint8Array ? [...value.bytes] : null,
         buffer: value.buffer instanceof ArrayBuffer ? [...new Uint8Array(value.buffer)] : null };
     }), { bytes: [0, 1, 127, 255], buffer: [0, 1, 127, 255] });
+    assert.deepEqual(await page.evaluate(() => {
+      window.__codexElectronModule.contextBridge.exposeInMainWorld("electronBridge", {
+        showContextMenu: () => { throw new Error("native menu must not run"); },
+        getBuildFlavor: () => "prod",
+      });
+      return { nativeMenu: typeof window.electronBridge.showContextMenu,
+        buildFlavor: window.electronBridge.getBuildFlavor() };
+    }), { nativeMenu: "undefined", buildFlavor: "prod" });
     for (const socket of sockets) {
       socket.send(JSON.stringify({
         action: "show-dialog",

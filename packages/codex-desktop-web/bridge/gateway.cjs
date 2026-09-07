@@ -134,7 +134,6 @@ async function createGateway(options) {
   const pendingBrowserSurfaces = new Map();
   const pendingRelayMessages = [];
   const channelSubscribers = new Map();
-  const eventHistory = [];
   const pendingDialogs = new Map();
   const uploadRoot = process.env.CODEX_WEB_UPLOAD_ROOT || "/tmp/codex-web-uploads";
   const fileRoots = (process.env.CODEX_WEB_FILE_ROOTS || "/workspace,/home/codex")
@@ -639,10 +638,6 @@ async function createGateway(options) {
     if (args?.[0]?.type === "run-command") {
       const commandId = args[0].id;
       if (!DEVICE_LOCAL_COMMAND_IDS.has(commandId)) {
-        eventHistory.push(message);
-        if (eventHistory.length > 1000) {
-          eventHistory.shift();
-        }
         for (const clientId of channelSubscribers.get(channel) || []) {
           const client = browserClients.get(clientId);
           send(client?.socket, message);
@@ -666,10 +661,6 @@ async function createGateway(options) {
       }
       return;
     }
-    eventHistory.push(message);
-    if (eventHistory.length > 1000) {
-      eventHistory.shift();
-    }
     for (const clientId of channelSubscribers.get(channel) || []) {
       const client = browserClients.get(clientId);
       send(client?.socket, message);
@@ -680,6 +671,11 @@ async function createGateway(options) {
     if (message.type === "relay-ready") {
       relayBootstrap = message.bootstrap || {};
       relayProjectState = projectStateSignature(relayBootstrap[SIDEBAR_CHANNEL]);
+      // A native renderer reload loses its IPC listeners while browser tabs
+      // remain connected. Rebuild their subscriptions on the new relay.
+      for (const channel of channelSubscribers.keys()) {
+        sendRelay({ type: "subscribe", channel });
+      }
       for (const queued of pendingRelayMessages.splice(0)) {
         sendRelay(queued);
       }
@@ -1142,7 +1138,6 @@ async function createGateway(options) {
       surfaceKeys: new Set(),
     };
     browserClients.set(clientId, client);
-    const since = Number(requestUrl.searchParams.get("since") || "0");
     send(socket, {
       type: "hello",
       releaseId: options.releaseId,
@@ -1153,11 +1148,6 @@ async function createGateway(options) {
     });
     for (const surface of auxiliaryWindows.values()) {
       if (surface.visible) sendAuxiliaryWindowState(client, surface);
-    }
-    for (const event of eventHistory) {
-      if (event.sequence > since) {
-        send(socket, event);
-      }
     }
     socket.on("message", (payload) => {
       handleBrowserMessage(client, decode(payload));
