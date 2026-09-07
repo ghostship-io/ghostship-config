@@ -71,6 +71,8 @@ let
     bitwarden-cli
     git
     git-lfs
+    gnupg
+    gnome-keyring
     gh
     openssh
     curl
@@ -454,26 +456,59 @@ let
     }
   '';
 
+  codexPackageSource = lib.cleanSourceWith {
+    src = ../../packages/codex-desktop-web;
+    filter =
+      path: type:
+      !(builtins.elem (baseNameOf path) [
+        "node_modules"
+        "dist"
+        ".cache"
+      ]);
+  };
+  codexReleaseSmoke = pkgs.writeShellScriptBin "codex-release-smoke" (
+    builtins.readFile ../../packages/codex-desktop-web/scripts/smoke-prepared.sh
+  );
+
   codexToolMaintenance = pkgs.writeShellScriptBin "codex-tool-maintenance" ''
     set -eu
 
     ${codexRuntimeEnv}
 
-    generation=${codexToolFallback}
-    [ -x "$generation/web/runtime/electron" ]
-    [ -x "$generation/codex/bin/codex" ]
-    [ -x "$generation/proxy/bin/codex_remote_proxy" ]
-    current_release="$(jq -r .desktopVersion "$generation/release.json")"
-    latest_release="$(
-      curl -fsSL --connect-timeout 15 --max-time 60 \
-        https://persistent.oaistatic.com/codex-app-prod/appcast.xml \
-        | sed -n 's/.*sparkle:shortVersionString="\([^"]*\)".*/\1/p' \
-        | head -n 1
-    )"
-    if [ -n "$latest_release" ] && [ "$latest_release" != "$current_release" ]; then
-      printf \
-        'warning: official Codex desktop %s is available; compatibility validation and a NixOS update are required before activation\n' \
-        "$latest_release" >&2
+    current="$(readlink -f "$CODEX_TOOL_CURRENT")"
+    candidate_file="$(mktemp)"
+    trap 'rm -f "$candidate_file"' EXIT
+    ${pkgs.nodejs_24}/bin/node ${codexPackageSource}/scripts/discover-linux-release.mjs \
+      ${codexPackageSource}/releases/chatgpt-archive-keyring.gpg > "$candidate_file"
+    latest_release="$(jq -r .desktopVersion "$candidate_file")"
+    current_release="$(jq -r .desktopVersion "$current/release.json")"
+    if [ "$(printf '%s\n' "$latest_release" "$current_release" | sort -V | tail -n1)" != "$latest_release" ]; then
+      printf '%s\n' "$current"
+      exit 0
+    fi
+    if [ "$latest_release" = "$(jq -r .desktopVersion ${codexToolFallback}/release.json)" ]; then
+      printf '%s\n' ${codexToolFallback}
+      exit 0
+    fi
+    checksum="$(jq -r .sha256 "$candidate_file")"
+    generation="$CODEX_TOOL_ROOT/generations/linux-$latest_release-$checksum-${
+      builtins.substring 0 12 (builtins.hashString "sha256" (toString codexPackageSource))
+    }"
+    if [ ! -f "$generation/validated" ]; then
+      mkdir -p "$generation/codex/bin"
+      CHATGPT_RELEASE_FILE="$candidate_file" nix build --impure --out-link "$generation/web" --expr '
+        let
+          pkgs = import ${pkgs.path} { system = "aarch64-linux"; config.allowUnfree = true; };
+          release = builtins.fromJSON (builtins.readFile (builtins.getEnv "CHATGPT_RELEASE_FILE"));
+        in pkgs.callPackage ${codexPackageSource}/package.nix { inherit release; }
+      ' >&2
+      ${codexReleaseSmoke}/bin/codex-release-smoke "$generation/web/runtime" >&2
+      ln -sfn "$generation/web/runtime/resources/codex-real" "$generation/codex/bin/codex"
+      ln -sfn ${codexRemoteProxyFallback} "$generation/proxy"
+      cp "$generation/web/release.json" "$generation/release.json"
+      "$generation/codex/bin/codex" --version > "$generation/codex.version"
+      printf 'official-linux-%s\n' "$latest_release" > "$generation/revision"
+      touch "$generation/validated"
     fi
     printf '%s\n' "$generation"
   '';
@@ -1241,9 +1276,18 @@ let
       [ -S "/tmp/.X11-unix/X''${display_number}" ] && break
       sleep 0.1
     done
+    install -d -m0700 "$XDG_DATA_HOME/keyrings"
+    if [ ! -f "$XDG_DATA_HOME/keyrings/.unlock" ]; then
+      (umask 077; head -c 48 /dev/urandom | base64 > "$XDG_DATA_HOME/keyrings/.unlock")
+    fi
+    # Native keyring dialogs have no browser DOM. Unlock the persistent keyring
+    # before launching the app so authentication can run without a desktop prompt.
+    ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock --components=secrets \
+      < "$XDG_DATA_HOME/keyrings/.unlock"
     cd /home/codex
     "$CODEX_TOOL_CURRENT/web/runtime/electron" \
       --no-sandbox \
+      --disable-gpu \
       --disable-dev-shm-usage &
     electron_pid=$!
     set +e

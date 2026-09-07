@@ -99,6 +99,7 @@
               python3
               shellcheck
               util-linux
+              gnupg
               playwright-driver.browsers
               prefetch-npm-deps
               ragenix.packages.${system}.default

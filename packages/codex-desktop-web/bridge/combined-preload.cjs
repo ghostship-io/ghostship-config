@@ -1,15 +1,6 @@
 "use strict";
 
-const path = require("node:path");
 const { ipcRenderer } = require("electron");
-const WebSocket = require("ws");
-const { decode, encode } = require("./codec.cjs");
-
-require(path.join(__dirname, "..", ".vite", "build", "preload.js"));
-
-const relaySecret = process.env.CODEX_WEB_RELAY_SECRET;
-const relayPort = process.env.CODEX_WEB_PORT || "8214";
-const relayUrl = `ws://127.0.0.1:${relayPort}/__bridge/relay`;
 const channelListeners = new Map();
 const messagePorts = new Map();
 const bootstrapRefreshMessageTypes = new Set([
@@ -18,8 +9,7 @@ const bootstrapRefreshMessageTypes = new Set([
   "workspace-root-option-added",
   "workspace-root-options-updated",
 ]);
-let socket;
-let reconnectTimer;
+let connected = false;
 
 function isProjectStateFetchResponse(message) {
   if (
@@ -77,9 +67,7 @@ function readBootstrap() {
 const bootstrap = readBootstrap();
 
 function send(message) {
-  if (socket?.readyState === WebSocket.OPEN) {
-    socket.send(encode(message));
-  }
+  if (connected) ipcRenderer.send("ghostship-native:relay-send", message);
 }
 
 function subscribe(channel) {
@@ -128,6 +116,10 @@ function createTransferredPort(message) {
 }
 
 async function handle(message) {
+  if (["invoke", "send", "subscribe", "unsubscribe", "post-message-port"].includes(message.type) &&
+      !message.channel?.startsWith("codex_desktop:")) {
+    throw new Error("Browser request used a private native channel");
+  }
   if (message.type === "invoke") {
     try {
       const result = await ipcRenderer.invoke(message.channel, ...message.args);
@@ -175,36 +167,16 @@ async function handle(message) {
   }
 }
 
-function connect() {
-  socket = new WebSocket(relayUrl, {
-    headers: {
-      "x-codex-relay-secret": relaySecret,
-      "x-codex-relay-primary": "1",
-    },
-  });
-  socket.on("open", () => {
+ipcRenderer.on("ghostship-native:relay-state", (_event, ready) => {
+  connected = ready === true;
+  if (connected) {
     send({ type: "relay-ready", bootstrap });
     for (const channel of channelListeners.keys()) {
       send({ type: "relay-subscription-ready", channel });
     }
-  });
-  socket.on("message", (payload) => {
-    try {
-      void handle(decode(payload));
-    } catch (error) {
-      send({
-        type: "relay-error",
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-  socket.on("close", () => {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(connect, 500);
-  });
-  socket.on("error", (error) => {
-    console.error("[codex-web] relay error", error);
-  });
-}
-
-connect();
+  }
+});
+ipcRenderer.on("ghostship-native:relay-message", (_event, message) => {
+  void handle(message).catch((error) => send({ type: "relay-error", error: String(error) }));
+});
+ipcRenderer.send("ghostship-native:relay-open");

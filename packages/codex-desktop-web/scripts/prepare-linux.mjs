@@ -10,11 +10,11 @@ const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const values = { release: '26.901.51231', output: path.join(packageRoot, 'dist') };
 for (let i = 2; i < process.argv.length; i++) {
   const name = process.argv[i];
-  if (!['--release', '--archive', '--output'].includes(name)) throw new Error(`Unknown argument: ${name}`);
+  if (!['--release', '--release-file', '--archive', '--output'].includes(name)) throw new Error(`Unknown argument: ${name}`);
   values[name.slice(2)] = process.argv[++i];
 }
 if (!values.archive) throw new Error('--archive must name the verified official Linux .deb');
-const release = JSON.parse(await readFile(path.join(packageRoot, 'releases', `${values.release}.json`), 'utf8'));
+const release = JSON.parse(await readFile(values['release-file'] || path.join(packageRoot, 'releases', `${values.release}.json`), 'utf8'));
 const archiveHash = createHash('sha256').update(await readFile(values.archive)).digest('hex');
 if (archiveHash !== release.sha256) throw new Error('Official Linux package SHA256 mismatch');
 const work = await mkdtemp(path.join(tmpdir(), 'chatgpt-linux-prepare-'));
@@ -29,7 +29,7 @@ try {
   const extracted = path.join(work, 'app');
   extractAll(path.join(source, 'resources/app.asar'), extracted);
   const pkg = JSON.parse(await readFile(path.join(extracted, 'package.json'), 'utf8'));
-  if (pkg.version !== release.desktopVersion || pkg.devDependencies?.electron !== release.electronVersion) {
+  if (pkg.version !== release.desktopVersion || (release.electronVersion && pkg.devDependencies?.electron !== release.electronVersion)) {
     throw new Error('Linux application/runtime version does not match the release descriptor');
   }
   const preload = await readFile(path.join(extracted, '.vite/build/preload.js'), 'utf8');
@@ -44,6 +44,8 @@ try {
   // the same official package. Only our transport bootstrap is added to ASAR.
   await cp(source, path.join(staged, 'runtime'), { recursive: true });
   await cp(path.join(packageRoot, 'bridge'), path.join(extracted, 'bridge'), { recursive: true });
+  const relayPreload = await readFile(path.join(extracted, 'bridge/combined-preload.cjs'), 'utf8');
+  await writeFile(path.join(extracted, 'bridge/combined-preload.cjs'), `(() => {\n${preload}\n})();\n${relayPreload}`);
   await cp(path.join(packageRoot, 'node_modules/ws'), path.join(extracted, 'node_modules/ws'), { recursive: true });
   const browserAssets = path.join(extracted, 'bridge/browser');
   await writeFile(path.join(browserAssets, 'browser-preload.js'), `(() => {
@@ -76,7 +78,7 @@ exec "$(dirname "$0")/codex-real" "$@"
   await chmod(path.join(resources, 'codex'), 0o755);
   await symlink('ChatGPT', path.join(staged, 'runtime/electron'));
   const manifest = {
-    ...release, archiveSha256: archiveHash,
+    ...release, electronVersion: pkg.devDependencies?.electron, archiveSha256: archiveHash,
     preloadSha256: createHash('sha256').update(preload).digest('hex'),
     rendererIndexSha256: createHash('sha256').update(await readFile(path.join(extracted, 'webview/index.html'))).digest('hex'),
     preloadChannels: channels,

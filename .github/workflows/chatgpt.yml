@@ -1,0 +1,33 @@
+name: ChatGPT web transport
+on:
+  pull_request:
+    paths:
+      - 'packages/codex-desktop-web/**'
+      - 'modules/self-hosted/codex.nix'
+      - 'flake.nix'
+      - 'flake.lock'
+      - '.github/workflows/chatgpt.yml'
+  push:
+    branches: [main, 'codex/chatgpt-linux']
+    paths:
+      - 'packages/codex-desktop-web/**'
+      - 'modules/self-hosted/codex.nix'
+      - 'flake.nix'
+      - 'flake.lock'
+      - '.github/workflows/chatgpt.yml'
+permissions:
+  contents: read
+concurrency:
+  group: chatgpt-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+      - run: nix develop -c npm --prefix packages/codex-desktop-web ci --ignore-scripts
+      - run: nix develop -c npm --prefix packages/codex-desktop-web test
+      - run: nix develop -c npm --prefix packages/codex-desktop-web run test:browser
+      - run: nix develop -c nixfmt --check packages/codex-desktop-web/package.nix modules/self-hosted/codex.nix

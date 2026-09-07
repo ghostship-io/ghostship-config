@@ -4,6 +4,8 @@ const crypto = require("node:crypto");
 const { EventEmitter } = require("node:events");
 const Module = require("node:module");
 const path = require("node:path");
+const WebSocket = require("ws");
+const { encode, decode } = require("./codec.cjs");
 
 function installElectronProxy(realElectron, gateway) {
   const originalLoad = Module._load;
@@ -12,6 +14,46 @@ function installElectronProxy(realElectron, gateway) {
   let browserFullscreen = false;
   let notificationCounter = 0;
   let applicationMenu;
+  let nativeRelay;
+  let nativeRelayRetry;
+
+  function connectNativeRelay() {
+    if (!browserPrimaryWindow || browserPrimaryWindow.isDestroyed()) return;
+    const contents = browserPrimaryWindow.webContents;
+    const socket = new WebSocket(`ws://127.0.0.1:${process.env.CODEX_WEB_PORT || "8214"}/__bridge/relay`, {
+      headers: {
+        "x-codex-relay-secret": process.env.CODEX_WEB_RELAY_SECRET,
+        "x-codex-relay-primary": "1",
+      },
+    });
+    nativeRelay = socket;
+    socket.on("open", () => {
+      if (!contents.isDestroyed()) contents.send("ghostship-native:relay-state", true);
+    });
+    socket.on("message", (data) => {
+      if (!contents.isDestroyed()) contents.send("ghostship-native:relay-message", decode(data));
+    });
+    socket.on("error", (error) => console.error("[codex-web] native relay error", error.message));
+    socket.on("close", () => {
+      if (nativeRelay !== socket) return;
+      nativeRelay = undefined;
+      if (!contents.isDestroyed()) contents.send("ghostship-native:relay-state", false);
+      nativeRelayRetry = setTimeout(connectNativeRelay, 500);
+    });
+  }
+  realElectron.ipcMain.on("ghostship-native:relay-open", (event) => {
+    if (event.sender !== browserPrimaryWindow?.webContents) return;
+    clearTimeout(nativeRelayRetry);
+    const previous = nativeRelay;
+    nativeRelay = undefined;
+    previous?.close();
+    connectNativeRelay();
+  });
+  realElectron.ipcMain.on("ghostship-native:relay-send", (event, message) => {
+    if (event.sender === browserPrimaryWindow?.webContents && nativeRelay?.readyState === WebSocket.OPEN) {
+      nativeRelay.send(encode(message));
+    }
+  });
 
   gateway.setBrowserFullscreenStateHandler((enabled) => {
     if (browserFullscreen === enabled) return;
@@ -58,7 +100,7 @@ function installElectronProxy(realElectron, gateway) {
         preloadName === "preload.js" && !browserPrimaryWindow;
       if (isBrowserPrimary) {
         webPreferences.preload = path.join(__dirname, "combined-preload.cjs");
-        webPreferences.sandbox = false;
+        webPreferences.sandbox = true;
       }
       super({
         ...options,
@@ -68,6 +110,13 @@ function installElectronProxy(realElectron, gateway) {
       });
       if (isBrowserPrimary) {
         browserPrimaryWindow = this;
+        this.on("closed", () => {
+          clearTimeout(nativeRelayRetry);
+          const previous = nativeRelay;
+          nativeRelay = undefined;
+          previous?.close();
+          browserPrimaryWindow = undefined;
+        });
       } else {
         gateway.registerAuxiliaryWindow(this, {
           modal: options.modal === true || Boolean(options.parent),

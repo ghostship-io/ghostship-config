@@ -45,9 +45,9 @@
   zlib,
   qt5,
   qt6,
+  release ? builtins.fromJSON (builtins.readFile ./releases/26.901.51231.json),
 }:
 let
-  release = builtins.fromJSON (builtins.readFile ./releases/26.901.51231.json);
   upstreamArchive = fetchurl {
     inherit (release) url;
     sha256 = release.sha256;
@@ -124,13 +124,14 @@ buildNpmPackage {
   ];
   buildPhase = ''
     runHook preBuild
-    node scripts/prepare-linux.mjs --release ${release.desktopVersion} \
+    node scripts/prepare-linux.mjs --release-file ${builtins.toFile "chatgpt-release.json" (builtins.toJSON release)} \
       --archive ${upstreamArchive} --output "$PWD/prepared"
     runHook postBuild
   '';
   installPhase = ''
     runHook preInstall
     cp -a prepared "$out"
+    cp releases/chatgpt-archive-keyring.gpg "$out/chatgpt-archive-keyring.gpg"
     # Android prebuilds share the CPU architecture but target a different libc.
     # They are never selected by the Linux runtime and cannot be ELF-patched here.
     find "$out/runtime" -type d -path '*/prebuilds/android-*' -prune -exec rm -r {} +
