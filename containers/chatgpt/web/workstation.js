@@ -102,3 +102,12 @@ byId('install').onclick = async () => {
 };
 window.addEventListener('appinstalled', () => { byId('install').hidden = true; });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+async function updateStatus() {
+  try {
+    const response = await fetch('/update-status.txt', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Update status unavailable');
+    byId('update-status').textContent = await response.text();
+  } catch { byId('update-status').textContent = 'Application update status unavailable.'; }
+}
+updateStatus();
+setInterval(updateStatus, 60000);

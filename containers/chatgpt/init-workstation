@@ -29,3 +29,4 @@ chown abc:abc /config/.config/openbox/autostart
 # Replace only the transport dashboard, leaving its pinned streaming core intact.
 cp /opt/ghostship-chatgpt/web/* /usr/share/selkies/web/
 update-chatgpt apply
+ln -sfn /var/lib/chatgpt-updates/status /usr/share/selkies/web/update-status.txt

@@ -17,9 +17,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 COPY . /opt/ghostship-chatgpt/source
 RUN cd /opt/ghostship-chatgpt/source \
     && install -m0755 launch-chatgpt start-session update-chatgpt /usr/local/bin/ \
+    && ln -s launch-chatgpt /usr/local/bin/chatgpt \
     && install -m0755 autostart /defaults/autostart \
     && cp -a web /opt/ghostship-chatgpt/web \
-    && install -m0755 init-workstation /custom-cont-init.d/10-workstation \
+    && install -Dm0755 init-workstation /custom-cont-init.d/10-workstation \
     && install -Dm0755 nix-daemon-run /etc/s6-overlay/s6-rc.d/svc-nix/run \
     && install -Dm0755 user-services-run /etc/s6-overlay/s6-rc.d/svc-user-services/run \
     && install -Dm0755 update-run /etc/s6-overlay/s6-rc.d/svc-chatgpt-update/run \

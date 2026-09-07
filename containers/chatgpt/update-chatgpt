@@ -11,6 +11,13 @@ version() { dpkg-deb -f "$1" Version; }
 if [[ ! -f "$state/current.deb" ]]; then
   cp /opt/ghostship-chatgpt/packages/chatgpt.deb "$state/current.deb"
 fi
+base_version=$(version /opt/ghostship-chatgpt/packages/chatgpt.deb)
+if dpkg --compare-versions "$base_version" gt "$(version "$state/current.deb")" &&
+  { [[ ! -f "$state/rejected-version" ]] || dpkg --compare-versions "$base_version" gt "$(cat "$state/rejected-version")"; }; then
+  cp "$state/current.deb" "$state/previous.deb"
+  cp /opt/ghostship-chatgpt/packages/chatgpt.deb "$state/current.deb"
+fi
+[[ -f "$state/status" ]] || echo "ChatGPT $(version "$state/current.deb")" > "$state/status"
 
 apply() {
   exec 8</run/chatgpt/app.lock
@@ -19,8 +26,8 @@ apply() {
   installed=$(dpkg-query -W -f='${Version}' chatgpt)
   target=$(version "$state/current.deb")
   # Reapply the last installed update when the OCI image is recreated.
-  if dpkg --compare-versions "$target" gt "$installed"; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y "$state/current.deb"
+  if [[ "$target" != "$installed" ]]; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades "$state/current.deb"
   fi
   if [[ -f "$state/pending.deb" ]]; then
     target=$(version "$state/pending.deb")
@@ -45,6 +52,9 @@ check() {
   candidate=$(apt-cache policy chatgpt | awk '/Candidate:/ {print $2}')
   current=$(version "$state/current.deb")
   dpkg --compare-versions "$candidate" gt "$current" || return 0
+  if [[ -f "$state/rejected-version" ]] && ! dpkg --compare-versions "$candidate" gt "$(cat "$state/rejected-version")"; then
+    return 0
+  fi
   temporary=$(mktemp -d "$state/download.XXXXXX")
   if (cd "$temporary" && apt-get download "chatgpt=$candidate"); then
     local package=("$temporary"/*.deb)
@@ -64,5 +74,16 @@ check() {
 case "${1:-check}" in
   apply) apply ;;
   check) check; apply ;;
-  *) echo 'Usage: update-chatgpt [check|apply]' >&2; exit 2 ;;
+  rollback)
+    exec 8</run/chatgpt/app.lock
+    flock -n -x 8 || { echo 'Exit ChatGPT before rolling back.' >&2; exit 1; }
+    [[ -f "$state/previous.deb" ]] || { echo 'No previous package retained.' >&2; exit 1; }
+    rejected=$(dpkg-query -W -f='${Version}' chatgpt)
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades "$state/previous.deb"
+    echo "$rejected" > "$state/rejected-version"
+    mv "$state/previous.deb" "$state/current.deb"
+    rm -f "$state/pending.deb"
+    echo "Rolled back to ChatGPT $(version "$state/current.deb"); release $rejected blocked." > "$state/status"
+    ;;
+  *) echo 'Usage: update-chatgpt [check|apply|rollback]' >&2; exit 2 ;;
 esac
