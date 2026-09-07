@@ -4,26 +4,69 @@ let
   tools = pkgs.buildEnv {
     name = "chatgpt-workstation-tools";
     paths = with pkgs; [
-      git git-lfs gh openssh nix cloudflared curl jq ripgrep fd direnv uv
-      python3 nodejs_24 stdenv.cc gnumake pkg-config cmake binutils
-      coreutils findutils gnugrep gnused gnutar gzip unzip p7zip which file
-      bashInteractive cacert
+      git
+      git-lfs
+      gh
+      openssh
+      nix
+      cloudflared
+      curl
+      jq
+      ripgrep
+      fd
+      direnv
+      uv
+      python3
+      nodejs_24
+      stdenv.cc
+      gnumake
+      pkg-config
+      cmake
+      binutils
+      coreutils
+      findutils
+      gnugrep
+      gnused
+      gnutar
+      gzip
+      unzip
+      p7zip
+      which
+      file
+      bashInteractive
+      cacert
     ];
-    pathsToLink = [ "/bin" "/share" ];
+    pathsToLink = [
+      "/bin"
+      "/share"
+    ];
     ignoreCollisions = true;
   };
   context = lib.cleanSourceWith {
     src = ../../containers/chatgpt;
-    filter = path: type: !(builtins.elem (baseNameOf path) [ "node_modules" ".cache" "artifacts" ]);
+    filter =
+      path: type:
+      !(builtins.elem (baseNameOf path) [
+        "node_modules"
+        ".cache"
+        "artifacts"
+      ]);
   };
-  image = "localhost/ghostship-chatgpt:${builtins.substring 0 16 (builtins.hashString "sha256" (toString context))}";
-in {
+  image = "localhost/ghostship-chatgpt:${
+    builtins.substring 0 16 (builtins.hashString "sha256" (toString context))
+  }";
+in
+{
   virtualisation.oci-containers.containers.chatgpt = {
     inherit image;
     pull = "never";
     extraOptions = [
-      "--network=ghostship_net" "--network-alias=codex" "--privileged"
-      "--shm-size=2g" "--pids-limit=-1" "--stop-timeout=120"
+      "--network=ghostship_net"
+      "--network-alias=codex-web"
+      "--privileged"
+      "--shm-size=2g"
+      "--pids-limit=-1"
+      "--stop-timeout=120"
     ];
     environment = {
       PUID = "3000";
@@ -42,12 +85,15 @@ in {
     ];
   };
   systemd.services.podman-chatgpt = {
-    after = [ "init-ghostship-net.service" "mnt-share.mount" ];
+    after = [
+      "init-ghostship-net.service"
+      "mnt-share.mount"
+    ];
     wants = [ "mnt-share.mount" ];
     requires = [ "init-ghostship-net.service" ];
     serviceConfig = {
-      TimeoutStartSec = "30m";
-      TimeoutStopSec = "150s";
+      TimeoutStartSec = lib.mkForce "30m";
+      TimeoutStopSec = lib.mkForce "150s";
     };
     preStart = lib.mkBefore ''
       set -eu
