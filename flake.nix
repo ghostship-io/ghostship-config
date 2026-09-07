@@ -104,26 +104,7 @@
             ];
             PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
           };
-          android = let
-            androidPkgs = import nixpkgs {
-              inherit system;
-              config = {
-                allowUnfree = true;
-                android_sdk.accept_license = true;
-              };
-            };
-            sdk = androidPkgs.androidenv.composeAndroidPackages {
-              platformVersions = [ "35" ];
-              buildToolsVersions = [ "35.0.0" ];
-              includeEmulator = true;
-              includeSystemImages = true;
-              systemImageTypes = [ "google_apis_playstore" ];
-              abiVersions = [ "x86_64" ];
-            };
-          in pkgs.mkShellNoCC {
-            packages = [ sdk.androidsdk pkgs.jdk17 pkgs.python3 ];
-            ANDROID_SDK_ROOT = "${sdk.androidsdk}/libexec/android-sdk";
-          };
+
         }
       );
 

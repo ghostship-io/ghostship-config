@@ -1,7 +1,7 @@
 # ChatGPT Linux container design
 
 Research date: 2026-09-07. Target: chill-penguin (ARM64), desktop browsers and
-Android Chrome installation. This replaces the retired macOS-derived Codex web
+web controls and inputs. Android device/emulator work was explicitly excluded. This replaces the retired macOS-derived Codex web
 bridge with the official Linux desktop application.
 
 ## Decision
@@ -37,7 +37,7 @@ verified, never assumed.
 - [Chrome install criteria](https://web.dev/articles/install-criteria): HTTPS,
   appropriate manifest, icons, start URL and display mode. Promotion and menu
   installation are distinct; a service worker alone is not installation proof.
-- [Android keyboard viewport](https://developer.chrome.com/blog/viewport-resize-behavior):
+- [Keyboard viewport](https://developer.chrome.com/blog/viewport-resize-behavior):
   use the visual viewport and `interactive-widget=resizes-content` to avoid
   hiding controls behind the keyboard.
 - [Android debugging](https://developer.chrome.com/docs/devtools/remote-debugging/):
@@ -60,3 +60,7 @@ profile; do not infer support from an unsigned-in screen.
 Discovery stopped after primary sources established the supported package,
 transport boundary, mobile criteria, and platform exclusions. Live acceptance
 will resolve runtime uncertainty.
+
+The workstation retains a separate persistent Nix store/daemon, Docker data, home,
+workspace, and development tooling, as requested. NixOS manages the container
+and seeds its isolated Nix store; Debian supplies the supported GUI runtime.

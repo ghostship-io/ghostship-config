@@ -4,7 +4,7 @@ ARG CHATGPT_VERSION=26.901.51231
 ARG CHATGPT_SHA256=02a2f5c6cb69509c62abcbdd13c76b139cdb2ca9edde7537239ddde024077ea0
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       bubblewrap chromium dbus-x11 git gh gnome-keyring libsecret-1-0 nodejs npm \
-      python3-venv build-essential scrot wmctrl xdotool xterm \
+      python3-venv build-essential scrot wmctrl xdotool xterm supervisor \
     && curl -fL --retry 3 -o /tmp/chatgpt.deb \
       "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_${CHATGPT_VERSION}_arm64.deb" \
     && echo "${CHATGPT_SHA256}  /tmp/chatgpt.deb" | sha256sum -c - \
@@ -16,8 +16,20 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 
 COPY launch-chatgpt /usr/local/bin/launch-chatgpt
 COPY autostart /defaults/autostart
+COPY init-workstation /custom-cont-init.d/10-workstation
+COPY nix-daemon-run /etc/s6-overlay/s6-rc.d/svc-nix/run
+COPY user-services-run /etc/s6-overlay/s6-rc.d/svc-user-services/run
+COPY supervisor.conf /etc/chatgpt-supervisor.conf
+RUN for service in svc-nix svc-user-services; do \
+      echo longrun > /etc/s6-overlay/s6-rc.d/$service/type; \
+      mkdir -p /etc/s6-overlay/s6-rc.d/$service/dependencies.d; \
+      touch /etc/s6-overlay/s6-rc.d/$service/dependencies.d/init-services; \
+      touch /etc/s6-overlay/s6-rc.d/user/contents.d/$service; \
+    done
+ENV PATH="/opt/ghostship-tools/bin:/config/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    NIX_REMOTE=daemon NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 ENV TITLE="ChatGPT" PUID=3000 PGID=3000 TZ=Pacific/Honolulu \
-    START_DOCKER=false PIXELFLUX_WAYLAND=false NO_GAMEPAD=true \
+    START_DOCKER=true PIXELFLUX_WAYLAND=false NO_GAMEPAD=true \
     SELKIES_MANUAL_WIDTH=1280 SELKIES_MANUAL_HEIGHT=900 \
     SELKIES_USE_CPU=true SELKIES_FRAMERATE=30 \
     FILE_MANAGER_PATH=/config/Transfers
