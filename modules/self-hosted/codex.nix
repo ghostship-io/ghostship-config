@@ -640,6 +640,14 @@ let
     fi
     if [ "$healthy" -eq 1 ]; then
       rm -f "$pending_restart"
+      # Retain the running release and its rollback target, releasing older
+      # downloaded generations' indirect Nix GC roots after a healthy switch.
+      for obsolete in "$CODEX_TOOL_ROOT"/generations/linux-*; do
+        [ -d "$obsolete" ] || continue
+        if [ "$obsolete" != "$generation" ] && [ "$obsolete" != "$previous" ]; then
+          rm -rf -- "$obsolete" || log_info "could not prune obsolete generation $obsolete"
+        fi
+      done
       log_info "queued Codex generation is healthy"
       exit 0
     fi

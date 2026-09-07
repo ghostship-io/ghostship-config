@@ -49,6 +49,10 @@ plugins remain sealed in the Nix store; their runtime copies are writable so
 upstream can apply Linux-specific plugin variants.
 Desktop launch overrides are applied to each app-server thread so its tool-server
 transport and credentials survive the persistent server connection.
+On narrow screens the sidebar is a drawer and closes after selecting a chat.
+The layout tracks the visible viewport so browser chrome and the software
+keyboard do not push the composer below the screen. Chrome can install the
+same-origin web app using its install action or the app's installation prompt.
 
 On another device, an upstream login callback may still target localhost on
 port 1455 or 1457. Replace the failed callback URL's host with this app's host,
@@ -74,6 +78,8 @@ Application package rollback
 does not reverse upstream profile migrations. No compatibility test guarantees
 that every feature of an unknown future release will work: account-dependent
 features and significant upstream API changes require live acceptance.
+Successful activation removes older downloaded generation links, retaining the
+current release and its rollback target so obsolete packages can be garbage-collected.
 
 Current and last-good generations are under `~/.local/share/codex-tools`.
 Logs are under `~/.codex-container/logs`. Operators can inspect:
@@ -100,5 +106,6 @@ nix develop -c npm --prefix packages/codex-desktop-web run test:browser
 Browser fixtures check binary IPC and modal interactions. Live acceptance must
 also inspect the deployed app, menus, inputs, terminal and embedded browser.
 Account-dependent tasks require a signed-in profile. Native desktop Computer Use
-is unavailable in the official Linux preview. Android device/emulator work is
-outside this task's scope.
+is unavailable in the official Linux preview. Mobile acceptance includes Chrome
+emulation, narrow and short viewports, and installation eligibility; physical
+Android installation must be distinguished from browser emulation.

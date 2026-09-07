@@ -70,6 +70,7 @@ function transformIndex(source, bootstrap = {}, appVersion = "0.0.0") {
     `<script>window.__CODEX_WEB_BOOTSTRAP__=${JSON.stringify(bootstrap).replaceAll("<", "\\u003c")}</script>`,
     '<script src="/__bridge/electron-shim.js"></script>',
     '<script src="/__bridge/webview-bridge.js"></script>',
+    '<script src="/__bridge/mobile-layout.js"></script>',
     '<script src="/__bridge/browser-preload.js"></script>',
     '<script defer src="/__bridge/pwa-register.js"></script>',
   ].join("\n    ");

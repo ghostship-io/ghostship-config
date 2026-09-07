@@ -103,6 +103,49 @@ test("embedded browser resizes and releases keyboard focus to application contro
   }
 });
 
+test("mobile drawer preserves chat width and follows the visible viewport", async () => {
+  const browser = await chromium.launch({ executablePath: findBrowserExecutable(), headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 412, height: 780 } });
+    await page.setContent(`<style>
+      * { box-sizing: border-box; } body { margin: 0; }
+      #root, #layout { height: 100%; } #layout { display: flex; position: relative; isolation: isolate; }
+      aside { width: 240px; flex-shrink: 0; overflow: hidden; }
+      main { flex: 1; display: flex; flex-direction: column; }
+      #composer { margin-top: auto; height: 100px; }
+    </style><div id="root"><div id="layout">
+      <aside class="app-shell-left-panel"><button data-app-action-sidebar-thread-row>Shared chat</button></aside>
+      <main data-app-shell-main-surface><button aria-label="Seitenleiste ausblenden" aria-controls="app-shell-sidebar" aria-expanded="true">Hide</button><input id="composer"></main>
+    </div></div>`);
+    await page.evaluate(() => {
+      document.querySelector('[aria-controls="app-shell-sidebar"]').onclick = () => {
+        document.querySelector('aside').style.width = '0px';
+      };
+    });
+    await page.addScriptTag({ path: path.join(packageRoot, 'bridge/browser/mobile-layout.js') });
+    await page.getByRole('button', { name: 'Close sidebar' }).waitFor();
+    assert.equal(await page.locator('main').evaluate((e) => e.inert), true);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('main').evaluate((e) => e.contains(document.activeElement)), false);
+    assert.equal((await page.locator('main').boundingBox()).width, 412);
+    await page.getByRole('button', { name: 'Shared chat' }).click();
+    await page.getByRole('button', { name: 'Close sidebar' }).waitFor({ state: 'hidden' });
+    assert.equal(await page.locator('main').evaluate((e) => e.inert), false);
+    await page.evaluate(() => { document.querySelector('aside').style.width = '240px'; });
+    await page.getByRole('button', { name: 'Close sidebar' }).click({ position: { x: 390, y: 100 } });
+    await page.getByRole('button', { name: 'Close sidebar' }).waitFor({ state: 'hidden' });
+    await page.evaluate(() => {
+      Object.defineProperty(window.visualViewport, 'height', { configurable: true, value: 350 });
+      window.visualViewport.dispatchEvent(new Event('resize'));
+    });
+    assert.equal((await page.locator('#root').boundingBox()).height, 350);
+    const composer = await page.locator('#composer').boundingBox();
+    assert.ok(composer.y + composer.height <= 350);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    assert.equal(await page.locator('aside').evaluate((e) => getComputedStyle(e).position), 'static');
+  } finally { await browser.close(); }
+});
+
 test("browser-native dialogs preserve modal and window lifecycles", async () => {
   const shim = readFileSync(
     path.join(packageRoot, "bridge", "browser", "electron-shim.js"),
