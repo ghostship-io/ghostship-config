@@ -5,7 +5,7 @@ const { EventEmitter } = require("node:events");
 const Module = require("node:module");
 const path = require("node:path");
 const WebSocket = require("ws");
-const { trackNotificationPort, currentNotificationPath } = require("./notification-context.cjs");
+const { trackNotificationPort, takeNotificationMetadata } = require("./notification-context.cjs");
 const { encode, decode } = require("./codec.cjs");
 
 function installElectronProxy(realElectron, gateway) {
@@ -242,7 +242,8 @@ function installElectronProxy(realElectron, gateway) {
     constructor(options = {}) {
       super();
       this.id = `notification-${crypto.randomUUID()}`;
-      this.options = { ...options, navigationPath: currentNotificationPath() };
+      const metadata = takeNotificationMetadata(options);
+      this.options = { ...options, navigationPath: metadata?.navigationPath, notificationTag: metadata?.id };
     }
 
     show() {

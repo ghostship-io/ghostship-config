@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.6.1] - 2026-09-07
+
+- **Notification targets**: Capture task routes across the upstream RPC read
+  loop and coalesce repeated completion alerts by upstream notification ID.
+- **Phone rotation**: Keep the mobile drawer and visual-viewport sizing on touch
+  phones in landscape so browser chrome and the keyboard cannot clip controls.
+
 ## [3.6.0] - 2026-09-07
 
 - **Background notifications**: Persist per-device Web Push subscriptions and

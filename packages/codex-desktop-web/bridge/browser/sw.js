@@ -34,7 +34,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(options.title || "Codex", {
     body: options.body || "", icon: "/__bridge/icon-192.png",
     actions: options.actions || [], silent: options.silent === true,
-    tag: `codex-${message.notificationId}`,
+    tag: `codex-${message.notificationTag || message.notificationId}`,
     data: { codexNotificationId: message.notificationId, navigationPath: message.navigationPath },
   }));
 });

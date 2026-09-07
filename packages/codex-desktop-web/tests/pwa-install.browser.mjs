@@ -184,13 +184,13 @@ test('background push wakes the service worker and displays a notification', asy
     assert.ok(registrationId);
     await cdp.send('ServiceWorker.stopAllWorkers');
     await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId,
-      data: JSON.stringify({ notificationId: 'background-proof', navigationPath: '/thread/shared', options: { title: 'Task finished', body: 'Available on every device' } }) });
+      data: JSON.stringify({ notificationId: 'background-proof', notificationTag: 'upstream-turn', navigationPath: '/thread/shared', options: { title: 'Task finished', body: 'Available on every device' } }) });
     await page.waitForFunction(async () => (await (await navigator.serviceWorker.ready).getNotifications()).length === 1);
     const shown = await page.evaluate(async () => {
       const [n] = await (await navigator.serviceWorker.ready).getNotifications();
       const result = { title: n.title, body: n.body, tag: n.tag, data: n.data }; n.close(); return result;
     });
     assert.deepEqual(shown, { title: 'Task finished', body: 'Available on every device',
-      tag: 'codex-background-proof', data: { codexNotificationId: 'background-proof', navigationPath: '/thread/shared' } });
+      tag: 'codex-upstream-turn', data: { codexNotificationId: 'background-proof', navigationPath: '/thread/shared' } });
   } finally { await browser.close(); await new Promise((resolve) => server.close(resolve)); }
 });

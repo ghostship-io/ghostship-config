@@ -631,7 +631,7 @@
       data: { codexNotificationId: message.notificationId, navigationPath: message.navigationPath },
       icon: options.icon || "/__bridge/icon-192.png",
       silent: options.silent === true,
-      tag: `codex-${message.notificationId}`,
+      tag: `codex-${message.notificationTag || message.notificationId}`,
     };
     if ("serviceWorker" in navigator) {
       const registration = await navigator.serviceWorker.ready;
@@ -658,13 +658,16 @@
   }
 
   async function closeBrowserNotification(notificationId) {
+    const message = browserNotifications.get(notificationId);
     browserNotifications.delete(notificationId);
     if (!("serviceWorker" in navigator)) return;
     const registration = await navigator.serviceWorker.ready;
     const notifications = await registration.getNotifications({
-      tag: `codex-${notificationId}`,
+      tag: `codex-${message?.notificationTag || notificationId}`,
     });
-    for (const notification of notifications) notification.close();
+    for (const notification of notifications) {
+      if (notification.data?.codexNotificationId === notificationId) notification.close();
+    }
   }
 
   async function setBrowserFullscreen(enabled) {

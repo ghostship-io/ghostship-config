@@ -1,5 +1,5 @@
 (() => {
-  const mobile = matchMedia('(max-width: 767px)');
+  const mobile = matchMedia('(max-width: 767px), (pointer: coarse) and (max-height: 600px)');
   const root = document.documentElement;
   let sidebar;
   let backdrop;
@@ -75,7 +75,7 @@
   const style = document.createElement('style');
   style.textContent = `
     [data-codex-web-sidebar-backdrop] { display: none; }
-    @media (max-width: 767px) {
+    @media (max-width: 767px), (pointer: coarse) and (max-height: 600px) {
       html, body, #root {
         height: var(--codex-web-viewport-height, 100dvh) !important;
         min-height: 0 !important;

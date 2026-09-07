@@ -49,6 +49,7 @@ function createPushNotifications(directory, deliver = webpush.sendNotification.b
       const payload = JSON.stringify({
         notificationId: message.notificationId,
         navigationPath: message.navigationPath,
+        notificationTag: message.notificationTag,
         options: {
           title: String(message.options.title || "Codex").slice(0, 120),
           body: String(message.options.body || "").slice(0, 500),

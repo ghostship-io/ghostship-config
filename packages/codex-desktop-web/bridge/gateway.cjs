@@ -340,6 +340,7 @@ async function createGateway(options) {
       type: "show-notification",
       notificationId,
       navigationPath: options.navigationPath,
+      notificationTag: options.notificationTag,
       options: {
         actions: Array.isArray(options.actions)
           ? options.actions.map((action, index) => ({

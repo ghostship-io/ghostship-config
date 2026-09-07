@@ -146,6 +146,24 @@ test("mobile drawer preserves chat width and follows the visible viewport", asyn
   } finally { await browser.close(); }
 });
 
+test("phone landscape keeps the zoomed frame inside the visual viewport", async () => {
+  const browser = await chromium.launch({ executablePath: findBrowserExecutable(), headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
+    await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>body{margin:0}#frame{display:flex;flex-direction:column}footer{margin-top:auto;height:120px;flex-shrink:0}</style>
+      <div id="root"><div id="frame" style="--codex-window-zoom:1;height:calc(100vh / var(--codex-window-zoom))">
+      <footer>Project and composer controls</footer></div></div>`);
+    await page.addScriptTag({ path: path.join(packageRoot, 'bridge/browser/mobile-layout.js') });
+    await page.evaluate(() => {
+      Object.defineProperty(visualViewport, 'height', { configurable: true, value: 300 });
+      visualViewport.dispatchEvent(new Event('resize'));
+    });
+    const bounds = await page.locator('footer').boundingBox();
+    assert.equal(bounds.y + bounds.height, 300);
+  } finally { await browser.close(); }
+});
+
 test("browser-native dialogs preserve modal and window lifecycles", async () => {
   const shim = readFileSync(
     path.join(packageRoot, "bridge", "browser", "electron-shim.js"),

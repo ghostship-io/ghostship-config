@@ -52,7 +52,8 @@ transport and credentials survive the persistent server connection.
 On narrow screens the sidebar is a drawer and closes after selecting a chat.
 The layout tracks the visible viewport so browser chrome and the software
 keyboard do not push the composer below the screen. The inner zoomed app frame
-also follows the visual viewport, and mobile home suggestions do not retain the
+also follows the visual viewport in portrait and touch-phone landscape, and
+mobile home suggestions do not retain the
 desktop negative margin that overlaps project headings. Chrome can install the
 same-origin web app using its install action or the app's installation prompt.
 The manifest fetch includes credentials so installation works behind the
@@ -79,7 +80,9 @@ Do not share the callback URL: it contains login state.
 
 Enable notifications on each browser/device using the app's permission offer.
 Completion alerts use both the live connection and encrypted Web Push, with a
-shared notification tag to avoid duplicate entries. Push can wake the service
+shared upstream notification tag to avoid duplicate entries. Task routes are
+matched at the native notification boundary; ambiguous shared-title alerts open
+the app rather than selecting the wrong task. Push can wake the service
 worker without an open app tab; clicking an alert focuses an existing tab or
 opens the app at the task route, which survives runtime upgrades. Background
 alerts open the task for its current approval controls instead of retaining
