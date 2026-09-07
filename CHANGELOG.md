@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   generation after failed startup. Refresh browser assets on transport changes.
 - **Browser compatibility**: Support sandboxed Linux preloads, preserve binary
   IPC payloads and initialize the upstream renderer's application version.
+- **Restart reliability**: Keep the updater alive through its own restart and
+  health checks, and defer automatic activation while browser tabs are connected.
 
 ## [3.4.7] - 2026-09-02
 

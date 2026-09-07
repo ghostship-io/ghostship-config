@@ -56,7 +56,10 @@ pinned Nix package set, with the official runtime and Linux native modules.
 Missing required preload channels fail preparation. An isolated empty-profile
 startup must connect the native relay before a candidate is queued.
 
-`codex-tool-update-restart.service` checks app-server idle state before activation.
+`codex-tool-update-restart.service` waits for idle tasks and no connected browser
+tabs before activation, protecting drafts and sign-in flows. Closing all app tabs
+allows a queued update to apply. Image deployment applies matching-version
+transport fixes at startup while preserving newer automatically installed releases.
 Failed health checks restore the previous generation. Application package rollback
 does not reverse upstream profile migrations. No compatibility test guarantees
 that every feature of an unknown future release will work: account-dependent

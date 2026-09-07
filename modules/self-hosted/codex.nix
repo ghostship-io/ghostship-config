@@ -462,8 +462,12 @@ let
       pkgs.jq
     ];
     text = ''
+      filter='.status == "ok" and .relayConnected == true'
+      if [[ "''${1:-}" == --idle ]]; then
+        filter="$filter and .browserClients == 0 and .pendingDialogs == 0"
+      fi
       curl -fsS --max-time 5 http://127.0.0.1:8214/health \
-        | jq -e '.status == "ok" and .relayConnected == true' >/dev/null
+        | jq -e "$filter" >/dev/null
     '';
   };
 
@@ -587,8 +591,8 @@ let
       exit 1
     }
 
-    if ! is_codex_idle; then
-      log_info "Codex reports active or unknown work; leaving restart queued"
+    if ! is_codex_idle || ! ${codexWebHealth}/bin/codex-web-health --idle; then
+      log_info "Codex has active work, connected browsers, or unknown state; leaving restart queued"
       exit 0
     fi
 
@@ -599,7 +603,7 @@ let
       exit 0
     fi
 
-    if ! is_codex_idle; then
+    if ! is_codex_idle || ! ${codexWebHealth}/bin/codex-web-health --idle; then
       log_info "Codex is no longer idle; leaving restart queued"
       exit 0
     fi
@@ -1348,7 +1352,12 @@ let
       ln -s /workspace/ghostship-agent/tools "$HOME/tools"
       chown -h codex:codex "$HOME/tools"
     fi
-    if [ ! -x "$CODEX_TOOL_CURRENT/web/runtime/electron" ] \
+    current_release="$(jq -r .desktopVersion "$CODEX_TOOL_CURRENT/release.json" 2>/dev/null || true)"
+    fallback_release="$(jq -r .desktopVersion ${codexToolFallback}/release.json)"
+    # Image replacement applies its transport fixes before the app starts,
+    # while preserving a newer automatically installed upstream release.
+    if [ "$(printf '%s\n' "$current_release" "$fallback_release" | sort -V | tail -n1)" = "$fallback_release" ] \
+      || [ ! -x "$CODEX_TOOL_CURRENT/web/runtime/electron" ] \
       || [ ! -x "$CODEX_TOOL_CURRENT/codex/bin/codex" ] \
       || [ ! -x "$CODEX_TOOL_CURRENT/proxy/bin/codex_remote_proxy" ]; then
       current_tmp="$CODEX_TOOL_CURRENT.tmp"
@@ -1846,7 +1855,9 @@ let
       Description=Restart Codex after queued maintenance becomes idle
       DefaultDependencies=no
       After=codex-bootstrap.service
-      Requires=codex-bootstrap.service
+      # Restarting the app must not stop this updater before health/rollback.
+      Wants=codex-bootstrap.service
+      Requires=codex-container-setup.service
       Conflicts=shutdown.target
       Before=shutdown.target
 

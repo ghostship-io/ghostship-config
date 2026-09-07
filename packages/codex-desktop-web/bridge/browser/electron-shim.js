@@ -12,6 +12,14 @@
   const outboundMessageListeners = new Set();
   const nativeFetch = window.fetch.bind(window);
   const bootstrap = window.__CODEX_WEB_BOOTSTRAP__ || {};
+  // Disable Electron-only telemetry in browser clients. The native app keeps
+  // its own diagnostics; a browser has no sentry-ipc protocol handler.
+  window.__SENTRY_IPC__ = {
+    "sentry-ipc": Object.fromEntries([
+      "sendRendererStart", "sendScope", "sendEnvelope", "sendStatus",
+      "sendStructuredLog", "sendMetric",
+    ].map((name) => [name, () => {}])),
+  };
   const deviceKey = "codex-web-device-id";
   const sequenceKey = "codex-web-event-sequence";
   const nativeRandomUUID =

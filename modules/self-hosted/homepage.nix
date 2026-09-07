@@ -201,6 +201,12 @@ in
             "[Services].[OpenChamber].server=literal:chill-penguin"
             "[Services].[OpenChamber].container=literal:openchamber"
 
+            "[Services].[ChatGPT].icon=literal:sh-chatgpt"
+            "[Services].[ChatGPT].href=literal:https://codex.ghostship.io"
+            "[Services].[ChatGPT].description=literal:ChatGPT Development Workstation"
+            "[Services].[ChatGPT].server=literal:chill-penguin"
+            "[Services].[ChatGPT].container=literal:codex"
+
             # Management group
             "[Management].[Homepage].icon=literal:sh-homepage"
             "[Management].[Homepage].description=literal:Dashboard"

@@ -40,7 +40,6 @@ function readBootstrap() {
   const channels = [
     "codex_desktop:get-sentry-init-options",
     "codex_desktop:get-build-flavor",
-    "codex_desktop:get-uses-owl-app-shell",
     "codex_desktop:get-shared-object-snapshot",
     "codex_desktop:get-system-theme-variant",
     "codex_desktop:get-initial-sidebar-bootstrap",
