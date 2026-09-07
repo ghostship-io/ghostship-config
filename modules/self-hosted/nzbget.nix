@@ -77,8 +77,8 @@ in
     ];
   };
 
-  # Preserve the remotely managed Cloudflare origin at gluetun:5001 while
-  # keeping NZBGet's provider traffic directly on ghostship_net.
+  # The live tunnel uses the direct registry origin above. Retain gluetun:5001
+  # as a compatibility endpoint for legacy callers.
   virtualisation.oci-containers.containers."nzbget-edge-proxy" = {
     podman.sdnotify = "healthy";
     image = "docker.io/library/nginx:alpine";
