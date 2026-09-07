@@ -97,6 +97,8 @@
               nixfmt
               nodejs_24
               python3
+              shellcheck
+              util-linux
               playwright-driver.browsers
               prefetch-npm-deps
               ragenix.packages.${system}.default
@@ -104,7 +106,6 @@
             ];
             PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
           };
-
         }
       );
 

@@ -31,7 +31,7 @@
     # Apps and utilities
     ./cloakbrowser.nix
     ./openchamber.nix
-    ./chatgpt.nix
+    ./codex.nix
 
     # Games
     ./romm-db.nix

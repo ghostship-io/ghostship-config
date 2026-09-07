@@ -30,15 +30,6 @@ let
       muximuxSections = [ "BookStack" ];
     }
     {
-      name = "codex";
-      paths = [ "/srv/apps/codex" ];
-      units = [ "podman-codex" ];
-      containers = [ "codex" ];
-      imageRepositories = [ "localhost/ghostship-codex" ];
-      homepageEntries = [ "Codex" ];
-      muximuxSections = [ "Codex" ];
-    }
-    {
       name = "t3code";
       paths = [ "/srv/apps/paseo" ];
       units = [ "podman-t3code" ];

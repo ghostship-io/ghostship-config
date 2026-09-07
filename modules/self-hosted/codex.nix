@@ -7,10 +7,10 @@
 }:
 
 let
-  codexHome = "/srv/apps/codex/home";
-  codexDocker = "/srv/apps/codex/docker";
-  codexNixRoot = "/srv/apps/codex/nix-root";
-  codexWorkspace = "/srv/apps/codex/workspace";
+  codexHome = "/srv/apps/chatgpt/home";
+  codexDocker = "/srv/apps/chatgpt/docker";
+  codexNixRoot = "/srv/apps/chatgpt/nix-root";
+  codexWorkspace = "/srv/apps/chatgpt/workspace";
   codexSecrets = config.ghostship.selfHostedSecrets.projections.codex.path;
   codexSecretsFile = "/run/secrets/codex.env";
   imageName = "localhost/ghostship-codex";
@@ -1504,7 +1504,8 @@ let
 
       [Service]
       Type=simple
-      ExecStart=@${pkgs.nix}/bin/nix-daemon nix-daemon --daemon
+      UnsetEnvironment=NIX_REMOTE
+      ExecStart=@${pkgs.nix}/bin/nix-daemon nix-daemon --store local --daemon
       KillMode=mixed
       LimitNOFILE=1048576
       Delegate=yes
@@ -1930,7 +1931,7 @@ in
     extraOptions = [
       "--privileged"
       "--systemd=always"
-      "--pids-limit=-1"
+      "--pids-limit=4096"
       "--stop-timeout=180"
       "--network=ghostship_net"
       "--health-cmd=${codexContainerHealth}/bin/codex-container-health"
@@ -1952,7 +1953,7 @@ in
   };
 
   systemd.tmpfiles.rules = [
-    "d /srv/apps/codex 0755 root root -"
+    "d /srv/apps/chatgpt 0755 root root -"
     "d ${codexDocker} 0755 root root -"
     "d ${codexHome} 0755 3000 3000 -"
     "d ${codexNixRoot} 0755 root root -"
@@ -1973,7 +1974,7 @@ in
     preStart = lib.mkAfter ''
       set -eu
 
-      install -d -m0755 -o root -g root /srv/apps/codex
+      install -d -m0755 -o root -g root /srv/apps/chatgpt
       install -d -m0755 -o root -g root ${codexDocker}
       install -d -m0755 -o 3000 -g 3000 ${codexHome}
       install -d -m0755 -o root -g root ${codexNixRoot}
