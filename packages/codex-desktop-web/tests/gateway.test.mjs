@@ -41,6 +41,13 @@ test("index transformation preserves HTML-escaped CSP sources", () => {
   );
 });
 
+test("Linux index receives the installed app version before renderer startup", () => {
+  const source = '<html data-build="<!-- PROD_BUILD_TAG_HERE -->"><script type="module"></script></html>';
+  const transformed = transformIndex(source, {}, "26.901.51231");
+  assert.match(transformed, /data-build="26\.901\.51231"/);
+  assert.doesNotMatch(transformed, /PROD_BUILD_TAG_HERE/);
+});
+
 test("browser IPC accepts only same-origin or explicitly allowed clients", () => {
   assert.equal(
     isBrowserOriginAllowed({

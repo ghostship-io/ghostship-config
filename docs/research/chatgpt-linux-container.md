@@ -1,66 +1,56 @@
 # ChatGPT Linux container design
 
-Research date: 2026-09-07. Target: chill-penguin (ARM64), desktop browsers and
-web controls and inputs. Android device/emulator work was explicitly excluded. This replaces the retired macOS-derived Codex web
-bridge with the official Linux desktop application.
+Research date: 2026-09-07. Target: chill-penguin (ARM64), a full Nix development
+workstation with web-native app controls. Android device work is excluded.
 
 ## Decision
 
-Run the complete official app in a Debian 13 X11 desktop and stream the whole
-session with Selkies. Keep the mobile/PWA shell outside application files.
-Full-session capture preserves native menus, dialogs and browser windows. A
-private Electron IPC bridge must reimplement native objects and track upstream
-changes; the existing bridge also rebuilt native modules and patched platform
-assumptions. Those are avoidable upgrade dependencies.
+Port the previous `codex-desktop-web` adapter and Nix/systemd workstation to the
+official Linux package. Serve the upstream renderer as HTML/CSS/JavaScript and
+relay Electron IPC to its official native runtime. Keep the browser adapter at
+the preload, main-process and gateway boundaries, without substitutions inside
+minified renderer bundles. Use browser-native dialogs for filesystem operations.
 
-Pin the streaming base by digest and test its updates separately. Use OpenAI's
-signed apt channel for application updates, preserve the profile and workspace,
-and retain a working package for recovery. Future upstream compatibility is
-verified, never assumed.
+The Linux runtime forces a sandboxed preload. Its relay therefore uses private
+Electron IPC to a main-process WebSocket rather than loading Node dependencies
+inside the preload. The browser cannot invoke those private relay channels.
+Binary values must survive both directions of the WebSocket transport.
 
-## Evidence
+Preserve the official custom runtime and Linux native modules; substituting a
+stock Electron runtime could remove capabilities supplied by OpenAI's build.
+Nix patches ELF interpreter/library paths, supplies dependencies, and builds an
+OCI image with an independent persistent Nix store, Docker daemon and systemd.
+
+## Updates
+
+Authenticate InRelease with OpenAI's pinned public key, verify the package index
+hash and downloaded package hash, then build a separate candidate. Check the
+preload contract and start the candidate with an empty profile before activation.
+Retain the previous generation and restore it if live startup health fails.
+
+Keep transport release identity separate from app version. Browser assets use
+network fetches rather than retaining a stale app shell after an upgrade, and
+WebSocket reconnects reload a page whose transport generation has changed.
+Unknown future API changes can still need adapter changes; automated smoke
+checks are an acceptance gate, not proof of every authenticated feature.
+
+## Primary evidence
 
 - [Official Linux installation](https://learn.chatgpt.com/docs/linux/linux-app):
-  Debian 13 and ARM64 are supported; installer supplies signed apt repository;
-  native Wayland is experimental. X11 avoids documented focus/window problems.
-- [Live ARM64 package index](https://persistent.oaistatic.com/codex-app-prod/linux/deb/dists/stable/main/binary-arm64/Packages):
-  version 26.901.51231, package SHA256
+  Linux preview packages include ARM64. Native desktop Computer Use is excluded.
+- [Official ARM64 package index](https://persistent.oaistatic.com/codex-app-prod/linux/deb/dists/stable/main/binary-arm64/Packages):
+  version 26.901.51231; package SHA256
   `02a2f5c6cb69509c62abcbdd13c76b139cdb2ca9edde7537239ddde024077ea0`.
-- [LinuxServer Selkies base](https://github.com/linuxserver/docker-baseimage-selkies):
-  ARM64 Debian base, X11, audio/microphone, clipboard and file transfer. Upstream
-  warns of breaking base updates and supplies no implicit latest tag.
-- [Electron IPC](https://www.electronjs.org/docs/latest/tutorial/ipc): native
-  desktop objects cannot simply be serialized across a browser transport.
-- [Selkies core interface](https://docs.selkies.io/reference/web-core/selkies-ws-core):
-  documented display scaling, keyboard, clipboard and peripheral messages offer
-  a transport-owned integration boundary.
-- [Chrome install criteria](https://web.dev/articles/install-criteria): HTTPS,
-  appropriate manifest, icons, start URL and display mode. Promotion and menu
-  installation are distinct; a service worker alone is not installation proof.
-- [Keyboard viewport](https://developer.chrome.com/blog/viewport-resize-behavior):
-  use the visual viewport and `interactive-widget=resizes-content` to avoid
-  hiding controls behind the keyboard.
-- [Android debugging](https://developer.chrome.com/docs/devtools/remote-debugging/):
-  verify installation and standalone launch in actual Android Chrome. Desktop
-  viewport emulation is complementary layout coverage.
+- [Electron IPC](https://www.electronjs.org/docs/latest/tutorial/ipc):
+  structured messages connect renderer and main processes; native objects need
+  explicit lifecycle adapters across the browser transport.
+- [Integrated terminal](https://learn.chatgpt.com/docs/integrated-terminal) and
+  [browser](https://learn.chatgpt.com/docs/browser): these are app capabilities
+  requiring live interaction checks, beyond a successful gateway response.
+- [Remote connections](https://learn.chatgpt.com/docs/remote-connections): official
+  remote hosts have platform restrictions; this web adapter is a separate path.
 
-## Acceptance boundaries
-
-All active controls must remain reachable and free of clipping. Mutually
-exclusive menus cannot all be displayed simultaneously. Fit mode keeps the
-whole desktop visible; phone text size is a tradeoff and needs real inspection.
-
-The official Linux preview excludes desktop Computer Use. Official Remote only
-supports Mac/Windows hosts. This container's PWA is a separate delivery path;
-it does not claim either unsupported native capability. Terminal, built-in
-browser, native dialogs, profile persistence, permissions and updates require
-live verification. Login and account-gated features require an authenticated
-profile; do not infer support from an unsigned-in screen.
-
-Discovery stopped after primary sources established the supported package,
-transport boundary, mobile criteria, and platform exclusions. Live acceptance
-will resolve runtime uncertainty.
-
-The workstation retains a separate persistent Nix store/daemon, Docker data, home,
-workspace, and development tooling, as requested. NixOS manages the container
-and seeds its isolated Nix store; Debian supplies the supported GUI runtime.
+All active controls must be visible or reachable without clipping. Mutually
+exclusive menus cannot all be displayed simultaneously. Test the actual deployed
+renderer, file-picker round trips, account-dependent tasks and small browser
+viewports; a healthy native relay alone is insufficient acceptance.

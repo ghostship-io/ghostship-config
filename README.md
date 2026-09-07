@@ -290,45 +290,32 @@ sudoers rule, and restores the last-known-good config if the T3 Code providers
 fail to recover. Codex and Antigravity credentials remain under
 `/home/paseo` across image replacements.
 
-Codex runs at `https://codex.ghostship.io` in a separate systemd-based Podman
-image. The repo verifies the signed official Codex desktop archive, runs its
-matching Linux Electron main process, and serves the original renderer and
-preload through a small browser transport. The desktop UI, terminal, projects,
-plugins, task views, settings, and model picker therefore come from the same
-upstream application code instead of a separately maintained web clone.
+ChatGPT runs at `https://codex.ghostship.io` in a Nix-built OCI development
+workstation, using the existing protected Cloudflare origin `codex:8214`.
+Its upstream Linux renderer runs directly in the browser, with browser-native
+menus, inputs and file pickers supplied by the existing Electron transport.
+The official Linux runtime, CLI and native modules stay together. No host port
+is published.
 
-A persistent `codex-app-server.service` owns task state and execution. Every
-browser device connects to that single app host, so open tasks and updates are
-shared across desktop and mobile clients. The disposable `codex-web.service`
-can restart without interrupting active work. Browser file dialogs expose only
-the persisted `/workspace` and `/home/codex` trees. The built-in Browser panel
-uses a persistent container-side Electron surface: page frames and mouse,
-touch, keyboard, navigation, and scroll input are relayed through the same
-multi-device gateway. Computer-use remains intentionally unsupported.
+Like OpenChamber, the workstation has systemd, a separate writable Nix store
+and daemon, nested Docker, and persistent home and workspace storage under
+`/srv/apps/chatgpt`. The `codex` user (`3000:3000`) owns `/home/codex` and
+`/workspace`. Use project Nix flakes for dependencies and systemd user services
+for persistent development servers.
 
-The `codex` user at `3000:3000` keeps its home, workspace, Docker state, user
-systemd units, and isolated Nix store under `/srv/apps/codex`. Use
-`codex-user-units` for persisted user services, `codex-tunnel` for ad hoc Quick
-Tunnels, and `codex-apply-config` after editing Codex TOML or hook
-configuration. Updates still use the existing idle-gated activation and
-last-good rollback path. The four-hour maintenance check compares the deployed
-signed desktop release with OpenAI's appcast; a newer release must pass the
-repo's versioned preload/IPC compatibility contract before the next NixOS
-deployment activates it. The app server is throttled above 32 GiB and capped
-at 40 GiB.
+Every four hours, the updater authenticates OpenAI's Linux package index,
+builds a candidate against the pinned Nix environment, checks its preload
+contract and starts it with an isolated profile. Successful candidates are
+queued for an idle restart; failed activation restores the previous generation.
+The renderer is not rewritten by minified bundle searches. Web transport
+changes have their own release identity so connected pages reload on upgrades.
 
-`OLLAMA_API_KEY` is projected from the secret catalog. A loopback-only proxy
-adds it to Ollama.com requests, and a four-hour catalog refresh inspects each
-cloud model's declared capabilities. Only models advertising `tools` are
-added to the Codex Web model picker; `thinking` and `vision` are reflected as
-optional model metadata rather than selection requirements.
-
-The bridge serves a standalone web app manifest, 192px and 512px maskable
-icons, mobile application metadata, and a root-scoped service worker. This
-keeps **Install app** available in Chrome on Android across compatible desktop
-releases. Like OpenChamber, Codex captures Chrome's `beforeinstallprompt` event
-and presents a persistent **Install Codex** offer with Install and Dismiss
-actions instead of depending on Chrome's engagement-based automatic prompt.
+Sign in through the web interface. The persistent home includes credentials and
+the private key used to unlock the desktop keyring on unattended boots. Native
+desktop Computer Use is unavailable in the official Linux preview. Android
+device testing is outside this task's scope. See the
+[workstation guide](docs/chatgpt-workstation.md) and
+[research and platform boundaries](docs/research/chatgpt-linux-container.md).
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts

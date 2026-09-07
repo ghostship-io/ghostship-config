@@ -58,7 +58,7 @@ function safeStaticPath(root, requestPath) {
   return resolved;
 }
 
-function transformIndex(source, bootstrap = {}) {
+function transformIndex(source, bootstrap = {}, appVersion = "0.0.0") {
   const bridgeScripts = [
     '<link rel="manifest" href="/manifest.webmanifest">',
     '<meta name="theme-color" content="#0d0d0d">',
@@ -74,6 +74,7 @@ function transformIndex(source, bootstrap = {}) {
     '<script defer src="/__bridge/pwa-register.js"></script>',
   ].join("\n    ");
   return source
+    .replaceAll("<!-- PROD_BUILD_TAG_HERE -->", appVersion)
     .replace("connect-src ", "connect-src ws: wss: ")
     .replace("<script type=\"module\"", `${bridgeScripts}\n    <script type="module"`);
 }
@@ -1066,7 +1067,7 @@ async function createGateway(options) {
       body = Buffer.from(
         request.socket.localPort === nativeHostPort
           ? body.toString("utf8")
-          : transformIndex(body.toString("utf8"), relayBootstrap),
+          : transformIndex(body.toString("utf8"), { ...relayBootstrap, __codexWebRelease: options.releaseId }, options.appVersion),
       );
     }
     response.writeHead(200, {
@@ -1142,6 +1143,7 @@ async function createGateway(options) {
     const since = Number(requestUrl.searchParams.get("since") || "0");
     send(socket, {
       type: "hello",
+      releaseId: options.releaseId,
       clientId,
       deviceId,
       sequence: eventSequence,

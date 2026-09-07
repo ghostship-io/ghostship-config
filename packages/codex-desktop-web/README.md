@@ -1,108 +1,42 @@
-# Codex Desktop Web
+# ChatGPT Desktop Web
 
-This package serves the unmodified renderer from the official ChatGPT desktop
-application in a browser. The official preload is rebuilt against a WebSocket
-Electron transport, while the official main process runs on the matching Linux
-Electron runtime.
+Serve the official Linux app's renderer directly in a browser. The official
+preload runs against a browser Electron shim; its real native counterpart and
+main process run in OpenAI's bundled Linux runtime. WebSocket IPC connects them.
+The main app uses ordinary HTML controls. Native file dialogs become browser
+pickers; secondary windows and embedded browser guests have lifecycle adapters.
 
-The gateway multiplexes every browser onto one native app host. IPC events,
-app-server MessagePorts, terminal state, and task updates are fanned out to all
-connected devices. Native file dialogs become a container-side picker confined
-to `CODEX_WEB_FILE_ROOTS`, which defaults to `/workspace,/home/codex`.
-Project bootstrap updates are relayed before invalidation events so a project
-created on one device appears immediately on every connected device.
-Native secondary windows, including About and the desktop pet, are rendered by
-the unchanged upstream app and relayed as synchronized interactive surfaces.
-Full-screen state is mapped to the browser Fullscreen API.
+The Nix/systemd OCI workstation is defined in `modules/self-hosted/codex.nix`.
+See [the workstation guide](../../docs/chatgpt-workstation.md) for deployment,
+persistent storage, development services, authentication and update operations.
+The image is built with Nix dockerTools; this package has no separate Dockerfile.
 
-Desktop task notifications are delivered through the root PWA service worker.
-The app presents an explicit permission request, and notification actions are
-returned to the native host. The upstream automation scheduler remains in the
-persistent desktop process, so scheduled tasks continue running without an
-open browser tab and notify installed Android clients when complete.
+## Release preparation
 
-The upstream Browser panel keeps its native tabs, toolbar, and lifecycle
-messages. Each materialized tab is backed by a persistent offscreen Electron
-surface in the container; compressed frames and normalized input events are
-relayed to every device viewing that task. A loopback-only renderer endpoint on
-port 5175 preserves the upstream main process's renderer-origin checks without
-exposing another container port.
-
-## Supported releases
-
-Release descriptors live under `releases/`. Each descriptor binds the desktop
-artifact, Electron runtime, Codex CLI, signatures, hashes, and compatibility
-family. `latest-compatible` updates can reuse a family when the generated
-preload and IPC contract remains compatible.
-
-## Local Docker build
+Release descriptors under `releases/` bind the official Linux package URL and
+checksum. `discover-linux-release.mjs` authenticates OpenAI's repository using
+the pinned public key. `prepare-linux.mjs` extracts the package, preserves its
+native runtime and Linux modules, checks required preload channels, and installs
+the transport. Nix resolves the runtime's ELF dependencies.
 
 ```sh
-docker build -t ghostship-codex-desktop-web .
-docker run --rm -p 8214:8214 \
-  -v codex-home:/home/codex \
-  -v codex-workspace:/workspace \
-  ghostship-codex-desktop-web
+nix develop -c npm --prefix packages/codex-desktop-web ci --ignore-scripts
+nix develop -c npm --prefix packages/codex-desktop-web test
+nix develop -c npm --prefix packages/codex-desktop-web run test:browser
 ```
 
-Open `http://localhost:8214`. The image keeps the upstream renderer assets
-unchanged and adds only the browser transport, PWA metadata, Linux runtime
-adapters, and persistent storage mounts.
-
-Chrome on Android can install the HTTPS deployment from **Install app**. The
-manifest, maskable icons, standalone display mode, and root-scoped service
-worker are served by the gateway rather than patched into upstream assets.
-
-For a fresh CLI login, the upstream callback listener still binds to loopback
-ports 1455 or 1457. If authentication occurs on another device, replace the
-failed callback URL's host with the Codex web app host while preserving
-`/auth/callback` and its query string; the gateway forwards it to the pending
-desktop listener.
-
-## Adding a desktop release
-
-1. Add a signed release descriptor under `releases/`.
-2. Run `npm run build:release -- --release VERSION`.
-3. Run `npm run test:contract`.
-4. Run the browser, multi-device, terminal, and PWA tests.
-5. Add the version to `releases/supported.json` only after all checks pass.
-
-A missing required preload channel or mismatched Electron version fails the
-candidate build without modifying the active generation.
+Automatic candidates also run `scripts/smoke-prepared.sh` with an isolated home
+before being queued for an idle restart. A failed live health check restores the
+previous generation. Renderer assets use network fetches, and the transport
+identity forces reload after a changed generation. Unknown upstream changes may
+still require new adapters and authenticated browser acceptance.
 
 ## Browser acceptance
 
-The capture-phase project-picker regression runs in a real browser:
+The fixture suite exercises binary IPC, file-picker modal containment, secondary
+window lifecycle, fullscreen and the install prompt. It does not prove Android
+installation or authenticated app features.
 
-```sh
-CODEX_BROWSER_EXECUTABLE=/path/to/chrome-wrapper npm run test:browser
-```
-
-Run the live compatibility suite against a healthy deployed gateway:
-
-```sh
-CODEX_WEB_URL=http://127.0.0.1:8214 \
-CODEX_BROWSER_EXECUTABLE=/path/to/chrome-wrapper \
-npm run test:live
-```
-
-Run the live UI surface sweep against the same gateway:
-
-```sh
-CODEX_WEB_URL=http://127.0.0.1:8214 \
-CODEX_BROWSER_EXECUTABLE=/path/to/chrome-wrapper \
-npm run test:live-ui
-```
-
-The live suite checks Chrome installability, service-worker control, application
-and model menus, the full project-folder creation round trip on two browser
-devices, scheduled-task navigation, terminal-panel controls, About, the desktop
-pet, full screen, and clean page errors. It creates and removes a temporary
-logical project backed by `/workspace`.
-
-The UI surface sweep physically opens the desktop application menus, safe native
-windows, project and folder-picker modals, primary screens, every settings
-category, desktop dropdowns, and the Android sidebar/dropdowns. It verifies the
-result of each safe action and closes every surface it opens. Destructive or
-externally consequential actions such as logout, quit, deletion, feedback,
-plugin installation, and task execution are inventoried but not invoked.
+`tests/live-acceptance.mjs` and `tests/live-ui-surface.mjs` contain the earlier
+renderer acceptance scenarios. When updating upstream, inspect the real UI and
+refresh any changed labels before using these suites as release evidence.

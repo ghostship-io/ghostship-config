@@ -96,6 +96,13 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
       client.on("message", (payload) => {
         const message = JSON.parse(payload.toString());
         browserMessages.push(message);
+        if (message.type === "invoke" && message.channel === "codex_desktop:binary-test") {
+          client.send(JSON.stringify({
+            type: "result", requestId: message.requestId, ok: true,
+            result: { bytes: { __codexBridgeType: "uint8array", base64: "AAF//w==" },
+              buffer: { __codexBridgeType: "arraybuffer", base64: "AAF//w==" } },
+          }));
+        }
         if (
           message.type === "auxiliary-window-command" &&
           message.windowId === "about" &&
@@ -135,6 +142,11 @@ test("browser-native dialogs preserve modal and window lifecycles", async () => 
         timeout: 5_000,
       });
     });
+    assert.deepEqual(await page.evaluate(async () => {
+      const value = await window.__codexElectronModule.ipcRenderer.invoke("codex_desktop:binary-test");
+      return { bytes: value.bytes instanceof Uint8Array ? [...value.bytes] : null,
+        buffer: value.buffer instanceof ArrayBuffer ? [...new Uint8Array(value.buffer)] : null };
+    }), { bytes: [0, 1, 127, 255], buffer: [0, 1, 127, 255] });
     for (const socket of sockets) {
       socket.send(JSON.stringify({
         action: "show-dialog",

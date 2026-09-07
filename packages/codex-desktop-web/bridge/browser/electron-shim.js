@@ -600,6 +600,10 @@
 
   function handle(message) {
     if (message.type === "hello") {
+      if (message.releaseId && bootstrap.__codexWebRelease && message.releaseId !== bootstrap.__codexWebRelease) {
+        location.reload();
+        return;
+      }
       while (outbound.length > 0) socket.send(outbound.shift());
       for (const channel of listeners.keys()) {
         send({ type: "subscribe", channel });
@@ -667,7 +671,13 @@
     );
     socket.addEventListener("message", (event) => {
       try {
-        handle(JSON.parse(String(event.data)));
+        handle(JSON.parse(String(event.data), (_key, item) => {
+          if (item?.__codexBridgeType === "uint8array" || item?.__codexBridgeType === "arraybuffer") {
+            const bytes = Uint8Array.from(atob(item.base64), (character) => character.charCodeAt(0));
+            return item.__codexBridgeType === "arraybuffer" ? bytes.buffer : bytes;
+          }
+          return item;
+        }));
       } catch (error) {
         console.error("[codex-web] invalid bridge message", error);
       }
@@ -720,6 +730,10 @@
       send({ type: "send", channel, args });
     },
     sendSync(channel) {
+      // Electron's sentry-ipc protocol is unavailable in an ordinary browser.
+      if (channel === "codex_desktop:get-sentry-init-options" && bootstrap[channel]) {
+        return { ...bootstrap[channel], dsn: undefined, enabled: false };
+      }
       if (Object.prototype.hasOwnProperty.call(bootstrap, channel)) {
         return bootstrap[channel];
       }

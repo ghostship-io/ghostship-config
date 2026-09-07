@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.5.0] - 2026-09-07
+
+- **ChatGPT Linux workstation**: Restore the web-native desktop renderer using
+  the official ARM64 Linux application and its native runtime in the existing
+  Nix/systemd OCI workstation, with persistent Nix, Docker, home and workspace.
+- **Application updates**: Authenticate OpenAI's signed package index, build and
+  smoke-test isolated candidates, queue idle activation and restore the previous
+  generation after failed startup. Refresh browser assets on transport changes.
+- **Browser compatibility**: Support sandboxed Linux preloads, preserve binary
+  IPC payloads and initialize the upstream renderer's application version.
+
 ## [3.4.7] - 2026-09-02
 
 - **LAN address migration**: Point the `chill-penguin` and WSL NFS mounts at

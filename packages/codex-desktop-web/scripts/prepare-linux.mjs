@@ -79,6 +79,11 @@ exec "$(dirname "$0")/codex-real" "$@"
   await symlink('ChatGPT', path.join(staged, 'runtime/electron'));
   const manifest = {
     ...release, electronVersion: pkg.devDependencies?.electron, archiveSha256: archiveHash,
+    transportSha256: createHash('sha256').update(await readFile(path.join(extracted, 'bridge/combined-preload.cjs')))
+      .update(await readFile(path.join(extracted, 'bridge/electron-proxy.cjs')))
+      .update(await readFile(path.join(extracted, 'bridge/gateway.cjs')))
+      .update(await readFile(path.join(browserAssets, 'electron-shim.js')))
+      .update(await readFile(path.join(browserAssets, 'webview-bridge.js'))).digest('hex'),
     preloadSha256: createHash('sha256').update(preload).digest('hex'),
     rendererIndexSha256: createHash('sha256').update(await readFile(path.join(extracted, 'webview/index.html'))).digest('hex'),
     preloadChannels: channels,

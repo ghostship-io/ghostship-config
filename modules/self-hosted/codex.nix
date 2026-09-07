@@ -455,6 +455,17 @@ let
       su-exec codex:codex ${codexAppServerStatus}/bin/codex-app-server-status --idle >/dev/null 2>&1
     }
   '';
+  codexWebHealth = pkgs.writeShellApplication {
+    name = "codex-web-health";
+    runtimeInputs = [
+      pkgs.curl
+      pkgs.jq
+    ];
+    text = ''
+      curl -fsS --max-time 5 http://127.0.0.1:8214/health \
+        | jq -e '.status == "ok" and .relayConnected == true' >/dev/null
+    '';
+  };
 
   codexPackageSource = lib.cleanSourceWith {
     src = ../../packages/codex-desktop-web;
@@ -604,7 +615,7 @@ let
     healthy=0
     for _ in $(seq 1 90); do
       if su-exec codex:codex ${codexAppServerStatus}/bin/codex-app-server-status --health >/dev/null 2>&1 \
-        && curl -fsS --max-time 5 http://127.0.0.1:8214/ >/dev/null; then
+        && ${codexWebHealth}/bin/codex-web-health; then
         healthy=1
         break
       fi
@@ -647,7 +658,7 @@ let
     fi
 
     if ! systemctl is-active --quiet codex-web.service \
-      || ! curl -fsS --max-time 5 http://127.0.0.1:8214/ >/dev/null; then
+      || ! ${codexWebHealth}/bin/codex-web-health; then
       log_info "Codex web bridge is unavailable; restarting bridge without interrupting app-server"
       systemctl reset-failed codex-web.service || true
       systemctl restart codex-web.service
@@ -705,7 +716,7 @@ let
     fi
 
     if su-exec codex:codex ${codexAppServerStatus}/bin/codex-app-server-status --health >/dev/null 2>&1 \
-      && ${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:8214/ >/dev/null; then
+      && ${codexWebHealth}/bin/codex-web-health; then
       exit 0
     fi
 
@@ -781,7 +792,7 @@ let
     wait_healthy() {
       for _ in $(seq 1 90); do
         if ${codexAppServerStatus}/bin/codex-app-server-status --health >/dev/null 2>&1 \
-          && curl -fsS --max-time 5 http://127.0.0.1:8214/ >/dev/null; then
+          && ${codexWebHealth}/bin/codex-web-health; then
           return 0
         fi
         sleep 1

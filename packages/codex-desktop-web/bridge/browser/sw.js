@@ -1,5 +1,3 @@
-const CACHE_NAME = "codex-desktop-web-v7";
-
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
 });
@@ -8,7 +6,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((names) =>
       Promise.all(
-        names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)),
+        names.filter((name) => name.startsWith("codex-desktop-web-")).map((name) => caches.delete(name)),
       ),
     ).then(() => self.clients.claim()),
   );
@@ -24,19 +22,9 @@ self.addEventListener("fetch", (event) => {
   ) {
     return;
   }
-  if (event.request.mode === "navigate") {
-    event.respondWith(fetch(event.request));
-    return;
-  }
-  event.respondWith(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      const cached = await cache.match(event.request);
-      if (cached) return cached;
-      const response = await fetch(event.request);
-      if (response.ok) cache.put(event.request, response.clone());
-      return response;
-    }),
-  );
+  // The app needs its live host; a stale cached renderer can speak the wrong
+  // IPC contract after an upgrade. Normal HTTP caching handles hashed assets.
+  event.respondWith(fetch(event.request));
 });
 
 self.addEventListener("notificationclick", (event) => {

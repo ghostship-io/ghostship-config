@@ -31,8 +31,10 @@ async function start() {
   process.env.CODEX_ELECTRON_DISABLE_QUIT_CONFIRMATION ||= "1";
 
   installCodexCliOverride();
+  const release = require(path.join(process.resourcesPath, "codex-web-compatibility.json"));
   const gateway = await createGateway({
     appVersion: require("../package.json").version,
+    releaseId: `${release.desktopVersion}:${release.transportSha256 || release.preloadSha256}`,
     host: process.env.CODEX_WEB_HOST,
     port: Number(process.env.CODEX_WEB_PORT),
     relaySecret: process.env.CODEX_WEB_RELAY_SECRET,
