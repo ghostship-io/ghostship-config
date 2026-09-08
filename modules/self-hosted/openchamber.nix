@@ -3793,6 +3793,7 @@ let
 in
 {
   ghostship.apps.openchamber = {
+    healthPath = "/";
     name = "OpenChamber";
     group = "Services";
     description = "OpenChamber Web";

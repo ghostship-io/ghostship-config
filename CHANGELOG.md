@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.7.3] - 2026-09-08
+
+- Supply Kuma's required empty monitor conditions for HTTP, TCP, and heartbeat
+  provisioning instead of sending an implicit null value.
+- Monitor the primary OpenChamber HTTP endpoint through the service registry.
+- Omit Seerr's legacy enable query parameter only for an empty selection,
+  satisfying its validator while preserving existing enabled libraries.
+
 ## [3.7.2] - 2026-09-08
 
 - Keep the shared Podman network setup active after success so simultaneous
