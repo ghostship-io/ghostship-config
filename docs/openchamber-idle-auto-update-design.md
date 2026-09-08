@@ -15,8 +15,8 @@ data, shares, or daemon sockets inside a Bubblewrap namespace. The updater and
 locked promotion validator are also bounded to 4 GiB of memory and 512 tasks;
 the same limits cover fresh bootstrap and the legacy migration prestage.
 
-Each generation records both upstream versions and the OpenChamber harness
-revision. The harness revision forces a new candidate when local admission or
+Each generation records both upstream versions, the OpenChamber harness
+revision, and the configured goal continuation limit. The harness revision forces a new candidate when local admission or
 recovery logic changes but the upstream versions do not. A candidate is parsed,
 smoke-tested, root-owned, made read-only, and revalidated while the promotion
 lock is held. Only an atomic `active` symlink change exposes it.
@@ -51,9 +51,11 @@ harness revision changes.
 Health recovery uses the same admission and drain protocol. A missing managed
 OpenCode process is treated as safely absent, allowing the coordinated restart
 to recover it; an existing process must still be idle with its connections
-drained. When an external OpenCode service survives a stopped web service,
-container health queues this coordinated recovery and defers Podman's kill
-policy instead of preempting direct OpenCode sessions.
+drained. The optional standalone OpenCode canary deliberately defers automatic promotion
+and recovery while its process is running: upstream status is per directory,
+so it cannot prove aggregate idleness after the web observer disconnects.
+That experimental mode requires an operator-controlled maintenance stop.
+The production embedded mode remains automatically maintained.
 
 ## Container image deployment
 

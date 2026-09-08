@@ -37,7 +37,9 @@ rewrite_validation_paths() {
 openchamberPath=
 harness_revision="$(sed -n 's/^  openchamberHarnessRevision = "\([^"]*\)";$/\1/p' "$module")"
 test -n "$harness_revision"
-openchamberHarnessRevision="$harness_revision"
+goal_limit="$(nix eval --raw --apply toString "$(git rev-parse --show-toplevel)#nixosConfigurations.chill-penguin.config.ghostship.openchamber.goalMaxAutoTurns")"
+harness_revision="$harness_revision-goal-$goal_limit"
+openchamberGenerationRevision="$harness_revision"
 for command_name in bash python3 node curl jq ip sleep seq; do
   command_dir="$(dirname "$(readlink -f "$(command -v "$command_name")")")"
   case ":$openchamberPath:" in

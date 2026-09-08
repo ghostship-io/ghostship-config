@@ -30,7 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   promotion, candidate validation, and recoverable image deployments. Count
   pending goal audits as active work and observe provider retries without aborts.
 - Raise the configurable goal continuation cap to 1,000 while retaining token
-  budgets and explicit goal termination controls.
+  budgets and explicit goal termination controls; include the configured limit
+  in generation identity so changed limits take effect.
 - Preserve the live Codex workstation and reconcile its service registry.
 - Add fleet CI and weekly validated input-update PRs; system upgrades consume
   the committed lock file. Correct stale inventory docs and document recovery.

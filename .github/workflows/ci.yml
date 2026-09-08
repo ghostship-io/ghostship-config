@@ -37,6 +37,7 @@ jobs:
             docker run --rm --security-opt apparmor=unconfined --security-opt seccomp=unconfined \
               --user "$(id -u):$(id -g)" \
               --volume /nix:/nix:ro --volume /etc/passwd:/etc/passwd:ro \
+              --volume /etc/ssl/certs:/etc/ssl/certs:ro \
               --volume "$PWD:$PWD" --volume "$RUNNER_TEMP:$RUNNER_TEMP" \
               --workdir "$PWD" --env PATH --env TMPDIR --env NIX_SSL_CERT_FILE \
               --env HOME="$RUNNER_TEMP" --env NIX_REMOTE=daemon \

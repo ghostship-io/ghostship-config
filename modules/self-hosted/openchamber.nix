@@ -20,7 +20,8 @@ let
   imageTag = "openchamber-runtime";
   # Bump whenever injected runtime safety hooks or wrappers change so an
   # unchanged npm pair is restaged with the new harness contract.
-  openchamberHarnessRevision = "2026-09-08.4";
+  openchamberHarnessRevision = "2026-09-08.5";
+  openchamberGenerationRevision = "${openchamberHarnessRevision}-goal-${toString config.ghostship.openchamber.goalMaxAutoTurns}";
 
   openchamberPackages = with pkgs; [
     nix
@@ -213,6 +214,13 @@ let
         exit 1
       fi
       exit 0
+    fi
+    # The standalone canary can outlive the web observer. OpenCode exposes
+    # status per directory, with no authoritative aggregate idle endpoint.
+    # Never infer that the whole process is idle from its default directory.
+    if systemctl is-active --quiet opencode.service 2>/dev/null; then
+      printf 'standalone OpenCode requires an operator-controlled maintenance stop\n' >&2
+      exit 1
     fi
     username=opencode
     password=
@@ -938,7 +946,7 @@ let
       platform_package="$4"
       [ "$(package_version "$prefix/lib/node_modules/@openchamber/web/package.json")" = "$expected_openchamber" ]
       [ "$(package_version "$prefix/lib/node_modules/$platform_package/package.json")" = "$expected_opencode" ]
-      [ "$(cat "$prefix/.openchamber-harness-revision" 2>/dev/null || true)" = "${openchamberHarnessRevision}" ]
+      [ "$(cat "$prefix/.openchamber-harness-revision" 2>/dev/null || true)" = "${openchamberGenerationRevision}" ]
       for javascript in \
         "$prefix/lib/node_modules/@openchamber/web/server/index.js" \
         "$prefix/lib/node_modules/@openchamber/web/server/lib/opencode/openchamber-routes.js" \
@@ -978,7 +986,7 @@ let
 
     active_is_usable() {
       active_clis_are_usable \
-        && [ "$(cat "$tools_root/active/.openchamber-harness-revision" 2>/dev/null || true)" = "${openchamberHarnessRevision}" ]
+        && [ "$(cat "$tools_root/active/.openchamber-harness-revision" 2>/dev/null || true)" = "${openchamberGenerationRevision}" ]
     }
 
     platform_package="$(opencode_platform_package)" || {
@@ -1039,7 +1047,7 @@ let
     fi
     current_openchamber="$(active_version @openchamber/web)"
     current_opencode="$(active_version "$platform_package")"
-    release_id="openchamber-$latest_openchamber--opencode-$latest_opencode--harness-${openchamberHarnessRevision}"
+    release_id="openchamber-$latest_openchamber--opencode-$latest_opencode--harness-${openchamberGenerationRevision}"
     generation="$generations_dir/$release_id"
     checked_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
@@ -1049,7 +1057,7 @@ let
       --arg latest_openchamber "$latest_openchamber" \
       --arg current_opencode "$current_opencode" \
       --arg latest_opencode "$latest_opencode" \
-      --arg harness_revision "${openchamberHarnessRevision}" \
+      --arg harness_revision "${openchamberGenerationRevision}" \
       '{
         checked_at: $checked_at,
         current: {openchamber: $current_openchamber, opencode: $current_opencode},
@@ -1067,7 +1075,7 @@ let
         exit 0
       fi
       if active_clis_are_usable; then
-        log_info "npm versions match latest but harness ${openchamberHarnessRevision} must be staged"
+        log_info "npm versions match latest but harness ${openchamberGenerationRevision} must be staged"
       elif [ "''${1:-}" != bootstrap ]; then
         printf 'error: active latest generation failed validation; bootstrap recovery is required\n' >&2
         exit 1
@@ -1102,7 +1110,7 @@ let
       sandbox_run_lifecycle "$staging"
       harden_generation "$staging"
       install_wrappers "$staging" "$platform_package"
-      printf '%s\n' "${openchamberHarnessRevision}" > "$staging/.openchamber-harness-revision"
+      printf '%s\n' "${openchamberGenerationRevision}" > "$staging/.openchamber-harness-revision"
       validate_generation "$staging" "$latest_openchamber" "$latest_opencode" "$platform_package"
       chmod -R a-w "$staging"
       mv "$staging" "$generation"

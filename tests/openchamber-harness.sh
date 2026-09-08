@@ -227,6 +227,29 @@ for script_name in openchamber-tool-maintenance openchamber-container-setup open
       fi
       bash -c 'set -- "$1"; eval "$2"' mode-check "$mode" "$condition"
     done
+    # A configured limit must invalidate both candidate reuse and active reuse.
+    for limit in 100 1000; do
+      configured_source="$(nix eval --impure --raw --expr '
+        let
+          flake = builtins.getFlake (toString ./.);
+          cfg = (flake.nixosConfigurations.chill-penguin.extendModules {
+            modules = [ { ghostship.openchamber.goalMaxAutoTurns = '"$limit"'; } ];
+          }).config;
+        in cfg.virtualisation.oci-containers.containers.openchamber.imageFile.drvPath
+      ')"
+      configured_maintenance="$(nix-store -q --requisites "$configured_source" | rg '/[^/]*-openchamber-tool-maintenance\.drv$' | head -n1)"
+      configured_text="$(nix derivation show "$configured_maintenance" | jq -er '(.derivations // .) | to_entries[0].value.env.text')"
+      test "$(printf '%s\n' "$configured_text" | rg -c 'harness-revision.*= ".*-goal-'"$limit"'"')" -eq 2
+    done
+  fi
+  if [ "$script_name" = openchamber-managed-opencode-idle ]; then
+    guard="$(printf '%s\n' "$script_source" | sed -n '/# The standalone canary/,/username=opencode/p')"
+    test -n "$guard"
+    if (systemctl() { return 0; }; eval "$guard"); then
+      printf 'standalone OpenCode was declared idle without aggregate status\n' >&2
+      exit 1
+    fi
+    (systemctl() { return 1; }; eval "$guard")
   fi
 done
 
