@@ -185,13 +185,21 @@ test('background push wakes the service worker and displays a notification', asy
     await cdp.send('ServiceWorker.stopAllWorkers');
     await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId,
       data: JSON.stringify({ notificationId: 'background-proof', notificationTag: 'upstream-turn', navigationPath: '/thread/shared', options: { title: 'Task finished', body: 'Available on every device' } }) });
-    const shown = await page.waitForFunction(async () => {
-      const [n] = await (await navigator.serviceWorker.ready).getNotifications();
-      if (!n) return false;
-      // Capture before the OS dismisses the notification between protocol calls.
-      const result = { title: n.title, body: n.body, tag: n.tag, data: n.data }; n.close(); return result;
+    const shown = await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.ready;
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline) {
+        const [n] = await registration.getNotifications();
+        if (n) {
+          const result = { title: n.title, body: n.body, tag: n.tag, data: n.data };
+          n.close();
+          return result;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Background push did not display a notification within 15 seconds');
     });
-    assert.deepEqual(await shown.jsonValue(), { title: 'Task finished', body: 'Available on every device',
+    assert.deepEqual(shown, { title: 'Task finished', body: 'Available on every device',
       tag: 'codex-upstream-turn', data: { codexNotificationId: 'background-proof', navigationPath: '/thread/shared' } });
   } finally { await browser.close(); await new Promise((resolve) => server.close(resolve)); }
 });
