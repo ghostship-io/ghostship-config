@@ -7,12 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.9.0] - 2026-09-08
+
+- Reapply T3's shared Ghostship agent tooling and native browser
+  through persistent bootstrap, server-start, doctor, and post-update hooks.
+- Automatically update Antigravity from the official ACP registry, preserving
+  the Asahi-compatible runtime and activating only after an offline ACP check.
+- Attempt each T3/provider update independently and queue idle restarts after
+  partial updates or Ghostship package changes.
+- Use Cloudflare sign-in for T3 browser access without a second pairing prompt,
+  with an internal gateway and a loopback-only T3 backend.
+
 ## [3.8.3] - 2026-09-08
 
 - Share installed Ghostship skills and tools across T3 Code providers, preserve
   provider plugins, and add repeatable container setup and CI validation.
 - Reduce agent instructions to short workflow rules and task-specific references;
   install and apply Matt Pocock's `writing-for-agents` skill.
+
 
 ## [3.8.2] - 2026-09-08
 

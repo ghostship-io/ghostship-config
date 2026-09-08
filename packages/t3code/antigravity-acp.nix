@@ -37,10 +37,14 @@ stdenvNoCC.mkDerivation {
       cat > "$out/bin/$executable" <<EOF
     #!${runtimeShell}
     set -eu
+    runtime="\''${T3CODE_ANTIGRAVITY_RUNTIME:-\''${XDG_DATA_HOME:-\$HOME/.local/share}/t3code-tools/antigravity/current}"
+    if [ ! -x "\$runtime/$executable" ]; then
+      runtime="$out/libexec"
+    fi
     ${lib.optionalString stdenvNoCC.hostPlatform.isAarch64 ''
-      exec ${qemu-user}/bin/qemu-x86_64 -L ${guestGlibc} -E LD_LIBRARY_PATH=${guestGlibc}/lib "$out/libexec/$executable" "\$@"
+      exec ${qemu-user}/bin/qemu-x86_64 -L ${guestGlibc} -E LD_LIBRARY_PATH=${guestGlibc}/lib "\$runtime/$executable" "\$@"
     ''}
-    exec "$out/libexec/$executable" "\$@"
+    exec "\$runtime/$executable" "\$@"
     EOF
       chmod 0755 "$out/bin/$executable"
     done

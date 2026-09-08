@@ -73,13 +73,6 @@ let
   ];
 
   antigravityAcp = pkgs.callPackage ../../packages/t3code/antigravity-acp.nix { };
-  nativeLibraries = lib.makeLibraryPath [
-    pkgs.glibc
-    pkgs.stdenv.cc.cc.lib
-    pkgs.zlib
-    pkgs.openssl
-    pkgs.libxcrypt
-  ];
 
   t3codePath = lib.makeBinPath t3codePackages;
   t3codeRuntimeEnv = ''
@@ -99,10 +92,11 @@ let
     export npm_config_prefix="$NPM_CONFIG_PREFIX"
     export OPENCODE_AUTOMATION_DIR="$HOME/.automation"
     export T3CODE_HOME="$HOME/.t3"
-    export T3CODE_HOST=0.0.0.0
-    export T3CODE_PORT=3773
+    export T3CODE_HOST=127.0.0.1
+    export T3CODE_PORT=3774
     export T3CODE_NO_BROWSER=true
-    export LD_LIBRARY_PATH=${nativeLibraries}
+    # Project-pinned Nix programs must use their own runtime libraries.
+    unset LD_LIBRARY_PATH
     hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     if [ -f "$hm_session_vars" ]; then
       # shellcheck disable=SC1090
@@ -184,6 +178,33 @@ let
     fi
 
     ${pkgs.ripgrep}/bin/rg --version >/dev/null
+  '';
+
+  t3codeAntigravityUpdate = pkgs.writeShellScriptBin "t3code-antigravity-update" ''
+    set -eu
+    ${t3codeRuntimeEnv}
+    exec ${pkgs.python3}/bin/python ${../../packages/t3code/update-antigravity.py} \
+      --bundled-version ${antigravityAcp.version} \
+      --probe ${../../tests/t3code-acp-smoke.py}
+  '';
+
+  t3codeInstallGhostshipAgent = pkgs.writeShellScriptBin "t3code-install-ghostship-agent" ''
+    set -eu
+    ${t3codeRuntimeEnv}
+    if [ "$(id -u)" = 0 ]; then
+      exec su-exec t3code:t3code "$0" "$@"
+    fi
+    if [ ! -f /workspace/ghostship-agent/flake.nix ]; then
+      printf 'ghostship-agent project is absent; installation deferred\n'
+      exit 0
+    fi
+    state_dir="$XDG_STATE_HOME/t3code-ghostship-agent"
+    mkdir -p "$state_dir"
+    exec 8>"$state_dir/install.lock"
+    ${pkgs.util-linux}/bin/flock 8
+    # Use the shared catalog installer so one owner manages provider skills,
+    # command wrappers, the native browser, and their persistent Nix roots.
+    exec ${t3codeSharedAgents}/bin/t3code-shared-agents "$@"
   '';
 
   t3codeToolMaintenance = pkgs.writeShellScriptBin "t3code-tool-maintenance" ''
@@ -359,13 +380,16 @@ let
 
     mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
-    install_agent_cli "t3" "T3 Code"
-    install_agent_cli "@openai/codex" "codex"
-    ${t3codeCodexRgRepair}/bin/t3code-codex-rg-repair
-    install_opencode_cli
+    update_status=0
+    install_agent_cli "t3" "T3 Code" || update_status=1
+    install_agent_cli "@openai/codex" "codex" || update_status=1
+    ${t3codeCodexRgRepair}/bin/t3code-codex-rg-repair || update_status=1
+    install_opencode_cli || update_status=1
     install_user_shim "t3" "$NPM_CONFIG_PREFIX/bin/t3"
     install_user_shim "codex" "$NPM_CONFIG_PREFIX/bin/codex"
     install_opencode_user_shim "$NPM_CONFIG_PREFIX/bin/opencode"
+    ${t3codeAntigravityUpdate}/bin/t3code-antigravity-update || update_status=1
+    exit "$update_status"
   '';
 
   t3codeToolAutoUpdate = pkgs.writeShellScriptBin "t3code-tool-auto-update" ''
@@ -406,35 +430,46 @@ let
     before_t3="$(user_version t3)"
     before_codex="$(user_version codex)"
     before_opencode="$(user_version opencode)"
+    before_antigravity="$(readlink -e "$XDG_DATA_HOME/t3code-tools/antigravity/current" || true)"
+    before_agent="$(readlink -e "$HOME/.local/state/t3code-agent-tools-package" || true)"
     before_config="$(${pkgs.coreutils}/bin/sha256sum "$T3CODE_HOME/userdata/settings.json" 2>/dev/null || true)"
 
-    su-exec t3code:t3code ${t3codeToolMaintenance}/bin/t3code-tool-maintenance
+    maintenance_status=0
+    su-exec t3code:t3code ${t3codeToolMaintenance}/bin/t3code-tool-maintenance || maintenance_status=$?
     su-exec t3code:t3code ${t3codeManagedConfig}/bin/t3code-managed-config
+    su-exec t3code:t3code ${t3codeRunHooks}/bin/t3code-run-hooks after-update.d
 
     after_t3="$(user_version t3)"
     after_codex="$(user_version codex)"
     after_opencode="$(user_version opencode)"
+    after_antigravity="$(readlink -e "$XDG_DATA_HOME/t3code-tools/antigravity/current" || true)"
+    after_agent="$(readlink -e "$HOME/.local/state/t3code-agent-tools-package" || true)"
     after_config="$(${pkgs.coreutils}/bin/sha256sum "$T3CODE_HOME/userdata/settings.json" 2>/dev/null || true)"
 
     log_info "t3: ''${before_t3:-missing} -> ''${after_t3:-missing}"
     log_info "codex: ''${before_codex:-missing} -> ''${after_codex:-missing}"
     log_info "opencode: ''${before_opencode:-missing} -> ''${after_opencode:-missing}"
+    log_info "antigravity: ''${before_antigravity:-bundled} -> ''${after_antigravity:-bundled}"
 
     if [ "$before_t3" != "$after_t3" ] \
       || [ "$before_codex" != "$after_codex" ] \
       || [ "$before_opencode" != "$after_opencode" ] \
+      || [ "$before_antigravity" != "$after_antigravity" ] \
+      || [ "$before_agent" != "$after_agent" ] \
       || [ "$before_config" != "$after_config" ]; then
       pending_tmp="$pending_restart.tmp"
       {
         printf 't3=%s\n' "$after_t3"
         printf 'codex=%s\n' "$after_codex"
         printf 'opencode=%s\n' "$after_opencode"
+        printf 'antigravity=%s\n' "$after_antigravity"
       } > "$pending_tmp"
       mv "$pending_tmp" "$pending_restart"
       log_info "tool update downloaded; queued restart until T3 Code is idle"
     else
       log_info "installed tool versions are unchanged"
     fi
+    exit "$maintenance_status"
   '';
 
   t3codeToolUpdateRestart = pkgs.writeShellScriptBin "t3code-tool-update-restart" ''
@@ -841,7 +876,7 @@ let
     ${t3codeRuntimeEnv}
 
     su-exec t3code:t3code ${t3codeToolMaintenance}/bin/t3code-tool-maintenance
-    ${t3codeRunHooks}/bin/t3code-run-hooks doctor.d
+    su-exec t3code:t3code ${t3codeRunHooks}/bin/t3code-run-hooks doctor.d
   '';
 
   t3codeSharedAgents = pkgs.writeShellScriptBin "t3code-shared-agents" ''
@@ -862,7 +897,6 @@ let
       fi
     fi
     ${t3codeRunHooks}/bin/t3code-run-hooks bootstrap.d
-    ${t3codeRunHooks}/bin/t3code-run-hooks before-t3code.d
   '';
 
   t3codeSnapshotConfig = pkgs.writeShellScriptBin "t3code-snapshot-config" ''
@@ -880,13 +914,13 @@ let
 
     ${t3codeProviderCheck}
     for _ in $(seq 1 90); do
-      if curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null \
+      if curl -fsS --max-time 5 http://127.0.0.1:3774/ >/dev/null \
         && t3code_providers_healthy; then
         break
       fi
       sleep 1
     done
-    curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null
+    curl -fsS --max-time 5 http://127.0.0.1:3774/ >/dev/null
     t3code_providers_healthy
 
     mkdir -p "$tmp/home"
@@ -1105,6 +1139,12 @@ let
       /workspace
   '';
 
+  t3codeAccessProxy = pkgs.writeShellScriptBin "t3code-access-proxy" ''
+    set -eu
+    ${t3codeRuntimeEnv}
+    exec ${pkgs.nodejs_24}/bin/node ${../../packages/t3code/access-proxy.cjs}
+  '';
+
   t3codeManagedConfig = pkgs.writeShellScriptBin "t3code-managed-config" ''
     set -eu
     ${t3codeRuntimeEnv}
@@ -1182,6 +1222,7 @@ let
       "$HOME/.t3code-container/hooks/bootstrap.d" \
       "$HOME/.t3code-container/hooks/before-t3code.d" \
       "$HOME/.t3code-container/hooks/doctor.d" \
+      "$HOME/.t3code-container/hooks/after-update.d" \
       "$HOME/.codex" \
       "$HOME/.gemini/antigravity-cli" \
       "$HOME/.local/share/keyrings" \
@@ -1208,6 +1249,17 @@ let
     chown t3code:t3code /run/user/3000
     chmod 0700 /run/user/3000
     su-exec t3code:t3code ${t3codeManagedConfig}/bin/t3code-managed-config
+    ln -sfn ${../../docs/t3code.md} "$HOME/.t3code-container/README.md"
+    chown -h t3code:t3code "$HOME/.t3code-container/README.md"
+    for hook_set in bootstrap.d before-t3code.d doctor.d after-update.d; do
+      hook="$HOME/.t3code-container/hooks/$hook_set/40-ghostship-agent-install"
+      cat > "$hook" <<'EOF'
+    #!/bin/sh
+    exec ${t3codeInstallGhostshipAgent}/bin/t3code-install-ghostship-agent "$@"
+    EOF
+      chmod 0755 "$hook"
+      chown t3code:t3code "$hook"
+    done
     if [ ! -e "$HOME/tools" ] && [ -d /workspace/ghostship-agent/tools ]; then
       ln -s /workspace/ghostship-agent/tools "$HOME/tools"
       chown -h t3code:t3code "$HOME/tools"
@@ -1221,7 +1273,13 @@ let
     if [ ! -x "$NPM_CONFIG_PREFIX/bin/t3" ] \
       || [ ! -x "$NPM_CONFIG_PREFIX/bin/codex" ] \
       || [ ! -x "$NPM_CONFIG_PREFIX/bin/opencode" ]; then
-      su-exec t3code:t3code ${t3codeToolMaintenance}/bin/t3code-tool-maintenance
+      if ! su-exec t3code:t3code ${t3codeToolMaintenance}/bin/t3code-tool-maintenance; then
+        # Optional ACP updates must not block startup with the bundled runtime.
+        for tool in t3 codex opencode; do
+          test -x "$NPM_CONFIG_PREFIX/bin/$tool" || exit 1
+        done
+        printf 'warning: some updates failed; starting with installed tools\n' >&2
+      fi
     fi
     su-exec t3code:t3code ${t3codeCodexRgRepair}/bin/t3code-codex-rg-repair
     su-exec t3code:t3code ${t3codeProjectBootstrap}/bin/t3code-project-bootstrap
@@ -1286,9 +1344,12 @@ let
     t3codeContainerSetup
     t3codeDockerdRun
     t3codeDaemonRun
+    t3codeAccessProxy
     t3codeProjectBootstrap
     t3codePair
     t3codeToolMaintenance
+    t3codeAntigravityUpdate
+    t3codeInstallGhostshipAgent
     t3codeToolAutoUpdate
     t3codeToolUpdateRestart
     t3codeDaemonMonitor
@@ -1565,6 +1626,7 @@ let
       Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
       Environment=AGENT_CLOAK_BASE_URL=http://cloakbrowser:8080
       Environment=PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin
+      ExecStartPre=${t3codeRunHooks}/bin/t3code-run-hooks before-t3code.d
       ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/t3code-tool-update/restart.pending
       ExecStart=${t3codeDaemonRun}/bin/t3code-server-run
       ExecStartPost=${t3codeSnapshotConfig}/bin/t3code-snapshot-config
@@ -1583,9 +1645,31 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/t3code-access-proxy.service <<'EOF'
+      [Unit]
+      Description=T3 Code access through the Cloudflare-authenticated site
+      DefaultDependencies=no
+      After=t3code-server.service
+      Requires=t3code-container-setup.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Service]
+      User=t3code
+      Group=t3code
+      Environment=HOME=/home/t3code
+      ExecStart=${t3codeAccessProxy}/bin/t3code-access-proxy
+      Restart=always
+      RestartSec=5
+      StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-access-proxy.log
+      StandardError=append:/home/t3code/.t3code-container/logs/t3code-access-proxy.log
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/t3code-tool-auto-update.service <<'EOF'
       [Unit]
-      Description=Update T3 Code, Codex, and OpenCode tools
+      Description=Update T3 Code, Codex, Antigravity, OpenCode, and Ghostship tooling
       DefaultDependencies=no
       After=t3code-bootstrap.service
       Requires=t3code-bootstrap.service
@@ -1686,7 +1770,7 @@ let
       [Unit]
       Description=T3 Code Multi-User System
       DefaultDependencies=no
-      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-bootstrap.service t3code-server.service t3code-tool-auto-update.timer t3code-tool-update-restart.timer t3code-server-monitor.timer
+      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-tool-update-restart.timer t3code-server-monitor.timer
       After=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -1702,6 +1786,7 @@ let
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
       ln -s ../t3code-bootstrap.service etc/systemd/system/multi-user.target.wants/t3code-bootstrap.service
       ln -s ../t3code-server.service etc/systemd/system/multi-user.target.wants/t3code-server.service
+      ln -s ../t3code-access-proxy.service etc/systemd/system/multi-user.target.wants/t3code-access-proxy.service
       ln -s ../t3code-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/t3code-tool-auto-update.timer
       ln -s ../t3code-tool-update-restart.timer etc/systemd/system/multi-user.target.wants/t3code-tool-update-restart.timer
       ln -s ../t3code-server-monitor.timer etc/systemd/system/multi-user.target.wants/t3code-server-monitor.timer
@@ -1733,11 +1818,10 @@ let
         "NIX_CONFIG=experimental-features = nix-command flakes"
         "NIX_REMOTE=daemon"
         "T3CODE_HOME=/home/t3code/.t3"
-        "T3CODE_HOST=0.0.0.0"
-        "T3CODE_PORT=3773"
+        "T3CODE_HOST=127.0.0.1"
+        "T3CODE_PORT=3774"
         "T3CODE_NO_BROWSER=true"
         "AGENT_CLOAK_BASE_URL=http://cloakbrowser:8080"
-        "LD_LIBRARY_PATH=${nativeLibraries}"
       ];
       WorkingDir = "/home/t3code";
       ExposedPorts = {

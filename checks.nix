@@ -25,6 +25,7 @@ in
           python
           pkgs.php
           pkgs.util-linux
+          pkgs.nodejs_24
         ];
       }
       ''
@@ -33,6 +34,7 @@ in
         cd source
         python modules/common/scripts/ghostship-config.py --test
         python -m unittest discover -s tests -v
+        node --test tests/t3code-access-proxy.test.cjs
         python -m compileall -q modules/self-hosted/secret-project.py modules/self-hosted/monitoring-provision.py modules/self-hosted/monitoring-heartbeats.py modules/self-hosted/seerr-provision.py modules/self-hosted/dashboard-sync.py modules/self-hosted/cloudflare-sync.py
         touch "$out"
       '';

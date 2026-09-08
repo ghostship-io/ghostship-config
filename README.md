@@ -184,6 +184,9 @@ inventory. Services use Podman, native healthchecks, and registry auto-update.
 Ordinary containers wait 30 seconds between restart attempts so brief boot-time
 DNS failures can recover without exhausting systemd's rapid-start limit.
 Agent workspaces retain their own lifecycle policies.
+T3 Code maintains its four provider/application tools and installs the local
+Ghostship agent project through persistent lifecycle hooks; see
+[T3 Code maintenance](docs/t3code.md).
 Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
@@ -280,13 +283,13 @@ T3 Code runs alongside OpenChamber at `https://t3code.ghostship.io`, with native
 Codex/OpenAI, OpenCode, and Antigravity ACP providers. It keeps independent
 copies of OpenChamber's projects and its own home, Docker state, and Nix store
 under `/srv/apps/t3code`. See [T3 Code setup and operations](docs/t3code.md)
-for pairing, provider sign-in, project import, and maintenance.
+for browser access, provider sign-in, project import, and maintenance.
 
 n8n, SearXNG, and PriceBuddy are retired from the declared stack.
 Retirement quarantines inactive app directories under `/srv/retired-apps`;
 active services and Codex state are excluded. Quarantine has no automatic purge.
 
-OpenChamber is the primary personal agent, with immutable tool generations,
+T3 Code is the primary coding workspace. OpenChamber retains immutable tool generations,
 validated idle updates, and recoverable deployments. The existing Codex
 workstation remains available separately and is preserved during fleet switches.
 See [OpenChamber stability](docs/openchamber-idle-auto-update-design.md).
