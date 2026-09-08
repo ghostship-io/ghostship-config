@@ -4,6 +4,7 @@ let
     ps.lxml
     ps.ruamel-yaml
     ps.requests
+    ps.python-socketio
   ]);
   hosts = builtins.attrValues self.nixosConfigurations;
   agentUnits = map (name: self.nixosConfigurations.chill-penguin.config.systemd.services.${name}) [

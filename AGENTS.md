@@ -497,6 +497,10 @@ changelog.
 
 ## Service-Specific Notes
 
+- Validate Kuma provisioning with existing monitors: its login/stat burst exceeds
+  Python Engine.IO's default 16-packet polling limit.
+- Validate Seerr setup against the installed image's `/app/seerr-api.yml`;
+  the released image's API can lag the development branch.
 - Hermes and Firecrawl are retired from the `chill-penguin` self-hosted stack.
   Keep their modules, image contexts, secret sources, dashboard entries, and
   runtime projections removed; use the cleanup modules for stale live artifacts.

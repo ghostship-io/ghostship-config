@@ -211,7 +211,7 @@ in
 
 {
   ghostship.apps.pyload = {
-    healthPath = "/favicon.ico";
+    healthPath = "/robots.txt";
     name = "pyLoad";
     group = "Services";
     description = "Download Manager";
