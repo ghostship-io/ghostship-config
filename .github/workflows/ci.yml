@@ -35,12 +35,13 @@ jobs:
           # shellcheck disable=SC2016
           nix develop .#ci -c bash -c '
             docker run --rm --security-opt apparmor=unconfined --security-opt seccomp=unconfined \
-              --user "$(id -u):$(id -g)" \
+              --cap-add SYS_ADMIN --cap-add NET_ADMIN --security-opt systempaths=unconfined \
               --volume /nix:/nix:ro --volume /etc/passwd:/etc/passwd:ro \
               --volume /etc/ssl/certs:/etc/ssl/certs:ro \
               --volume "$PWD:$PWD" --volume "$RUNNER_TEMP:$RUNNER_TEMP" \
               --workdir "$PWD" --env PATH --env TMPDIR --env NIX_SSL_CERT_FILE \
               --env HOME="$RUNNER_TEMP" --env NIX_REMOTE=daemon \
+              --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory --env GIT_CONFIG_VALUE_0="$PWD" \
               --env "NIX_CONFIG=experimental-features = nix-command flakes" \
               ubuntu:24.04 bash tests/openchamber-harness.sh
           '

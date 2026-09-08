@@ -111,6 +111,7 @@
               python3
               ripgrep
               jq
+              curl
               nodejs_24
               util-linux
               iproute2
