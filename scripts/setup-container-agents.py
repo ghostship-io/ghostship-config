@@ -228,9 +228,9 @@ def main():
         + ' "$@"\n',
         hook: "#!/bin/sh\n"
         + marker
-        + "\nexec "
+        + "\n"
         + shlex.quote(str(launcher))
-        + " --skills-only\n",
+        + " --skills-only || printf 'warning: shared skills need attention\\n' >&2\n",
     }
     for path, content in files.items():
         path.parent.mkdir(parents=True, exist_ok=True)

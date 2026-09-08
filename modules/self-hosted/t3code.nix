@@ -857,7 +857,9 @@ let
     ${t3codeRuntimeEnv}
 
     if [ -d /workspace/ghostship-agent/skills ]; then
-      ${t3codeSharedAgents}/bin/t3code-shared-agents --skills-only
+      if ! ${t3codeSharedAgents}/bin/t3code-shared-agents --skills-only; then
+        printf 'warning: shared agent setup needs attention; preserving provider startup\n' >&2
+      fi
     fi
     ${t3codeRunHooks}/bin/t3code-run-hooks bootstrap.d
     ${t3codeRunHooks}/bin/t3code-run-hooks before-t3code.d
