@@ -20,7 +20,7 @@ let
   imageTag = "openchamber-runtime";
   # Bump whenever injected runtime safety hooks or wrappers change so an
   # unchanged npm pair is restaged with the new harness contract.
-  openchamberHarnessRevision = "2026-09-08.5";
+  openchamberHarnessRevision = "2026-09-08.6";
   openchamberGenerationRevision = "${openchamberHarnessRevision}-goal-${toString config.ghostship.openchamber.goalMaxAutoTurns}";
 
   openchamberPackages = with pkgs; [
@@ -462,6 +462,11 @@ let
     )
     replace(
         "server/lib/terminal/runtime.js",
+        "if (!attached && now - session.lastActivity > IDLE_TIMEOUT_MS) {",
+        "if (!attached && session.status === 'exited' && now - session.lastActivity > IDLE_TIMEOUT_MS) {",
+    )
+    replace(
+        "server/lib/terminal/runtime.js",
         "  return { shutdown };",
         "  return { shutdown, getActiveSessionCount: () => pendingSessionCreates.size + [...sessions.values()].filter((session) => session.status === 'running').length };",
     )
@@ -798,7 +803,7 @@ let
         --setenv PATH /candidate/bin:${openchamberPath}:/bin:/usr/bin \
         --chdir /home/openchamber \
         -- ${pkgs.nodejs_24}/bin/node --input-type=module <<'NODE'
-    import { mkdir, writeFile, unlink } from 'node:fs/promises';
+    import { mkdir, writeFile, unlink, readFile } from 'node:fs/promises';
     import { createScheduledTasksRuntime } from '/candidate/lib/node_modules/@openchamber/web/server/lib/scheduled-tasks/runtime.js';
 
     Math.random = () => 0;
@@ -935,6 +940,24 @@ let
     releaseGoalProbe();
     await waitFor(() => goals.getMaintenanceWorkCount() === 0, 'settled goal audit still blocks maintenance');
     goals.stop();
+
+    // Exercise the installed sweep after three days without browser activity.
+    const terminalSource = await readFile('/candidate/lib/node_modules/@openchamber/web/server/lib/terminal/runtime.js', 'utf8');
+    const sweepBody = terminalSource.match(/const idleSweep = setInterval\(\(\) => \{([\s\S]*?)\n  \}, 5 \* 60 \* 1000\);/)?.[1];
+    if (!sweepBody) throw new Error('terminal idle sweep contract changed');
+    const terminalSessions = new Map([
+      ['quiet-running', { status: 'running', lastActivity: 0, process: 'running-process' }],
+      ['finished', { status: 'exited', lastActivity: 0, process: 'finished-process' }],
+    ]);
+    const terminated = [];
+    new Function('sessions', 'connections', 'closeAttachments', 'terminateProcess', 'IDLE_TIMEOUT_MS', 'Date', sweepBody)(
+      terminalSessions, new Set(), () => {}, (process) => terminated.push(process),
+      30 * 60 * 1000, { now: () => 3 * 24 * 60 * 60 * 1000 },
+    );
+    if (!terminalSessions.has('quiet-running') || terminalSessions.has('finished')
+      || JSON.stringify(terminated) !== JSON.stringify(['finished-process'])) {
+      throw new Error('terminal cleanup killed quiet running work or retained an expired exit');
+    }
     process.exit(0);
     NODE
     }
@@ -1003,12 +1026,14 @@ let
       exit 0
     fi
 
-    install -d -m 0755 "$HOME/.local/bin" "$HOME/.local/libexec" "$generations_dir" "$report_dir"
+    install -d -m 0755 "$HOME/.local/bin" "$HOME/.local/libexec" "$report_dir"
     install -d -m 0700 "$update_state"
     install -m 0755 ${openchamberManagedOpenCodeIdlePortable} \
       "$HOME/.local/libexec/openchamber-managed-opencode-idle"
     exec 9<"$control_dir/tool-update.lock"
     ${pkgs.util-linux}/bin/flock 9
+    # Restore the managed parent after an interrupted locked validation.
+    install -d -m 0755 "$generations_dir"
 
     if [ "''${1:-}" = bootstrap-candidate ]; then
       [ -f "$candidate_file" ] || {
@@ -1176,7 +1201,6 @@ let
     gate_armed=0
     opencode_gate_armed=0
     generations_locked=0
-    generations_mode=""
     mkdir -p "$(dirname "$audit_log")"
 
     clear_opencode_network_gate() {
@@ -1191,7 +1215,7 @@ let
 
     disarm_gate() {
       if [ "$generations_locked" -eq 1 ]; then
-        chmod "$generations_mode" "$tools_root/generations"
+        chmod 0755 "$tools_root/generations"
         generations_locked=0
       fi
       if [ -f "$transaction_file" ]; then
@@ -1326,7 +1350,6 @@ let
 
     lock_candidate_tree() {
       candidate="$1"
-      generations_mode="$(${pkgs.coreutils}/bin/stat -c '%a' "$tools_root/generations")"
       chmod a-w "$tools_root/generations"
       generations_locked=1
       chown -R root:root "$candidate"
@@ -1335,7 +1358,7 @@ let
 
     unlock_generations() {
       [ "$generations_locked" -eq 1 ] || return 0
-      chmod "$generations_mode" "$tools_root/generations"
+      chmod 0755 "$tools_root/generations"
       generations_locked=0
     }
 
@@ -1344,6 +1367,8 @@ let
       log_info "tool maintenance is still running; leaving restart queued"
       exit 0
     fi
+    # SIGKILL/OOM bypasses traps; repair only after acquiring the shared lock.
+    install -d -m0755 -o 3000 -g 3000 "$tools_root/generations"
     if [ ! -f "$transaction_file" ]; then
       clear_opencode_network_gate force
     fi
@@ -3923,7 +3948,9 @@ in
         ${lib.escapeShellArgs (map toString openchamberImageContents)}
 
       gcroot_dir=${openchamberNixRoot}/nix/var/nix/gcroots/ghostship-openchamber-image
-      rm -rf "$gcroot_dir"
+      # Keep prior image closures rooted: rollback skips this pre-start hook,
+      # and the persistent store masks the image store. Retire roots manually
+      # only after their images are no longer rollback candidates.
       install -d -m0755 -o root -g root "$gcroot_dir"
       for store_path in ${lib.escapeShellArgs (map toString openchamberImageContents)}; do
         ln -s "$store_path" "$gcroot_dir/$(basename "$store_path")"

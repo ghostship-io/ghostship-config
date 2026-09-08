@@ -28,7 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   retirement quarantine while preserving the active agent environment.
 - Stabilize OpenChamber with isolated immutable tool generations, activity-aware
   promotion, candidate validation, and recoverable image deployments. Count
-  pending goal audits as active work and observe provider retries without aborts.
+  pending goal audits as active work, preserve quiet detached terminals, and
+  observe provider retries without aborts. Retain image dependencies for rollback
+  and recover staging permissions after interrupted validation.
 - Raise the configurable goal continuation cap to 1,000 while retaining token
   budgets and explicit goal termination controls; include the configured limit
   in generation identity so changed limits take effect.

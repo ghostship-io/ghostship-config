@@ -63,6 +63,9 @@ Host activation writes a content-derived desired image identity without
 restarting the running container. A one-minute host worker applies a changed
 image only after the same OpenChamber and direct OpenCode drain checks pass.
 It records the exact previous Podman image ID before stopping the container.
+The persistent store retains old image GC roots as well: keeping a Podman image
+alone cannot protect dependencies masked by that store. Retire those roots
+manually only when the matching images are no longer rollback candidates.
 
 The new image must reach Podman healthy state, an active web service, and a
 reachable root endpoint before its identity becomes applied. On failure, the
@@ -81,6 +84,10 @@ drain because that runtime lacks the maintenance counters. It prestages the
 latest validated generation but deliberately requires one operator-controlled
 stop. Once the gated runtime is active, later tool and image updates are fully
 automatic.
+
+Detached, quiet running terminals no longer expire after 30 minutes. The idle
+sweep removes only exited terminals; close abandoned running shells explicitly
+so they do not occupy a terminal slot or block maintenance.
 
 Provider retry monitoring logs prolonged retries without aborting sessions.
 Rate limits and transient provider outages therefore remain recoverable by

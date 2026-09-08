@@ -153,6 +153,13 @@ EOF
 chmod 0755 "$candidate/bin/openchamber" "$candidate/bin/opencode"
 printf '%s\t9.9.9\t8.8.8\t%s\n' "$candidate" "$release_id" > "$candidate_file"
 
+# Recover the parent permissions left behind when a validator is killed.
+chmod 0555 "$generations_dir"
+permission_recovery="$(sed -n '/# Restore the managed parent/,/^$/p' "$module")"
+test -n "$permission_recovery"
+eval "$permission_recovery"
+test "$(stat -c '%a' "$generations_dir")" = 755
+
 (
   platform_package=opencode-linux-x64
   npm() {

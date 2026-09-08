@@ -165,6 +165,11 @@ if rg -q 'chown -R openchamber:openchamber.*openchamber-tools' "$module"; then
   printf 'container setup recursively returns immutable generations to the runtime user\n' >&2
   exit 1
 fi
+# The old image uses the persistent store during exact-image rollback.
+if rg -q 'rm -rf "\$gcroot_dir"' "$module"; then
+  printf 'replacement startup discards rollback image GC roots\n' >&2
+  exit 1
+fi
 rg -q 'promotion is queued behind the continuous-idle gate' "$module"
 rg -q 'failed promotion; waiting for a newer latest release' "$module"
 rg -q 'restoring previous generation' "$module"
