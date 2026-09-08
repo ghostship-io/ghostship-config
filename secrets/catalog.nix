@@ -611,8 +611,8 @@ in
       };
     };
 
-    paseo = {
-      fileName = "paseo.env";
+    t3code = {
+      fileName = "t3code.env";
       owner = "apps";
       group = "apps";
       mode = "0440";

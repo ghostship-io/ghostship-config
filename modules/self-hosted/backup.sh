@@ -108,6 +108,8 @@ restic backup --host chill-penguin --tag ghostship \
     --exclude "$app_snapshot/chatgpt/nix-root" \
     --exclude "$app_snapshot/romm-db" \
     --exclude "$app_snapshot/grimmory-db" \
+    --exclude "$app_snapshot/t3code/docker" \
+    --exclude "$app_snapshot/t3code/nix-root" \
     --exclude "$app_snapshot/openchamber/docker" \
     --exclude "$app_snapshot/openchamber/nix-root" \
     --exclude '**/node_modules' --exclude '**/.cache' \

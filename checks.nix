@@ -10,6 +10,7 @@ let
   agentUnits = map (name: self.nixosConfigurations.chill-penguin.config.systemd.services.${name}) [
     "podman-openchamber"
     "podman-codex"
+    "podman-t3code"
   ];
   failures = pkgs.lib.concatMap (
     host: map (a: a.message) (builtins.filter (a: !a.assertion) host.config.assertions)

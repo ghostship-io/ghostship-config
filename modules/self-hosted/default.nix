@@ -39,6 +39,7 @@
     ./openchamber-options.nix
     ./openchamber.nix
     ./codex.nix
+    ./t3code.nix
 
     # Games
     ./romm-db.nix

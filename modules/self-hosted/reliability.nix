@@ -21,6 +21,7 @@ let
     !(builtins.elem name [
       "codex"
       "openchamber"
+      "t3code"
     ])
   ) containers;
 in

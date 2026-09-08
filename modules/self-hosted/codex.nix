@@ -2009,7 +2009,12 @@ let
 
 in
 {
-  nixpkgs.config.allowUnfreePredicate = pkg: lib.getName pkg == "ghostship-codex-desktop-web";
+  nixpkgs.config.allowUnfreePredicate =
+    pkg:
+    builtins.elem (lib.getName pkg) [
+      "ghostship-codex-desktop-web"
+      "antigravity-acp"
+    ];
 
   ghostship.apps.codex = {
     name = "Codex";

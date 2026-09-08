@@ -1,36 +1,31 @@
 {
   config,
-  inputs,
   lib,
   pkgs,
   ...
 }:
 
 let
-  # Preserve the existing state paths while replacing the Paseo workload.
-  paseoHome = "/srv/apps/paseo/home";
-  paseoDocker = "/srv/apps/paseo/docker";
-  paseoNixRoot = "/srv/apps/paseo/nix-root";
-  paseoWorkspace = "/srv/apps/paseo/workspace";
-  paseoSecrets = config.ghostship.selfHostedSecrets.projections.paseo.path;
-  paseoSecretsFile = "/run/secrets/paseo.env";
+  t3codeHome = "/srv/apps/t3code/home";
+  t3codeDocker = "/srv/apps/t3code/docker";
+  t3codeNixRoot = "/srv/apps/t3code/nix-root";
+  t3codeWorkspace = "/srv/apps/t3code/workspace";
+  t3codeSecrets = config.ghostship.selfHostedSecrets.projections.t3code.path;
+  t3codeSecretsFile = "/run/secrets/t3code.env";
   imageName = "localhost/ghostship-t3code";
-  imageTag = "t3code-${inputs.self.shortRev or inputs.self.rev or "dirty"}";
+  imageTag = "t3code-runtime";
 
-  paseoPackages = with pkgs; [
+  t3codePackages = with pkgs; [
     nix
     systemd
     dbus
     pam
-    gnome-keyring
-    libsecret
     docker
     cloudflared
     sudo
     git
     git-lfs
     gh
-    ollama
     openssh
     curl
     jq
@@ -39,7 +34,19 @@ let
     direnv
     uv
     python3
+    ruff
+    basedpyright
+    nil
+    nixfmt
+    shellcheck
+    shfmt
+    yq-go
+    buildkit
+    bubblewrap
+    fuse-overlayfs
     nodejs_24
+    typescript-language-server
+    prettier
     stdenv.cc
     gnumake
     pkg-config
@@ -65,30 +72,37 @@ let
     cacert
   ];
 
-  paseoPath = lib.makeBinPath paseoPackages;
-  paseoRuntimeEnv = ''
-    if [ -f ${paseoSecretsFile} ]; then
+  antigravityAcp = pkgs.callPackage ../../packages/t3code/antigravity-acp.nix { };
+  nativeLibraries = lib.makeLibraryPath [
+    pkgs.glibc
+    pkgs.stdenv.cc.cc.lib
+    pkgs.zlib
+    pkgs.openssl
+    pkgs.libxcrypt
+  ];
+
+  t3codePath = lib.makeBinPath t3codePackages;
+  t3codeRuntimeEnv = ''
+    if [ -f ${t3codeSecretsFile} ]; then
       set -a
       # shellcheck disable=SC1091
-      . ${paseoSecretsFile}
+      . ${t3codeSecretsFile}
       set +a
     fi
-    export HOME=/home/paseo
-    export USER=paseo
+    export HOME=/home/t3code
+    export USER=t3code
     export XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}"
     export XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}"
     export XDG_CACHE_HOME="''${XDG_CACHE_HOME:-$HOME/.cache}"
     export XDG_DATA_HOME="''${XDG_DATA_HOME:-$HOME/.local/share}"
-    export NPM_CONFIG_PREFIX="$HOME/.local/share/paseo-tools/npm"
+    export NPM_CONFIG_PREFIX="$HOME/.local/share/t3code-tools/npm"
     export npm_config_prefix="$NPM_CONFIG_PREFIX"
     export OPENCODE_AUTOMATION_DIR="$HOME/.automation"
     export T3CODE_HOME="$HOME/.t3"
-    export T3CODE_OLLAMA_CATALOG="$XDG_STATE_HOME/t3code-ollama/catalog.json"
     export T3CODE_HOST=0.0.0.0
     export T3CODE_PORT=3773
     export T3CODE_NO_BROWSER=true
-    export OLLAMA_HOST=http://127.0.0.1:11434
-    export AGY_CLI_DISABLE_AUTO_UPDATE=true
+    export LD_LIBRARY_PATH=${nativeLibraries}
     hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     if [ -f "$hm_session_vars" ]; then
       # shellcheck disable=SC1090
@@ -99,7 +113,7 @@ let
         set -u
       fi
     fi
-    export PATH=$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${paseoPath}:/bin:/usr/bin:$PATH
+    export PATH=$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${t3codePath}:/bin:/usr/bin:$PATH
     export DOCKER_HOST=unix:///var/run/docker.sock
     export XDG_RUNTIME_DIR=/run/user/3000
     export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
@@ -122,7 +136,7 @@ let
     fi
   '';
 
-  paseoIdleCheck = ''
+  t3codeIdleCheck = ''
     is_t3code_idle() {
       state_db="$T3CODE_HOME/userdata/state.sqlite"
       [ -f "$state_db" ] || return 1
@@ -138,157 +152,20 @@ let
     }
   '';
 
-  paseoProviderCheck = ''
+  # Sign-in is user-owned. Missing credentials must not restart the server.
+  t3codeProviderCheck = ''
     t3code_providers_healthy() {
-      for provider in codex codex_ollama opencode; do
-        cache="$T3CODE_HOME/caches/$provider.json"
-        [ -f "$cache" ] || return 1
-        ${pkgs.jq}/bin/jq -e '.status == "ready" and .installed == true' "$cache" >/dev/null 2>&1 \
-          || return 1
+      for provider in codex opencode; do
+        [ -x "$HOME/.local/bin/$provider" ] || return 1
       done
+      [ -x ${antigravityAcp}/bin/agy_acp_server.par ]
     }
   '';
 
-  paseoOllamaProxy = pkgs.writeTextFile {
-    name = "paseo-ollama-cloud-proxy";
-    destination = "/bin/paseo-ollama-cloud-proxy";
-    executable = true;
-    text = ''
-      #!${pkgs.nodejs_24}/bin/node
-      const http = require("node:http");
-      const https = require("node:https");
-
-      const apiKey = process.env.OLLAMA_API_KEY || "";
-      const maxBody = 64 * 1024 * 1024;
-      const server = http.createServer((request, response) => {
-        if (!apiKey) {
-          response.writeHead(503, { "content-type": "application/json" });
-          response.end(JSON.stringify({ error: "Ollama API key is not configured" }));
-          return;
-        }
-
-        const headers = { ...request.headers };
-        delete headers.host;
-        delete headers.connection;
-        delete headers["proxy-connection"];
-        delete headers["transfer-encoding"];
-        headers.authorization = "Bearer " + apiKey;
-        let size = 0;
-        const upstreamRequest = https.request({
-          hostname: "ollama.com",
-          port: 443,
-          method: request.method,
-          path: request.url || "/",
-          headers,
-        }, (upstreamResponse) => {
-          response.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
-          upstreamResponse.pipe(response);
-        });
-        upstreamRequest.on("error", (error) => {
-          if (response.headersSent) {
-            response.destroy(error);
-            return;
-          }
-          response.writeHead(502, { "content-type": "application/json" });
-          response.end(JSON.stringify({ error: String(error && error.message || error) }));
-        });
-        request.on("data", (chunk) => {
-          size += chunk.length;
-          if (size > maxBody) {
-            upstreamRequest.destroy(new Error("request body exceeds 64 MiB"));
-            request.destroy();
-            if (!response.headersSent) {
-              response.writeHead(413, { "content-type": "application/json" });
-              response.end(JSON.stringify({ error: "request body exceeds 64 MiB" }));
-            }
-            return;
-          }
-          upstreamRequest.write(chunk);
-        });
-        request.on("end", () => upstreamRequest.end());
-        request.on("error", (error) => upstreamRequest.destroy(error));
-      });
-      server.listen(11434, "127.0.0.1", () => {
-        process.stderr.write("Ollama cloud proxy listening on 127.0.0.1:11434\n");
-      });
-    '';
-  };
-
-  paseoOllamaCodex = pkgs.writeShellScriptBin "paseo-ollama-codex" ''
+  t3codeCodexRgRepair = pkgs.writeShellScriptBin "t3code-codex-rg-repair" ''
     set -eu
 
-    ${paseoRuntimeEnv}
-
-    if [ "''${1:-}" = "--version" ]; then
-      exec codex --version
-    fi
-
-    exec ollama launch codex \
-      --yes \
-      --model gpt-oss:120b \
-      -- \
-      --local-provider=ollama \
-      "$@"
-  '';
-
-  paseoOllamaCatalogRefresh = pkgs.writeShellScriptBin "paseo-ollama-catalog-refresh" ''
-    set -eu
-
-    ${paseoRuntimeEnv}
-
-    if [ -z "''${OLLAMA_API_KEY:-}" ]; then
-      printf 'error: OLLAMA_API_KEY is not configured\n' >&2
-      exit 1
-    fi
-
-    catalog_dir="$(dirname "$T3CODE_OLLAMA_CATALOG")"
-    mkdir -p "$catalog_dir"
-    work_dir="$(mktemp -d "$catalog_dir/.refresh.XXXXXX")"
-    trap 'rm -rf "$work_dir"' EXIT
-
-    auth_header_file="$work_dir/authorization.header"
-    printf 'Authorization: Bearer %s\n' "$OLLAMA_API_KEY" > "$auth_header_file"
-    chmod 0600 "$auth_header_file"
-    curl -fsS --retry 3 --connect-timeout 15 --max-time 60 \
-      -H "@$auth_header_file" https://ollama.com/api/tags > "$work_dir/tags.json"
-
-    jq -r '.models[]? | .model // .name // empty' "$work_dir/tags.json" \
-      | sort -u > "$work_dir/models"
-    : > "$work_dir/catalog.jsonl"
-    while IFS= read -r model; do
-      [ -n "$model" ] || continue
-      payload="$(jq -cn --arg model "$model" '{model: $model}')"
-      if ! curl -fsS --retry 2 --connect-timeout 15 --max-time 60 \
-        -H "@$auth_header_file" -H 'Content-Type: application/json' \
-        --data "$payload" https://ollama.com/api/show > "$work_dir/show.json"; then
-        printf 'warning: failed to inspect Ollama model %s\n' "$model" >&2
-        continue
-      fi
-      jq -c --arg name "$model" '
-        (.capabilities // []) as $capabilities
-        | select($capabilities | index("tools"))
-        | {name: $name, capabilities: $capabilities}
-      ' "$work_dir/show.json" >> "$work_dir/catalog.jsonl"
-    done < "$work_dir/models"
-
-    jq -s 'sort_by(.name)' "$work_dir/catalog.jsonl" > "$work_dir/catalog.json"
-    jq -e 'length > 0 and all(.[]; (.capabilities | index("tools")) != null)' \
-      "$work_dir/catalog.json" >/dev/null
-    install -m 0600 "$work_dir/catalog.json" "$T3CODE_OLLAMA_CATALOG.tmp"
-    mv "$T3CODE_OLLAMA_CATALOG.tmp" "$T3CODE_OLLAMA_CATALOG"
-  '';
-
-  paseoOllamaProxyRun = pkgs.writeShellScriptBin "paseo-ollama-cloud-proxy-run" ''
-    set -eu
-
-    ${paseoRuntimeEnv}
-    exec ${paseoOllamaProxy}/bin/paseo-ollama-cloud-proxy
-  '';
-
-  paseoCodexRgRepair = pkgs.writeShellScriptBin "paseo-codex-rg-repair" ''
-    set -eu
-
-    npm_prefix="''${NPM_CONFIG_PREFIX:-/home/paseo/.local/share/paseo-tools/npm}"
+    npm_prefix="''${NPM_CONFIG_PREFIX:-/home/t3code/.local/share/t3code-tools/npm}"
     codex_root="$npm_prefix/lib/node_modules/@openai/codex"
     repaired=0
 
@@ -309,10 +186,10 @@ let
     ${pkgs.ripgrep}/bin/rg --version >/dev/null
   '';
 
-  paseoToolMaintenance = pkgs.writeShellScriptBin "t3code-tool-maintenance" ''
+  t3codeToolMaintenance = pkgs.writeShellScriptBin "t3code-tool-maintenance" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
     export NODE_NO_WARNINGS=1
 
     log_info() {
@@ -480,58 +357,21 @@ let
       chmod 0755 "$HOME/.local/bin/opencode"
     }
 
-    install_antigravity_cli() {
-      staging_dir="$(mktemp -d "$XDG_CACHE_HOME/antigravity-install.XXXXXX")"
-      trap 'rm -rf "$staging_dir"' EXIT HUP INT TERM
-      mkdir -p "$staging_dir/home" "$staging_dir/config"
-      antigravity_dir="$XDG_DATA_HOME/paseo-tools/antigravity"
-
-      log_info "installing or upgrading Antigravity CLI"
-      if ! ${pkgs.curl}/bin/curl -fsSL https://antigravity.google/cli/install.sh \
-        | HOME="$staging_dir/home" XDG_CONFIG_HOME="$staging_dir/config" \
-          ${pkgs.bash}/bin/bash -s -- --dir "$staging_dir"; then
-        log_warn "Antigravity CLI install failed"
-        return 1
-      fi
-      if [ ! -x "$staging_dir/agy" ]; then
-        log_warn "Antigravity installer did not produce agy"
-        return 1
-      fi
-      loader="$(find_nix_glibc_loader || true)"
-      if [ -z "$loader" ]; then
-        log_warn "Nix glibc loader is unavailable for Antigravity CLI"
-        return 1
-      fi
-      mkdir -p "$antigravity_dir"
-      install -m 0755 "$staging_dir/agy" "$antigravity_dir/agy.new"
-      mv "$antigravity_dir/agy.new" "$antigravity_dir/agy"
-      cat > "$HOME/.local/bin/agy" <<EOF
-    #!/usr/bin/env sh
-    set -eu
-    exec '$loader' --library-path "''${loader%/*}" '$antigravity_dir/agy' "\$@"
-    EOF
-      chmod 0755 "$HOME/.local/bin/agy"
-      rm -rf "$staging_dir"
-      trap - EXIT HUP INT TERM
-    }
-
     mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
     install_agent_cli "t3" "T3 Code"
-    npm uninstall -g --no-fund --no-audit @getpaseo/cli >/dev/null 2>&1 || true
     install_agent_cli "@openai/codex" "codex"
-    ${paseoCodexRgRepair}/bin/paseo-codex-rg-repair
+    ${t3codeCodexRgRepair}/bin/t3code-codex-rg-repair
     install_opencode_cli
-    install_antigravity_cli
     install_user_shim "t3" "$NPM_CONFIG_PREFIX/bin/t3"
     install_user_shim "codex" "$NPM_CONFIG_PREFIX/bin/codex"
     install_opencode_user_shim "$NPM_CONFIG_PREFIX/bin/opencode"
   '';
 
-  paseoToolAutoUpdate = pkgs.writeShellScriptBin "paseo-tool-auto-update" ''
+  t3codeToolAutoUpdate = pkgs.writeShellScriptBin "t3code-tool-auto-update" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
     export NODE_NO_WARNINGS=1
 
     state_dir="/run/t3code-tool-update"
@@ -545,7 +385,7 @@ let
       printf 'info: %s\n' "$1" >&2
     }
 
-    ${paseoIdleCheck}
+    ${t3codeIdleCheck}
 
     if systemctl is-active --quiet t3code-server.service && ! is_t3code_idle; then
       log_info "T3 Code reports active or unknown work; tool update deferred"
@@ -554,7 +394,7 @@ let
 
     user_version() {
       tool="$1"
-      su-exec paseo:paseo sh -c '
+      su-exec t3code:t3code sh -c '
         tool="$1"
         if ! command -v "$tool" >/dev/null 2>&1; then
           exit 0
@@ -566,39 +406,29 @@ let
     before_t3="$(user_version t3)"
     before_codex="$(user_version codex)"
     before_opencode="$(user_version opencode)"
-    before_agy="$(user_version agy)"
     before_config="$(${pkgs.coreutils}/bin/sha256sum "$T3CODE_HOME/userdata/settings.json" 2>/dev/null || true)"
-    before_catalog="$(${pkgs.coreutils}/bin/sha256sum "$T3CODE_OLLAMA_CATALOG" 2>/dev/null || true)"
 
-    su-exec paseo:paseo ${paseoToolMaintenance}/bin/t3code-tool-maintenance
-    su-exec paseo:paseo ${paseoOllamaCatalogRefresh}/bin/paseo-ollama-catalog-refresh
-    su-exec paseo:paseo ${paseoManagedConfig}/bin/paseo-managed-config
+    su-exec t3code:t3code ${t3codeToolMaintenance}/bin/t3code-tool-maintenance
+    su-exec t3code:t3code ${t3codeManagedConfig}/bin/t3code-managed-config
 
     after_t3="$(user_version t3)"
     after_codex="$(user_version codex)"
     after_opencode="$(user_version opencode)"
-    after_agy="$(user_version agy)"
     after_config="$(${pkgs.coreutils}/bin/sha256sum "$T3CODE_HOME/userdata/settings.json" 2>/dev/null || true)"
-    after_catalog="$(${pkgs.coreutils}/bin/sha256sum "$T3CODE_OLLAMA_CATALOG" 2>/dev/null || true)"
 
     log_info "t3: ''${before_t3:-missing} -> ''${after_t3:-missing}"
     log_info "codex: ''${before_codex:-missing} -> ''${after_codex:-missing}"
     log_info "opencode: ''${before_opencode:-missing} -> ''${after_opencode:-missing}"
-    log_info "agy: ''${before_agy:-missing} -> ''${after_agy:-missing}"
 
     if [ "$before_t3" != "$after_t3" ] \
       || [ "$before_codex" != "$after_codex" ] \
       || [ "$before_opencode" != "$after_opencode" ] \
-      || [ "$before_agy" != "$after_agy" ] \
-      || [ "$before_config" != "$after_config" ] \
-      || [ "$before_catalog" != "$after_catalog" ]; then
+      || [ "$before_config" != "$after_config" ]; then
       pending_tmp="$pending_restart.tmp"
       {
         printf 't3=%s\n' "$after_t3"
         printf 'codex=%s\n' "$after_codex"
         printf 'opencode=%s\n' "$after_opencode"
-        printf 'agy=%s\n' "$after_agy"
-        printf 'ollama_catalog=%s\n' "$after_catalog"
       } > "$pending_tmp"
       mv "$pending_tmp" "$pending_restart"
       log_info "tool update downloaded; queued restart until T3 Code is idle"
@@ -607,10 +437,10 @@ let
     fi
   '';
 
-  paseoToolUpdateRestart = pkgs.writeShellScriptBin "paseo-tool-update-restart" ''
+  t3codeToolUpdateRestart = pkgs.writeShellScriptBin "t3code-tool-update-restart" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
 
     state_dir="/run/t3code-tool-update"
     pending_restart="$state_dir/restart.pending"
@@ -619,7 +449,7 @@ let
       printf 'info: %s\n' "$1" >&2
     }
 
-    ${paseoIdleCheck}
+    ${t3codeIdleCheck}
 
     [ -f "$pending_restart" ] || exit 0
 
@@ -657,35 +487,20 @@ let
     rm -f "$pending_restart"
   '';
 
-  paseoQueueBootstrapRestart = pkgs.writeShellScriptBin "paseo-queue-bootstrap-restart" ''
+  t3codeDaemonMonitor = pkgs.writeShellScriptBin "t3code-server-monitor" ''
     set -eu
 
-    state_dir="/run/t3code-tool-update"
-    pending_restart="$state_dir/restart.pending"
-    ${pkgs.coreutils}/bin/install -d -m 0700 "$state_dir"
+    ${t3codeRuntimeEnv}
 
-    exec 9>"$state_dir/tool-update.lock"
-    ${pkgs.util-linux}/bin/flock 9
-
-    pending_tmp="$pending_restart.tmp"
-    printf 'source=bootstrap\n' > "$pending_tmp"
-    ${pkgs.coreutils}/bin/mv "$pending_tmp" "$pending_restart"
-  '';
-
-  paseoDaemonMonitor = pkgs.writeShellScriptBin "t3code-server-monitor" ''
-    set -eu
-
-    ${paseoRuntimeEnv}
-
-    log_file="$HOME/.paseo-container/logs/t3code-server-monitor.log"
+    log_file="$HOME/.t3code-container/logs/t3code-server-monitor.log"
     mkdir -p "$(dirname "$log_file")"
 
     log_info() {
       printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >> "$log_file"
     }
 
-    ${paseoIdleCheck}
-    ${paseoProviderCheck}
+    ${t3codeIdleCheck}
+    ${t3codeProviderCheck}
 
     unhealthy_reason=""
     web_was_active=1
@@ -697,8 +512,6 @@ let
       unhealthy_reason="T3 Code web UI is not responding"
     elif ! t3code_providers_healthy; then
       unhealthy_reason="Codex or OpenCode provider is unavailable"
-    elif ! command -v agy >/dev/null 2>&1 || ! agy --version >/dev/null 2>&1; then
-      unhealthy_reason="Antigravity CLI is unavailable"
     fi
 
     if [ -z "$unhealthy_reason" ]; then
@@ -724,10 +537,10 @@ let
     systemctl restart t3code-server.service
   '';
 
-  paseoContainerHealth = pkgs.writeShellScriptBin "paseo-container-health" ''
+  t3codeContainerHealth = pkgs.writeShellScriptBin "t3code-container-health" ''
     set -eu
 
-    ${paseoIdleCheck}
+    ${t3codeIdleCheck}
 
     read -r uptime _ < /proc/uptime
     uptime_seconds="''${uptime%%.*}"
@@ -745,10 +558,10 @@ let
         fi
         ;;
     esac
-    if ! setup_state="$(${pkgs.systemd}/bin/systemctl show paseo-container-setup.service -p ActiveState --value)"; then
+    if ! setup_state="$(${pkgs.systemd}/bin/systemctl show t3code-container-setup.service -p ActiveState --value)"; then
       exit 0
     fi
-    if ! bootstrap_state="$(${pkgs.systemd}/bin/systemctl show paseo-bootstrap.service -p ActiveState --value)"; then
+    if ! bootstrap_state="$(${pkgs.systemd}/bin/systemctl show t3code-bootstrap.service -p ActiveState --value)"; then
       exit 0
     fi
     if ! web_state="$(${pkgs.systemd}/bin/systemctl show t3code-server.service -p ActiveState --value)"; then
@@ -778,14 +591,14 @@ let
     exit 0
   '';
 
-  paseoApplyConfig = pkgs.writeShellScriptBin "t3code-apply-config" ''
+  t3codeApplyConfig = pkgs.writeShellScriptBin "t3code-apply-config" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
 
-    recovery_dir="$HOME/.paseo-container/recovery"
+    recovery_dir="$HOME/.t3code-container/recovery"
     last_good="$recovery_dir/last-good"
-    log_file="$HOME/.paseo-container/logs/paseo-apply-config.log"
+    log_file="$HOME/.t3code-container/logs/t3code-apply-config.log"
     systemctl_bin="${pkgs.systemd}/bin/systemctl"
     sudo_bin="/usr/bin/sudo"
 
@@ -829,10 +642,6 @@ let
         log_error "opencode CLI is not installed"
         return 1
       }
-      command -v agy >/dev/null 2>&1 || {
-        log_error "Antigravity CLI is not installed"
-        return 1
-      }
 
       for file in \
         "$T3CODE_HOME/userdata/settings.json" \
@@ -860,7 +669,6 @@ let
       t3 --version >/dev/null
       codex --version >/dev/null
       opencode debug config >/dev/null
-      agy --version >/dev/null
     }
 
     restart_daemon() {
@@ -868,7 +676,7 @@ let
       "$sudo_bin" -n "$systemctl_bin" restart t3code-server.service
     }
 
-    ${paseoProviderCheck}
+    ${t3codeProviderCheck}
 
     wait_healthy() {
       for _ in $(seq 1 90); do
@@ -921,10 +729,10 @@ let
     esac
   '';
 
-  paseoUserUnits = pkgs.writeShellScriptBin "t3code-user-units" ''
+  t3codeUserUnits = pkgs.writeShellScriptBin "t3code-user-units" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
 
     usage() {
       cat >&2 <<EOF
@@ -981,20 +789,20 @@ let
     esac
   '';
 
-  paseoRunHooks = pkgs.writeShellScriptBin "paseo-run-hooks" ''
+  t3codeRunHooks = pkgs.writeShellScriptBin "t3code-run-hooks" ''
     set -eu
 
     hook_set="''${1:-}"
     if [ -z "$hook_set" ]; then
-      printf 'usage: paseo-run-hooks <hook-set>\n' >&2
+      printf 'usage: t3code-run-hooks <hook-set>\n' >&2
       exit 2
     fi
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
     export T3CODE_HOOK_SET="$hook_set"
 
-    hook_dir="$HOME/.paseo-container/hooks/$hook_set"
-    log_file="$HOME/.paseo-container/logs/paseo-hooks.log"
+    hook_dir="$HOME/.t3code-container/hooks/$hook_set"
+    log_file="$HOME/.t3code-container/logs/t3code-hooks.log"
     mkdir -p "$(dirname "$log_file")" "$hook_dir"
 
     log_info() {
@@ -1027,30 +835,30 @@ let
     fi
   '';
 
-  paseoDoctor = pkgs.writeShellScriptBin "paseo-doctor" ''
+  t3codeDoctor = pkgs.writeShellScriptBin "t3code-doctor" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
 
-    su-exec paseo:paseo ${paseoToolMaintenance}/bin/t3code-tool-maintenance
-    ${paseoRunHooks}/bin/paseo-run-hooks doctor.d
+    su-exec t3code:t3code ${t3codeToolMaintenance}/bin/t3code-tool-maintenance
+    ${t3codeRunHooks}/bin/t3code-run-hooks doctor.d
   '';
 
-  paseoBootstrap = pkgs.writeShellScriptBin "paseo-bootstrap" ''
+  t3codeBootstrap = pkgs.writeShellScriptBin "t3code-bootstrap" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
 
-    ${paseoRunHooks}/bin/paseo-run-hooks bootstrap.d
-    ${paseoRunHooks}/bin/paseo-run-hooks before-t3code.d
+    ${t3codeRunHooks}/bin/t3code-run-hooks bootstrap.d
+    ${t3codeRunHooks}/bin/t3code-run-hooks before-t3code.d
   '';
 
-  paseoSnapshotConfig = pkgs.writeShellScriptBin "paseo-snapshot-config" ''
+  t3codeSnapshotConfig = pkgs.writeShellScriptBin "t3code-snapshot-config" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
 
-    recovery_dir="$HOME/.paseo-container/recovery"
+    recovery_dir="$HOME/.t3code-container/recovery"
     last_good="$recovery_dir/last-good"
     tmp="$recovery_dir/last-good.tmp"
 
@@ -1058,7 +866,7 @@ let
     rm -rf "$tmp"
     mkdir -p "$tmp"
 
-    ${paseoProviderCheck}
+    ${t3codeProviderCheck}
     for _ in $(seq 1 90); do
       if curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null \
         && t3code_providers_healthy; then
@@ -1085,14 +893,14 @@ let
     mv "$tmp" "$last_good"
   '';
 
-  paseoTunnel = pkgs.writeShellScriptBin "t3code-tunnel" ''
+  t3codeTunnel = pkgs.writeShellScriptBin "t3code-tunnel" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
 
-    tunnel_dir="$HOME/.paseo-container/tunnels"
+    tunnel_dir="$HOME/.t3code-container/tunnels"
     unit_dir="$HOME/.config/systemd/user"
-    log_dir="$HOME/.paseo-container/logs/tunnels"
+    log_dir="$HOME/.t3code-container/logs/tunnels"
 
     usage() {
       cat >&2 <<EOF
@@ -1140,7 +948,7 @@ let
     }
 
     unit_name() {
-      printf 'paseo-tunnel-%s.service' "$1"
+      printf 't3code-tunnel-%s.service' "$1"
     }
 
     unit_path() {
@@ -1160,7 +968,7 @@ let
       log_file="$(log_path "$name")"
       cat > "$(unit_path "$name")" <<EOF
     [Unit]
-    Description=Paseo quick tunnel: $name
+    Description=T3 Code quick tunnel: $name
     After=default.target
 
     [Service]
@@ -1271,10 +1079,10 @@ let
     esac
   '';
 
-  paseoDaemonRun = pkgs.writeShellScriptBin "t3code-server-run" ''
+  t3codeDaemonRun = pkgs.writeShellScriptBin "t3code-server-run" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
     export XDG_RUNTIME_DIR=/run/user/3000
     cd /workspace
 
@@ -1285,79 +1093,53 @@ let
       /workspace
   '';
 
-  paseoManagedConfig = pkgs.writeShellScriptBin "paseo-managed-config" ''
+  t3codeManagedConfig = pkgs.writeShellScriptBin "t3code-managed-config" ''
     set -eu
-
-    ${paseoRuntimeEnv}
-
+    ${t3codeRuntimeEnv}
     config_dir="$T3CODE_HOME/userdata"
     config_file="$config_dir/settings.json"
+    [ ! -f "$config_file" ] || exit 0
+    mkdir -p "$config_dir"
     config_tmp="$(mktemp "$config_dir/settings.json.tmp.XXXXXX")"
-    provider_models_tmp="$(mktemp "$config_dir/provider-models.json.tmp.XXXXXX")"
-    trap 'rm -f "$config_tmp" "$config_tmp.source" "$provider_models_tmp"' EXIT HUP INT TERM
-
-    if [ -f "$config_file" ]; then
-      ${pkgs.jq}/bin/jq -e 'type == "object"' "$config_file" >/dev/null
-      config_source="$config_file"
-    else
-      printf '{}\n' > "$config_tmp.source"
-      config_source="$config_tmp.source"
-    fi
-
-    if [ -f "$T3CODE_OLLAMA_CATALOG" ]; then
-      ${pkgs.jq}/bin/jq 'map(.name)' "$T3CODE_OLLAMA_CATALOG" > "$provider_models_tmp"
-    else
-      printf '%s\n' '["gpt-oss:120b"]' > "$provider_models_tmp"
-    fi
-    ${pkgs.jq}/bin/jq -e 'type == "array" and length > 0' "$provider_models_tmp" >/dev/null
-
-    ${pkgs.jq}/bin/jq --slurpfile providerModels "$provider_models_tmp" '
-      .providerInstances = ((.providerInstances // {}) + {
-        codex_ollama: {
-          driver: "codex",
-          displayName: "Codex (Ollama Cloud)",
-          enabled: true,
-          environment: [
-            {
-              name: "OLLAMA_HOST",
-              value: "http://127.0.0.1:11434",
-              sensitive: false
-            }
-          ],
-          config: {
-            binaryPath: "codex",
-            homePath: "~/.codex",
-            launchArgs: "--local-provider=ollama",
-            customModels: $providerModels[0]
-          }
-        }
-      })
-    ' "$config_source" > "$config_tmp"
+    trap 'rm -f "$config_tmp"' EXIT
+    cat > "$config_tmp" <<'JSON'
+    {
+      "providerInstances": {
+        "codex": {"driver": "codex", "enabled": true, "config": {"binaryPath": "codex"}},
+        "opencode": {"driver": "opencode", "enabled": true, "config": {"binaryPath": "opencode"}},
+        "antigravity": {"driver": "antigravity", "enabled": true, "config": {"binaryPath": "/bin/agy_acp_server.par"}}
+      }
+    }
+    JSON
     chmod 0600 "$config_tmp"
     mv "$config_tmp" "$config_file"
-    rm -f "$config_tmp.source" "$provider_models_tmp"
-    trap - EXIT HUP INT TERM
   '';
 
-  paseoProjectBootstrap = pkgs.writeShellScriptBin "t3code-project-bootstrap" ''
+  t3codeProjectBootstrap = pkgs.writeShellScriptBin "t3code-project-bootstrap" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
 
     for repo_dir in /workspace/*; do
       [ -e "$repo_dir/.git" ] || continue
       repo_name="$(basename "$repo_dir")"
-      t3 project add \
+      if ! output="$(t3 project add \
         --base-dir "$T3CODE_HOME" \
         --title "$repo_name" \
-        "$repo_dir" >/dev/null 2>&1 || true
+        "$repo_dir" 2>&1)"; then
+        # The CLI reports duplicates as errors; all other failures block setup.
+        case "$output" in
+          *ProjectAlreadyExistsError*) ;;
+          *) printf '%s\n' "$output" >&2; exit 1 ;;
+        esac
+      fi
     done
   '';
 
-  paseoPair = pkgs.writeShellScriptBin "t3code-pair" ''
+  t3codePair = pkgs.writeShellScriptBin "t3code-pair" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
 
     exec t3 auth pairing create \
       --base-dir "$T3CODE_HOME" \
@@ -1367,10 +1149,10 @@ let
       "$@"
   '';
 
-  paseoContainerSetup = pkgs.writeShellScriptBin "paseo-container-setup" ''
+  t3codeContainerSetup = pkgs.writeShellScriptBin "t3code-container-setup" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
 
     mkdir -p \
       "$HOME/.local/bin" \
@@ -1378,17 +1160,16 @@ let
       "$NPM_CONFIG_PREFIX/lib" \
       "$XDG_DATA_HOME" \
       "$XDG_STATE_HOME" \
-      "$XDG_STATE_HOME/t3code-ollama" \
       "$XDG_CACHE_HOME" \
       "$T3CODE_HOME/userdata" \
       "$T3CODE_HOME/caches" \
-      "$HOME/.paseo-container/logs" \
-      "$HOME/.paseo-container/recovery" \
-      "$HOME/.paseo-container/tunnels" \
-      "$HOME/.paseo-container/logs/tunnels" \
-      "$HOME/.paseo-container/hooks/bootstrap.d" \
-      "$HOME/.paseo-container/hooks/before-t3code.d" \
-      "$HOME/.paseo-container/hooks/doctor.d" \
+      "$HOME/.t3code-container/logs" \
+      "$HOME/.t3code-container/recovery" \
+      "$HOME/.t3code-container/tunnels" \
+      "$HOME/.t3code-container/logs/tunnels" \
+      "$HOME/.t3code-container/hooks/bootstrap.d" \
+      "$HOME/.t3code-container/hooks/before-t3code.d" \
+      "$HOME/.t3code-container/hooks/doctor.d" \
       "$HOME/.codex" \
       "$HOME/.gemini/antigravity-cli" \
       "$HOME/.local/share/keyrings" \
@@ -1401,91 +1182,79 @@ let
       /var/run \
       /tmp \
       /run/user/3000
-    chown -R paseo:paseo \
+    chown -R t3code:t3code \
       "$HOME/.local" \
       "$HOME/.config" \
       "$HOME/.cache" \
       "$HOME/.automation" \
       "$T3CODE_HOME" \
-      "$HOME/.paseo-container" \
+      "$HOME/.t3code-container" \
       "$HOME/.codex" \
       "$HOME/.gemini" \
       "$HOME/.local/share/keyrings" \
       "$HOME/.config/systemd"
-    chown paseo:paseo /run/user/3000
+    chown t3code:t3code /run/user/3000
     chmod 0700 /run/user/3000
-    if ! su-exec paseo:paseo ${paseoOllamaCatalogRefresh}/bin/paseo-ollama-catalog-refresh; then
-      printf 'warning: Ollama catalog refresh failed; preserving the existing catalog\n' >&2
-    fi
-    su-exec paseo:paseo ${paseoManagedConfig}/bin/paseo-managed-config
+    su-exec t3code:t3code ${t3codeManagedConfig}/bin/t3code-managed-config
     if [ ! -e "$HOME/tools" ] && [ -d /workspace/ghostship-agent/tools ]; then
       ln -s /workspace/ghostship-agent/tools "$HOME/tools"
-      chown -h paseo:paseo "$HOME/tools"
+      chown -h t3code:t3code "$HOME/tools"
     fi
     for tool in agent ghostship-cloakbrowser; do
       if [ -x "$HOME/tools/bin/$tool" ]; then
         ln -sfn "$HOME/tools/bin/$tool" "$HOME/.local/bin/$tool"
-        chown -h paseo:paseo "$HOME/.local/bin/$tool"
+        chown -h t3code:t3code "$HOME/.local/bin/$tool"
       fi
     done
     if [ ! -x "$NPM_CONFIG_PREFIX/bin/t3" ] \
       || [ ! -x "$NPM_CONFIG_PREFIX/bin/codex" ] \
-      || [ ! -x "$NPM_CONFIG_PREFIX/bin/opencode" ] \
-      || ! su-exec paseo:paseo "$HOME/.local/bin/agy" --version >/dev/null 2>&1; then
-      su-exec paseo:paseo ${paseoToolMaintenance}/bin/t3code-tool-maintenance
+      || [ ! -x "$NPM_CONFIG_PREFIX/bin/opencode" ]; then
+      su-exec t3code:t3code ${t3codeToolMaintenance}/bin/t3code-tool-maintenance
     fi
-    su-exec paseo:paseo npm uninstall -g --no-fund --no-audit @getpaseo/cli >/dev/null 2>&1 || true
-    su-exec paseo:paseo ${paseoCodexRgRepair}/bin/paseo-codex-rg-repair
-    su-exec paseo:paseo ${paseoProjectBootstrap}/bin/t3code-project-bootstrap
+    su-exec t3code:t3code ${t3codeCodexRgRepair}/bin/t3code-codex-rg-repair
+    su-exec t3code:t3code ${t3codeProjectBootstrap}/bin/t3code-project-bootstrap
     cat > "$HOME/.local/bin/t3code-server-run" <<'EOF'
     #!/bin/sh
-    exec ${paseoDaemonRun}/bin/t3code-server-run "$@"
+    exec ${t3codeDaemonRun}/bin/t3code-server-run "$@"
     EOF
-    chown paseo:paseo "$HOME/.local/bin/t3code-server-run"
+    chown t3code:t3code "$HOME/.local/bin/t3code-server-run"
     chmod 0755 "$HOME/.local/bin/t3code-server-run"
     cat > "$HOME/.local/bin/t3code-pair" <<'EOF'
     #!/bin/sh
-    exec ${paseoPair}/bin/t3code-pair "$@"
+    exec ${t3codePair}/bin/t3code-pair "$@"
     EOF
-    chown paseo:paseo "$HOME/.local/bin/t3code-pair"
+    chown t3code:t3code "$HOME/.local/bin/t3code-pair"
     chmod 0755 "$HOME/.local/bin/t3code-pair"
     cat > "$HOME/.local/bin/t3code-tunnel" <<'EOF'
     #!/bin/sh
-    exec ${paseoTunnel}/bin/t3code-tunnel "$@"
+    exec ${t3codeTunnel}/bin/t3code-tunnel "$@"
     EOF
-    chown paseo:paseo "$HOME/.local/bin/t3code-tunnel"
+    chown t3code:t3code "$HOME/.local/bin/t3code-tunnel"
     chmod 0755 "$HOME/.local/bin/t3code-tunnel"
     cat > "$HOME/.local/bin/t3code-user-units" <<'EOF'
     #!/bin/sh
-    exec ${paseoUserUnits}/bin/t3code-user-units "$@"
+    exec ${t3codeUserUnits}/bin/t3code-user-units "$@"
     EOF
-    chown paseo:paseo "$HOME/.local/bin/t3code-user-units"
+    chown t3code:t3code "$HOME/.local/bin/t3code-user-units"
     chmod 0755 "$HOME/.local/bin/t3code-user-units"
     cat > "$HOME/.local/bin/t3code-apply-config" <<'EOF'
     #!/bin/sh
-    exec ${paseoApplyConfig}/bin/t3code-apply-config "$@"
+    exec ${t3codeApplyConfig}/bin/t3code-apply-config "$@"
     EOF
-    chown paseo:paseo "$HOME/.local/bin/t3code-apply-config"
+    chown t3code:t3code "$HOME/.local/bin/t3code-apply-config"
     chmod 0755 "$HOME/.local/bin/t3code-apply-config"
-    rm -f \
-      "$HOME/.local/bin/paseo" \
-      "$HOME/.local/bin/paseo-daemon-run" \
-      "$HOME/.local/bin/paseo-proxy" \
-      "$HOME/.local/bin/paseo-tunnel" \
-      "$HOME/.local/bin/paseo-user-units" \
-      "$HOME/.local/bin/paseo-apply-config"
 
   '';
 
-  paseoDockerdRun = pkgs.writeShellScriptBin "paseo-dockerd-run" ''
+  t3codeDockerdRun = pkgs.writeShellScriptBin "t3code-dockerd-run" ''
     set -eu
 
-    ${paseoRuntimeEnv}
+    ${t3codeRuntimeEnv}
 
     rm -f /var/run/docker.pid
     exec dockerd \
       --host=unix:///var/run/docker.sock \
-      --group=paseo \
+      --group=t3code \
       --data-root=/var/lib/docker \
       --storage-driver=vfs \
       --iptables=false \
@@ -1493,56 +1262,58 @@ let
       --bridge=none
   '';
 
-  paseoEntrypoint = pkgs.writeShellScriptBin "paseo-systemd-entrypoint" ''
+  t3codeEntrypoint = pkgs.writeShellScriptBin "t3code-systemd-entrypoint" ''
     set -eu
 
     exec ${pkgs.systemd}/lib/systemd/systemd
   '';
 
-  paseoImageContents = paseoPackages ++ [
-    paseoEntrypoint
-    paseoContainerSetup
-    paseoDockerdRun
-    paseoDaemonRun
-    paseoProjectBootstrap
-    paseoPair
-    paseoOllamaProxyRun
-    paseoToolMaintenance
-    paseoToolAutoUpdate
-    paseoToolUpdateRestart
-    paseoQueueBootstrapRestart
-    paseoDaemonMonitor
-    paseoContainerHealth
-    paseoRunHooks
-    paseoDoctor
-    paseoApplyConfig
-    paseoUserUnits
-    paseoBootstrap
-    paseoSnapshotConfig
-    paseoTunnel
+  t3codeImageContents = t3codePackages ++ [
+    antigravityAcp
+    t3codeEntrypoint
+    t3codeContainerSetup
+    t3codeDockerdRun
+    t3codeDaemonRun
+    t3codeProjectBootstrap
+    t3codePair
+    t3codeToolMaintenance
+    t3codeToolAutoUpdate
+    t3codeToolUpdateRestart
+    t3codeDaemonMonitor
+    t3codeContainerHealth
+    t3codeRunHooks
+    t3codeDoctor
+    t3codeApplyConfig
+    t3codeUserUnits
+    t3codeBootstrap
+    t3codeSnapshotConfig
+    t3codeTunnel
     pkgs.dockerTools.binSh
     pkgs.dockerTools.usrBinEnv
     pkgs.dockerTools.caCertificates
   ];
 
-  paseoImage = pkgs.dockerTools.buildLayeredImageWithNixDb {
+  t3codeImage = pkgs.dockerTools.buildLayeredImageWithNixDb {
     name = imageName;
     tag = imageTag;
-    contents = paseoImageContents;
+    contents = t3codeImageContents;
     extraCommands = ''
-      mkdir -p etc/nix etc/pam.d etc/sudoers.d etc/systemd/system/multi-user.target.wants etc/systemd/user/sockets.target.wants usr/bin usr/share/systemd/user nix/store nix/var/log/nix nix/var/nix tmp workspace home/paseo
+      mkdir -p etc/nix etc/pam.d etc/sudoers.d etc/systemd/system/multi-user.target.wants etc/systemd/user/sockets.target.wants usr/bin usr/share/systemd/user nix/store nix/var/log/nix nix/var/nix tmp workspace home/t3code
       mkdir -p mnt/share run/user var/empty var/lib/docker var/log/journal var/run
+      mkdir -p lib lib64
+      ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
+      ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} lib64/$(basename ${pkgs.stdenv.cc.bintools.dynamicLinker})
       chmod 1777 tmp
       chmod 0555 var/empty
       cp ${pkgs.sudo}/bin/sudo usr/bin/sudo
       chmod 0755 usr/bin/sudo
       cat > etc/passwd <<'EOF'
       root:x:0:0:root:/root:/bin/sh
-      paseo:x:3000:3000:Paseo:/home/paseo:/bin/sh
+      t3code:x:3000:3000:T3 Code:/home/t3code:/bin/sh
       EOF
       cat > etc/group <<'EOF'
       root:x:0:
-      paseo:x:3000:
+      t3code:x:3000:
       EOF
       nixbld_members=""
       nixbld_index=1
@@ -1559,21 +1330,23 @@ let
       cat > etc/nix/nix.conf <<'EOF'
       experimental-features = nix-command flakes
       sandbox = false
-      allowed-users = root paseo
+      allowed-users = root t3code
       trusted-users = root
+      max-jobs = 2
+      cores = 2
       build-users-group = nixbld
       EOF
-      rm -f etc/sudoers etc/sudoers.d/paseo-apply-config etc/pam.d/sudo
+      rm -f etc/sudoers etc/sudoers.d/t3code-apply-config etc/pam.d/sudo
       cat > etc/sudoers <<'EOF'
       root ALL=(ALL:ALL) ALL
       #includedir /etc/sudoers.d
       EOF
       chmod 0440 etc/sudoers
-      cat > etc/sudoers.d/paseo-apply-config <<'EOF'
-      paseo ALL=(root) NOPASSWD: ${pkgs.systemd}/bin/systemctl reset-failed t3code-server.service
-      paseo ALL=(root) NOPASSWD: ${pkgs.systemd}/bin/systemctl restart t3code-server.service
+      cat > etc/sudoers.d/t3code-apply-config <<'EOF'
+      t3code ALL=(root) NOPASSWD: ${pkgs.systemd}/bin/systemctl reset-failed t3code-server.service
+      t3code ALL=(root) NOPASSWD: ${pkgs.systemd}/bin/systemctl restart t3code-server.service
       EOF
-      chmod 0440 etc/sudoers.d/paseo-apply-config
+      chmod 0440 etc/sudoers.d/t3code-apply-config
       rm -f etc/pam.d/systemd-user
       cat > etc/pam.d/systemd-user <<'EOF'
       account required ${pkgs.pam}/lib/security/pam_permit.so
@@ -1614,16 +1387,16 @@ let
       Slice=session.slice
       EOF
       ln -s ../dbus.socket etc/systemd/user/sockets.target.wants/dbus.socket
-      cat > etc/systemd/system/paseo-container-setup.service <<'EOF'
+      cat > etc/systemd/system/t3code-container-setup.service <<'EOF'
       [Unit]
-      Description=Prepare Paseo container state
+      Description=Prepare T3 Code container state
       DefaultDependencies=no
       Conflicts=shutdown.target
       Before=shutdown.target
 
       [Service]
       Type=oneshot
-      ExecStart=${paseoContainerSetup}/bin/paseo-container-setup
+      ExecStart=${t3codeContainerSetup}/bin/t3code-container-setup
       RemainAfterExit=yes
       TimeoutStartSec=20m
       TasksMax=infinity
@@ -1635,10 +1408,10 @@ let
       [Unit]
       Description=Nix package manager daemon
       DefaultDependencies=no
-      After=paseo-container-setup.service nix-daemon.socket
-      Requires=paseo-container-setup.service nix-daemon.socket
+      After=t3code-container-setup.service nix-daemon.socket
+      Requires=t3code-container-setup.service nix-daemon.socket
       Conflicts=shutdown.target
-      Before=user@3000.service paseo-secret-service.service paseo-bootstrap.service t3code-server.service shutdown.target
+      Before=user@3000.service t3code-bootstrap.service t3code-server.service shutdown.target
 
       [Service]
       Type=simple
@@ -1658,10 +1431,10 @@ let
       [Unit]
       Description=Nix package manager daemon socket
       DefaultDependencies=no
-      After=paseo-container-setup.service
-      Requires=paseo-container-setup.service
+      After=t3code-container-setup.service
+      Requires=t3code-container-setup.service
       Conflicts=shutdown.target
-      Before=nix-daemon.service user@3000.service paseo-secret-service.service paseo-bootstrap.service t3code-server.service shutdown.target
+      Before=nix-daemon.service user@3000.service t3code-bootstrap.service t3code-server.service shutdown.target
 
       [Socket]
       ListenStream=/nix/var/nix/daemon-socket/socket
@@ -1674,22 +1447,22 @@ let
       EOF
       cat > etc/systemd/system/user@.service <<'EOF'
       [Unit]
-      Description=Paseo user manager for UID %i
+      Description=T3 Code user manager for UID %i
       Documentation=man:user@.service(5)
       DefaultDependencies=no
-      After=paseo-container-setup.service nix-daemon.socket
-      Requires=paseo-container-setup.service nix-daemon.socket
+      After=t3code-container-setup.service nix-daemon.socket
+      Requires=t3code-container-setup.service nix-daemon.socket
       Conflicts=shutdown.target
-      Before=paseo-secret-service.service paseo-bootstrap.service t3code-server.service shutdown.target
+      Before=t3code-bootstrap.service t3code-server.service shutdown.target
       IgnoreOnIsolate=yes
 
       [Service]
       User=%i
       PAMName=systemd-user
       Type=notify-reload
-      Environment=HOME=/home/paseo
-      Environment=USER=paseo
-      Environment=LOGNAME=paseo
+      Environment=HOME=/home/t3code
+      Environment=USER=t3code
+      Environment=LOGNAME=t3code
       Environment=XDG_RUNTIME_DIR=/run/user/%i
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%i/bus
       Environment=NIX_REMOTE=daemon
@@ -1710,43 +1483,18 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
-      cat > etc/systemd/system/paseo-secret-service.service <<'EOF'
-      [Unit]
-      Description=Paseo Secret Service for Antigravity credentials
-      DefaultDependencies=no
-      After=paseo-container-setup.service user@3000.service
-      Requires=paseo-container-setup.service user@3000.service
-      Conflicts=shutdown.target
-      Before=paseo-bootstrap.service t3code-server.service shutdown.target
-
-      [Service]
-      Type=simple
-      User=paseo
-      Group=paseo
-      Environment=HOME=/home/paseo
-      Environment=XDG_RUNTIME_DIR=/run/user/3000
-      Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
-      Environment=GNOME_KEYRING_CONTROL=/run/user/3000/keyring
-      ExecStart=${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --foreground --components=secrets --control-directory=/run/user/3000/keyring
-      Restart=always
-      RestartSec=5
-      TimeoutStopSec=10s
-
-      [Install]
-      WantedBy=multi-user.target
-      EOF
       cat > etc/systemd/system/dockerd.service <<'EOF'
       [Unit]
-      Description=Paseo Docker daemon
+      Description=T3 Code Docker daemon
       DefaultDependencies=no
-      After=paseo-container-setup.service
-      Requires=paseo-container-setup.service
+      After=t3code-container-setup.service
+      Requires=t3code-container-setup.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
       [Service]
       Type=simple
-      ExecStart=${paseoDockerdRun}/bin/paseo-dockerd-run
+      ExecStart=${t3codeDockerdRun}/bin/t3code-dockerd-run
       Restart=always
       RestartSec=5
       TimeoutStopSec=30s
@@ -1755,32 +1503,30 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
-      cat > etc/systemd/system/paseo-bootstrap.service <<'EOF'
+      cat > etc/systemd/system/t3code-bootstrap.service <<'EOF'
       [Unit]
-      Description=Run Paseo bootstrap hooks
+      Description=Run T3 Code bootstrap hooks
       DefaultDependencies=no
-      After=paseo-container-setup.service nix-daemon.socket user@3000.service paseo-secret-service.service dockerd.service t3code-server.service
-      Requires=paseo-container-setup.service nix-daemon.socket user@3000.service paseo-secret-service.service dockerd.service
-      Wants=t3code-server.service
+      After=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
+      Requires=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
       [Service]
       Type=oneshot
-      User=paseo
-      Group=paseo
-      Environment=HOME=/home/paseo
-      Environment=USER=paseo
+      User=t3code
+      Group=t3code
+      Environment=HOME=/home/t3code
+      Environment=USER=t3code
       Environment=XDG_RUNTIME_DIR=/run/user/3000
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
-      Environment=OPENCODE_AUTOMATION_DIR=/home/paseo/.automation
-      Environment=PATH=/home/paseo/.local/bin:/home/paseo/.local/share/paseo-tools/npm/bin:${paseoPath}:/bin:/usr/bin
-      ExecStart=${paseoBootstrap}/bin/paseo-bootstrap
-      ExecStartPost=+${paseoQueueBootstrapRestart}/bin/paseo-queue-bootstrap-restart
+      Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
+      Environment=PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin
+      ExecStart=${t3codeBootstrap}/bin/t3code-bootstrap
       RemainAfterExit=yes
       TimeoutStartSec=20m
-      StandardOutput=append:/home/paseo/.paseo-container/logs/paseo-bootstrap.log
-      StandardError=append:/home/paseo/.paseo-container/logs/paseo-bootstrap.log
+      StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-bootstrap.log
+      StandardError=append:/home/t3code/.t3code-container/logs/t3code-bootstrap.log
       TasksMax=infinity
 
       [Install]
@@ -1790,32 +1536,32 @@ let
       [Unit]
       Description=T3 Code server and web UI
       DefaultDependencies=no
-      After=paseo-container-setup.service user@3000.service paseo-secret-service.service dockerd.service paseo-ollama-cloud-proxy.service
-      Requires=paseo-container-setup.service user@3000.service paseo-secret-service.service dockerd.service paseo-ollama-cloud-proxy.service
+      After=t3code-container-setup.service user@3000.service dockerd.service t3code-bootstrap.service
+      Requires=t3code-container-setup.service user@3000.service dockerd.service t3code-bootstrap.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
       [Service]
       Type=simple
-      User=paseo
-      Group=paseo
-      Environment=HOME=/home/paseo
-      Environment=USER=paseo
+      User=t3code
+      Group=t3code
+      Environment=HOME=/home/t3code
+      Environment=USER=t3code
       Environment=XDG_RUNTIME_DIR=/run/user/3000
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
-      Environment=OPENCODE_AUTOMATION_DIR=/home/paseo/.automation
+      Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
       Environment=AGENT_CLOAK_BASE_URL=http://cloakbrowser:8080
-      Environment=PATH=/home/paseo/.local/bin:/home/paseo/.local/share/paseo-tools/npm/bin:${paseoPath}:/bin:/usr/bin
+      Environment=PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin
       ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/t3code-tool-update/restart.pending
-      ExecStart=${paseoDaemonRun}/bin/t3code-server-run
-      ExecStartPost=${paseoSnapshotConfig}/bin/paseo-snapshot-config
+      ExecStart=${t3codeDaemonRun}/bin/t3code-server-run
+      ExecStartPost=${t3codeSnapshotConfig}/bin/t3code-snapshot-config
       Restart=always
       RestartSec=5
       TimeoutStartSec=20m
       TimeoutStopSec=10s
       SuccessExitStatus=0 143
-      StandardOutput=append:/home/paseo/.paseo-container/logs/t3code-server.service.log
-      StandardError=append:/home/paseo/.paseo-container/logs/t3code-server.service.log
+      StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-server.service.log
+      StandardError=append:/home/t3code/.t3code-container/logs/t3code-server.service.log
       MemoryHigh=12G
       MemoryMax=16G
       OOMPolicy=continue
@@ -1824,55 +1570,28 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
-      cat > etc/systemd/system/paseo-ollama-cloud-proxy.service <<'EOF'
+      cat > etc/systemd/system/t3code-tool-auto-update.service <<'EOF'
       [Unit]
-      Description=Ollama.com API compatibility proxy
+      Description=Update T3 Code, Codex, and OpenCode tools
       DefaultDependencies=no
-      After=paseo-container-setup.service
-      Requires=paseo-container-setup.service
-      Conflicts=shutdown.target
-      Before=t3code-server.service shutdown.target
-
-      [Service]
-      Type=simple
-      User=paseo
-      Group=paseo
-      Environment=HOME=/home/paseo
-      Environment=USER=paseo
-      Environment=PATH=/home/paseo/.local/bin:${paseoPath}:/bin:/usr/bin
-      ExecStart=${paseoOllamaProxyRun}/bin/paseo-ollama-cloud-proxy-run
-      Restart=always
-      RestartSec=5
-      TimeoutStopSec=10s
-      StandardOutput=append:/home/paseo/.paseo-container/logs/paseo-ollama-cloud-proxy.log
-      StandardError=append:/home/paseo/.paseo-container/logs/paseo-ollama-cloud-proxy.log
-      TasksMax=infinity
-
-      [Install]
-      WantedBy=multi-user.target
-      EOF
-      cat > etc/systemd/system/paseo-tool-auto-update.service <<'EOF'
-      [Unit]
-      Description=Update T3 Code, Codex, OpenCode, and Antigravity tools
-      DefaultDependencies=no
-      After=paseo-bootstrap.service
-      Requires=paseo-bootstrap.service
+      After=t3code-bootstrap.service
+      Requires=t3code-bootstrap.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
       [Service]
       Type=oneshot
-      Environment=PATH=/home/paseo/.local/bin:/home/paseo/.local/share/paseo-tools/npm/bin:${paseoPath}:/bin:/usr/bin
-      ExecStart=${paseoToolAutoUpdate}/bin/paseo-tool-auto-update
-      StandardOutput=append:/home/paseo/.paseo-container/logs/paseo-tool-auto-update.log
-      StandardError=append:/home/paseo/.paseo-container/logs/paseo-tool-auto-update.log
+      Environment=PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin
+      ExecStart=${t3codeToolAutoUpdate}/bin/t3code-tool-auto-update
+      StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-tool-auto-update.log
+      StandardError=append:/home/t3code/.t3code-container/logs/t3code-tool-auto-update.log
       TasksMax=infinity
       EOF
-      cat > etc/systemd/system/paseo-tool-auto-update.timer <<'EOF'
+      cat > etc/systemd/system/t3code-tool-auto-update.timer <<'EOF'
       [Unit]
       Description=Periodic T3 Code agent tool updates
       DefaultDependencies=no
-      After=paseo-bootstrap.service
+      After=t3code-bootstrap.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -1880,40 +1599,40 @@ let
       OnBootSec=10m
       OnUnitActiveSec=4h
       Persistent=true
-      Unit=paseo-tool-auto-update.service
+      Unit=t3code-tool-auto-update.service
 
       [Install]
       WantedBy=multi-user.target
       EOF
-      cat > etc/systemd/system/paseo-tool-update-restart.service <<'EOF'
+      cat > etc/systemd/system/t3code-tool-update-restart.service <<'EOF'
       [Unit]
       Description=Restart T3 Code after queued maintenance becomes idle
       DefaultDependencies=no
-      After=paseo-bootstrap.service
-      Requires=paseo-bootstrap.service
+      After=t3code-bootstrap.service
+      Requires=t3code-bootstrap.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
       [Service]
       Type=oneshot
-      Environment=PATH=/home/paseo/.local/bin:/home/paseo/.local/share/paseo-tools/npm/bin:${paseoPath}:/bin:/usr/bin
-      ExecStart=${paseoToolUpdateRestart}/bin/paseo-tool-update-restart
-      StandardOutput=append:/home/paseo/.paseo-container/logs/paseo-tool-update-restart.log
-      StandardError=append:/home/paseo/.paseo-container/logs/paseo-tool-update-restart.log
+      Environment=PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin
+      ExecStart=${t3codeToolUpdateRestart}/bin/t3code-tool-update-restart
+      StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-tool-update-restart.log
+      StandardError=append:/home/t3code/.t3code-container/logs/t3code-tool-update-restart.log
       TasksMax=infinity
       EOF
-      cat > etc/systemd/system/paseo-tool-update-restart.timer <<'EOF'
+      cat > etc/systemd/system/t3code-tool-update-restart.timer <<'EOF'
       [Unit]
       Description=Apply queued T3 Code maintenance when idle
       DefaultDependencies=no
-      After=paseo-bootstrap.service
+      After=t3code-bootstrap.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
       [Timer]
       OnBootSec=2m
       OnUnitActiveSec=1m
-      Unit=paseo-tool-update-restart.service
+      Unit=t3code-tool-update-restart.service
 
       [Install]
       WantedBy=multi-user.target
@@ -1923,16 +1642,15 @@ let
       Description=Monitor T3 Code server and agent tools
       DefaultDependencies=no
       After=t3code-server.service
-      Wants=t3code-server.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
       [Service]
       Type=oneshot
-      Environment=PATH=/home/paseo/.local/bin:/home/paseo/.local/share/paseo-tools/npm/bin:${paseoPath}:/bin:/usr/bin
-      ExecStart=${paseoDaemonMonitor}/bin/t3code-server-monitor
-      StandardOutput=append:/home/paseo/.paseo-container/logs/t3code-server-monitor.log
-      StandardError=append:/home/paseo/.paseo-container/logs/t3code-server-monitor.log
+      Environment=PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin
+      ExecStart=${t3codeDaemonMonitor}/bin/t3code-server-monitor
+      StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-server-monitor.log
+      StandardError=append:/home/t3code/.t3code-container/logs/t3code-server-monitor.log
       TasksMax=infinity
       EOF
       cat > etc/systemd/system/t3code-server-monitor.timer <<'EOF'
@@ -1955,8 +1673,8 @@ let
       [Unit]
       Description=T3 Code Multi-User System
       DefaultDependencies=no
-      Wants=paseo-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service paseo-secret-service.service dockerd.service paseo-ollama-cloud-proxy.service paseo-bootstrap.service t3code-server.service paseo-tool-auto-update.timer paseo-tool-update-restart.timer t3code-server-monitor.timer
-      After=paseo-container-setup.service nix-daemon.socket user@3000.service dockerd.service
+      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-bootstrap.service t3code-server.service t3code-tool-auto-update.timer t3code-tool-update-restart.timer t3code-server-monitor.timer
+      After=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       AllowIsolate=yes
       EOF
       rm -f etc/systemd/system/docker.service \
@@ -1964,17 +1682,15 @@ let
         etc/systemd/system/multi-user.target.wants/docker.service \
         etc/systemd/system/sockets.target.wants/docker.socket
       ln -s multi-user.target etc/systemd/system/default.target
-      ln -s ../paseo-container-setup.service etc/systemd/system/multi-user.target.wants/paseo-container-setup.service
+      ln -s ../t3code-container-setup.service etc/systemd/system/multi-user.target.wants/t3code-container-setup.service
       ln -s ../nix-daemon.socket etc/systemd/system/multi-user.target.wants/nix-daemon.socket
       ln -s ../nix-daemon.service etc/systemd/system/multi-user.target.wants/nix-daemon.service
       ln -s ../user@.service etc/systemd/system/multi-user.target.wants/user@3000.service
-      ln -s ../paseo-secret-service.service etc/systemd/system/multi-user.target.wants/paseo-secret-service.service
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
-      ln -s ../paseo-ollama-cloud-proxy.service etc/systemd/system/multi-user.target.wants/paseo-ollama-cloud-proxy.service
-      ln -s ../paseo-bootstrap.service etc/systemd/system/multi-user.target.wants/paseo-bootstrap.service
+      ln -s ../t3code-bootstrap.service etc/systemd/system/multi-user.target.wants/t3code-bootstrap.service
       ln -s ../t3code-server.service etc/systemd/system/multi-user.target.wants/t3code-server.service
-      ln -s ../paseo-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/paseo-tool-auto-update.timer
-      ln -s ../paseo-tool-update-restart.timer etc/systemd/system/multi-user.target.wants/paseo-tool-update-restart.timer
+      ln -s ../t3code-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/t3code-tool-auto-update.timer
+      ln -s ../t3code-tool-update-restart.timer etc/systemd/system/multi-user.target.wants/t3code-tool-update-restart.timer
       ln -s ../t3code-server-monitor.timer etc/systemd/system/multi-user.target.wants/t3code-server-monitor.timer
     '';
     fakeRootCommands = ''
@@ -1984,33 +1700,33 @@ let
       chmod 4755 usr/bin/sudo
     '';
     config = {
-      Cmd = [ "${paseoEntrypoint}/bin/paseo-systemd-entrypoint" ];
+      Cmd = [ "${t3codeEntrypoint}/bin/t3code-systemd-entrypoint" ];
       Env = [
-        "HOME=/home/paseo"
-        "USER=paseo"
+        "HOME=/home/t3code"
+        "USER=t3code"
         "DOCKER_HOST=unix:///var/run/docker.sock"
         "XDG_RUNTIME_DIR=/run/user/3000"
         "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus"
-        "XDG_CONFIG_HOME=/home/paseo/.config"
-        "XDG_STATE_HOME=/home/paseo/.local/state"
-        "XDG_CACHE_HOME=/home/paseo/.cache"
-        "XDG_DATA_HOME=/home/paseo/.local/share"
-        "NPM_CONFIG_PREFIX=/home/paseo/.local/share/paseo-tools/npm"
-        "npm_config_prefix=/home/paseo/.local/share/paseo-tools/npm"
-        "OPENCODE_AUTOMATION_DIR=/home/paseo/.automation"
-        "PATH=/home/paseo/.local/bin:/home/paseo/.local/share/paseo-tools/npm/bin:${paseoPath}:/bin:/usr/bin"
+        "XDG_CONFIG_HOME=/home/t3code/.config"
+        "XDG_STATE_HOME=/home/t3code/.local/state"
+        "XDG_CACHE_HOME=/home/t3code/.cache"
+        "XDG_DATA_HOME=/home/t3code/.local/share"
+        "NPM_CONFIG_PREFIX=/home/t3code/.local/share/t3code-tools/npm"
+        "npm_config_prefix=/home/t3code/.local/share/t3code-tools/npm"
+        "OPENCODE_AUTOMATION_DIR=/home/t3code/.automation"
+        "PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin"
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "NIX_CONFIG=experimental-features = nix-command flakes"
         "NIX_REMOTE=daemon"
-        "T3CODE_HOME=/home/paseo/.t3"
+        "T3CODE_HOME=/home/t3code/.t3"
         "T3CODE_HOST=0.0.0.0"
         "T3CODE_PORT=3773"
         "T3CODE_NO_BROWSER=true"
         "AGENT_CLOAK_BASE_URL=http://cloakbrowser:8080"
-        "AGY_CLI_DISABLE_AUTO_UPDATE=true"
+        "LD_LIBRARY_PATH=${nativeLibraries}"
       ];
-      WorkingDir = "/home/paseo";
+      WorkingDir = "/home/t3code";
       ExposedPorts = {
         "3773/tcp" = { };
       };
@@ -2019,9 +1735,25 @@ let
 
 in
 {
+  ghostship.apps.t3code = {
+    name = "T3 Code";
+    group = "Services";
+    description = "Codex, OpenCode, and Antigravity workspace";
+    icon = "mdi-code-braces-#7c3aed";
+    order = 102;
+    hostname = "t3code.ghostship.io";
+    origin = "http://t3code:3773";
+    healthPath = "/";
+    muximux = {
+      icon = "muximux-code";
+      color = "#7c3aed";
+      dropdown = false;
+    };
+  };
+
   virtualisation.oci-containers.containers."t3code" = {
     image = "${imageName}:${imageTag}";
-    imageFile = paseoImage;
+    imageFile = t3codeImage;
     pull = "never";
     labels = {
       "io.containers.autoupdate" = "disabled";
@@ -2034,7 +1766,7 @@ in
       "--stop-timeout=180"
       "--hostname=t3code.ghostship.io"
       "--network=ghostship_net"
-      "--health-cmd=${paseoContainerHealth}/bin/paseo-container-health"
+      "--health-cmd=${t3codeContainerHealth}/bin/t3code-container-health"
       "--health-interval=30s"
       "--health-timeout=15s"
       "--health-retries=5"
@@ -2042,27 +1774,28 @@ in
       "--health-on-failure=kill"
     ];
     volumes = [
-      "${paseoDocker}:/var/lib/docker:rw"
-      "${paseoWorkspace}:/workspace:rw"
-      "${paseoHome}:/home/paseo:rw"
-      "${paseoNixRoot}/nix:/nix:rw"
-      "${paseoSecrets}:${paseoSecretsFile}:ro"
+      "${t3codeDocker}:/var/lib/docker:rw"
+      "${t3codeWorkspace}:/workspace:rw"
+      "${t3codeHome}:/home/t3code:rw"
+      "${t3codeNixRoot}/nix:/nix:rw"
+      "${t3codeSecrets}:${t3codeSecretsFile}:ro"
       "/mnt/share:/mnt/share:rw"
     ];
-    environmentFiles = [ paseoSecrets ];
+    environmentFiles = [ t3codeSecrets ];
   };
 
   systemd.tmpfiles.rules = [
-    "d /srv/apps/paseo 0755 root root -"
-    "d ${paseoDocker} 0755 root root -"
-    "d ${paseoHome} 0755 3000 3000 -"
-    "d ${paseoNixRoot} 0755 root root -"
-    "d ${paseoNixRoot}/nix 0755 root root -"
-    "d ${paseoWorkspace} 0755 3000 3000 -"
+    "d /srv/apps/t3code 0755 root root -"
+    "d ${t3codeDocker} 0755 root root -"
+    "d ${t3codeHome} 0755 3000 3000 -"
+    "d ${t3codeNixRoot} 0755 root root -"
+    "d ${t3codeNixRoot}/nix 0755 root root -"
+    "d ${t3codeWorkspace} 0755 3000 3000 -"
   ];
 
   systemd.services.podman-t3code = {
-    conflicts = [ "podman-paseo.service" ];
+    restartIfChanged = false;
+    stopIfChanged = false;
     after = [
       "init-ghostship-net.service"
       "mnt-share.mount"
@@ -2075,57 +1808,59 @@ in
     preStart = lib.mkAfter ''
       set -eu
 
-      ${pkgs.podman}/bin/podman rm -f paseo >/dev/null 2>&1 || true
+      install -d -m0755 -o root -g root /srv/apps/t3code
+      install -d -m0755 -o root -g root ${t3codeDocker}
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}
+      install -d -m0755 -o root -g root ${t3codeNixRoot}
+      install -d -m0755 -o 3000 -g 3000 ${t3codeWorkspace}
 
-      install -d -m0755 -o root -g root /srv/apps/paseo
-      install -d -m0755 -o root -g root ${paseoDocker}
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}
-      install -d -m0755 -o root -g root ${paseoNixRoot}
-      install -d -m0755 -o 3000 -g 3000 ${paseoWorkspace}
+      for source in /srv/apps/openchamber/workspace/*; do
+        [ -d "$source" ] || continue
+        name="$(basename "$source")"
+        destination=${t3codeWorkspace}/"$name"
+        [ ! -e "$destination" ] || continue
+        staging="$(mktemp -d ${t3codeWorkspace}/.import.XXXXXX)"
+        trap 'rm -rf "$staging"' EXIT
+        ${pkgs.coreutils}/bin/cp -a --reflink=auto "$source/." "$staging/"
+        chown -R 3000:3000 "$staging"
+        mv "$staging" "$destination"
+        trap - EXIT
+      done
 
-      nix_store_uri='local?root=${paseoNixRoot}'
+      nix_store_uri='local?root=${t3codeNixRoot}'
       ${pkgs.nix}/bin/nix copy \
         --no-check-sigs \
         --to "$nix_store_uri" \
-        ${lib.escapeShellArgs (map toString paseoImageContents)}
+        ${lib.escapeShellArgs (map toString t3codeImageContents)}
 
-      gcroot_dir=${paseoNixRoot}/nix/var/nix/gcroots/ghostship-t3code-image
+      gcroot_dir=${t3codeNixRoot}/nix/var/nix/gcroots/ghostship-t3code-image
       rm -rf "$gcroot_dir"
       install -d -m0755 -o root -g root "$gcroot_dir"
-      for store_path in ${lib.escapeShellArgs (map toString paseoImageContents)}; do
+      for store_path in ${lib.escapeShellArgs (map toString t3codeImageContents)}; do
         ln -s "$store_path" "$gcroot_dir/$(basename "$store_path")"
       done
 
-      rm -f ${paseoNixRoot}/nix/var/nix/temproots/*
-      rm -rf ${paseoNixRoot}/nix/var/nix/builds/*
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.local/bin
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.local/share
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.local/state
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.cache
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.config/opencode
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.codex
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.gemini/antigravity-cli
-      install -d -m0700 -o 3000 -g 3000 ${paseoHome}/.local/share/keyrings
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.automation
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.config/systemd/user
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.t3/userdata
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.t3/caches
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.paseo-container/logs/tunnels
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.paseo-container/recovery
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.paseo-container/tunnels
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.paseo-container/hooks/bootstrap.d
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.paseo-container/hooks/before-t3code.d
-      install -d -m0755 -o 3000 -g 3000 ${paseoHome}/.paseo-container/hooks/doctor.d
+      rm -f ${t3codeNixRoot}/nix/var/nix/temproots/*
+      rm -rf ${t3codeNixRoot}/nix/var/nix/builds/*
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.local/bin
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.local/share
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.local/state
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.cache
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.config/opencode
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.codex
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.gemini/antigravity-cli
+      install -d -m0700 -o 3000 -g 3000 ${t3codeHome}/.local/share/keyrings
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.automation
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.config/systemd/user
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3/userdata
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3/caches
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3code-container/logs/tunnels
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3code-container/recovery
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3code-container/tunnels
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3code-container/hooks/bootstrap.d
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3code-container/hooks/before-t3code.d
+      install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3code-container/hooks/doctor.d
 
-      if [ -e ${paseoHome}/.config/systemd/user/paseo.service ] \
-        && grep -q 'ExecStart=/home/paseo/.local/bin/paseo-daemon-run' ${paseoHome}/.config/systemd/user/paseo.service; then
-        rm -f ${paseoHome}/.config/systemd/user/paseo.service
-      fi
-      if [ -e ${paseoHome}/.config/systemd/user/default.target ] \
-        && grep -q 'Paseo User Default Target' ${paseoHome}/.config/systemd/user/default.target; then
-        rm -f ${paseoHome}/.config/systemd/user/default.target
-      fi
-      rm -f ${paseoHome}/.config/systemd/user/default.target.wants/paseo.service
     '';
   };
 }

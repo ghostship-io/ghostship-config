@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.8.0] - 2026-09-08
+
+- Restore T3 Code alongside OpenChamber with independent project copies,
+  persistent systemd user services, nested Docker, and an isolated Nix store.
+- Enable native Codex/OpenAI, OpenCode, and Google's official Antigravity ACP
+  agent; keep initial provider sign-in separate from container health.
+- Register T3 Code for dashboards, Cloudflare ingress, monitoring, and backups.
+
 ## [3.7.5] - 2026-09-08
 
 - Publish Muximux settings atomically with their PHP access guard, preventing

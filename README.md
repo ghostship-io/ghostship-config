@@ -268,7 +268,13 @@ restores the previous last-good config snapshot if the restart does not become
 healthy. `openchamber-web.service` refreshes that last-good snapshot whenever
 it starts successfully.
 
-T3 Code, n8n, SearXNG, and PriceBuddy are retired from the declared stack.
+T3 Code runs alongside OpenChamber at `https://t3code.ghostship.io`, with native
+Codex/OpenAI, OpenCode, and Antigravity ACP providers. It keeps independent
+copies of OpenChamber's projects and its own home, Docker state, and Nix store
+under `/srv/apps/t3code`. See [T3 Code setup and operations](docs/t3code.md)
+for pairing, provider sign-in, project import, and maintenance.
+
+n8n, SearXNG, and PriceBuddy are retired from the declared stack.
 Retirement quarantines inactive app directories under `/srv/retired-apps`;
 active services and Codex state are excluded. Quarantine has no automatic purge.
 
