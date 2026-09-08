@@ -30,7 +30,9 @@
     };
 
     apple-silicon = {
-      url = "github:nix-community/nixos-apple-silicon/main";
+      # Newer revisions require vendorfw/firmware.cpio rebuilt from macOS.
+      # Keep this host's existing firmware supported until that maintenance.
+      url = "github:nix-community/nixos-apple-silicon/9fe29a63b23005acfcd1324a9e78b6241226cdb1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -112,6 +114,7 @@
               nodejs_24
               util-linux
               iproute2
+              bubblewrap
             ];
           };
           default = pkgs.mkShellNoCC {
@@ -140,6 +143,7 @@
               iproute2
               gnupg
               espeak-ng
+              bubblewrap
               playwright-driver.browsers
               prefetch-npm-deps
               pkgs.ragenix

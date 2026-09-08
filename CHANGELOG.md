@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   current MariaDB image digests for reviewed engine migrations.
 - Refresh coordinated Nix inputs; adapt Home Manager SSH option names without
   changing policy, and use the compatible nixpkgs ragenix CLI.
+- Retain the compatible Apple Silicon input until vendor firmware is rebuilt
+  from macOS; the newer input requires a firmware archive this host lacks.
 - Render application configuration at service startup, preserve native secret
   values in Podman env files, require critical secrets, and write configs atomically.
 - Add readiness notifications, network/NAS/database ordering, and non-destructive

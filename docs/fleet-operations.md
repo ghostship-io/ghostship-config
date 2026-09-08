@@ -41,6 +41,12 @@ copy of the bulk media library.
 
 ## Audit findings and changes
 
+Apple Silicon support remains pinned to the compatible revision. Newer upstream
+support requires `/boot/vendorfw/firmware.cpio`, rebuilt using the Asahi installer
+from macOS; this server currently has `/boot/asahi/all_firmware.tar.gz`. Schedule
+that firmware maintenance separately before advancing the hardware input. The
+verified live bootloader is systemd-boot with an uncompressed ARM64 Image.
+
 | Finding | Change / remaining acceptance |
 | --- | --- |
 | Shell quoting reached Podman as literal characters | Separate shell-safe `.env` and raw `.env.container` projections; tested round trips |
