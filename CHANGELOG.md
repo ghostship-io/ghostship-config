@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.8.1] - 2026-09-08
+
+- Run Antigravity's official x86 ACP agent through container-local QEMU on
+  ARM64, avoiding Google's 4 KB allocator assertion on Asahi's 16 KB pages.
+- Add an offline ACP handshake probe that exercises initialization without
+  requiring a Google login or sending a model request.
+
 ## [3.8.0] - 2026-09-08
 
 - Restore T3 Code alongside OpenChamber with independent project copies,

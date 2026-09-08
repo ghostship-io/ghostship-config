@@ -37,7 +37,8 @@ podman exec --user 3000:3000 t3code /home/t3code/.local/bin/t3code-pair
 
 Open that link, then use **Settings > Providers**:
 
-- **Codex / OpenAI:** sign in to your OpenAI account using T3's provider setup.
+- **Codex / OpenAI:** run `codex login --device-auth` in a T3 project terminal,
+  complete the browser sign-in, then refresh provider status in Settings.
 - **OpenCode:** configure the desired model provider and authenticate as needed.
 - **Antigravity:** the official ACP executable and its matching helper are
   preinstalled. Choose **Sign in with Google**. For remote browser sign-in, paste
@@ -49,8 +50,14 @@ preserved. Shared GitHub, OpenCode, OpenRouter, and Bitwarden environment fields
 come from the existing encrypted secret catalog through the dedicated `t3code`
 projection. The Google account and Codex login remain user-owned.
 
-The ACP runtime is pinned to Google's `1.1.1` release with SHA-256 checks for
-Linux x64 and ARM64. Update `packages/t3code/antigravity-acp.nix`, rebuild the host,
+The ACP runtime is pinned to Google's `1.1.1` Linux x64 release with SHA-256
+verification. It runs natively on x64 and through container-local QEMU on ARM64:
+Google's ARM binary aborts during initialization on Asahi's 16 KB memory pages,
+whereas the x86 emulator supplies the required 4 KB guest pages. Both the ACP
+agent and its helper use the wrapper. Emulation adds startup and execution
+overhead; account sign-in and authenticated model requests still need live
+verification with the user's account.
+Update `packages/t3code/antigravity-acp.nix`, rebuild the host,
 and restart the T3 container when changing that runtime. T3's Antigravity binary
 path is `/bin/agy_acp_server.par`, so future image updates retain a stable path.
 
@@ -84,4 +91,12 @@ podman exec t3code curl -fsS http://127.0.0.1:3773/ >/dev/null
 podman exec --user 3000:3000 t3code t3 --version
 podman exec --user 3000:3000 t3code docker info
 podman exec --user 3000:3000 t3code nix store ping --store daemon
+```
+
+Exercise ACP initialization offline in a disposable container using the built
+image (no account or project access):
+
+```sh
+podman run --rm -i --network none --user 3000:3000 --entrypoint /bin/python \
+  localhost/ghostship-t3code:t3code-runtime - < tests/t3code-acp-smoke.py
 ```

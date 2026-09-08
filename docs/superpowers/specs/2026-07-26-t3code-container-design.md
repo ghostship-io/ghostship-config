@@ -1,5 +1,8 @@
 # T3 Code Container Design
 
+Historical July migration design. The September restoration uses independent
+T3 state and native Antigravity ACP; see [current operations](../../t3code.md).
+
 ## Goal
 
 Replace the Paseo workload on `chill-penguin` with upstream T3 Code while
