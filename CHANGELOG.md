@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.8.2] - 2026-09-08
+
+- Space ordinary container restart attempts by 30 seconds so brief boot-time
+  DNS failures do not exhaust systemd's rapid-start limit.
+- Document persistent T3 Code deployment so reboot keeps the deployed service.
+
 ## [3.8.1] - 2026-09-08
 
 - Run Antigravity's official x86 ACP agent through container-local QEMU on
