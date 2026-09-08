@@ -215,7 +215,7 @@ image_drv="$(nix eval --raw \
 for script_name in openchamber-tool-maintenance openchamber-container-setup openchamber-runtime-metadata openchamber-managed-opencode-idle; do
   script_drv="$(nix-store -q --requisites "$image_drv" | rg "/[^/]*-$script_name\\.drv$" | head -n1)"
   test -n "$script_drv"
-  script_source="$(nix derivation show "$script_drv" | jq -r 'to_entries[0].value.env.text')"
+  script_source="$(nix derivation show "$script_drv" | jq -er '(.derivations // .) | to_entries[0].value.env.text | select(type == "string" and length > 0)')"
   printf '%s\n' "$script_source" | bash -n
   if [ "$script_name" = openchamber-tool-maintenance ]; then
     for mode in validate-candidate bootstrap-candidate bootstrap; do
@@ -235,7 +235,7 @@ restart_drv="$(nix-store -q --requisites "$image_drv" \
 test -n "$restart_drv"
 bash "$repo_root/tests/openchamber-update-state-machine.sh" \
   "$module" \
-  <(nix derivation show "$restart_drv" | jq -r 'to_entries[0].value.env.text')
+  <(nix derivation show "$restart_drv" | jq -er '(.derivations // .) | to_entries[0].value.env.text | select(type == "string" and length > 0)')
 
 system_drv="$(nix eval --raw \
   "$repo_root#nixosConfigurations.chill-penguin.config.system.build.toplevel.drvPath")"
@@ -243,4 +243,4 @@ host_drv="$(nix-store -q --requisites "$system_drv" \
   | rg '/[^/]*-openchamber-deploy-when-idle\.drv$' | head -n1)"
 test -n "$host_drv"
 bash "$repo_root/tests/openchamber-host-deploy-state-machine.sh" \
-  <(nix derivation show "$host_drv" | jq -r 'to_entries[0].value.env.text')
+  <(nix derivation show "$host_drv" | jq -er '(.derivations // .) | to_entries[0].value.env.text | select(type == "string" and length > 0)')
