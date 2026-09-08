@@ -214,7 +214,15 @@ image_drv="$(nix eval --raw \
 for script_name in openchamber-tool-maintenance openchamber-container-setup openchamber-runtime-metadata openchamber-managed-opencode-idle; do
   script_drv="$(nix-store -q --requisites "$image_drv" | rg "/[^/]*-$script_name\\.drv$" | head -n1)"
   test -n "$script_drv"
-  nix derivation show "$script_drv" | jq -r 'to_entries[0].value.env.text' | bash -n
+  script_source="$(nix derivation show "$script_drv" | jq -r 'to_entries[0].value.env.text')"
+  printf '%s\n' "$script_source" | bash -n
+  if [ "$script_name" = openchamber-tool-maintenance ]; then
+    for mode in validate-candidate bootstrap-candidate bootstrap; do
+      condition="$(printf '%s\n' "$script_source" | sed -n "s/^if \(\[.*= $mode \]\); then$/\1/p" | head -n1)"
+      test -n "$condition"
+      bash -c 'set -- "$1"; eval "$2"' mode-check "$mode" "$condition"
+    done
+  fi
 done
 
 restart_drv="$(nix-store -q --requisites "$image_drv" \

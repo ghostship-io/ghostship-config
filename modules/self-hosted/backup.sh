@@ -78,7 +78,7 @@ for app in romm grimmory; do
             echo "Backup refused: $app is already paused" >&2
             exit 1
         fi
-        health_intervals[$app]=$(podman inspect "$app" --format '{{.Config.Healthcheck.Interval}}')
+        health_intervals[$app]=$(podman inspect "$app" --format '{{json .Config.Healthcheck.Interval}}')
         health_actions[$app]=$(podman inspect "$app" --format '{{.Config.HealthcheckOnFailureAction}}')
         quiesced+=("$app")
         podman update --health-on-failure=none --health-interval=disable "$app" >/dev/null

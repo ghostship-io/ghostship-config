@@ -54,7 +54,8 @@ class BackupFailureTests(unittest.TestCase):
                     '  findmnt:*) [ "$BACKUP_TEST_FAILURE" != nas ] || exit 1; case "$*" in *--target*) echo / ;; esac ;;\n'
                     "  podman:inspect)\n"
                     '    case "$*" in\n'
-                    "      *Healthcheck.Interval*) echo 30000000000 ;;\n"
+                    "      *'json .Config.Healthcheck.Interval'*) echo 30000000000 ;;\n"
+                    "      *Healthcheck.Interval*) echo 30s ;;\n"
                     "      *HealthcheckOnFailureAction*) echo kill ;;\n"
                     '      *State.Paused*) [ -f "$BACKUP_TEST_LOG.$2.paused" ] && echo true || echo false ;;\n'
                     "      *) echo true ;;\n"

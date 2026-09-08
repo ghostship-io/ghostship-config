@@ -20,7 +20,7 @@ let
   imageTag = "openchamber-runtime";
   # Bump whenever injected runtime safety hooks or wrappers change so an
   # unchanged npm pair is restaged with the new harness contract.
-  openchamberHarnessRevision = "2026-09-08.2";
+  openchamberHarnessRevision = "2026-09-08.3";
 
   openchamberPackages = with pkgs; [
     nix
@@ -978,7 +978,7 @@ let
       exit 1
     }
 
-    if [ "\''${1:-}" = validate-candidate ]; then
+    if [ "''${1:-}" = validate-candidate ]; then
       [ "$#" -eq 4 ] || {
         printf 'usage: openchamber-tool-maintenance validate-candidate <path> <openchamber-version> <opencode-version>\n' >&2
         exit 2
@@ -994,7 +994,7 @@ let
     exec 9<"$control_dir/tool-update.lock"
     ${pkgs.util-linux}/bin/flock 9
 
-    if [ "\''${1:-}" = bootstrap-candidate ]; then
+    if [ "''${1:-}" = bootstrap-candidate ]; then
       [ -f "$candidate_file" ] || {
         printf 'error: no prestaged candidate is available for offline bootstrap\n' >&2
         exit 1
@@ -1017,7 +1017,7 @@ let
       exit 0
     fi
 
-    if [ "\''${1:-}" = bootstrap ] && active_is_usable; then
+    if [ "''${1:-}" = bootstrap ] && active_is_usable; then
       install_user_shims
       log_info "using the validated active generation; latest check remains asynchronous"
       exit 0
@@ -1060,7 +1060,7 @@ let
       fi
       if active_clis_are_usable; then
         log_info "npm versions match latest but harness ${openchamberHarnessRevision} must be staged"
-      elif [ "\''${1:-}" != bootstrap ]; then
+      elif [ "''${1:-}" != bootstrap ]; then
         printf 'error: active latest generation failed validation; bootstrap recovery is required\n' >&2
         exit 1
       else
@@ -1071,7 +1071,7 @@ let
       fi
     fi
 
-    if [ "\''${1:-}" != bootstrap ] \
+    if [ "''${1:-}" != bootstrap ] \
       && [ -f "$failed_file" ] \
       && [ "$(cat "$failed_file")" = "$release_id" ]; then
       log_info "release $release_id previously failed promotion; waiting for a newer latest release"
@@ -1105,7 +1105,7 @@ let
       "$generation" "$latest_openchamber" "$latest_opencode" "$release_id" > "$candidate_file.tmp"
     mv "$candidate_file.tmp" "$candidate_file"
 
-    if [ "\''${1:-}" = bootstrap ]; then
+    if [ "''${1:-}" = bootstrap ]; then
       ln -sfn "$generation" "$tools_root/active.next"
       mv -Tf "$tools_root/active.next" "$tools_root/active"
       install_user_shims
@@ -3540,7 +3540,11 @@ let
     restore_previous_container() {
       [ -n "$previous_image" ] || return 1
       log_info "action=restore-previous-container desired=$desired image=$previous_image"
-      ${pkgs.systemd}/bin/systemctl stop podman-openchamber.service 2>/dev/null || true
+      ${pkgs.systemd}/bin/systemctl stop podman-openchamber.service || return 1
+      # Bootstrap takes the same lock; release it only after the old writer stops.
+      host_gate_armed=0
+      host_opencode_gate_armed=0
+      ${pkgs.util-linux}/bin/flock -u 9 2>/dev/null || true
       ${pkgs.podman}/bin/podman tag "$previous_image" ${imageName}:${imageTag} \
         || return 1
       install -d -m 0755 "$rollback_override_dir"

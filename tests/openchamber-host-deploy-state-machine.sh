@@ -222,6 +222,11 @@ container_was_active=1
 systemctl_mode=success
 restore_previous_when_safe
 grep -q 'failed-replacement-gated' "$event_log"
+stop_line=$(grep -n '^systemctl stop podman-openchamber.service$' "$event_log" | head -1 | cut -d: -f1)
+unlock_line=$(grep -n '^flock -u 9$' "$event_log" | head -1 | cut -d: -f1)
+start_line=$(grep -n '^systemctl start podman-openchamber.service$' "$event_log" | head -1 | cut -d: -f1)
+test "$stop_line" -lt "$unlock_line"
+test "$unlock_line" -lt "$start_line"
 grep -q 'managed-opencode-probe --print-port' "$event_log"
 grep -q 'iptables -I OUTPUT 1 -j OPENCHAMBER_OPENCODE_GATE' "$event_log"
 grep -q '^podman tag sha256:previous-image localhost/ghostship-openchamber:openchamber-runtime$' "$event_log"
