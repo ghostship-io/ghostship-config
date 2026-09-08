@@ -30,6 +30,9 @@ in
   networking.hostName = "chill-penguin";
   networking.networkmanager.enable = true;
 
+  # Keep the live bus implementation so fleet updates do not require a reboot.
+  services.dbus.implementation = "dbus";
+
   # Bootloader setup for Asahi
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = false;
