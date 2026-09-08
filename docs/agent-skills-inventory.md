@@ -8,6 +8,11 @@ available through their owning provider when the plugin is active.
 
 | Skill | Source |
 | --- | --- |
+| `blast-radius` | pstack (selected and installed) |
+| `diagnosing-bugs` | Matt Pocock (selected and installed) |
+| `principle-prove-it-works` | pstack (selected and installed) |
+| `principle-make-operations-idempotent` | pstack (selected and installed) |
+| `resolving-merge-conflicts` | Matt Pocock (selected and installed) |
 | `ghostship-agent-tooling` | Existing Ghostship catalog |
 | `ghostship-audit-worktree` | Existing Ghostship catalog |
 | `ghostship-bitwarden` | Existing Ghostship catalog |
@@ -80,22 +85,22 @@ installed and enabled; this does not transfer their connectors to other agents.
 
 | Plugin | Status |
 | --- | --- |
-| `gmail` | Enabled |
-| `github` | Enabled |
-| `google-drive` | Enabled |
-| `google-calendar` | Enabled |
-| `finances` | Enabled |
-| `plugin-management` | Enabled |
-| `app-691eab1e001081919e57189f8b2f03bc` | Enabled |
-| `app-6944c4eec37c8191839ab9eafaa2f1f4` | Enabled |
-| `app-6923772ef3d48191b6b18899af1cb037` | Enabled |
-| `openai-templates` | Enabled |
-| `deep-research-work` | Enabled |
+| Gmail | Enabled |
+| GitHub | Enabled |
+| Google Drive | Enabled |
+| Google Calendar | Enabled |
+| Finances | Enabled |
+| Plugin Management | Enabled |
+| Instacart | Enabled |
+| Zen Shopping | Enabled |
+| Target | Enabled |
+| Default templates | Enabled |
+| Deep Research | Enabled |
 
 OpenCode uses its configured providers without additional user plugins.
 Antigravity uses its authenticated T3 Code ACP profile and shared skill paths.
 
-## Recommended additions — awaiting selection
+## Additional options
 
 Install only the selection the user requests. `grill-me` and
 `improve-codebase-architecture` are already present in the Ghostship catalog.
@@ -112,8 +117,10 @@ Install only the selection the user requests. `grill-me` and
 | pstack | `principle-fix-root-causes` | Avoid accumulating workaround configuration. |
 | pstack | `technical-writing` | Keep runbooks and PR descriptions easy to review. |
 
-The first two Matt skills plus the first three pstack skills are the suggested
-small starting set. pstack marks these skills `disable-model-invocation: true`;
+The user selected `diagnosing-bugs`, `resolving-merge-conflicts`, `blast-radius`,
+`principle-prove-it-works`, and `principle-make-operations-idempotent`; all five
+are now installed alongside `writing-for-agents`. The remaining rows are
+optional recommendations. pstack marks its skills `disable-model-invocation: true`;
 their native invocation behavior varies by agent, so activation must be checked
 when installing rather than assuming Cursor plugin behavior transfers.
 
@@ -129,3 +136,12 @@ Sources: [Matt Pocock skills](https://github.com/mattpocock/skills),
 - Read and applied to the project and shared `AGENTS.md` files.
 - Shared with Antigravity through `~/.gemini/config/skills`.
 - Available on the next agent turn; start a new provider session if its catalog is cached.
+
+## Selected skill source revisions
+
+- Matt Pocock additions: `mattpocock/skills` at
+  `3cca18b368ae95cdbdebbff572ccafa662551015`, under `skills/engineering/`.
+- pstack additions: `cursor/plugins` at
+  `71ed0d1076fec562c1b74ee353121a8d00f75382`, under `pstack/skills/`.
+- Reinstall selected upstream skills with the Skill Installer into
+  `~/.agents/skills`, then run `t3code-shared-agents --skills-only`.

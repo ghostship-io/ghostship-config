@@ -16,18 +16,27 @@ python3 scripts/setup-container-agents.py
 ```
 
 This builds `/workspace/ghostship-agent#default` with that repo's lock file,
-keeps a persistent Nix GC root, and exposes its packaged commands through
+keeps persistent Nix GC roots for the tools and native Chromium, and exposes
+104 packaged commands through
 `~/.local/bin`, already inherited by T3 Code and its providers. The package
 includes `agent`, browser and Bitwarden tooling, Google Workspace tooling,
-Printing Press, generated API clients, and shared Git tooling.
+Printing Press, generated API clients, and shared Git tooling. Tool launchers
+clear the provider-specific `LD_LIBRARY_PATH` so each Nix package uses its own
+libraries. `agent-browser` defaults to the packaged Chromium because Chrome
+for Testing does not ship a Linux ARM64 build. Explicit browser overrides are
+preserved.
 
-Codex/ChatGPT and OpenCode discover the same 15 shared skills under
+Codex/ChatGPT and OpenCode discover the same shared skills under
 `~/.agents/skills`; Antigravity ACP reads links to them under
 `~/.gemini/config/skills`. Missing optional Antigravity `name` metadata is
 supplied in an installed copy for Codex/OpenCode compatibility. Supporting
 resources and the original source remain intact. Shared preferences and the
 container path guidance are also published to the providers' native user
 instruction files.
+
+Selected upstream skills installed in `~/.agents/skills` are shared with
+Antigravity on refresh too. The current selection is recorded in the
+[installed skill inventory](agent-skills-inventory.md).
 
 The installer preserves unrelated skills and refuses to replace unmanaged
 commands or instruction files. It records its links so later runs can update

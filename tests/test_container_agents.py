@@ -2,6 +2,7 @@
 
 import importlib.util
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,7 +75,18 @@ class ContainerAgentsTest(unittest.TestCase):
         old.parent.mkdir(parents=True)
         old.symlink_to(self.home / "tools/bin/agent")
         self.install()
-        self.assertEqual(old.resolve(), command)
+        self.assertIn(str(command), old.read_text())
+
+    def test_packaged_command_does_not_inherit_provider_library_path(self):
+        command = self.package / "bin/example"
+        command.write_text('#!/bin/sh\nprintf "%s" "${LD_LIBRARY_PATH-unset}"\n')
+        self.install()
+        result = subprocess.check_output(
+            [str(self.home / ".local/bin/example")],
+            env=dict(os.environ, LD_LIBRARY_PATH="/provider-only-libraries"),
+            text=True,
+        )
+        self.assertEqual(result, "unset")
 
     def test_antigravity_optional_name_is_normalized_for_other_providers(self):
         skill = self.source / "skills/example/SKILL.md"

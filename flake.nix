@@ -91,6 +91,7 @@
         in
         {
           ghostship-config = (pkgs.extend (import ./modules/common/ghostship-pkg.nix)).ghostship-config;
+          container-browser = pkgs.chromium;
           codex-desktop-web = pkgs.callPackage ./packages/codex-desktop-web/package.nix { };
         }
       );

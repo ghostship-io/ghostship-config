@@ -18,6 +18,7 @@ def install(home, source, package, preferences):
     previous = json.loads(manifest.read_text()) if manifest.exists() else {}
     links = {}
     normalized = {}
+    commands = {}
     skills = sorted((source / "skills").glob("*/SKILL.md"))
     if not skills:
         raise ValueError(f"No shared skills found under {source / 'skills'}")
@@ -57,7 +58,28 @@ def install(home, source, package, preferences):
     if package is not None:
         for command in sorted((package / "bin").iterdir()):
             if command.is_file() and os.access(command, os.X_OK):
-                links[home / ".local/bin" / command.name] = command
+                wrapper = state / "bin" / command.name
+                # The container exports native libraries for npm providers.
+                # Nix packages carry their own RPATHs; mixing libc versions
+                # makes even their shell interpreters segfault before startup.
+                commands[wrapper] = (
+                    "#!/bin/sh\nunset LD_LIBRARY_PATH\n"
+                    + (
+                        'export AGENT_BROWSER_ENGINE="${AGENT_BROWSER_ENGINE:-chrome}"\n'
+                        'if [ -z "${AGENT_BROWSER_EXECUTABLE_PATH:-}" ]; then\n'
+                        "  export AGENT_BROWSER_EXECUTABLE_PATH="
+                        + shlex.quote(
+                            str(home / ".local/state/t3code-agent-browser/bin/chromium")
+                        )
+                        + "\nfi\n"
+                        if command.name == "agent-browser"
+                        else ""
+                    )
+                    + "exec "
+                    + shlex.quote(str(command))
+                    + ' "$@"\n'
+                )
+                links[home / ".local/bin" / command.name] = wrapper
     else:
         links.update(
             {
@@ -95,6 +117,12 @@ def install(home, source, package, preferences):
         )
 
     state.mkdir(parents=True, exist_ok=True)
+    for wrapper, content in commands.items():
+        wrapper.parent.mkdir(parents=True, exist_ok=True)
+        temporary = wrapper.with_suffix(".tmp")
+        temporary.write_text(content)
+        temporary.chmod(0o755)
+        temporary.replace(wrapper)
     for name, content in normalized.items():
         directory = state / "skills" / name
         directory.mkdir(parents=True, exist_ok=True)
@@ -203,6 +231,23 @@ def main():
             ],
             check=True,
         )
+        # Chrome for Testing has no Linux ARM64 build. Use the repository's
+        # packaged Chromium instead of invoking a distro installer in Nix.
+        repository = Path(__file__).resolve().parents[1]
+        if not (repository / "flake.nix").exists():
+            repository = Path("/workspace/nixos-config")
+        subprocess.run(
+            [
+                "nix",
+                "build",
+                "--no-write-lock-file",
+                "-L",
+                f"{repository}#container-browser",
+                "--out-link",
+                str(home / ".local/state/t3code-agent-browser"),
+            ],
+            check=True,
+        )
     skills, commands = install(
         home, source, package.absolute() if package else None, args.preferences
     )
@@ -212,7 +257,7 @@ def main():
         state / "preferences.md": args.preferences.read_text(),
         launcher: "#!/bin/sh\n"
         + marker
-        + "\nexec "
+        + "\nunset LD_LIBRARY_PATH\nexec "
         + shlex.join(
             [
                 sys.executable,
