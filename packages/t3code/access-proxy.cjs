@@ -30,9 +30,13 @@ async function trustedPeer(request, lookup = dns.lookup) {
 }
 
 function createProxy(upstreamPort, getToken, trust = trustedPeer) {
+  function appNavigation(request) {
+    return request.method === "GET" && request.headers["sec-fetch-dest"] === "document" &&
+      !/^\/api(?:\/|\?|$)/.test(request.url);
+  }
   async function options(request) {
     const headers = { ...request.headers };
-    if (headers.accept?.includes("text/html") || request.headers["sec-fetch-dest"] === "document") {
+    if (appNavigation(request)) {
       headers["accept-encoding"] = "identity";
       delete headers["if-none-match"];
       delete headers["if-modified-since"];
@@ -60,7 +64,7 @@ function createProxy(upstreamPort, getToken, trust = trustedPeer) {
     try { forwarding = await options(request); }
     catch { response.writeHead(502).end("T3 Code backend unavailable"); return; }
     const upstream = http.request(forwarding, (incoming) => {
-      if (request.method === "GET" && incoming.statusCode === 200 &&
+      if (appNavigation(request) && !incoming.headers["content-disposition"] && incoming.statusCode === 200 &&
           incoming.headers["content-type"]?.includes("text/html")) {
         const chunks = [];
         incoming.on("error", () => response.destroy());

@@ -144,7 +144,7 @@ test("compressed upstream HTML gets one credentialed manifest and fresh cache he
       "content-length": body.length, etag: '"upstream"' });
     response.end(body);
   });
-  const response = await fetch(url, { headers: { accept: "text/html", "if-none-match": '"upstream"' } });
+  const response = await fetch(url, { headers: { accept: "text/html", "sec-fetch-dest": "document", "if-none-match": '"upstream"' } });
   const html = await response.text();
   assert.equal((html.match(/rel="manifest"/g) || []).length, 1);
   assert.match(html, /crossorigin="use-credentials"/);
@@ -152,4 +152,21 @@ test("compressed upstream HTML gets one credentialed manifest and fresh cache he
   assert.equal(response.headers.get("content-encoding"), null);
   assert.equal(response.headers.get("etag"), null);
   assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+test("HTML fetches, API previews, and downloads preserve their original bytes and headers", async (t) => {
+  const { url, backend } = await fixture(t);
+  const html = '<html><head><title>User file</title></head><body>Original content</body></html>';
+  backend.removeAllListeners("request");
+  backend.on("request", (request, response) => {
+    response.writeHead(200, { "content-type": "text/html", "content-length": Buffer.byteLength(html),
+      etag: '"user-file"', ...(request.url === "/download" ? { "content-disposition": "attachment; filename=example.html" } : {}) });
+    response.end(html);
+  });
+  for (const [route, destination] of [["/fragment", "empty"], ["/api/files/preview", "document"], ["/download", "document"]]) {
+    const response = await fetch(url + route, { headers: { accept: "text/html", "sec-fetch-dest": destination } });
+    assert.equal(await response.text(), html);
+    assert.equal(response.headers.get("etag"), '"user-file"');
+    assert.equal(response.headers.get("content-length"), String(Buffer.byteLength(html)));
+  }
 });
