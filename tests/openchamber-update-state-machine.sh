@@ -150,6 +150,10 @@ case "${1:-}" in
   *) exit 2 ;;
 esac
 EOF
+# Use the Nix interpreter, not the outer distro's dynamically linked env.
+for tool in openchamber opencode; do
+  sed -i "1c#!$(readlink -f "$(command -v bash)")" "$candidate/bin/$tool"
+done
 chmod 0755 "$candidate/bin/openchamber" "$candidate/bin/opencode"
 printf '%s\t9.9.9\t8.8.8\t%s\n' "$candidate" "$release_id" > "$candidate_file"
 
@@ -159,6 +163,18 @@ permission_recovery="$(sed -n '/# Restore the managed parent/,/^$/p' "$module")"
 test -n "$permission_recovery"
 eval "$permission_recovery"
 test "$(stat -c '%a' "$generations_dir")" = 755
+
+# Shared roots survive two starts and a release with overlapping dependencies.
+gcroot_dir="$fixture_root/gcroots"
+mkdir -p "$gcroot_dir" "$fixture_root/store/first" "$fixture_root/store/second"
+gcroot_write="$(sed -n '/ln -sfnT "\$store_path" "\$gcroot_dir/p' "$module")"
+test -n "$gcroot_write"
+for store_path in "$fixture_root/store/first" "$fixture_root/store/first" "$fixture_root/store/second"; do
+  eval "$gcroot_write"
+done
+test "$(readlink "$gcroot_dir/first")" = "$fixture_root/store/first"
+test "$(readlink "$gcroot_dir/second")" = "$fixture_root/store/second"
+test ! -e "$fixture_root/store/first/first"
 
 (
   platform_package=opencode-linux-x64

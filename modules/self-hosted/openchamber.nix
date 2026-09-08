@@ -3953,7 +3953,7 @@ in
       # only after their images are no longer rollback candidates.
       install -d -m0755 -o root -g root "$gcroot_dir"
       for store_path in ${lib.escapeShellArgs (map toString openchamberImageContents)}; do
-        ln -s "$store_path" "$gcroot_dir/$(basename "$store_path")"
+        ln -sfnT "$store_path" "$gcroot_dir/$(basename "$store_path")"
       done
 
       rm -f ${openchamberNixRoot}/nix/var/nix/temproots/*

@@ -38,8 +38,8 @@ jobs:
               --cap-add SYS_ADMIN --cap-add NET_ADMIN --security-opt systempaths=unconfined \
               --volume /nix:/nix:ro --volume /etc/passwd:/etc/passwd:ro \
               --volume /etc/ssl/certs:/etc/ssl/certs:ro \
-              --volume "$PWD:$PWD" --volume "$RUNNER_TEMP:$RUNNER_TEMP" \
-              --workdir "$PWD" --env PATH --env TMPDIR --env NIX_SSL_CERT_FILE \
+              --volume "$PWD:$PWD" \
+              --workdir "$PWD" --env PATH --env TMPDIR=/tmp --env NIX_SSL_CERT_FILE \
               --env HOME=/root --env NIX_REMOTE=daemon \
               --env "NIX_CONFIG=experimental-features = nix-command flakes" \
               ubuntu:24.04 bash -c "git config --global --add safe.directory \"$PWD\" && exec bash tests/openchamber-harness.sh"

@@ -105,6 +105,8 @@
           ci = pkgs.mkShellNoCC {
             packages = with pkgs; [
               git
+              bash
+              coreutils
               actionlint
               shellcheck
               gitleaks
