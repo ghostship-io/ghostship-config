@@ -9,24 +9,19 @@ let
   openchamberHome = "/srv/apps/openchamber/home";
   openchamberDocker = "/srv/apps/openchamber/docker";
   openchamberNixRoot = "/srv/apps/openchamber/nix-root";
+  openchamberToolControl = "/srv/apps/openchamber/tool-update-control";
   openchamberWorkspace = "/srv/apps/openchamber/workspace";
   openchamberSecrets = config.ghostship.selfHostedSecrets.projections.openchamber.path;
   openchamberSecretsFile = "/run/secrets/openchamber.env";
   openchamberDeploymentState = "/var/lib/ghostship/openchamber-deployment";
+  externalOpenCode = config.ghostship.openchamber.externalOpenCode.enable;
+  nativeResponses = config.ghostship.openchamber.nativeResponses.enable;
   imageName = "localhost/ghostship-openchamber";
   imageTag = "openchamber-runtime";
-  openchamberOpenCodeConfig = builtins.toJSON {
-    provider.openai.options = {
-      headerTimeout = 60000;
-      timeout = 600000;
-      chunkTimeout = 60000;
-    };
-    compaction = {
-      auto = true;
-      prune = true;
-      reserved = 20000;
-    };
-  };
+  # Bump whenever injected runtime safety hooks or wrappers change so an
+  # unchanged npm pair is restaged with the new harness contract.
+  openchamberHarnessRevision = "2026-09-08.6";
+  openchamberGenerationRevision = "${openchamberHarnessRevision}-goal-${toString config.ghostship.openchamber.goalMaxAutoTurns}";
 
   openchamberPackages = with pkgs; [
     nix
@@ -47,7 +42,11 @@ let
     direnv
     uv
     python3
+    ruff
+    basedpyright
     nodejs_24
+    typescript-language-server
+    prettier
     stdenv.cc
     gnumake
     pkg-config
@@ -67,13 +66,29 @@ let
     su-exec
     which
     file
+    nil
+    nixfmt
+    shellcheck
+    shfmt
+    yq-go
+    buildkit
+    bubblewrap
+    fuse-overlayfs
     bashInteractive
     cacert
   ];
 
   openchamberPath = lib.makeBinPath openchamberPackages;
+  openchamberExternalOpenCodeReady = ''
+    opencode_ready() {
+      systemctl is-active --quiet opencode.service \
+        && curl -fsS --max-time 5 http://127.0.0.1:4096/global/health \
+          | jq -e '.healthy == true' >/dev/null 2>&1
+    }
+  '';
   openchamberRuntimeEnv = ''
-    if [ -f ${openchamberSecretsFile} ]; then
+    if [ "''${OPENCHAMBER_SKIP_RUNTIME_SECRETS:-0}" != 1 ] \
+      && [ -f ${openchamberSecretsFile} ]; then
       set -a
       # shellcheck disable=SC1091
       . ${openchamberSecretsFile}
@@ -85,10 +100,14 @@ let
     export XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}"
     export XDG_CACHE_HOME="''${XDG_CACHE_HOME:-$HOME/.cache}"
     export XDG_DATA_HOME="''${XDG_DATA_HOME:-$HOME/.local/share}"
-    export NPM_CONFIG_PREFIX="$HOME/.local/share/openchamber-tools/npm"
+    export NPM_CONFIG_PREFIX="$HOME/.local/share/openchamber-tools/active"
     export npm_config_prefix="$NPM_CONFIG_PREFIX"
     export OPENCODE_AUTOMATION_DIR="$HOME/.automation"
-    export OPENCODE_CONFIG_CONTENT=${lib.escapeShellArg openchamberOpenCodeConfig}
+    export OPENCHAMBER_MAINTENANCE_GATE="/var/lib/openchamber-tool-update/admission.lock"
+    # ghostship-agent owns the complete on-disk behavior config; runtime overlays
+    # are deliberately disabled so timeout and compaction keys have one owner.
+    unset OPENCODE_CONFIG_CONTENT
+    ${lib.optionalString nativeResponses "export OPENCODE_EXPERIMENTAL_NATIVE_LLM=1"}
     hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     if [ -f "$hm_session_vars" ]; then
       # shellcheck disable=SC1090
@@ -138,274 +157,1299 @@ let
     }
   '';
 
+  openchamberManagedOpenCodeIdleBody = ''
+    set -eu
+
+    if systemctl is-active --quiet opencode.service 2>/dev/null; then
+      opencode_pid="$(systemctl show opencode.service -p MainPID --value)"
+      case "$opencode_pid" in
+        ""|0|*[!0-9]*) exit 1 ;;
+      esac
+      tr "\0" "\n" < "/proc/$opencode_pid/cmdline" 2>/dev/null \
+        | grep -Eq "(^|/)opencode$" || exit 1
+      tr "\0" "\n" < "/proc/$opencode_pid/cmdline" 2>/dev/null \
+        | grep -qx serve || exit 1
+    else
+      web_cgroup="$(systemctl show openchamber-web.service -p ControlGroup --value)"
+      [ -n "$web_cgroup" ] || exit 1
+      opencode_pid=
+      matches=0
+      for cmdline in /proc/[0-9]*/cmdline; do
+        pid="$(basename "$(dirname "$cmdline")")"
+        if tr "\0" "\n" < "$cmdline" 2>/dev/null | grep -Eq "(^|/)opencode$" \
+          && tr "\0" "\n" < "$cmdline" 2>/dev/null | grep -qx serve \
+          && grep -Fq "$web_cgroup" "/proc/$pid/cgroup" 2>/dev/null; then
+          opencode_pid="$pid"
+          matches=$((matches + 1))
+        fi
+      done
+      [ "$matches" -eq 1 ] || exit 1
+    fi
+    [ -n "$opencode_pid" ] || exit 1
+    port=
+    expect_port=0
+    while IFS= read -r argument; do
+      if [ "$expect_port" -eq 1 ]; then
+        port="$argument"
+        break
+      fi
+      if [ "$argument" = --port ]; then
+        expect_port=1
+      else
+        case "$argument" in
+          --port=*) port="$(printf '%s\n' "$argument" | cut -d= -f2)"; break ;;
+        esac
+      fi
+    done < <(tr "\0" "\n" < "/proc/$opencode_pid/cmdline")
+    case "$port" in
+      ""|*[!0-9]*) exit 1 ;;
+    esac
+    if [ "''${1:-}" = --print-port ]; then
+      printf '%s\n' "$port"
+      exit 0
+    fi
+    if [ "''${1:-}" = --connections-drained ]; then
+      if ss -Hnt state established \
+        "( sport = :$port or dport = :$port )" | grep -q .; then
+        exit 1
+      fi
+      exit 0
+    fi
+    # The standalone canary can outlive the web observer. OpenCode exposes
+    # status per directory, with no authoritative aggregate idle endpoint.
+    # Never infer that the whole process is idle from its default directory.
+    if systemctl is-active --quiet opencode.service 2>/dev/null; then
+      printf 'standalone OpenCode requires an operator-controlled maintenance stop\n' >&2
+      exit 1
+    fi
+    username=opencode
+    password=
+    while IFS= read -r entry; do
+      case "$entry" in
+        OPENCODE_SERVER_USERNAME=*) username="$(printf '%s\n' "$entry" | cut -d= -f2-)" ;;
+        OPENCODE_SERVER_PASSWORD=*) password="$(printf '%s\n' "$entry" | cut -d= -f2-)" ;;
+      esac
+    done < <(tr "\0" "\n" < "/proc/$opencode_pid/environ")
+    if [ -n "$password" ]; then
+      status="$(printf 'user = \"%s:%s\"\n' "$username" "$password" \
+        | curl --config - -fsS --max-time 5 "http://127.0.0.1:$port/session/status")"
+    else
+      status="$(curl -fsS --max-time 5 "http://127.0.0.1:$port/session/status")"
+    fi
+    printf '%s\n' "$status" \
+      | jq -e 'type == "object" and all(.[]; type == "object" and .type == "idle")' >/dev/null
+  '';
+  openchamberManagedOpenCodeIdlePortable = pkgs.writeText "openchamber-managed-opencode-idle-portable" ''
+    #!/usr/bin/env bash
+    ${openchamberManagedOpenCodeIdleBody}
+  '';
+  openchamberManagedOpenCodePresentPortable = pkgs.writeText "openchamber-managed-opencode-present-portable" ''
+    #!/usr/bin/env bash
+    set -eu
+
+    if systemctl is-active --quiet opencode.service 2>/dev/null; then
+      exit 0
+    fi
+    for cmdline in /proc/[0-9]*/cmdline; do
+      if tr "\0" "\n" < "$cmdline" 2>/dev/null | grep -Eq "(^|/)opencode$" \
+        && tr "\0" "\n" < "$cmdline" 2>/dev/null | grep -qx serve; then
+        exit 0
+      fi
+    done
+    exit 1
+  '';
+  openchamberManagedOpenCodeIdle = pkgs.writeShellScriptBin "openchamber-managed-opencode-idle" openchamberManagedOpenCodeIdleBody;
+
   openchamberToolMaintenance = pkgs.writeShellScriptBin "openchamber-tool-maintenance" ''
     set -eu
 
+    if [ "''${OPENCHAMBER_TOOL_ENV_SANITIZED:-0}" != 1 ]; then
+      exec ${pkgs.coreutils}/bin/env -i \
+        OPENCHAMBER_TOOL_ENV_SANITIZED=1 \
+        OPENCHAMBER_SKIP_RUNTIME_SECRETS=1 \
+        HOME="$HOME" \
+        USER=openchamber \
+        XDG_CONFIG_HOME="''${XDG_CONFIG_HOME:-$HOME/.config}" \
+        XDG_STATE_HOME="''${XDG_STATE_HOME:-$HOME/.local/state}" \
+        XDG_CACHE_HOME="''${XDG_CACHE_HOME:-$HOME/.cache}" \
+        XDG_DATA_HOME="''${XDG_DATA_HOME:-$HOME/.local/share}" \
+        PATH=${openchamberPath}:/bin:/usr/bin \
+        "$0" "$@"
+    fi
+    export OPENCHAMBER_SKIP_RUNTIME_SECRETS=1
     ${openchamberRuntimeEnv}
     export NODE_NO_WARNINGS=1
+
+    tools_root="$XDG_DATA_HOME/openchamber-tools"
+    generations_dir="$tools_root/generations"
+    update_state="$XDG_STATE_HOME/openchamber-tool-update"
+    control_dir="/var/lib/openchamber-tool-update"
+    candidate_file="$update_state/candidate.tsv"
+    failed_file="$control_dir/failed-release"
+    report_dir="$HOME/.config/openchamber/run"
+    report="$report_dir/update-check.json"
+    staging=""
 
     log_info() {
       printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >&2
     }
 
-    log_warn() {
-      printf 'warn: %s\n' "$1" >&2
+    cleanup() {
+      [ -z "$staging" ] || rm -rf "$staging"
+    }
+    trap cleanup EXIT INT TERM
+
+    package_version() {
+      package_json="$1"
+      [ -f "$package_json" ] || return 1
+      jq -er '.version | strings | select(length > 0)' "$package_json"
     }
 
-    install_agent_cli() {
+    active_version() {
       package="$1"
-      label="$2"
-
-      log_info "installing or upgrading $label"
-
-      if ! install_output="$(npm install -g --no-fund --no-audit "$package@latest" 2>&1)"; then
-        log_warn "$label install failed"
-        if [ -n "$install_output" ]; then
-          printf '%s\n' "$install_output" >&2
-        fi
-        return 1
-      fi
-
-      if [ -n "$install_output" ]; then
-        printf '%s\n' "$install_output" >&2
-      fi
+      package_version "$tools_root/active/lib/node_modules/$package/package.json" 2>/dev/null || true
     }
 
-    opencode_loader_name() {
+    opencode_platform_package() {
       case "$(uname -m)" in
-        aarch64|arm64)
-          printf '%s\n' "ld-linux-aarch64.so.1"
-          ;;
-        x86_64|amd64)
-          printf '%s\n' "ld-linux-x86-64.so.2"
-          ;;
-        *)
-          return 1
-          ;;
+        aarch64|arm64) printf '%s\n' opencode-linux-arm64 ;;
+        x86_64|amd64) printf '%s\n' opencode-linux-x64 ;;
+        *) return 1 ;;
       esac
     }
 
-    find_nix_glibc_loader() {
-      loader_name="$(opencode_loader_name)" || return 1
+    harden_generation() {
+      prefix="$1"
+      python3 - "$prefix" <<'PY'
+    import pathlib
+    import sys
 
-      for store_dir in /nix/store "$HOME/.local/share/nix/root/nix/store"; do
-        if [ ! -d "$store_dir" ]; then
-          continue
-        fi
+    prefix = pathlib.Path(sys.argv[1])
+    candidate_root = prefix.resolve(strict=True)
+    web = prefix / "lib/node_modules/@openchamber/web"
 
-        for candidate in "$store_dir"/*-glibc-*/lib/"$loader_name"; do
-          if [ -x "$candidate" ]; then
-            printf '%s\n' "$candidate"
-            return 0
-          fi
-        done
+    for entry in prefix.rglob("*"):
+        if not entry.is_symlink():
+            continue
+        try:
+            entry.resolve(strict=True).relative_to(candidate_root)
+        except (FileNotFoundError, ValueError):
+            raise SystemExit(f"candidate symlink escapes or dangles: {entry}")
+
+    def replace(relative, old, new):
+        path = web / relative
+        if path.is_symlink():
+            raise SystemExit(f"required OpenChamber safety hook is a symlink: {relative}")
+        try:
+            resolved = path.resolve(strict=True)
+            resolved.relative_to(candidate_root)
+        except (FileNotFoundError, ValueError):
+            raise SystemExit(f"required OpenChamber safety hook escapes the candidate: {relative}")
+        source = resolved.read_text()
+        if old not in source:
+            raise SystemExit(f"required OpenChamber safety hook is missing: {relative}")
+        resolved.write_text(source.replace(old, new, 1))
+
+    replace(
+        "server/lib/session-goal/runtime.js",
+        "const MAX_AUTO_TURNS = 20;",
+        "const MAX_AUTO_TURNS = ${toString config.ghostship.openchamber.goalMaxAutoTurns};",
+    )
+    # Goal audits and delayed continuations are work even while model sessions
+    # briefly report idle. Keep observers running until that work settles.
+    replace(
+        "server/lib/session-goal/runtime.js",
+        "  return { processPayload, stop };",
+        "  return { processPayload, stop, getMaintenanceWorkCount: () => timers.size + inflight.size };",
+    )
+
+    replace(
+        "server/index.js",
+        "  app.set('trust proxy', true);",
+        """  app.set('trust proxy', true);
+      const maintenanceGatePath = process.env.OPENCHAMBER_MAINTENANCE_GATE;
+      let maintenanceActiveMutations = 0;
+      let maintenanceObserverPaused = false;
+      let maintenanceObserverResumePromise = null;
+      let maintenanceSchedulerPaused = Boolean(maintenanceGatePath && fs.existsSync(maintenanceGatePath));
+      app.use((req, res, next) => {
+        if (req.method === 'GET' && req.path === '/api/openchamber/maintenance-drain') {
+          const activeTerminalSessions = terminalRuntime?.getActiveSessionCount?.() ?? 0;
+          const activeOpenCodeSessions = getActiveSessionCount();
+          const scheduledTaskStatus = scheduledTasksRuntime?.getStatus?.() ?? {};
+          const maintenanceGateActive = maintenanceGatePath && fs.existsSync(maintenanceGatePath);
+          if (maintenanceGateActive && !maintenanceSchedulerPaused) {
+            scheduledTasksRuntime.pauseForMaintenance();
+            maintenanceSchedulerPaused = true;
+          }
+          const activeGoalWork = sessionGoalRuntime.getMaintenanceWorkCount?.() ?? 1;
+          const activeScheduledTasks = scheduledTaskStatus.runningScheduledTasksCount ?? 0;
+          const queuedScheduledTasks = scheduledTaskStatus.queuedScheduledTasksCount ?? 0;
+          if (maintenanceGateActive
+            && maintenanceActiveMutations === 0 && activeTerminalSessions === 0
+            && activeOpenCodeSessions === 0 && activeScheduledTasks === 0 && activeGoalWork === 0) {
+            if (!maintenanceObserverPaused) {
+              openCodeWatcherRuntime.stop();
+              globalMessageStreamHub.stop();
+              globalWatcherStartPromise = null;
+              maintenanceObserverPaused = true;
+            }
+          }
+          return res.json({
+            inFlightMutations: maintenanceActiveMutations,
+            activeTerminalSessions,
+            activeOpenCodeSessions,
+            activeGoalWork,
+            activeScheduledTasks,
+            queuedScheduledTasks,
+            observerPaused: maintenanceObserverPaused,
+            schedulerPaused: maintenanceSchedulerPaused,
+          });
+        }
+        const mutating = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+        if (maintenanceGatePath && mutating && fs.existsSync(maintenanceGatePath)) {
+          return res.status(503).json({ error: 'OpenChamber maintenance is draining active sessions; retry shortly.' });
+        }
+        if (mutating) {
+          maintenanceActiveMutations += 1;
+          let settled = false;
+          const settle = () => {
+            if (settled) return;
+            settled = true;
+            maintenanceActiveMutations = Math.max(0, maintenanceActiveMutations - 1);
+          };
+          res.once('finish', settle);
+          // A disconnected socket does not cancel its asynchronous handler.
+          // Unknown unfinished mutations must continue to block maintenance.
+        }
+        next();
+      });""",
+    )
+    replace(
+        "server/index.js",
+        "  server = http.createServer(app);",
+        """  server = http.createServer(app);
+      server.prependListener('upgrade', (_req, socket) => {
+        if (maintenanceGatePath && fs.existsSync(maintenanceGatePath)) {
+          socket.write('HTTP/1.1 503 Service Unavailable\\r\\nConnection: close\\r\\n\\r\\n');
+          socket.destroy();
+          return;
+        }
+      });
+      setInterval(() => {
+        if (maintenanceGatePath && fs.existsSync(maintenanceGatePath)) return;
+        if (maintenanceSchedulerPaused) {
+          scheduledTasksRuntime.resumeAfterMaintenance();
+          maintenanceSchedulerPaused = false;
+        }
+        if (maintenanceObserverPaused && !maintenanceObserverResumePromise) {
+          maintenanceObserverResumePromise = ensureGlobalWatcherStarted()
+            .then(() => {
+              if (maintenanceGatePath && fs.existsSync(maintenanceGatePath)) {
+                openCodeWatcherRuntime.stop();
+                globalMessageStreamHub.stop();
+                globalWatcherStartPromise = null;
+                return;
+              }
+              maintenanceObserverPaused = false;
+            })
+            .catch((error) => {
+              console.warn('Global event watcher maintenance resume failed:', error?.message || error);
+            })
+            .finally(() => { maintenanceObserverResumePromise = null; });
+        }
+      }, 100).unref();""",
+    )
+    replace(
+        "server/lib/terminal/runtime.js",
+        "if (!attached && now - session.lastActivity > IDLE_TIMEOUT_MS) {",
+        "if (!attached && session.status === 'exited' && now - session.lastActivity > IDLE_TIMEOUT_MS) {",
+    )
+    replace(
+        "server/lib/terminal/runtime.js",
+        "  return { shutdown };",
+        "  return { shutdown, getActiveSessionCount: () => pendingSessionCreates.size + [...sessions.values()].filter((session) => session.status === 'running').length };",
+    )
+    replace(
+        "server/lib/opencode/openchamber-routes.js",
+        "  app.post('/api/openchamber/update-install', async (_req, res) => {",
+        "  app.post('/api/openchamber/update-install', async (_req, res) => { return res.status(403).json({ error: 'Updates are managed by the idle-gated generation updater.' });",
+    )
+    replace(
+        "bin/lib/commands-update.js",
+        "return async function updateCommand(options = {}) {",
+        "return async function updateCommand(options = {}) { process.stderr.write('error: updates are managed by the idle-gated generation updater.\\n'); process.exitCode = 1; return;",
+    )
+    replace(
+        "server/lib/opencode/routes.js",
+        "  app.post('/api/opencode/upgrade', async (req, res) => {",
+        "  app.post('/api/opencode/upgrade', async (req, res) => { return res.status(403).json({ error: 'Updates are managed by the idle-gated generation updater.' });",
+    )
+    replace(
+        "server/lib/opencode/proxy.js",
+        "  app.use('/api', (_req, _res, next) => {",
+        "  app.use('/api', (req, res, next) => { if (req.method === 'POST' && req.path === '/global/upgrade') return res.status(403).json({ error: 'Updates are managed by the idle-gated generation updater.' });",
+    )
+    replace(
+        "server/lib/scheduled-tasks/runtime.js",
+        "import { createOpencodeClient }",
+        "import fs from 'node:fs';\nimport { createOpencodeClient }",
+    )
+    replace(
+        "server/lib/scheduled-tasks/runtime.js",
+        "  let started = false;\n  const tasksByProject = new Map();",
+        "  let started = false;\n  let maintenancePaused = Boolean(process.env.OPENCHAMBER_MAINTENANCE_GATE && fs.existsSync(process.env.OPENCHAMBER_MAINTENANCE_GATE));\n  const tasksByProject = new Map();",
+    )
+    replace(
+        "server/lib/scheduled-tasks/runtime.js",
+        "  const syncTaskSchedule = async (projectID, task) => {\n    if (!task) {\n      return;\n    }\n    const nextRunAt = computeNextRunAt(task, Date.now());",
+        """  const syncTaskSchedule = async (projectID, task) => {
+        if (!task) {
+          return;
+        }
+        const now = Date.now();
+        const persistedNextRunAt = task.state?.nextRunAt;
+        const lastScheduledFor = task.state?.lastScheduledFor;
+        if (task.enabled && Number.isFinite(persistedNextRunAt) && persistedNextRunAt <= now
+          && (!Number.isFinite(lastScheduledFor)
+            || Math.abs(lastScheduledFor - persistedNextRunAt) > TASK_DUE_SLACK_MS)) {
+          scheduleTask(projectID, task.id, persistedNextRunAt);
+          return;
+        }
+        const nextRunAt = computeNextRunAt(task, now);""",
+    )
+    replace(
+        "server/lib/scheduled-tasks/runtime.js",
+        "      clearTimerForKey(taskKey);\n      const taskMap = tasksByProject.get(projectID);",
+        """      clearTimerForKey(taskKey);
+          if (maintenancePaused) {
+            const retryTimer = setTimeout(() => {
+              clearTimerForKey(taskKey);
+              scheduleTask(projectID, taskID, nextRunAt);
+            }, 1000);
+            timersByTaskKey.set(taskKey, retryTimer);
+            return;
+          }
+          const taskMap = tasksByProject.get(projectID);""",
+    )
+    replace(
+        "server/lib/scheduled-tasks/runtime.js",
+        "  const pumpQueue = () => {\n    if (!started) {\n      return;\n    }",
+        """  const pumpQueue = () => {
+        if (!started || maintenancePaused) {
+          return;
+        }""",
+    )
+    replace(
+        "server/lib/scheduled-tasks/runtime.js",
+        "      runningScheduledTasksCount: runningCount,",
+        "      runningScheduledTasksCount: runningCount,\n      queuedScheduledTasksCount: queuedTaskKeys.size,",
+    )
+    replace(
+        "server/lib/scheduled-tasks/runtime.js",
+        "    runNow,\n    getStatus,",
+        """    runNow,
+        getStatus,
+        pauseForMaintenance() { maintenancePaused = true; },
+        resumeAfterMaintenance() { maintenancePaused = false; pumpQueue(); },""",
+    )
+    PY
+    }
+
+    install_wrappers() {
+      prefix="$1"
+      platform_package="$2"
+      [ -x "$prefix/bin/openchamber" ] || return 1
+      [ -x "$prefix/lib/node_modules/$platform_package/bin/opencode" ] || return 1
+      mv "$prefix/bin/openchamber" "$prefix/bin/openchamber.upstream"
+
+      cat > "$prefix/bin/openchamber" <<EOF
+    #!/usr/bin/env sh
+    set -eu
+    script_dir="\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)"
+    if [ "\''${1:-}" = update ]; then
+      printf 'error: updates are staged automatically and promoted only while idle\n' >&2
+      exit 1
+    fi
+    exec "\$script_dir/openchamber.upstream" "\$@"
+    EOF
+      cat > "$prefix/bin/opencode" <<EOF
+    #!/usr/bin/env sh
+    set -eu
+    ${sourceHmSessionVarsIfPresent}
+    script_dir="\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)"
+    skip_next=0
+    for argument in "\$@"; do
+      if [ "\$skip_next" -eq 1 ]; then
+        skip_next=0
+        continue
+      fi
+      case "\$argument" in
+        --log-level|--port|--hostname|--mdns-domain|--cors|-m|--model|-s|--session|--prompt|--agent|--replay-limit)
+          skip_next=1
+          ;;
+        --log-level=*|--port=*|--hostname=*|--mdns-domain=*|--cors=*|--model=*|--session=*|--prompt=*|--agent=*|--replay-limit=*|-h|--help|-v|--version|--print-logs|--pure|--mdns|-c|--continue|--fork|--auto|--mini|--no-replay)
+          ;;
+        --) break ;;
+        upgrade)
+          printf 'error: updates are staged automatically and promoted only while idle\n' >&2
+          exit 1
+          ;;
+        -*) ;;
+        *) break ;;
+      esac
+    done
+    upstream="\$script_dir/../lib/node_modules/$platform_package/bin/opencode"
+    loader='${pkgs.stdenv.cc.bintools.dynamicLinker}'
+    library_path='${pkgs.glibc}/lib'
+    if [ -x "\$loader" ]; then
+      exec "\$loader" --library-path "\$library_path" "\$upstream" "\$@"
+    fi
+    exec "\$upstream" "\$@"
+    EOF
+      chmod 0755 "$prefix/bin/openchamber" "$prefix/bin/opencode"
+    }
+
+    sandbox_install() {
+      prefix="$1"
+      openchamber_version="$2"
+      opencode_version="$3"
+      platform_package="$4"
+      ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=30s 20m \
+        ${pkgs.bubblewrap}/bin/bwrap \
+        --unshare-all \
+        --share-net \
+        --die-with-parent \
+        --new-session \
+        --ro-bind /nix/store /nix/store \
+        --ro-bind /bin /bin \
+        --dir /usr \
+        --ro-bind /usr/bin /usr/bin \
+        --dir /etc \
+        --ro-bind /etc/resolv.conf /etc/resolv.conf \
+        --ro-bind /etc/hosts /etc/hosts \
+        --proc /proc \
+        --dev /dev \
+        --tmpfs /tmp \
+        --dir /home \
+        --dir /home/openchamber \
+        --bind "$prefix" /candidate \
+        --setenv HOME /home/openchamber \
+        --setenv USER openchamber \
+        --setenv PATH ${openchamberPath}:/bin:/usr/bin \
+        --setenv NIX_SSL_CERT_FILE ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt \
+        --setenv SSL_CERT_FILE ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt \
+        --chdir /home/openchamber \
+        -- ${pkgs.nodejs_24}/bin/npm install -g --prefix /candidate \
+          --no-fund --no-audit --ignore-scripts \
+          "@openchamber/web@$openchamber_version" \
+          "$platform_package@$opencode_version"
+    }
+
+    sandbox_run_lifecycle() {
+      prefix="$1"
+      ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=30s 5m \
+        ${pkgs.bubblewrap}/bin/bwrap \
+        --unshare-all \
+        --die-with-parent \
+        --new-session \
+        --ro-bind /nix/store /nix/store \
+        --ro-bind /bin /bin \
+        --dir /usr \
+        --ro-bind /usr/bin /usr/bin \
+        --proc /proc \
+        --dev /dev \
+        --tmpfs /tmp \
+        --dir /home \
+        --dir /home/openchamber \
+        --bind "$prefix" /candidate \
+        --setenv HOME /home/openchamber \
+        --setenv USER openchamber \
+        --setenv PATH ${openchamberPath}:/bin:/usr/bin \
+        --setenv npm_config_offline true \
+        --chdir /home/openchamber \
+        -- ${pkgs.nodejs_24}/bin/npm rebuild -g --prefix /candidate --offline
+    }
+
+    sandbox_validate_clis() {
+      prefix="$1"
+      ${pkgs.bubblewrap}/bin/bwrap \
+        --unshare-all \
+        --die-with-parent \
+        --new-session \
+        --ro-bind /nix/store /nix/store \
+        --ro-bind /bin /bin \
+        --dir /usr \
+        --ro-bind /usr/bin /usr/bin \
+        --proc /proc \
+        --dev /dev \
+        --tmpfs /tmp \
+        --dir /home \
+        --dir /home/openchamber \
+        --ro-bind "$prefix" /candidate \
+        --setenv HOME /home/openchamber \
+        --setenv USER openchamber \
+        --setenv PATH /candidate/bin:${openchamberPath}:/bin:/usr/bin \
+        --setenv XDG_CONFIG_HOME /home/openchamber/.config \
+        --setenv XDG_STATE_HOME /home/openchamber/.local/state \
+        --setenv XDG_CACHE_HOME /home/openchamber/.cache \
+        --setenv XDG_DATA_HOME /home/openchamber/.local/share \
+        --chdir /home/openchamber \
+        -- ${pkgs.bash}/bin/bash -c \
+          'openchamber --version >/dev/null && opencode --version >/dev/null && opencode debug config >/dev/null'
+    }
+
+    sandbox_validate_server() {
+      prefix="$1"
+      ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=30s 3m \
+        ${pkgs.bubblewrap}/bin/bwrap \
+        --unshare-all \
+        --uid 0 \
+        --gid 0 \
+        --cap-add CAP_NET_ADMIN \
+        --die-with-parent \
+        --new-session \
+        --ro-bind /nix/store /nix/store \
+        --ro-bind /bin /bin \
+        --dir /usr \
+        --ro-bind /usr/bin /usr/bin \
+        --proc /proc \
+        --dev /dev \
+        --tmpfs /tmp \
+        --tmpfs /run \
+        --dir /home \
+        --dir /home/openchamber \
+        --ro-bind "$prefix" /candidate \
+        --setenv HOME /home/openchamber \
+        --setenv USER openchamber \
+        --setenv PATH /candidate/bin:${openchamberPath}:/bin:/usr/bin \
+        --setenv XDG_CONFIG_HOME /home/openchamber/.config \
+        --setenv XDG_STATE_HOME /home/openchamber/.local/state \
+        --setenv XDG_CACHE_HOME /home/openchamber/.cache \
+        --setenv XDG_DATA_HOME /home/openchamber/.local/share \
+        --setenv OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN true \
+        --setenv OPENCHAMBER_MAINTENANCE_GATE /tmp/openchamber-maintenance.lock \
+        --setenv NODE_NO_WARNINGS 1 \
+        --chdir /home/openchamber \
+        -- ${pkgs.bash}/bin/bash -c '
+          set -eu
+          ip link set lo up
+          openchamber serve --host 127.0.0.1 --port 33119 --foreground >/tmp/openchamber-smoke.log 2>&1 &
+          server_pid=$!
+          cleanup_server() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup_server EXIT INT TERM
+          for _ in $(seq 1 120); do
+            if activity=$(curl -fsS --max-time 2 http://127.0.0.1:33119/api/session-activity 2>/dev/null) \
+              && printf "%s\n" "$activity" | jq -e "type == \"object\" and all(.[]; type == \"object\" and .type == \"idle\")" >/dev/null \
+              && curl -fsS --max-time 2 http://127.0.0.1:33119/api/opencode/health \
+                | jq -e ".healthy == true" >/dev/null \
+              && curl -fsS --max-time 2 http://127.0.0.1:33119/api/openchamber/maintenance-drain \
+                | jq -e ".inFlightMutations == 0 and .activeTerminalSessions == 0 and .activeOpenCodeSessions == 0 and .activeScheduledTasks == 0 and .activeGoalWork == 0" >/dev/null; then
+              touch /tmp/openchamber-maintenance.lock
+              curl -fsS --max-time 2 http://127.0.0.1:33119/api/openchamber/maintenance-drain \
+                | jq -e ".inFlightMutations == 0 and .activeTerminalSessions == 0 and .activeOpenCodeSessions == 0 and .activeScheduledTasks == 0 and .activeGoalWork == 0 and .observerPaused == true and .schedulerPaused == true" >/dev/null
+              mutation_status=$(curl -sS --max-time 2 -o /dev/null -w "%{http_code}" \
+                -X POST http://127.0.0.1:33119/api/openchamber/maintenance-probe)
+              websocket_status=$(curl --http1.1 -sS --max-time 2 -o /dev/null -w "%{http_code}" \
+                -H "Connection: Upgrade" -H "Upgrade: websocket" \
+                http://127.0.0.1:33119/api/session-activity)
+              rm -f /tmp/openchamber-maintenance.lock
+              [ "$mutation_status" = 503 ] && [ "$websocket_status" = 503 ] || exit 1
+              observer_resumed=0
+              for _ in $(seq 1 20); do
+                if curl -fsS --max-time 2 http://127.0.0.1:33119/api/openchamber/maintenance-drain \
+                  | jq -e ".observerPaused == false and .schedulerPaused == false" >/dev/null; then
+                  observer_resumed=1
+                  break
+                fi
+                sleep 0.1
+              done
+              [ "$observer_resumed" -eq 1 ] || exit 1
+              exit 0
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat /tmp/openchamber-smoke.log >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/openchamber-smoke.log >&2
+          exit 1
+        '
+    }
+
+    sandbox_validate_scheduler() {
+      prefix="$1"
+      ${pkgs.coreutils}/bin/timeout --signal=TERM --kill-after=5s 30s \
+        ${pkgs.bubblewrap}/bin/bwrap \
+        --unshare-all \
+        --die-with-parent \
+        --new-session \
+        --ro-bind /nix/store /nix/store \
+        --ro-bind /bin /bin \
+        --dir /usr \
+        --ro-bind /usr/bin /usr/bin \
+        --proc /proc \
+        --dev /dev \
+        --tmpfs /tmp \
+        --dir /home \
+        --dir /home/openchamber \
+        --ro-bind "$prefix" /candidate \
+        --setenv HOME /home/openchamber \
+        --setenv USER openchamber \
+        --setenv PATH /candidate/bin:${openchamberPath}:/bin:/usr/bin \
+        --chdir /home/openchamber \
+        -- ${pkgs.nodejs_24}/bin/node --input-type=module <<'NODE'
+    import { mkdir, writeFile, unlink, readFile } from 'node:fs/promises';
+    import { createScheduledTasksRuntime } from '/candidate/lib/node_modules/@openchamber/web/server/lib/scheduled-tasks/runtime.js';
+
+    Math.random = () => 0;
+    const projectID = 'maintenance-project';
+    const projectPath = '/tmp/maintenance-project';
+    await mkdir(projectPath + '/.agents/loops', { recursive: true });
+    const now = Date.now();
+    const makeTask = (id) => ({
+      id,
+      name: id,
+      enabled: true,
+      schedule: { kind: 'once', date: '2000-01-01', time: '00:00', timezone: 'UTC' },
+      execution: {
+        prompt: 'maintenance scheduler probe',
+        providerID: 'openai',
+        modelID: 'probe',
+        permissionAutoAccept: false,
+        goalEnabled: false,
+      },
+      state: { nextRunAt: now - 1000 },
+    });
+    const tasks = new Map([
+      ['task-a', makeTask('task-a')],
+      ['task-b', makeTask('task-b')],
+    ]);
+    const mergeState = (task, patch) => ({
+      ...task,
+      state: { ...(task.state || {}), ...patch },
+    });
+    const claimed = [];
+    const releases = [];
+    const projectConfigRuntime = {
+      async reconcileLoopTasks() { return [...tasks.values()]; },
+      async listScheduledTasks() { return [...tasks.values()]; },
+      async updateScheduledTaskState(project, id, patch) {
+        if (project !== projectID || !tasks.has(id)) return { task: null };
+        const next = mergeState(tasks.get(id), patch);
+        tasks.set(id, next);
+        return { task: next };
+      },
+      async updateScheduledTaskStateIf(project, id, predicate, patch) {
+        const current = tasks.get(id);
+        if (project !== projectID || !current || !predicate(current)) {
+          return { task: current || null, updated: false };
+        }
+        claimed.push(id);
+        const next = mergeState(current, patch);
+        tasks.set(id, next);
+        return { task: next, updated: true };
+      },
+      async upsertScheduledTask(project, task) {
+        if (project !== projectID) return { task: null };
+        tasks.set(task.id, task);
+        return { task };
+      },
+    };
+    process.env.OPENCHAMBER_MAINTENANCE_GATE = '/tmp/persisted-maintenance.lock';
+    await writeFile(process.env.OPENCHAMBER_MAINTENANCE_GATE, 'probe');
+    const runtime = createScheduledTasksRuntime({
+      projectConfigRuntime,
+      listProjects: async () => [{ id: projectID, path: projectPath }],
+      buildOpenCodeUrl: () => 'http://127.0.0.1:9',
+      getOpenCodeAuthHeaders: () => ({}),
+      waitForOpenCodeReady: () => new Promise((resolve) => releases.push(resolve)),
+      logger: { warn() {}, error() {}, info() {} },
+      maxGlobalConcurrency: 1,
+      maxProjectConcurrency: 1,
+      maxRunDurationMs: 1000,
+    });
+    const waitFor = async (predicate, message, timeoutMs = 5000) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (predicate()) return;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      throw new Error(message);
+    };
+
+    await runtime.start();
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    let status = runtime.getStatus();
+    if (claimed.length !== 0 || status.runningScheduledTasksCount !== 0
+      || status.queuedScheduledTasksCount !== 0) {
+      throw new Error('paused scheduler dispatched overdue work');
+    }
+
+    await unlink(process.env.OPENCHAMBER_MAINTENANCE_GATE);
+    runtime.resumeAfterMaintenance();
+    await waitFor(() => {
+      const snapshot = runtime.getStatus();
+      return claimed.length === 1
+        && snapshot.runningScheduledTasksCount === 1
+        && snapshot.queuedScheduledTasksCount === 1;
+    }, 'overdue tasks did not preserve concurrency and queue accounting');
+
+    runtime.pauseForMaintenance();
+    releases.shift()?.();
+    await waitFor(() => {
+      const snapshot = runtime.getStatus();
+      return snapshot.runningScheduledTasksCount === 0
+        && snapshot.queuedScheduledTasksCount === 1;
+    }, 'paused scheduler did not preserve queued work');
+
+    runtime.resumeAfterMaintenance();
+    await waitFor(() => claimed.length === 2 && runtime.getStatus().runningScheduledTasksCount === 1,
+      'resume did not synchronously pump queued work');
+    releases.shift()?.();
+    await waitFor(() => {
+      const snapshot = runtime.getStatus();
+      return snapshot.runningScheduledTasksCount === 0
+        && snapshot.queuedScheduledTasksCount === 0;
+    }, 'scheduler did not settle after resumed work');
+
+    if (new Set(claimed).size !== 2 || claimed.length !== 2) {
+      throw new Error('persisted overdue occurrences were duplicated or lost');
+    }
+    runtime.stop();
+
+    const { createSessionGoalRuntime } = await import('/candidate/lib/node_modules/@openchamber/web/server/lib/session-goal/runtime.js');
+    let releaseGoalProbe;
+    globalThis.fetch = () => new Promise((resolve) => {
+      releaseGoalProbe = () => resolve({ ok: true, json: async () => ({}) });
+    });
+    const goals = createSessionGoalRuntime({
+      buildOpenCodeUrl: (route) => 'http://127.0.0.1:1' + route,
+      getOpenCodeAuthHeaders: () => ({}),
+      isEnabled: () => true,
+      idleQuietMs: 20,
+    });
+    goals.processPayload({ type: 'session.status', properties: { sessionID: 'maintenance-goal', status: { type: 'idle' } } });
+    if (goals.getMaintenanceWorkCount() !== 1) throw new Error('pending goal continuation appears idle');
+    await waitFor(() => typeof releaseGoalProbe === 'function', 'goal audit did not start');
+    if (goals.getMaintenanceWorkCount() !== 1) throw new Error('in-flight goal audit appears idle');
+    releaseGoalProbe();
+    await waitFor(() => goals.getMaintenanceWorkCount() === 0, 'settled goal audit still blocks maintenance');
+    goals.stop();
+
+    // Exercise the installed sweep after three days without browser activity.
+    const terminalSource = await readFile('/candidate/lib/node_modules/@openchamber/web/server/lib/terminal/runtime.js', 'utf8');
+    const sweepBody = terminalSource.match(/const idleSweep = setInterval\(\(\) => \{([\s\S]*?)\n  \}, 5 \* 60 \* 1000\);/)?.[1];
+    if (!sweepBody) throw new Error('terminal idle sweep contract changed');
+    const terminalSessions = new Map([
+      ['quiet-running', { status: 'running', lastActivity: 0, process: 'running-process' }],
+      ['finished', { status: 'exited', lastActivity: 0, process: 'finished-process' }],
+    ]);
+    const terminated = [];
+    new Function('sessions', 'connections', 'closeAttachments', 'terminateProcess', 'IDLE_TIMEOUT_MS', 'Date', sweepBody)(
+      terminalSessions, new Set(), () => {}, (process) => terminated.push(process),
+      30 * 60 * 1000, { now: () => 3 * 24 * 60 * 60 * 1000 },
+    );
+    if (!terminalSessions.has('quiet-running') || terminalSessions.has('finished')
+      || JSON.stringify(terminated) !== JSON.stringify(['finished-process'])) {
+      throw new Error('terminal cleanup killed quiet running work or retained an expired exit');
+    }
+    process.exit(0);
+    NODE
+    }
+
+    validate_generation() {
+      prefix="$1"
+      expected_openchamber="$2"
+      expected_opencode="$3"
+      platform_package="$4"
+      [ "$(package_version "$prefix/lib/node_modules/@openchamber/web/package.json")" = "$expected_openchamber" ]
+      [ "$(package_version "$prefix/lib/node_modules/$platform_package/package.json")" = "$expected_opencode" ]
+      [ "$(cat "$prefix/.openchamber-harness-revision" 2>/dev/null || true)" = "${openchamberGenerationRevision}" ]
+      for javascript in \
+        "$prefix/lib/node_modules/@openchamber/web/server/index.js" \
+        "$prefix/lib/node_modules/@openchamber/web/server/lib/opencode/openchamber-routes.js" \
+        "$prefix/lib/node_modules/@openchamber/web/server/lib/opencode/routes.js" \
+        "$prefix/lib/node_modules/@openchamber/web/server/lib/opencode/proxy.js" \
+        "$prefix/lib/node_modules/@openchamber/web/server/lib/session-goal/runtime.js" \
+        "$prefix/lib/node_modules/@openchamber/web/server/lib/scheduled-tasks/runtime.js" \
+        "$prefix/lib/node_modules/@openchamber/web/server/lib/terminal/runtime.js" \
+        "$prefix/lib/node_modules/@openchamber/web/bin/lib/commands-update.js"; do
+        node --check "$javascript" >/dev/null
       done
-
-      return 1
+      sandbox_validate_clis "$prefix"
+      sandbox_validate_server "$prefix"
+      sandbox_validate_scheduler "$prefix"
     }
 
-    install_opencode_platform_wrapper() {
-      platform_package="$1"
-      fallback_bin="$NPM_CONFIG_PREFIX/lib/node_modules/$platform_package/bin/opencode"
-
-      if [ ! -x "$fallback_bin" ]; then
-        log_warn "$platform_package binary is missing"
-        return 1
-      fi
-
-      loader="$(find_nix_glibc_loader || true)"
-
-      rm -f "$NPM_CONFIG_PREFIX/bin/opencode"
-      cat > "$NPM_CONFIG_PREFIX/bin/opencode" <<EOF
+    install_user_shims() {
+      for name in openchamber opencode; do
+        shim="$HOME/.local/bin/.$name.next.$$"
+        cat > "$shim" <<EOF
     #!/usr/bin/env sh
     set -eu
-    ${sourceHmSessionVarsIfPresent}
-    fallback_bin='$fallback_bin'
-    loader='$loader'
-    if [ -n "\$loader" ]; then
-      exec "\$loader" --library-path "\''${loader%/*}" "\$fallback_bin" "\$@"
-    fi
-    exec "\$fallback_bin" "\$@"
+    exec '$tools_root/active/bin/$name' "\$@"
     EOF
-      chmod 0755 "$NPM_CONFIG_PREFIX/bin/opencode"
+        chmod 0755 "$shim"
+        mv -f "$shim" "$HOME/.local/bin/$name"
+      done
     }
 
-    install_opencode_cli() {
-      log_info "installing or upgrading opencode"
+    active_clis_are_usable() {
+      [ -x "$tools_root/active/bin/openchamber" ] \
+        && [ -x "$tools_root/active/bin/opencode" ] \
+        && "$tools_root/active/bin/openchamber" --version >/dev/null \
+        && "$tools_root/active/bin/opencode" --version >/dev/null \
+        && "$tools_root/active/bin/opencode" debug config >/dev/null
+    }
 
-      rm -f "$NPM_CONFIG_PREFIX/bin/opencode"
+    active_is_usable() {
+      active_clis_are_usable \
+        && [ "$(cat "$tools_root/active/.openchamber-harness-revision" 2>/dev/null || true)" = "${openchamberGenerationRevision}" ]
+    }
 
-      if install_output="$(npm install -g --no-fund --no-audit opencode-ai@latest 2>&1)"; then
-        if [ -n "$install_output" ]; then
-          printf '%s\n' "$install_output" >&2
-        fi
-        return 0
-      fi
+    platform_package="$(opencode_platform_package)" || {
+      printf 'error: unsupported OpenCode architecture: %s\n' "$(uname -m)" >&2
+      exit 1
+    }
 
-      log_warn "opencode install failed, trying platform package"
-      if [ -n "$install_output" ]; then
-        printf '%s\n' "$install_output" >&2
-      fi
+    if [ "''${1:-}" = validate-candidate ]; then
+      [ "$#" -eq 4 ] || {
+        printf 'usage: openchamber-tool-maintenance validate-candidate <path> <openchamber-version> <opencode-version>\n' >&2
+        exit 2
+      }
+      validate_generation "$2" "$3" "$4" "$platform_package"
+      exit 0
+    fi
 
-      case "$(uname -m)" in
-        aarch64|arm64)
-          platform_package="opencode-linux-arm64"
-          ;;
-        x86_64|amd64)
-          platform_package="opencode-linux-x64"
-          ;;
+    install -d -m 0755 "$HOME/.local/bin" "$HOME/.local/libexec" "$report_dir"
+    install -d -m 0700 "$update_state"
+    install -m 0755 ${openchamberManagedOpenCodeIdlePortable} \
+      "$HOME/.local/libexec/openchamber-managed-opencode-idle"
+    exec 9<"$control_dir/tool-update.lock"
+    ${pkgs.util-linux}/bin/flock 9
+    # Restore the managed parent after an interrupted locked validation.
+    install -d -m 0755 "$generations_dir"
+
+    if [ "''${1:-}" = bootstrap-candidate ]; then
+      [ -f "$candidate_file" ] || {
+        printf 'error: no prestaged candidate is available for offline bootstrap\n' >&2
+        exit 1
+      }
+      IFS="$(printf '\t')" read -r candidate candidate_openchamber candidate_opencode candidate_release < "$candidate_file"
+      case "$candidate" in
+        "$generations_dir/"*) ;;
         *)
-          log_warn "unsupported opencode fallback architecture: $(uname -m)"
-          return 1
+          printf 'error: prestaged candidate is outside the managed generations directory\n' >&2
+          exit 1
           ;;
       esac
+      [ "$(basename "$candidate")" = "$candidate_release" ]
+      validate_generation "$candidate" "$candidate_openchamber" "$candidate_opencode" "$platform_package"
+      ln -sfn "$candidate" "$tools_root/active.next"
+      mv -Tf "$tools_root/active.next" "$tools_root/active"
+      install_user_shims
+      rm -f "$candidate_file"
+      log_info "activated prestaged $candidate_release without registry access"
+      exit 0
+    fi
 
-      if ! platform_output="$(npm install -g --no-fund --no-audit "$platform_package@latest" 2>&1)"; then
-        log_warn "$platform_package install failed"
-        if [ -n "$platform_output" ]; then
-          printf '%s\n' "$platform_output" >&2
-        fi
-        return 1
-      fi
+    if [ "''${1:-}" = bootstrap ] && active_is_usable; then
+      install_user_shims
+      log_info "using the validated active generation; latest check remains asynchronous"
+      exit 0
+    fi
 
-      if [ -n "$platform_output" ]; then
-        printf '%s\n' "$platform_output" >&2
-      fi
-
-      install_opencode_platform_wrapper "$platform_package"
-    }
-
-    install_user_shim() {
-      name="$1"
-      target="$2"
-
-      cat > "$HOME/.local/bin/$name" <<EOF
-    #!/usr/bin/env sh
-    set -eu
-    target='$target'
-    if [ ! -x "\$target" ]; then
-      printf 'error: %s is not installed yet; run openchamber-tool-maintenance\n' "$name" >&2
+    latest_openchamber="$(npm view @openchamber/web@latest version 2>/dev/null || true)"
+    latest_opencode="$(npm view opencode-ai@latest version 2>/dev/null || true)"
+    if [ -z "$latest_openchamber" ] || [ -z "$latest_opencode" ]; then
+      printf 'error: failed to resolve latest OpenChamber or OpenCode release\n' >&2
       exit 1
     fi
-    exec "\$target" "\$@"
-    EOF
-      chmod 0755 "$HOME/.local/bin/$name"
-    }
+    current_openchamber="$(active_version @openchamber/web)"
+    current_opencode="$(active_version "$platform_package")"
+    release_id="openchamber-$latest_openchamber--opencode-$latest_opencode--harness-${openchamberGenerationRevision}"
+    generation="$generations_dir/$release_id"
+    checked_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-    install_opencode_user_shim() {
-      target="$1"
+    jq -n \
+      --arg checked_at "$checked_at" \
+      --arg current_openchamber "$current_openchamber" \
+      --arg latest_openchamber "$latest_openchamber" \
+      --arg current_opencode "$current_opencode" \
+      --arg latest_opencode "$latest_opencode" \
+      --arg harness_revision "${openchamberGenerationRevision}" \
+      '{
+        checked_at: $checked_at,
+        current: {openchamber: $current_openchamber, opencode: $current_opencode},
+        latest: {openchamber: $latest_openchamber, opencode: $latest_opencode},
+        harness_revision: $harness_revision,
+        promotion: "staged-then-promoted-after-30-seconds-continuous-idle"
+      }' > "$report.tmp"
+    mv "$report.tmp" "$report"
 
-      cat > "$HOME/.local/bin/opencode" <<EOF
-    #!/usr/bin/env sh
-    set -eu
-    ${sourceHmSessionVarsIfPresent}
-    target='$target'
-    if [ ! -x "\$target" ]; then
-      printf 'error: opencode is not installed yet; run openchamber-tool-maintenance\n' >&2
-      exit 1
+    if [ "$current_openchamber" = "$latest_openchamber" ] \
+      && [ "$current_opencode" = "$latest_opencode" ]; then
+      if active_is_usable; then
+        rm -f "$candidate_file"
+        log_info "OpenChamber and OpenCode already match npm latest"
+        exit 0
+      fi
+      if active_clis_are_usable; then
+        log_info "npm versions match latest but harness ${openchamberGenerationRevision} must be staged"
+      elif [ "''${1:-}" != bootstrap ]; then
+        printf 'error: active latest generation failed validation; bootstrap recovery is required\n' >&2
+        exit 1
+      else
+        log_info "active latest generation failed validation; rebuilding it"
+        rm -f "$tools_root/active"
+        chmod -R u+w "$generation" 2>/dev/null || true
+        rm -rf "$generation"
+      fi
     fi
-    exec "\$target" "\$@"
-    EOF
-      chmod 0755 "$HOME/.local/bin/opencode"
-    }
 
-    mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
+    if [ "''${1:-}" != bootstrap ] \
+      && [ -f "$failed_file" ] \
+      && [ "$(cat "$failed_file")" = "$release_id" ]; then
+      log_info "release $release_id previously failed promotion; waiting for a newer latest release"
+      exit 0
+    fi
 
-    install_agent_cli "@openchamber/web" "openchamber"
-    install_opencode_cli
-    install_user_shim "openchamber" "$NPM_CONFIG_PREFIX/bin/openchamber"
-    install_opencode_user_shim "$NPM_CONFIG_PREFIX/bin/opencode"
+    if [ -d "$generation" ] \
+      && ! validate_generation "$generation" "$latest_openchamber" "$latest_opencode" "$platform_package"; then
+      log_info "cached generation $release_id failed validation; restaging it"
+      chmod -R u+w "$generation" 2>/dev/null || true
+      rm -rf "$generation"
+    fi
+
+    if [ ! -d "$generation" ]; then
+      staging="$generations_dir/.staging-$release_id-$$"
+      rm -rf "$staging"
+      install -d -m 0755 "$staging"
+      log_info "staging npm latest: OpenChamber $latest_openchamber and OpenCode $latest_opencode"
+      sandbox_install "$staging" "$latest_openchamber" "$latest_opencode" "$platform_package"
+      sandbox_run_lifecycle "$staging"
+      harden_generation "$staging"
+      install_wrappers "$staging" "$platform_package"
+      printf '%s\n' "${openchamberGenerationRevision}" > "$staging/.openchamber-harness-revision"
+      validate_generation "$staging" "$latest_openchamber" "$latest_opencode" "$platform_package"
+      chmod -R a-w "$staging"
+      mv "$staging" "$generation"
+      staging=""
+    fi
+
+    printf '%s\t%s\t%s\t%s\n' \
+      "$generation" "$latest_openchamber" "$latest_opencode" "$release_id" > "$candidate_file.tmp"
+    mv "$candidate_file.tmp" "$candidate_file"
+
+    if [ "''${1:-}" = bootstrap ]; then
+      ln -sfn "$generation" "$tools_root/active.next"
+      mv -Tf "$tools_root/active.next" "$tools_root/active"
+      install_user_shims
+      rm -f "$candidate_file"
+      log_info "bootstrapped $release_id before service startup"
+    else
+      log_info "staged $release_id; promotion is queued behind the continuous-idle gate"
+    fi
   '';
 
   openchamberToolAutoUpdate = pkgs.writeShellScriptBin "openchamber-tool-auto-update" ''
     set -eu
 
     ${openchamberRuntimeEnv}
-    export NODE_NO_WARNINGS=1
+    export PATH=${openchamberPath}:/bin:/usr/bin
+    ${pkgs.su-exec}/bin/su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
+  '';
 
-    state_dir="/run/openchamber-tool-update"
-    pending_restart="$state_dir/restart.pending"
-    install -d -m 0700 "$state_dir"
+  openchamberCacheCleanup = pkgs.writeShellScriptBin "openchamber-cache-cleanup" ''
+    set -eu
 
-    exec 9>"$state_dir/tool-update.lock"
-    ${pkgs.util-linux}/bin/flock 9
+    ${openchamberRuntimeEnv}
+    export PATH=${openchamberPath}:/bin:/usr/bin
 
-    log_info() {
-      printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >&2
-    }
-
-    user_version() {
-      tool="$1"
-      su-exec openchamber:openchamber sh -c '
-        tool="$1"
-        if ! command -v "$tool" >/dev/null 2>&1; then
-          exit 0
-        fi
-        "$tool" --version 2>/dev/null | sed -n "1p" || true
-      ' sh "$tool"
-    }
-
-    before_openchamber="$(user_version openchamber)"
-    before_opencode="$(user_version opencode)"
-
-    su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
-
-    after_openchamber="$(user_version openchamber)"
-    after_opencode="$(user_version opencode)"
-
-    log_info "openchamber: ''${before_openchamber:-missing} -> ''${after_openchamber:-missing}"
-    log_info "opencode: ''${before_opencode:-missing} -> ''${after_opencode:-missing}"
-
-    if [ "$before_openchamber" != "$after_openchamber" ] || [ "$before_opencode" != "$after_opencode" ]; then
-      pending_tmp="$pending_restart.tmp"
-      {
-        printf 'source=tool-update\n'
-        printf 'queued_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-        printf 'previous_openchamber=%s\n' "$before_openchamber"
-        printf 'previous_opencode=%s\n' "$before_opencode"
-        printf 'openchamber=%s\n' "$after_openchamber"
-        printf 'opencode=%s\n' "$after_opencode"
-      } > "$pending_tmp"
-      mv "$pending_tmp" "$pending_restart"
-      log_info "tool update downloaded; queued restart until OpenChamber is idle"
-    else
-      log_info "installed tool versions are unchanged"
-    fi
+    for cache_dir in \
+      "$HOME/.cache/npm" \
+      "$HOME/.cache/uv" \
+      "$HOME/.cache/go-build" \
+      "$HOME/.cache/bun" \
+      "$HOME/.npm/_cacache"; do
+      [ -d "$cache_dir" ] || continue
+      find "$cache_dir" -xdev -type f -mtime +30 -delete
+    done
   '';
 
   openchamberToolUpdateRestart = pkgs.writeShellScriptBin "openchamber-tool-update-restart" ''
     set -eu
 
     ${openchamberRuntimeEnv}
+    export PATH=${openchamberPath}:/bin:/usr/bin
 
-    state_dir="/run/openchamber-tool-update"
-    pending_restart="$state_dir/restart.pending"
+    tools_root="$XDG_DATA_HOME/openchamber-tools"
+    state_dir="$XDG_STATE_HOME/openchamber-tool-update"
+    control_dir="/var/lib/openchamber-tool-update"
+    candidate_file="$state_dir/candidate.tsv"
+    health_restart_file="$control_dir/health-restart.pending"
+    failed_file="$control_dir/failed-release"
+    transaction_file="$control_dir/promotion.tsv"
+    gate_file="$control_dir/admission.lock"
+    previous_link="$tools_root/previous"
     audit_log="$HOME/.config/openchamber/logs/restart-audit.log"
+    gate_armed=0
+    opencode_gate_armed=0
+    generations_locked=0
     mkdir -p "$(dirname "$audit_log")"
+
+    clear_opencode_network_gate() {
+      if [ "$opencode_gate_armed" -ne 1 ] && [ "''${1:-}" != force ]; then
+        return 0
+      fi
+      ${pkgs.iptables}/bin/iptables -D OUTPUT -j OPENCHAMBER_OPENCODE_GATE 2>/dev/null || true
+      ${pkgs.iptables}/bin/iptables -F OPENCHAMBER_OPENCODE_GATE 2>/dev/null || true
+      ${pkgs.iptables}/bin/iptables -X OPENCHAMBER_OPENCODE_GATE 2>/dev/null || true
+      opencode_gate_armed=0
+    }
+
+    disarm_gate() {
+      if [ "$generations_locked" -eq 1 ]; then
+        chmod 0755 "$tools_root/generations"
+        generations_locked=0
+      fi
+      if [ -f "$transaction_file" ]; then
+        return 0
+      fi
+      clear_opencode_network_gate
+      if [ "$gate_armed" -eq 1 ] && [ ! -f "$transaction_file" ]; then
+        rm -f "$gate_file"
+      fi
+    }
+    trap disarm_gate EXIT INT TERM
 
     log_info() {
       printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >&2
     }
 
     audit_restart() {
-      reason="$(tr '\n' ' ' < "$pending_restart")"
-      printf '%s source=queued-maintenance action=restart-web %s\n' \
-        "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$reason" >> "$audit_log"
+      action="$1"
+      release="$2"
+      printf '%s source=tool-auto-update action=%s release=%s\n' \
+        "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$action" "$release" \
+        | ${pkgs.su-exec}/bin/su-exec openchamber:openchamber tee -a "$audit_log" >/dev/null
     }
 
     ${openchamberIdleCheck}
+    ${lib.optionalString externalOpenCode openchamberExternalOpenCodeReady}
 
-    [ -f "$pending_restart" ] || exit 0
+    has_opencode_serve() {
+      web_cgroup="$(systemctl show openchamber-web.service -p ControlGroup --value)"
+      [ -n "$web_cgroup" ] || return 1
+      for cmdline in /proc/[0-9]*/cmdline; do
+        pid_dir="$(dirname "$cmdline")"
+        if tr '\0' ' ' < "$cmdline" 2>/dev/null | grep -q 'opencode serve' \
+          && grep -Fq "$web_cgroup" "$pid_dir/cgroup" 2>/dev/null; then
+          return 0
+        fi
+      done
+      return 1
+    }
 
-    exec 9>"$state_dir/tool-update.lock"
+    runtime_healthy() {
+      is_openchamber_idle || return 1
+      curl -fsS --max-time 5 http://127.0.0.1:3000/api/opencode/health \
+        | jq -e '.healthy == true' >/dev/null 2>&1 \
+        || return 1
+      ${if externalOpenCode then "opencode_ready" else "has_opencode_serve"}
+    }
+
+    maintenance_drained() {
+      curl -fsS --max-time 5 http://127.0.0.1:3000/api/openchamber/maintenance-drain \
+        | jq -e '
+          .inFlightMutations == 0
+          and .activeTerminalSessions == 0
+          and .activeOpenCodeSessions == 0
+          and .activeScheduledTasks == 0 and .activeGoalWork == 0
+          and .observerPaused == true
+          and .schedulerPaused == true
+        ' >/dev/null 2>&1
+    }
+
+    managed_opencode_idle() {
+      ${openchamberManagedOpenCodeIdle}/bin/openchamber-managed-opencode-idle
+    }
+
+    managed_opencode_connections_drained() {
+      ${openchamberManagedOpenCodeIdle}/bin/openchamber-managed-opencode-idle \
+        --connections-drained
+    }
+
+    opencode_process_present() {
+      ${
+        if externalOpenCode then "systemctl is-active --quiet opencode.service" else "has_opencode_serve"
+      }
+    }
+
+    managed_opencode_quiesced_or_absent() {
+      if ! opencode_process_present; then
+        return 0
+      fi
+      managed_opencode_connections_drained && managed_opencode_idle
+    }
+
+    arm_opencode_network_gate() {
+      opencode_port="$(${openchamberManagedOpenCodeIdle}/bin/openchamber-managed-opencode-idle --print-port)" \
+        || {
+          if [ "''${1:-}" = allow-absent ] && ! opencode_process_present; then
+            opencode_port=4096
+          else
+            return 1
+          fi
+        }
+      case "$opencode_port" in
+        ""|*[!0-9]*) return 1 ;;
+      esac
+      opencode_gate_armed=1
+      ${pkgs.iptables}/bin/iptables -N OPENCHAMBER_OPENCODE_GATE 2>/dev/null || true
+      ${pkgs.iptables}/bin/iptables -C OPENCHAMBER_OPENCODE_GATE \
+        -p tcp --syn --dport "$opencode_port" -m conntrack --ctstate NEW \
+        -m owner '!' --uid-owner 0 -j REJECT 2>/dev/null \
+        || ${pkgs.iptables}/bin/iptables -A OPENCHAMBER_OPENCODE_GATE \
+          -p tcp --syn --dport "$opencode_port" -m conntrack --ctstate NEW \
+          -m owner '!' --uid-owner 0 -j REJECT \
+        || return 1
+      ${pkgs.iptables}/bin/iptables -C OUTPUT \
+        -j OPENCHAMBER_OPENCODE_GATE 2>/dev/null \
+        || ${pkgs.iptables}/bin/iptables -I OUTPUT 1 \
+          -j OPENCHAMBER_OPENCODE_GATE \
+        || return 1
+    }
+
+    wait_runtime_healthy() {
+      for _ in $(seq 1 60); do
+        if runtime_healthy; then
+          return 0
+        fi
+        sleep 2
+      done
+      runtime_healthy
+    }
+
+    prune_generations() {
+      active_generation="$(readlink -f "$tools_root/active")"
+      previous_generation="$(readlink -f "$previous_link" 2>/dev/null || true)"
+      for generation_dir in "$tools_root/generations"/* "$tools_root/generations"/.staging-*; do
+        [ -e "$generation_dir" ] || continue
+        [ "$generation_dir" = "$active_generation" ] && continue
+        [ "$generation_dir" = "$previous_generation" ] && continue
+        chmod -R u+w "$generation_dir" 2>/dev/null || true
+        rm -rf -- "$generation_dir"
+      done
+    }
+
+    lock_candidate_tree() {
+      candidate="$1"
+      chmod a-w "$tools_root/generations"
+      generations_locked=1
+      chown -R root:root "$candidate"
+      chmod -R a-w "$candidate"
+    }
+
+    unlock_generations() {
+      [ "$generations_locked" -eq 1 ] || return 0
+      chmod 0755 "$tools_root/generations"
+      generations_locked=0
+    }
+
+    exec 9<>"$control_dir/tool-update.lock"
     if ! ${pkgs.util-linux}/bin/flock -n 9; then
       log_info "tool maintenance is still running; leaving restart queued"
       exit 0
     fi
+    # SIGKILL/OOM bypasses traps; repair only after acquiring the shared lock.
+    install -d -m0755 -o 3000 -g 3000 "$tools_root/generations"
+    if [ ! -f "$transaction_file" ]; then
+      clear_opencode_network_gate force
+    fi
+
+    if [ -f "$transaction_file" ]; then
+      IFS="$(printf '\t')" read -r interrupted_old interrupted_candidate interrupted_release < "$transaction_file"
+      if systemctl is-active --quiet openchamber-web.service \
+        || ${lib.optionalString externalOpenCode "systemctl is-active --quiet opencode.service ||"} false; then
+        gate_armed=1
+        if ! arm_opencode_network_gate allow-absent; then
+          log_info "could not gate OpenCode while recovering $interrupted_release"
+          exit 1
+        fi
+        sleep 30
+        recovery_quiesced=1
+        if systemctl is-active --quiet openchamber-web.service \
+          && { ! maintenance_drained || ! is_openchamber_idle; }; then
+          recovery_quiesced=0
+        fi
+        if ! managed_opencode_quiesced_or_absent; then
+          recovery_quiesced=0
+        fi
+        if [ "$recovery_quiesced" -ne 1 ]; then
+          log_info "runtime is active or unknown while recovering $interrupted_release"
+          exit 1
+        fi
+      fi
+      log_info "recovering interrupted promotion $interrupted_release"
+      ${pkgs.su-exec}/bin/su-exec openchamber:openchamber ln -sfn "$interrupted_old" "$tools_root/active.next"
+      ${pkgs.su-exec}/bin/su-exec openchamber:openchamber mv -Tf "$tools_root/active.next" "$tools_root/active"
+      recovery_ok=1
+      ${lib.optionalString externalOpenCode "systemctl restart opencode.service || recovery_ok=0"}
+      if [ "$recovery_ok" -eq 1 ]; then
+        systemctl restart openchamber-web.service || recovery_ok=0
+      fi
+      clear_opencode_network_gate
+      if [ "$recovery_ok" -eq 1 ] && wait_runtime_healthy; then
+        printf '%s\n' "$interrupted_release" > "$failed_file.tmp"
+        mv "$failed_file.tmp" "$failed_file"
+        rm -f "$candidate_file" "$transaction_file" "$gate_file"
+        clear_opencode_network_gate
+        audit_restart recover-interrupted "$interrupted_release"
+        exit 1
+      fi
+      log_info "previous generation is not healthy yet; preserving promotion recovery state"
+      audit_restart recover-pending "$interrupted_release"
+      exit 1
+    fi
+
+    if [ ! -f "$candidate_file" ] && [ ! -f "$health_restart_file" ]; then
+      rm -f "$gate_file"
+      exit 0
+    fi
 
     if ! systemctl is-active --quiet openchamber-web.service; then
-      log_info "openchamber-web.service is stopped; clearing queued restart"
-      rm -f "$pending_restart"
+      if [ -f "$health_restart_file" ]; then
+        log_info "OpenChamber is stopped; attempting queued health recovery"
+        if ! arm_opencode_network_gate allow-absent; then
+          log_info "could not gate OpenCode before stopped-web health recovery"
+          exit 0
+        fi
+        sleep 30
+        if ! managed_opencode_quiesced_or_absent; then
+          log_info "OpenCode is active or unknown before stopped-web health recovery"
+          exit 0
+        fi
+        recovery_ok=1
+        ${lib.optionalString externalOpenCode "systemctl restart opencode.service || recovery_ok=0"}
+        if [ "$recovery_ok" -eq 1 ]; then
+          systemctl restart openchamber-web.service || recovery_ok=0
+        fi
+        clear_opencode_network_gate
+        if [ "$recovery_ok" -eq 1 ] && wait_runtime_healthy; then
+          rm -f "$health_restart_file" "$gate_file"
+          audit_restart health-recover-stopped current
+          exit 0
+        fi
+        log_info "queued health recovery did not restore the stopped runtime"
+        exit 1
+      fi
+      log_info "openchamber-web.service is stopped; leaving candidate queued"
       exit 0
     fi
 
@@ -414,23 +1458,157 @@ let
       exit 0
     fi
 
-    log_info "OpenChamber is idle; requiring 30 seconds of continuous idle before restart"
+    printf '%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$gate_file.tmp"
+    mv "$gate_file.tmp" "$gate_file"
+    gate_armed=1
+    sleep 1
+    if ! maintenance_drained || ! is_openchamber_idle || ! managed_opencode_quiesced_or_absent; then
+      log_info "admissions are still draining or activity began while the gate was closing; leaving candidate queued"
+      exit 0
+    fi
+
+    if ! arm_opencode_network_gate allow-absent; then
+      log_info "failed to gate direct OpenCode admissions; leaving restart queued"
+      exit 0
+    fi
+    log_info "OpenChamber and new OpenCode admissions are gated; requiring 30 seconds of continuous idle before restart"
     sleep 30
 
-    if [ ! -f "$pending_restart" ]; then
-      log_info "queued restart was already applied by another service start"
+    if ! maintenance_drained || ! is_openchamber_idle \
+      || ! managed_opencode_quiesced_or_absent; then
+      log_info "OpenChamber is no longer fully drained and idle; leaving restart queued"
       exit 0
     fi
 
-    if ! is_openchamber_idle; then
-      log_info "OpenChamber is no longer idle; leaving restart queued"
+    if [ -f "$health_restart_file" ] && [ ! -f "$candidate_file" ]; then
+      log_info "runtime is fully drained; performing queued health recovery"
+      restart_ok=1
+      ${lib.optionalString externalOpenCode "systemctl restart opencode.service || restart_ok=0"}
+      if [ "$restart_ok" -eq 1 ]; then
+        systemctl restart openchamber-web.service || restart_ok=0
+      fi
+      clear_opencode_network_gate
+      if [ "$restart_ok" -eq 1 ]; then
+        wait_runtime_healthy || restart_ok=0
+      fi
+      if [ "$restart_ok" -eq 1 ]; then
+        rm -f "$health_restart_file" "$gate_file"
+        gate_armed=0
+        audit_restart health-recover current
+        exit 0
+      fi
+      log_info "queued health recovery failed; request remains pending"
+      audit_restart health-recover-pending current
+      exit 1
+    fi
+
+    if [ ! -f "$candidate_file" ]; then
+      log_info "candidate was already promoted"
       exit 0
     fi
 
-    log_info "OpenChamber remained idle for 30 seconds; applying queued maintenance restart"
-    audit_restart
-    systemctl restart openchamber-web.service
-    rm -f "$pending_restart"
+    IFS="$(printf '\t')" read -r candidate openchamber_version opencode_version release_id < "$candidate_file"
+    case "$candidate" in
+      "$tools_root/generations/"*) ;;
+      *)
+        log_info "candidate path is outside the managed generations directory; latching failure"
+        printf '%s\n' "$release_id" > "$failed_file.tmp"
+        mv "$failed_file.tmp" "$failed_file"
+        rm -f "$candidate_file"
+        exit 1
+        ;;
+    esac
+    candidate_real="$(${pkgs.coreutils}/bin/readlink -f "$candidate" 2>/dev/null || true)"
+    if [ "$candidate_real" != "$candidate" ] \
+      || [ "$(basename "$candidate")" != "$release_id" ]; then
+      log_info "candidate $release_id does not resolve to its declared immutable generation; latching failure"
+      printf '%s\n' "$release_id" > "$failed_file.tmp"
+      mv "$failed_file.tmp" "$failed_file"
+      rm -f "$candidate_file"
+      exit 1
+    fi
+    lock_candidate_tree "$candidate"
+    if ! ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance \
+      validate-candidate "$candidate" "$openchamber_version" "$opencode_version"; then
+      log_info "candidate $release_id failed locked pre-promotion validation; latching failure"
+      printf '%s\n' "$release_id" > "$failed_file.tmp"
+      mv "$failed_file.tmp" "$failed_file"
+      rm -f "$candidate_file"
+      unlock_generations
+      exit 1
+    fi
+
+    old_generation="$(readlink -f "$tools_root/active")"
+    printf '%s\t%s\t%s\n' "$old_generation" "$candidate" "$release_id" > "$transaction_file.tmp"
+    mv "$transaction_file.tmp" "$transaction_file"
+    ${pkgs.su-exec}/bin/su-exec openchamber:openchamber ln -sfn "$old_generation" "$previous_link"
+    ${pkgs.su-exec}/bin/su-exec openchamber:openchamber ln -sfn "$candidate" "$tools_root/active.next"
+    ${pkgs.su-exec}/bin/su-exec openchamber:openchamber mv -Tf "$tools_root/active.next" "$tools_root/active"
+    unlock_generations
+    audit_restart promote "$release_id"
+
+    restart_ok=1
+    ${lib.optionalString externalOpenCode ''
+      systemctl restart opencode.service || restart_ok=0
+      if [ "$restart_ok" -eq 1 ]; then
+        for _ in $(seq 1 30); do
+          if opencode_ready; then break; fi
+          sleep 2
+        done
+        opencode_ready || restart_ok=0
+      fi
+    ''}
+    if [ "$restart_ok" -eq 1 ]; then
+      systemctl restart openchamber-web.service || restart_ok=0
+    fi
+    clear_opencode_network_gate
+    if [ "$restart_ok" -eq 1 ]; then
+      wait_runtime_healthy || restart_ok=0
+    fi
+
+    if [ "$restart_ok" -eq 1 ]; then
+      rm -f "$candidate_file" "$failed_file" "$transaction_file" "$health_restart_file"
+      rm -f "$gate_file"
+      gate_armed=0
+      prune_generations
+      log_info "promoted $release_id after sustained idle"
+      exit 0
+    fi
+
+    log_info "promotion $release_id failed health checks; restoring previous generation"
+    if ! arm_opencode_network_gate allow-absent; then
+      log_info "failed to gate OpenCode before rollback; preserving promotion recovery state"
+      audit_restart rollback-deferred "$release_id"
+      exit 1
+    fi
+    sleep 30
+    if ! maintenance_drained || ! is_openchamber_idle \
+      || ! managed_opencode_quiesced_or_absent; then
+      log_info "runtime is active or unknown before rollback; preserving promotion recovery state"
+      audit_restart rollback-deferred "$release_id"
+      exit 1
+    fi
+    ${pkgs.su-exec}/bin/su-exec openchamber:openchamber ln -sfn "$old_generation" "$tools_root/active.next"
+    ${pkgs.su-exec}/bin/su-exec openchamber:openchamber mv -Tf "$tools_root/active.next" "$tools_root/active"
+    rollback_ok=1
+    ${lib.optionalString externalOpenCode "systemctl restart opencode.service || rollback_ok=0"}
+    if [ "$rollback_ok" -eq 1 ]; then
+      systemctl restart openchamber-web.service || rollback_ok=0
+    fi
+    clear_opencode_network_gate
+    if [ "$rollback_ok" -ne 1 ] || ! wait_runtime_healthy; then
+      log_info "previous generation is not healthy yet; preserving promotion recovery state"
+      audit_restart rollback-pending "$release_id"
+      exit 1
+    fi
+    printf '%s\n' "$release_id" > "$failed_file.tmp"
+    mv "$failed_file.tmp" "$failed_file"
+    rm -f "$candidate_file" "$transaction_file" "$health_restart_file"
+    rm -f "$gate_file"
+    gate_armed=0
+    clear_opencode_network_gate
+    audit_restart rollback "$release_id"
+    exit 1
   '';
 
   openchamberRetryGuard = pkgs.writeShellScriptBin "openchamber-retry-guard" ''
@@ -494,23 +1672,8 @@ let
           continue
         fi
 
-        if ! session="$(curl -fsS --max-time 10 "http://127.0.0.1:3000/api/session/$session_id")"; then
-          log_info "session=$session_id retry guard could not resolve session directory"
-          continue
-        fi
-        directory="$(printf '%s\n' "$session" | jq -r '.directory // empty')"
-        if [ -z "$directory" ]; then
-          log_info "session=$session_id retry guard found no session directory"
-          continue
-        fi
-        encoded_directory="$(printf '%s' "$directory" | jq -sRr @uri)"
-
-        if curl -fsS --max-time 15 -X POST \
-          "http://127.0.0.1:3000/api/session/$session_id/abort?directory=$encoded_directory" >/dev/null; then
-          log_info "session=$session_id action=abort-provider-retry attempt=$attempt age_ms=$age_ms reason=$message"
-        else
-          log_info "session=$session_id provider retry abort failed; will retry"
-        fi
+        # Provider rate limits and outages must not cancel autonomous goals.
+        log_info "session=$session_id action=observe-provider-retry attempt=$attempt age_ms=$age_ms reason=$message"
       done
   '';
 
@@ -589,6 +1752,7 @@ let
     }
 
     ${openchamberIdleCheck}
+    ${lib.optionalString externalOpenCode openchamberExternalOpenCodeReady}
 
     unhealthy_reason=""
     web_was_active=1
@@ -596,6 +1760,10 @@ let
     if ! systemctl is-active --quiet openchamber-web.service; then
       unhealthy_reason="openchamber-web.service is not active"
       web_was_active=0
+    ${lib.optionalString externalOpenCode ''
+      elif ! opencode_ready; then
+        unhealthy_reason="external OpenCode endpoint is not ready"
+    ''}
     elif ! curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null; then
       unhealthy_reason="OpenChamber root endpoint is not responding"
     fi
@@ -638,25 +1806,26 @@ let
       exit 0
     fi
 
-    if [ "$web_was_active" -eq 1 ] && ! is_openchamber_idle; then
-      log_info "unhealthy: $unhealthy_reason; OpenChamber activity is active or unknown; restart deferred"
-      exit 0
-    fi
-
-    state_dir="/run/openchamber-tool-update"
-    install -d -m 0700 "$state_dir"
-    exec 9>"$state_dir/tool-update.lock"
+    update_control_dir="/var/lib/openchamber-tool-update"
+    exec 9<>"$update_control_dir/tool-update.lock"
     if ! ${pkgs.util-linux}/bin/flock -n 9; then
       log_info "unhealthy: $unhealthy_reason; tool maintenance or restart is in progress; restart deferred"
       exit 0
     fi
+    if [ -f "$update_control_dir/promotion.tsv" ]; then
+      log_info "unhealthy: $unhealthy_reason; tool promotion recovery owns the restart gates; restart deferred"
+      exit 0
+    fi
 
-    log_info "unhealthy: $unhealthy_reason; restarting openchamber-web.service"
-    printf '%s source=health-monitor action=restart-web reason=%s failures=%s\n' \
+    printf '%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+      > "$update_control_dir/health-restart.pending.tmp"
+    mv "$update_control_dir/health-restart.pending.tmp" \
+      "$update_control_dir/health-restart.pending"
+    log_info "unhealthy: $unhealthy_reason; queued coordinated idle-gated recovery"
+    printf '%s source=health-monitor action=queue-restart reason=%s failures=%s\n' \
       "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$unhealthy_reason" "$failure_count" \
       >> "$HOME/.config/openchamber/logs/restart-audit.log"
-    systemctl reset-failed openchamber-web.service || true
-    systemctl restart openchamber-web.service
+    systemctl start --no-block openchamber-tool-update-restart.service || true
     rm -f "$state_file"
   '';
 
@@ -664,6 +1833,12 @@ let
     set -eu
 
     ${openchamberIdleCheck}
+    ${lib.optionalString externalOpenCode openchamberExternalOpenCodeReady}
+
+    if [ -f /var/lib/openchamber-tool-update/promotion.tsv ]; then
+      printf 'warning: tool promotion recovery owns the restart gates; container kill deferred\n' >&2
+      exit 0
+    fi
 
     read -r uptime _ < /proc/uptime
     uptime_seconds="''${uptime%%.*}"
@@ -672,12 +1847,12 @@ let
     fi
     case "$manager_started_usec" in
       ""|*[!0-9]*)
-        container_age_seconds=1200
+        container_age_seconds=3600
         ;;
       *)
         container_age_seconds=$((uptime_seconds - (manager_started_usec / 1000000)))
         if [ "$container_age_seconds" -lt 0 ]; then
-          container_age_seconds=1200
+          container_age_seconds=3600
         fi
         ;;
     esac
@@ -691,26 +1866,36 @@ let
       exit 0
     fi
 
-    if [ "$container_age_seconds" -lt 1200 ] \
+    if [ "$container_age_seconds" -lt 3600 ] \
       && { [ "$setup_state" = "activating" ] \
         || [ "$bootstrap_state" = "activating" ] \
         || [ "$web_state" = "activating" ]; }; then
       exit 0
     fi
 
-    if ${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null; then
+    if ${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null \
+      && ${if externalOpenCode then "opencode_ready" else "true"}; then
       exit 0
     fi
 
     if ! ${pkgs.systemd}/bin/systemctl is-active --quiet openchamber-web.service; then
+      ${lib.optionalString externalOpenCode ''
+        if ${pkgs.systemd}/bin/systemctl is-active --quiet opencode.service; then
+          health_restart=/var/lib/openchamber-tool-update/health-restart.pending
+          if [ ! -f "$health_restart" ]; then
+            printf '%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$health_restart.tmp"
+            mv "$health_restart.tmp" "$health_restart"
+          fi
+          ${pkgs.systemd}/bin/systemctl start --no-block \
+            openchamber-tool-update-restart.service || true
+          printf 'warning: OpenChamber web is stopped while external OpenCode is active; coordinated recovery owns its admission gate and container kill is deferred\n' >&2
+          exit 0
+        fi
+      ''}
       exit 1
     fi
 
-    if is_openchamber_idle; then
-      exit 1
-    fi
-
-    printf 'warning: OpenChamber health is degraded but activity is active or unknown; container kill deferred\n' >&2
+    printf 'warning: OpenChamber health is degraded while its service is active; coordinated monitor recovery owns admission gating and container kill is deferred\n' >&2
     exit 0
   '';
 
@@ -801,6 +1986,10 @@ let
     }
 
     restart_web() {
+      ${lib.optionalString externalOpenCode ''
+        "$sudo_bin" -n "$systemctl_bin" reset-failed opencode.service
+        "$sudo_bin" -n "$systemctl_bin" restart opencode.service
+      ''}
       "$sudo_bin" -n "$systemctl_bin" reset-failed openchamber-web.service
       "$sudo_bin" -n "$systemctl_bin" restart openchamber-web.service
     }
@@ -814,9 +2003,21 @@ let
       return 1
     }
 
+    opencode_healthy() {
+      ${
+        if externalOpenCode then
+          ''
+            curl -fsS --max-time 5 http://127.0.0.1:4096/global/health \
+              | jq -e '.healthy == true' >/dev/null 2>&1
+          ''
+        else
+          "has_opencode_serve"
+      }
+    }
+
     wait_healthy() {
       for _ in $(seq 1 90); do
-        if curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null && has_opencode_serve; then
+        if curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null && opencode_healthy; then
           return 0
         fi
         sleep 1
@@ -975,7 +2176,7 @@ let
 
     ${openchamberRuntimeEnv}
 
-    su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
+    ${pkgs.su-exec}/bin/su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
     ${openchamberRunHooks}/bin/openchamber-run-hooks doctor.d
   '';
 
@@ -1020,6 +2221,69 @@ let
 
     rm -rf "$last_good"
     mv "$tmp" "$last_good"
+  '';
+
+  openchamberRuntimeMetadata = pkgs.writeShellScriptBin "openchamber-runtime-metadata" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+
+    config_file="$HOME/.config/opencode/opencode.json"
+    run_dir="$HOME/.config/openchamber/run"
+    effective_raw="$run_dir/effective-opencode-config.raw.$$"
+    redacted="$run_dir/effective-opencode-config.redacted.json"
+    fingerprint="$run_dir/effective-opencode-config.sha256"
+    metadata="$run_dir/runtime-metadata.json"
+    install -d -m 0755 "$run_dir"
+
+    if [ ! -f "$config_file" ]; then
+      printf 'error: managed OpenCode config is missing: %s\n' "$config_file" >&2
+      exit 1
+    fi
+    umask 077
+    trap 'rm -f "$effective_raw"' EXIT INT TERM
+    opencode debug config > "$effective_raw"
+    jq '
+      walk(
+        if type == "object" then
+          with_entries(
+            if (.key | test("api.?key|token|secret|password|credential|authorization|cookie"; "i"))
+            then .value = "[REDACTED]"
+            else .
+            end
+          )
+        else . end
+      )
+    ' "$effective_raw" > "$redacted.tmp"
+    mv "$redacted.tmp" "$redacted"
+    rm -f "$effective_raw"
+    trap - EXIT INT TERM
+    jq -S -c . "$redacted" | sha256sum | cut -d ' ' -f 1 > "$fingerprint.tmp"
+    mv "$fingerprint.tmp" "$fingerprint"
+    sdk_package="$(find "$NPM_CONFIG_PREFIX/lib/node_modules" -path '*/@opencode-ai/sdk/package.json' -print -quit 2>/dev/null || true)"
+    sdk_version=""
+    [ -z "$sdk_package" ] || sdk_version="$(jq -r '.version // empty' "$sdk_package")"
+
+    jq -n \
+      --arg openchamber "$(openchamber --version | sed -n '1p')" \
+      --arg opencode "$(opencode --version | sed -n '1p')" \
+      --arg sdk "$sdk_version" \
+      --arg model "$(jq -r '.model // empty' "$config_file")" \
+      --argjson native_responses ${lib.boolToString nativeResponses} \
+      --argjson external_opencode ${lib.boolToString externalOpenCode} \
+      --arg config_sha256 "$(cat "$fingerprint")" \
+      '{
+        openchamber: $openchamber,
+        opencode: $opencode,
+        opencode_sdk: $sdk,
+        model_id: $model,
+        config_sha256: $config_sha256,
+        feature_gates: {
+          native_responses: $native_responses,
+          external_opencode: $external_opencode
+        }
+      }' > "$metadata.tmp"
+    mv "$metadata.tmp" "$metadata"
   '';
 
   openchamberTunnel = pkgs.writeShellScriptBin "openchamber-tunnel" ''
@@ -1215,6 +2479,13 @@ let
     export XDG_RUNTIME_DIR=/run/user/3000
     unset OPENCHAMBER_UI_PASSWORD UI_PASSWORD
     export OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN=true
+    export OPENCODE_PORT=4096
+    ${lib.optionalString externalOpenCode ''
+      export OPENCODE_HOST=http://127.0.0.1:4096
+      export OPENCODE_SKIP_START=true
+    ''}
+
+    ${openchamberRuntimeMetadata}/bin/openchamber-runtime-metadata
 
     for _ in $(seq 1 30); do
       if docker info >/dev/null 2>&1; then
@@ -1230,6 +2501,31 @@ let
     exec openchamber serve --host 0.0.0.0 --port 3000 --foreground
   '';
 
+  openchamberOpenCodeRun = pkgs.writeShellScriptBin "openchamber-opencode-run" ''
+    set -eu
+
+    ${openchamberRuntimeEnv}
+    export XDG_RUNTIME_DIR=/run/user/3000
+    cd /home/openchamber
+    exec opencode serve --hostname 127.0.0.1 --port 4096
+  '';
+
+  openchamberHardenActiveGeneration = pkgs.writeShellScriptBin "openchamber-harden-active-generation" ''
+    set -eu
+
+    tools_root=/home/openchamber/.local/share/openchamber-tools
+    active_generation="$(${pkgs.coreutils}/bin/readlink -f "$tools_root/active" 2>/dev/null || true)"
+    case "$active_generation" in
+      "$tools_root/generations/"*) ;;
+      *)
+        printf 'error: active OpenChamber generation is outside the managed tree\n' >&2
+        exit 1
+        ;;
+    esac
+    chown -R root:root "$active_generation"
+    chmod -R a-w "$active_generation"
+  '';
+
   openchamberContainerSetup = pkgs.writeShellScriptBin "openchamber-container-setup" ''
     set -eu
 
@@ -1237,13 +2533,14 @@ let
 
     mkdir -p \
       "$HOME/.local/bin" \
-      "$NPM_CONFIG_PREFIX/bin" \
-      "$NPM_CONFIG_PREFIX/lib" \
+      "$XDG_DATA_HOME/openchamber-tools/generations" \
+      "$XDG_STATE_HOME/openchamber-tool-update" \
       "$XDG_DATA_HOME" \
       "$XDG_STATE_HOME" \
       "$XDG_CACHE_HOME" \
       "$HOME/.config/openchamber/logs" \
       "$HOME/.config/openchamber/recovery" \
+      "$HOME/.config/openchamber/run" \
       "$HOME/.config/openchamber/tunnels" \
       "$HOME/.config/openchamber/logs/tunnels" \
       "$HOME/.config/opencode" \
@@ -1258,10 +2555,30 @@ let
       /var/run \
       /tmp \
       /run/user/3000
+    install -d -m 0755 -o root -g root /var/lib/openchamber-tool-update
+    touch /var/lib/openchamber-tool-update/tool-update.lock
+    chown root:root /var/lib/openchamber-tool-update/tool-update.lock
+    chmod 0644 /var/lib/openchamber-tool-update/tool-update.lock
     chown -R openchamber:openchamber "$HOME/.openchamber" "$HOME/.config/systemd"
-    chown -R openchamber:openchamber "$HOME/.config/openchamber/logs" "$HOME/.config/openchamber/recovery" "$HOME/.config/openchamber/tunnels"
+    chown -R openchamber:openchamber "$HOME/.config/openchamber/logs" "$HOME/.config/openchamber/recovery" "$HOME/.config/openchamber/run" "$HOME/.config/openchamber/tunnels"
     chown openchamber:openchamber /run/user/3000
     chmod 0700 /run/user/3000
+    managed_opencode_root=/workspace/ghostship-agent/config/opencode
+    if [ ! -f "$HOME/.config/opencode/opencode.json" ]; then
+      if [ ! -f "$managed_opencode_root/opencode.json" ] \
+        || [ ! -f "$managed_opencode_root/AGENTS.md" ] \
+        || [ ! -d "$managed_opencode_root/agent" ]; then
+        printf 'error: managed OpenCode config is missing from %s\n' "$managed_opencode_root" >&2
+        exit 1
+      fi
+      install -Dm0644 "$managed_opencode_root/opencode.json" "$HOME/.config/opencode/opencode.json"
+      install -Dm0644 "$managed_opencode_root/AGENTS.md" "$HOME/.config/opencode/AGENTS.md"
+      install -d -m0755 "$HOME/.config/opencode/agent"
+      for agent_prompt in "$managed_opencode_root/agent"/*.md; do
+        install -m0644 "$agent_prompt" "$HOME/.config/opencode/agent/"
+      done
+      chown -R openchamber:openchamber "$HOME/.config/opencode"
+    fi
     if [ ! -e "$HOME/tools" ] && [ -d /workspace/ghostship-agent/tools ]; then
       ln -s /workspace/ghostship-agent/tools "$HOME/tools"
       chown -h openchamber:openchamber "$HOME/tools"
@@ -1273,9 +2590,49 @@ let
       "$HOME/.local/bin/codex" \
       "$HOME/.local/bin/gemini" \
       "$HOME/.local/bin/gemini-cli"
-    if [ ! -x "$NPM_CONFIG_PREFIX/bin/openchamber" ] \
-      || [ ! -x "$NPM_CONFIG_PREFIX/bin/opencode" ]; then
-      su-exec openchamber:openchamber ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance
+    chown openchamber:openchamber \
+      "$XDG_DATA_HOME/openchamber-tools" \
+      "$XDG_DATA_HOME/openchamber-tools/generations"
+    chown -R openchamber:openchamber "$XDG_STATE_HOME/openchamber-tool-update"
+    transaction_file=/var/lib/openchamber-tool-update/promotion.tsv
+    recovery_pending=0
+    if [ -f "$transaction_file" ]; then
+      IFS="$(printf '\t')" read -r interrupted_old interrupted_candidate interrupted_release < "$transaction_file"
+      case "$interrupted_old" in
+        "$XDG_DATA_HOME/openchamber-tools/generations/"*) ;;
+        *)
+          printf 'error: interrupted promotion has an invalid previous generation path\n' >&2
+          exit 1
+          ;;
+      esac
+      if [ ! -x "$interrupted_old/bin/openchamber" ] || [ ! -x "$interrupted_old/bin/opencode" ]; then
+        printf 'error: interrupted promotion previous generation is incomplete\n' >&2
+        exit 1
+      fi
+      ${pkgs.su-exec}/bin/su-exec openchamber:openchamber ln -sfn "$interrupted_old" "$XDG_DATA_HOME/openchamber-tools/active.next"
+      ${pkgs.su-exec}/bin/su-exec openchamber:openchamber mv -Tf \
+        "$XDG_DATA_HOME/openchamber-tools/active.next" \
+        "$XDG_DATA_HOME/openchamber-tools/active"
+      recovery_pending=1
+    fi
+    if [ "$recovery_pending" -eq 0 ]; then
+      rm -f "$OPENCHAMBER_MAINTENANCE_GATE"
+      if [ ! -L "$XDG_DATA_HOME/openchamber-tools/active" ] \
+        && [ -f "$XDG_STATE_HOME/openchamber-tool-update/candidate.tsv" ]; then
+        # The host already validated this immutable generation while the old
+        # container was live. Activate it without returning to the registry.
+        ${pkgs.su-exec}/bin/su-exec openchamber:openchamber \
+          ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance bootstrap-candidate
+      else
+        # Resolve and validate npm latest. Initial startup promotes before any
+        # service can own a session; later candidates remain queued until idle.
+        ${pkgs.su-exec}/bin/su-exec openchamber:openchamber \
+          ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance bootstrap
+      fi
+    else
+      # Keep the transaction and admission gate intact. The restart worker
+      # clears them only after the restored runtime is healthy.
+      printf 'interrupted tool promotion recovery remains pending after startup\n' >&2
     fi
     cat > "$HOME/.local/bin/openchamber-web-run" <<'EOF'
     #!/bin/sh
@@ -1332,8 +2689,11 @@ let
     openchamberContainerSetup
     openchamberDockerdRun
     openchamberWebRun
+    openchamberOpenCodeRun
+    openchamberHardenActiveGeneration
     openchamberToolMaintenance
     openchamberToolAutoUpdate
+    openchamberCacheCleanup
     openchamberToolUpdateRestart
     openchamberRetryGuard
     openchamberReconcileInterruptedTools
@@ -1345,6 +2705,7 @@ let
     openchamberUserUnits
     openchamberBootstrap
     openchamberSnapshotConfig
+    openchamberRuntimeMetadata
     openchamberTunnel
     pkgs.dockerTools.binSh
     pkgs.dockerTools.usrBinEnv
@@ -1398,6 +2759,8 @@ let
       cat > etc/sudoers.d/openchamber-apply-config <<'EOF'
       openchamber ALL=(root) NOPASSWD: ${pkgs.systemd}/bin/systemctl reset-failed openchamber-web.service
       openchamber ALL=(root) NOPASSWD: ${pkgs.systemd}/bin/systemctl restart openchamber-web.service
+      ${lib.optionalString externalOpenCode "openchamber ALL=(root) NOPASSWD: ${pkgs.systemd}/bin/systemctl reset-failed opencode.service"}
+      ${lib.optionalString externalOpenCode "openchamber ALL=(root) NOPASSWD: ${pkgs.systemd}/bin/systemctl restart opencode.service"}
       EOF
       chmod 0440 etc/sudoers.d/openchamber-apply-config
       rm -f etc/pam.d/systemd-user
@@ -1451,8 +2814,11 @@ let
       Type=oneshot
       ExecStart=${openchamberContainerSetup}/bin/openchamber-container-setup
       RemainAfterExit=yes
-      TimeoutStartSec=20m
-      TasksMax=infinity
+      TimeoutStartSec=30m
+      MemoryHigh=2G
+      MemoryMax=4G
+      OOMPolicy=kill
+      TasksMax=512
 
       [Install]
       WantedBy=multi-user.target
@@ -1563,7 +2929,7 @@ let
       After=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       Requires=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       Conflicts=shutdown.target
-      Before=openchamber-web.service shutdown.target
+      Before=${lib.optionalString externalOpenCode "opencode.service "}openchamber-web.service shutdown.target
 
       [Service]
       Type=oneshot
@@ -1574,9 +2940,10 @@ let
       Environment=XDG_RUNTIME_DIR=/run/user/3000
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation
-      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/active/bin:${openchamberPath}:/bin:/usr/bin
       ExecCondition=+${pkgs.runtimeShell} -c 'state="$(${pkgs.systemd}/bin/systemctl show openchamber-web.service -p ActiveState --value)" && { [ "$state" = inactive ] || [ "$state" = failed ]; }'
       ExecStart=${openchamberBootstrap}/bin/openchamber-bootstrap
+      ExecStartPost=+${openchamberHardenActiveGeneration}/bin/openchamber-harden-active-generation
       RemainAfterExit=yes
       TimeoutStartSec=20m
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-bootstrap.log
@@ -1586,16 +2953,66 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      ${lib.optionalString externalOpenCode ''
+        cat > etc/systemd/system/openchamber-runtime.slice <<'EOF'
+        [Unit]
+        Description=OpenChamber runtime aggregate resource boundary
+        DefaultDependencies=no
+        Conflicts=shutdown.target
+        Before=shutdown.target
+
+        [Slice]
+        MemoryHigh=32G
+        MemoryMax=40G
+        EOF
+        cat > etc/systemd/system/opencode.service <<'EOF'
+        [Unit]
+        Description=OpenCode server for OpenChamber
+        DefaultDependencies=no
+        After=openchamber-bootstrap.service
+        Requires=openchamber-bootstrap.service
+        Conflicts=shutdown.target
+        Before=openchamber-web.service shutdown.target
+
+        [Service]
+        Slice=openchamber-runtime.slice
+        Type=simple
+        User=openchamber
+        Group=openchamber
+        Environment=HOME=/home/openchamber
+        Environment=USER=openchamber
+        Environment=XDG_RUNTIME_DIR=/run/user/3000
+        Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
+        Environment=OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation
+        Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/active/bin:${openchamberPath}:/bin:/usr/bin
+        ExecStart=${openchamberOpenCodeRun}/bin/openchamber-opencode-run
+        Restart=always
+        RestartSec=5
+        TimeoutStartSec=2m
+        TimeoutStopSec=30s
+        SuccessExitStatus=0 143
+        StandardOutput=append:/home/openchamber/.config/openchamber/logs/opencode.service.log
+        StandardError=append:/home/openchamber/.config/openchamber/logs/opencode.service.log
+        MemoryHigh=24G
+        MemoryMax=32G
+        OOMPolicy=continue
+        TasksMax=infinity
+
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+      ''}
       cat > etc/systemd/system/openchamber-web.service <<'EOF'
       [Unit]
       Description=OpenChamber Web
       DefaultDependencies=no
-      After=openchamber-bootstrap.service
-      Requires=openchamber-bootstrap.service
+      After=openchamber-bootstrap.service${lib.optionalString externalOpenCode " opencode.service"}
+      Requires=openchamber-bootstrap.service${lib.optionalString externalOpenCode " opencode.service"}
       Conflicts=shutdown.target
       Before=shutdown.target
 
       [Service]
+      ${lib.optionalString externalOpenCode "Slice=openchamber-runtime.slice"}
       Type=simple
       User=openchamber
       Group=openchamber
@@ -1604,8 +3021,7 @@ let
       Environment=XDG_RUNTIME_DIR=/run/user/3000
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation
-      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
-      ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/openchamber-tool-update/restart.pending
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/active/bin:${openchamberPath}:/bin:/usr/bin
       ExecStart=${openchamberWebRun}/bin/openchamber-web-run
       ExecStartPost=${openchamberSnapshotConfig}/bin/openchamber-snapshot-config
       Restart=always
@@ -1634,11 +3050,15 @@ let
 
       [Service]
       Type=oneshot
-      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/active/bin:${openchamberPath}:/bin:/usr/bin
       ExecStart=${openchamberToolAutoUpdate}/bin/openchamber-tool-auto-update
+      TimeoutStartSec=30m
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-tool-auto-update.log
       StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-tool-auto-update.log
-      TasksMax=infinity
+      MemoryHigh=2G
+      MemoryMax=4G
+      OOMPolicy=kill
+      TasksMax=512
       EOF
       cat > etc/systemd/system/openchamber-tool-auto-update.timer <<'EOF'
       [Unit]
@@ -1657,6 +3077,44 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/openchamber-cache-cleanup.service <<'EOF'
+      [Unit]
+      Description=Prune stale OpenChamber tool cache files
+      DefaultDependencies=no
+      After=openchamber-bootstrap.service
+      Requires=openchamber-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Service]
+      Type=oneshot
+      User=openchamber
+      Group=openchamber
+      Environment=HOME=/home/openchamber
+      Environment=USER=openchamber
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/active/bin:${openchamberPath}:/bin:/usr/bin
+      ExecStart=${openchamberCacheCleanup}/bin/openchamber-cache-cleanup
+      StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-cache-cleanup.log
+      StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-cache-cleanup.log
+      TasksMax=infinity
+      EOF
+      cat > etc/systemd/system/openchamber-cache-cleanup.timer <<'EOF'
+      [Unit]
+      Description=Daily bounded OpenChamber tool cache cleanup
+      DefaultDependencies=no
+      After=openchamber-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Timer]
+      OnBootSec=15m
+      OnUnitActiveSec=1d
+      Persistent=true
+      Unit=openchamber-cache-cleanup.service
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/openchamber-tool-update-restart.service <<'EOF'
       [Unit]
       Description=Restart OpenChamber after queued maintenance becomes idle
@@ -1668,11 +3126,15 @@ let
 
       [Service]
       Type=oneshot
-      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/active/bin:${openchamberPath}:/bin:/usr/bin
       ExecStart=${openchamberToolUpdateRestart}/bin/openchamber-tool-update-restart
+      TimeoutStartSec=20m
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-tool-update-restart.log
       StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-tool-update-restart.log
-      TasksMax=infinity
+      MemoryHigh=2G
+      MemoryMax=4G
+      OOMPolicy=kill
+      TasksMax=512
       EOF
       cat > etc/systemd/system/openchamber-tool-update-restart.timer <<'EOF'
       [Unit]
@@ -1701,7 +3163,7 @@ let
 
       [Service]
       Type=oneshot
-      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/active/bin:${openchamberPath}:/bin:/usr/bin
       ExecStart=${openchamberRetryGuard}/bin/openchamber-retry-guard
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-retry-guard.log
       StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-retry-guard.log
@@ -1734,7 +3196,7 @@ let
 
       [Service]
       Type=oneshot
-      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin
+      Environment=PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/active/bin:${openchamberPath}:/bin:/usr/bin
       ExecStart=${openchamberWebMonitor}/bin/openchamber-web-monitor
       StandardOutput=append:/home/openchamber/.config/openchamber/logs/openchamber-web-monitor.log
       StandardError=append:/home/openchamber/.config/openchamber/logs/openchamber-web-monitor.log
@@ -1760,7 +3222,7 @@ let
       [Unit]
       Description=OpenChamber Multi-User System
       DefaultDependencies=no
-      Wants=openchamber-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service openchamber-bootstrap.service openchamber-web.service openchamber-tool-auto-update.timer openchamber-tool-update-restart.timer openchamber-retry-guard.timer openchamber-web-monitor.timer
+      Wants=openchamber-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service openchamber-bootstrap.service${lib.optionalString externalOpenCode " opencode.service"} openchamber-web.service openchamber-tool-auto-update.timer openchamber-cache-cleanup.timer openchamber-tool-update-restart.timer openchamber-retry-guard.timer openchamber-web-monitor.timer
       After=openchamber-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -1775,8 +3237,10 @@ let
       ln -s ../user@.service etc/systemd/system/multi-user.target.wants/user@3000.service
       ln -s ../dockerd.service etc/systemd/system/multi-user.target.wants/dockerd.service
       ln -s ../openchamber-bootstrap.service etc/systemd/system/multi-user.target.wants/openchamber-bootstrap.service
+      ${lib.optionalString externalOpenCode "ln -s ../opencode.service etc/systemd/system/multi-user.target.wants/opencode.service"}
       ln -s ../openchamber-web.service etc/systemd/system/multi-user.target.wants/openchamber-web.service
       ln -s ../openchamber-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/openchamber-tool-auto-update.timer
+      ln -s ../openchamber-cache-cleanup.timer etc/systemd/system/multi-user.target.wants/openchamber-cache-cleanup.timer
       ln -s ../openchamber-tool-update-restart.timer etc/systemd/system/multi-user.target.wants/openchamber-tool-update-restart.timer
       ln -s ../openchamber-retry-guard.timer etc/systemd/system/multi-user.target.wants/openchamber-retry-guard.timer
       ln -s ../openchamber-web-monitor.timer etc/systemd/system/multi-user.target.wants/openchamber-web-monitor.timer
@@ -1799,10 +3263,10 @@ let
         "XDG_STATE_HOME=/home/openchamber/.local/state"
         "XDG_CACHE_HOME=/home/openchamber/.cache"
         "XDG_DATA_HOME=/home/openchamber/.local/share"
-        "NPM_CONFIG_PREFIX=/home/openchamber/.local/share/openchamber-tools/npm"
-        "npm_config_prefix=/home/openchamber/.local/share/openchamber-tools/npm"
+        "NPM_CONFIG_PREFIX=/home/openchamber/.local/share/openchamber-tools/active"
+        "npm_config_prefix=/home/openchamber/.local/share/openchamber-tools/active"
         "OPENCODE_AUTOMATION_DIR=/home/openchamber/.automation"
-        "PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/npm/bin:${openchamberPath}:/bin:/usr/bin"
+        "PATH=/home/openchamber/.local/bin:/home/openchamber/.local/share/openchamber-tools/active/bin:${openchamberPath}:/bin:/usr/bin"
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "NIX_CONFIG=experimental-features = nix-command flakes"
@@ -1817,7 +3281,7 @@ let
   };
 
   openchamberDeploymentId = builtins.hashString "sha256" (toString openchamberImage);
-  openchamberDeployQueued = pkgs.writeShellScriptBin "openchamber-deploy-queued" ''
+  openchamberDeployWhenIdle = pkgs.writeShellScriptBin "openchamber-deploy-when-idle" ''
     set -eu
 
     state_dir=${openchamberDeploymentState}
@@ -1825,7 +3289,17 @@ let
     applied_file="$state_dir/applied"
     applying_file="$state_dir/applying"
     failed_file="$state_dir/failed"
+    rollback_image_file="$state_dir/rollback-image"
+    rollback_desired_file="$state_dir/rollback-desired"
+    gate_file=${openchamberToolControl}/admission.lock
+    promotion_file=${openchamberToolControl}/promotion.tsv
+    rollback_override_dir=/run/systemd/system/podman-openchamber.service.d
+    rollback_override="$rollback_override_dir/rollback-image.conf"
     audit_log=${openchamberHome}/.config/openchamber/logs/restart-audit.log
+    host_gate_armed=0
+    host_opencode_gate_armed=0
+    container_was_active=0
+    previous_image=""
 
     install -d -m 0755 "$state_dir"
     install -d -m 0755 -o 3000 -g 3000 "$(dirname "$audit_log")"
@@ -1836,17 +3310,102 @@ let
     failed=""
     [ ! -f "$applied_file" ] || applied="$(cat "$applied_file")"
     [ ! -f "$failed_file" ] || failed="$(cat "$failed_file")"
-    if [ "$desired" = "$applied" ]; then
-      rm -f "$applying_file" "$failed_file"
-      exit 0
-    fi
-    [ "$desired" != "$failed" ] || exit 0
-
     log_info() {
       message="$1"
       printf '%s info: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$message"
       printf '%s source=host-deployment %s\n' \
         "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$message" >> "$audit_log"
+    }
+
+    clear_rollback_override() {
+      [ -f "$rollback_override" ] || return 0
+      rm -f "$rollback_override"
+      rmdir "$rollback_override_dir" 2>/dev/null || true
+      ${pkgs.systemd}/bin/systemctl daemon-reload
+    }
+
+    clear_rollback_state() {
+      rm -f "$rollback_image_file" "$rollback_desired_file"
+    }
+
+    persist_rollback_state() {
+      printf '%s\n' "$previous_image" > "$rollback_image_file.tmp"
+      mv "$rollback_image_file.tmp" "$rollback_image_file"
+      printf '%s\n' "$desired" > "$rollback_desired_file.tmp"
+      mv "$rollback_desired_file.tmp" "$rollback_desired_file"
+    }
+
+    rollback_container_healthy() {
+      [ "$(${pkgs.podman}/bin/podman inspect openchamber \
+        --format '{{.Image}}' 2>/dev/null || true)" = "$previous_image" ] \
+        && [ "$(${pkgs.podman}/bin/podman inspect openchamber \
+          --format '{{.State.Health.Status}}' 2>/dev/null || true)" = "healthy" ] \
+        && ${pkgs.podman}/bin/podman exec openchamber \
+          systemctl is-active --quiet openchamber-web.service \
+        && ${pkgs.podman}/bin/podman exec openchamber \
+          curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null 2>&1
+    }
+
+    clear_host_opencode_network_gate() {
+      if [ "$host_opencode_gate_armed" -ne 1 ] && [ "''${1:-}" != force ]; then
+        return 0
+      fi
+      ${pkgs.podman}/bin/podman exec openchamber \
+        iptables -D OUTPUT -j OPENCHAMBER_OPENCODE_GATE 2>/dev/null || true
+      ${pkgs.podman}/bin/podman exec openchamber \
+        iptables -F OPENCHAMBER_OPENCODE_GATE 2>/dev/null || true
+      ${pkgs.podman}/bin/podman exec openchamber \
+        iptables -X OPENCHAMBER_OPENCODE_GATE 2>/dev/null || true
+      host_opencode_gate_armed=0
+    }
+
+    disarm_host_gate() {
+      clear_host_opencode_network_gate
+      if [ "$host_gate_armed" -eq 1 ]; then
+        rm -f "$gate_file"
+        host_gate_armed=0
+      fi
+    }
+    trap disarm_host_gate EXIT INT TERM
+
+    maintenance_snapshot() {
+      ${pkgs.podman}/bin/podman exec openchamber \
+        curl -fsS --max-time 5 \
+          http://127.0.0.1:3000/api/openchamber/maintenance-drain
+    }
+
+    maintenance_supported() {
+      maintenance_snapshot | ${pkgs.jq}/bin/jq -e '
+        (.inFlightMutations | type) == "number"
+        and (.activeTerminalSessions | type) == "number"
+        and (.activeOpenCodeSessions | type) == "number"
+        and (.activeScheduledTasks | type) == "number"
+        and (.activeGoalWork | type) == "number"
+        and (.observerPaused | type) == "boolean"
+        and (.schedulerPaused | type) == "boolean"
+      ' >/dev/null 2>&1
+    }
+
+    maintenance_drained() {
+      maintenance_snapshot | ${pkgs.jq}/bin/jq -e '
+        .inFlightMutations == 0
+        and .activeTerminalSessions == 0
+        and .activeOpenCodeSessions == 0
+        and .activeScheduledTasks == 0 and .activeGoalWork == 0
+        and .observerPaused == true
+        and .schedulerPaused == true
+      ' >/dev/null 2>&1
+    }
+
+    is_live_idle() {
+      if ! activity="$(${pkgs.podman}/bin/podman exec openchamber \
+        curl -fsS --max-time 5 http://127.0.0.1:3000/api/session-activity 2>/dev/null)"; then
+        return 1
+      fi
+      printf '%s\n' "$activity" | ${pkgs.jq}/bin/jq -e '
+        type == "object"
+        and all(.[]; type == "object" and .type == "idle")
+      ' >/dev/null 2>&1
     }
 
     mark_failed() {
@@ -1855,29 +3414,354 @@ let
       rm -f "$applying_file"
     }
 
-    if ! ${pkgs.systemd}/bin/systemctl show podman-openchamber.service \
-      --property=Environment --value \
-      | ${pkgs.gnugrep}/bin/grep -Fq \
-        "GHOSTSHIP_OPENCHAMBER_DEPLOYMENT_ID=$desired"; then
+    managed_opencode_probe() {
+      ${pkgs.podman}/bin/podman exec -i --user 3000:3000 \
+        --env PATH=/bin:/usr/bin openchamber \
+        /bin/bash -s -- "$@" < ${openchamberManagedOpenCodeIdlePortable}
+    }
+
+    managed_opencode_root_probe() {
+      ${pkgs.podman}/bin/podman exec -i \
+        --env PATH=/bin:/usr/bin openchamber \
+        /bin/bash -s -- "$@" < ${openchamberManagedOpenCodeIdlePortable}
+    }
+
+    managed_opencode_process_present() {
+      ${pkgs.podman}/bin/podman exec -i \
+        --env PATH=/bin:/usr/bin openchamber \
+        /bin/bash -s < ${openchamberManagedOpenCodePresentPortable}
+    }
+
+    managed_opencode_quiesced_or_absent() {
+      if ! managed_opencode_process_present; then
+        return 0
+      fi
+      managed_opencode_probe --connections-drained \
+        && managed_opencode_root_probe
+    }
+
+    arm_host_opencode_network_gate() {
+      opencode_port="$(managed_opencode_probe --print-port)" \
+        || {
+          if [ "''${1:-}" = allow-absent ] \
+            && ! managed_opencode_process_present; then
+            opencode_port=4096
+          else
+            return 1
+          fi
+        }
+      case "$opencode_port" in
+        ""|*[!0-9]*) return 1 ;;
+      esac
+      host_opencode_gate_armed=1
+      ${pkgs.podman}/bin/podman exec openchamber \
+        iptables -N OPENCHAMBER_OPENCODE_GATE 2>/dev/null || true
+      ${pkgs.podman}/bin/podman exec openchamber \
+        iptables -C OPENCHAMBER_OPENCODE_GATE \
+          -p tcp --syn --dport "$opencode_port" -m conntrack --ctstate NEW \
+          -m owner '!' --uid-owner 0 -j REJECT 2>/dev/null \
+        || ${pkgs.podman}/bin/podman exec openchamber \
+          iptables -A OPENCHAMBER_OPENCODE_GATE \
+            -p tcp --syn --dport "$opencode_port" -m conntrack --ctstate NEW \
+            -m owner '!' --uid-owner 0 -j REJECT \
+        || return 1
+      ${pkgs.podman}/bin/podman exec openchamber \
+        iptables -C OUTPUT -j OPENCHAMBER_OPENCODE_GATE 2>/dev/null \
+        || ${pkgs.podman}/bin/podman exec openchamber \
+          iptables -I OUTPUT 1 -j OPENCHAMBER_OPENCODE_GATE \
+        || return 1
+    }
+
+    quiesce_active_container() {
+      exec 9<>${openchamberToolControl}/tool-update.lock
+      if ! ${pkgs.util-linux}/bin/flock -n 9; then
+        log_info "action=defer desired=$desired reason=tool-update-in-progress"
+        return 1
+      fi
+      if [ -f "$promotion_file" ]; then
+        log_info "action=defer desired=$desired reason=tool-promotion-recovery"
+        return 1
+      fi
+      clear_host_opencode_network_gate force
+      if ! is_live_idle; then
+        log_info "action=defer desired=$desired reason=active-or-unknown"
+        return 1
+      fi
+      if ! maintenance_supported; then
+        log_info "action=defer desired=$desired reason=legacy-runtime-needs-controlled-stop"
+        return 1
+      fi
+      printf '%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$gate_file.tmp"
+      mv "$gate_file.tmp" "$gate_file"
+      host_gate_armed=1
+      sleep 1
+      if ! maintenance_drained || ! is_live_idle; then
+        log_info "action=defer desired=$desired reason=admissions-still-draining"
+        return 1
+      fi
+      if ! managed_opencode_probe; then
+        log_info "action=defer desired=$desired reason=managed-opencode-active-or-unknown"
+        return 1
+      fi
+      if ! arm_host_opencode_network_gate; then
+        log_info "action=defer desired=$desired reason=direct-opencode-gate-failed"
+        return 1
+      fi
+      log_info "action=admissions-gated desired=$desired wait_seconds=30"
+      sleep 30
+      if ! maintenance_drained || ! is_live_idle; then
+        log_info "action=defer desired=$desired reason=activity-resumed-or-drain-incomplete"
+        return 1
+      fi
+      if ! managed_opencode_probe --connections-drained; then
+        log_info "action=defer desired=$desired reason=direct-opencode-connections-remain"
+        return 1
+      fi
+      if ! managed_opencode_root_probe; then
+        log_info "action=defer desired=$desired reason=managed-opencode-resumed-or-unknown"
+        return 1
+      fi
+    }
+
+    quiesce_failed_replacement() {
+      exec 9<>${openchamberToolControl}/tool-update.lock
+      if ! ${pkgs.util-linux}/bin/flock -n 9; then
+        log_info "action=defer desired=$desired reason=tool-update-in-progress"
+        return 1
+      fi
+      if [ -f "$promotion_file" ]; then
+        log_info "action=defer desired=$desired reason=tool-promotion-recovery"
+        return 1
+      fi
+      clear_host_opencode_network_gate force
+      printf '%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$gate_file.tmp"
+      mv "$gate_file.tmp" "$gate_file"
+      host_gate_armed=1
+      if ! arm_host_opencode_network_gate allow-absent; then
+        log_info "action=defer desired=$desired reason=failed-replacement-opencode-gate-failed"
+        return 1
+      fi
+      log_info "action=failed-replacement-gated desired=$desired wait_seconds=30"
+      sleep 30
+      if ! managed_opencode_quiesced_or_absent; then
+        log_info "action=defer desired=$desired reason=failed-replacement-opencode-active-or-unknown"
+        return 1
+      fi
+    }
+
+    stop_quiesced_container() {
+      [ "$container_was_active" -eq 1 ] || return 0
+      previous_image="$(${pkgs.podman}/bin/podman inspect openchamber \
+        --format '{{.Image}}' 2>/dev/null || true)"
+      if [ -z "$previous_image" ] \
+        || ! ${pkgs.podman}/bin/podman image exists "$previous_image"; then
+        log_info "action=defer desired=$desired reason=previous-container-image-unknown"
+        return 1
+      fi
+      persist_rollback_state
+      log_info "action=stop-quiesced-container desired=$desired"
+      if ! ${pkgs.systemd}/bin/systemctl stop podman-openchamber.service; then
+        clear_rollback_state
+        log_info "action=deployment-failed desired=$desired reason=container-stop"
+        return 1
+      fi
+      host_gate_armed=0
+      host_opencode_gate_armed=0
+      ${pkgs.util-linux}/bin/flock -u 9
+    }
+
+    start_replacement_container() {
+      log_info "action=start-container desired=$desired"
+      if ! ${pkgs.systemd}/bin/systemctl start podman-openchamber.service; then
+        log_info "action=deployment-failed desired=$desired reason=container-start"
+        return 1
+      fi
+    }
+
+    restore_previous_container() {
+      [ -n "$previous_image" ] || return 1
+      log_info "action=restore-previous-container desired=$desired image=$previous_image"
+      ${pkgs.systemd}/bin/systemctl stop podman-openchamber.service || return 1
+      # Bootstrap takes the same lock; release it only after the old writer stops.
+      host_gate_armed=0
+      host_opencode_gate_armed=0
+      ${pkgs.util-linux}/bin/flock -u 9 2>/dev/null || true
+      ${pkgs.podman}/bin/podman tag "$previous_image" ${imageName}:${imageTag} \
+        || return 1
+      install -d -m 0755 "$rollback_override_dir"
+      {
+        printf '%s\n' '[Service]'
+        printf '%s\n' 'ExecStartPre='
+        printf '%s\n' 'ExecStartPre=-${pkgs.podman}/bin/podman rm -f openchamber'
+        printf '%s\n' 'ExecStartPre=${pkgs.coreutils}/bin/rm -f /run/openchamber/ctr-id'
+      } > "$rollback_override.tmp"
+      mv "$rollback_override.tmp" "$rollback_override"
+      ${pkgs.systemd}/bin/systemctl daemon-reload
+      ${pkgs.systemd}/bin/systemctl start podman-openchamber.service \
+        || return 1
+      for _ in $(seq 1 150); do
+        if [ "$(${pkgs.podman}/bin/podman inspect openchamber \
+          --format '{{.State.Health.Status}}' 2>/dev/null || true)" = "healthy" ] \
+          && ${pkgs.podman}/bin/podman exec openchamber \
+            systemctl is-active --quiet openchamber-web.service \
+          && ${pkgs.podman}/bin/podman exec openchamber \
+            curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null 2>&1; then
+          log_info "action=restore-complete desired=$desired image=$previous_image"
+          return 0
+        fi
+        sleep 2
+      done
+      log_info "action=restore-failed desired=$desired image=$previous_image"
+      return 1
+    }
+
+    restore_previous_when_safe() {
+      if ${pkgs.systemd}/bin/systemctl is-active --quiet podman-openchamber.service; then
+        container_was_active=1
+        web_state="$(${pkgs.podman}/bin/podman exec openchamber \
+          systemctl show openchamber-web.service -p ActiveState --value \
+          2>/dev/null || true)"
+        case "$web_state" in
+          active)
+            quiesce_active_container || return 1
+            ;;
+          inactive|failed)
+            quiesce_failed_replacement || return 1
+            ;;
+          *)
+            log_info "action=defer desired=$desired reason=failed-replacement-web-state-$web_state"
+            return 1
+            ;;
+        esac
+      fi
+      restore_previous_container
+    }
+
+    ensure_first_generation() {
+      active_link=${openchamberHome}/.local/share/openchamber-tools/active
+      if [ -L "$active_link" ] \
+        || ! ${pkgs.systemd}/bin/systemctl is-active --quiet podman-openchamber.service; then
+        return 0
+      fi
+
+      log_info "action=prestage-first-generation reason=migrate-running-runtime"
+      install -d -m 0755 -o 3000 -g 3000 \
+        ${openchamberHome}/.local/share/openchamber-tools/generations \
+        ${openchamberHome}/.local/state/openchamber-tool-update
+      install -d -m 0755 -o root -g root ${openchamberToolControl}
+      touch ${openchamberToolControl}/tool-update.lock
+      chown root:root ${openchamberToolControl}/tool-update.lock
+      chmod 0644 ${openchamberToolControl}/tool-update.lock
+      ${pkgs.podman}/bin/podman load --input ${openchamberImage} >/dev/null
+      ${pkgs.podman}/bin/podman run --rm \
+        --user 3000:3000 \
+        --security-opt="unmask=/proc/*" \
+        --memory=4g \
+        --memory-reservation=2g \
+        --pids-limit=512 \
+        --network ghostship_net \
+        --volume ${openchamberHome}:/home/openchamber:rw \
+        --volume ${openchamberToolControl}:/var/lib/openchamber-tool-update:rw \
+        --env HOME=/home/openchamber \
+        --env USER=openchamber \
+        --workdir /home/openchamber \
+        --entrypoint ${openchamberToolMaintenance}/bin/openchamber-tool-maintenance \
+        ${imageName}:${imageTag}
+      candidate_file=${openchamberHome}/.local/state/openchamber-tool-update/candidate.tsv
+      [ -f "$candidate_file" ] || return 1
+      IFS="$(printf '\t')" read -r candidate _ < "$candidate_file"
+      case "$candidate" in
+        /home/openchamber/*) ;;
+        *) return 1 ;;
+      esac
+      candidate_relative="$(printf '%s\n' "$candidate" \
+        | ${pkgs.gnused}/bin/sed 's#^/home/openchamber/##')"
+      host_candidate="$(${pkgs.coreutils}/bin/readlink -f \
+        ${openchamberHome}/"$candidate_relative")"
+      case "$host_candidate" in
+        ${openchamberHome}/.local/share/openchamber-tools/generations/*) ;;
+        *) return 1 ;;
+      esac
+      [ -x "$host_candidate/bin/openchamber" ] \
+        && [ -x "$host_candidate/bin/opencode" ]
+    }
+
+    if [ -f "$rollback_image_file" ] && [ -f "$rollback_desired_file" ]; then
+      rollback_desired="$(cat "$rollback_desired_file")"
+      previous_image="$(cat "$rollback_image_file")"
+      if rollback_container_healthy || restore_previous_when_safe; then
+        if [ "$rollback_desired" = "$desired" ]; then
+          mark_failed
+          log_info "action=rollback-latched desired=$desired image=$previous_image"
+        else
+          clear_rollback_state
+          clear_rollback_override
+          rm -f "$applying_file"
+          log_info "action=rollback-complete superseded=$rollback_desired desired=$desired image=$previous_image"
+        fi
+      else
+        log_info "action=rollback-pending desired=$desired image=$previous_image"
+      fi
+      exit 1
+    fi
+
+    if [ "$desired" = "$applied" ]; then
+      clear_rollback_override
+      rm -f "$applying_file" "$failed_file"
+      exit 0
+    fi
+
+    if ! ${pkgs.systemd}/bin/systemctl show podman-openchamber.service --property=Environment --value \
+      | ${pkgs.gnugrep}/bin/grep -Fq "GHOSTSHIP_OPENCHAMBER_DEPLOYMENT_ID=$desired"; then
       log_info "action=defer desired=$desired reason=unit-not-reloaded"
       exit 0
     fi
 
+    if ! ensure_first_generation; then
+      log_info "action=defer desired=$desired reason=first-generation-prestage-failed"
+      exit 1
+    fi
+
+    [ "$desired" != "$failed" ] || exit 0
+
+    if ${pkgs.systemd}/bin/systemctl is-active --quiet podman-openchamber.service; then
+      container_was_active=1
+      if ! quiesce_active_container; then
+        exit 0
+      fi
+    fi
+
     printf '%s\n' "$desired" > "$applying_file.tmp"
     mv "$applying_file.tmp" "$applying_file"
-    log_info "action=restart-container desired=$desired"
-    if ! ${pkgs.systemd}/bin/systemctl restart podman-openchamber.service; then
-      mark_failed
-      log_info "action=deployment-failed desired=$desired reason=container-restart"
+    if ! stop_quiesced_container; then
+      exit 1
+    fi
+    if ! start_replacement_container; then
+      if restore_previous_when_safe; then
+        mark_failed
+      else
+        log_info "action=rollback-pending desired=$desired image=$previous_image"
+      fi
       exit 1
     fi
 
     healthy=0
-    for _ in $(seq 1 120); do
+    for _ in $(seq 1 360); do
       if [ "$(${pkgs.podman}/bin/podman inspect openchamber \
         --format '{{.State.Health.Status}}' 2>/dev/null || true)" = "healthy" ] \
         && ${pkgs.podman}/bin/podman exec openchamber \
           systemctl is-active --quiet openchamber-web.service \
+        && ${
+          if externalOpenCode then
+            ''
+              ${pkgs.podman}/bin/podman exec openchamber ${pkgs.runtimeShell} -c \
+                '${pkgs.systemd}/bin/systemctl is-active --quiet opencode.service \
+                  && ${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:4096/global/health \
+                    | ${pkgs.jq}/bin/jq -e ".healthy == true" >/dev/null 2>&1'
+            ''
+          else
+            "true"
+        } \
         && ${pkgs.podman}/bin/podman exec openchamber \
           curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null 2>&1; then
         healthy=1
@@ -1886,29 +3770,43 @@ let
       sleep 10
     done
 
-    if [ "$healthy" -ne 1 ]; then
-      mark_failed
-      log_info "action=deployment-failed desired=$desired reason=health-timeout"
-      exit 1
-    fi
-
     running="$(${pkgs.podman}/bin/podman inspect openchamber \
-      --format '{{index .Config.Labels "io.ghostship.openchamber.deployment"}}' \
-      2>/dev/null || true)"
-    if [ "$running" != "$desired" ]; then
-      mark_failed
-      log_info "action=deployment-failed desired=$desired reason=image-identity-mismatch running=$running"
+      --format '{{index .Config.Labels "io.ghostship.openchamber.deployment"}}' 2>/dev/null || true)"
+    if [ "$healthy" -ne 1 ] || [ "$running" != "$desired" ]; then
+      log_info "action=deployment-failed desired=$desired reason=health-timeout"
+      if restore_previous_when_safe; then
+        mark_failed
+      else
+        log_info "action=rollback-pending desired=$desired image=$previous_image"
+      fi
       exit 1
     fi
 
     printf '%s\n' "$desired" > "$applied_file.tmp"
     mv "$applied_file.tmp" "$applied_file"
     rm -f "$applying_file" "$failed_file"
+    clear_rollback_state
+    clear_rollback_override
     log_info "action=deployment-complete desired=$desired"
   '';
 
 in
 {
+  ghostship.apps.openchamber = {
+    name = "OpenChamber";
+    group = "Services";
+    description = "OpenChamber Web";
+    icon = "mdi-code-braces-#111827";
+    order = 100;
+    hostname = "openchamber.ghostship.io";
+    origin = "http://openchamber:3000";
+    muximux = {
+      icon = "muximux-code";
+      color = "#111827";
+      dropdown = false;
+    };
+  };
+
   virtualisation.oci-containers.containers."openchamber" = {
     image = "${imageName}:${imageTag}";
     imageFile = openchamberImage;
@@ -1933,18 +3831,20 @@ in
     ];
     volumes = [
       "${openchamberDocker}:/var/lib/docker:rw"
+      "${openchamberToolControl}:/var/lib/openchamber-tool-update:rw"
       "${openchamberWorkspace}:/workspace:rw"
       "${openchamberHome}:/home/openchamber:rw"
       "${openchamberNixRoot}/nix:/nix:rw"
       "${openchamberSecrets}:${openchamberSecretsFile}:ro"
       "/mnt/share:/mnt/share:rw"
     ];
-    environmentFiles = [ openchamberSecrets ];
+    environmentFiles = [ config.ghostship.selfHostedSecrets.projections.openchamber.containerPath ];
   };
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/openchamber 0755 root root -"
     "d ${openchamberDocker} 0755 root root -"
+    "d ${openchamberToolControl} 0755 root root -"
     "d ${openchamberHome} 0755 3000 3000 -"
     "d ${openchamberNixRoot} 0755 root root -"
     "d ${openchamberNixRoot}/nix 0755 root root -"
@@ -1953,27 +3853,53 @@ in
 
   system.activationScripts.openchamber-deployment = {
     text = ''
-      install -d -m 0755 ${openchamberDeploymentState}
-      printf '%s\n' ${lib.escapeShellArg openchamberDeploymentId} \
-        > ${openchamberDeploymentState}/desired.tmp
-      mv ${openchamberDeploymentState}/desired.tmp ${openchamberDeploymentState}/desired
+      state_dir=${openchamberDeploymentState}
+      desired=${lib.escapeShellArg openchamberDeploymentId}
+      rollback_image_file="$state_dir/rollback-image"
+      rollback_desired_file="$state_dir/rollback-desired"
+      rollback_override_dir=/run/systemd/system/podman-openchamber.service.d
+      rollback_override="$rollback_override_dir/rollback-image.conf"
+      install -d -m 0755 "$state_dir"
+      printf '%s\n' "$desired" > "$state_dir/desired.tmp"
+      mv "$state_dir/desired.tmp" "$state_dir/desired"
+
+      applied=""
+      [ ! -f "$state_dir/applied" ] || applied="$(cat "$state_dir/applied")"
+      if [ -f "$rollback_image_file" ] && [ -f "$rollback_desired_file" ]; then
+        rollback_image="$(cat "$rollback_image_file")"
+        if ${pkgs.podman}/bin/podman image exists "$rollback_image"; then
+          ${pkgs.podman}/bin/podman tag "$rollback_image" ${imageName}:${imageTag}
+          install -d -m 0755 "$rollback_override_dir"
+          {
+            printf '%s\n' '[Service]'
+            printf '%s\n' 'ExecStartPre='
+            printf '%s\n' 'ExecStartPre=-${pkgs.podman}/bin/podman rm -f openchamber'
+            printf '%s\n' 'ExecStartPre=${pkgs.coreutils}/bin/rm -f /run/openchamber/ctr-id'
+          } > "$rollback_override"
+        fi
+      elif [ "$applied" = "$desired" ]; then
+        rm -f "$rollback_override"
+        rmdir "$rollback_override_dir" 2>/dev/null || true
+      elif [ -f "$rollback_desired_file" ]; then
+        rm -f "$rollback_image_file" "$rollback_desired_file" "$rollback_override"
+        rmdir "$rollback_override_dir" 2>/dev/null || true
+      fi
     '';
     supportsDryActivation = false;
   };
 
   systemd.services.openchamber-deploy-when-idle = {
-    # Retain the unit name so existing timers and deployment state converge.
-    description = "Deploy an operator-approved OpenChamber image";
+    description = "Deploy a changed OpenChamber image after sustained idle";
     after = [ "podman.service" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${openchamberDeployQueued}/bin/openchamber-deploy-queued";
-      TimeoutStartSec = "25m";
+      ExecStart = "${openchamberDeployWhenIdle}/bin/openchamber-deploy-when-idle";
+      TimeoutStartSec = "70m";
     };
   };
 
   systemd.timers.openchamber-deploy-when-idle = {
-    description = "Apply a queued operator-approved OpenChamber deployment";
+    description = "Check for a queued OpenChamber image deployment";
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnBootSec = "2m";
@@ -2010,6 +3936,7 @@ in
 
       install -d -m0755 -o root -g root /srv/apps/openchamber
       install -d -m0755 -o root -g root ${openchamberDocker}
+      install -d -m0755 -o root -g root ${openchamberToolControl}
       install -d -m0755 -o 3000 -g 3000 ${openchamberHome}
       install -d -m0755 -o root -g root ${openchamberNixRoot}
       install -d -m0755 -o 3000 -g 3000 ${openchamberWorkspace}
@@ -2021,10 +3948,12 @@ in
         ${lib.escapeShellArgs (map toString openchamberImageContents)}
 
       gcroot_dir=${openchamberNixRoot}/nix/var/nix/gcroots/ghostship-openchamber-image
-      rm -rf "$gcroot_dir"
+      # Keep prior image closures rooted: rollback skips this pre-start hook,
+      # and the persistent store masks the image store. Retire roots manually
+      # only after their images are no longer rollback candidates.
       install -d -m0755 -o root -g root "$gcroot_dir"
       for store_path in ${lib.escapeShellArgs (map toString openchamberImageContents)}; do
-        ln -s "$store_path" "$gcroot_dir/$(basename "$store_path")"
+        ln -sfnT "$store_path" "$gcroot_dir/$(basename "$store_path")"
       done
 
       rm -f ${openchamberNixRoot}/nix/var/nix/temproots/*

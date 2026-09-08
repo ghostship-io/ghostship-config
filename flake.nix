@@ -9,7 +9,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    nixos-hardware.url = "github:NixOS/nixos-hardware/master";
+    nixos-hardware = {
+      url = "github:NixOS/nixos-hardware/master";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
     ragenix = {
       url = "github:yaxitech/ragenix";
@@ -27,7 +30,9 @@
     };
 
     apple-silicon = {
-      url = "github:nix-community/nixos-apple-silicon/main";
+      # Newer revisions require vendorfw/firmware.cpio rebuilt from macOS.
+      # Keep this host's existing firmware supported until that maintenance.
+      url = "github:nix-community/nixos-apple-silicon/9fe29a63b23005acfcd1324a9e78b6241226cdb1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -71,12 +76,21 @@
         };
     in
     {
+      checks = forAllSystems (
+        system:
+        import ./checks.nix {
+          pkgs = pkgsFor system;
+          inherit self;
+        }
+      );
+
       packages = forAllSystems (
         system:
         let
           pkgs = pkgsFor system;
         in
         {
+          ghostship-config = (pkgs.extend (import ./modules/common/ghostship-pkg.nix)).ghostship-config;
           codex-desktop-web = pkgs.callPackage ./packages/codex-desktop-web/package.nix { };
         }
       );
@@ -87,17 +101,55 @@
           pkgs = pkgsFor system;
         in
         {
+          # CI needs no downloaded browsers or agent-maintenance tools.
+          ci = pkgs.mkShellNoCC {
+            packages = with pkgs; [
+              git
+              bash
+              coreutils
+              actionlint
+              shellcheck
+              gitleaks
+              python3
+              ripgrep
+              jq
+              curl
+              nodejs_24
+              util-linux
+              iproute2
+              bubblewrap
+            ];
+          };
           default = pkgs.mkShellNoCC {
             packages = with pkgs; [
               git
               age
               gnugrep
+              ripgrep
               gnused
               jq
               nixfmt
+              shellcheck
+              actionlint
+              gitleaks
+              ruff
+              (python3.withPackages (ps: [
+                ps.lxml
+                ps.ruamel-yaml
+                ps.bcrypt
+                ps.python-socketio
+                ps.requests
+                ps.websocket-client
+              ]))
+              nodejs_24
+              util-linux
+              iproute2
+              gnupg
+              espeak-ng
+              bubblewrap
               playwright-driver.browsers
               prefetch-npm-deps
-              ragenix.packages.${system}.default
+              pkgs.ragenix
               ssh-to-age
             ];
             PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";

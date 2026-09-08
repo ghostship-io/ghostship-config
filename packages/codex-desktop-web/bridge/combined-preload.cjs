@@ -1,25 +1,17 @@
 "use strict";
 
-const path = require("node:path");
 const { ipcRenderer } = require("electron");
-const WebSocket = require("ws");
-const { decode, encode } = require("./codec.cjs");
-
-require(path.join(__dirname, "..", ".vite", "build", "preload.js"));
-
-const relaySecret = process.env.CODEX_WEB_RELAY_SECRET;
-const relayPort = process.env.CODEX_WEB_PORT || "8214";
-const relayUrl = `ws://127.0.0.1:${relayPort}/__bridge/relay`;
 const channelListeners = new Map();
 const messagePorts = new Map();
+const chunkTransfers = new Map();
+const sidebarChannel = "codex_desktop:get-initial-sidebar-bootstrap";
 const bootstrapRefreshMessageTypes = new Set([
   "active-workspace-roots-updated",
   "global-state-updated",
   "workspace-root-option-added",
   "workspace-root-options-updated",
 ]);
-let socket;
-let reconnectTimer;
+let connected = false;
 
 function isProjectStateFetchResponse(message) {
   if (
@@ -50,7 +42,6 @@ function readBootstrap() {
   const channels = [
     "codex_desktop:get-sentry-init-options",
     "codex_desktop:get-build-flavor",
-    "codex_desktop:get-uses-owl-app-shell",
     "codex_desktop:get-shared-object-snapshot",
     "codex_desktop:get-system-theme-variant",
     "codex_desktop:get-initial-sidebar-bootstrap",
@@ -76,10 +67,67 @@ function readBootstrap() {
 
 const bootstrap = readBootstrap();
 
-function send(message) {
-  if (socket?.readyState === WebSocket.OPEN) {
-    socket.send(encode(message));
+// The relay owns acknowledgements even when the hidden native view has stopped
+// consuming messages. Browser sessions receive only complete transfers.
+function readChunk(part, channel) {
+  if (part.kind === "start") {
+    for (const [id, transfer] of chunkTransfers) {
+      if (transfer.channel === channel) chunkTransfers.delete(id);
+    }
+    chunkTransfers.set(part.transferId, { channel, sequence: part.sequence, stack: [], value: undefined });
+    return;
   }
+  const transfer = chunkTransfers.get(part.transferId);
+  if (!transfer) return;
+  if (part.sequence !== transfer.sequence + 1) {
+    chunkTransfers.delete(part.transferId);
+    throw new Error("Out-of-order native chunk transfer");
+  }
+  transfer.sequence = part.sequence;
+  function append(value) {
+    const parent = transfer.stack.at(-1);
+    if (!parent) transfer.value = value;
+    else if (Array.isArray(parent.value)) parent.value.push(value);
+    else {
+      Object.defineProperty(parent.value, parent.key, {
+        configurable: true, enumerable: true, writable: true, value,
+      });
+      parent.key = undefined;
+    }
+  }
+  for (const token of part.tokens || []) {
+    switch (token.type) {
+      case "object-start":
+      case "array-start": {
+        const value = token.type === "array-start" ? [] : {};
+        append(value);
+        transfer.stack.push({ value });
+        break;
+      }
+      case "container-end": transfer.stack.pop(); break;
+      case "key": transfer.stack.at(-1).key = token.value; break;
+      case "value": append(token.value); break;
+      case "string-start": transfer.string = { target: token.target, parts: [] }; break;
+      case "string-chunk": transfer.string.parts.push(token.value); break;
+      case "string-end": {
+        const value = transfer.string.parts.join("");
+        if (transfer.string.target === "key") transfer.stack.at(-1).key = value;
+        else append(value);
+        transfer.string = undefined;
+        break;
+      }
+      default: throw new Error(`Unsupported native chunk token: ${token.type}`);
+    }
+  }
+  if (part.kind === "end") {
+    chunkTransfers.delete(part.transferId);
+    if (transfer.stack.length || transfer.string) throw new Error("Incomplete native chunk transfer");
+    return transfer.value;
+  }
+}
+
+function send(message) {
+  if (connected) ipcRenderer.send("ghostship-native:relay-send", message);
 }
 
 function subscribe(channel) {
@@ -87,6 +135,28 @@ function subscribe(channel) {
     return;
   }
   const listener = (_event, ...args) => {
+    if (args[0]?.marker === "codex-host-chunked-message-v1") {
+      // Electron queues inline state updates behind this transfer. Acknowledge
+      // every part locally; upstream ignores duplicate acknowledgements from
+      // its renderer. Browser connections must never own native flow control.
+      ipcRenderer.send("codex_desktop:chunked-message-ack", args[0].transferId, args[0].sequence);
+      try {
+        const value = readChunk(args[0], channel);
+        if (value === undefined) return;
+        args = [value];
+      } catch (error) {
+        chunkTransfers.delete(args[0].transferId);
+        console.error("[codex-web] native chunk decode failed", error);
+        return;
+      }
+    }
+    if (channel === "codex_desktop:message-for-view" && args[0]?.type === "shared-object-updated") {
+      const snapshot = bootstrap["codex_desktop:get-shared-object-snapshot"];
+      if (snapshot) {
+        if (args[0].value === undefined) delete snapshot[args[0].key];
+        else snapshot[args[0].key] = args[0].value;
+      }
+    }
     if (
       channel === "codex_desktop:message-for-view" &&
       (
@@ -94,7 +164,9 @@ function subscribe(channel) {
         isProjectStateFetchResponse(args[0])
       )
     ) {
-      const nextBootstrap = readBootstrap();
+      // Project updates need only the sidebar, not the multi-megabyte shared
+      // object snapshot, diagnostics, and other unchanged startup metadata.
+      const nextBootstrap = { [sidebarChannel]: ipcRenderer.sendSync(sidebarChannel) };
       Object.assign(bootstrap, nextBootstrap);
       send({ type: "bootstrap-update", bootstrap: nextBootstrap });
     }
@@ -105,12 +177,17 @@ function subscribe(channel) {
 }
 
 function unsubscribe(channel) {
+  // Keep startup snapshots current even while no browser is connected.
+  if (channel === "codex_desktop:message-for-view") return;
   const listener = channelListeners.get(channel);
   if (!listener) {
     return;
   }
   ipcRenderer.removeListener(channel, listener);
   channelListeners.delete(channel);
+  for (const [id, transfer] of chunkTransfers) {
+    if (transfer.channel === channel) chunkTransfers.delete(id);
+  }
 }
 
 function createTransferredPort(message) {
@@ -128,6 +205,10 @@ function createTransferredPort(message) {
 }
 
 async function handle(message) {
+  if (["invoke", "send", "subscribe", "unsubscribe", "post-message-port"].includes(message.type) &&
+      !message.channel?.startsWith("codex_desktop:")) {
+    throw new Error("Browser request used a private native channel");
+  }
   if (message.type === "invoke") {
     try {
       const result = await ipcRenderer.invoke(message.channel, ...message.args);
@@ -150,6 +231,7 @@ async function handle(message) {
     return;
   }
   if (message.type === "send") {
+    if (message.channel === "codex_desktop:chunked-message-ack") return;
     ipcRenderer.send(message.channel, ...message.args);
     return;
   }
@@ -175,36 +257,18 @@ async function handle(message) {
   }
 }
 
-function connect() {
-  socket = new WebSocket(relayUrl, {
-    headers: {
-      "x-codex-relay-secret": relaySecret,
-      "x-codex-relay-primary": "1",
-    },
-  });
-  socket.on("open", () => {
+subscribe("codex_desktop:message-for-view");
+ipcRenderer.on("ghostship-native:relay-state", (_event, ready) => {
+  connected = ready === true;
+  if (connected) {
     send({ type: "relay-ready", bootstrap });
     for (const channel of channelListeners.keys()) {
       send({ type: "relay-subscription-ready", channel });
     }
-  });
-  socket.on("message", (payload) => {
-    try {
-      void handle(decode(payload));
-    } catch (error) {
-      send({
-        type: "relay-error",
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-  socket.on("close", () => {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(connect, 500);
-  });
-  socket.on("error", (error) => {
-    console.error("[codex-web] relay error", error);
-  });
-}
-
-connect();
+  }
+});
+ipcRenderer.on("ghostship-native:relay-message", (_event, message) => {
+  void handle(message).catch((error) => send({ type: "relay-error", error: String(error) }));
+});
+ipcRenderer.send("ghostship-native:relay-open");
+setInterval(() => send({ type: "relay-heartbeat" }), 5000);

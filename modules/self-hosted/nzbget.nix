@@ -26,7 +26,28 @@ let
 in
 
 {
+  ghostship.apps.nzbget = {
+    name = "NZBGet";
+    group = "Downloads";
+    description = "NZB Downloader";
+    icon = "sh-nzbget";
+    order = 40;
+    hostname = "nzbget.ghostship.io";
+    origin = "http://nzbget:5001";
+    widget = {
+      type = "nzbget";
+      username = "ghostship";
+      password = "";
+    };
+    muximux = {
+      icon = "fa-download";
+      color = "#4ad946";
+      dropdown = true;
+    };
+  };
+
   virtualisation.oci-containers.containers."nzbget" = {
+    podman.sdnotify = "healthy";
     image = "lscr.io/linuxserver/nzbget:latest";
     pull = "always";
     labels = {
@@ -56,9 +77,10 @@ in
     ];
   };
 
-  # Preserve the remotely managed Cloudflare origin at gluetun:5001 while
-  # keeping NZBGet's provider traffic directly on ghostship_net.
+  # The live tunnel uses the direct registry origin above. Retain gluetun:5001
+  # as a compatibility endpoint for legacy callers.
   virtualisation.oci-containers.containers."nzbget-edge-proxy" = {
+    podman.sdnotify = "healthy";
     image = "docker.io/library/nginx:alpine";
     pull = "always";
     labels = {

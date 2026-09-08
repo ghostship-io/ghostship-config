@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cloudflared-secrets = config.ghostship.selfHostedSecrets.projections.cloudflared.path;
@@ -7,6 +12,14 @@ let
 in
 
 {
+  ghostship.apps.cloudflared = {
+    name = "Cloudflared";
+    group = "Downloads";
+    description = "Cloudflare Tunnel";
+    icon = "sh-cloudflare";
+    order = 250;
+  };
+
   virtualisation.oci-containers.containers."cloudflared" = {
     image = "docker.io/cloudflare/cloudflared:latest";
     pull = "always";
@@ -18,8 +31,7 @@ in
       "--network=ghostship_net"
     ];
     environmentFiles = [
-      cloudflared-secrets
-      cloudflared-runtime-env
+      config.ghostship.selfHostedSecrets.projections."cloudflared-runtime".containerPath
     ];
     cmd = [
       "tunnel"

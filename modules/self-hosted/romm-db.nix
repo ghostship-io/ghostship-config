@@ -10,11 +10,10 @@ let
 in
 {
   virtualisation.oci-containers.containers."romm-db" = {
-    image = "lscr.io/linuxserver/mariadb:latest";
+    podman.sdnotify = "healthy";
+    image = "lscr.io/linuxserver/mariadb@sha256:94f67a7e6deb4557630c9aaba08142eb2f667101d9bc6069167ae3ae21502e90";
     pull = "always";
-    labels = {
-      "io.containers.autoupdate" = "registry";
-    };
+    # Preserve the live database engine until a restore-tested migration is reviewed.
     user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
@@ -43,7 +42,7 @@ in
   };
 
   systemd.tmpfiles.rules = [
-    "d /srv/apps/romm-db 0755 apps apps -"
+    "d /srv/apps/romm-db 0700 apps apps -"
   ];
 
   systemd.services.podman-romm-db.preStart = ''

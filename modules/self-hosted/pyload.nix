@@ -210,7 +210,25 @@ let
 in
 
 {
+  ghostship.apps.pyload = {
+    healthPath = "/favicon.ico";
+    name = "pyLoad";
+    group = "Services";
+    description = "Download Manager";
+    icon = "sh-pyload";
+    order = 160;
+    hostname = "pyload.ghostship.io";
+    origin = "http://pyload:8000";
+    muximux = {
+      icon = "fa-download";
+      color = "#ffcc00";
+      dropdown = true;
+      url = "/pyload/";
+    };
+  };
+
   virtualisation.oci-containers.containers."pyload" = {
+    podman.sdnotify = "healthy";
     image = pyloadImage;
     pull = "always";
     labels = {

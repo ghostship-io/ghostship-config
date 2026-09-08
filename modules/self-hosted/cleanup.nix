@@ -30,15 +30,6 @@ let
       muximuxSections = [ "BookStack" ];
     }
     {
-      name = "codex";
-      paths = [ "/srv/apps/codex" ];
-      units = [ "podman-codex" ];
-      containers = [ "codex" ];
-      imageRepositories = [ "localhost/ghostship-codex" ];
-      homepageEntries = [ "Codex" ];
-      muximuxSections = [ "Codex" ];
-    }
-    {
       name = "t3code";
       paths = [ "/srv/apps/paseo" ];
       units = [ "podman-t3code" ];
@@ -411,36 +402,38 @@ let
     }
   ];
 
-  renderCommands =
-    field: command:
-    lib.concatMapStringsSep "\n" (
-      artifact: lib.concatMapStringsSep "\n" command (artifact.${field} or [ ])
-    ) retiredArtifacts;
+  eligibleArtifacts = lib.filter (
+    artifact:
+    artifact.name != "codex"
+    && !(lib.any (name: builtins.hasAttr name config.virtualisation.oci-containers.containers) (
+      artifact.containers or [ ]
+    ))
+  ) retiredArtifacts;
 
-  homepageEntries = lib.unique (
-    lib.concatMap (artifact: artifact.homepageEntries or [ ]) retiredArtifacts
-  );
-  muximuxSections = lib.unique (
-    lib.concatMap (artifact: artifact.muximuxSections or [ ]) retiredArtifacts
-  );
+  commands =
+    field: artifact: command:
+    lib.concatMapStringsSep "\n" command (artifact.${field} or [ ]);
 in
 lib.mkIf (config.networking.hostName == "chill-penguin") {
   system.activationScripts.chill-penguin-retired-artifact-cleanup = {
-    deps = [
-      "homepage-config"
-      "muximux-config"
-    ];
+    supportsDryActivation = false;
     text = ''
+      retirement_dir="/srv/retired-apps/$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ)"
+
       cleanup_retired_path() {
         path="$1"
-
+        [ -e "$path" ] || return 0
+        # Never follow a link or move a mount out from under an application.
+        if [ -L "$path" ] || ${pkgs.util-linux}/bin/mountpoint -q "$path"; then
+          printf 'warning: refusing linked or mounted retirement path %s\n' "$path" >&2
+          return 0
+        fi
         case "$path" in
           /srv/apps/*)
-            ${pkgs.coreutils}/bin/rm -rf -- "$path"
+            ${pkgs.coreutils}/bin/install -d -m0700 "$retirement_dir"
+            ${pkgs.coreutils}/bin/mv -T --no-clobber -- "$path" "$retirement_dir/''${path##*/}"
             ;;
-          *)
-            printf 'warning: refusing retired artifact cleanup path outside /srv/apps: %s\n' "$path" >&2
-            ;;
+          *) printf 'warning: refusing retirement path %s\n' "$path" >&2 ;;
         esac
       }
 
@@ -448,7 +441,7 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
         image="$1"
 
         if ${pkgs.podman}/bin/podman image exists "$image" >/dev/null 2>&1; then
-          ${pkgs.podman}/bin/podman rmi -f "$image" >/dev/null 2>&1 || true
+          ${pkgs.podman}/bin/podman rmi "$image" >/dev/null 2>&1 || true
         fi
       }
 
@@ -459,7 +452,7 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
           | while IFS= read -r image; do
               case "$image" in
                 "$repository":*)
-                  ${pkgs.podman}/bin/podman rmi -f "$image" >/dev/null 2>&1 || true
+                  ${pkgs.podman}/bin/podman rmi "$image" >/dev/null 2>&1 || true
                   ;;
               esac
             done
@@ -498,45 +491,48 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
         fi
       }
 
-      ${renderCommands "units" (unit: ''
-        if [ -d /run/systemd/system ]; then
-          ${pkgs.systemd}/bin/systemctl stop ${lib.escapeShellArg "${unit}.service"} >/dev/null 2>&1 || true
+      ${lib.concatMapStringsSep "\n" (artifact: ''
+        protected=false
+        ${commands "units" artifact (unit: ''
+          state="$(${pkgs.systemd}/bin/systemctl show -p ActiveState --value ${lib.escapeShellArg "${unit}.service"} 2>/dev/null || true)"
+          case "$state" in
+            active|activating|reloading|deactivating) protected=true ;;
+          esac
+        '')}
+        ${commands "containers" artifact (name: ''
+          if [ "$(${pkgs.podman}/bin/podman inspect --format '{{.State.Running}}' ${lib.escapeShellArg name} 2>/dev/null || true)" = true ]; then
+            protected=true
+          fi
+        '')}
+        if [ "$protected" = true ]; then
+          echo ${lib.escapeShellArg "warning: preserving active retired service ${artifact.name}"} >&2
+        else
+          ${commands "timers" artifact (timer: ''
+            ${pkgs.systemd}/bin/systemctl stop ${lib.escapeShellArg "${timer}.timer"} >/dev/null 2>&1 || true
+          '')}
+          ${commands "containers" artifact (name: ''
+            if ! ${pkgs.podman}/bin/podman rm ${lib.escapeShellArg name} >/dev/null 2>&1; then
+              if ${pkgs.podman}/bin/podman container exists ${lib.escapeShellArg name}; then
+                protected=true
+              fi
+            fi
+          '')}
+          if [ "$protected" = false ]; then
+          ${commands "paths" artifact (path: "cleanup_retired_path ${lib.escapeShellArg path}")}
+          ${commands "imageRefs" artifact (ref: "remove_image_ref ${lib.escapeShellArg ref}")}
+          ${commands "imageRepositories" artifact (
+            ref: "remove_image_repository ${lib.escapeShellArg ref}"
+          )}
+          ${commands "homepageEntries" artifact (entry: "prune_homepage_entry ${lib.escapeShellArg entry}")}
+          ${commands "muximuxSections" artifact (
+            section: "prune_muximux_section ${lib.escapeShellArg section}"
+          )}
+          else
+            echo "warning: retirement cancelled because a container could not be removed" >&2
+          fi
+          # Named volumes and quarantine data require explicit operator removal.
         fi
-      '')}
-
-      ${renderCommands "timers" (timer: ''
-        if [ -d /run/systemd/system ]; then
-          ${pkgs.systemd}/bin/systemctl stop ${lib.escapeShellArg "${timer}.timer"} >/dev/null 2>&1 || true
-        fi
-      '')}
-
-      ${renderCommands "containers" (container: ''
-        ${pkgs.podman}/bin/podman rm -f ${lib.escapeShellArg container} >/dev/null 2>&1 || true
-      '')}
-
-      ${renderCommands "volumes" (volume: ''
-        ${pkgs.podman}/bin/podman volume rm -f ${lib.escapeShellArg volume} >/dev/null 2>&1 || true
-      '')}
-
-      ${renderCommands "paths" (path: ''
-        cleanup_retired_path ${lib.escapeShellArg path}
-      '')}
-
-      ${renderCommands "imageRefs" (image: ''
-        remove_image_ref ${lib.escapeShellArg image}
-      '')}
-
-      ${renderCommands "imageRepositories" (repository: ''
-        remove_image_repository ${lib.escapeShellArg repository}
-      '')}
-
-      ${lib.concatMapStringsSep "\n" (entry: ''
-        entry=${lib.escapeShellArg entry} prune_homepage_entry ${lib.escapeShellArg entry}
-      '') homepageEntries}
-
-      ${lib.concatMapStringsSep "\n" (section: ''
-        prune_muximux_section ${lib.escapeShellArg section}
-      '') muximuxSections}
+      '') eligibleArtifacts}
     '';
   };
 }

@@ -7,6 +7,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.7.0] - 2026-09-08
+
+- Declare service hostnames, origins, and dashboard metadata with each container;
+  automatically reconcile Cloudflare routes/DNS and both dashboards while
+  preserving unrelated entries and Google Access policies.
+
+- Add Uptime Kuma, authenticated Android ntfy notifications, and Seerr with
+  approval-required requests using existing Plex/Sonarr/Radarr settings.
+- Add encrypted Restic backups, isolated restore checks, retention, stale-job
+  alerts, and a recent-backup gate for automatic container updates. Pin the
+  current MariaDB image digests for reviewed engine migrations.
+- Refresh coordinated Nix inputs; adapt Home Manager SSH option names without
+  changing policy, and use the compatible nixpkgs ragenix CLI.
+- Retain the compatible Apple Silicon input until vendor firmware is rebuilt
+  from macOS; the newer input requires a firmware archive this host lacks.
+- Render application configuration at service startup, preserve native secret
+  values in Podman env files, require critical secrets, and write configs atomically.
+- Add readiness notifications, network/NAS/database ordering, and non-destructive
+  retirement quarantine while preserving the active agent environment.
+- Stabilize OpenChamber with isolated immutable tool generations, activity-aware
+  promotion, candidate validation, and recoverable image deployments. Count
+  pending goal audits as active work, preserve quiet detached terminals, and
+  observe provider retries without aborts. Retain image dependencies for rollback
+  and recover staging permissions after interrupted validation.
+- Raise the configurable goal continuation cap to 1,000 while retaining token
+  budgets and explicit goal termination controls; include the configured limit
+  in generation identity so changed limits take effect.
+- Preserve the live Codex workstation and reconcile its service registry.
+- Add fleet CI and weekly validated input-update PRs; system upgrades consume
+  the committed lock file. Correct stale inventory docs and document recovery.
+
+## [3.6.1] - 2026-09-07
+
+- **Notification targets**: Capture task routes across the upstream RPC read
+  loop and coalesce repeated completion alerts by upstream notification ID.
+- **Phone rotation**: Keep the mobile drawer and visual-viewport sizing on touch
+  phones in landscape so browser chrome and the keyboard cannot clip controls.
+
+## [3.6.0] - 2026-09-07
+
+- **Background notifications**: Persist per-device Web Push subscriptions and
+  VAPID keys, encrypt completion alerts, wake the service worker for closed-tab
+  delivery, and open the app from notification clicks. Report registration
+  failures with a retry action.
+- **Idle upgrades**: Check the signed ChatGPT Linux repository every 15 minutes
+  and allow activation after 15 minutes without browser input, while protecting
+  active tasks, recordings, open terminals and dialogs.
+- **Project selection**: Disable folder selection during navigation so a quick
+  click cannot select the previous directory. Document the OpenChamber project,
+  Git authentication and Nix profile migration.
+- **Mobile project screen**: Fit the inner zoomed frame to the visible viewport
+  and remove the desktop suggestion overlap so project headings and composer
+  controls stay separate below Android browser chrome.
+- **Browser verification**: Exercise encrypted push payloads, stopped-worker
+  notifications, multi-device focus and update deferral, plus the folder-loading
+  race. Include a local speech fixture tool for microphone acceptance.
+
+## [3.5.0] - 2026-09-07
+
+- **ChatGPT Linux workstation**: Restore the web-native desktop renderer using
+  the official ARM64 Linux application and its native runtime in the existing
+  Nix/systemd OCI workstation, with persistent Nix, Docker, home and workspace.
+- **Application updates**: Authenticate OpenAI's signed package index, build and
+  smoke-test isolated candidates, queue idle activation and restore the previous
+  generation after failed startup. Refresh browser assets on transport changes.
+- **Browser compatibility**: Support sandboxed Linux preloads, preserve binary
+  IPC payloads and initialize the upstream renderer's application version.
+- **Web controls**: Use upstream web menus, keep project actions visible, refresh
+  chunked state updates and reconnect without replaying an application backlog.
+- **Embedded browser**: Resize pages to their panel, preserve keyboard modifiers,
+  and keep typing focused through cursor overlays and application shortcuts
+  without announcing navigation on each keystroke.
+- **Bundled plugins**: Make runtime copies writable so Linux plugin variants can
+  be materialized from sealed Nix resources.
+- **Restart reliability**: Keep the updater alive through its own restart and
+  health checks, and defer automatic activation while browser tabs are connected.
+- **Chat startup**: Forward desktop tool-server configuration to each persistent
+  app-server thread and provide the Linux sandbox helper.
+- **Folder picking**: Keep file dialogs above clipped project modals while
+  preserving the parent dialog during selection.
+- **Recovery checks**: Require renderer heartbeats and roll back failed service
+  starts as well as failed health checks.
+- **Mobile layout**: Keep navigation in a drawer and size the app to the visible
+  viewport so the composer stays reachable with browser chrome and keyboards.
+- **Session synchronization**: Refresh project state in place across browsers,
+  preserving the current conversation and unsent draft during project changes,
+  and isolate transport channels between tabs sharing browser storage. Preserve
+  Electron window identity so native state broadcasts include the app window.
+- **Browser startup**: Compress large HTTP and WebSocket payloads, route request
+  replies to their originating tab, and avoid resending the full startup
+  snapshot for project updates. Relay complete native chunked messages and
+  acknowledge them independently of the hidden renderer to keep state updates flowing.
+- **Authenticated app installation**: Include access cookies when Chrome fetches
+  the web app manifest behind Cloudflare Access.
+
 ## [3.4.7] - 2026-09-02
 
 - **LAN address migration**: Point the `chill-penguin` and WSL NFS mounts at

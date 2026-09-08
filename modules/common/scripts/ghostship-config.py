@@ -5,6 +5,8 @@ import logging
 import re
 import configparser
 import tempfile
+import shlex
+import stat
 from io import StringIO
 from lxml import etree
 from ruamel.yaml import YAML
@@ -14,8 +16,9 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
 class ValueResolver:
-    def __init__(self, secrets_files=None):
+    def __init__(self, secrets_files=None, require_secrets=False):
         self.secrets = {}
+        self.require_secrets = require_secrets
         if secrets_files is None:
             return
 
@@ -36,17 +39,37 @@ class ValueResolver:
                                 line = line[7:].strip()
                             if "=" in line:
                                 k, v = line.split("=", 1)
-                                self.secrets[k.strip()] = v.strip()
-            except Exception as e:
-                logging.error(
-                    f"Failed to load secrets file {secrets_file}: {e}"
-                )
+                                raw = v.strip()
+                                # Decode quotes; never expand values.
+                                if raw.startswith(("'", '"')):
+                                    try:
+                                        parts = shlex.split(
+                                            raw, comments=False
+                                        )
+                                    except ValueError:
+                                        raise ValueError(
+                                            f"Bad quoting: {k.strip()}"
+                                        ) from None
+                                    if len(parts) != 1:
+                                        raise ValueError(
+                                            f"Bad quoting: {k.strip()}"
+                                        )
+                                    raw = parts[0]
+                                self.secrets[k.strip()] = raw
+            except (OSError, ValueError):
+                raise ValueError(
+                    f"Cannot parse secrets file {secrets_file}"
+                ) from None
 
     def resolve(self, value):
         if value.startswith("env:"):
             var_name = value[4:]
             # Check local secrets dict first, then OS environment
-            val = self.secrets.get(var_name) or os.environ.get(var_name)
+            val = self.secrets.get(var_name, os.environ.get(var_name))
+            if self.require_secrets and (val is None or val == ""):
+                raise ValueError(
+                    f"Required secret {var_name} is missing or empty"
+                )
             if val is None:
                 logging.warning(f"Secret variable {var_name} not found")
                 return ""
@@ -55,8 +78,15 @@ class ValueResolver:
             path = value[5:]
             try:
                 with open(path, "r") as f:
-                    return f.read().strip()
+                    result = f.read().strip()
+                    if self.require_secrets and not result:
+                        raise ValueError("Required secret file is empty")
+                    return result
             except Exception as e:
+                if self.require_secrets:
+                    raise ValueError(
+                        f"Cannot read required secret file {path}"
+                    ) from None
                 logging.error(f"Failed to read secret from {path}: {e}")
                 return ""
         if value.startswith("literal:"):
@@ -530,9 +560,9 @@ class KVDriver:
 class PyLoadDriver:
     section_re = re.compile(r'^(?P<section>[a-z_]+)\s+-\s+"[^"]+":\s*$')
     option_re = re.compile(
-        r'^(?P<indent>\s*)(?P<type>.+?)\s+'
+        r"^(?P<indent>\s*)(?P<type>.+?)\s+"
         r'(?P<key>[a-z_]+)\s+:\s+"(?P<label>[^"]*)"\s+=\s*'
-        r'(?P<value>.*)$'
+        r"(?P<value>.*)$"
     )
 
     def __init__(self, content):
@@ -578,9 +608,9 @@ class PyLoadDriver:
                 return
 
             self.lines[index] = (
-                f'{option_match.group("indent")}'
-                f'{option_match.group("type")} '
-                f'{option_match.group("key")} : '
+                f"{option_match.group('indent')}"
+                f"{option_match.group('type')} "
+                f"{option_match.group('key')} : "
                 f'"{option_match.group("label")}" = '
                 f"{new_value}"
             )
@@ -647,8 +677,23 @@ class ConfigManager:
             logging.info(f"Dry-run: Would write changes to {self.file_path}")
             return True
 
-        with open(self.file_path, "w") as f:
-            f.write(new_content)
+        # Replace the symlink destination, preserving the link itself.
+        destination = os.path.realpath(self.file_path)
+        metadata = os.stat(destination)
+        fd, temporary = tempfile.mkstemp(
+            dir=os.path.dirname(destination), prefix=".ghostship-"
+        )
+        try:
+            with os.fdopen(fd, "w") as handle:
+                os.fchown(handle.fileno(), metadata.st_uid, metadata.st_gid)
+                os.fchmod(handle.fileno(), stat.S_IMODE(metadata.st_mode))
+                handle.write(new_content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
         logging.info(f"Updated {self.file_path}")
         return True
 
@@ -805,10 +850,7 @@ plugins:
             searxng = ConfigManager(searxng_path)
             searxng.load()
             searxng.driver.set(
-                (
-                    "plugins[searx.plugins.calculator.SXNGPlugin]."
-                    "active"
-                ),
+                ("plugins[searx.plugins.calculator.SXNGPlugin].active"),
                 resolver.resolve("yaml:true"),
             )
             searxng.save()
@@ -908,9 +950,7 @@ WebUI\\Port=5000
                 res = f.read()
                 assert "WebUI\\ReverseProxySupportEnabled = true" in res
                 assert "WebUI\\AlternativeUIEnabled = true" in res
-                assert (
-                    "WebUI\\AuthSubnetWhitelistEnabled = true" in res
-                )
+                assert "WebUI\\AuthSubnetWhitelistEnabled = true" in res
                 assert (
                     "WebUI\\AuthSubnetWhitelist = "
                     "127.0.0.0/8,10.0.0.0/8,"
@@ -982,15 +1022,15 @@ webui - "Web Interface":
                 )
                 assert 'debug_level : "Debug level" = debug' in res
                 assert (
-                    'bool folder_per_package : '
+                    "bool folder_per_package : "
                     '"Create folder for each package" = True' in res
                 )
                 assert (
-                    'bool autologin : '
+                    "bool autologin : "
                     '"Skip login if single user" = True' in res
                 )
                 assert (
-                    'int session_lifetime : '
+                    "int session_lifetime : "
                     '"Session lifetime (minutes)" = 5256000' in res
                 )
                 assert "download.max_downloads=10" not in res
@@ -1073,9 +1113,7 @@ webui - "Web Interface":
                     g["Utilities"] for g in data if "Utilities" in g
                 )
                 omni = next(
-                    s["OmniTools"]
-                    for s in utils_group
-                    if "OmniTools" in s
+                    s["OmniTools"] for s in utils_group if "OmniTools" in s
                 )
                 assert omni["icon"] == "fa-wrench"
 
@@ -1129,6 +1167,12 @@ def main():
         help="Path to env-style secrets file",
     )
 
+    parser.add_argument(
+        "--require-secrets",
+        action="store_true",
+        help="Fail before writing if referenced secrets are missing or empty",
+    )
+
     args = parser.parse_args()
 
     if args.test:
@@ -1143,7 +1187,9 @@ def main():
         logging.info(f"File not found: {args.file}. Skipping.")
         sys.exit(0)
 
-    resolver = ValueResolver(secrets_files=args.secrets_file)
+    resolver = ValueResolver(
+        secrets_files=args.secrets_file, require_secrets=args.require_secrets
+    )
     manager = ConfigManager(
         args.file,
         args.format,
@@ -1172,4 +1218,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, ValueError) as error:
+        logging.error("%s", error)
+        sys.exit(1)

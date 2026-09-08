@@ -1,7 +1,19 @@
 { ... }:
 
 {
+  ghostship.apps.flaresolverr = {
+    healthPath = "/";
+    name = "FlareSolverr";
+    group = "Utilities";
+    description = "Proxy Server";
+    icon = "sh-flaresolverr";
+    order = 250;
+    hostname = "flaresolverr.ghostship.io";
+    origin = "http://flaresolverr:8191";
+  };
+
   virtualisation.oci-containers.containers."flaresolverr" = {
+    podman.sdnotify = "healthy";
     image = "ghcr.io/flaresolverr/flaresolverr:latest";
     pull = "always";
     labels = {

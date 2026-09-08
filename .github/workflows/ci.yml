@@ -1,0 +1,49 @@
+name: Fleet checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fleet-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            max-jobs = 2
+            cores = 2
+      - name: Evaluate hosts and run regression tests
+        run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package
+      - name: Check workflows and backup script
+        run: |
+          nix develop .#ci -c actionlint
+          nix develop .#ci -c shellcheck -s bash -e SC1091 modules/self-hosted/backup.sh modules/self-hosted/restore-check.sh
+      - name: Check OpenChamber update and rollback state machines
+        # Ubuntu restricts user namespaces for store-path binaries. Keep the
+        # probe in a disposable container instead of changing runner policy.
+        run: |
+          # shellcheck disable=SC2016
+          nix develop .#ci -c bash -c '
+            docker run --rm --security-opt apparmor=unconfined --security-opt seccomp=unconfined \
+              --cap-add SYS_ADMIN --cap-add NET_ADMIN --security-opt systempaths=unconfined \
+              --volume /nix:/nix:ro --volume /etc/passwd:/etc/passwd:ro \
+              --volume /etc/ssl/certs:/etc/ssl/certs:ro \
+              --volume "$PWD:$PWD" \
+              --workdir "$PWD" --env PATH --env TMPDIR=/tmp --env NIX_SSL_CERT_FILE \
+              --env HOME=/root --env NIX_REMOTE=daemon \
+              --env "NIX_CONFIG=experimental-features = nix-command flakes" \
+              ubuntu:24.04 bash -c "git config --global --add safe.directory \"$PWD\" && exec bash tests/openchamber-harness.sh"
+          '
+
+      - name: Scan current source for secrets
+        run: nix develop .#ci -c gitleaks dir --redact --no-banner .

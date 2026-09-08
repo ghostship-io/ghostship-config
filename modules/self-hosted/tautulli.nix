@@ -1,11 +1,36 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   tautulli-secrets = config.ghostship.selfHostedSecrets.projections.tautulli.path;
   render-tautulli-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project tautulli";
 in
 {
+  ghostship.apps.tautulli = {
+    name = "Tautulli";
+    group = "Media";
+    description = "Plex Monitoring";
+    icon = "sh-tautulli";
+    order = 130;
+    hostname = "tautulli.ghostship.io";
+    origin = "http://tautulli:8181";
+    widget = {
+      type = "tautulli";
+      key = "env:TAUTULLI_API_KEY";
+    };
+    muximux = {
+      icon = "muximux-plexivity";
+      color = "#e5a00d";
+      dropdown = true;
+    };
+  };
+
   virtualisation.oci-containers.containers."tautulli" = {
+    podman.sdnotify = "healthy";
     image = "lscr.io/linuxserver/tautulli:latest";
     pull = "always";
     labels = {

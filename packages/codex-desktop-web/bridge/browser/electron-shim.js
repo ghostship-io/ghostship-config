@@ -12,8 +12,15 @@
   const outboundMessageListeners = new Set();
   const nativeFetch = window.fetch.bind(window);
   const bootstrap = window.__CODEX_WEB_BOOTSTRAP__ || {};
+  // Disable Electron-only telemetry in browser clients. The native app keeps
+  // its own diagnostics; a browser has no sentry-ipc protocol handler.
+  window.__SENTRY_IPC__ = {
+    "sentry-ipc": Object.fromEntries([
+      "sendRendererStart", "sendScope", "sendEnvelope", "sendStatus",
+      "sendStructuredLog", "sendMetric",
+    ].map((name) => [name, () => {}])),
+  };
   const deviceKey = "codex-web-device-id";
-  const sequenceKey = "codex-web-event-sequence";
   const nativeRandomUUID =
     typeof crypto.randomUUID === "function" ? crypto.randomUUID.bind(crypto) : null;
 
@@ -32,16 +39,58 @@
 
   const deviceId = localStorage.getItem(deviceKey) || randomId();
   localStorage.setItem(deviceKey, deviceId);
+  // Tabs share device storage, but native message ports must be unique even
+  // when another tab starts or the previous connection is still closing.
+  const sessionId = randomId();
   let requestCounter = 0;
   let reconnectTimer;
   let socket;
+  let hasConnected = false;
   let activeDialog;
   let notificationPrompt;
-  let projectMutationReloadTimer;
+  let pushPublicKey;
+  let pushRegistration;
+
+  const mediaTracks = new Set();
+  let lastActivitySent = 0;
+  function reportPresence() {
+    send({ type: "browser-presence",
+      focused: document.visibilityState === "visible" && document.hasFocus(),
+      activeMedia: [...mediaTracks].some((track) => track.readyState === "live"),
+      terminalOpen: Boolean(document.querySelector(".xterm")),
+    });
+  }
+  function reportActivity(event) {
+    if (!event.isTrusted || Date.now() - lastActivitySent < 1000) return;
+    lastActivitySent = Date.now();
+    send({ type: "user-activity" });
+    reportPresence();
+  }
+  for (const event of ["pointerdown", "keydown", "input", "wheel"]) {
+    window.addEventListener(event, reportActivity, { capture: true, passive: true });
+  }
+  for (const event of ["focus", "blur", "pageshow"]) window.addEventListener(event, reportPresence);
+  document.addEventListener("visibilitychange", reportPresence);
+  setInterval(reportPresence, 15000);
+  if (navigator.mediaDevices?.getUserMedia) {
+    const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async (...args) => {
+      const stream = await getUserMedia(...args);
+      for (const track of stream.getTracks()) {
+        mediaTracks.add(track);
+        const ended = () => { mediaTracks.delete(track); reportPresence(); };
+        track.addEventListener("ended", ended, { once: true });
+        const stop = track.stop.bind(track);
+        track.stop = () => { stop(); ended(); };
+      }
+      reportPresence();
+      return stream;
+    };
+  }
 
   function nextId(prefix) {
     requestCounter += 1;
-    return `${prefix}-${deviceId}-${requestCounter}`;
+    return `${prefix}-${sessionId}-${requestCounter}`;
   }
 
   function send(message) {
@@ -97,7 +146,7 @@
 
   function showMessageDialog(message) {
     const options = message.options || {};
-    const overlay = document.createElement("div");
+    const overlay = document.createElement("dialog");
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("data-codex-web-dialog", "");
@@ -149,6 +198,8 @@
     overlay.append(panel);
     dialogMountTarget().append(overlay);
     overlay.style.display = "grid";
+    overlay.addEventListener("cancel", (event) => event.preventDefault());
+    overlay.showModal();
     activeDialog = { dialogId: message.dialogId, overlay };
   }
 
@@ -161,7 +212,7 @@
     const directoryMode =
       message.dialogType === "open" &&
       (message.options?.properties || []).includes("openDirectory");
-    const overlay = document.createElement("div");
+    const overlay = document.createElement("dialog");
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("data-codex-web-dialog", "");
@@ -202,17 +253,23 @@
     select.style.background = "#e7e7e7";
     select.style.color = "#111";
 
+    let directoryRequest = 0;
     async function loadDirectory(target) {
+      const request = ++directoryRequest;
+      select.disabled = true;
       entries.textContent = "Loading…";
-      const response = await nativeFetch(
-        `/__bridge/files?path=${encodeURIComponent(target)}`,
-      );
-      if (!response.ok) {
-        entries.textContent = "This location is not available.";
+      let listing;
+      try {
+        const response = await nativeFetch(`/__bridge/files?path=${encodeURIComponent(target)}`);
+        if (!response.ok) throw new Error("Folder unavailable");
+        listing = await response.json();
+      } catch {
+        if (request === directoryRequest) entries.textContent = "This location is not available.";
         return;
       }
-      const listing = await response.json();
+      if (request !== directoryRequest) return;
       currentPath = listing.path;
+      select.disabled = false;
       selectedFile = undefined;
       location.value = currentPath;
       entries.replaceChildren();
@@ -277,6 +334,10 @@
     overlay.append(panel);
     dialogMountTarget().append(overlay);
     overlay.style.display = "grid";
+    // The top layer escapes the parent's clipping/containing block while DOM
+    // nesting keeps upstream capture-phase outside-click handlers satisfied.
+    overlay.addEventListener("cancel", (event) => event.preventDefault());
+    overlay.showModal();
     activeDialog = { dialogId: message.dialogId, overlay };
     void loadDirectory(currentPath);
   }
@@ -482,11 +543,44 @@
       `data:${message.frame.mimeType || "image/png"};base64,${message.frame.data}`;
   }
 
-  function ensureNotificationPrompt() {
+  async function registerPush() {
+    if (!pushPublicKey || Notification.permission !== "granted" || !("serviceWorker" in navigator)) return;
+    if (pushRegistration) return pushRegistration;
+    pushRegistration = (async () => {
+      const registration = await navigator.serviceWorker.ready;
+      if (!registration.pushManager) return;
+      const key = Uint8Array.from(atob(pushPublicKey.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+      let subscription = await registration.pushManager.getSubscription();
+      if (subscription && subscription.options.applicationServerKey &&
+          String(new Uint8Array(subscription.options.applicationServerKey)) !== String(key)) {
+        await subscription.unsubscribe();
+        subscription = null;
+      }
+      subscription ||= await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      send({ type: "push-subscribe", subscription: subscription.toJSON() });
+    })().catch(() => ensureNotificationPrompt("Background notifications could not connect. Retry to enable alerts when the app is closed."))
+      .finally(() => { pushRegistration = undefined; });
+    return pushRegistration;
+  }
+
+  function openNotificationFromUrl() {
+    const url = new URL(location.href);
+    const notificationId = url.searchParams.get("codex-notification");
+    if (!notificationId) return;
+    const actionId = url.searchParams.get("codex-action");
+    const navigationPath = url.searchParams.get("codex-path");
+    url.searchParams.delete("codex-path");
+    url.searchParams.delete("codex-notification");
+    url.searchParams.delete("codex-action");
+    history.replaceState(history.state, "", url);
+    send({ type: "notification-action", notificationId, navigationPath, action: "click", actionId });
+  }
+
+  function ensureNotificationPrompt(error) {
     if (
       notificationPrompt ||
       !("Notification" in window) ||
-      Notification.permission !== "default"
+      (!error && Notification.permission !== "default")
     ) {
       return;
     }
@@ -497,18 +591,19 @@
     prompt.dataset.codexNotificationPrompt = "";
     prompt.style.cssText =
       "position:fixed;z-index:2147483646;top:max(48px,calc(env(safe-area-inset-top) + 12px));right:max(12px,env(safe-area-inset-right));display:flex;flex-wrap:wrap;align-items:center;gap:10px;max-width:calc(100vw - 24px);padding:11px 12px;border:1px solid #444;border-radius:10px;background:#202020;color:#ececec;box-shadow:0 12px 40px rgba(0,0,0,.5);font:13px system-ui,sans-serif;pointer-events:auto";
-    label.textContent = "Enable Codex notifications for completed and scheduled tasks.";
-    enable.textContent = "Enable";
+    label.textContent = error || "Enable Codex notifications for completed and scheduled tasks.";
+    enable.textContent = error ? "Retry" : "Enable";
     dismiss.textContent = "Not now";
     for (const button of [enable, dismiss]) {
       button.style.cssText =
         "padding:6px 9px;border:1px solid #555;border-radius:6px;background:#303030;color:inherit;cursor:pointer;white-space:nowrap";
     }
     enable.onclick = async () => {
-      await Notification.requestPermission();
+      if (Notification.permission === "default") await Notification.requestPermission();
       prompt.remove();
       notificationPrompt = undefined;
       if (Notification.permission === "granted") {
+        void registerPush();
         for (const notification of browserNotifications.values()) {
           void showBrowserNotification(notification);
         }
@@ -533,10 +628,10 @@
     const notificationOptions = {
       actions: options.actions || [],
       body: options.body || "",
-      data: { codexNotificationId: message.notificationId },
+      data: { codexNotificationId: message.notificationId, navigationPath: message.navigationPath },
       icon: options.icon || "/__bridge/icon-192.png",
       silent: options.silent === true,
-      tag: `codex-${message.notificationId}`,
+      tag: `codex-${message.notificationTag || message.notificationId}`,
     };
     if ("serviceWorker" in navigator) {
       const registration = await navigator.serviceWorker.ready;
@@ -549,6 +644,7 @@
       send({
         type: "notification-action",
         notificationId: message.notificationId,
+        navigationPath: message.navigationPath,
         action: "click",
       });
     };
@@ -562,13 +658,16 @@
   }
 
   async function closeBrowserNotification(notificationId) {
+    const message = browserNotifications.get(notificationId);
     browserNotifications.delete(notificationId);
     if (!("serviceWorker" in navigator)) return;
     const registration = await navigator.serviceWorker.ready;
     const notifications = await registration.getNotifications({
-      tag: `codex-${notificationId}`,
+      tag: `codex-${message?.notificationTag || notificationId}`,
     });
-    for (const notification of notifications) notification.close();
+    for (const notification of notifications) {
+      if (notification.data?.codexNotificationId === notificationId) notification.close();
+    }
   }
 
   async function setBrowserFullscreen(enabled) {
@@ -600,7 +699,22 @@
 
   function handle(message) {
     if (message.type === "hello") {
+      // A new connection needs fresh app-host ports and state. Replaying old
+      // responses and partial chunk streams both stalls and corrupts the UI.
+      if (hasConnected) {
+        location.reload();
+        return;
+      }
+      hasConnected = true;
+      pushPublicKey = message.pushPublicKey;
+      if ("Notification" in window && Notification.permission === "granted") void registerPush();
+      else if ("Notification" in window && Notification.permission === "denied") send({ type: "push-unsubscribe" });
+      if (message.releaseId && bootstrap.__codexWebRelease && message.releaseId !== bootstrap.__codexWebRelease) {
+        location.reload();
+        return;
+      }
       while (outbound.length > 0) socket.send(outbound.shift());
+      reportPresence();
       for (const channel of listeners.keys()) {
         send({ type: "subscribe", channel });
       }
@@ -615,7 +729,6 @@
       return;
     }
     if (message.type === "event") {
-      sessionStorage.setItem(sequenceKey, String(message.sequence));
       emit(message.channel, message.args);
       return;
     }
@@ -627,7 +740,9 @@
       for (const listener of controlListeners) {
         listener(message);
       }
-      if (message.action === "open-external" && message.url) {
+      if (message.action === "push-status" && message.error) {
+        ensureNotificationPrompt("Background notifications could not be saved. Retry to enable alerts when the app is closed.");
+      } else if (message.action === "open-external" && message.url) {
         window.open(message.url, "_blank", "noopener,noreferrer");
       } else if (message.action === "show-dialog") {
         showDialog(message);
@@ -646,8 +761,13 @@
       } else if (message.action === "update-bootstrap") {
         Object.assign(bootstrap, message.bootstrap || {});
       } else if (message.action === "project-state-changed") {
-        clearTimeout(projectMutationReloadTimer);
-        projectMutationReloadTimer = setTimeout(() => location.reload(), 1500);
+        // Use upstream invalidation events so other sessions update their
+        // projects without replacing the current document or losing a draft.
+        emit("codex_desktop:message-for-view", [{
+          type: "global-state-updated",
+          keys: ["local-projects", "remote-projects", "project-order", "connection-group-order"],
+        }]);
+        emit("codex_desktop:message-for-view", [{ type: "workspace-root-options-updated" }]);
       }
     }
   }
@@ -661,13 +781,18 @@
       return;
     }
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const since = sessionStorage.getItem(sequenceKey) || "0";
     socket = new WebSocket(
-      `${protocol}//${location.host}/__bridge/ipc?device=${encodeURIComponent(deviceId)}&since=${encodeURIComponent(since)}`,
+      `${protocol}//${location.host}/__bridge/ipc?device=${encodeURIComponent(deviceId)}`,
     );
     socket.addEventListener("message", (event) => {
       try {
-        handle(JSON.parse(String(event.data)));
+        handle(JSON.parse(String(event.data), (_key, item) => {
+          if (item?.__codexBridgeType === "uint8array" || item?.__codexBridgeType === "arraybuffer") {
+            const bytes = Uint8Array.from(atob(item.base64), (character) => character.charCodeAt(0));
+            return item.__codexBridgeType === "arraybuffer" ? bytes.buffer : bytes;
+          }
+          return item;
+        }));
       } catch (error) {
         console.error("[codex-web] invalid bridge message", error);
       }
@@ -714,12 +839,19 @@
       return new Promise((resolve, reject) => {
         pendingInvokes.set(requestId, { resolve, reject });
         send({ type: "invoke", requestId, channel, args });
+        if (channel === "codex_desktop:message-from-view" && args[0]?.type === "ready") {
+          setTimeout(openNotificationFromUrl, 0);
+        }
       });
     },
     send(channel, ...args) {
       send({ type: "send", channel, args });
     },
     sendSync(channel) {
+      // Electron's sentry-ipc protocol is unavailable in an ordinary browser.
+      if (channel === "codex_desktop:get-sentry-init-options" && bootstrap[channel]) {
+        return { ...bootstrap[channel], dsn: undefined, enabled: false };
+      }
       if (Object.prototype.hasOwnProperty.call(bootstrap, channel)) {
         return bootstrap[channel];
       }
@@ -802,6 +934,9 @@
   const electronModule = {
     contextBridge: {
       exposeInMainWorld(key, api) {
+        // The upstream renderer provides accessible web menus when the native
+        // popup capability is absent. Keep those menus in the browser DOM.
+        if (key === "electronBridge") api = { ...api, showContextMenu: undefined };
         Object.defineProperty(window, key, {
           configurable: false,
           enumerable: true,
@@ -868,6 +1003,7 @@
       send({
         type: "notification-action",
         notificationId: event.data.notificationId,
+        navigationPath: event.data.navigationPath,
         action: "click",
         actionId: event.data.actionId || null,
       });
@@ -925,7 +1061,7 @@
     void setBrowserFullscreen(!document.fullscreenElement);
   }, true);
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", ensureNotificationPrompt, {
+    document.addEventListener("DOMContentLoaded", () => ensureNotificationPrompt(), {
       once: true,
     });
   } else {
@@ -934,6 +1070,14 @@
 
   const browserUsabilityStyle = document.createElement("style");
   browserUsabilityStyle.textContent = `
+    [data-app-action-sidebar-project-row] [class~="w-0"]:has(button) {
+      width: auto !important;
+      overflow: visible !important;
+      flex-shrink: 0 !important;
+    }
+    [data-app-action-sidebar-project-row] [class~="opacity-0"]:has(button) {
+      opacity: 1 !important;
+    }
     button[aria-label="Add new project"],
     div:has(> div > button[aria-label="Add new project"]) {
       opacity: 1 !important;

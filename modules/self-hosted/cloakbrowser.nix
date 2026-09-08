@@ -11,7 +11,23 @@ let
   };
 in
 {
+  ghostship.apps.cloakbrowser = {
+    name = "CloakBrowser";
+    group = "Management";
+    description = "Browser Profile Manager";
+    icon = "sh-google-chrome";
+    order = 110;
+    hostname = "cloakbrowser.ghostship.io";
+    origin = "http://cloakbrowser:8080";
+    muximux = {
+      icon = "muximux-chrome";
+      color = "#000000";
+      dropdown = false;
+    };
+  };
+
   virtualisation.oci-containers.containers."cloakbrowser" = {
+    podman.sdnotify = "healthy";
     image = "docker.io/cloakhq/cloakbrowser-manager:latest";
     pull = "always";
     labels = {

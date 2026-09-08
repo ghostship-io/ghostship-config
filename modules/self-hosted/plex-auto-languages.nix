@@ -1,10 +1,24 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   plex-secrets = config.ghostship.selfHostedSecrets.projections.plex.path;
 in
 {
+  ghostship.apps.plex-auto-languages = {
+    name = "Plex Auto Languages";
+    group = "Utilities";
+    description = "Language Manager";
+    icon = "sh-plex";
+    order = 250;
+  };
+
   virtualisation.oci-containers.containers."plex-auto-languages" = {
+    podman.sdnotify = "healthy";
     image = "ghcr.io/journeydocker/plex-auto-languages:latest";
     pull = "always";
     labels = {
@@ -35,7 +49,7 @@ in
   system.activationScripts.pal-config = {
     text = ''
       CONFIG_FILE="/srv/apps/plex-auto-languages/config.yaml"
-      
+
       if [ -f "$CONFIG_FILE" ] && [ -f "${plex-secrets}" ]; then
         echo "Surgically updating PAL config..."
         set -a
