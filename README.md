@@ -189,7 +189,8 @@ findings, backup/restore commands, update policy, and staged deployment checks.
 Each container's `ghostship.apps` declaration synchronizes its Cloudflare tunnel
 route, DNS name, Homepage entry, and Muximux link. Registry changes apply after
 the host generation is activated. Unrelated Cloudflare records and personal
-dashboard entries remain intact.
+dashboard entries remain intact. Muximux settings writes are atomic, and its
+health checks use a static endpoint to avoid triggering upstream update checks.
 
 Retired `chill-penguin` self-hosted service artifacts are cleaned from the
 allowlist in
@@ -338,7 +339,7 @@ Gluetun secret bundle must provide PIA credentials (`PIA_USER`/`PIA_PASS` or
 legacy `OPENVPN_*` names) and `HTTP_CONTROL_SERVER_API_KEY`, and does not
 require any application-specific benchmark credentials.
 
-Chaptarr now extends the arr stack to books and audiobooks. It should mount the shared downloads root at `/downloads`, manage `/mnt/share/Library/Books` and `/mnt/share/Library/Audiobooks` as separate library roots, and stay visible in Homepage plus the Muximux dropdown immediately before Bazarr. Grimmory is still the primary reading and listening surface, so it also mounts both library roots. Public `chaptarr.ghostship.io` exposure remains part of the external Cloudflare/tunnel workflow rather than repo-managed ingress.
+Chaptarr now extends the arr stack to books and audiobooks. It should mount the shared downloads root at `/downloads`, manage `/mnt/share/Library/Books` and `/mnt/share/Library/Audiobooks` as separate library roots, and stay visible in Homepage plus the Muximux dropdown immediately before Bazarr. Grimmory is still the primary reading and listening surface, so it also mounts both library roots. Public `chaptarr.ghostship.io` exposure is managed by its Nix service declaration alongside its dashboard entries.
 
 CloakBrowser runs again as a standalone manager on `chill-penguin` for direct
 profile management, alongside the embedded browser contract used by

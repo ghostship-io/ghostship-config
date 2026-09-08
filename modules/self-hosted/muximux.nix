@@ -1,6 +1,13 @@
 { lib, pkgs, ... }:
 
 let
+  muximuxWriterInit = pkgs.writeScript "muximux-writer-init" ''
+    #!/usr/bin/with-contenv bash
+    set -euo pipefail
+    php /run/ghostship/muximux-patch-writer.php \
+      /config/www/muximux/muximux.php /run/ghostship/muximux-save-config.php
+    chown abc:abc /config/www/muximux/muximux.php
+  '';
   rommIframeShimVersion = "20260402-2";
   rommIframeShim = pkgs.writeText "romm-iframe-shim.js" ''
     (() => {
@@ -300,7 +307,7 @@ in
   config = lib.mkMerge [
     {
       ghostship.apps.muximux = {
-        healthPath = "/";
+        healthPath = "/favicon.ico";
         name = "Muximux";
         group = "Management";
         description = "Lightweight Portal";
@@ -324,9 +331,13 @@ in
           PUID = "3000";
           PGID = "3000";
           TZ = "UTC";
+          S6_BEHAVIOUR_IF_STAGE2_FAILS = "2";
         };
         volumes = [
           "/srv/apps/muximux:/config:rw"
+          "${muximuxWriterInit}:/etc/cont-init.d/50-ghostship-writer:ro"
+          "${./muximux-patch-writer.php}:/run/ghostship/muximux-patch-writer.php:ro"
+          "${./muximux-save-config.php}:/run/ghostship/muximux-save-config.php:ro"
         ];
       };
 

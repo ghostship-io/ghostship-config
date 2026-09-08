@@ -153,6 +153,11 @@ fields and widgets are authoritative; edit their module to make changes stick.
 Adding another public container needs one app declaration, not three separate
 lists. Keep its Homepage secrets projection current when adding widget keys.
 
+The legacy Muximux runtime receives an atomic settings writer at startup. It
+publishes the INI and PHP access guard together; the old in-place header rewrite
+could corrupt settings during concurrent requests. Both native and Kuma health
+checks use `/favicon.ico`, since `/` can fetch GitHub branches and save settings.
+
 `ghostship-cloudflare-sync.service` reads that manifest and reconciles the
 existing remote-managed tunnel and proxied CNAME records at activation/boot and
 every six hours. It does not create or replace the tunnel itself. From the

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.7.5] - 2026-09-08
+
+- Publish Muximux settings atomically with their PHP access guard, preventing
+  concurrent reads from observing its legacy partial header rewrite.
+- Use its static favicon for health checks so routine probes do not trigger
+  GitHub branch refreshes or configuration writes.
+- Remove the retired Paseo dashboard alias and correct Chaptarr ingress docs.
+
 ## [3.7.4] - 2026-09-08
 
 - Allow Kuma's populated monitor/stat login burst within a bounded Engine.IO
