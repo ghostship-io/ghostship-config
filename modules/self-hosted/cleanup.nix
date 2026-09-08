@@ -36,7 +36,10 @@ let
       containers = [ "t3code" ];
       imageRepositories = [ "localhost/ghostship-t3code" ];
       homepageEntries = [ "T3 Code" ];
-      muximuxSections = [ "T3Code" ];
+      muximuxSections = [
+        "T3Code"
+        "Paseo"
+      ];
     }
     {
       name = "jdownloader";

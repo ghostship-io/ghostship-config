@@ -12,7 +12,8 @@ let
     radarr = "http://127.0.0.1:7878/ping";
     prowlarr = "http://127.0.0.1:9696/ping";
     plex = "http://127.0.0.1:32400/identity";
-    muximux = "http://127.0.0.1/";
+    # The legacy index performs GitHub checks and writes settings on GET.
+    muximux = "http://127.0.0.1/favicon.ico";
   };
   # Agent units own their lifecycle: Requires would stop them on network-unit updates.
   active = lib.filterAttrs (

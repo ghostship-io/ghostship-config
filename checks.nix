@@ -22,6 +22,7 @@ in
       {
         nativeBuildInputs = [
           python
+          pkgs.php
           pkgs.util-linux
         ];
       }

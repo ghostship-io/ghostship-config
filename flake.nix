@@ -133,6 +133,7 @@
               actionlint
               gitleaks
               ruff
+              php
               (python3.withPackages (ps: [
                 ps.lxml
                 ps.ruamel-yaml
