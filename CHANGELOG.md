@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.7.1] - 2026-09-08
+
+- Preserve chill-penguin's running D-Bus implementation across the nixpkgs
+  refresh so fleet activation does not require rebooting the active agents.
+
 ## [3.7.0] - 2026-09-08
 
 - Declare service hostnames, origins, and dashboard metadata with each container;

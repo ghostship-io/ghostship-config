@@ -47,6 +47,11 @@ from macOS; this server currently has `/boot/asahi/all_firmware.tar.gz`. Schedul
 that firmware maintenance separately before advancing the hardware input. The
 verified live bootloader is systemd-boot with an uncompressed ARM64 Image.
 
+chill-penguin explicitly retains its running `dbus` implementation. The updated
+nixpkgs default is `broker`; changing a running system bus requires a separate
+reboot window. Keep that change outside live fleet updates so active agents can
+continue running and the switch-inhibitor checks remain enabled.
+
 | Finding | Change / remaining acceptance |
 | --- | --- |
 | Shell quoting reached Podman as literal characters | Separate shell-safe `.env` and raw `.env.container` projections; tested round trips |
