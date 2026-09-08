@@ -148,6 +148,11 @@ notes.
 
 ## Shared Skills
 
+- In the T3 Code container, run `python3 scripts/setup-container-agents.py` to
+  build the existing `/workspace/ghostship-agent` tool package and share its
+  skills with Codex/ChatGPT, OpenCode, and Antigravity. The persistent
+  `t3code-shared-agents` helper refreshes the installation; see
+  [the container workflow](docs/container-workflow.md#shared-skills-and-tools).
 - Shared repo-managed skills live under `home/config/skills/` and are linked
   into `~/.agents/skills/` on develop hosts. Managed external `skills` CLI
   installs also land under `~/.agents/skills/`, but they are maintained by
@@ -406,7 +411,7 @@ nix develop
 The flake exposes a default Linux dev shell so `use flake` works in the T3 Code
 container, on WSL development hosts, and on Apple Silicon Linux systems. It
 includes Git/GitHub CLI, SSH, Nix validation tools, Node.js, Python, and Age
-without installing agent CLIs. Use `nix develop .#secrets` for `ragenix`.
+and Ragenix without installing agent CLIs.
 Local Playwright browsers are available
 through `nix develop .#browser`; that shell also sets
 `PLAYWRIGHT_BROWSERS_PATH`. On this host's current Nix

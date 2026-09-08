@@ -844,11 +844,21 @@ let
     ${t3codeRunHooks}/bin/t3code-run-hooks doctor.d
   '';
 
+  t3codeSharedAgents = pkgs.writeShellScriptBin "t3code-shared-agents" ''
+    set -eu
+    ${t3codeRuntimeEnv}
+    exec ${pkgs.python3}/bin/python ${../../scripts/setup-container-agents.py} \
+      --preferences ${../../home/config/AGENTS.md} "$@"
+  '';
+
   t3codeBootstrap = pkgs.writeShellScriptBin "t3code-bootstrap" ''
     set -eu
 
     ${t3codeRuntimeEnv}
 
+    if [ -d /workspace/ghostship-agent/skills ]; then
+      ${t3codeSharedAgents}/bin/t3code-shared-agents --skills-only
+    fi
     ${t3codeRunHooks}/bin/t3code-run-hooks bootstrap.d
     ${t3codeRunHooks}/bin/t3code-run-hooks before-t3code.d
   '';
@@ -1282,6 +1292,7 @@ let
     t3codeDaemonMonitor
     t3codeContainerHealth
     t3codeRunHooks
+    t3codeSharedAgents
     t3codeDoctor
     t3codeApplyConfig
     t3codeUserUnits

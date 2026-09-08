@@ -7,6 +7,48 @@ environment. Keep their existing launchers, credentials, and configuration.
 Do not apply `home/profiles/develop.nix` or run
 `ghostship-agent-maintenance` here; those target the NixOS develop hosts.
 
+## Shared skills and tools
+
+Install the existing Ghostship catalog for all three T3 Code providers:
+
+```sh
+python3 scripts/setup-container-agents.py
+```
+
+This builds `/workspace/ghostship-agent#default` with that repo's lock file,
+keeps a persistent Nix GC root, and exposes its packaged commands through
+`~/.local/bin`, already inherited by T3 Code and its providers. The package
+includes `agent`, browser and Bitwarden tooling, Google Workspace tooling,
+Printing Press, generated API clients, and shared Git tooling.
+
+Codex/ChatGPT and OpenCode discover the same 15 shared skills under
+`~/.agents/skills`; Antigravity ACP reads links to them under
+`~/.gemini/config/skills`. Missing optional Antigravity `name` metadata is
+supplied in an installed copy for Codex/OpenCode compatibility. Supporting
+resources and the original source remain intact. Shared preferences and the
+container path guidance are also published to the providers' native user
+instruction files.
+
+The installer preserves unrelated skills and refuses to replace unmanaged
+commands or instruction files. It records its links so later runs can update
+or prune only its own entries. Provider credentials, model choices, plugin
+settings, and Codex's built-in skills are left in place. Provider-specific
+plugins and hosted connectors remain provider-specific; sharing filesystem
+skills does not transfer those plugins or their authentication to another CLI.
+
+Run `t3code-shared-agents` to rebuild and refresh the package, or
+`t3code-shared-agents --skills-only` to refresh discovery without a build. The
+installer persists this helper and a T3 Code bootstrap hook in the user home,
+so refreshes survive removal of the development worktree. The Nix-managed
+container bootstrap also refreshes skills on subsequent deployments.
+
+Check discovery with `opencode debug skill` and Codex app-server `skills/list`.
+Start a fresh provider session to reload cached skill catalogs. Antigravity's
+ACP skill paths were also verified against the bundled 1.1.1 server source.
+See the [Codex skill documentation](https://learn.chatgpt.com/docs/build-skills),
+[OpenCode skill documentation](https://opencode.ai/docs/skills/), and
+[Antigravity skill documentation](https://antigravity.google/docs/skills).
+
 ## Project tools and validation
 
 Use the repository's pinned tools from any agent terminal:
@@ -17,7 +59,7 @@ nix develop -c scripts/check
 ```
 
 The default shell supplies Git, GitHub CLI, SSH, Nix, formatting and shell
-validation tools, Node.js, Python, Age, and SSH-to-Age. It inherits
+validation tools, Node.js, Python, Ragenix, Age, and SSH-to-Age. It inherits
 the container's agent launchers and authentication environment. It does not
 require a login shell, Home Manager, Windows paths, or local root access.
 
@@ -31,12 +73,8 @@ and `PLAYWRIGHT_BROWSERS_PATH`. Ordinary Nix work does not download those
 browsers. The browser shell inherits the default tools. Browser tests still
 need the relevant project's JavaScript dependencies and any site credentials.
 
-Use `nix develop .#secrets` for `ragenix`. This shell also inherits the default
-tools and may build the pinned Rust application on first use; ordinary
-validation does not need that build.
-
 `scripts/check` parses all tracked Nix files, runs ShellCheck on the workflow
-script, checks patch whitespace, and evaluates default/browser/secrets shells for
+script, checks patch whitespace, and evaluates ci/default/browser shells for
 `x86_64-linux` and `aarch64-linux` plus every host's full system derivation.
 It uses the checked-in lock file without updating it. Stage new Nix files
 before running checks. These checks validate module assertions and derivation
