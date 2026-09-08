@@ -219,8 +219,12 @@ for script_name in openchamber-tool-maintenance openchamber-container-setup open
   printf '%s\n' "$script_source" | bash -n
   if [ "$script_name" = openchamber-tool-maintenance ]; then
     for mode in validate-candidate bootstrap-candidate bootstrap; do
-      condition="$(printf '%s\n' "$script_source" | sed -n "s/^if \(\[.*= $mode \]\); then$/\1/p" | head -n1)"
-      test -n "$condition"
+      condition="$(printf '%s\n' "$script_source" | sed -n "s/^[[:space:]]*if \(\[.*= $mode \]\); then$/\1/p" | head -n1)"
+      if [ -z "$condition" ]; then
+        printf 'Missing generated mode guard: %s\n' "$mode" >&2
+        printf '%s\n' "$script_source" | rg 'validate-candidate|bootstrap-candidate| = bootstrap' >&2
+        exit 1
+      fi
       bash -c 'set -- "$1"; eval "$2"' mode-check "$mode" "$condition"
     done
   fi
