@@ -129,6 +129,11 @@
                 ps.requests
                 ps.websocket-client
               ]))
+              nodejs_24
+              util-linux
+              iproute2
+              gnupg
+              espeak-ng
               playwright-driver.browsers
               prefetch-npm-deps
               pkgs.ragenix

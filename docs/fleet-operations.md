@@ -1,6 +1,6 @@
 # Fleet operations and modernization
 
-The 3.5.0 configuration was prepared from the September 2026 audit. Repository
+The 3.7.0 configuration was prepared from the September 2026 audit. Repository
 validation is separate from native builds, activation, and live acceptance.
 
 ## How the fleet works
@@ -54,10 +54,11 @@ copy of the bulk media library.
 | README described retired apps and manual kiosk startup as current | Correct declared inventory and kiosk behavior |
 | Input refresh exposed renamed SSH options / ragenix incompatibility | Use current Home Manager option names with the same policy and nixpkgs ragenix CLI |
 
-No SSH authorization policy change, general Cloudflare policy audit, or
-agent-container migration is included. The pending OpenChamber idle-recovery edit is preserved
-with its Nix string quoting corrected. Its eventual deployment must be
-reconciled with the other thread's Codex replacement.
+No SSH authorization policy change or general Cloudflare policy audit is included.
+OpenChamber remains the primary agent; the existing Codex workstation is retained.
+OpenChamber updates use validated immutable generations and coordinated drain
+checks, including pending goal continuations. Provider retries are observed
+without aborting the task. See the OpenChamber stability document for recovery.
 
 ## Added services
 
@@ -145,9 +146,11 @@ ghostship-cloudflare-sync --apply     # reconcile immediately
 Only declared exact hostnames are adopted. Unknown tunnel rules, global tunnel
 settings, DNS records, and external Synology/SSH routes remain intact. Existing
 origin-request settings are preserved. Conflicting DNS record types or duplicate
-managed tunnel rules cause a failure instead of guessing. The duplicate Codex
-routes observed during the audit remain outside this branch's ownership, for
-the active migration thread to reconcile.
+managed tunnel rules cause a failure instead of guessing. Before the first
+rollout, remove only the shadowed legacy `codex-web:8214` rule for
+`codex.ghostship.io`, preserving the first, live `codex:8214` rule and a
+private snapshot of the original tunnel configuration. Codex then joins the
+same registry without changing its effective public route.
 
 Managed DNS records carry a Nix ownership comment. Previous managed names are
 recorded under `/var/lib/ghostship-cloudflare`; removals delete only records
@@ -210,11 +213,12 @@ containers it paused and restores their health-check settings and removes the te
 Restic stores encrypted snapshots under
 `/mnt/share/Backups/ghostship/chill-penguin`. Backup selection includes app
 state, logical MariaDB exports, image/generation manifests, SSH host keys, and
-Apple Silicon firmware. Raw MariaDB directories, Codex state, OpenChamber's
-nested Docker directory, node_modules, and caches are excluded. OpenChamber's
+Apple Silicon firmware. Raw MariaDB directories, the retired Codex directory,
+both agent containers' nested Docker and Nix stores, node_modules, and caches
+are excluded. Current ChatGPT and OpenChamber home/workspace state is included. OpenChamber's
 remaining local files are snapshot-backed without stopping it; its nested
 Docker volumes need a separate application-aware recovery decision in the
-Codex migration thread. Nested Btrfs subvolumes are not recursively included
+agent recovery procedure. Nested Btrfs subvolumes are not recursively included
 by a parent snapshot; review coverage before adding any under `/srv/apps`.
 
 Timers run nightly at 23:00 UTC for backups, Sunday 21:00 for repository checks,
@@ -257,8 +261,8 @@ switches hosts. PRs created with `GITHUB_TOKEN` do not automatically trigger a
 second workflow run; use the update workflow's validation and explicitly run
 Fleet checks after review when needed.
 
-1. Merge reviewed changes after CI; reconcile the separate Codex/OpenChamber
-   thread before any server switch. Preserve current active sessions.
+1. Merge reviewed changes after CI. Preserve the running Codex container.
+   Prestage and validate OpenChamber before its one controlled legacy restart.
 2. On a WSL canary, build the merged configuration, inspect changes, switch at
    an idle time, and check shells, agent launchers, SSH agent, and NFS. Then
    repeat for the second WSL host. Do not rebuild both concurrently.
@@ -296,7 +300,7 @@ mv /run/ghostship-secrets/backup.env.new /run/ghostship-secrets/backup.env
 ```
 
 Run these sequentially, stopping on any error. Do not activate the new system
-until both commands succeed and the active agent migration is reconciled.
+until both commands succeed and the OpenChamber candidate is validated.
 The normal secret projection owns this file after activation. If a hard kill
 interrupts the backup process, inspect `podman ps` for paused RomM/Grimmory
 containers and unpause them; their declarative health settings are restored by

@@ -36,7 +36,9 @@
 
     # Apps and utilities
     ./cloakbrowser.nix
+    ./openchamber-options.nix
     ./openchamber.nix
+    ./codex.nix
 
     # Games
     ./romm-db.nix

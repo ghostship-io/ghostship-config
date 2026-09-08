@@ -104,9 +104,12 @@ if [ ! -e "$RESTIC_REPOSITORY/config" ]; then
 fi
 restic backup --host chill-penguin --tag ghostship \
     --exclude "$app_snapshot/codex" \
+    --exclude "$app_snapshot/chatgpt/docker" \
+    --exclude "$app_snapshot/chatgpt/nix-root" \
     --exclude "$app_snapshot/romm-db" \
     --exclude "$app_snapshot/grimmory-db" \
     --exclude "$app_snapshot/openchamber/docker" \
+    --exclude "$app_snapshot/openchamber/nix-root" \
     --exclude '**/node_modules' --exclude '**/.cache' \
     "$app_snapshot" "$state/exports" "$state/recovery" /etc/ssh /boot/asahi \
     /var/lib/ghostship-cloudflare /var/lib/ghostship-dashboards

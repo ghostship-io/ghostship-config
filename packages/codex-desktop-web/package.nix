@@ -3,114 +3,152 @@
   stdenv,
   buildNpmPackage,
   fetchurl,
-  fetchzip,
-  electron_41-bin,
+  autoPatchelfHook,
+  dpkg,
   imagemagick,
   nodejs_24,
-  python3,
-  pkg-config,
-  gnumake,
-  gcc,
-  unzip,
-  ripgrep,
+  alsa-lib,
+  at-spi2-atk,
+  cairo,
+  cups,
+  dbus,
+  expat,
+  gdk-pixbuf,
+  glib,
+  gtk3,
+  gtk4,
+  nss,
+  nspr,
+  libx11,
+  libxcb,
+  libxcomposite,
+  libxdamage,
+  libxext,
+  libxfixes,
+  libxrandr,
+  libxkbfile,
+  pango,
+  pciutils,
+  systemd,
+  libnotify,
+  pipewire,
+  libsecret,
+  libpulseaudio,
+  speechd-minimal,
+  libdrm,
+  libgbm,
+  libxkbcommon,
+  libxshmfence,
+  libGL,
+  vulkan-loader,
+  libusb1,
+  zlib,
+  qt5,
+  qt6,
+  release ? builtins.fromJSON (builtins.readFile ./releases/26.901.51231.json),
 }:
-
 let
-  version = "26.721.41059";
-  electronVersion = "42.3.0";
-  electron = electron_41-bin.overrideAttrs (
-    finalAttrs: _previousAttrs: {
-      version = electronVersion;
-      src = fetchurl {
-        url = "https://github.com/electron/electron/releases/download/v${electronVersion}/electron-v${electronVersion}-${
-          if stdenv.hostPlatform.isAarch64 then "linux-arm64" else "linux-x64"
-        }.zip";
-        hash =
-          if stdenv.hostPlatform.isAarch64 then
-            "sha256-Kjdf+XP7e93FOKT2eyFBlH6dclE6G6or6r7Cp/Zc0PA="
-          else
-            "sha256-SHpmfKanNLlYwWz/HfdNnUTSwYpszNtN1R9jAaNWxCA=";
-      };
-    }
-  );
-  electronHeaders = fetchzip {
-    url = "https://artifacts.electronjs.org/headers/dist/v${electronVersion}/node-v${electronVersion}-headers.tar.gz";
-    hash = "sha256-hwmsjdYUf6yFd734M3LKtZ/EIk1IDb7XwPzlt6PIBMo=";
-  };
   upstreamArchive = fetchurl {
-    url = "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-arm64-${version}.zip";
-    hash = "sha256-4rRQVvPR+KuQ9/FiSb+1pA0J0PgJnxLKDY16j9+RCM4=";
-  };
-  source = lib.cleanSourceWith {
-    src = ./.;
-    filter =
-      path: type:
-      let
-        name = baseNameOf path;
-      in
-      !builtins.elem name [
-        ".cache"
-        "dist"
-        "node_modules"
-      ];
+    inherit (release) url;
+    sha256 = release.sha256;
   };
 in
 buildNpmPackage {
   pname = "ghostship-codex-desktop-web";
-  inherit version;
-  src = source;
-
-  npmDepsHash = "sha256-jQyQCGOoNMi/yyWUiEKoXpvxY9Frnj4nWRPQ81b+iNw=";
+  version = release.desktopVersion;
+  src = lib.cleanSourceWith {
+    src = ./.;
+    filter =
+      path: type:
+      !(builtins.elem (baseNameOf path) [
+        ".cache"
+        "dist"
+        "node_modules"
+      ]);
+  };
+  npmDepsHash = "sha256-y7UAMYe7F4o7lSyyYspqmCFQ41OsHDMqMm9wvqZNw/Q=";
   npmInstallFlags = [ "--ignore-scripts" ];
   dontNpmBuild = true;
-
   nativeBuildInputs = [
+    autoPatchelfHook
+    dpkg
     imagemagick
     nodejs_24
-    python3
-    pkg-config
-    gnumake
-    gcc
-    unzip
-    ripgrep
   ];
-
+  buildInputs = [
+    alsa-lib
+    at-spi2-atk
+    cairo
+    cups
+    dbus
+    expat
+    gdk-pixbuf
+    glib
+    gtk3
+    gtk4
+    nss
+    nspr
+    libx11
+    libxcb
+    libxcomposite
+    libxdamage
+    libxext
+    libxfixes
+    libxrandr
+    libxkbfile
+    pango
+    pciutils
+    stdenv.cc.cc.lib
+    systemd
+    libnotify
+    pipewire
+    libsecret
+    libpulseaudio
+    speechd-minimal
+    libdrm
+    libgbm
+    libxkbcommon
+    libxshmfence
+    libGL
+    vulkan-loader
+    libusb1
+    zlib
+  ];
+  # Electron loads these libraries dynamically; retain them in the runtime path.
+  runtimeDependencies = [
+    libGL
+    libgbm
+    libsecret
+    libpulseaudio
+    vulkan-loader
+  ];
   buildPhase = ''
     runHook preBuild
-
-    rm -rf node_modules/electron/dist
-    cp -a ${electron.dist} node_modules/electron/dist
-    chmod -R u+w node_modules/electron/dist
-    printf 'electron\n' > node_modules/electron/path.txt
-
-    npm_config_nodedir=${electronHeaders} \
-      npm_config_target=${electronVersion} \
-      npm_config_runtime=electron \
-      npm rebuild --offline --build-from-source node-pty
-
-    mkdir -p .cache
-    ln -s ${upstreamArchive} .cache/ChatGPT-darwin-arm64-${version}.zip
-    node scripts/prepare-upstream.mjs \
-      --release ${version} \
-      --cache "$PWD/.cache" \
-      --output "$PWD/prepared"
-
+    node scripts/prepare-linux.mjs --release-file ${builtins.toFile "chatgpt-release.json" (builtins.toJSON release)} \
+      --archive ${upstreamArchive} --output "$PWD/prepared"
     runHook postBuild
   '';
-
   installPhase = ''
     runHook preInstall
     cp -a prepared "$out"
+    cp releases/chatgpt-archive-keyring.gpg "$out/chatgpt-archive-keyring.gpg"
+    # Android prebuilds share the CPU architecture but target a different libc.
+    # They are never selected by the Linux runtime and cannot be ELF-patched here.
+    find "$out/runtime" -type d -path '*/prebuilds/android-*' -prune -exec rm -r {} +
     runHook postInstall
   '';
-
+  # Preserve native code and resource data; only ELF loader/library paths change.
+  dontStrip = true;
+  preFixup = ''
+    # Chromium ships optional Qt 5 and Qt 6 shims. Search both libraries without
+    # activating mutually exclusive Qt application build hooks.
+    addAutoPatchelfSearchPath ${qt5.qtbase}/lib
+    addAutoPatchelfSearchPath ${qt6.qtbase}/lib
+  '';
   meta = {
-    description = "Versioned browser bridge for the official Codex desktop renderer";
-    homepage = "https://openai.com/codex/";
+    description = "Web-native transport for the official ChatGPT Linux desktop app";
+    homepage = "https://learn.chatgpt.com/docs/linux/linux-app";
     license = lib.licenses.unfree;
-    platforms = [
-      "x86_64-linux"
-      "aarch64-linux"
-    ];
+    platforms = [ "aarch64-linux" ];
   };
 }

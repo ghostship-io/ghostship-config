@@ -1,20 +1,19 @@
 {
   config,
-  inputs,
   lib,
   pkgs,
   ...
 }:
 
 let
-  codexHome = "/srv/apps/codex/home";
-  codexDocker = "/srv/apps/codex/docker";
-  codexNixRoot = "/srv/apps/codex/nix-root";
-  codexWorkspace = "/srv/apps/codex/workspace";
+  codexHome = "/srv/apps/chatgpt/home";
+  codexDocker = "/srv/apps/chatgpt/docker";
+  codexNixRoot = "/srv/apps/chatgpt/nix-root";
+  codexWorkspace = "/srv/apps/chatgpt/workspace";
   codexSecrets = config.ghostship.selfHostedSecrets.projections.codex.path;
   codexSecretsFile = "/run/secrets/codex.env";
   imageName = "localhost/ghostship-codex";
-  imageTag = "codex-${inputs.self.shortRev or inputs.self.rev or "dirty"}";
+  imageTag = "codex-runtime";
   codexWebFallback = pkgs.callPackage ../../packages/codex-desktop-web/package.nix { };
   codexCliFallback = pkgs.runCommand "ghostship-codex-cli" { } ''
     mkdir -p "$out/bin"
@@ -71,6 +70,9 @@ let
     bitwarden-cli
     git
     git-lfs
+    gnupg
+    gnome-keyring
+    bubblewrap
     gh
     openssh
     curl
@@ -96,6 +98,7 @@ let
     xz
     p7zip
     util-linux
+    procps
     websocat
     iptables
     iproute2
@@ -158,7 +161,16 @@ let
       #!${pkgs.nodejs_24}/bin/node
       const fs = require("node:fs");
       const readline = require("node:readline");
-      const { spawn } = require("node:child_process");
+      const { spawn, spawnSync } = require("node:child_process");
+
+      const parsedConfig = spawnSync("${pkgs.python3}/bin/python3", [
+        "${../../packages/codex-desktop-web/bridge/cli-config.py}",
+      ], { input: JSON.stringify(process.argv.slice(2)), encoding: "utf8" });
+      if (parsedConfig.status !== 0) {
+        process.stderr.write("Unable to parse desktop app-server configuration\n");
+        process.exit(1);
+      }
+      const launchConfig = JSON.parse(parsedConfig.stdout);
 
       const home = process.env.HOME || "/home/codex";
       const proxy = process.env.CODEX_REMOTE_PROXY_PATH ||
@@ -228,6 +240,9 @@ let
         if (!["thread/start", "thread/resume", "thread/fork"].includes(message.method)) {
           return message;
         }
+        // The Unix-socket proxy cannot apply CLI -c flags to an already-running
+        // server. Preserve desktop MCP credentials and features per thread.
+        message.params.config = { ...launchConfig, ...message.params.config };
         if (typeof message.params.model !== "string" ||
             !message.params.model.startsWith("ollama/")) return message;
         const model = message.params.model.slice("ollama/".length);
@@ -453,27 +468,75 @@ let
       su-exec codex:codex ${codexAppServerStatus}/bin/codex-app-server-status --idle >/dev/null 2>&1
     }
   '';
+  codexWebHealth = pkgs.writeShellApplication {
+    name = "codex-web-health";
+    runtimeInputs = [
+      pkgs.curl
+      pkgs.jq
+    ];
+    text = ''
+      filter='.status == "ok" and .relayConnected == true'
+      if [[ "''${1:-}" == --idle ]]; then
+        filter="$filter and .updateReady == true and .pendingDialogs == 0"
+      fi
+      curl -fsS --max-time 5 http://127.0.0.1:8214/health \
+        | jq -e "$filter" >/dev/null
+    '';
+  };
+
+  codexPackageSource = lib.cleanSourceWith {
+    src = ../../packages/codex-desktop-web;
+    filter =
+      path: type:
+      !(builtins.elem (baseNameOf path) [
+        "node_modules"
+        "dist"
+        ".cache"
+      ]);
+  };
+  codexReleaseSmoke = pkgs.writeShellScriptBin "codex-release-smoke" (
+    builtins.readFile ../../packages/codex-desktop-web/scripts/smoke-prepared.sh
+  );
 
   codexToolMaintenance = pkgs.writeShellScriptBin "codex-tool-maintenance" ''
     set -eu
 
     ${codexRuntimeEnv}
 
-    generation=${codexToolFallback}
-    [ -x "$generation/web/runtime/electron" ]
-    [ -x "$generation/codex/bin/codex" ]
-    [ -x "$generation/proxy/bin/codex_remote_proxy" ]
-    current_release="$(jq -r .desktopVersion "$generation/release.json")"
-    latest_release="$(
-      curl -fsSL --connect-timeout 15 --max-time 60 \
-        https://persistent.oaistatic.com/codex-app-prod/appcast.xml \
-        | sed -n 's/.*sparkle:shortVersionString="\([^"]*\)".*/\1/p' \
-        | head -n 1
-    )"
-    if [ -n "$latest_release" ] && [ "$latest_release" != "$current_release" ]; then
-      printf \
-        'warning: official Codex desktop %s is available; compatibility validation and a NixOS update are required before activation\n' \
-        "$latest_release" >&2
+    current="$(readlink -f "$CODEX_TOOL_CURRENT")"
+    candidate_file="$(mktemp)"
+    trap 'rm -f "$candidate_file"' EXIT
+    ${pkgs.nodejs_24}/bin/node ${codexPackageSource}/scripts/discover-linux-release.mjs \
+      ${codexPackageSource}/releases/chatgpt-archive-keyring.gpg > "$candidate_file"
+    latest_release="$(jq -r .desktopVersion "$candidate_file")"
+    current_release="$(jq -r .desktopVersion "$current/release.json")"
+    if [ "$(printf '%s\n' "$latest_release" "$current_release" | sort -V | tail -n1)" != "$latest_release" ]; then
+      printf '%s\n' "$current"
+      exit 0
+    fi
+    if [ "$latest_release" = "$(jq -r .desktopVersion ${codexToolFallback}/release.json)" ]; then
+      printf '%s\n' ${codexToolFallback}
+      exit 0
+    fi
+    checksum="$(jq -r .sha256 "$candidate_file")"
+    generation="$CODEX_TOOL_ROOT/generations/linux-$latest_release-$checksum-${
+      builtins.substring 0 12 (builtins.hashString "sha256" (toString codexPackageSource))
+    }"
+    if [ ! -f "$generation/validated" ]; then
+      mkdir -p "$generation/codex/bin"
+      CHATGPT_RELEASE_FILE="$candidate_file" nix build --impure --out-link "$generation/web" --expr '
+        let
+          pkgs = import ${pkgs.path} { system = "aarch64-linux"; config.allowUnfree = true; };
+          release = builtins.fromJSON (builtins.readFile (builtins.getEnv "CHATGPT_RELEASE_FILE"));
+        in pkgs.callPackage ${codexPackageSource}/package.nix { inherit release; }
+      ' >&2
+      ${codexReleaseSmoke}/bin/codex-release-smoke "$generation/web/runtime" >&2
+      ln -sfn "$generation/web/runtime/resources/codex-real" "$generation/codex/bin/codex"
+      ln -sfn ${codexRemoteProxyFallback} "$generation/proxy"
+      cp "$generation/web/release.json" "$generation/release.json"
+      "$generation/codex/bin/codex" --version > "$generation/codex.version"
+      printf 'official-linux-%s\n' "$latest_release" > "$generation/revision"
+      touch "$generation/validated"
     fi
     printf '%s\n' "$generation"
   '';
@@ -541,8 +604,8 @@ let
       exit 1
     }
 
-    if ! is_codex_idle; then
-      log_info "Codex reports active or unknown work; leaving restart queued"
+    if ! is_codex_idle || ! ${codexWebHealth}/bin/codex-web-health --idle; then
+      log_info "Codex has active work, recent browser activity, recording, terminals, or unknown state; leaving restart queued"
       exit 0
     fi
 
@@ -553,7 +616,7 @@ let
       exit 0
     fi
 
-    if ! is_codex_idle; then
+    if ! is_codex_idle || ! ${codexWebHealth}/bin/codex-web-health --idle; then
       log_info "Codex is no longer idle; leaving restart queued"
       exit 0
     fi
@@ -563,20 +626,27 @@ let
     rm -f "$current_tmp"
     ln -s "$generation" "$current_tmp"
     mv -Tf "$current_tmp" "$CODEX_TOOL_CURRENT"
-    systemctl restart codex-app-server.service
-    systemctl restart codex-web.service
-
     healthy=0
-    for _ in $(seq 1 90); do
-      if su-exec codex:codex ${codexAppServerStatus}/bin/codex-app-server-status --health >/dev/null 2>&1 \
-        && curl -fsS --max-time 5 http://127.0.0.1:8214/ >/dev/null; then
-        healthy=1
-        break
-      fi
-      sleep 1
-    done
+    if systemctl restart codex-app-server.service && systemctl restart codex-web.service; then
+      for _ in $(seq 1 90); do
+        if su-exec codex:codex ${codexAppServerStatus}/bin/codex-app-server-status --health >/dev/null 2>&1 \
+          && ${codexWebHealth}/bin/codex-web-health; then
+          healthy=1
+          break
+        fi
+        sleep 1
+      done
+    fi
     if [ "$healthy" -eq 1 ]; then
       rm -f "$pending_restart"
+      # Retain the running release and its rollback target, releasing older
+      # downloaded generations' indirect Nix GC roots after a healthy switch.
+      for obsolete in "$CODEX_TOOL_ROOT"/generations/linux-*; do
+        [ -d "$obsolete" ] || continue
+        if [ "$obsolete" != "$generation" ] && [ "$obsolete" != "$previous" ]; then
+          rm -rf -- "$obsolete" || log_info "could not prune obsolete generation $obsolete"
+        fi
+      done
       log_info "queued Codex generation is healthy"
       exit 0
     fi
@@ -586,8 +656,8 @@ let
       rm -f "$current_tmp"
       ln -s "$previous" "$current_tmp"
       mv -Tf "$current_tmp" "$CODEX_TOOL_CURRENT"
-      systemctl restart codex-app-server.service
-      systemctl restart codex-web.service
+      systemctl restart codex-app-server.service || log_info "last-good app-server restart failed"
+      systemctl restart codex-web.service || log_info "last-good web restart failed"
     fi
     rm -f "$pending_restart"
     exit 1
@@ -612,7 +682,7 @@ let
     fi
 
     if ! systemctl is-active --quiet codex-web.service \
-      || ! curl -fsS --max-time 5 http://127.0.0.1:8214/ >/dev/null; then
+      || ! ${codexWebHealth}/bin/codex-web-health; then
       log_info "Codex web bridge is unavailable; restarting bridge without interrupting app-server"
       systemctl reset-failed codex-web.service || true
       systemctl restart codex-web.service
@@ -670,7 +740,7 @@ let
     fi
 
     if su-exec codex:codex ${codexAppServerStatus}/bin/codex-app-server-status --health >/dev/null 2>&1 \
-      && ${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:8214/ >/dev/null; then
+      && ${codexWebHealth}/bin/codex-web-health; then
       exit 0
     fi
 
@@ -746,7 +816,7 @@ let
     wait_healthy() {
       for _ in $(seq 1 90); do
         if ${codexAppServerStatus}/bin/codex-app-server-status --health >/dev/null 2>&1 \
-          && curl -fsS --max-time 5 http://127.0.0.1:8214/ >/dev/null; then
+          && ${codexWebHealth}/bin/codex-web-health; then
           return 0
         fi
         sleep 1
@@ -1241,9 +1311,23 @@ let
       [ -S "/tmp/.X11-unix/X''${display_number}" ] && break
       sleep 0.1
     done
+    install -d -m0700 "$XDG_DATA_HOME/keyrings"
+    if [ ! -f "$XDG_DATA_HOME/keyrings/.unlock" ]; then
+      (umask 077; head -c 48 /dev/urandom | base64 > "$XDG_DATA_HOME/keyrings/.unlock")
+    fi
+    # Native keyring dialogs have no browser DOM. Unlock the persistent keyring
+    # before launching the app so authentication can run without a desktop prompt.
+    ${pkgs.gnome-keyring}/bin/gnome-keyring-daemon --unlock --components=secrets \
+      < "$XDG_DATA_HOME/keyrings/.unlock"
+    # Repair copies left by earlier builds that inherited sealed Nix modes.
+    # chmod -R skips symlinks encountered inside this runtime-only directory.
+    if [ -d "$CODEX_HOME/.tmp/bundled-marketplaces" ]; then
+      chmod -R u+rwX "$CODEX_HOME/.tmp/bundled-marketplaces"
+    fi
     cd /home/codex
     "$CODEX_TOOL_CURRENT/web/runtime/electron" \
       --no-sandbox \
+      --disable-gpu \
       --disable-dev-shm-usage &
     electron_pid=$!
     set +e
@@ -1293,7 +1377,12 @@ let
       ln -s /workspace/ghostship-agent/tools "$HOME/tools"
       chown -h codex:codex "$HOME/tools"
     fi
-    if [ ! -x "$CODEX_TOOL_CURRENT/web/runtime/electron" ] \
+    current_release="$(jq -r .desktopVersion "$CODEX_TOOL_CURRENT/release.json" 2>/dev/null || true)"
+    fallback_release="$(jq -r .desktopVersion ${codexToolFallback}/release.json)"
+    # Image replacement applies its transport fixes before the app starts,
+    # while preserving a newer automatically installed upstream release.
+    if [ "$(printf '%s\n' "$current_release" "$fallback_release" | sort -V | tail -n1)" = "$fallback_release" ] \
+      || [ ! -x "$CODEX_TOOL_CURRENT/web/runtime/electron" ] \
       || [ ! -x "$CODEX_TOOL_CURRENT/codex/bin/codex" ] \
       || [ ! -x "$CODEX_TOOL_CURRENT/proxy/bin/codex_remote_proxy" ]; then
       current_tmp="$CODEX_TOOL_CURRENT.tmp"
@@ -1504,7 +1593,8 @@ let
 
       [Service]
       Type=simple
-      ExecStart=@${pkgs.nix}/bin/nix-daemon nix-daemon --daemon
+      UnsetEnvironment=NIX_REMOTE
+      ExecStart=@${pkgs.nix}/bin/nix-daemon nix-daemon --store local --daemon
       KillMode=mixed
       LimitNOFILE=1048576
       Delegate=yes
@@ -1778,7 +1868,7 @@ let
 
       [Timer]
       OnBootSec=10m
-      OnUnitActiveSec=4h
+      OnUnitActiveSec=15m
       Persistent=true
       Unit=codex-tool-auto-update.service
 
@@ -1790,7 +1880,9 @@ let
       Description=Restart Codex after queued maintenance becomes idle
       DefaultDependencies=no
       After=codex-bootstrap.service
-      Requires=codex-bootstrap.service
+      # Restarting the app must not stop this updater before health/rollback.
+      Wants=codex-bootstrap.service
+      Requires=codex-container-setup.service
       Conflicts=shutdown.target
       Before=shutdown.target
 
@@ -1919,6 +2011,20 @@ in
 {
   nixpkgs.config.allowUnfreePredicate = pkg: lib.getName pkg == "ghostship-codex-desktop-web";
 
+  ghostship.apps.codex = {
+    name = "Codex";
+    group = "Management";
+    hostname = "codex.ghostship.io";
+    origin = "http://codex:8214";
+    icon = "sh-openai";
+    description = "Personal Codex workstation";
+    order = 21;
+    muximux = {
+      icon = "muximux-code";
+      color = "#10a37f";
+    };
+  };
+
   virtualisation.oci-containers.containers."codex" = {
     image = "${imageName}:${imageTag}";
     imageFile = codexImage;
@@ -1930,7 +2036,7 @@ in
     extraOptions = [
       "--privileged"
       "--systemd=always"
-      "--pids-limit=-1"
+      "--pids-limit=4096"
       "--stop-timeout=180"
       "--network=ghostship_net"
       "--health-cmd=${codexContainerHealth}/bin/codex-container-health"
@@ -1948,11 +2054,11 @@ in
       "${codexSecrets}:${codexSecretsFile}:ro"
       "/mnt/share:/mnt/share:rw"
     ];
-    environmentFiles = [ codexSecrets ];
+    environmentFiles = [ config.ghostship.selfHostedSecrets.projections.codex.containerPath ];
   };
 
   systemd.tmpfiles.rules = [
-    "d /srv/apps/codex 0755 root root -"
+    "d /srv/apps/chatgpt 0755 root root -"
     "d ${codexDocker} 0755 root root -"
     "d ${codexHome} 0755 3000 3000 -"
     "d ${codexNixRoot} 0755 root root -"
@@ -1961,6 +2067,9 @@ in
   ];
 
   systemd.services.podman-codex = {
+    # Preserve the separate live workstation during fleet switches.
+    restartIfChanged = false;
+    stopIfChanged = false;
     after = [
       "init-ghostship-net.service"
       "mnt-share.mount"
@@ -1973,7 +2082,7 @@ in
     preStart = lib.mkAfter ''
       set -eu
 
-      install -d -m0755 -o root -g root /srv/apps/codex
+      install -d -m0755 -o root -g root /srv/apps/chatgpt
       install -d -m0755 -o root -g root ${codexDocker}
       install -d -m0755 -o 3000 -g 3000 ${codexHome}
       install -d -m0755 -o root -g root ${codexNixRoot}

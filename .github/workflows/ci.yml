@@ -28,5 +28,7 @@ jobs:
         run: |
           nix develop .#ci -c actionlint
           nix develop .#ci -c shellcheck -s bash -e SC1091 modules/self-hosted/backup.sh modules/self-hosted/restore-check.sh
+      - name: Check OpenChamber update and rollback state machines
+        run: nix develop -c bash tests/openchamber-harness.sh
       - name: Scan current source for secrets
         run: nix develop .#ci -c gitleaks dir --redact --no-banner .

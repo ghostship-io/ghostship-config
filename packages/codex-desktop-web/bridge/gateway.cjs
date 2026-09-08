@@ -4,9 +4,12 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const zlib = require("node:zlib");
 const { URL } = require("node:url");
 const { WebSocketServer, WebSocket } = require("ws");
 const { decode, encode } = require("./codec.cjs");
+const { validNavigationPath } = require("./notification-context.cjs");
+const { createPushNotifications } = require("./push-notifications.cjs");
 
 const SIDEBAR_CHANNEL = "codex_desktop:get-initial-sidebar-bootstrap";
 const PROJECT_STATE_KEYS = new Set([
@@ -17,6 +20,33 @@ const PROJECT_STATE_KEYS = new Set([
 ]);
 const DEVICE_LOCAL_COMMAND_IDS = new Set(["showKeyboardShortcuts"]);
 const DEVICE_LOCAL_COMMAND_CLAIM_TTL_MS = 2_000;
+
+function sendHttpBody(request, response, headers, body) {
+  const acceptsGzip = String(request.headers["accept-encoding"] || "").split(",")
+    .some((entry) => /^gzip(?:\s*;|\s*$)/i.test(entry.trim()) &&
+      !/;\s*q=0(?:\.0*)?\s*$/i.test(entry));
+  if (body.length >= 1024 && acceptsGzip && /text\/|javascript|json/.test(headers["content-type"])) {
+    zlib.gzip(body, { level: 3 }, (error, compressed) => {
+      if (response.destroyed) return;
+      const payload = error ? body : compressed;
+      response.writeHead(200, { ...headers, vary: "Accept-Encoding",
+        ...(error ? {} : { "content-encoding": "gzip" }), "content-length": payload.length });
+      response.end(payload);
+    });
+    return;
+  }
+  response.writeHead(200, { ...headers, vary: "Accept-Encoding", "content-length": body.length });
+  response.end(body);
+}
+
+function responseKey(message) {
+  if (message?.type === "fetch" || message?.type === "fetch-response" || message?.type === "cancel-fetch") {
+    return message.requestId == null ? null : `fetch:${message.requestId}`;
+  }
+  const request = message?.type === "mcp-request" || message?.type === "thread-prewarm-start" ? message.request
+    : message?.type === "mcp-response" ? message.message : null;
+  return request?.id == null ? null : `mcp:${message.hostId}:${request.id}`;
+}
 
 function projectStateSignature(sidebar) {
   const projectEntries = Array.isArray(sidebar?.globalStateEntries)
@@ -58,9 +88,9 @@ function safeStaticPath(root, requestPath) {
   return resolved;
 }
 
-function transformIndex(source, bootstrap = {}) {
+function transformIndex(source, bootstrap = {}, appVersion = "0.0.0") {
   const bridgeScripts = [
-    '<link rel="manifest" href="/manifest.webmanifest">',
+    '<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">',
     '<meta name="theme-color" content="#0d0d0d">',
     '<meta name="mobile-web-app-capable" content="yes">',
     '<meta name="apple-mobile-web-app-capable" content="yes">',
@@ -70,10 +100,12 @@ function transformIndex(source, bootstrap = {}) {
     `<script>window.__CODEX_WEB_BOOTSTRAP__=${JSON.stringify(bootstrap).replaceAll("<", "\\u003c")}</script>`,
     '<script src="/__bridge/electron-shim.js"></script>',
     '<script src="/__bridge/webview-bridge.js"></script>',
+    '<script src="/__bridge/mobile-layout.js"></script>',
     '<script src="/__bridge/browser-preload.js"></script>',
     '<script defer src="/__bridge/pwa-register.js"></script>',
   ].join("\n    ");
   return source
+    .replaceAll("<!-- PROD_BUILD_TAG_HERE -->", appVersion)
     .replace("connect-src ", "connect-src ws: wss: ")
     .replace("<script type=\"module\"", `${bridgeScripts}\n    <script type="module"`);
 }
@@ -127,13 +159,13 @@ function browserSurfaceKey(conversationId, browserTabId) {
 
 async function createGateway(options) {
   const browserClients = new Map();
+  const push = options.stateDirectory ? createPushNotifications(options.stateDirectory) : null;
   const browserSurfaces = new Map();
   const auxiliaryWindows = new Map();
   const browserNotifications = new Map();
   const pendingBrowserSurfaces = new Map();
   const pendingRelayMessages = [];
   const channelSubscribers = new Map();
-  const eventHistory = [];
   const pendingDialogs = new Map();
   const uploadRoot = process.env.CODEX_WEB_UPLOAD_ROOT || "/tmp/codex-web-uploads";
   const fileRoots = (process.env.CODEX_WEB_FILE_ROOTS || "/workspace,/home/codex")
@@ -145,11 +177,27 @@ async function createGateway(options) {
   let relayBootstrap = {};
   let relayProjectState = projectStateSignature();
   let relaySocket;
+  let relayHeartbeat = 0;
+
+  function isRelayHealthy() {
+    return relaySocket?.readyState === WebSocket.OPEN &&
+      relayHeartbeat > 0 && Date.now() - relayHeartbeat < 15000;
+  }
   let surfaceGeneration = 0;
   let auxiliaryWindowGeneration = 0;
   let browserGuestFactory;
   let browserFullscreenStateHandler;
+  let browserFocusStateHandler;
+  let browserFocused = false;
+  function updateBrowserFocus() {
+    const next = [...browserClients.values()].some((client) => client.focused);
+    if (next !== browserFocused) {
+      browserFocused = next;
+      browserFocusStateHandler?.(next);
+    }
+  }
   const pendingDeviceLocalCommands = new Map();
+  const responseOwners = new Map();
 
   fs.mkdirSync(uploadRoot, { recursive: true, mode: 0o700 });
 
@@ -288,9 +336,11 @@ async function createGateway(options) {
 
   function showNotification(notificationId, options, onEvent) {
     browserNotifications.set(notificationId, onEvent);
-    broadcastControl({
+    const message = {
       type: "show-notification",
       notificationId,
+      navigationPath: options.navigationPath,
+      notificationTag: options.notificationTag,
       options: {
         actions: Array.isArray(options.actions)
           ? options.actions.map((action, index) => ({
@@ -306,7 +356,9 @@ async function createGateway(options) {
         silent: options.silent === true,
         title: options.title || "Codex",
       },
-    });
+    };
+    broadcastControl(message);
+    void push?.notify(message);
   }
 
   function closeNotification(notificationId) {
@@ -487,6 +539,14 @@ async function createGateway(options) {
     if (!surface || !client.surfaceKeys.has(key)) return;
     const guest = surface.webContents;
     switch (message.command) {
+      case "resize": {
+        const { width, height } = message;
+        if (!Number.isInteger(width) || !Number.isInteger(height) ||
+            width < 1 || height < 1 || width > 4096 || height > 4096) return;
+        surface.ownerWindow?.setContentSize(width, height);
+        void captureBrowserSurface(surface);
+        return;
+      }
       case "navigate": {
         let target;
         try {
@@ -516,7 +576,7 @@ async function createGateway(options) {
         break;
       case "focus":
         guest.focus();
-        break;
+        return;
       case "input": {
         const input = message.input;
         if (!input || typeof input.type !== "string") return;
@@ -545,7 +605,10 @@ async function createGateway(options) {
         delete input.xRatio;
         delete input.yRatio;
         guest.sendInputEvent(input);
-        break;
+        // Navigation events publish state themselves. Re-announcing navigation
+        // on every keystroke makes upstream refocus/recreate browser controls.
+        void captureBrowserSurface(surface);
+        return;
       }
       default:
         return;
@@ -635,13 +698,28 @@ async function createGateway(options) {
       channel,
       args,
     };
+    if (channel === "codex_desktop:message-for-view") {
+      const value = args?.[0];
+      if (value?.type === "fetch-response" || value?.type === "mcp-response") {
+        const key = responseKey(value);
+        const client = browserClients.get(responseOwners.get(key));
+        responseOwners.delete(key);
+        send(client?.socket, message);
+        return;
+      }
+      if (value?.type === "shared-object-updated") {
+        const snapshot = relayBootstrap["codex_desktop:get-shared-object-snapshot"];
+        if (snapshot) {
+          if (value.value === undefined) delete snapshot[value.key];
+          else Object.defineProperty(snapshot, value.key, {
+            configurable: true, enumerable: true, writable: true, value: value.value,
+          });
+        }
+      }
+    }
     if (args?.[0]?.type === "run-command") {
       const commandId = args[0].id;
       if (!DEVICE_LOCAL_COMMAND_IDS.has(commandId)) {
-        eventHistory.push(message);
-        if (eventHistory.length > 1000) {
-          eventHistory.shift();
-        }
         for (const clientId of channelSubscribers.get(channel) || []) {
           const client = browserClients.get(clientId);
           send(client?.socket, message);
@@ -665,10 +743,6 @@ async function createGateway(options) {
       }
       return;
     }
-    eventHistory.push(message);
-    if (eventHistory.length > 1000) {
-      eventHistory.shift();
-    }
     for (const clientId of channelSubscribers.get(channel) || []) {
       const client = browserClients.get(clientId);
       send(client?.socket, message);
@@ -676,9 +750,19 @@ async function createGateway(options) {
   }
 
   function handleRelayMessage(message) {
+    if (message.type === "relay-heartbeat") {
+      if (relayHeartbeat > 0) relayHeartbeat = Date.now();
+      return;
+    }
     if (message.type === "relay-ready") {
+      relayHeartbeat = Date.now();
       relayBootstrap = message.bootstrap || {};
       relayProjectState = projectStateSignature(relayBootstrap[SIDEBAR_CHANNEL]);
+      // A native renderer reload loses its IPC listeners while browser tabs
+      // remain connected. Rebuild their subscriptions on the new relay.
+      for (const channel of channelSubscribers.keys()) {
+        sendRelay({ type: "subscribe", channel });
+      }
       for (const queued of pendingRelayMessages.splice(0)) {
         sendRelay(queued);
       }
@@ -722,6 +806,29 @@ async function createGateway(options) {
   }
 
   function handleBrowserMessage(client, message) {
+    if (message.type === "user-activity") {
+      client.lastActivity = Date.now();
+      return;
+    }
+    if (message.type === "browser-presence") {
+      client.presenceKnown = true;
+      client.focused = message.focused === true;
+      client.activeMedia = message.activeMedia === true;
+      client.terminalOpen = message.terminalOpen === true;
+      updateBrowserFocus();
+      return;
+    }
+    if (message.type === "push-subscribe" || message.type === "push-unsubscribe") {
+      try {
+        if (!push) throw new Error("Background notifications are unavailable");
+        if (message.type === "push-subscribe") push.subscribe(client.deviceId, message.subscription);
+        else push.unsubscribe(client.deviceId);
+        send(client.socket, { type: "control", action: "push-status", enabled: push.has(client.deviceId) });
+      } catch (error) {
+        send(client.socket, { type: "control", action: "push-status", enabled: false, error: error.message });
+      }
+      return;
+    }
     if (
       message.type === "claim-device-local-command" &&
       typeof message.commandId === "string" &&
@@ -742,6 +849,13 @@ async function createGateway(options) {
       return;
     }
     if (message.type === "invoke" || message.type === "send") {
+      if (message.channel === "codex_desktop:message-from-view") {
+        const key = responseKey(message.args?.[0]);
+        if (key) {
+          if (message.args[0].type === "cancel-fetch") responseOwners.delete(key);
+          else responseOwners.set(key, client.id);
+        }
+      }
       sendRelay({ ...message, clientId: client.id });
       return;
     }
@@ -815,6 +929,12 @@ async function createGateway(options) {
     }
     if (message.type === "notification-action") {
       const notify = browserNotifications.get(message.notificationId);
+      if (message.action === "click" && validNavigationPath(message.navigationPath) &&
+          (!notify || !/^\d+$/.test(message.actionId || ""))) {
+        send(client.socket, { type: "event", channel: "codex_desktop:message-for-view",
+          args: [{ type: "navigate-to-route", path: message.navigationPath }] });
+        return;
+      }
       if (notify) {
         notify({
           type: message.action === "close" ? "close" : "click",
@@ -900,10 +1020,12 @@ async function createGateway(options) {
     const requestUrl = new URL(request.url || "/", "http://localhost");
     if (requestUrl.pathname === "/health") {
       jsonResponse(response, 200, {
-        status: relaySocket?.readyState === WebSocket.OPEN ? "ok" : "starting",
+        status: isRelayHealthy() ? "ok" : "starting",
         version: options.appVersion,
-        relayConnected: relaySocket?.readyState === WebSocket.OPEN,
+        relayConnected: isRelayHealthy(),
         browserClients: browserClients.size,
+        updateReady: [...browserClients.values()].every((client) => client.presenceKnown &&
+          !client.activeMedia && !client.terminalOpen && Date.now() - client.lastActivity >= 15 * 60 * 1000),
         pendingDialogs: pendingDialogs.size,
       });
       return;
@@ -913,12 +1035,14 @@ async function createGateway(options) {
         try {
           const callback = await fetch(
             `http://127.0.0.1:${port}${requestUrl.pathname}${requestUrl.search}`,
+            { redirect: "manual", signal: AbortSignal.timeout(30_000) },
           );
           const body = Buffer.from(await callback.arrayBuffer());
           response.writeHead(callback.status, {
             "content-type": callback.headers.get("content-type") || "text/html; charset=utf-8",
             "content-length": body.length,
             "cache-control": "no-store",
+            ...(callback.headers.has("location") ? { location: callback.headers.get("location") } : {}),
           });
           response.end(body);
           return;
@@ -1052,8 +1176,7 @@ async function createGateway(options) {
       if (bridgeFile === "sw.js") {
         headers["service-worker-allowed"] = "/";
       }
-      response.writeHead(200, headers);
-      response.end(body);
+      sendHttpBody(request, response, headers, body);
       return;
     }
 
@@ -1065,23 +1188,27 @@ async function createGateway(options) {
     if (target.endsWith("index.html")) {
       body = Buffer.from(
         request.socket.localPort === nativeHostPort
-          ? body.toString("utf8")
-          : transformIndex(body.toString("utf8"), relayBootstrap),
+          ? body.toString("utf8").replaceAll("<!-- PROD_BUILD_TAG_HERE -->", options.appVersion)
+          : transformIndex(body.toString("utf8"), { ...relayBootstrap, __codexWebRelease: options.releaseId }, options.appVersion),
       );
     }
-    response.writeHead(200, {
+    sendHttpBody(request, response, {
       "content-type": MIME_TYPES.get(path.extname(target)) || "application/octet-stream",
       "content-length": body.length,
       "cache-control": target.endsWith("index.html")
         ? "no-cache"
         : "public, max-age=31536000, immutable",
-    });
-    response.end(body);
+    }, body);
   };
   const server = http.createServer(handleHttpRequest);
   const nativeServer = http.createServer(handleHttpRequest);
 
-  const browserWebSockets = new WebSocketServer({ noServer: true });
+  const browserWebSockets = new WebSocketServer({ noServer: true,
+    perMessageDeflate: {
+      zlibDeflateOptions: { level: 3 }, concurrencyLimit: 2, threshold: 1024,
+      serverNoContextTakeover: true, clientNoContextTakeover: true,
+    },
+  });
   const relayWebSockets = new WebSocketServer({ noServer: true });
 
   server.on("upgrade", (request, socket, head) => {
@@ -1118,6 +1245,7 @@ async function createGateway(options) {
       return;
     }
     relaySocket = socket;
+    relayHeartbeat = 0;
     socket.on("message", (payload) => {
       handleRelayMessage(decode(payload));
     });
@@ -1134,32 +1262,35 @@ async function createGateway(options) {
     const client = {
       id: clientId,
       deviceId,
+      lastActivity: Date.now(),
+      presenceKnown: false,
+      focused: false,
       socket,
       portIds: new Set(),
       surfaceKeys: new Set(),
     };
     browserClients.set(clientId, client);
-    const since = Number(requestUrl.searchParams.get("since") || "0");
     send(socket, {
       type: "hello",
+      pushPublicKey: push?.publicKey,
+      releaseId: options.releaseId,
       clientId,
       deviceId,
       sequence: eventSequence,
-      relayConnected: relaySocket?.readyState === WebSocket.OPEN,
+      relayConnected: isRelayHealthy(),
     });
     for (const surface of auxiliaryWindows.values()) {
       if (surface.visible) sendAuxiliaryWindowState(client, surface);
-    }
-    for (const event of eventHistory) {
-      if (event.sequence > since) {
-        send(socket, event);
-      }
     }
     socket.on("message", (payload) => {
       handleBrowserMessage(client, decode(payload));
     });
     socket.on("close", () => {
       browserClients.delete(clientId);
+      updateBrowserFocus();
+      for (const [key, owner] of responseOwners) {
+        if (owner === clientId) responseOwners.delete(key);
+      }
       for (const [channel, subscribers] of channelSubscribers) {
         subscribers.delete(clientId);
         if (subscribers.size === 0) {
@@ -1216,6 +1347,8 @@ async function createGateway(options) {
     requestDialog,
     closeNotification,
     nativeServer,
+    isBrowserFocused: () => browserFocused,
+    setBrowserFocusStateHandler(handler) { browserFocusStateHandler = handler; },
     setBrowserFullscreenStateHandler(handler) {
       browserFullscreenStateHandler = handler;
     },

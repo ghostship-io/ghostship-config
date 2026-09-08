@@ -6,6 +6,7 @@ const electron = require("electron");
 const path = require("node:path");
 const { createGateway } = require("./gateway.cjs");
 const { installElectronProxy } = require("./electron-proxy.cjs");
+const { installWritablePluginCopies } = require("./writable-plugin-copies.cjs");
 
 function installCodexCliOverride() {
   const cliOverride = process.env.CODEX_CLI_PATH;
@@ -31,8 +32,12 @@ async function start() {
   process.env.CODEX_ELECTRON_DISABLE_QUIT_CONFIRMATION ||= "1";
 
   installCodexCliOverride();
+  installWritablePluginCopies(process.resourcesPath);
+  const release = require(path.join(process.resourcesPath, "codex-web-compatibility.json"));
   const gateway = await createGateway({
     appVersion: require("../package.json").version,
+    stateDirectory: path.join(electron.app.getPath("home"), ".local/state/codex-web"),
+    releaseId: `${release.desktopVersion}:${release.transportSha256 || release.preloadSha256}`,
     host: process.env.CODEX_WEB_HOST,
     port: Number(process.env.CODEX_WEB_PORT),
     relaySecret: process.env.CODEX_WEB_RELAY_SECRET,

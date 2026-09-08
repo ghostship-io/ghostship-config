@@ -47,7 +47,8 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   await mkdir(sharedRoot);
   await writeFile(
     path.join(webviewRoot, "index.html"),
-    '<script type="module" src="/assets/index.js"></script>',
+    '<html data-build="<!-- PROD_BUILD_TAG_HERE -->"><script type="module" src="/assets/index.js"></script></html>' +
+      `<!--${'compressible'.repeat(1000)}-->`,
   );
   process.env.CODEX_WEB_FILE_ROOTS = sharedRoot;
   process.env.CODEX_WEB_UPLOAD_ROOT = path.join(root, "uploads");
@@ -60,12 +61,18 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
     webviewRoot,
   });
   const port = gateway.server.address().port;
+  const nativeResponse = await fetch("http://127.0.0.1:5175/", { headers: { 'accept-encoding': 'gzip' } });
+  assert.equal(nativeResponse.headers.get('content-encoding'), 'gzip');
+  const nativeIndex = await nativeResponse.text();
+  assert.match(nativeIndex, /data-build="test"/);
+  assert.doesNotMatch(nativeIndex, /PROD_BUILD_TAG_HERE|electron-shim/);
   const relay = await openSocket(`ws://127.0.0.1:${port}/__bridge/relay`, {
     headers: {
       "x-codex-relay-primary": "1",
       "x-codex-relay-secret": "test-secret",
     },
   });
+  assert.equal((await (await fetch(`http://127.0.0.1:${port}/health`)).json()).status, "starting");
   relay.send(encode({ type: "relay-ready", bootstrap: {} }));
 
   const origin = `http://127.0.0.1:${port}`;
@@ -100,6 +107,7 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   });
   assert.equal((await nextMessage(first)).type, "hello");
   assert.equal((await nextMessage(second)).type, "hello");
+  assert.equal(first.extensions, 'permessage-deflate');
 
   const relaySubscription = nextMessage(relay);
   first.send(encode({ type: "subscribe", channel: "shared-event" }));
@@ -114,6 +122,40 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   relay.send(encode({ type: "event", channel: "shared-event", args: ["same"] }));
   assert.equal((await firstEvent).args[0], "same");
   assert.equal((await secondEvent).args[0], "same");
+
+  const fresh = await openSocket(`${origin}/__bridge/ipc?device=fresh&since=0`, {
+    headers: { origin },
+  });
+  assert.equal((await nextMessage(fresh)).type, "hello");
+  fresh.send(encode({ type: "invoke", channel: "fence", requestId: "fresh", args: [] }));
+  const freshRequest = await nextMessage(relay);
+  relay.send(encode({ type: "result", clientId: freshRequest.clientId,
+    requestId: "fresh", ok: true, result: "current" }));
+  assert.equal((await nextMessage(fresh)).type, "result", "fresh clients must not replay stale events");
+  first.send(encode({ type: 'invoke', channel: 'codex_desktop:message-from-view',
+    requestId: 'transport-fetch', args: [{ type: 'fetch', requestId: 'owned-fetch' }] }));
+  await nextMessage(relay);
+  const largeBody = JSON.stringify({ value: 'repeated state '.repeat(10000) });
+  const bytesBefore = first._socket.bytesRead;
+  relay.send(encode({ type: 'event', channel: 'codex_desktop:message-for-view',
+    args: [{ type: 'fetch-response', requestId: 'owned-fetch', bodyJsonString: largeBody }] }));
+  assert.equal((await nextMessage(first)).args[0].bodyJsonString, largeBody);
+  assert.ok(first._socket.bytesRead - bytesBefore < largeBody.length / 4,
+    'large state responses must be compressed on the wire');
+  second.send(encode({ type: 'invoke', channel: 'fence', requestId: 'response-fence', args: [] }));
+  const fence = await nextMessage(relay);
+  relay.send(encode({ type: 'result', clientId: fence.clientId, requestId: fence.requestId, ok: true }));
+  assert.equal((await nextMessage(second)).type, 'result', 'another tab must not receive request-specific state');
+  first.send(encode({ type: 'invoke', channel: 'codex_desktop:message-from-view',
+    requestId: 'transport-prewarm', args: [{ type: 'thread-prewarm-start', hostId: 'local',
+      request: { id: 'prewarm-request', method: 'thread/start' } }] }));
+  await nextMessage(relay);
+  relay.send(encode({ type: 'event', channel: 'codex_desktop:message-for-view',
+    args: [{ type: 'mcp-response', hostId: 'local', message: { id: 'prewarm-request', result: {} } }] }));
+  assert.equal((await nextMessage(first)).args[0].message.id, 'prewarm-request');
+  fresh.close();
+  relay.send(encode({ type: "relay-ready", bootstrap: {} }));
+  assert.deepEqual(await nextMessage(relay), { type: "subscribe", channel: "shared-event" });
 
   const localSubscription = nextMessage(relay);
   first.send(encode({
@@ -352,8 +394,11 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   guest.stop = () => {};
   guest.reload = () => {};
   guest.focus = () => {};
+  let viewport;
   gateway.registerBrowserGuest(
-    { browserTabId: "tab", conversationId: "conversation" },
+    { browserTabId: "tab", conversationId: "conversation",
+      ownerWindow: { close: () => {},
+        setContentSize: (width, height) => { viewport = { width, height }; } } },
     guest,
   );
 
@@ -382,6 +427,15 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(guest.currentUrl, "https://example.com/");
 
+  first.send(encode({ type: "browser-surface-command", browserTabId: "tab",
+    conversationId: "conversation", command: "resize", width: 794, height: 878 }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(viewport, { width: 794, height: 878 });
+  first.send(encode({ type: "browser-surface-command", browserTabId: "tab",
+    conversationId: "conversation", command: "resize", width: 1000000, height: -1 }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(viewport, { width: 794, height: 878 });
+
   first.send(encode({
     type: "browser-surface-command",
     browserTabId: "tab",
@@ -403,6 +457,54 @@ test("gateway fans native events and dialogs out to multiple browser devices", a
     x: 320,
     y: 360,
   });
+
+  first.send(encode({ type: 'notification-action', notificationId: 'from-previous-generation',
+    action: 'click', navigationPath: '/thread/shared' }));
+  let navigation;
+  do { navigation = await nextMessage(first); } while (navigation.type === 'control');
+  assert.deepEqual(navigation, { type: 'event', channel: 'codex_desktop:message-for-view',
+    args: [{ type: 'navigate-to-route', path: '/thread/shared' }] });
+
+  const focusChanges = [];
+  gateway.setBrowserFocusStateHandler((focused) => focusChanges.push(focused));
+  const presence = async (socket, values = {}) => {
+    socket.send(encode({ type: 'browser-presence', focused: false, activeMedia: false, terminalOpen: false, ...values }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  };
+  const updateReady = async () => (await (await fetch(`${origin}/health`)).json()).updateReady;
+  assert.equal(await updateReady(), false, 'unknown clients block automatic restart');
+  await presence(first, { focused: true });
+  await presence(second, { focused: true });
+  await presence(first);
+  assert.equal(gateway.isBrowserFocused(), true, 'one focused device keeps the app focused');
+  await presence(second);
+  assert.deepEqual(focusChanges, [true, false]);
+  assert.equal(await updateReady(), false, 'recently connected clients are active');
+  const activityClock = Date.now;
+  try {
+    Date.now = () => activityClock() + 16 * 60 * 1000;
+    assert.equal(await updateReady(), true, 'idle open tabs allow updates');
+    await presence(first, { activeMedia: true });
+    assert.equal(await updateReady(), false, 'recording blocks updates');
+    await presence(first, { terminalOpen: true });
+    assert.equal(await updateReady(), false, 'open terminals block updates');
+    await presence(first);
+    assert.equal(await updateReady(), true);
+    first.send(encode({ type: 'user-activity' }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(await updateReady(), false, 'new input postpones updates');
+  } finally { Date.now = activityClock; }
+
+  const realNow = Date.now;
+  try {
+    Date.now = () => realNow() + 16000;
+    assert.equal((await (await fetch(`${origin}/health`)).json()).status, "starting");
+    relay.send(encode({ type: "relay-heartbeat" }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal((await (await fetch(`${origin}/health`)).json()).status, "ok");
+  } finally {
+    Date.now = realNow;
+  }
 
   first.close();
   second.close();
