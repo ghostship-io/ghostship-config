@@ -20,7 +20,7 @@ let
   imageTag = "openchamber-runtime";
   # Bump whenever injected runtime safety hooks or wrappers change so an
   # unchanged npm pair is restaged with the new harness contract.
-  openchamberHarnessRevision = "2026-09-08.1";
+  openchamberHarnessRevision = "2026-09-08.2";
 
   openchamberPackages = with pkgs; [
     nix
@@ -342,6 +342,11 @@ let
             raise SystemExit(f"required OpenChamber safety hook is missing: {relative}")
         resolved.write_text(source.replace(old, new, 1))
 
+    replace(
+        "server/lib/session-goal/runtime.js",
+        "const MAX_AUTO_TURNS = 20;",
+        "const MAX_AUTO_TURNS = ${toString config.ghostship.openchamber.goalMaxAutoTurns};",
+    )
     # Goal audits and delayed continuations are work even while model sessions
     # briefly report idle. Keep observers running until that work settles.
     replace(

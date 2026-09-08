@@ -84,6 +84,12 @@ Provider retry monitoring logs prolonged retries without aborting sessions.
 Rate limits and transient provider outages therefore remain recoverable by
 the runtime instead of being cancelled after ten minutes.
 
+`ghostship.openchamber.goalMaxAutoTurns` defaults to 1,000 automatic goal
+continuations, replacing the upstream 20-continuation ceiling for multi-day
+work. Per-goal token budgets, completion/blocked audits, and manual Stop remain
+effective. This increases potential provider usage; it is a continuation count,
+not a guaranteed runtime duration.
+
 ## Runtime boundaries
 
 OpenChamber remains the aggregate task authority through

@@ -107,6 +107,11 @@
               shellcheck
               gitleaks
               python3
+              ripgrep
+              jq
+              nodejs_24
+              util-linux
+              iproute2
             ];
           };
           default = pkgs.mkShellNoCC {
@@ -114,6 +119,7 @@
               git
               age
               gnugrep
+              ripgrep
               gnused
               jq
               nixfmt
