@@ -22,6 +22,8 @@ jobs:
           extra_nix_config: |
             max-jobs = 2
             cores = 2
+      - name: Validate container development workflow
+        run: nix develop .#ci --no-write-lock-file -c scripts/check
       - name: Evaluate hosts and run regression tests
         run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package
       - name: Check workflows and backup script

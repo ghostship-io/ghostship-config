@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+printf 'Checking tracked Nix syntax and workflow scripts\n'
+while IFS= read -r -d '' source; do
+  nix-instantiate --parse "$source" >/dev/null
+done < <(git ls-files -z -- '*.nix')
+shellcheck scripts/check
+actionlint
+git diff --check
+git diff --cached --check
+
+printf 'Evaluating development shells for both Linux architectures\n'
+for system in x86_64-linux aarch64-linux; do
+  for shell in ci default browser; do
+    nix eval --no-write-lock-file --raw ".#devShells.$system.$shell.drvPath" >/dev/null
+  done
+done
+
+# Evaluate full system derivations, including module assertions, without building
+# kernels, container images, or firmware that belongs on the target host.
+hosts="$(nix eval --no-write-lock-file --json .#nixosConfigurations --apply builtins.attrNames)"
+for host in $(jq -r '.[]' <<<"$hosts"); do
+  printf 'Evaluating %s\n' "$host"
+  nix eval --no-write-lock-file --raw ".#nixosConfigurations.$host.config.system.build.toplevel.drvPath" >/dev/null
+done
+
+printf 'Repository checks passed\n'

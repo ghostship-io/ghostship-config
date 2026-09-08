@@ -148,6 +148,11 @@ notes.
 
 ## Shared Skills
 
+- In the T3 Code container, run `python3 scripts/setup-container-agents.py` to
+  build the existing `/workspace/ghostship-agent` tool package and share its
+  skills with Codex/ChatGPT, OpenCode, and Antigravity. The persistent
+  `t3code-shared-agents` helper refreshes the installation; see
+  [the container workflow](docs/container-workflow.md#shared-skills-and-tools).
 - Shared repo-managed skills live under `home/config/skills/` and are linked
   into `~/.agents/skills/` on develop hosts. Managed external `skills` CLI
   installs also land under `~/.agents/skills/`, but they are maintained by
@@ -384,6 +389,11 @@ Radarr/Sonarr synchronization working without pinning a stale patch release.
 
 ## Usage
 
+For development from the existing T3 Code container, follow
+[`docs/container-workflow.md`](docs/container-workflow.md). The container uses
+`/workspace/nixos-config` and `/home/t3code`; its agent tools are managed
+separately from this repo's NixOS develop-host profiles.
+
 Run system-changing commands from a root shell or direct root SSH session.
 
 Build the current host:
@@ -395,18 +405,36 @@ nixos-rebuild build --flake .#(hostname)
 Enter the repo shell with direnv or Nix:
 
 ```fish
+cp -n .envrc.example .envrc
 direnv allow
 # or
 nix develop
 ```
 
-The flake exposes a default Linux dev shell so `use flake` works on the WSL
-development hosts and on Apple Silicon Linux systems. On this host's current Nix
+The flake exposes a default Linux dev shell so `use flake` works in the T3 Code
+container, on WSL development hosts, and on Apple Silicon Linux systems. It
+includes Git/GitHub CLI, SSH, Nix validation tools, Node.js, Python, and Age
+and Ragenix without installing agent CLIs.
+Local Playwright browsers are available
+through `nix develop .#browser`; that shell also sets
+`PLAYWRIGHT_BROWSERS_PATH`. On this host's current Nix
 `2.31.3` stack the shell export path is order-sensitive: keep `git` before
 `age` in the default shell package list or `nix print-dev-env` and `direnv` can
 fail with `get-env.sh failed to produce an environment`. After changing the
 default shell, run `direnv reload` or start a fresh shell to pick up the updated
 environment.
+
+Run the same validation used by GitHub Actions:
+
+```sh
+nix develop --no-write-lock-file -c scripts/check
+```
+
+This parses tracked Nix files, checks the workflow script, and evaluates both
+Linux architectures' development shells and all four host system derivations. It does not
+build or activate host systems. Stage new Nix files before evaluation so the
+flake can see them. CI runs once per PR update and main push, cancels superseded
+runs, and avoids full fleet builds to conserve runner time.
 
 Apply the built generation:
 

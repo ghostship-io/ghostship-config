@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.8.3] - 2026-09-08
+
+- Share installed Ghostship skills and tools across T3 Code providers, preserve
+  provider plugins, and add repeatable container setup and CI validation.
+- Reduce agent instructions to short workflow rules and task-specific references;
+  install and apply Matt Pocock's `writing-for-agents` skill.
+
 ## [3.8.2] - 2026-09-08
 
 - Space ordinary container restart attempts by 30 seconds so brief boot-time
@@ -163,17 +170,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   acknowledge them independently of the hidden renderer to keep state updates flowing.
 - **Authenticated app installation**: Include access cookies when Chrome fetches
   the web app manifest behind Cloudflare Access.
-
-## [3.4.7] - 2026-09-02
-
-- **LAN address migration**: Point the `chill-penguin` and WSL NFS mounts at
-  `flame-mammoth`'s new `192.168.4.241` reservation, and update Plex to
-  advertise `chill-penguin` at `192.168.4.240` while recognizing the new
-  `192.168.4.0/22` LAN.
-- **NZBGet direct networking**: Move NZBGet out of Gluetun's Vancouver VPN
-  namespace and onto `ghostship_net`, update Homepage to use the direct
-  service address, explicitly disable the retired UsenetPrime server, and
-  preserve the existing Cloudflare origin through a local Nginx edge proxy.
 
 ## [3.4.6] - 2026-08-12
 

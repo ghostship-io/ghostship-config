@@ -91,6 +91,7 @@
         in
         {
           ghostship-config = (pkgs.extend (import ./modules/common/ghostship-pkg.nix)).ghostship-config;
+          container-browser = pkgs.chromium;
           codex-desktop-web = pkgs.callPackage ./packages/codex-desktop-web/package.nix { };
         }
       );
@@ -100,7 +101,7 @@
         let
           pkgs = pkgsFor system;
         in
-        {
+        rec {
           # CI needs no downloaded browsers or agent-maintenance tools.
           ci = pkgs.mkShellNoCC {
             packages = with pkgs; [
@@ -124,6 +125,13 @@
             packages = with pkgs; [
               git
               age
+              bashInteractive
+              coreutils
+              curl
+              direnv
+              gh
+              nix
+              openssh
               gnugrep
               ripgrep
               gnused
@@ -148,11 +156,14 @@
               gnupg
               espeak-ng
               bubblewrap
-              playwright-driver.browsers
               prefetch-npm-deps
               pkgs.ragenix
               ssh-to-age
             ];
+          };
+          browser = pkgs.mkShellNoCC {
+            inputsFrom = [ default ];
+            packages = [ pkgs.playwright-driver.browsers ];
             PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
           };
         }
