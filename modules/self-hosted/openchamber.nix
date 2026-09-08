@@ -20,7 +20,7 @@ let
   imageTag = "openchamber-runtime";
   # Bump whenever injected runtime safety hooks or wrappers change so an
   # unchanged npm pair is restaged with the new harness contract.
-  openchamberHarnessRevision = "2026-09-08.3";
+  openchamberHarnessRevision = "2026-09-08.4";
 
   openchamberPackages = with pkgs; [
     nix
@@ -363,7 +363,7 @@ let
       let maintenanceActiveMutations = 0;
       let maintenanceObserverPaused = false;
       let maintenanceObserverResumePromise = null;
-      let maintenanceSchedulerPaused = false;
+      let maintenanceSchedulerPaused = Boolean(maintenanceGatePath && fs.existsSync(maintenanceGatePath));
       app.use((req, res, next) => {
         if (req.method === 'GET' && req.path === '/api/openchamber/maintenance-drain') {
           const activeTerminalSessions = terminalRuntime?.getActiveSessionCount?.() ?? 0;
@@ -411,7 +411,8 @@ let
             maintenanceActiveMutations = Math.max(0, maintenanceActiveMutations - 1);
           };
           res.once('finish', settle);
-          res.once('close', settle);
+          // A disconnected socket does not cancel its asynchronous handler.
+          // Unknown unfinished mutations must continue to block maintenance.
         }
         next();
       });""",
@@ -478,8 +479,13 @@ let
     )
     replace(
         "server/lib/scheduled-tasks/runtime.js",
+        "import { createOpencodeClient }",
+        "import fs from 'node:fs';\nimport { createOpencodeClient }",
+    )
+    replace(
+        "server/lib/scheduled-tasks/runtime.js",
         "  let started = false;\n  const tasksByProject = new Map();",
-        "  let started = false;\n  let maintenancePaused = false;\n  const tasksByProject = new Map();",
+        "  let started = false;\n  let maintenancePaused = Boolean(process.env.OPENCHAMBER_MAINTENANCE_GATE && fs.existsSync(process.env.OPENCHAMBER_MAINTENANCE_GATE));\n  const tasksByProject = new Map();",
     )
     replace(
         "server/lib/scheduled-tasks/runtime.js",
@@ -784,7 +790,7 @@ let
         --setenv PATH /candidate/bin:${openchamberPath}:/bin:/usr/bin \
         --chdir /home/openchamber \
         -- ${pkgs.nodejs_24}/bin/node --input-type=module <<'NODE'
-    import { mkdir } from 'node:fs/promises';
+    import { mkdir, writeFile, unlink } from 'node:fs/promises';
     import { createScheduledTasksRuntime } from '/candidate/lib/node_modules/@openchamber/web/server/lib/scheduled-tasks/runtime.js';
 
     Math.random = () => 0;
@@ -841,6 +847,8 @@ let
         return { task };
       },
     };
+    process.env.OPENCHAMBER_MAINTENANCE_GATE = '/tmp/persisted-maintenance.lock';
+    await writeFile(process.env.OPENCHAMBER_MAINTENANCE_GATE, 'probe');
     const runtime = createScheduledTasksRuntime({
       projectConfigRuntime,
       listProjects: async () => [{ id: projectID, path: projectPath }],
@@ -862,7 +870,6 @@ let
     };
 
     await runtime.start();
-    runtime.pauseForMaintenance();
     await new Promise((resolve) => setTimeout(resolve, 1200));
     let status = runtime.getStatus();
     if (claimed.length !== 0 || status.runningScheduledTasksCount !== 0
@@ -870,6 +877,7 @@ let
       throw new Error('paused scheduler dispatched overdue work');
     }
 
+    await unlink(process.env.OPENCHAMBER_MAINTENANCE_GATE);
     runtime.resumeAfterMaintenance();
     await waitFor(() => {
       const snapshot = runtime.getStatus();
@@ -3614,6 +3622,7 @@ let
       ${pkgs.podman}/bin/podman load --input ${openchamberImage} >/dev/null
       ${pkgs.podman}/bin/podman run --rm \
         --user 3000:3000 \
+        --security-opt="unmask=/proc/*" \
         --memory=4g \
         --memory-reservation=2g \
         --pids-limit=512 \
@@ -3666,6 +3675,12 @@ let
     if [ "$desired" = "$applied" ]; then
       clear_rollback_override
       rm -f "$applying_file" "$failed_file"
+      exit 0
+    fi
+
+    if ! ${pkgs.systemd}/bin/systemctl show podman-openchamber.service --property=Environment --value \
+      | ${pkgs.gnugrep}/bin/grep -Fq "GHOSTSHIP_OPENCHAMBER_DEPLOYMENT_ID=$desired"; then
+      log_info "action=defer desired=$desired reason=unit-not-reloaded"
       exit 0
     fi
 
@@ -3722,7 +3737,9 @@ let
       sleep 10
     done
 
-    if [ "$healthy" -ne 1 ]; then
+    running="$(${pkgs.podman}/bin/podman inspect openchamber \
+      --format '{{index .Config.Labels "io.ghostship.openchamber.deployment"}}' 2>/dev/null || true)"
+    if [ "$healthy" -ne 1 ] || [ "$running" != "$desired" ]; then
       log_info "action=deployment-failed desired=$desired reason=health-timeout"
       if restore_previous_when_safe; then
         mark_failed
@@ -3763,6 +3780,7 @@ in
     pull = "never";
     labels = {
       "io.containers.autoupdate" = "disabled";
+      "io.ghostship.openchamber.deployment" = openchamberDeploymentId;
     };
     ports = [ ];
     extraOptions = [
@@ -3870,6 +3888,10 @@ in
       "mnt-share.mount"
     ];
     serviceConfig = {
+      Environment = lib.mkForce [
+        "PODMAN_SYSTEMD_UNIT=%n"
+        "GHOSTSHIP_OPENCHAMBER_DEPLOYMENT_ID=${openchamberDeploymentId}"
+      ];
       TimeoutStopSec = lib.mkForce "210s";
       SuccessExitStatus = [
         0

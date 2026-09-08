@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+trap 'printf "OpenChamber test failed at %s:%s: %s\n" "$0" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 host_source="$(cat "$1")"
 fixture_root="$(mktemp -d -t openchamber-host-state.XXXXXX)"

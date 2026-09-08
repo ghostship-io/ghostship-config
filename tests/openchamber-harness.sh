@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+trap 'printf "OpenChamber test failed at %s:%s: %s\n" "$0" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 repo_root="$(git rev-parse --show-toplevel)"
 module="$repo_root/modules/self-hosted/openchamber.nix"
