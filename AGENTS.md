@@ -7,6 +7,12 @@ changelog.
 
 ## Workflow and Shared Defaults
 
+- This repo also runs in the T3 Code container at `/workspace/nixos-config`
+  as `t3code`. Use `nix develop -c scripts/check` for local validation and
+  `nix develop .#browser` only when local Playwright browsers are needed.
+  The container owns Codex, OpenCode, and Antigravity; do not apply the develop
+  host's Home Manager profile or agent maintenance here. Deploy NixOS changes
+  through Git and direct root SSH on the target host, not local activation.
 - `home/config/AGENTS.md` is the user's cross-repo preference layer, not
   repo-specific guidance. Keep it concise, imperative, and high-signal.
 - The shared workflow preferences require verified work to be committed before

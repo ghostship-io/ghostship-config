@@ -41,7 +41,11 @@ Verify with the smallest relevant check.
 
 ## Development Environment
 
-The environment is NixOS on WSL2 on Windows 11.
+- Inspect the current environment instead of assuming NixOS, WSL2, a username,
+  or a home directory. Projects also run in the T3 Code Linux container.
+- In containers, use the existing Nix daemon and agent launchers. Keep project
+  dependencies in the dev shell; build and activate host systems on the target
+  NixOS host through direct root SSH.
 
 ### Nix
 
@@ -104,6 +108,7 @@ nix develop -c uv run basepyright
 
 ## Windows and WSL2
 
+- Apply these instructions only when running in WSL with Windows interop.
 - Prefer `/mnt/c/...` for Windows files.
 - Use `wslpath` to translate paths.
 - Use Linux paths for Linux/WSL commands.

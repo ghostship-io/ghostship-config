@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.8.2] - 2026-09-08
+
+- Share installed Ghostship skills and tools across the T3 Code agents and
+  adapt the project development shell, validation, and deployment workflow
+  to the existing container.
+
 ## [3.8.1] - 2026-09-08
 
 - Run Antigravity's official x86 ACP agent through container-local QEMU on
@@ -157,17 +163,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   acknowledge them independently of the hidden renderer to keep state updates flowing.
 - **Authenticated app installation**: Include access cookies when Chrome fetches
   the web app manifest behind Cloudflare Access.
-
-## [3.4.7] - 2026-09-02
-
-- **LAN address migration**: Point the `chill-penguin` and WSL NFS mounts at
-  `flame-mammoth`'s new `192.168.4.241` reservation, and update Plex to
-  advertise `chill-penguin` at `192.168.4.240` while recognizing the new
-  `192.168.4.0/22` LAN.
-- **NZBGet direct networking**: Move NZBGet out of Gluetun's Vancouver VPN
-  namespace and onto `ghostship_net`, update Homepage to use the direct
-  service address, explicitly disable the retired UsenetPrime server, and
-  preserve the existing Cloudflare origin through a local Nginx edge proxy.
 
 ## [3.4.6] - 2026-08-12
 
