@@ -67,6 +67,12 @@ and [official ACP registry](https://github.com/agentclientprotocol/registry/tree
 
 ## Maintenance
 
+Deploy with `nixos-rebuild switch --flake .#chill-penguin -L` on the host after
+pulling the committed configuration. This updates the system profile and boot
+entry as well as the running system. Running a built system's
+`switch-to-configuration switch` directly does not advance the system profile;
+reboot can therefore return to a generation without T3 Code.
+
 The four-hour tool timer updates T3, Codex, and OpenCode when the database reports
 no pending or running turns. Unknown activity defers maintenance and recovery.
 The ACP runtime updates only with the image. Container health checks web/server

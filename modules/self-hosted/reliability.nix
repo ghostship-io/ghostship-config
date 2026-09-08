@@ -66,6 +66,8 @@ in
         ++ lib.optional (database != null) "podman-${database}.service";
       unitConfig.RequiresMountsFor = lib.optional usesNas "/mnt/share";
       serviceConfig.TimeoutStartSec = lib.mkDefault "10min";
+      # Allow boot-time DNS outages to recover without exhausting rapid retries.
+      serviceConfig.RestartSec = lib.mkDefault "30s";
       serviceConfig.UMask = lib.mkDefault "0077";
       preStart = lib.mkBefore (
         lib.optionalString usesNas ''

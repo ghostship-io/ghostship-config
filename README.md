@@ -181,6 +181,9 @@ notes.
 The container stack lives in the flat
 [`modules/self-hosted/default.nix`](modules/self-hosted/default.nix)
 inventory. Services use Podman, native healthchecks, and registry auto-update.
+Ordinary containers wait 30 seconds between restart attempts so brief boot-time
+DNS failures can recover without exhausting systemd's rapid-start limit.
+Agent workspaces retain their own lifecycle policies.
 Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
