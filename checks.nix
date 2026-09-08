@@ -3,8 +3,13 @@ let
   python = pkgs.python3.withPackages (ps: [
     ps.lxml
     ps.ruamel-yaml
+    ps.requests
   ]);
   hosts = builtins.attrValues self.nixosConfigurations;
+  agentUnits = map (name: self.nixosConfigurations.chill-penguin.config.systemd.services.${name}) [
+    "podman-openchamber"
+    "podman-codex"
+  ];
   failures = pkgs.lib.concatMap (
     host: map (a: a.message) (builtins.filter (a: !a.assertion) host.config.assertions)
   ) hosts;
@@ -30,6 +35,12 @@ in
       '';
   host-evaluation =
     assert failures == [ ];
+    assert builtins.all (
+      unit:
+      !unit.restartIfChanged
+      && !unit.stopIfChanged
+      && !(builtins.elem "init-ghostship-net.service" unit.requires)
+    ) agentUnits;
     pkgs.runCommand "ghostship-host-evaluation"
       {
         # Force complete derivation evaluation without building the fleet in CI.

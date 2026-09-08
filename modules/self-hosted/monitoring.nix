@@ -34,7 +34,7 @@ let
       # Credential config travels over stdin instead of appearing in argv.
       printf 'user = "publisher:%s"\n' "$NTFY_PUBLISH_PASSWORD" |
         curl --config - --fail --silent --show-error --max-time 15 \
-          --data-binary "$*" "http://$address/operations"
+          --data-binary "$*" "http://$address:8080/operations"
     '';
   };
 in
@@ -63,7 +63,7 @@ in
     icon = "sh-ntfy";
     order = 190;
     hostname = "ntfy.ghostship.io";
-    origin = "http://ntfy:80";
+    origin = "http://ntfy:8080";
     access = "native";
     muximux = {
       icon = "fa-bell";
@@ -105,7 +105,7 @@ in
       ];
       extraOptions = [
         "--network=ghostship_net"
-        "--health-cmd=wget -q -O /dev/null http://127.0.0.1/v1/health"
+        "--health-cmd=wget -q -O /dev/null http://127.0.0.1:8080/v1/health"
         "--health-interval=30s"
         "--health-timeout=10s"
         "--health-retries=5"
@@ -127,7 +127,7 @@ in
     umask 077
     cat > /run/ghostship-ntfy/server.yml.new <<EOF
     base-url: https://ntfy.ghostship.io
-    listen-http: ':80'
+    listen-http: ':8080'
     behind-proxy: true
     auth-file: /var/lib/ntfy/auth.db
     auth-default-access: deny-all

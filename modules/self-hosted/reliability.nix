@@ -6,7 +6,7 @@
 }:
 let
   containers = config.virtualisation.oci-containers.containers;
-  # These images include wget; do not invent HTTP checks for scheduled jobs.
+  # Plex provides curl; the other HTTP targets provide wget.
   endpoints = {
     sonarr = "http://127.0.0.1:8989/ping";
     radarr = "http://127.0.0.1:7878/ping";
@@ -14,14 +14,26 @@ let
     plex = "http://127.0.0.1:32400/identity";
     muximux = "http://127.0.0.1/";
   };
-  active = lib.filterAttrs (name: _: name != "codex") containers;
+  # Agent units own their lifecycle: Requires would stop them on network-unit updates.
+  active = lib.filterAttrs (
+    name: _:
+    !(builtins.elem name [
+      "codex"
+      "openchamber"
+    ])
+  ) containers;
 in
 {
   virtualisation.oci-containers.containers = lib.mkMerge [
     (lib.mapAttrs (name: url: {
       podman.sdnotify = "healthy";
       extraOptions = [
-        "--health-cmd=wget -q -O /dev/null --timeout=5 ${url}"
+        (
+          if name == "plex" then
+            "--health-cmd=curl -fsS --max-time 5 ${url} >/dev/null"
+          else
+            "--health-cmd=wget -q -O /dev/null --timeout=5 ${url}"
+        )
         "--health-interval=30s"
         "--health-timeout=10s"
         "--health-retries=5"
