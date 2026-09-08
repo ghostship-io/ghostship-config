@@ -163,8 +163,9 @@
           };
           browser = pkgs.mkShellNoCC {
             inputsFrom = [ default ];
-            packages = [ pkgs.playwright-driver.browsers ];
+            packages = [ pkgs.playwright-driver.browsers pkgs.playwright-driver pkgs.librsvg ];
             PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
+            PLAYWRIGHT_MODULE = "${pkgs.playwright-driver}";
           };
         }
       );

@@ -103,6 +103,29 @@ Upstream: [provider setup](https://github.com/pingdotgg/t3code/blob/main/docs/us
 [Antigravity sign-in](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-antigravity.md),
 and [official ACP registry](https://github.com/agentclientprotocol/registry/tree/main/antigravity-acp).
 
+## Android installation
+
+Open `https://t3code.ghostship.io` in Android Chrome and complete Cloudflare
+sign-in. Use Chrome's menu, then **Install app** or **Add to home screen >
+Install**. T3 Code opens from its own launcher icon in a standalone window.
+If a shortcut was created before installation support was added, install the
+app from a refreshed Chrome tab and remove the old shortcut.
+
+The gateway supplies a named manifest, 192px/512px icons with maskable safe
+areas, and a manifest link that includes Cloudflare cookies. A root-scoped
+service worker shows a reconnect screen when offline. Coding still requires a
+connection to the server. The worker caches no application bundles, code,
+messages, or credentials; normal navigation uses the current server version.
+Gateway-owned assets persist across T3 npm updates and container replacement.
+
+Validate with `nix develop .#browser -c node --test tests/t3code-pwa.browser.cjs`.
+The Chrome fixture checks real install eligibility and the browser's install
+event behind cookie authentication, offline navigation, and fresh content after
+reconnection. Physical Android installation must still be verified on a phone.
+The icon PNGs are rendered from `packages/t3code/pwa/icon.svg` using
+`rsvg-convert -w <size> -h <size>` in the browser shell. Change the versioned icon
+URLs when artwork changes so Chrome can update installed icons.
+
 ## Maintenance
 
 Deploy with `nixos-rebuild switch --flake .#chill-penguin -L` on the host after

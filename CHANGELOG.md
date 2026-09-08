@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.10.0] - 2026-09-08
+
+- Make T3 Code installable in Android Chrome with a named standalone manifest,
+  Android launcher icons, and credentialed manifest fetching behind Cloudflare.
+- Preserve installation support across T3 updates and show a reconnect screen
+  offline without caching private workspace data or old application bundles.
+
 ## [3.9.0] - 2026-09-08
 
 - Reapply T3's shared Ghostship agent tooling and native browser

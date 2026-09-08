@@ -284,6 +284,8 @@ Codex/OpenAI, OpenCode, and Antigravity ACP providers. It keeps independent
 copies of OpenChamber's projects and its own home, Docker state, and Nix store
 under `/srv/apps/t3code`. See [T3 Code setup and operations](docs/t3code.md)
 for browser access, provider sign-in, project import, and maintenance.
+Android Chrome can install it as a standalone app from the browser menu;
+see [Android installation](docs/t3code.md#android-installation).
 
 n8n, SearXNG, and PriceBuddy are retired from the declared stack.
 Retirement quarantines inactive app directories under `/srv/retired-apps`;

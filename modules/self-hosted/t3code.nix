@@ -1142,7 +1142,7 @@ let
   t3codeAccessProxy = pkgs.writeShellScriptBin "t3code-access-proxy" ''
     set -eu
     ${t3codeRuntimeEnv}
-    exec ${pkgs.nodejs_24}/bin/node ${../../packages/t3code/access-proxy.cjs}
+    exec ${pkgs.nodejs_24}/bin/node ${../../packages/t3code}/access-proxy.cjs
   '';
 
   t3codeManagedConfig = pkgs.writeShellScriptBin "t3code-managed-config" ''
