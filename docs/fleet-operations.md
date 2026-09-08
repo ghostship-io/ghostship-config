@@ -106,8 +106,9 @@ existing `Optimal` quality profile (or an unambiguous sole profile), and
 requires `/tv` and `/movies` roots already present in Sonarr/Radarr. It fails
 rather than choosing among ambiguous alternatives. Ordinary users receive
 REQUEST permission only, without auto-approval. Library setup supports both the
-released query-based API and the newer POST/PUT API; every legacy query includes
-the enabled library IDs because omitting them would disable existing selections.
+released query-based API and the newer POST/PUT API. Legacy queries include any
+enabled library IDs because omitting them disables selections; the parameter is
+omitted only for an intentionally empty selection, since empty values are rejected.
 New Plex users require explicit import. After successful first-run setup, the marker
 `/srv/apps/seerr/.ghostship-provisioned` preserves later settings. Verify a
 request as an ordinary user remains pending until an administrator approves it.

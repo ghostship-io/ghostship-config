@@ -102,6 +102,7 @@ def main():
                 {
                     "name": f"Ghostship {name}",
                     "type": "http",
+                    "conditions": [],
                     "url": url,
                     "interval": 60,
                     "retryInterval": 60,
@@ -128,6 +129,7 @@ def main():
                     {
                         "name": f"Ghostship {name}",
                         "type": "port",
+                        "conditions": [],
                         "hostname": host,
                         "port": port,
                         "interval": 60,
@@ -154,6 +156,7 @@ def main():
                     {
                         "name": monitor_name,
                         "type": "push",
+                        "conditions": [],
                         "pushToken": token,
                         "interval": 600,
                         "retryInterval": 60,

@@ -113,16 +113,20 @@ def main():
     except requests.HTTPError as error:
         if error.response.status_code != 404:
             raise
-        # Released Seerr uses a mutating GET: omitting enable disables libraries.
+        # Released Seerr uses a mutating GET: omitting enable disables libraries,
+        # but its validator rejects an empty value. Omit only an empty selection.
         enabled = {
             str(library["id"])
             for library in plex.get("libraries", [])
             if library.get("enabled")
         }
+        sync_params = {"sync": "true"}
+        if enabled:
+            sync_params["enable"] = ",".join(sorted(enabled))
         libraries = api(
             "GET",
             "/settings/plex/library",
-            params={"sync": "true", "enable": ",".join(sorted(enabled))},
+            params=sync_params,
         )
         enabled.update(
             str(library["id"])
@@ -132,7 +136,7 @@ def main():
         libraries = api(
             "GET",
             "/settings/plex/library",
-            params={"enable": ",".join(sorted(enabled))},
+            params={"enable": ",".join(sorted(enabled))} if enabled else None,
         )
         if not enabled.issubset(
             {str(library["id"]) for library in libraries if library.get("enabled")}

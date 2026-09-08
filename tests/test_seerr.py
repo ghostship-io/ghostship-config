@@ -17,12 +17,12 @@ def response(data, status=200):
 
 
 class SeerrTests(unittest.TestCase):
-    def run_setup(self, sync_status):
+    def run_setup(self, sync_status, existing_enabled=True):
         calls = []
         marker = Mock()
         marker.exists.return_value = False
         libraries = [
-            {"id": "1", "type": "artist", "enabled": True},
+            {"id": "1", "type": "artist", "enabled": existing_enabled},
             {"id": "2", "type": "movie", "enabled": False},
             {"id": "3", "type": "show", "enabled": False},
         ]
@@ -35,6 +35,8 @@ class SeerrTests(unittest.TestCase):
             if path == "/settings/plex/library/sync":
                 return response(libraries, sync_status)
             if path == "/settings/plex/library":
+                if (params or {}).get("enable") == "":
+                    return response({"message": "Empty enable value"}, 400)
                 # Match the released API's destructive missing-enable behavior.
                 enabled = (params or {}).get("enable", "").split(",")
                 return response(
@@ -82,6 +84,13 @@ class SeerrTests(unittest.TestCase):
             queries, [{"sync": "true", "enable": "1"}, {"enable": "1,2,3"}]
         )
         self.assertFalse(any(method == "PUT" for method, *_ in calls))
+
+    def test_first_setup_omits_empty_enable_parameter(self):
+        calls = self.run_setup(404, existing_enabled=False)
+        queries = [
+            params for _, path, _, params in calls if path == "/settings/plex/library"
+        ]
+        self.assertEqual(queries, [{"sync": "true"}, {"enable": "2,3"}])
 
     def test_new_api_uses_per_library_updates(self):
         calls = self.run_setup(200)
