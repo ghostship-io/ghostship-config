@@ -85,7 +85,10 @@ without aborting the task. See the OpenChamber stability document for recovery.
 Monitoring provisioning creates missing `Ghostship ...` entries from the same
 registry. HTTP target URLs follow the registry; existing notification and
 interval choices are preserved. Independently added monitors remain untouched. HTTP checks distinguish successful responses
-from redirects; database/download services without a reliable public HTTP
+from redirects; pyLoad uses its direct public `/robots.txt` endpoint because its
+favicon route redirects. The provisioning client permits a bounded 256-packet
+login burst for existing monitor histories, with a regression covering a
+populated fleet. Database/download services without a reliable public HTTP
 probe use TCP checks. A five-minute local heartbeat reports stale backup
 (30 hours) or update (36 hours) success markers. Missing heartbeat delivery is
 also detected by Kuma. Same-host monitoring cannot deliver an alert during a

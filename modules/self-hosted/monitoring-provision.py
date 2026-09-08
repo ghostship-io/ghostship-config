@@ -8,6 +8,11 @@ import threading
 from pathlib import Path
 
 import socketio
+from engineio.payload import Payload
+
+# Kuma emits heartbeat/stat packets for every monitor before acknowledging login.
+# Its populated fleet exceeds Engine.IO's default 16-packet polling limit.
+Payload.max_decode_packets = 256
 
 
 def main():
@@ -89,9 +94,7 @@ def main():
             )
             if existing is not None:
                 if existing["type"] != "http":
-                    raise RuntimeError(
-                        f"Managed HTTP monitor {name} changed type"
-                    )
+                    raise RuntimeError(f"Managed HTTP monitor {name} changed type")
                 if existing.get("url") != url:
                     monitor = call("getMonitor", existing["id"])["monitor"]
                     monitor["url"] = url

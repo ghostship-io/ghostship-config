@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.7.4] - 2026-09-08
+
+- Allow Kuma's populated monitor/stat login burst within a bounded Engine.IO
+  polling limit so provisioning remains repeatable after initial setup.
+- Monitor pyLoad's direct public robots endpoint instead of its favicon
+  redirect, avoiding false alarms while retaining strict HTTP status checks.
+
 ## [3.7.3] - 2026-09-08
 
 - Supply Kuma's required empty monitor conditions for HTTP, TCP, and heartbeat
