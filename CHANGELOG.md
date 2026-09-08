@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.7.2] - 2026-09-08
+
+- Keep the shared Podman network setup active after success so simultaneous
+  container starts do not repeatedly run it and hit systemd's start limit.
+- Keep both agent containers outside shared hard startup dependencies so a
+  network-setup unit update cannot stop active OpenChamber work.
+- Run ntfy on unprivileged internal port 8080 and synchronize its tunnel,
+  dashboard, health check, publisher, and monitoring references.
+- Use Plex's installed curl client for readiness checks instead of absent wget,
+  avoiding false health failures and unnecessary container restarts.
+- Support the released Seerr library-setup API as well as its newer API,
+  preserving selected libraries when retrying incomplete provisioning.
+
 ## [3.7.1] - 2026-09-08
 
 - Preserve chill-penguin's running D-Bus implementation across the nixpkgs

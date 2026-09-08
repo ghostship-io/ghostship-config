@@ -78,7 +78,10 @@ in
           description = "Create ghostship_net podman network";
           after = [ "network.target" ];
           wantedBy = [ "multi-user.target" ];
-          serviceConfig.Type = "oneshot";
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+          };
           script = ''
             ${pkgs.podman}/bin/podman network inspect ghostship_net >/dev/null 2>&1 || \
             ${pkgs.podman}/bin/podman network create ghostship_net

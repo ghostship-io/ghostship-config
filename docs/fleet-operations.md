@@ -35,7 +35,10 @@ flowchart LR
 Containers share `ghostship_net`; no new host ports are published. Plex keeps
 its existing host exposure. qBittorrent shares Gluetun's VPN namespace. NZBGet
 uses direct networking; its compatibility proxy preserves the old tunnel
-origin. Media/download files live on the NAS, while app databases and settings
+origin. Network setup remains active after success to serve shared startup
+dependencies. Both agent containers keep their own lifecycle and soft network
+ordering so refreshing that setup unit cannot stop their work.
+Media/download files live on the NAS, while app databases and settings
 live locally. The backup repository covers local service state, not a second
 copy of the bulk media library.
 
@@ -76,7 +79,7 @@ without aborting the task. See the OpenChamber stability document for recovery.
 | Service | Internal origin | Public hostname | Purpose and authentication |
 | --- | --- | --- | --- |
 | Uptime Kuma 2 | `http://uptime-kuma:3001` | `uptime.ghostship.io` | Internal HTTP/TCP checks plus backup/update heartbeats; existing Google Access policy, then local `the owner` account |
-| ntfy | `http://ntfy:80` | `ntfy.ghostship.io` | Android operations notifications; native authentication, no browser-login redirect |
+| ntfy | `http://ntfy:8080` | `ntfy.ghostship.io` | Android operations notifications; native authentication, no browser-login redirect |
 | Seerr | `http://seerr:5055` | `requests.ghostship.io` | Plex requests routed to existing Sonarr/Radarr profiles and roots; existing Google Access policy plus Plex login |
 
 Monitoring provisioning creates missing `Ghostship ...` entries from the same
@@ -102,8 +105,10 @@ Seerr provisioning authenticates using the existing Plex token, selects the
 existing `Optimal` quality profile (or an unambiguous sole profile), and
 requires `/tv` and `/movies` roots already present in Sonarr/Radarr. It fails
 rather than choosing among ambiguous alternatives. Ordinary users receive
-REQUEST permission only, without auto-approval. New Plex users require explicit
-import. After successful first-run setup, the marker
+REQUEST permission only, without auto-approval. Library setup supports both the
+released query-based API and the newer POST/PUT API; every legacy query includes
+the enabled library IDs because omitting them would disable existing selections.
+New Plex users require explicit import. After successful first-run setup, the marker
 `/srv/apps/seerr/.ghostship-provisioned` preserves later settings. Verify a
 request as an ordinary user remains pending until an administrator approves it.
 

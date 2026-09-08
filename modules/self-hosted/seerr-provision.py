@@ -28,11 +28,14 @@ def main():
     session = requests.Session()
     base = address("seerr", 5055) + "/api/v1"
 
-    def api(method, path, data=None):
-        response = session.request(method, base + path, json=data, timeout=30)
+    def api(method, path, data=None, params=None):
+        response = session.request(
+            method, base + path, json=data, params=params, timeout=30
+        )
         if not response.ok:
-            raise RuntimeError(
-                f"Seerr {method} {path} failed ({response.status_code})"
+            raise requests.HTTPError(
+                f"Seerr {method} {path} failed ({response.status_code})",
+                response=response,
             )
         return response.json() if response.content else None
 
@@ -105,23 +108,51 @@ def main():
             "/settings/plex",
             {"ip": "plex", "port": 32400, "useSsl": False},
         )
-    api("POST", "/settings/plex/library/sync")
-    for library in api("GET", "/settings/plex/library"):
-        if library.get("type") in ("movie", "show"):
-            api(
-                "PUT",
-                f"/settings/plex/library/{library['id']}",
-                {"enabled": True},
-            )
+    try:
+        libraries = api("POST", "/settings/plex/library/sync")
+    except requests.HTTPError as error:
+        if error.response.status_code != 404:
+            raise
+        # Released Seerr uses a mutating GET: omitting enable disables libraries.
+        enabled = {
+            str(library["id"])
+            for library in plex.get("libraries", [])
+            if library.get("enabled")
+        }
+        libraries = api(
+            "GET",
+            "/settings/plex/library",
+            params={"sync": "true", "enable": ",".join(sorted(enabled))},
+        )
+        enabled.update(
+            str(library["id"])
+            for library in libraries
+            if library.get("type") in ("movie", "show")
+        )
+        libraries = api(
+            "GET",
+            "/settings/plex/library",
+            params={"enable": ",".join(sorted(enabled))},
+        )
+        if not enabled.issubset(
+            {str(library["id"]) for library in libraries if library.get("enabled")}
+        ):
+            raise RuntimeError("Seerr did not enable the selected Plex libraries")
+    else:
+        for library in libraries:
+            if library.get("type") in ("movie", "show"):
+                api(
+                    "PUT",
+                    f"/settings/plex/library/{library['id']}",
+                    {"enabled": True},
+                )
     for name, settings in definitions:
         if not api("GET", f"/settings/{name}"):
             api("POST", f"/settings/{name}/test", settings)
             api("POST", f"/settings/{name}", settings)
     api("POST", "/settings/initialize")
     marker.touch(mode=0o600)
-    print(
-        "Seerr configured with administrator approval required for ordinary users"
-    )
+    print("Seerr configured with administrator approval required for ordinary users")
 
 
 if __name__ == "__main__":

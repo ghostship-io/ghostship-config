@@ -58,7 +58,7 @@ def main():
                         "name": "Ghostship ntfy",
                         "type": "ntfy",
                         "isDefault": False,
-                        "ntfyserverurl": "http://ntfy",
+                        "ntfyserverurl": "http://ntfy:8080",
                         "ntfytopic": "operations",
                         "ntfyAuthenticationMethod": "usernamePassword",
                         "ntfyusername": "publisher",
