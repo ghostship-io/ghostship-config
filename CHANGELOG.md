@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.10.1] - 2026-09-14
+
+- Disable OpenChamber and its deployment timer on chill-penguin while retaining
+  its declaration and persistent data for later restoration.
+- Restore Homepage, Plex, NZBGet, qBittorrent, Sonarr, Radarr, and Prowlarr
+  as top-level Muximux desktop tabs after the registry migration misplaced them.
+
 ## [3.10.0] - 2026-09-08
 
 - Make T3 Code installable in Android Chrome with a named standalone manifest,

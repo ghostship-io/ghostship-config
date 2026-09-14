@@ -16,6 +16,12 @@ in
     server = true;
   };
 
+  # Park OpenChamber without removing its declaration or persistent data.
+  virtualisation.oci-containers.containers.openchamber.autoStart = false;
+  systemd.services.podman-openchamber.enable = false;
+  systemd.services.openchamber-deploy-when-idle.enable = false;
+  systemd.timers.openchamber-deploy-when-idle.enable = false;
+
   hardware.asahi = {
     enable = true;
     setupAsahiSound = false;

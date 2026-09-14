@@ -42,7 +42,7 @@ in
     muximux = {
       icon = "fa-download";
       color = "#4ad946";
-      dropdown = true;
+      dropdown = false;
     };
   };
 

@@ -200,7 +200,9 @@ findings, backup/restore commands, update policy, and staged deployment checks.
 Each container's `ghostship.apps` declaration synchronizes its Cloudflare tunnel
 route, DNS name, Homepage entry, and Muximux link. Registry changes apply after
 the host generation is activated. Unrelated Cloudflare records and personal
-dashboard entries remain intact. Muximux settings writes are atomic, and its
+dashboard entries remain intact. Homepage, Plex, NZBGet, qBittorrent, Sonarr,
+Radarr, and Prowlarr retain their original top-level Muximux placement.
+Muximux settings writes are atomic, and its
 health checks use a static endpoint to avoid triggering upstream update checks.
 
 Retired `chill-penguin` self-hosted service artifacts are cleaned from the
@@ -213,7 +215,13 @@ service modules.
 PyLoad has a daily `04:00` `pyload-restart-failed` timer that checks the
 internal `http://pyload:8000` API and restarts failed queue links when present.
 
-OpenChamber runs as a separate repo-built Podman OCI image for
+OpenChamber is disabled on `chill-penguin`; its container and idle-deployment
+units are masked declaratively. All persistent data under `/srv/apps/openchamber`
+is retained. To bring it back, remove the four OpenChamber parking overrides in
+`hosts/chill-penguin/default.nix`, commit, and rebuild the host. Its declaration
+recreates the container using the existing home, projects, Docker state, and Nix store.
+
+When enabled, OpenChamber runs as a separate repo-built Podman OCI image for
 `https://openchamber.ghostship.io`. It uses the `openchamber` user at
 `3000:3000`, keeps `/workspace`, `/home/openchamber`, and Docker state under
 `/srv/apps/openchamber`, and starts systemd-managed `dockerd` plus a persistent
@@ -279,7 +287,7 @@ restores the previous last-good config snapshot if the restart does not become
 healthy. `openchamber-web.service` refreshes that last-good snapshot whenever
 it starts successfully.
 
-T3 Code runs alongside OpenChamber at `https://t3code.ghostship.io`, with native
+T3 Code runs at `https://t3code.ghostship.io`, with native
 Codex/OpenAI, OpenCode, and Antigravity ACP providers. It keeps independent
 copies of OpenChamber's projects and its own home, Docker state, and Nix store
 under `/srv/apps/t3code`. See [T3 Code setup and operations](docs/t3code.md)

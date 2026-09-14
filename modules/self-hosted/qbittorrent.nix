@@ -215,7 +215,7 @@ in
         muximux = {
           icon = "fa-magnet";
           color = "#63cda9";
-          dropdown = true;
+          dropdown = false;
         };
       };
 

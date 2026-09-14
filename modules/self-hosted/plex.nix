@@ -64,7 +64,7 @@ in
     muximux = {
       icon = "muximux-plex";
       color = "#ebaf00";
-      dropdown = true;
+      dropdown = false;
     };
   };
 
