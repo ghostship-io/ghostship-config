@@ -217,9 +217,11 @@ internal `http://pyload:8000` API and restarts failed queue links when present.
 
 OpenChamber is disabled on `chill-penguin`; its container and idle-deployment
 units are masked declaratively. All persistent data under `/srv/apps/openchamber`
-is retained. To bring it back, remove the four OpenChamber parking overrides in
+is retained, and its existing Uptime Kuma monitor is paused without deleting
+history. To bring it back, remove the OpenChamber parking overrides in
 `hosts/chill-penguin/default.nix`, commit, and rebuild the host. Its declaration
 recreates the container using the existing home, projects, Docker state, and Nix store.
+Resume the existing OpenChamber monitor in Uptime Kuma after startup.
 
 When enabled, OpenChamber runs as a separate repo-built Podman OCI image for
 `https://openchamber.ghostship.io`. It uses the `openchamber` user at

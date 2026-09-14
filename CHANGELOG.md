@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.10.1] - 2026-09-14
 
 - Disable OpenChamber and its deployment timer on chill-penguin while retaining
-  its declaration and persistent data for later restoration.
+  its declaration and persistent data for later restoration; pause its uptime
+  monitor and retain monitoring history.
 - Restore Homepage, Plex, NZBGet, qBittorrent, Sonarr, Radarr, and Prowlarr
   as top-level Muximux desktop tabs after the registry migration misplaced them.
 

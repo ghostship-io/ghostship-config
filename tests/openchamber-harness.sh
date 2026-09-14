@@ -265,10 +265,11 @@ bash "$repo_root/tests/openchamber-update-state-machine.sh" \
   "$module" \
   <(nix derivation show "$restart_drv" | jq -er '(.derivations // .) | to_entries[0].value.env.text | select(type == "string" and length > 0)')
 
-system_drv="$(nix eval --raw \
-  "$repo_root#nixosConfigurations.chill-penguin.config.system.build.toplevel.drvPath")"
-host_drv="$(nix-store -q --requisites "$system_drv" \
-  | rg '/[^/]*-openchamber-deploy-when-idle\.drv$' | head -n1)"
+# Parked services are absent from the host closure; test their retained helper.
+host_drv="$(nix eval --json \
+  "$repo_root#nixosConfigurations.chill-penguin.config.systemd.services.openchamber-deploy-when-idle.serviceConfig.ExecStart" \
+  --apply 'command: builtins.attrNames (builtins.getContext command)' \
+  | jq -er '.[] | select(endswith("-openchamber-deploy-when-idle.drv"))')"
 test -n "$host_drv"
 bash "$repo_root/tests/openchamber-host-deploy-state-machine.sh" \
   <(nix derivation show "$host_drv" | jq -er '(.derivations // .) | to_entries[0].value.env.text | select(type == "string" and length > 0)')
