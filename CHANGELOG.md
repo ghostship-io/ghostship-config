@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.9.6] - 2026-09-15
+
+- Run Tdarr automatically with one transcode worker, folder watch, scan on
+  start, and atomic replacement after validation.
+- Publish Tdarr on Homepage and Muximux at `tdarr.ghostship.io`.
+- Disable the OpenChamber container so T3 Code remains the agent runtime.
+
 ## [3.9.5] - 2026-09-15
 
 - Run a single Tdarr transcode worker without pausing for Plex playback.

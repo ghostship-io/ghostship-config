@@ -75,21 +75,12 @@
       }
     },
     {
-      "name": "Review Validated Output",
-      "sourceRepo": "Community",
-      "pluginName": "requireReview",
-      "version": "1.0.0",
-      "id": "review",
-      "position": { "x": 300, "y": 860 },
-      "inputsDB": {}
-    },
-    {
       "name": "Replace Pilot Original",
       "sourceRepo": "Local",
       "pluginName": "plexReplace",
       "version": "1.0.0",
       "id": "replace",
-      "position": { "x": 300, "y": 980 },
+      "position": { "x": 300, "y": 860 },
       "inputsDB": {}
     },
     {
@@ -142,7 +133,6 @@
     { "source": "duration", "sourceHandle": "3", "target": "fail", "targetHandle": null, "id": "e10" },
     { "source": "validate", "sourceHandle": "1", "target": "decode", "targetHandle": null, "id": "e11" },
     { "source": "validate", "sourceHandle": "2", "target": "fail", "targetHandle": null, "id": "e12" },
-    { "source": "decode", "sourceHandle": "1", "target": "review", "targetHandle": null, "id": "e13" },
-    { "source": "review", "sourceHandle": "1", "target": "replace", "targetHandle": null, "id": "e14" }
+    { "source": "decode", "sourceHandle": "1", "target": "replace", "targetHandle": null, "id": "e13" }
   ]
 }

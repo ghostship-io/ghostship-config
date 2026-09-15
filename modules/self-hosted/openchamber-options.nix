@@ -2,6 +2,7 @@
 
 {
   options.ghostship.openchamber = {
+    enable = lib.mkEnableOption "the OpenChamber container";
     goalMaxAutoTurns = lib.mkOption {
       type = lib.types.ints.positive;
       default = 1000;

@@ -215,6 +215,11 @@ fi
 nix-instantiate --parse "$module" >/dev/null
 nix-instantiate --parse "$repo_root/modules/self-hosted/openchamber-options.nix" >/dev/null
 
+if [ "$(nix eval --json "$repo_root#nixosConfigurations.chill-penguin.config.ghostship.openchamber.enable")" != "true" ]; then
+  printf 'OpenChamber container is disabled; skipping image and deploy checks\n'
+  exit 0
+fi
+
 image_drv="$(nix eval --raw \
   "$repo_root#nixosConfigurations.chill-penguin.config.virtualisation.oci-containers.containers.openchamber.imageFile.drvPath")"
 for script_name in openchamber-tool-maintenance openchamber-container-setup openchamber-runtime-metadata openchamber-managed-opencode-idle; do

@@ -37,13 +37,13 @@ let
     container = ".mkv";
     containerFilter = "mkv,mp4,mov,m4v,mpg,mpeg,avi,webm,wmv,m2ts,ts";
     createdAt = 1789430400000;
-    folderWatching = false;
+    folderWatching = true;
     useFsEvents = false;
-    scheduledScanFindNew = false;
+    scheduledScanFindNew = true;
     processLibrary = true;
     processTranscodes = true;
     processHealthChecks = false;
-    scanOnStart = false;
+    scanOnStart = true;
     exifToolScan = true;
     mediaInfoScan = true;
     ffprobeShowData = false;
@@ -140,7 +140,11 @@ let
   libraryUpdate = request "LibrarySettingsJSONDB" "update" pilotLibrary._id pilotLibrary;
   bootstrap = pkgs.writeShellApplication {
     name = "tdarr-bootstrap";
-    runtimeInputs = [ pkgs.coreutils ];
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+      pkgs.python3
+    ];
     text = ''
       upsert() {
         get_request="$1"
@@ -159,10 +163,47 @@ let
 
       upsert /bootstrap/flow-get.json /bootstrap/flow-insert.json /bootstrap/flow-update.json
       upsert /bootstrap/library-get.json /bootstrap/library-insert.json /bootstrap/library-update.json
+
+      node_config=/srv/apps/tdarr/configs/Tdarr_Node_Config.json
+      if test -f "$node_config"; then
+        python3 -c '
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+data = json.loads(path.read_text())
+data["startPaused"] = False
+path.write_text(json.dumps(data, indent=2) + "\n")
+' "$node_config"
+      fi
+
+      node_id="$(${podman} exec tdarr curl -fsS http://127.0.0.1:8265/api/v2/get-nodes | jq -r "keys[0] // empty")"
+      if test -n "$node_id"; then
+        ${podman} exec tdarr curl -fsS -H "Content-Type: application/json" \
+          --data "{\"data\":{\"nodeID\":\"$node_id\",\"nodeUpdates\":{\"nodePaused\":false,\"workerLimits\":{\"healthcheckcpu\":0,\"healthcheckgpu\":0,\"transcodecpu\":1,\"transcodegpu\":0}}}}" \
+          http://127.0.0.1:8265/api/v2/update-node >/dev/null
+      fi
     '';
   };
 in
 {
+  ghostship.apps.tdarr = {
+    healthPath = "/";
+    name = "Tdarr";
+    group = "Media";
+    description = "HEVC encoder";
+    icon = "sh-tdarr";
+    order = 35;
+    hostname = "tdarr.ghostship.io";
+    origin = "http://tdarr:8265";
+    widget = {
+      type = "tdarr";
+    };
+    muximux = {
+      icon = "muximux-video_library";
+      color = "#6efefc";
+      dropdown = true;
+    };
+  };
+
   # Pilot: only staged copies are writable. Production is mounted read-only.
   # Root startup is required by the upstream image's ownership initialization;
   # Tdarr runs with the standard apps PUID/PGID afterward.

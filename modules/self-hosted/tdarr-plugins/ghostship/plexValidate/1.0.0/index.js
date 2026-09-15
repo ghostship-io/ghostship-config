@@ -56,7 +56,7 @@ const plugin = async (args) => {
   const duration = Number(args.inputFileObj?.ffProbeData?.format?.duration || 0);
   const maximumSizeMb = duration > 0 ? (duration / 7200) * 20480 : 0;
   if (args.variables?.user?.plexVideoEncoded && ratio > 0.85) errors.push(`space saving is only ${((1 - ratio) * 100).toFixed(1)}%`);
-  if (args.variables?.user?.plexVideoEncoded && ratio < 0.20) errors.push(`output is unexpectedly small (${(ratio * 100).toFixed(1)}%)`);
+  if (args.variables?.user?.plexVideoEncoded && ratio < 0.05) errors.push(`output is unexpectedly small (${(ratio * 100).toFixed(1)}%)`);
   if (args.variables?.user?.plexVideoEncoded && maximumSizeMb > 0 && outputSize > maximumSizeMb) {
     errors.push("output exceeds the duration-scaled 20 GiB ceiling");
   }

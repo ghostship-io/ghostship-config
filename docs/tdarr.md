@@ -13,10 +13,11 @@ Production movies and TV are read-only under `/source`. Only copied samples
 under `/srv/apps/tdarr/pilot` (`/media` inside Tdarr) may be replaced. Cache and
 application state live under `/srv/apps/tdarr`. The node runs one CPU
 transcode worker and no GPU or health-check workers, with an eight-CPU quota
-and a 12 GiB RAM cap. Do not pause for Plex playback. Encodes write to cache
-while the original stays in place; after review, `plexReplace` copies beside
-it and atomically renames over the original so the path is never empty. The
-library schedule is enabled for every hour. It uses Nix's native ARM64 FFmpeg because the image's bundled x265 build
+and a 12 GiB RAM cap. It starts unpaused, watches `/media`, and scans on
+startup. Encodes write to cache while the original stays in place; a
+validated output is copied beside it and atomically renamed over the original
+so the path is never empty. The library schedule is enabled for every hour.
+Homepage and Muximux expose it at `https://tdarr.ghostship.io`. It uses Nix's native ARM64 FFmpeg because the image's bundled x265 build
 was about 20 times slower in the initial test. The M1 Ultra's Linux video
 encoder is not supported; do not assume GPU device passthrough supplies
 hardware encoding.
@@ -37,7 +38,7 @@ original-language audio and English full/forced subtitles. It uses HEVC
 quality-based encoding, retains compatible AAC/AC-3/E-AC-3 tracks up to 5.1,
 and converts incompatible or larger channel layouts to AC-3. It validates
 duration, stream inventory, the duration-scaled size ceiling, meaningful
-savings, and a full output decode before requiring manual review. Test playback
+savings, and a full output decode before replacing the staged copy. Test playback
 on Samsung, Apple TV, Android/Google TV, iPhone and browser clients. No
 production replacement is enabled by this module.
 

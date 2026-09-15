@@ -3791,7 +3791,7 @@ let
   '';
 
 in
-{
+lib.mkIf config.ghostship.openchamber.enable {
   ghostship.apps.openchamber = {
     healthPath = "/";
     name = "OpenChamber";
