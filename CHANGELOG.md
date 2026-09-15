@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.10.3] - 2026-09-15
+
+- Add persistent Grok Build CLI installation and update hooks for the T3 container, with device authentication and T3 provider setup instructions.
+
 ## [3.10.2] - 2026-09-15
 
 - Install and automatically update the official `agy` terminal CLI in the T3 container, with checksum verification and persistent storage.

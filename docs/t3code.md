@@ -141,6 +141,21 @@ and complete its Google sign-in; T3's ACP login does not authenticate the CLI.
 For scripted tasks, use `agy -p "your task"`. The ARM64 CLI launcher was verified
 on Chill Penguin; authenticated execution requires the separate CLI login.
 
+## Grok Build CLI and T3 provider
+
+Run `python3 packages/t3code/setup-grok.py` to install the official
+`@xai-official/grok` npm package and persistent bootstrap/after-update hooks.
+The `grok` command is exposed in `~/.local/bin`; its isolated npm installation
+and `~/.grok` credentials persist in the container home. The existing four-hour
+tool updater refreshes it when T3 is idle. Grok's `agent` alias is not installed,
+preserving the shared Ghostship command.
+
+Use `grok login --device-auth` to authenticate from another browser. In T3's
+provider settings, enable Grok and set its binary path to
+`/home/t3code/.local/bin/grok`, then refresh provider status. CLI and T3 use the
+same user home and login. Verify an authenticated T3 task before treating an
+installed/ready badge as proof of model access.
+
 ## Maintenance
 
 Deploy with `nixos-rebuild switch --flake .#chill-penguin -L` on the host after

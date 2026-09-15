@@ -542,3 +542,5 @@ Supported onboarding flow:
   editors, and agent workflows from running into a low default descriptor cap.
 
 The T3 container also provides the persistent, automatically updated `agy` terminal CLI; see [CLI setup](docs/t3code.md#antigravity-terminal-cli).
+
+Grok Build is available through the [persistent CLI and T3 provider setup](docs/t3code.md#grok-build-cli-and-t3-provider).
