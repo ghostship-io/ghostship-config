@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.9.1] - 2026-09-15
+
+- Delegate shared agent instruction generation and installation to
+  `ghostship-agent`, which owns the `.agents` guidance and delivery defaults.
+
 ## [3.9.0] - 2026-09-08
 
 - Reapply T3's shared Ghostship agent tooling and native browser

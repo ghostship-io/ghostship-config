@@ -32,7 +32,11 @@ Codex/ChatGPT and OpenCode discover the same shared skills under
 supplied in an installed copy for Codex/OpenCode compatibility. Supporting
 resources and the original source remain intact. Shared preferences and the
 container path guidance are also published to the providers' native user
-instruction files.
+instruction files. The setup command delegates to
+`ghostship-agent/tools/setup-container-agents.py`; that repo owns the shared
+instructions at `config/agents/AGENTS.md` and publishes them through
+`~/.agents/AGENTS.md`. Change delivery defaults there, then run
+`t3code-shared-agents --skills-only` to activate them.
 
 Selected upstream skills installed in `~/.agents/skills` are shared with
 Antigravity on refresh too. The current selection is recorded in the
