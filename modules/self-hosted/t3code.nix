@@ -883,7 +883,7 @@ let
     set -eu
     ${t3codeRuntimeEnv}
     exec ${pkgs.python3}/bin/python ${../../scripts/setup-container-agents.py} \
-      --preferences ${../../home/config/AGENTS.md} "$@"
+      "$@"
   '';
 
   t3codeBootstrap = pkgs.writeShellScriptBin "t3code-bootstrap" ''

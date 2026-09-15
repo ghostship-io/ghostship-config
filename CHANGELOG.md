@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preserve installation support across T3 updates and show a reconnect screen
   offline without caching private workspace data or old application bundles.
 
+## [3.9.1] - 2026-09-15
+
+- Delegate shared agent instruction generation and installation to
+  `ghostship-agent`, which owns the `.agents` guidance and delivery defaults.
+
 ## [3.9.0] - 2026-09-08
 
 - Reapply T3's shared Ghostship agent tooling and native browser
