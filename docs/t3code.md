@@ -126,6 +126,21 @@ The icon PNGs are rendered from `packages/t3code/pwa/icon.svg` using
 `rsvg-convert -w <size> -h <size>` in the browser shell. Change the versioned icon
 URLs when artwork changes so Chrome can update installed icons.
 
+## Antigravity terminal CLI
+
+`agy` is the official Antigravity terminal CLI, separate from T3's ACP provider.
+Install it with `python3 packages/t3code/update-agy.py`. This also installs
+persistent bootstrap and after-update hooks. The executable lives at
+`~/.local/bin/agy` in the persistent container home. Bootstrap
+and the four-hour tool updater check Google's platform manifest, verify its
+SHA-512 checksum, and run a version probe before atomically replacing the CLI.
+The CLI's own background updater remains available too.
+
+Run `agy --version` or `agy --help` in the T3 terminal. On first use, run `agy`
+and complete its Google sign-in; T3's ACP login does not authenticate the CLI.
+For scripted tasks, use `agy -p "your task"`. The ARM64 CLI launcher was verified
+on Chill Penguin; authenticated execution requires the separate CLI login.
+
 ## Maintenance
 
 Deploy with `nixos-rebuild switch --flake .#chill-penguin -L` on the host after

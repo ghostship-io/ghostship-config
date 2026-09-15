@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.10.2] - 2026-09-15
+
+- Install and automatically update the official `agy` terminal CLI in the T3 container, with checksum verification and persistent storage.
+
 ## [3.10.1] - 2026-09-14
 
 - Disable OpenChamber and its deployment timer on chill-penguin while retaining

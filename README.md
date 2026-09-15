@@ -540,3 +540,5 @@ Supported onboarding flow:
   `/usr/bin/...` paths appear in the live instance.
 - Login sessions raise the soft `nofile` limit to `65536` to keep busy shells,
   editors, and agent workflows from running into a low default descriptor cap.
+
+The T3 container also provides the persistent, automatically updated `agy` terminal CLI; see [CLI setup](docs/t3code.md#antigravity-terminal-cli).
