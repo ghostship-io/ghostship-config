@@ -19,8 +19,9 @@ const details = () => ({
 const plugin = async (args) => {
   const source = String(args.inputFileObj?._id || "");
   const original = String(args.originalLibraryFile?._id || "");
-  if (!original.startsWith("/media/")) {
-    throw new Error("plexReplace only replaces files under /media");
+  const allowed = ["/media/", "/source/Movies/", "/source/TV/"];
+  if (!allowed.some((prefix) => original.startsWith(prefix))) {
+    throw new Error(`plexReplace refuses ${original}`);
   }
   if (!source) throw new Error("plexReplace is missing the working file");
   if (source === original && Number(args.inputFileObj?.file_size || 0) === Number(args.originalLibraryFile?.file_size || 0)) {
@@ -44,6 +45,7 @@ const plugin = async (args) => {
 
   args.jobLog(`Atomically replacing ${original}`);
   await fs.promises.rename(tmp, original);
+  await fs.promises.chmod(original, 0o644);
   return {
     outputFileObj: { _id: original },
     outputNumber: 1,

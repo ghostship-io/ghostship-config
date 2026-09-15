@@ -19,95 +19,118 @@ let
     "Sat"
   ];
   hourString = hour: if hour < 10 then "0${toString hour}" else toString hour;
-  pilotLibrary = {
-    _id = "plex-hevc-pilot";
-    name = "Plex HEVC Pilot";
-    priority = 0;
-    folder = "/media";
-    foldersToIgnore = "";
-    foldersToIgnoreCaseInsensitive = false;
-    folderWatchScanInterval = 300;
-    scannerThreadCount = 1;
-    cache = "/temp/pilot";
-    output = "";
-    folderToFolderConversion = false;
-    folderToFolderConversionDeleteSource = false;
-    folderToFolderRecordHistory = true;
-    copyIfConditionsMet = false;
-    container = ".mkv";
-    containerFilter = "mkv,mp4,mov,m4v,mpg,mpeg,avi,webm,wmv,m2ts,ts";
-    createdAt = 1789430400000;
-    folderWatching = true;
-    useFsEvents = false;
-    scheduledScanFindNew = true;
-    processLibrary = true;
-    processTranscodes = true;
-    processHealthChecks = false;
-    scanOnStart = true;
-    exifToolScan = true;
-    mediaInfoScan = true;
-    ffprobeShowData = false;
-    isDirectoryLibrary = false;
-    closedCaptionScan = false;
-    scanButtons = true;
-    scanFound = "";
-    navItemSelected = "navSourceFolder";
-    pluginIDs = [ ];
-    pluginCommunity = true;
-    handbrake = false;
-    ffmpeg = true;
-    handbrakescan = false;
-    ffmpegscan = true;
-    preset = "";
-    decisionMaker = {
-      settingsPlugin = false;
-      settingsFlows = true;
-      settingsVideo = false;
-      settingsAudio = false;
-      videoExcludeSwitch = false;
-      video_codec_names_exclude = [ ];
-      video_size_range_include = {
-        min = 0;
-        max = 100000;
+  mkLibrary =
+    {
+      id,
+      name,
+      folder,
+      cache,
+    }:
+    {
+      _id = id;
+      inherit name folder cache;
+      priority = 0;
+      foldersToIgnore = "";
+      foldersToIgnoreCaseInsensitive = false;
+      folderWatchScanInterval = 3600;
+      scannerThreadCount = 2;
+      output = "";
+      folderToFolderConversion = false;
+      folderToFolderConversionDeleteSource = false;
+      folderToFolderRecordHistory = true;
+      copyIfConditionsMet = false;
+      container = ".mkv";
+      containerFilter = "mkv,mp4,mov,m4v,mpg,mpeg,avi,webm,wmv,m2ts,ts";
+      createdAt = 1789430400000;
+      folderWatching = true;
+      useFsEvents = false;
+      scheduledScanFindNew = true;
+      processLibrary = true;
+      processTranscodes = true;
+      processHealthChecks = false;
+      scanOnStart = true;
+      exifToolScan = true;
+      mediaInfoScan = true;
+      ffprobeShowData = false;
+      isDirectoryLibrary = false;
+      closedCaptionScan = false;
+      scanButtons = true;
+      scanFound = "";
+      navItemSelected = "navSourceFolder";
+      pluginIDs = [ ];
+      pluginCommunity = true;
+      handbrake = false;
+      ffmpeg = true;
+      handbrakescan = false;
+      ffmpegscan = true;
+      preset = "";
+      decisionMaker = {
+        settingsPlugin = false;
+        settingsFlows = true;
+        settingsVideo = false;
+        settingsAudio = false;
+        videoExcludeSwitch = false;
+        video_codec_names_exclude = [ ];
+        video_size_range_include = {
+          min = 0;
+          max = 100000;
+        };
+        video_height_range_include = {
+          min = 0;
+          max = 1080;
+        };
+        video_width_range_include = {
+          min = 0;
+          max = 1920;
+        };
+        audioExcludeSwitch = false;
+        audio_codec_names_exclude = [ ];
+        audio_size_range_include = {
+          min = 0;
+          max = 100000;
+        };
       };
-      video_height_range_include = {
-        min = 0;
-        max = 1080;
-      };
-      video_width_range_include = {
-        min = 0;
-        max = 1920;
-      };
-      audioExcludeSwitch = false;
-      audio_codec_names_exclude = [ ];
-      audio_size_range_include = {
-        min = 0;
-        max = 100000;
-      };
+      flowId = flow._id;
+      schedule = lib.concatMap (
+        day:
+        map (hour: {
+          _id = "${day}:${hourString hour}-${hourString (lib.mod (hour + 1) 24)}";
+          checked = true;
+        }) hours
+      ) days;
+      totalHealthCheckCount = 0;
+      totalTranscodeCount = 0;
+      sizeDiff = 0;
+      holdNewFiles = false;
+      holdFor = 3600;
+      holdForDisplayUnit = "hours";
+      pluginStackOverview = false;
+      filterResolutionsSkip = "";
+      filterCodecsSkip = "";
+      filterContainersSkip = "";
+      filterHardlinked = false;
+      processPluginsSequentially = true;
     };
-    flowId = flow._id;
-    schedule = lib.concatMap (
-      day:
-      map (hour: {
-        _id = "${day}:${hourString hour}-${hourString (lib.mod (hour + 1) 24)}";
-        # Node pause is the processing gate. An all-false library schedule
-        # keeps queued files out of the transcode table.
-        checked = true;
-      }) hours
-    ) days;
-    totalHealthCheckCount = 0;
-    totalTranscodeCount = 0;
-    sizeDiff = 0;
-    holdNewFiles = false;
-    holdFor = 3600;
-    holdForDisplayUnit = "hours";
-    pluginStackOverview = false;
-    filterResolutionsSkip = "";
-    filterCodecsSkip = "";
-    filterContainersSkip = "";
-    filterHardlinked = false;
-    processPluginsSequentially = true;
-  };
+  libraries = [
+    (mkLibrary {
+      id = "plex-hevc-pilot";
+      name = "Plex HEVC Pilot";
+      folder = "/media";
+      cache = "/temp/pilot";
+    })
+    (mkLibrary {
+      id = "plex-hevc-movies";
+      name = "Plex HEVC Movies";
+      folder = "/source/Movies";
+      cache = "/temp/movies";
+    })
+    (mkLibrary {
+      id = "plex-hevc-tv";
+      name = "Plex HEVC TV";
+      folder = "/source/TV";
+      cache = "/temp/tv";
+    })
+  ];
   request =
     collection: mode: docID: obj:
     pkgs.writeText "tdarr-${docID}-${mode}.json" (
@@ -135,9 +158,20 @@ let
   flowGet = getRequest "FlowsJSONDB" flow._id;
   flowInsert = request "FlowsJSONDB" "insert" flow._id flow;
   flowUpdate = request "FlowsJSONDB" "update" flow._id flow;
-  libraryGet = getRequest "LibrarySettingsJSONDB" pilotLibrary._id;
-  libraryInsert = request "LibrarySettingsJSONDB" "insert" pilotLibrary._id pilotLibrary;
-  libraryUpdate = request "LibrarySettingsJSONDB" "update" pilotLibrary._id pilotLibrary;
+  libraryFiles = lib.concatMap (library: [
+    {
+      name = "${library._id}-get.json";
+      path = getRequest "LibrarySettingsJSONDB" library._id;
+    }
+    {
+      name = "${library._id}-insert.json";
+      path = request "LibrarySettingsJSONDB" "insert" library._id library;
+    }
+    {
+      name = "${library._id}-update.json";
+      path = request "LibrarySettingsJSONDB" "update" library._id library;
+    }
+  ]) libraries;
   bootstrap = pkgs.writeShellApplication {
     name = "tdarr-bootstrap";
     runtimeInputs = [
@@ -162,7 +196,9 @@ let
       }
 
       upsert /bootstrap/flow-get.json /bootstrap/flow-insert.json /bootstrap/flow-update.json
-      upsert /bootstrap/library-get.json /bootstrap/library-insert.json /bootstrap/library-update.json
+      ${lib.concatMapStrings (library: ''
+        upsert /bootstrap/${library._id}-get.json /bootstrap/${library._id}-insert.json /bootstrap/${library._id}-update.json
+      '') libraries}
 
       node_config=/srv/apps/tdarr/configs/Tdarr_Node_Config.json
       if test -f "$node_config"; then
@@ -204,9 +240,9 @@ in
     };
   };
 
-  # Pilot: only staged copies are writable. Production is mounted read-only.
-  # Root startup is required by the upstream image's ownership initialization;
-  # Tdarr runs with the standard apps PUID/PGID afterward.
+  # Movies and TV are writable so a validated encode can atomically replace
+  # the original. Root startup is required by the upstream image's ownership
+  # initialization; Tdarr runs with the standard apps PUID/PGID afterward.
   virtualisation.oci-containers.containers.tdarr = {
     image = "ghcr.io/haveagitgat/tdarr@sha256:a7cf8ad422a5a640588f496150f42e5def8060041bb02f348d319062161f5b2c";
     pull = "always";
@@ -239,16 +275,14 @@ in
       "/srv/apps/tdarr/pilot:/media"
       "/srv/apps/tdarr/policy:/policy:ro"
       "/nix/store:/nix/store:ro"
-      "/mnt/share/Library/Movies:/source/Movies:ro"
-      "/mnt/share/Library/TV:/source/TV:ro"
+      "/mnt/share/Library/Movies:/source/Movies"
+      "/mnt/share/Library/TV:/source/TV"
       "${./tdarr-plugins}:/app/server/Tdarr/Plugins/FlowPlugins/LocalFlowPlugins:ro"
       "${flowGet}:/bootstrap/flow-get.json:ro"
       "${flowInsert}:/bootstrap/flow-insert.json:ro"
       "${flowUpdate}:/bootstrap/flow-update.json:ro"
-      "${libraryGet}:/bootstrap/library-get.json:ro"
-      "${libraryInsert}:/bootstrap/library-insert.json:ro"
-      "${libraryUpdate}:/bootstrap/library-update.json:ro"
-    ];
+    ]
+    ++ map (file: "${file.path}:/bootstrap/${file.name}:ro") libraryFiles;
     extraOptions = [
       "--network=ghostship_net"
       "--cpus=8"
@@ -268,6 +302,8 @@ in
     "/logs"
     "/cache"
     "/cache/pilot"
+    "/cache/movies"
+    "/cache/tv"
     "/pilot"
     "/policy"
   ];

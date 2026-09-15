@@ -9,15 +9,14 @@ ARM64 image contains the server and an internal CPU node. Its root startup
 initializes ownership, then uses apps UID/GID 3000. The pilot intentionally
 omits auto-update until an image/flow combination has passed validation.
 
-Production movies and TV are read-only under `/source`. Only copied samples
-under `/srv/apps/tdarr/pilot` (`/media` inside Tdarr) may be replaced. Cache and
-application state live under `/srv/apps/tdarr`. The node runs one CPU
-transcode worker and no GPU or health-check workers, with an eight-CPU quota
-and a 12 GiB RAM cap. It starts unpaused, watches `/media`, and scans on
-startup. Encodes write to cache while the original stays in place; a
-validated output is copied beside it and atomically renamed over the original
-so the path is never empty. The library schedule is enabled for every hour.
-Homepage and Muximux expose it at `https://tdarr.ghostship.io`. It uses Nix's native ARM64 FFmpeg because the image's bundled x265 build
+Movies and TV under `/source` are writable so a validated encode can replace
+the original. Cache and application state live under `/srv/apps/tdarr`. The
+node runs one CPU transcode worker and no GPU or health-check workers, with
+an eight-CPU quota and a 12 GiB RAM cap. It starts unpaused, watches Movies
+and TV, and scans on startup. Encodes write to cache while the original stays
+in place; a validated output is copied beside it and atomically renamed over
+the original so the path is never empty. Homepage and Muximux expose it at
+`https://tdarr.ghostship.io`. It uses Nix's native ARM64 FFmpeg because the image's bundled x265 build
 was about 20 times slower in the initial test. The M1 Ultra's Linux video
 encoder is not supported; do not assume GPU device passthrough supplies
 hardware encoding.
@@ -32,15 +31,13 @@ requires that extra category layer beneath `LocalFlowPlugins`.
 
 ## Pilot completion
 
-Stage representative copies (grain, animation, foreign dialogue, subtitles,
-ordinary TV, high-bitrate remux). The flow operates only on `/media`; it keeps
-original-language audio and English full/forced subtitles. It uses HEVC
-quality-based encoding, retains compatible AAC/AC-3/E-AC-3 tracks up to 5.1,
-and converts incompatible or larger channel layouts to AC-3. It validates
-duration, stream inventory, the duration-scaled size ceiling, meaningful
-savings, and a full output decode before replacing the staged copy. Test playback
-on Samsung, Apple TV, Android/Google TV, iPhone and browser clients. No
-production replacement is enabled by this module.
+The flow keeps original-language audio and English full/forced subtitles. It
+uses HEVC quality-based encoding, retains compatible AAC/AC-3/E-AC-3 tracks
+up to 5.1, and converts incompatible or larger channel layouts to AC-3. It
+validates duration, stream inventory, the duration-scaled size ceiling,
+meaningful savings, and a full output decode before replacing the original.
+4K, HDR, interlaced, commentary, and unknown-language titles go to review
+instead of automatic replacement.
 
 Visual quality takes precedence over reaching a fixed file size. Begin the
 pilot at x265 CRF 20 with a slow preset and test grain/dark/motion sequences;

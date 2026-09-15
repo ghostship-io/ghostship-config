@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.9.7] - 2026-09-15
+
+- Scan and process Plex Movies and TV automatically with one transcode worker.
+- Replace validated library files in place so the original stays available
+  until the new copy is ready.
+
 ## [3.9.6] - 2026-09-15
 
 - Run Tdarr automatically with one transcode worker, folder watch, scan on
