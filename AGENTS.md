@@ -9,6 +9,10 @@
 - Bump `VERSION` and update `CHANGELOG.md` for completed changes.
 - Deploy through committed Git changes and direct root SSH on the target host.
   If push or SSH access fails, report the blocker. Do not call `sudo`.
+- Every use of this repository must preserve the active T3 Code session:
+  never stop, restart, recreate, or auto-update `t3code` or its inner runtime.
+  Before activation, follow the session guard in
+  [container workflow](docs/container-workflow.md#preserve-the-active-t3-code-session).
 
 Read on demand:
 

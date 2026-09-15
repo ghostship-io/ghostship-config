@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.9.2] - 2026-09-15
+
+- Add a CPU-limited Tdarr pilot with read-only production media and writable
+  staging, initially paused and reachable only on the internal network.
+- Require all agent deployments to preserve the running T3 Code session and
+  verify its container identity and service PID across activation.
+
 ## [3.9.1] - 2026-09-15
 
 - Delegate shared agent instruction generation and installation to

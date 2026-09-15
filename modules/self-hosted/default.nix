@@ -21,6 +21,7 @@
 
     # Media and downloads
     ./tautulli.nix
+    ./tdarr.nix
     ./plex.nix
     ./prowlarr.nix
     ./sonarr.nix
