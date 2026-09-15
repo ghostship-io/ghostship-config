@@ -22,7 +22,9 @@ hardware encoding.
 databases without API credentials and atomically publishes their original
 language metadata to Tdarr. An hourly timer reconciles changes. Missing or
 unknown metadata routes a file to review. Tdarr startup idempotently installs
-the locked `Plex HEVC guarded v1` flow and pilot library.
+the locked `Plex HEVC guarded v1` flow and pilot library. Local flow plugins
+live under `tdarr-plugins/<category>/<pluginName>/<version>/` because Tdarr
+requires that extra category layer beneath `LocalFlowPlugins`.
 
 ## Pilot completion
 

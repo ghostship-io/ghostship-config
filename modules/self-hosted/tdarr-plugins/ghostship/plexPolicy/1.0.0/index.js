@@ -34,7 +34,7 @@ const title = (stream) => String(stream?.tags?.title || "").trim().toLowerCase()
 const isCommentary = (stream) => /commentary|director|producer|screenwriter|cast and crew/.test(title(stream));
 
 const plugin = async (args) => {
-  const lib = require("../../../../methods/lib")();
+  const lib = require("../../../../../methods/lib")();
   args.inputs = lib.loadDefaultValues(args.inputs, details);
   const command = args.variables?.ffmpegCommand;
   if (!command?.init) throw new Error("Plex HEVC policy requires Begin Command first");
