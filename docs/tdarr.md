@@ -13,7 +13,8 @@ Production movies and TV are read-only under `/source`. Only copied samples
 under `/srv/apps/tdarr/pilot` (`/media` inside Tdarr) may be replaced. Cache and
 application state live under `/srv/apps/tdarr`. The node starts paused, with
 one CPU transcode worker, no GPU workers, an eight-CPU quota and a 12 GiB RAM
-cap. It uses Nix's native ARM64 FFmpeg because the image's bundled x265 build
+cap. The library schedule is enabled for every hour so a paused node, not an
+empty schedule, is what holds work. It uses Nix's native ARM64 FFmpeg because the image's bundled x265 build
 was about 20 times slower in the initial test. The M1 Ultra's Linux video
 encoder is not supported; do not assume GPU device passthrough supplies
 hardware encoding.

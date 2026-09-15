@@ -90,7 +90,9 @@ let
       day:
       map (hour: {
         _id = "${day}:${hourString hour}-${hourString (lib.mod (hour + 1) 24)}";
-        checked = false;
+        # Node pause is the processing gate. An all-false library schedule
+        # keeps queued files out of the transcode table.
+        checked = true;
       }) hours
     ) days;
     totalHealthCheckCount = 0;

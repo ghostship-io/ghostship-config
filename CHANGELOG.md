@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.9.4] - 2026-09-15
+
+- Enable the Tdarr pilot library schedule for every hour so queued files
+  reach workers when the node is unpaused.
+
 ## [3.9.3] - 2026-09-15
 
 - Place Tdarr local flow plugins under a `ghostship` category so Tdarr can
