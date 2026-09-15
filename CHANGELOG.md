@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add a CPU-limited Tdarr pilot with read-only production media and writable
   staging, initially paused and reachable only on the internal network.
+- Use native ARM64 FFmpeg with a guarded HEVC flow, full output validation,
+  manual approval, and duration-scaled 10/20 GiB size thresholds.
+- Reconcile original-language metadata from Radarr and Sonarr so unrelated
+  dubs can be removed without guessing from filenames or stream order.
 - Require all agent deployments to preserve the running T3 Code session and
   verify its container identity and service PID across activation.
 
