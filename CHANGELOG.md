@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.9.5] - 2026-09-15
+
+- Run a single Tdarr transcode worker without pausing for Plex playback.
+- Replace a validated pilot file by copying beside the original and renaming
+  over it so the library path is never empty.
+
 ## [3.9.4] - 2026-09-15
 
 - Enable the Tdarr pilot library schedule for every hour so queued files

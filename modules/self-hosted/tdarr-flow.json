@@ -85,8 +85,8 @@
     },
     {
       "name": "Replace Pilot Original",
-      "sourceRepo": "Community",
-      "pluginName": "replaceOriginalFile",
+      "sourceRepo": "Local",
+      "pluginName": "plexReplace",
       "version": "1.0.0",
       "id": "replace",
       "position": { "x": 300, "y": 980 },

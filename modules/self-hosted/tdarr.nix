@@ -180,10 +180,10 @@ in
       internalNode = "true";
       inContainer = "true";
       nodeName = "chill-penguin-cpu-pilot";
-      startPaused = "true";
+      startPaused = "false";
       transcodecpuWorkers = "1";
       transcodegpuWorkers = "0";
-      healthcheckcpuWorkers = "1";
+      healthcheckcpuWorkers = "0";
       healthcheckgpuWorkers = "0";
       ffmpegVersion = "7";
       ffmpegPath = ffmpeg;

@@ -11,10 +11,12 @@ omits auto-update until an image/flow combination has passed validation.
 
 Production movies and TV are read-only under `/source`. Only copied samples
 under `/srv/apps/tdarr/pilot` (`/media` inside Tdarr) may be replaced. Cache and
-application state live under `/srv/apps/tdarr`. The node starts paused, with
-one CPU transcode worker, no GPU workers, an eight-CPU quota and a 12 GiB RAM
-cap. The library schedule is enabled for every hour so a paused node, not an
-empty schedule, is what holds work. It uses Nix's native ARM64 FFmpeg because the image's bundled x265 build
+application state live under `/srv/apps/tdarr`. The node runs one CPU
+transcode worker and no GPU or health-check workers, with an eight-CPU quota
+and a 12 GiB RAM cap. Do not pause for Plex playback. Encodes write to cache
+while the original stays in place; after review, `plexReplace` copies beside
+it and atomically renames over the original so the path is never empty. The
+library schedule is enabled for every hour. It uses Nix's native ARM64 FFmpeg because the image's bundled x265 build
 was about 20 times slower in the initial test. The M1 Ultra's Linux video
 encoder is not supported; do not assume GPU device passthrough supplies
 hardware encoding.
@@ -61,8 +63,8 @@ tracks must satisfy the channel limit.
 
 Before production, add persistent source fingerprints/policy versions,
 bounded disk reservations, import events plus periodic NFS reconciliation,
-source-change detection, Plex activity throttling, validation gates, staged
-NAS replacement with recoverable originals, and Radarr/Sonarr/Plex refresh.
+source-change detection, validation gates, recoverable originals, and
+Radarr/Sonarr/Plex refresh.
 Review the arr upgrade policy to prevent repeated download/encode loops.
 Keep originals outside scanned libraries for 7–14 days with a quota. Never
 overwrite in place or treat a zero encoder exit code as a health check.
