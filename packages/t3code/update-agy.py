@@ -29,9 +29,13 @@ def main():
     target = Path.home() / ".local/bin/agy"
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
-        installed = subprocess.check_output(
-            [target, "--version"], text=True, timeout=30
-        ).strip()
+        try:
+            installed = subprocess.check_output(
+                [target, "--version"], text=True, timeout=30
+            ).strip()
+        except (OSError, subprocess.SubprocessError):
+            # A broken installed copy must not block a verified replacement.
+            installed = None
         if installed == release["version"]:
             print(f"agy {installed} is current")
             return

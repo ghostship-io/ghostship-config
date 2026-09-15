@@ -18,7 +18,7 @@ spec.loader.exec_module(updater)
 
 
 class UpdateTests(unittest.TestCase):
-    def run_update(self, *, bad_hash=False, bad_version=False):
+    def run_update(self, *, bad_hash=False, bad_version=False, broken_install=False):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
             target = home / ".local/bin/agy"
@@ -49,7 +49,10 @@ class UpdateTests(unittest.TestCase):
                 patch.object(
                     updater.subprocess,
                     "check_output",
-                    side_effect=["1.2.2", "invalid" if bad_version else "1.2.3"],
+                    side_effect=[
+                        OSError("broken executable") if broken_install else "1.2.2",
+                        "invalid" if bad_version else "1.2.3",
+                    ],
                 ),
             ):
                 if bad_hash or bad_version:
@@ -64,6 +67,9 @@ class UpdateTests(unittest.TestCase):
 
     def test_valid_update(self):
         self.run_update()
+
+    def test_broken_install_is_repaired(self):
+        self.run_update(broken_install=True)
 
     def test_checksum_failure_preserves_install(self):
         self.run_update(bad_hash=True)
