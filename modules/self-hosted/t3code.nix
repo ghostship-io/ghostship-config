@@ -138,10 +138,27 @@ let
     const { DatabaseSync } = require("node:sqlite");
     const db = new DatabaseSync(process.env.T3CODE_STATE_DB, { readOnly: true });
     const row = db.prepare(
-      "SELECT count(*) AS active FROM projection_turns WHERE state IN ('pending', 'running')"
-    ).get();
+      // Ignore deleted threads and pending requests superseded by a later turn.
+      // Unresolved pending requests and all running turns still block maintenance.
+      `SELECT count(*) AS active FROM projection_turns AS turn
+       JOIN projection_threads AS thread USING (thread_id)
+       WHERE thread.deleted_at IS NULL AND (
+         turn.state = 'running' OR (
+           turn.state = 'pending' AND NOT EXISTS (
+             SELECT 1 FROM projection_turns AS newer
+             WHERE newer.thread_id = turn.thread_id
+               AND newer.requested_at > turn.requested_at
+               AND newer.turn_id IS NOT NULL
+           )
+         )
+       )
+       UNION ALL
+       SELECT count(*) AS active FROM projection_threads
+       WHERE deleted_at IS NULL
+         AND julianday(latest_user_message_at) > julianday('now', '-1 minute')`
+    ).all();
     db.close();
-    process.exit(Number(row.active) === 0 ? 0 : 1);
+    process.exit(row.every((entry) => Number(entry.active) === 0) ? 0 : 1);
     JS
     }
   '';
@@ -550,6 +567,14 @@ let
     fi
 
     if [ -z "$unhealthy_reason" ]; then
+      main_pid="$(systemctl show t3code-server.service --property MainPID --value)"
+      if ! unhealthy_reason="$(${pkgs.python3}/bin/python3 ${../../packages/t3code/memory-watchdog.py} "$main_pid" 2>> "$log_file")"; then
+        log_info "memory measurement unavailable; recovery deferred"
+        exit 0
+      fi
+    fi
+
+    if [ -z "$unhealthy_reason" ]; then
       log_info "healthy"
       exit 0
     fi
@@ -564,6 +589,12 @@ let
     exec 9>"$state_dir/tool-update.lock"
     if ! ${pkgs.util-linux}/bin/flock -n 9; then
       log_info "unhealthy: $unhealthy_reason; tool maintenance or restart is in progress; restart deferred"
+      exit 0
+    fi
+
+    # Recheck after acquiring the maintenance lock, close to the restart.
+    if [ "$web_was_active" -eq 1 ] && ! is_t3code_idle; then
+      log_info "unhealthy: $unhealthy_reason; work became active or unknown; restart deferred"
       exit 0
     fi
 

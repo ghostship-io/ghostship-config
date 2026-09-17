@@ -545,4 +545,4 @@ The T3 container also provides the persistent, automatically updated `agy` termi
 
 Grok Build is available through the [persistent CLI and T3 provider setup](docs/t3code.md#grok-build-cli-and-t3-provider).
 
-T3 and its child agents share a [24/32 GiB memory budget](docs/t3code.md#memory-budget) to avoid provider timeouts under concurrent workloads.
+T3 and its child agents share a [24/32 GiB memory budget](docs/t3code.md#memory-budget) to avoid provider timeouts under concurrent workloads. A memory watchdog logs usage and recovers sustained high usage when idle.

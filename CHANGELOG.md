@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.12.0] - 2026-09-17
+
+- Detect sustained T3 process memory growth or memory pressure and restart only when idle, with a 30-minute cooldown and diagnostic samples. Ignore deleted threads and superseded pending requests in maintenance idle checks.
+
 ## [3.11.1] - 2026-09-17
 
 - Raise the T3 service memory budget to 24 GiB soft / 32 GiB hard for the server and its child agents, preventing repeated provider and Git timeouts from cgroup memory throttling.

@@ -171,6 +171,21 @@ running service with `systemctl set-property --runtime t3code-server.service
 MemoryHigh=24G MemoryMax=32G` inside the container as root, without restarting
 active agents; the image configuration supplies the same limits on recreation.
 
+The one-minute server monitor records the main process RSS, combined anonymous
+memory, total cgroup memory, and memory pressure in
+`~/.t3code-container/logs/t3code-server-monitor.log`. These distinguish process
+growth from reclaimable file cache; high usage alone does not prove a leak.
+Three consecutive high samples trigger idle-only recovery: either 8 GiB of
+anonymous memory, or 20 GiB total with at least 10% full memory stall time over
+the last minute. A service must have run for 30 minutes before memory recovery
+can restart it. Cache alone does not trigger recovery. Missing measurements or
+unknown activity defer recovery. The monitor shares the updater lock and
+rechecks activity before restarting; active work can delay recovery indefinitely.
+
+Maintenance ignores deleted threads and pending requests superseded by a later
+turn. Running turns, unresolved pending requests, and messages from the last
+minute still block restarts. No conversation records are modified.
+
 ## Maintenance
 
 Deploy with `nixos-rebuild switch --flake .#chill-penguin -L` on the host after
