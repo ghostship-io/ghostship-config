@@ -2,14 +2,25 @@
 
 import json
 import os
+import pwd
 import select
 import subprocess
 import tempfile
 import time
 from pathlib import Path
 
+# The harness sandboxes tool execution as this account. Its absence crashes the
+# agent inside session creation instead of failing at protocol initialization.
+SANDBOX_USER = "nobody"
+
 
 def main():
+    # The harness drops privileges to this account for sandboxed tool work. A
+    # container image without it aborts the session once the agent acts.
+    try:
+        pwd.getpwnam(SANDBOX_USER)
+    except KeyError:
+        raise RuntimeError(f"ACP sandbox account '{SANDBOX_USER}' is missing")
     with tempfile.TemporaryDirectory(prefix="t3code-acp-") as directory:
         env = dict(
             os.environ,

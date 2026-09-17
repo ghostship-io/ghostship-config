@@ -84,6 +84,13 @@ preserved. Shared GitHub, OpenCode, OpenRouter, and Bitwarden environment fields
 come from the existing encrypted secret catalog through the dedicated `t3code`
 projection. The Google account and Codex login remain user-owned.
 
+The image defines the `nobody`/`nogroup` (uid/gid 65534) account. Google's ACP
+harness drops to this unprivileged account for sandboxed tool work; when it
+cannot resolve the account the agent aborts instead of running the turn. The
+offline updater probe fails closed when the account is absent. The separate
+`-32000` "Authentication required" reply means the profile has no `auth.type` or
+the Google account is not signed in yet; it is not an account-mapping problem.
+
 The image includes Google's `1.1.1` Linux x64 ACP release with SHA-256
 verification as a fallback. It runs natively on x64 and through container-local QEMU on ARM64:
 Google's ARM binary aborts during initialization on Asahi's 16 KB memory pages,

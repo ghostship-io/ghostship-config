@@ -1414,10 +1414,12 @@ let
       chmod 0755 usr/bin/sudo
       cat > etc/passwd <<'EOF'
       root:x:0:0:root:/root:/bin/sh
+      nobody:x:65534:65534:Unprivileged:/var/empty:/bin/sh
       t3code:x:3000:3000:T3 Code:/home/t3code:/bin/sh
       EOF
       cat > etc/group <<'EOF'
       root:x:0:
+      nobody:x:65534:
       t3code:x:3000:
       EOF
       nixbld_members=""

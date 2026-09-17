@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.12.2] - 2026-09-17
+
+- Define the `nobody`/`nogroup` account in the T3 container image so Google's
+  Antigravity ACP harness can drop privileges for sandboxed tool work instead
+  of aborting the turn.
+- Fail the offline Antigravity ACP probe closed when that sandbox account is
+  absent.
+
 ## [3.12.1] - 2026-09-17
 
 - Include the agy updater integrity tests in automatic unittest discovery.
