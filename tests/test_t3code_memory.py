@@ -36,7 +36,7 @@ class MemoryWatchdog(unittest.TestCase):
         self.assertTrue(recover)
 
     def test_cooldown_process_change_and_sample_gap(self):
-        for patch in ({'age': 100}, {'pid': 11}, {'time': 1500}):
+        for patch in ({'age': 100}, {'pid': 11}, {'time': 1060}, {'time': 1500}):
             sample = self.sample()
             sample.update(patch)
             _, recover = watchdog.evaluate(sample, {'pid': 10, 'time': 940, 'count': 5})

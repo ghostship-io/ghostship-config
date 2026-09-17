@@ -11,7 +11,7 @@ GIB = 1024**3
 def evaluate(sample, previous):
     same_process = previous.get("pid") == sample["pid"]
     # Require consecutive timer samples, not observations accumulated across gaps.
-    consecutive = same_process and 30 <= sample["time"] - previous.get("time", 0) <= 150
+    consecutive = same_process and 30 <= sample["time"] - previous.get("time", 0) <= 110
     high = sample["anon"] >= 8 * GIB or (
         sample["current"] >= 20 * GIB and sample["pressure"] >= 10
     )
