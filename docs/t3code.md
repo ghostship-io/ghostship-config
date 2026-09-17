@@ -156,6 +156,21 @@ provider settings, enable Grok and set its binary path to
 same user home and login. Verify an authenticated T3 task before treating an
 installed/ready badge as proof of model access.
 
+## Memory budget
+
+The T3 server service includes all provider processes and their child tools in
+one cgroup. It has a 24 GiB `MemoryHigh` threshold and a 32 GiB `MemoryMax`
+ceiling on Chill Penguin. The previous 12/16 GiB limits caused repeated CLI
+health-check and Git timeouts once the combined workload exceeded 12 GiB,
+even when the host had available memory.
+
+When direct CLI probes succeed but T3 probes time out, inspect
+`memory.events` and `memory.pressure` in the service cgroup. Increasing probe
+timeouts does not fix memory reclaim stalls. The limits can be applied to the
+running service with `systemctl set-property --runtime t3code-server.service
+MemoryHigh=24G MemoryMax=32G` inside the container as root, without restarting
+active agents; the image configuration supplies the same limits on recreation.
+
 ## Maintenance
 
 Deploy with `nixos-rebuild switch --flake .#chill-penguin -L` on the host after

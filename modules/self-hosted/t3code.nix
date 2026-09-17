@@ -1637,8 +1637,9 @@ let
       SuccessExitStatus=0 143
       StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-server.service.log
       StandardError=append:/home/t3code/.t3code-container/logs/t3code-server.service.log
-      MemoryHigh=12G
-      MemoryMax=16G
+      # This cgroup includes every provider and its tools, not only the web server.
+      MemoryHigh=24G
+      MemoryMax=32G
       OOMPolicy=continue
       TasksMax=infinity
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.11.1] - 2026-09-17
+
+- Raise the T3 service memory budget to 24 GiB soft / 32 GiB hard for the server and its child agents, preventing repeated provider and Git timeouts from cgroup memory throttling.
+
 ## [3.11.0] - 2026-09-15
 
 - Add persistent Grok Build CLI installation and update hooks for the T3 container, with device authentication and T3 provider setup instructions.
