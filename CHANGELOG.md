@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.12.3] - 2026-09-18
+
+- Run the Antigravity `localharness_external` helper natively on ARM64 instead
+  of under QEMU. Emulation corrupted its Go runtime and aborted long turns with
+  "Harness process exited unexpectedly (WS close code 1006)". The x86_64 ACP
+  server stays emulated because Google's binary aborts on 16 KiB pages.
+- Stage the matching native harness from the official registry in the automatic
+  updater, and fail the offline probe when a runtime harness is not native.
+
 ## [3.12.2] - 2026-09-17
 
 - Define the `nobody`/`nogroup` account in the T3 container image so Google's
