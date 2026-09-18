@@ -91,20 +91,24 @@ offline updater probe fails closed when the account is absent. The separate
 `-32000` "Authentication required" reply means the profile has no `auth.type` or
 the Google account is not signed in yet; it is not an account-mapping problem.
 
-The image includes Google's `1.1.1` Linux x64 ACP release with SHA-256
-verification as a fallback. It runs natively on x64 and through container-local QEMU on ARM64:
-Google's ARM binary aborts during initialization on Asahi's 16 KB memory pages,
-whereas the x86 emulator supplies the required 4 KB guest pages. Both the ACP
-agent and its helper use the wrapper. Emulation adds startup and execution
-overhead; account sign-in and authenticated model requests still need live
-verification with the user's account.
+The image includes Google's `1.1.1` ACP release with SHA-256 verification as a
+fallback. Google's ACP server aborts natively on Asahi's 16 KB memory pages, so
+on ARM64 it stays on the x86_64 archive under container-local QEMU, whose x86
+guest supplies the required 4 KB pages. The `localharness_external` helper is a
+static Go binary with no page-size assumption: emulating it corrupts its runtime
+and panics mid-turn (`mergeStringNoZero`), which T3 reports as "Harness process
+exited unexpectedly (WS close code 1006)"; it therefore runs natively on ARM64.
+The server and helper wrappers run from the matching archive per architecture.
+Emulation adds startup and execution overhead; account sign-in and authenticated
+model requests still need live verification with the user's account.
 The automatic updater reads the official ACP registry and accepts only the
-corresponding Linux x64 archive URL at `dl.google.com`. It records the downloaded
-archive's SHA-256, stages the server and helper together, and checks ACP
-initialization offline before atomically switching the persistent `current`
-link. A failed download or protocol check keeps the previous release. Releases
-live under `~/.local/share/t3code-tools/antigravity`; both wrappers continue to
-use QEMU on ARM64. T3's binary path stays `/bin/agy_acp_server.par` across updates.
+corresponding `dl.google.com` archive URLs. It stages the x86_64 server and the
+native harness together, checks ACP initialization offline, and only then
+atomically switches the persistent `current` link. A failed download or protocol
+check keeps the previous release. Releases live under
+`~/.local/share/t3code-tools/antigravity`; the harness wrapper refuses to emulate
+and falls back to the bundled native binary when a staged runtime harness is not
+ARM64. T3's binary path stays `/bin/agy_acp_server.par` across updates.
 
 Upstream: [provider setup](https://github.com/pingdotgg/t3code/blob/main/docs/user/install.md),
 [Antigravity sign-in](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-antigravity.md),

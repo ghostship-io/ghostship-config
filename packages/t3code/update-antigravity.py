@@ -5,6 +5,7 @@ import fcntl
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -15,21 +16,37 @@ import zipfile
 from pathlib import Path
 
 REGISTRY = "https://raw.githubusercontent.com/agentclientprotocol/registry/main/antigravity-acp/agent.json"
-BINARIES = ("agy_acp_server.par", "localharness_external")
+SERVER_URL = (
+    "https://dl.google.com/agy-extensions/releases/linux/"
+    "agy-acp-server-agy_acp_server_{version}-linux-x86_64.zip"
+)
+HARNESS_URL = (
+    "https://dl.google.com/agy-extensions/releases/linux/"
+    "agy-acp-server-agy_acp_server_{version}-linux-{arch}.zip"
+)
 
 
-def release_info(metadata):
+def release_info(metadata, machine=None):
+    """Resolve the release version and the archives to stage.
+
+    The ACP server must stay on x86_64 because Google's binary aborts on hosts
+    with 16 KiB pages. The harness is a static Go binary that runs natively, so
+    an ARM64 host stages the matching ARM64 harness instead of emulating it.
+    """
     version = metadata["version"]
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Invalid Antigravity release version")
-    url = metadata["distribution"]["binary"]["linux-x86_64"]["archive"]
-    expected = (
-        "https://dl.google.com/agy-extensions/releases/linux/"
-        f"agy-acp-server-agy_acp_server_{version}-linux-x86_64.zip"
-    )
-    if url != expected:
+    machine = platform.machine() if machine is None else machine
+    harness_arch = "arm64" if machine in ("aarch64", "arm64") else "x86_64"
+    server = SERVER_URL.format(version=version)
+    expected_server = metadata["distribution"]["binary"]["linux-x86_64"]["archive"]
+    harness = HARNESS_URL.format(version=version, arch=harness_arch)
+    expected_harness = metadata["distribution"]["binary"][
+        "linux-aarch64" if harness_arch == "arm64" else "linux-x86_64"
+    ]["archive"]
+    if expected_server != server or expected_harness != harness:
         raise ValueError("Unexpected Antigravity release URL")
-    return version, url
+    return version, {"agy_acp_server.par": server, "localharness_external": harness}
 
 
 def download(url, destination):
@@ -49,8 +66,16 @@ def probe_runtime(directory, probe):
     )
 
 
-def update(root, bundled_version, metadata, probe, fetch=download, check=probe_runtime):
-    version, url = release_info(metadata)
+def update(
+    root,
+    bundled_version,
+    metadata,
+    probe,
+    fetch=download,
+    check=probe_runtime,
+    machine=None,
+):
+    version, archives = release_info(metadata, machine)
     root.mkdir(parents=True, exist_ok=True)
     current = root / "current"
     installed_version = bundled_version
@@ -68,30 +93,37 @@ def update(root, bundled_version, metadata, probe, fetch=download, check=probe_r
     releases.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".staging-", dir=root) as temporary:
         stage = Path(temporary)
-        archive = stage / "release.zip"
-        fetch(url, archive)
-        with archive.open("rb") as stream:
-            digest = hashlib.file_digest(stream, "sha256").hexdigest()
         runtime = stage / "runtime"
         runtime.mkdir()
+        digests = {}
         # Extract only the two expected binaries; never trust archive paths.
-        with zipfile.ZipFile(archive) as package:
-            for name in BINARIES:
+        for name, url in archives.items():
+            archive = stage / f"{name}.zip"
+            fetch(url, archive)
+            with archive.open("rb") as stream:
+                digests[name] = hashlib.file_digest(stream, "sha256").hexdigest()
+            with zipfile.ZipFile(archive) as package:
                 with package.open(name) as source, (runtime / name).open("wb") as dest:
                     shutil.copyfileobj(source, dest)
-                (runtime / name).chmod(0o755)
+            (runtime / name).chmod(0o755)
         check(runtime, probe)
         (runtime / "release.json").write_text(
-            json.dumps({"version": version, "url": url, "sha256": digest}) + "\n"
+            json.dumps(
+                {"version": version, "archives": archives, "sha256": digests}
+            )
+            + "\n"
         )
-        destination = releases / f"{version}-{digest}"
+        destination = releases / f"{version}-{digests['agy_acp_server.par']}"
         if not destination.exists():
             runtime.rename(destination)
         link = stage / "current"
         link.symlink_to(destination)
         # Server and helper switch together; failed checks leave current intact.
         link.replace(current)
-    print(f"Activated Antigravity {version} (sha256 {digest})")
+    print(
+        f"Activated Antigravity {version} "
+        f"(server sha256 {digests['agy_acp_server.par']})"
+    )
     return True
 
 
