@@ -25,7 +25,7 @@ in
     muximux = {
       icon = "muximux-sonarr";
       color = "#35c5f4";
-      dropdown = true;
+      dropdown = false;
     };
   };
 

@@ -7,45 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## [3.9.7] - 2026-09-15
+## [3.14.0] - 2026-09-20
 
-- Scan and process Plex Movies and TV automatically with one transcode worker.
-- Replace validated library files in place so the original stays available
-  until the new copy is ready.
+- Run Tdarr automatically on chill-penguin with one CPU transcode worker, folder watch, scan on start, and atomic replacement after validation.
+- Publish Tdarr on Homepage and Muximux at `tdarr.ghostship.io` with Cloudflare Access protection.
+- Reconcile original-language metadata from Radarr and Sonarr so unrelated dubs can be removed without guessing from filenames or stream order.
 
-## [3.9.6] - 2026-09-15
+## [3.13.2] - 2026-09-20
 
-- Run Tdarr automatically with one transcode worker, folder watch, scan on
-  start, and atomic replacement after validation.
-- Publish Tdarr on Homepage and Muximux at `tdarr.ghostship.io`.
-- Disable the OpenChamber container so T3 Code remains the agent runtime.
+- Wrap the current native T3 CLI with its image-provided GCC runtime library
+  path. T3 0.0.42 on ARM64 requires `libatomic.so.1`; keep that path scoped to
+  T3 so project-pinned Nix commands still run with clean loader settings.
 
-## [3.9.5] - 2026-09-15
+## [3.13.1] - 2026-09-20
 
-- Run a single Tdarr transcode worker without pausing for Plex playback.
-- Replace a validated pilot file by copying beside the original and renaming
-  over it so the library path is never empty.
+- Snapshot Chill Penguin's dedicated `/srv` Btrfs subvolume when seeding
+  Synara. Snapshotting the parent root omitted nested subvolume contents and
+  prevented the initial migration from finding the T3 Code state.
 
-## [3.9.4] - 2026-09-15
+## [3.13.0] - 2026-09-20
 
-- Enable the Tdarr pilot library schedule for every hour so queued files
-  reach workers when the node is unpaused.
+- Add the independent Synara T3 Code container at `synara.ghostship.io`, with
+  separate home, workspace, nested Docker, Nix store, health supervision,
+  dashboard registration, Cloudflare routing, and backup coverage.
+- Seed Synara once from a crash-consistent Btrfs snapshot of T3 Code's live
+  home, workspace, and nested Docker state. The reflink migration preserves
+  transferable provider logins, configuration, conversations, worktrees, and
+  project files without stopping or restarting T3 Code.
 
-## [3.9.3] - 2026-09-15
+## [3.12.3] - 2026-09-18
 
-- Place Tdarr local flow plugins under a `ghostship` category so Tdarr can
-  load `plexPolicy` and `plexValidate` by name.
+- Run the Antigravity `localharness_external` helper natively on ARM64 instead
+  of under QEMU. Emulation corrupted its Go runtime and aborted long turns with
+  "Harness process exited unexpectedly (WS close code 1006)". The x86_64 ACP
+  server stays emulated because Google's binary aborts on 16 KiB pages.
+- Stage the matching native harness from the official registry in the automatic
+  updater, and fail the offline probe when a runtime harness is not native.
 
-## [3.9.2] - 2026-09-15
+## [3.12.2] - 2026-09-17
 
-- Add a CPU-limited Tdarr pilot with read-only production media and writable
-  staging, initially paused and reachable only on the internal network.
-- Use native ARM64 FFmpeg with a guarded HEVC flow, full output validation,
-  manual approval, and duration-scaled 10/20 GiB size thresholds.
-- Reconcile original-language metadata from Radarr and Sonarr so unrelated
-  dubs can be removed without guessing from filenames or stream order.
-- Require all agent deployments to preserve the running T3 Code session and
-  verify its container identity and service PID across activation.
+- Define the `nobody`/`nogroup` account in the T3 container image so Google's
+  Antigravity ACP harness can drop privileges for sandboxed tool work instead
+  of aborting the turn.
+- Fail the offline Antigravity ACP probe closed when that sandbox account is
+  absent.
+
+## [3.12.1] - 2026-09-17
+
+- Include the agy updater integrity tests in automatic unittest discovery.
+
+## [3.12.0] - 2026-09-17
+
+- Detect sustained T3 process memory growth or memory pressure and restart only when idle, with a 30-minute cooldown and diagnostic samples. Ignore deleted threads and superseded pending requests in maintenance idle checks.
+
+## [3.11.1] - 2026-09-17
+
+- Raise the T3 service memory budget to 24 GiB soft / 32 GiB hard for the server and its child agents, preventing repeated provider and Git timeouts from cgroup memory throttling.
+
+## [3.11.0] - 2026-09-15
+
+- Add persistent Grok Build CLI installation and update hooks for the T3 container, with device authentication and T3 provider setup instructions.
+
+## [3.10.2] - 2026-09-15
+
+- Install and automatically update the official `agy` terminal CLI in the T3 container, with checksum verification and persistent storage.
+
+## [3.10.1] - 2026-09-14
+
+- Disable OpenChamber and its deployment timer on chill-penguin while retaining
+  its declaration and persistent data for later restoration; pause its uptime
+  monitor and retain monitoring history.
+- Restore Homepage, Plex, NZBGet, qBittorrent, Sonarr, Radarr, and Prowlarr
+  as top-level Muximux desktop tabs after the registry migration misplaced them.
+
+## [3.10.0] - 2026-09-08
+
+- Make T3 Code installable in Android Chrome with a named standalone manifest,
+  Android launcher icons, and credentialed manifest fetching behind Cloudflare.
+- Preserve installation support across T3 updates and show a reconnect screen
+  offline without caching private workspace data or old application bundles.
 
 ## [3.9.1] - 2026-09-15
 

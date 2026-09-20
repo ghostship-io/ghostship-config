@@ -2,14 +2,67 @@
 
 import json
 import os
+import platform
+import pwd
 import select
+import struct
 import subprocess
 import tempfile
 import time
 from pathlib import Path
 
+# The harness sandboxes tool execution as this account. Its absence crashes the
+# agent inside session creation instead of failing at protocol initialization.
+SANDBOX_USER = "nobody"
+# ELF e_machine values. The ACP server is emulated on 16 KiB-page hosts, but the
+# harness must match the host CPU: emulating its Go runtime panics mid-turn.
+ELF_MACHINE = {"x86_64": 62, "aarch64": 183, "arm64": 183}
+
+
+def elf_machine(path):
+    with Path(path).open("rb") as stream:
+        header = stream.read(20)
+    if len(header) < 20 or header[:4] != b"\x7fELF":
+        return None
+    return struct.unpack_from("<H", header, 18)[0]
+
+
+def harness_binary():
+    """Resolve the harness binary the ACP wrapper will actually execute.
+
+    Mirrors the package wrapper: a staged runtime harness is used only when it
+    is already native to this host; otherwise the bundled native binary wins.
+    """
+    expected = ELF_MACHINE.get(platform.machine())
+    wrapper = Path("/bin/localharness_external").resolve()
+    # The package installs its fallback at <out>/libexec, next to <out>/bin.
+    bundled = wrapper.parent.parent / "libexec" / "localharness_external"
+    runtime = os.environ.get("T3CODE_ANTIGRAVITY_RUNTIME")
+    if runtime:
+        staged = Path(runtime) / "localharness_external"
+        if staged.exists() and elf_machine(staged) == expected:
+            return staged
+    return bundled if bundled.exists() else wrapper
+
 
 def main():
+    # The harness drops privileges to this account for sandboxed tool work. A
+    # container image without it aborts the session once the agent acts.
+    try:
+        pwd.getpwnam(SANDBOX_USER)
+    except KeyError:
+        raise RuntimeError(f"ACP sandbox account '{SANDBOX_USER}' is missing")
+    expected = ELF_MACHINE.get(platform.machine())
+    harness = harness_binary()
+    actual = elf_machine(harness)
+    if expected is not None and actual is not None and actual != expected:
+        raise RuntimeError(
+            f"ACP harness {harness} is not native to {platform.machine()} "
+            f"(e_machine {actual}); emulating it crashes long turns"
+        )
+    # Always invoke the wrapper so the x86_64 server is emulated on ARM64 hosts
+    # and the staged runtime under T3CODE_ANTIGRAVITY_RUNTIME is honored.
+    server = "/bin/agy_acp_server.par"
     with tempfile.TemporaryDirectory(prefix="t3code-acp-") as directory:
         env = dict(
             os.environ,
@@ -24,7 +77,7 @@ def main():
         log = Path(directory) / "stderr.log"
         with log.open("w") as stderr:
             proc = subprocess.Popen(
-                ["/bin/agy_acp_server.par", "--uid="],
+                [str(server), "--uid="],
                 env=env,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,

@@ -25,7 +25,7 @@ in
     muximux = {
       icon = "muximux-paw";
       color = "#e45124";
-      dropdown = true;
+      dropdown = false;
     };
   };
 

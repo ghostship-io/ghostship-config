@@ -4,6 +4,8 @@ const http = require("node:http");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const dns = require("node:dns/promises");
+const zlib = require("node:zlib");
+const { servePwa, enhanceHtml } = require("./pwa.cjs");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const exec = promisify(execFile);
@@ -28,8 +30,17 @@ async function trustedPeer(request, lookup = dns.lookup) {
 }
 
 function createProxy(upstreamPort, getToken, trust = trustedPeer) {
+  function appNavigation(request) {
+    return request.method === "GET" && request.headers["sec-fetch-dest"] === "document" &&
+      !/^\/api(?:\/|\?|$)/.test(request.url);
+  }
   async function options(request) {
     const headers = { ...request.headers };
+    if (appNavigation(request)) {
+      headers["accept-encoding"] = "identity";
+      delete headers["if-none-match"];
+      delete headers["if-modified-since"];
+    }
     // Other containers retain native T3 authentication. Never trust forwarded
     // headers to identify the tunnel: only its actual TCP peer may bypass pairing.
     if (!await trust(request)) {
@@ -48,10 +59,28 @@ function createProxy(upstreamPort, getToken, trust = trustedPeer) {
   }
   const server = http.createServer(async (request, response) => {
     if (!sameOrigin(request)) { response.writeHead(403).end(); return; }
+    if (servePwa(request, response)) return;
     let forwarding;
     try { forwarding = await options(request); }
     catch { response.writeHead(502).end("T3 Code backend unavailable"); return; }
     const upstream = http.request(forwarding, (incoming) => {
+      if (appNavigation(request) && !incoming.headers["content-disposition"] && incoming.statusCode === 200 &&
+          incoming.headers["content-type"]?.includes("text/html")) {
+        const chunks = [];
+        incoming.on("error", () => response.destroy());
+        incoming.on("data", (chunk) => chunks.push(chunk));
+        incoming.on("end", () => {
+          try {
+            let body = Buffer.concat(chunks);
+            const decoder = { gzip: zlib.gunzipSync, br: zlib.brotliDecompressSync, deflate: zlib.inflateSync }[incoming.headers["content-encoding"]];
+            if (decoder) body = decoder(body);
+            const headers = { ...incoming.headers, "cache-control": "no-store" };
+            for (const name of ["content-length", "content-encoding", "etag", "last-modified"]) delete headers[name];
+            response.writeHead(200, headers).end(enhanceHtml(body.toString("utf8")));
+          } catch { response.writeHead(502).end("T3 Code page unavailable"); }
+        });
+        return;
+      }
       response.writeHead(incoming.statusCode, incoming.headers);
       incoming.pipe(response);
     });

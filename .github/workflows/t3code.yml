@@ -1,0 +1,20 @@
+name: T3 Code browser
+on:
+  pull_request:
+    paths: ['packages/t3code/**', 'tests/t3code-*.cjs', 'flake.nix', 'flake.lock', '.github/workflows/t3code.yml']
+  push:
+    branches: [main]
+    paths: ['packages/t3code/**', 'tests/t3code-*.cjs', 'flake.nix', 'flake.lock', '.github/workflows/t3code.yml']
+permissions:
+  contents: read
+concurrency:
+  group: t3code-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+      - run: nix develop .#browser -c node --test tests/t3code-pwa.browser.cjs

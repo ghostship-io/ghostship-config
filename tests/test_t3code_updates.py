@@ -9,18 +9,20 @@ from test_config import load
 
 updater = load("t3code_antigravity", "packages/t3code/update-antigravity.py")
 
+BINARIES = ("agy_acp_server.par", "localharness_external")
+
 
 def release(version="1.2.0"):
+    base = (
+        "https://dl.google.com/agy-extensions/releases/linux/"
+        f"agy-acp-server-agy_acp_server_{version}-linux"
+    )
     return {
         "version": version,
         "distribution": {
             "binary": {
-                "linux-x86_64": {
-                    "archive": (
-                        "https://dl.google.com/agy-extensions/releases/linux/"
-                        f"agy-acp-server-agy_acp_server_{version}-linux-x86_64.zip"
-                    )
-                }
+                "linux-x86_64": {"archive": f"{base}-x86_64.zip"},
+                "linux-aarch64": {"archive": f"{base}-arm64.zip"},
             }
         },
     }
@@ -28,7 +30,7 @@ def release(version="1.2.0"):
 
 def archive(_url, destination):
     with zipfile.ZipFile(destination, "w") as package:
-        for name in updater.BINARIES:
+        for name in BINARIES:
             package.writestr(name, f"new {name}")
         package.writestr("../../outside", "must not be extracted")
 
@@ -46,14 +48,16 @@ class AntigravityUpdates(unittest.TestCase):
     def test_switches_server_and_helper_only_after_probe(self):
         def check(candidate, _probe):
             self.assertEqual((self.root / "current").resolve(), self.old)
-            for name in updater.BINARIES:
+            for name in BINARIES:
                 self.assertEqual((candidate / name).read_text(), f"new {name}")
             self.assertEqual(
-                sorted(p.name for p in candidate.iterdir()), sorted(updater.BINARIES)
+                sorted(p.name for p in candidate.iterdir()), sorted(BINARIES)
             )
 
         self.assertTrue(
-            updater.update(self.root, "1.1.1", release(), "probe", archive, check)
+            updater.update(
+                self.root, "1.1.1", release(), "probe", archive, check, "x86_64"
+            )
         )
         active = (self.root / "current").resolve()
         self.assertNotEqual(active, self.old)
@@ -71,6 +75,7 @@ class AntigravityUpdates(unittest.TestCase):
                 "probe",
                 archive,
                 Mock(side_effect=RuntimeError("bad protocol")),
+                "x86_64",
             )
         self.assertEqual((self.root / "current").resolve(), self.old)
         self.assertFalse(list(self.root.glob(".staging-*")))
@@ -82,7 +87,9 @@ class AntigravityUpdates(unittest.TestCase):
 
         check = Mock()
         with self.assertRaises(KeyError):
-            updater.update(self.root, "1.1.1", release(), "probe", incomplete, check)
+            updater.update(
+                self.root, "1.1.1", release(), "probe", incomplete, check, "x86_64"
+            )
         check.assert_not_called()
         self.assertEqual((self.root / "current").resolve(), self.old)
 
@@ -90,14 +97,18 @@ class AntigravityUpdates(unittest.TestCase):
         fetch = Mock()
         for version in ("1.1.1", "1.0.0"):
             self.assertFalse(
-                updater.update(self.root, "1.1.1", release(version), "probe", fetch)
+                updater.update(
+                    self.root, "1.1.1", release(version), "probe", fetch, machine="x86_64"
+                )
             )
         fetch.assert_not_called()
 
     def test_image_fallback_does_not_require_persistent_runtime(self):
         (self.root / "current").unlink()
         fetch = Mock()
-        self.assertFalse(updater.update(self.root, "1.2.0", release(), "probe", fetch))
+        self.assertFalse(
+            updater.update(self.root, "1.2.0", release(), "probe", fetch, machine="x86_64")
+        )
         fetch.assert_not_called()
 
     def test_rejects_unexpected_download_source(self):
@@ -106,6 +117,20 @@ class AntigravityUpdates(unittest.TestCase):
             "https://example.com/a.zip"
         )
         with self.assertRaises(ValueError):
-            updater.release_info(data)
+            updater.release_info(data, "x86_64")
         with self.assertRaises(ValueError):
-            updater.release_info(release("../../bad"))
+            updater.release_info(release("../../bad"), "x86_64")
+
+    def test_arm64_host_stages_native_harness(self):
+        _, archives = updater.release_info(release(), "aarch64")
+        self.assertTrue(archives["agy_acp_server.par"].endswith("-x86_64.zip"))
+        self.assertTrue(archives["localharness_external"].endswith("-arm64.zip"))
+
+    def test_x86_64_host_stages_matching_harness(self):
+        _, archives = updater.release_info(release(), "x86_64")
+        self.assertTrue(archives["agy_acp_server.par"].endswith("-x86_64.zip"))
+        self.assertTrue(archives["localharness_external"].endswith("-x86_64.zip"))
+
+
+if __name__ == "__main__":
+    unittest.main()

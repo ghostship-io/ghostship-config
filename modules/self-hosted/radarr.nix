@@ -25,7 +25,7 @@ in
     muximux = {
       icon = "muximux-radarr";
       color = "#ffc230";
-      dropdown = true;
+      dropdown = false;
     };
   };
 

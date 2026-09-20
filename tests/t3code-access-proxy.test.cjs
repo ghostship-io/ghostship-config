@@ -6,6 +6,7 @@ const { once } = require("node:events");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
+const { gzipSync } = require("node:zlib");
 const { createProxy, trustedPeer, sessionProvider } = require("../packages/t3code/access-proxy.cjs");
 
 async function fixture(t, trust) {
@@ -109,4 +110,63 @@ test("revoked persisted sessions renew once for concurrent requests", async (t) 
   assert.equal((await fs.stat(path.join(directory, "session.json"))).mode & 0o777, 0o600);
   const restarted = await sessionProvider(directory, async () => { throw new Error("unexpected renewal"); }, async () => true);
   assert.equal(await restarted(), "renewed");
+});
+
+test("PWA metadata supplies real Android icons and root service worker scope", async (t) => {
+  const { url, received } = await fixture(t);
+  const response = await fetch(`${url}/manifest.webmanifest`);
+  assert.match(response.headers.get("content-type"), /application\/manifest\+json/);
+  const manifest = await response.json();
+  assert.equal(manifest.name, "T3 Code");
+  assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.start_url, "/");
+  assert.equal(manifest.scope, "/");
+  assert.equal(manifest.prefer_related_applications, false);
+  for (const icon of manifest.icons) {
+    const image = await fetch(url + icon.src);
+    const png = Buffer.from(await image.arrayBuffer());
+    assert.equal(png.toString("hex", 0, 8), "89504e470d0a1a0a");
+    assert.equal(`${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`, icon.sizes);
+  }
+  const worker = await fetch(`${url}/__t3_pwa/sw.js`);
+  assert.equal(worker.headers.get("service-worker-allowed"), "/");
+  assert.equal(worker.headers.get("cache-control"), "no-cache");
+  assert.equal(received.length, 0);
+});
+
+test("compressed upstream HTML gets one credentialed manifest and fresh cache headers", async (t) => {
+  const { url, backend } = await fixture(t);
+  backend.removeAllListeners("request");
+  backend.on("request", (request, response) => {
+    assert.equal(request.headers["if-none-match"], undefined);
+    const body = gzipSync('<html><head><link rel="manifest" href="/upstream.json"></head><body>T3</body></html>');
+    response.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip",
+      "content-length": body.length, etag: '"upstream"' });
+    response.end(body);
+  });
+  const response = await fetch(url, { headers: { accept: "text/html", "sec-fetch-dest": "document", "if-none-match": '"upstream"' } });
+  const html = await response.text();
+  assert.equal((html.match(/rel="manifest"/g) || []).length, 1);
+  assert.match(html, /crossorigin="use-credentials"/);
+  assert.match(html, /\/__t3_pwa\/register.js/);
+  assert.equal(response.headers.get("content-encoding"), null);
+  assert.equal(response.headers.get("etag"), null);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+test("HTML fetches, API previews, and downloads preserve their original bytes and headers", async (t) => {
+  const { url, backend } = await fixture(t);
+  const html = '<html><head><title>User file</title></head><body>Original content</body></html>';
+  backend.removeAllListeners("request");
+  backend.on("request", (request, response) => {
+    response.writeHead(200, { "content-type": "text/html", "content-length": Buffer.byteLength(html),
+      etag: '"user-file"', ...(request.url === "/download" ? { "content-disposition": "attachment; filename=example.html" } : {}) });
+    response.end(html);
+  });
+  for (const [route, destination] of [["/fragment", "empty"], ["/api/files/preview", "document"], ["/download", "document"]]) {
+    const response = await fetch(url + route, { headers: { accept: "text/html", "sec-fetch-dest": destination } });
+    assert.equal(await response.text(), html);
+    assert.equal(response.headers.get("etag"), '"user-file"');
+    assert.equal(response.headers.get("content-length"), String(Buffer.byteLength(html)));
+  }
 });

@@ -84,24 +84,118 @@ preserved. Shared GitHub, OpenCode, OpenRouter, and Bitwarden environment fields
 come from the existing encrypted secret catalog through the dedicated `t3code`
 projection. The Google account and Codex login remain user-owned.
 
-The image includes Google's `1.1.1` Linux x64 ACP release with SHA-256
-verification as a fallback. It runs natively on x64 and through container-local QEMU on ARM64:
-Google's ARM binary aborts during initialization on Asahi's 16 KB memory pages,
-whereas the x86 emulator supplies the required 4 KB guest pages. Both the ACP
-agent and its helper use the wrapper. Emulation adds startup and execution
-overhead; account sign-in and authenticated model requests still need live
-verification with the user's account.
+The image defines the `nobody`/`nogroup` (uid/gid 65534) account. Google's ACP
+harness drops to this unprivileged account for sandboxed tool work; when it
+cannot resolve the account the agent aborts instead of running the turn. The
+offline updater probe fails closed when the account is absent. The separate
+`-32000` "Authentication required" reply means the profile has no `auth.type` or
+the Google account is not signed in yet; it is not an account-mapping problem.
+
+The image includes Google's `1.1.1` ACP release with SHA-256 verification as a
+fallback. Google's ACP server aborts natively on Asahi's 16 KB memory pages, so
+on ARM64 it stays on the x86_64 archive under container-local QEMU, whose x86
+guest supplies the required 4 KB pages. The `localharness_external` helper is a
+static Go binary with no page-size assumption: emulating it corrupts its runtime
+and panics mid-turn (`mergeStringNoZero`), which T3 reports as "Harness process
+exited unexpectedly (WS close code 1006)"; it therefore runs natively on ARM64.
+The server and helper wrappers run from the matching archive per architecture.
+Emulation adds startup and execution overhead; account sign-in and authenticated
+model requests still need live verification with the user's account.
 The automatic updater reads the official ACP registry and accepts only the
-corresponding Linux x64 archive URL at `dl.google.com`. It records the downloaded
-archive's SHA-256, stages the server and helper together, and checks ACP
-initialization offline before atomically switching the persistent `current`
-link. A failed download or protocol check keeps the previous release. Releases
-live under `~/.local/share/t3code-tools/antigravity`; both wrappers continue to
-use QEMU on ARM64. T3's binary path stays `/bin/agy_acp_server.par` across updates.
+corresponding `dl.google.com` archive URLs. It stages the x86_64 server and the
+native harness together, checks ACP initialization offline, and only then
+atomically switches the persistent `current` link. A failed download or protocol
+check keeps the previous release. Releases live under
+`~/.local/share/t3code-tools/antigravity`; the harness wrapper refuses to emulate
+and falls back to the bundled native binary when a staged runtime harness is not
+ARM64. T3's binary path stays `/bin/agy_acp_server.par` across updates.
 
 Upstream: [provider setup](https://github.com/pingdotgg/t3code/blob/main/docs/user/install.md),
 [Antigravity sign-in](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-antigravity.md),
 and [official ACP registry](https://github.com/agentclientprotocol/registry/tree/main/antigravity-acp).
+
+## Android installation
+
+Open `https://t3code.ghostship.io` in Android Chrome and complete Cloudflare
+sign-in. Use Chrome's menu, then **Install app** or **Add to home screen >
+Install**. T3 Code opens from its own launcher icon in a standalone window.
+If a shortcut was created before installation support was added, install the
+app from a refreshed Chrome tab and remove the old shortcut.
+
+The gateway supplies a named manifest, 192px/512px icons with maskable safe
+areas, and a manifest link that includes Cloudflare cookies. A root-scoped
+service worker shows a reconnect screen when offline. Coding still requires a
+connection to the server. The worker caches no application bundles, code,
+messages, or credentials; normal navigation uses the current server version.
+Gateway-owned assets persist across T3 npm updates and container replacement.
+
+Validate with `nix develop .#browser -c node --test tests/t3code-pwa.browser.cjs`.
+The Chrome fixture checks real install eligibility and the browser's install
+event behind cookie authentication, offline navigation, and fresh content after
+reconnection. Physical Android installation must still be verified on a phone.
+The icon PNGs are rendered from `packages/t3code/pwa/icon.svg` using
+`rsvg-convert -w <size> -h <size>` in the browser shell. Change the versioned icon
+URLs when artwork changes so Chrome can update installed icons.
+
+## Antigravity terminal CLI
+
+`agy` is the official Antigravity terminal CLI, separate from T3's ACP provider.
+Install it with `python3 packages/t3code/update-agy.py`. This also installs
+persistent bootstrap and after-update hooks. The executable lives at
+`~/.local/bin/agy` in the persistent container home. Bootstrap
+and the four-hour tool updater check Google's platform manifest, verify its
+SHA-512 checksum, and run a version probe before atomically replacing the CLI.
+The CLI's own background updater remains available too.
+
+Run `agy --version` or `agy --help` in the T3 terminal. On first use, run `agy`
+and complete its Google sign-in; T3's ACP login does not authenticate the CLI.
+For scripted tasks, use `agy -p "your task"`. The ARM64 CLI launcher was verified
+on Chill Penguin; authenticated execution requires the separate CLI login.
+
+## Grok Build CLI and T3 provider
+
+Run `python3 packages/t3code/setup-grok.py` to install the official
+`@xai-official/grok` npm package and persistent bootstrap/after-update hooks.
+The `grok` command is exposed in `~/.local/bin`; its isolated npm installation
+and `~/.grok` credentials persist in the container home. The existing four-hour
+tool updater refreshes it when T3 is idle. Grok's `agent` alias is not installed,
+preserving the shared Ghostship command.
+
+Use `grok login --device-auth` to authenticate from another browser. In T3's
+provider settings, enable Grok and set its binary path to
+`/home/t3code/.local/bin/grok`, then refresh provider status. CLI and T3 use the
+same user home and login. Verify an authenticated T3 task before treating an
+installed/ready badge as proof of model access.
+
+## Memory budget
+
+The T3 server service includes all provider processes and their child tools in
+one cgroup. It has a 24 GiB `MemoryHigh` threshold and a 32 GiB `MemoryMax`
+ceiling on Chill Penguin. The previous 12/16 GiB limits caused repeated CLI
+health-check and Git timeouts once the combined workload exceeded 12 GiB,
+even when the host had available memory.
+
+When direct CLI probes succeed but T3 probes time out, inspect
+`memory.events` and `memory.pressure` in the service cgroup. Increasing probe
+timeouts does not fix memory reclaim stalls. The limits can be applied to the
+running service with `systemctl set-property --runtime t3code-server.service
+MemoryHigh=24G MemoryMax=32G` inside the container as root, without restarting
+active agents; the image configuration supplies the same limits on recreation.
+
+The one-minute server monitor records the main process RSS, combined anonymous
+memory, total cgroup memory, and memory pressure in
+`~/.t3code-container/logs/t3code-server-monitor.log`. These distinguish process
+growth from reclaimable file cache; high usage alone does not prove a leak.
+Three consecutive high samples trigger idle-only recovery: either 8 GiB of
+anonymous memory, or 20 GiB total with at least 10% full memory stall time over
+the last minute. A service must have run for 30 minutes before memory recovery
+can restart it. Cache alone does not trigger recovery. Missing measurements or
+unknown activity defer recovery. The monitor shares the updater lock and
+rechecks activity before restarting; active work can delay recovery indefinitely.
+
+Maintenance ignores deleted threads and pending requests superseded by a later
+turn. Running turns, unresolved pending requests, and messages from the last
+minute still block restarts. No conversation records are modified.
 
 ## Maintenance
 
