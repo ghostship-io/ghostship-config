@@ -24,9 +24,11 @@ restic restore latest --host chill-penguin --tag ghostship --target "$scratch" \
     --include /var/lib/ghostship-backup/snapshot/apps/ntfy \
     --include /var/lib/ghostship-backup/snapshot/apps/uptime-kuma \
     --include /var/lib/ghostship-backup/snapshot/apps/seerr \
+    --include /var/lib/ghostship-backup/snapshot/apps/t3code \
     --include /var/lib/ghostship-backup/snapshot/srv/apps/ntfy \
     --include /var/lib/ghostship-backup/snapshot/srv/apps/uptime-kuma \
-    --include /var/lib/ghostship-backup/snapshot/srv/apps/seerr
+    --include /var/lib/ghostship-backup/snapshot/srv/apps/seerr \
+    --include /var/lib/ghostship-backup/snapshot/srv/apps/t3code
 
 # Work only on restored SQLite files. Opening read/write allows WAL recovery.
 python - "$scratch" <<'PY'
@@ -47,6 +49,15 @@ for path in root.rglob('*'):
         if result != [('ok',)]:
             raise RuntimeError(f'SQLite integrity check failed: {path.name}')
     print(f'SQLite restore verified: {path.name}')
+
+for state_db in root.rglob('state.sqlite'):
+    if 't3code' in str(state_db) or '.t3' in str(state_db):
+        with sqlite3.connect(str(state_db)) as db:
+            tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+            for expected in ['projection_threads', 'projection_turns']:
+                if expected in tables:
+                    count = db.execute(f"SELECT count(*) FROM {expected}").fetchone()[0]
+                    print(f'T3 Code table {expected} verified ({count} rows)')
 PY
 
 # Import each logical dump into its own disposable engine. No network, live

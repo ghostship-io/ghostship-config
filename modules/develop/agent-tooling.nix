@@ -6,6 +6,7 @@
 }:
 
 let
+  versions = import ../../packages/t3code/versions.nix;
   agentToolsRoot = "${userHome}/.local/share/ghostship-agent-tools";
   agentNpmPrefix = "${agentToolsRoot}/npm";
   agentBinDir = "${agentNpmPrefix}/bin";
@@ -107,11 +108,12 @@ let
 
     install_agent_cli() {
       package="$1"
-      label="$2"
+      target_version="$2"
+      label="$3"
 
-      log_info "installing or upgrading $label"
+      log_info "installing or upgrading $label to $target_version"
 
-      if ! install_output="$(${pkgs.nodejs}/bin/npm install -g --no-fund --no-audit "$package@latest" 2>&1)"; then
+      if ! install_output="$(${pkgs.nodejs}/bin/npm install -g --no-fund --no-audit "$package@$target_version" 2>&1)"; then
         log_warn "$label install failed, continuing"
         if [ -n "$install_output" ]; then
           printf '%s\n' "$install_output" >&2
@@ -327,10 +329,11 @@ let
 
     mkdir -p "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
-    install_agent_cli "@openai/codex" "codex"
-    install_agent_cli "@google/gemini-cli" "gemini"
-    install_agent_cli "opencode-ai" "opencode"
-    install_agent_cli "skills" "skills"
+    install_agent_cli "@openai/codex" "${versions.codex.version}" "codex"
+    install_agent_cli "@anthropic-ai/claude-code" "${versions.claude.version}" "claude"
+    install_agent_cli "@google/gemini-cli" "0.1.20" "gemini"
+    install_agent_cli "opencode-ai" "${versions.opencode.version}" "opencode"
+    install_agent_cli "skills" "1.1.0" "skills"
     remove_stale_openspec_cli
     ${lib.concatMapStrings (skill: ''
       ensure_managed_global_skill "${skill.name}" "${skill.source}"
