@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.13.1] - 2026-09-20
+
+- Snapshot Chill Penguin's dedicated `/srv` Btrfs subvolume when seeding
+  Synara. Snapshotting the parent root omitted nested subvolume contents and
+  prevented the initial migration from finding the T3 Code state.
+
 ## [3.13.0] - 2026-09-20
 
 - Add the independent Synara T3 Code container at `synara.ghostship.io`, with
