@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.13.0] - 2026-09-20
+
+- Add the independent Synara T3 Code container at `synara.ghostship.io`, with
+  separate home, workspace, nested Docker, Nix store, health supervision,
+  dashboard registration, Cloudflare routing, and backup coverage.
+- Seed Synara once from a crash-consistent Btrfs snapshot of T3 Code's live
+  home, workspace, and nested Docker state. The reflink migration preserves
+  transferable provider logins, configuration, conversations, worktrees, and
+  project files without stopping or restarting T3 Code.
+
 ## [3.12.3] - 2026-09-18
 
 - Run the Antigravity `localharness_external` helper natively on ARM64 instead
