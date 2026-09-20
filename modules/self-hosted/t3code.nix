@@ -12,6 +12,11 @@ let
   t3codeWorkspace = "/srv/apps/t3code/workspace";
   t3codeSecrets = config.ghostship.selfHostedSecrets.projections.t3code.path;
   t3codeSecretsFile = "/run/secrets/t3code.env";
+  synaraRoot = "/srv/apps/synara";
+  synaraHome = "${synaraRoot}/home";
+  synaraDocker = "${synaraRoot}/docker";
+  synaraNixRoot = "${synaraRoot}/nix-root";
+  synaraWorkspace = "${synaraRoot}/workspace";
   imageName = "localhost/ghostship-t3code";
   imageTag = "t3code-runtime";
 
@@ -1882,6 +1887,22 @@ in
     };
   };
 
+  ghostship.apps.synara = {
+    name = "Synara";
+    group = "Services";
+    description = "Independent continuation of the T3 Code workspace";
+    icon = "mdi-code-braces-#2563eb";
+    order = 103;
+    hostname = "synara.ghostship.io";
+    origin = "http://synara:3773";
+    healthPath = "/";
+    muximux = {
+      icon = "muximux-code";
+      color = "#2563eb";
+      dropdown = false;
+    };
+  };
+
   virtualisation.oci-containers.containers."t3code" = {
     image = "${imageName}:${imageTag}";
     imageFile = t3codeImage;
@@ -1915,6 +1936,43 @@ in
     environmentFiles = [ t3codeSecrets ];
   };
 
+  # Synara intentionally shares the immutable T3 Code image while keeping all
+  # mutable state separate. Its first start takes a crash-consistent Btrfs
+  # snapshot of T3 Code's home, workspace, and nested Docker state. T3 Code
+  # remains running throughout the migration.
+  virtualisation.oci-containers.containers."synara" = {
+    image = "${imageName}:${imageTag}";
+    imageFile = t3codeImage;
+    pull = "never";
+    labels = {
+      "io.containers.autoupdate" = "disabled";
+    };
+    ports = [ ];
+    extraOptions = [
+      "--privileged"
+      "--systemd=always"
+      "--pids-limit=-1"
+      "--stop-timeout=180"
+      "--hostname=synara.ghostship.io"
+      "--network=ghostship_net"
+      "--health-cmd=${t3codeContainerHealth}/bin/t3code-container-health"
+      "--health-interval=30s"
+      "--health-timeout=15s"
+      "--health-retries=5"
+      "--health-start-period=5m"
+      "--health-on-failure=kill"
+    ];
+    volumes = [
+      "${synaraDocker}:/var/lib/docker:rw"
+      "${synaraWorkspace}:/workspace:rw"
+      "${synaraHome}:/home/t3code:rw"
+      "${synaraNixRoot}/nix:/nix:rw"
+      "${t3codeSecrets}:${t3codeSecretsFile}:ro"
+      "/mnt/share:/mnt/share:rw"
+    ];
+    environmentFiles = [ t3codeSecrets ];
+  };
+
   systemd.tmpfiles.rules = [
     "d /srv/apps/t3code 0755 root root -"
     "d ${t3codeDocker} 0755 root root -"
@@ -1922,6 +1980,12 @@ in
     "d ${t3codeNixRoot} 0755 root root -"
     "d ${t3codeNixRoot}/nix 0755 root root -"
     "d ${t3codeWorkspace} 0755 3000 3000 -"
+    "d ${synaraRoot} 0755 root root -"
+    "d ${synaraDocker} 0755 root root -"
+    "d ${synaraHome} 0755 3000 3000 -"
+    "d ${synaraNixRoot} 0755 root root -"
+    "d ${synaraNixRoot}/nix 0755 root root -"
+    "d ${synaraWorkspace} 0755 3000 3000 -"
   ];
 
   systemd.services.podman-t3code = {
@@ -1992,6 +2056,106 @@ in
       install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3code-container/hooks/before-t3code.d
       install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3code-container/hooks/doctor.d
 
+    '';
+  };
+
+  systemd.services.podman-synara = {
+    restartIfChanged = false;
+    stopIfChanged = false;
+    after = [
+      "init-ghostship-net.service"
+      "mnt-share.mount"
+      "podman-t3code.service"
+    ];
+    wants = [
+      "init-ghostship-net.service"
+      "mnt-share.mount"
+    ];
+    serviceConfig.TimeoutStopSec = lib.mkForce "210s";
+    preStart = lib.mkAfter ''
+      set -eu
+
+      migration_marker=${synaraRoot}/.t3code-migration-complete
+      migration_staging=/srv/apps/.synara-migration-staging
+      migration_snapshot=/srv/apps/.synara-migration-snapshot
+
+      cleanup_migration() {
+        if ${pkgs.btrfs-progs}/bin/btrfs subvolume show "$migration_snapshot" >/dev/null 2>&1; then
+          ${pkgs.btrfs-progs}/bin/btrfs subvolume delete "$migration_snapshot"
+        fi
+        rm -rf "$migration_snapshot"
+        rm -rf "$migration_staging"
+      }
+
+      cleanup_migration
+      if [ ! -f "$migration_marker" ]; then
+        trap cleanup_migration EXIT
+        install -d -m0755 -o root -g root "$migration_staging"
+
+        # The source stays live. Snapshotting its containing Btrfs subvolume
+        # captures SQLite databases and WAL files at one filesystem instant.
+        ${pkgs.btrfs-progs}/bin/btrfs subvolume snapshot -r / "$migration_snapshot"
+        source_root="$migration_snapshot/srv/apps/t3code"
+        for directory in home workspace docker; do
+          test -d "$source_root/$directory"
+          install -d -m0755 "$migration_staging/$directory"
+          ${pkgs.coreutils}/bin/cp -a --reflink=always \
+            "$source_root/$directory/." "$migration_staging/$directory/"
+        done
+
+        test -d "$migration_staging/home/.codex"
+        test -d "$migration_staging/home/.config"
+        test -d "$migration_staging/home/.t3/userdata"
+        test -d "$migration_staging/workspace/nixos-config/.git"
+        printf 'source=/srv/apps/t3code\ncreated=%s\n' \
+          "$(${pkgs.coreutils}/bin/date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          > "$migration_staging/.t3code-migration-complete"
+
+        rm -rf ${synaraRoot}
+        mv "$migration_staging" ${synaraRoot}
+        ${pkgs.btrfs-progs}/bin/btrfs subvolume delete "$migration_snapshot"
+        trap - EXIT
+      fi
+
+      install -d -m0755 -o root -g root ${synaraRoot}
+      install -d -m0755 -o root -g root ${synaraDocker}
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}
+      install -d -m0755 -o root -g root ${synaraNixRoot}
+      install -d -m0755 -o 3000 -g 3000 ${synaraWorkspace}
+
+      nix_store_uri='local?root=${synaraNixRoot}'
+      ${pkgs.nix}/bin/nix copy \
+        --no-check-sigs \
+        --to "$nix_store_uri" \
+        ${lib.escapeShellArgs (map toString t3codeImageContents)}
+
+      gcroot_dir=${synaraNixRoot}/nix/var/nix/gcroots/ghostship-t3code-image
+      rm -rf "$gcroot_dir"
+      install -d -m0755 -o root -g root "$gcroot_dir"
+      for store_path in ${lib.escapeShellArgs (map toString t3codeImageContents)}; do
+        ln -s "$store_path" "$gcroot_dir/$(basename "$store_path")"
+      done
+
+      rm -f ${synaraNixRoot}/nix/var/nix/temproots/*
+      rm -rf ${synaraNixRoot}/nix/var/nix/builds/*
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.local/bin
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.local/share
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.local/state
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.cache
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.config/opencode
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.codex
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.gemini/antigravity-cli
+      install -d -m0700 -o 3000 -g 3000 ${synaraHome}/.local/share/keyrings
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.automation
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.config/systemd/user
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.t3/userdata
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.t3/caches
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.t3code-container/logs/tunnels
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.t3code-container/recovery
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.t3code-container/tunnels
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.t3code-container/hooks/bootstrap.d
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.t3code-container/hooks/before-t3code.d
+      install -d -m0755 -o 3000 -g 3000 ${synaraHome}/.t3code-container/hooks/doctor.d
     '';
   };
 }
