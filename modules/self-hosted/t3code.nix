@@ -210,6 +210,25 @@ let
       --probe ${../../tests/t3code-acp-smoke.py}
   '';
 
+  t3codeInstallT3Shim = pkgs.writeShellScriptBin "t3code-install-t3-shim" ''
+    set -eu
+
+    target="''${1:-$NPM_CONFIG_PREFIX/bin/t3}"
+    mkdir -p "$HOME/.local/bin"
+    cat > "$HOME/.local/bin/t3" <<EOF
+    #!/usr/bin/env sh
+    set -eu
+    target='$target'
+    if [ ! -x "\$target" ]; then
+      printf 'error: t3 is not installed yet; run t3code-tool-maintenance\n' >&2
+      exit 1
+    fi
+    export LD_LIBRARY_PATH='${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}'
+    exec "\$target" "\$@"
+    EOF
+    chmod 0755 "$HOME/.local/bin/t3"
+  '';
+
   t3codeInstallGhostshipAgent = pkgs.writeShellScriptBin "t3code-install-ghostship-agent" ''
     set -eu
     ${t3codeRuntimeEnv}
@@ -407,7 +426,7 @@ let
     install_agent_cli "@openai/codex" "codex" || update_status=1
     ${t3codeCodexRgRepair}/bin/t3code-codex-rg-repair || update_status=1
     install_opencode_cli || update_status=1
-    install_user_shim "t3" "$NPM_CONFIG_PREFIX/bin/t3"
+    ${t3codeInstallT3Shim}/bin/t3code-install-t3-shim "$NPM_CONFIG_PREFIX/bin/t3"
     install_user_shim "codex" "$NPM_CONFIG_PREFIX/bin/codex"
     install_opencode_user_shim "$NPM_CONFIG_PREFIX/bin/opencode"
     ${t3codeAntigravityUpdate}/bin/t3code-antigravity-update || update_status=1
@@ -1317,6 +1336,7 @@ let
         printf 'warning: some updates failed; starting with installed tools\n' >&2
       fi
     fi
+    su-exec t3code:t3code ${t3codeInstallT3Shim}/bin/t3code-install-t3-shim "$NPM_CONFIG_PREFIX/bin/t3"
     su-exec t3code:t3code ${t3codeCodexRgRepair}/bin/t3code-codex-rg-repair
     su-exec t3code:t3code ${t3codeProjectBootstrap}/bin/t3code-project-bootstrap
     cat > "$HOME/.local/bin/t3code-server-run" <<'EOF'
@@ -1384,6 +1404,7 @@ let
     t3codeProjectBootstrap
     t3codePair
     t3codeToolMaintenance
+    t3codeInstallT3Shim
     t3codeAntigravityUpdate
     t3codeInstallGhostshipAgent
     t3codeToolAutoUpdate
