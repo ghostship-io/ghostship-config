@@ -118,6 +118,25 @@ worktree, verify and commit changes, push, and open a draft PR. The repo's
 
 ## Remote deployment
 
+### Preserve the active T3 Code session
+
+Every deployment from T3 Code must keep `podman-t3code.service`, the `t3code`
+container, and its inner application runtime running. Restarting any of them
+terminates the agent session. This restriction also covers Podman auto-update,
+dependency restarts, host reboot, and container bootstrap/activation helpers.
+
+Record the container ID and start time plus the service MainPID before work.
+Build first; inspect the candidate unit definitions, activation scripts, and
+`switch-to-configuration dry-activate` output before a full switch. A clean
+unit diff alone does not prove activation is safe: inspect dependencies and
+imperative hooks too. If T3 Code could be interrupted, activate only the exact
+new service's Nix-generated unit through root SSH and retain its build as a
+GC root. Report the deferred full-system switch. Never stop T3 Code to make a
+deployment pass. Verify the recorded identity, start time, and MainPID afterward.
+
+An explicit later instruction scheduling a T3 Code restart is required to
+override this guard; ordinary authorization to deploy is insufficient.
+
 The container hostname identifies the coding environment. Always select the
 target explicitly instead of using `.#$(hostname)` here. Host configuration
 can be evaluated without root:

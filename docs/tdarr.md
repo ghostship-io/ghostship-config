@@ -1,0 +1,72 @@
+# Tdarr pilot
+
+The encoder must run on the existing Chill Penguin server and target HEVC;
+an external worker is outside the selected design.
+
+The Nix-managed `tdarr` service uses the shared `ghostship_net` network at
+`http://tdarr:8265`; no host ports or public endpoint are exposed. The pinned
+ARM64 image contains the server and an internal CPU node. Its root startup
+initializes ownership, then uses apps UID/GID 3000. The pilot intentionally
+omits auto-update until an image/flow combination has passed validation.
+
+Movies and TV under `/source` are writable so a validated encode can replace
+the original. Cache and application state live under `/srv/apps/tdarr`. The
+node runs one CPU transcode worker and no GPU or health-check workers, with
+an eight-CPU quota and a 12 GiB RAM cap. It starts unpaused, watches Movies
+and TV, and scans on startup. Encodes write to cache while the original stays
+in place; a validated output is copied beside it and atomically renamed over
+the original so the path is never empty. Homepage and Muximux expose it at
+`https://tdarr.ghostship.io`. It uses Nix's native ARM64 FFmpeg because the image's bundled x265 build
+was about 20 times slower in the initial test. The M1 Ultra's Linux video
+encoder is not supported; do not assume GPU device passthrough supplies
+hardware encoding.
+
+`tdarr-language-policy.service` reads the local Radarr and Sonarr SQLite
+databases without API credentials and atomically publishes their original
+language metadata to Tdarr. An hourly timer reconciles changes. Missing or
+unknown metadata routes a file to review. Tdarr startup idempotently installs
+the locked `Plex HEVC guarded v1` flow and pilot library. Local flow plugins
+live under `tdarr-plugins/<category>/<pluginName>/<version>/` because Tdarr
+requires that extra category layer beneath `LocalFlowPlugins`.
+
+## Pilot completion
+
+The flow keeps original-language audio and English full/forced subtitles. It
+uses HEVC quality-based encoding, retains compatible AAC/AC-3/E-AC-3 tracks
+up to 5.1, and converts incompatible or larger channel layouts to AC-3. It
+validates duration, stream inventory, the duration-scaled size ceiling,
+meaningful savings, and a full output decode before replacing the original.
+4K, HDR, interlaced, commentary, and unknown-language titles go to review
+instead of automatic replacement.
+
+Visual quality takes precedence over reaching a fixed file size. Begin the
+pilot at x265 CRF 20 with a slow preset and test grain/dark/motion sequences;
+this is lossy encoding, not a promise of identical quality. Preserve an
+existing efficient encode or reject an output with less than 15% savings.
+Use 10 GiB per two hours as the encoding threshold and 20 GiB per two hours as
+the validation ceiling, scaled by duration. CRF remains authoritative: reject
+rather than lower quality further when difficult material exceeds the ceiling.
+Never upscale, change frame rate, or automatically convert HDR/interlaced
+sources in the first production policy.
+
+Audio must have at most six channels (5.1). Preserve mono/stereo and compatible
+original-language tracks. Downmix higher-channel layouts with a tested matrix;
+check dialogue and levels before replacement. Remove unrelated dubbed audio
+by default, retaining English full/forced subtitles. Original multilingual
+dialogue, commentary or historically meaningful alternate tracks warrant
+review. Resolve original language from authoritative item metadata and inspect
+stream tags/title; missing or contradictory tags require review, not deletion.
+An English dub is not required for foreign films. Both commentary and main
+tracks must satisfy the channel limit.
+
+Before production, add persistent source fingerprints/policy versions,
+bounded disk reservations, import events plus periodic NFS reconciliation,
+source-change detection, validation gates, recoverable originals, and
+Radarr/Sonarr/Plex refresh.
+Review the arr upgrade policy to prevent repeated download/encode loops.
+Keep originals outside scanned libraries for 7–14 days with a quota. Never
+overwrite in place or treat a zero encoder exit code as a health check.
+
+Use the T3 session guard in `container-workflow.md` for activation. If a full
+switch affects T3 Code, use only the generated Tdarr unit with a retained GC
+root and report full-system activation as deferred.

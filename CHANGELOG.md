@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.14.0] - 2026-09-20
+
+- Run Tdarr automatically on chill-penguin with one CPU transcode worker, folder watch, scan on start, and atomic replacement after validation.
+- Publish Tdarr on Homepage and Muximux at `tdarr.ghostship.io` with Cloudflare Access protection.
+- Reconcile original-language metadata from Radarr and Sonarr so unrelated dubs can be removed without guessing from filenames or stream order.
+
 ## [3.13.2] - 2026-09-20
 
 - Wrap the current native T3 CLI with its image-provided GCC runtime library
