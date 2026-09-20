@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.13.2] - 2026-09-20
+
+- Wrap the current native T3 CLI with its image-provided GCC runtime library
+  path. T3 0.0.42 on ARM64 requires `libatomic.so.1`; keep that path scoped to
+  T3 so project-pinned Nix commands still run with clean loader settings.
+
 ## [3.13.1] - 2026-09-20
 
 - Snapshot Chill Penguin's dedicated `/srv` Btrfs subvolume when seeding
