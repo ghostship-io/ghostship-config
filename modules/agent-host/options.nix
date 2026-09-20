@@ -30,8 +30,8 @@
 
     readOnlyShare = lib.mkOption {
       type = lib.types.bool;
-      default = true;
-      description = "Whether to mount /mnt/share as read-only inside agent containers by default";
+      default = false;
+      description = "Whether to mount /mnt/share as read-only inside agent containers";
     };
   };
 

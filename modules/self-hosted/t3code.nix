@@ -6,7 +6,6 @@
 }:
 
 let
-  versions = import ../../packages/t3code/versions.nix;
   providerManifest = import ../../packages/t3code/provider-manifest.nix { inherit lib; };
   t3codeActivityProbe = pkgs.callPackage ../../packages/t3code/activity-probe/default.nix { };
   t3codeHome = "/srv/apps/t3code/home";
@@ -143,7 +142,7 @@ let
   # Sign-in is user-owned. Missing credentials must not restart the server.
   t3codeProviderCheck = ''
     t3code_providers_healthy() {
-      for provider in codex claude opencode; do
+      for provider in codex claude cursor opencode; do
         [ -x "$HOME/.local/bin/$provider" ] || return 1
       done
       [ -x ${antigravityAcp}/bin/agy_acp_server.par ]
@@ -236,12 +235,11 @@ let
 
     install_agent_cli() {
       package="$1"
-      target_version="$2"
-      label="$3"
+      label="$2"
 
-      log_info "installing or upgrading $label to $target_version"
+      log_info "installing or upgrading $label"
 
-      if ! install_output="$(npm install -g --no-fund --no-audit "$package@$target_version" 2>&1)"; then
+      if ! install_output="$(npm install -g --no-fund --no-audit "$package@latest" 2>&1)"; then
         log_warn "$label install failed"
         if [ -n "$install_output" ]; then
           printf '%s\n' "$install_output" >&2
@@ -252,6 +250,21 @@ let
       if [ -n "$install_output" ]; then
         printf '%s\n' "$install_output" >&2
       fi
+    }
+
+    install_cursor_cli() {
+      log_info "installing or upgrading cursor agent"
+      if ! curl -fsSL https://cursor.com/install | bash 2>&1; then
+        log_warn "cursor install failed"
+        return 1
+      fi
+      for version_dir in "$HOME/.local/share/cursor-agent/versions"/*; do
+        if [ -d "$version_dir" ]; then
+          ln -sf "$(command -v node)" "$version_dir/node"
+        fi
+      done
+      ln -sf "$HOME/.local/bin/cursor-agent" "$HOME/.local/bin/cursor"
+      return 0
     }
 
     opencode_loader_name() {
@@ -314,11 +327,11 @@ let
     }
 
     install_opencode_cli() {
-      log_info "installing or upgrading opencode to ${versions.opencode.version}"
+      log_info "installing or upgrading opencode"
 
       rm -f "$NPM_CONFIG_PREFIX/bin/opencode"
 
-      if install_output="$(npm install -g --no-fund --no-audit opencode-ai@${versions.opencode.version} 2>&1)"; then
+      if install_output="$(npm install -g --no-fund --no-audit opencode-ai@latest 2>&1)"; then
         if [ -n "$install_output" ]; then
           printf '%s\n' "$install_output" >&2
         fi
@@ -332,10 +345,10 @@ let
 
       case "$(uname -m)" in
         aarch64|arm64)
-          platform_package="${versions.opencode.platformPackageArm64}"
+          platform_package="opencode-linux-arm64"
           ;;
         x86_64|amd64)
-          platform_package="${versions.opencode.platformPackageX64}"
+          platform_package="opencode-linux-x64"
           ;;
         *)
           log_warn "unsupported opencode fallback architecture: $(uname -m)"
@@ -343,7 +356,7 @@ let
           ;;
       esac
 
-      if ! platform_output="$(npm install -g --no-fund --no-audit "$platform_package@${versions.opencode.version}" 2>&1)"; then
+      if ! platform_output="$(npm install -g --no-fund --no-audit "$platform_package@latest" 2>&1)"; then
         log_warn "$platform_package install failed"
         if [ -n "$platform_output" ]; then
           printf '%s\n' "$platform_output" >&2
@@ -395,11 +408,12 @@ let
     mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
     update_status=0
-    install_agent_cli "t3" "${versions.t3.version}" "T3 Code" || update_status=1
-    install_agent_cli "@openai/codex" "${versions.codex.version}" "codex" || update_status=1
+    install_agent_cli "t3" "T3 Code" || update_status=1
+    install_agent_cli "@openai/codex" "codex" || update_status=1
     ${t3codeCodexRgRepair}/bin/t3code-codex-rg-repair || update_status=1
-    install_agent_cli "@anthropic-ai/claude-code" "${versions.claude.version}" "claude" || update_status=1
+    install_agent_cli "@anthropic-ai/claude-code" "claude" || update_status=1
     install_opencode_cli || update_status=1
+    install_cursor_cli || update_status=1
     ${t3codeInstallT3Shim}/bin/t3code-install-t3-shim "$NPM_CONFIG_PREFIX/bin/t3"
     install_user_shim "codex" "$NPM_CONFIG_PREFIX/bin/codex"
     install_user_shim "claude" "$NPM_CONFIG_PREFIX/bin/claude"
@@ -446,6 +460,7 @@ let
     before_t3="$(user_version t3)"
     before_codex="$(user_version codex)"
     before_claude="$(user_version claude)"
+    before_cursor="$(user_version cursor)"
     before_opencode="$(user_version opencode)"
     before_antigravity="$(readlink -e "$XDG_DATA_HOME/t3code-tools/antigravity/current" || true)"
     before_agent="$(readlink -e "$HOME/.local/state/t3code-agent-tools-package" || true)"
@@ -459,6 +474,7 @@ let
     after_t3="$(user_version t3)"
     after_codex="$(user_version codex)"
     after_claude="$(user_version claude)"
+    after_cursor="$(user_version cursor)"
     after_opencode="$(user_version opencode)"
     after_antigravity="$(readlink -e "$XDG_DATA_HOME/t3code-tools/antigravity/current" || true)"
     after_agent="$(readlink -e "$HOME/.local/state/t3code-agent-tools-package" || true)"
@@ -467,12 +483,14 @@ let
     log_info "t3: ''${before_t3:-missing} -> ''${after_t3:-missing}"
     log_info "codex: ''${before_codex:-missing} -> ''${after_codex:-missing}"
     log_info "claude: ''${before_claude:-missing} -> ''${after_claude:-missing}"
+    log_info "cursor: ''${before_cursor:-missing} -> ''${after_cursor:-missing}"
     log_info "opencode: ''${before_opencode:-missing} -> ''${after_opencode:-missing}"
     log_info "antigravity: ''${before_antigravity:-bundled} -> ''${after_antigravity:-bundled}"
 
     if [ "$before_t3" != "$after_t3" ] \
       || [ "$before_codex" != "$after_codex" ] \
       || [ "$before_claude" != "$after_claude" ] \
+      || [ "$before_cursor" != "$after_cursor" ] \
       || [ "$before_opencode" != "$after_opencode" ] \
       || [ "$before_antigravity" != "$after_antigravity" ] \
       || [ "$before_agent" != "$after_agent" ] \
@@ -482,6 +500,7 @@ let
         printf 't3=%s\n' "$after_t3"
         printf 'codex=%s\n' "$after_codex"
         printf 'claude=%s\n' "$after_claude"
+        printf 'cursor=%s\n' "$after_cursor"
         printf 'opencode=%s\n' "$after_opencode"
         printf 'antigravity=%s\n' "$after_antigravity"
       } > "$pending_tmp"
@@ -739,6 +758,7 @@ let
       t3 --version >/dev/null
       codex --version >/dev/null
       claude --version >/dev/null || true
+      cursor --version >/dev/null || true
       opencode debug config >/dev/null
     }
 
@@ -1920,7 +1940,7 @@ in
       "${t3codeHome}:/home/t3code:rw"
       "${t3codeNixRoot}/nix:/nix:rw"
       "${t3codeSecrets}:${t3codeSecretsFile}:ro"
-      "${config.ghostship.agentHost.sharedPath}:/mnt/share:${if config.ghostship.agentHost.readOnlyShare then "ro" else "rw"}"
+      "${config.ghostship.agentHost.sharedPath}:/mnt/share:rw"
     ];
     environmentFiles = [ t3codeSecrets ];
   };

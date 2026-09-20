@@ -1,16 +1,11 @@
 { lib ? null }:
 
-let
-  versions = import ./versions.nix;
-in
 {
-  inherit versions;
-
   providers = {
     codex = {
       name = "codex";
-      package = versions.codex.package;
-      version = versions.codex.version;
+      package = "@openai/codex";
+      autoUpdate = true;
       required = true;
       authType = "native";
       skillDirs = [ ".agents/skills" ];
@@ -20,8 +15,8 @@ in
 
     claude = {
       name = "claude";
-      package = versions.claude.package;
-      version = versions.claude.version;
+      package = "@anthropic-ai/claude-code";
+      autoUpdate = true;
       required = true;
       authType = "native";
       skillDirs = [ ".claude/skills" ".agents/skills" ];
@@ -29,10 +24,21 @@ in
       binary = "claude";
     };
 
+    cursor = {
+      name = "cursor";
+      package = "cursor-agent";
+      autoUpdate = true;
+      required = false;
+      authType = "native";
+      skillDirs = [ ".cursor/skills" ".agents/skills" ];
+      description = "Cursor AI Agent CLI";
+      binary = "cursor";
+    };
+
     opencode = {
       name = "opencode";
-      package = versions.opencode.package;
-      version = versions.opencode.version;
+      package = "opencode-ai";
+      autoUpdate = true;
       required = true;
       authType = "instance-env";
       skillDirs = [ ".agents/skills" ];
@@ -42,8 +48,8 @@ in
 
     grok = {
       name = "grok";
-      package = versions.grok.package;
-      version = versions.grok.version;
+      package = "@xai-official/grok";
+      autoUpdate = true;
       required = false;
       authType = "native";
       skillDirs = [ ".agents/skills" ];
@@ -54,6 +60,7 @@ in
     antigravity = {
       name = "antigravity";
       specialPlatformAdapter = true;
+      autoUpdate = true;
       required = false;
       authType = "account-instance";
       skillDirs = [ ".gemini/config/skills" ];
