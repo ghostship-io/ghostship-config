@@ -7,7 +7,8 @@ under `/srv/apps/synara` and is never shared with the running T3 Code instance.
 
 ## Initial migration
 
-The first `podman-synara.service` start snapshots the live Btrfs root and
+The first `podman-synara.service` start snapshots the live `/srv` Btrfs
+subvolume and
 reflink-copies these T3 Code paths into a staging directory:
 
 - `/srv/apps/t3code/home`, including provider configuration, transferable

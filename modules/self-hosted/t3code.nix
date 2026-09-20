@@ -2077,7 +2077,7 @@ in
 
       migration_marker=${synaraRoot}/.t3code-migration-complete
       migration_staging=/srv/apps/.synara-migration-staging
-      migration_snapshot=/srv/apps/.synara-migration-snapshot
+      migration_snapshot=/var/lib/.synara-migration-snapshot
 
       cleanup_migration() {
         if ${pkgs.btrfs-progs}/bin/btrfs subvolume show "$migration_snapshot" >/dev/null 2>&1; then
@@ -2092,10 +2092,10 @@ in
         trap cleanup_migration EXIT
         install -d -m0755 -o root -g root "$migration_staging"
 
-        # The source stays live. Snapshotting its containing Btrfs subvolume
+        # The source stays live. Snapshotting its dedicated Btrfs subvolume
         # captures SQLite databases and WAL files at one filesystem instant.
-        ${pkgs.btrfs-progs}/bin/btrfs subvolume snapshot -r / "$migration_snapshot"
-        source_root="$migration_snapshot/srv/apps/t3code"
+        ${pkgs.btrfs-progs}/bin/btrfs subvolume snapshot -r /srv "$migration_snapshot"
+        source_root="$migration_snapshot/apps/t3code"
         for directory in home workspace docker; do
           test -d "$source_root/$directory"
           install -d -m0755 "$migration_staging/$directory"
