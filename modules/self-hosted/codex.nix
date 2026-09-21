@@ -192,11 +192,7 @@ let
       function readCatalog() {
         try {
           const parsed = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
-          return Array.isArray(parsed)
-            ? parsed.filter((entry) =>
-                Array.isArray(entry.capabilities) &&
-                entry.capabilities.includes("tools"))
-            : [];
+          return Array.isArray(parsed) ? parsed : [];
         } catch {
           return [];
         }
@@ -229,7 +225,7 @@ let
             id: "ollama/" + entry.name,
             model: "ollama/" + entry.name,
             displayName: "Ollama / " + entry.name,
-            description: "Tool-capable Ollama.com cloud model",
+            description: "Ollama.com cloud model",
           };
         });
       }
@@ -1242,13 +1238,11 @@ let
       fi
       jq -c --arg name "$model" '
         (.capabilities // []) as $capabilities
-        | select($capabilities | index("tools"))
         | {name: $name, capabilities: $capabilities}
       ' "$work_dir/show.json" >> "$work_dir/catalog.jsonl"
     done < "$work_dir/models"
 
-    jq -s 'sort_by(.name)' "$work_dir/catalog.jsonl" > "$work_dir/catalog.json"
-    jq -e 'all(.[]; (.capabilities | index("tools")) != null)' "$work_dir/catalog.json" >/dev/null
+    jq -s 'sort_by(.name)' "$work_dir/catalog.jsonl" > "$work_dir/catalog.json" 
     install -m 0600 "$work_dir/catalog.json" "$CODEX_OLLAMA_CATALOG.tmp"
     mv "$CODEX_OLLAMA_CATALOG.tmp" "$CODEX_OLLAMA_CATALOG"
   '';
