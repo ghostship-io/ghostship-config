@@ -4,10 +4,11 @@ import json
 import os
 import platform
 import pwd
-import select
+import queue
 import struct
 import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -83,6 +84,32 @@ def main():
                 stderr=stderr,
                 text=True,
             )
+            replies = queue.Queue()
+
+            def read_replies():
+                for output_line in proc.stdout:
+                    replies.put(output_line)
+                replies.put(None)
+
+            output_thread = threading.Thread(target=read_replies, daemon=True)
+            output_thread.start()
+
+            def wait_for_reply(request_id, label):
+                deadline = time.monotonic() + 45
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise RuntimeError(f"ACP {label} timed out")
+                    try:
+                        line = replies.get(timeout=remaining)
+                    except queue.Empty as error:
+                        raise RuntimeError(f"ACP {label} timed out") from error
+                    if line is None:
+                        raise RuntimeError(f"ACP exited before {label}")
+                    reply = json.loads(line)
+                    if reply.get("id") == request_id:
+                        return reply
+
             try:
                 request = {
                     "jsonrpc": "2.0",
@@ -96,20 +123,7 @@ def main():
                 }
                 proc.stdin.write(json.dumps(request) + "\n")
                 proc.stdin.flush()
-                deadline = time.monotonic() + 45
-                while True:
-                    remaining = deadline - time.monotonic()
-                    if (
-                        remaining <= 0
-                        or not select.select([proc.stdout], [], [], remaining)[0]
-                    ):
-                        raise RuntimeError("ACP initialization timed out")
-                    line = proc.stdout.readline()
-                    if not line:
-                        raise RuntimeError("ACP exited before initialization")
-                    reply = json.loads(line)
-                    if reply.get("id") == 1:
-                        break
+                reply = wait_for_reply(1, "initialization")
                 result = reply.get("result", {})
                 if result.get("protocolVersion") != 1 or not any(
                     method.get("id") == "oauth-personal"
@@ -129,20 +143,7 @@ def main():
                 }
                 proc.stdin.write(json.dumps(request) + "\n")
                 proc.stdin.flush()
-                deadline = time.monotonic() + 45
-                while True:
-                    remaining = deadline - time.monotonic()
-                    if (
-                        remaining <= 0
-                        or not select.select([proc.stdout], [], [], remaining)[0]
-                    ):
-                        raise RuntimeError("ACP session/list round trip timed out")
-                    line = proc.stdout.readline()
-                    if not line:
-                        raise RuntimeError("ACP exited before session/list response")
-                    reply = json.loads(line)
-                    if reply.get("id") == 2:
-                        break
+                reply = wait_for_reply(2, "session/list response")
                 if ("result" in reply) == ("error" in reply):
                     raise RuntimeError(f"Unexpected ACP session/list response: {reply}")
                 print(
