@@ -36,6 +36,9 @@ class BackupFailureTests(unittest.TestCase):
             script = script.replace(
                 "/var/lib/ghostship-dashboards", str(root / "dashboards")
             )
+            script = script.replace(
+                "/srv/retired-apps", str(root / "retired-apps")
+            )
             script = script.replace("/run/current-system", str(root))
             for command in [
                 "findmnt",

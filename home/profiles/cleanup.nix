@@ -99,6 +99,7 @@ let
     }
     {
       name = "opencode-server";
+      userUnits = [ "opencode-server.service" ];
       paths = [
         ".config/systemd/user/opencode-server.service"
         ".config/systemd/user/default.target.wants/opencode-server.service"
@@ -110,9 +111,8 @@ let
     }
     {
       name = "openchamber-user-service";
+      userUnits = [ "openchamber.service" ];
       paths = [
-        ".config/systemd/user/opencode.service"
-        ".config/systemd/user/default.target.wants/opencode.service"
         ".config/systemd/user/openchamber.service"
         ".config/systemd/user/default.target.wants/openchamber.service"
       ];
@@ -350,9 +350,24 @@ let
         cleanup_home_glob ${relativePattern}
       ''
     ) (entry.pathGlobs or [ ]);
+
+  renderUserUnitCleanup =
+    entry:
+    lib.concatMapStringsSep "\n" (unit: ''
+      $DRY_RUN_CMD ${pkgs.systemd}/bin/systemctl --user disable --now ${lib.escapeShellArg unit} || true
+    '') (entry.userUnits or [ ]);
 in
 {
   home.activation.ghostshipRetiredArtifactCleanup = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    legacy_opencode_unit="$HOME/.config/systemd/user/opencode.service"
+    if [ -f "$legacy_opencode_unit" ] \
+      && ${pkgs.gnugrep}/bin/grep -Eqi 'openchamber|\.openchamber' "$legacy_opencode_unit"; then
+      $DRY_RUN_CMD ${pkgs.systemd}/bin/systemctl --user disable --now opencode.service || true
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -f -- \
+        "$legacy_opencode_unit" \
+        "$HOME/.config/systemd/user/default.target.wants/opencode.service"
+    fi
+
     cleanup_home_path() {
       relative_path="$1"
 
@@ -389,6 +404,7 @@ in
     }
 
     ${lib.concatMapStringsSep "\n" (entry: ''
+      ${renderUserUnitCleanup entry}
       ${renderPathCleanup entry}
       ${renderGlobCleanup entry}
     '') retiredArtifacts}

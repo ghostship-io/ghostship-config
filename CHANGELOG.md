@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.2] - 2026-09-21
+
+- Connect the armored-armadillo WSL worker to the main T3 web client through a
+  dedicated, Access-protected Cloudflare tunnel instead of T3 Connect. Add
+  guarded two-minute self-healing for the worker and connector; both start with
+  the NixOS WSL system and require no Windows scheduled task.
+- Add an idempotent Cloudflare tunnel provisioner that reconciles the named
+  tunnel, exact DNS record, loopback ingress, Access coverage, and private
+  connector token without placing credentials in the Nix store.
+
 ## [3.15.1] - 2026-09-21
 
 - Include GNU Make in the managed agent-CLI maintenance runtime so T3's

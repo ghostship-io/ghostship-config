@@ -10,9 +10,8 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
-    # T3 Connect resolves the cloudflared relay client on the caller's PATH.
-    # The package keeps the first Connect attempt offline-tolerant instead of
-    # relying on T3 Code's download during setup.
+    # Direct workers use cloudflared as a persistent outbound connector. Keep
+    # it installed with T3 so recovery does not depend on an online download.
     environment.systemPackages = [
       pkgs.cloudflared
       # T3 requires Node 22.16+ / 24; pin the runtime it is tested against.

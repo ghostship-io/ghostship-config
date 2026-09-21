@@ -447,10 +447,57 @@ let
     lib.concatMapStringsSep "\n" command (artifact.${field} or [ ]);
 in
 lib.mkIf (config.networking.hostName == "chill-penguin") {
-  system.activationScripts.chill-penguin-retired-artifact-cleanup = {
-    supportsDryActivation = false;
-    text = ''
+  # A system service starts after switch-to-configuration has stopped units
+  # removed by the new generation. Activation scripts run too early and would
+  # preserve those still-active retired containers until a second rebuild.
+  systemd.services.chill-penguin-retired-artifact-cleanup = {
+    description = "Quarantine retired self-hosted application artifacts";
+    requires = [ "podman-t3code.service" ];
+    after = [ "podman-t3code.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig.Type = "oneshot";
+    script = ''
       retirement_dir="/srv/retired-apps/$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ)"
+
+      # Preserve every missing OpenChamber repository before its source tree is
+      # quarantined. Existing T3 projects remain authoritative and untouched.
+      imported_openchamber=false
+      if [ -d /srv/apps/openchamber/workspace ] && [ -d /srv/apps/t3code/workspace ]; then
+        for source in /srv/apps/openchamber/workspace/*; do
+          [ -d "$source" ] || continue
+          if [ -L "$source" ] || ${pkgs.util-linux}/bin/mountpoint -q "$source"; then
+            printf 'warning: refusing linked or mounted OpenChamber project %s\n' "$source" >&2
+            continue
+          fi
+          name="$(${pkgs.coreutils}/bin/basename "$source")"
+          destination="/srv/apps/t3code/workspace/$name"
+          [ ! -e "$destination" ] || continue
+          staging="$(${pkgs.coreutils}/bin/mktemp -d /srv/apps/t3code/workspace/.import.XXXXXX)"
+          ${pkgs.coreutils}/bin/cp -a --reflink=auto "$source/." "$staging/"
+          ${pkgs.coreutils}/bin/chown -R 3000:3000 "$staging"
+          ${pkgs.coreutils}/bin/mv "$staging" "$destination"
+          imported_openchamber=true
+        done
+      fi
+      if [ "$imported_openchamber" = true ]; then
+        t3_ready=false
+        for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
+          if ${pkgs.podman}/bin/podman exec t3code \
+            systemctl is-active --quiet t3code-server.service 2>/dev/null \
+            && ${pkgs.podman}/bin/podman exec t3code \
+              test -x /bin/t3code-project-bootstrap; then
+            t3_ready=true
+            break
+          fi
+          sleep 5
+        done
+        if [ "$t3_ready" != true ]; then
+          printf 'error: T3 did not become ready for imported project registration\n' >&2
+          exit 1
+        fi
+        ${pkgs.podman}/bin/podman exec --user 3000:3000 t3code \
+          /bin/t3code-project-bootstrap
+      fi
 
       cleanup_retired_path() {
         path="$1"

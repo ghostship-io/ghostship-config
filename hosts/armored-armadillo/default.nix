@@ -17,6 +17,11 @@
     t3worker = true;
   };
 
+  ghostship.t3Worker.directTunnel = {
+    enable = true;
+    hostname = "armored-armadillo-t3.ghostship.io";
+  };
+
   wsl.defaultUser = "nixos";
 
   # Automation
