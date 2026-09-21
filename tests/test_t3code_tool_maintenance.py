@@ -32,6 +32,10 @@ class ToolMaintenanceSource(unittest.TestCase):
             'if [ "$installed_version" != "$expected_version" ]; then', SOURCE
         )
 
+    def test_npm_agents_parse_json_output_from_user_npm_configuration(self):
+        self.assertIn('const parsed = JSON.parse(input);', SOURCE)
+        self.assertIn('if (typeof parsed === "string") version = parsed;', SOURCE)
+
     def test_image_includes_nodes_openssl_certificate_directory(self):
         self.assertIn("    openssl\n", SOURCE)
 

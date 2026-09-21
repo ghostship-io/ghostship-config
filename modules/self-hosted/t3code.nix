@@ -255,9 +255,17 @@ let
         cat "$latest_error" >&2
       fi
       rm -rf "$lookup_cache"
-      latest_version="$(printf '%s\n' "$latest_output" | sed -n '1p')"
-      if [ -z "$latest_version" ]; then
-        log_warn "the registry returned no current version for $package"
+      if ! latest_version="$(printf '%s' "$latest_output" | node -e '
+        const input = require("fs").readFileSync(0, "utf8").trim();
+        let version = input;
+        try {
+          const parsed = JSON.parse(input);
+          if (typeof parsed === "string") version = parsed;
+        } catch (_) {}
+        if (!version || version.includes("\\n")) process.exit(1);
+        process.stdout.write(version);
+      ')"; then
+        log_warn "the registry returned an invalid version for $package"
         return 1
       fi
 
