@@ -30,7 +30,7 @@
       autoUpdate = true;
       required = false;
       authType = "native";
-      skillDirs = [ ".cursor/skills" ".agents/skills" ];
+      skillDirs = [ ".agents/skills" ];
       description = "Cursor AI Agent CLI";
       binary = "cursor";
     };
