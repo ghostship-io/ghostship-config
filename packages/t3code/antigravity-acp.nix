@@ -70,6 +70,7 @@ stdenvNoCC.mkDerivation {
     # QEMU crashes it during session startup.
     export ANTIGRAVITY_HARNESS_PATH="$out/bin/localharness_external"
     export T3CODE_ANTIGRAVITY_LAUNCHER="$out/libexec/agy_acp-launch"
+    export T3CODE_ANTIGRAVITY_VERSION="${version}"
     exec ${pkgs.python3}/bin/python3 "$out/libexec/antigravity-acp-proxy.py" "\$@"
     EOF
     cat > "$out/bin/localharness_external" <<EOF

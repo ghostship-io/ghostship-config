@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.14.4] - 2026-09-21
+
+- Complete the Antigravity ACP compatibility bridge by returning the pinned
+  1.1.1 initialization descriptor immediately and suppressing the agent's
+  delayed duplicate response. This breaks the T3/agent initialization
+  deadlock while leaving all authenticated session traffic on the real agent.
+
 ## [3.14.3] - 2026-09-21
 
 - Bridge Google Antigravity's ACP initialization ordering so T3 Code can

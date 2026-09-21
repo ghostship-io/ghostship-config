@@ -8,11 +8,67 @@ import sys
 import threading
 
 
-def is_method(line: bytes, method: str) -> bool:
+def decode_message(line: bytes) -> dict[str, object] | None:
     try:
-        return json.loads(line).get("method") == method
+        value = json.loads(line)
     except (AttributeError, json.JSONDecodeError, UnicodeDecodeError):
-        return False
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def initialize_response(request_id: object) -> bytes:
+    version = os.environ.get("T3CODE_ANTIGRAVITY_VERSION", "1.1.1")
+    return (
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "protocolVersion": 1,
+                    "agentCapabilities": {
+                        "loadSession": True,
+                        "promptCapabilities": {
+                            "image": True,
+                            "audio": True,
+                            "embeddedContext": True,
+                        },
+                        "mcpCapabilities": {"http": True, "sse": True},
+                        "sessionCapabilities": {"list": {}, "resume": {}},
+                        "auth": {"logout": {}},
+                    },
+                    "authMethods": [
+                        {
+                            "id": "oauth-personal",
+                            "name": "Log in with Google",
+                            "description": "Log in with your Google account",
+                        },
+                        {
+                            "id": "oauth-business",
+                            "name": "Log in with Gemini Enterprise",
+                            "description": "Log in with Gemini Enterprise",
+                        },
+                        {
+                            "id": "gemini-api-key",
+                            "name": "Gemini API key",
+                            "description": "Use a Gemini Developer API key",
+                        },
+                        {
+                            "id": "agent-platform",
+                            "name": "Gemini Enterprise Agent Platform",
+                            "description": "Use Gemini Enterprise Agent Platform",
+                        },
+                    ],
+                    "agentInfo": {
+                        "name": "antigravity-acp",
+                        "title": "Google Antigravity",
+                        "version": f"agy_acp_server_{version}",
+                    },
+                },
+            },
+            separators=(",", ":"),
+        ).encode()
+        + b"\n"
+    )
 
 
 def main() -> int:
@@ -27,11 +83,23 @@ def main() -> int:
     assert child.stdout is not None
 
     output_error: list[BaseException] = []
+    suppressed_response_ids: set[object] = set()
+    suppression_lock = threading.Lock()
 
     def forward_output() -> None:
         try:
-            while chunk := child.stdout.read(65536):
-                sys.stdout.buffer.write(chunk)
+            for line in child.stdout:
+                message = decode_message(line)
+                with suppression_lock:
+                    suppress = (
+                        message is not None
+                        and message.get("id") in suppressed_response_ids
+                    )
+                    if suppress:
+                        suppressed_response_ids.remove(message.get("id"))
+                if suppress:
+                    continue
+                sys.stdout.buffer.write(line)
                 sys.stdout.buffer.flush()
         except (BrokenPipeError, OSError) as error:
             output_error.append(error)
@@ -43,22 +111,32 @@ def main() -> int:
 
     try:
         for line in sys.stdin.buffer:
+            message = decode_message(line)
             if (
                 injected_initialized
                 and not suppressed_client_initialized
-                and is_method(line, "initialized")
+                and message is not None
+                and message.get("method") == "initialized"
             ):
                 suppressed_client_initialized = True
                 continue
 
+            initialize_id = None
+            if message is not None and message.get("method") == "initialize":
+                initialize_id = message.get("id")
+                with suppression_lock:
+                    suppressed_response_ids.add(initialize_id)
+
             child.stdin.write(line)
             child.stdin.flush()
-            if not injected_initialized and is_method(line, "initialize"):
+            if not injected_initialized and initialize_id is not None:
                 child.stdin.write(
                     b'{"jsonrpc":"2.0","method":"initialized","params":{}}\n'
                 )
                 child.stdin.flush()
                 injected_initialized = True
+                sys.stdout.buffer.write(initialize_response(initialize_id))
+                sys.stdout.buffer.flush()
     except (BrokenPipeError, OSError):
         pass
     finally:
