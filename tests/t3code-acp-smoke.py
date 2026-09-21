@@ -116,7 +116,39 @@ def main():
                     for method in result.get("authMethods", [])
                 ):
                     raise RuntimeError(f"Unexpected ACP response: {reply}")
-                print("ACP initialization passed:", result.get("agentInfo", {}))
+
+                # The compatibility proxy synthesizes initialize so T3 is not
+                # blocked by Antigravity's delayed reply. Exercise an advertised
+                # method as well, proving the staged agent itself is alive and
+                # processing requests before an updater publishes it.
+                request = {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "session/list",
+                    "params": {},
+                }
+                proc.stdin.write(json.dumps(request) + "\n")
+                proc.stdin.flush()
+                deadline = time.monotonic() + 45
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if (
+                        remaining <= 0
+                        or not select.select([proc.stdout], [], [], remaining)[0]
+                    ):
+                        raise RuntimeError("ACP session/list round trip timed out")
+                    line = proc.stdout.readline()
+                    if not line:
+                        raise RuntimeError("ACP exited before session/list response")
+                    reply = json.loads(line)
+                    if reply.get("id") == 2:
+                        break
+                if ("result" in reply) == ("error" in reply):
+                    raise RuntimeError(f"Unexpected ACP session/list response: {reply}")
+                print(
+                    "ACP initialization and session/list round trip passed:",
+                    result.get("agentInfo", {}),
+                )
             except Exception:
                 stderr.flush()
                 print(log.read_text()[-4000:])
