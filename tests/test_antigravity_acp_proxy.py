@@ -17,9 +17,9 @@ class AntigravityAcpProxyTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             launcher = Path(directory) / "fake-agent.py"
             launcher.write_text(
-                textwrap.dedent(
+                f"#!{sys.executable}\n"
+                + textwrap.dedent(
                     """\
-                    #!/usr/bin/env python3
                     import json
                     import sys
 
