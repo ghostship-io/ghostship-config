@@ -109,6 +109,29 @@ let
       codexHookCommands = [ ];
     }
     {
+      name = "openchamber-user-service";
+      paths = [
+        ".config/systemd/user/opencode.service"
+        ".config/systemd/user/default.target.wants/opencode.service"
+        ".config/systemd/user/openchamber.service"
+        ".config/systemd/user/default.target.wants/openchamber.service"
+      ];
+      pathGlobs = [ ];
+      geminiExtensionKeys = [ ];
+      skillLockNames = [ ];
+      codexHookCommands = [ ];
+    }
+    {
+      name = "retired-agent-tooling-paths";
+      paths = [
+        ".openchamber"
+      ];
+      pathGlobs = [ ];
+      geminiExtensionKeys = [ ];
+      skillLockNames = [ ];
+      codexHookCommands = [ ];
+    }
+    {
       name = "workmux";
       paths = [
         ".cache/workmux"
