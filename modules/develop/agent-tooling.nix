@@ -130,6 +130,12 @@ let
         log_warn "cursor install failed, continuing"
         return 0
       fi
+      if [ -L "$HOME/.local/bin/agent" ]; then
+        agent_target="$(readlink "$HOME/.local/bin/agent" || true)"
+        if case "$agent_target" in *cursor-agent*) true;; *) false;; esac; then
+          rm -f "$HOME/.local/bin/agent"
+        fi
+      fi
       for version_dir in "$HOME/.local/share/cursor-agent/versions"/*; do
         if [ -d "$version_dir" ]; then
           ln -sf "${pkgs.nodejs}/bin/node" "$version_dir/node"

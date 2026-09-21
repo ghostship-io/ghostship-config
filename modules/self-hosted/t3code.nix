@@ -258,6 +258,13 @@ let
         log_warn "cursor install failed"
         return 1
       fi
+      # Remove cursor installer's takeover of ~/.local/bin/agent to protect Ghostship agent CLI
+      if [ -L "$HOME/.local/bin/agent" ]; then
+        agent_target="$(readlink "$HOME/.local/bin/agent" || true)"
+        if case "$agent_target" in *cursor-agent*) true;; *) false;; esac; then
+          rm -f "$HOME/.local/bin/agent"
+        fi
+      fi
       for version_dir in "$HOME/.local/share/cursor-agent/versions"/*; do
         if [ -d "$version_dir" ]; then
           ln -sf "$(command -v node)" "$version_dir/node"
