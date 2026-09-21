@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.14.6] - 2026-09-21
+
+- Restore the managed Ollama Cloud and OpenRouter API keys to the T3 Code
+  container environment so OpenCode's environment-backed provider
+  configuration authenticates after container replacement or restart.
+
 ## [3.14.5] - 2026-09-21
 
 - Run T3's Antigravity browser-suppression preflight with the pinned Node
