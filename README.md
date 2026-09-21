@@ -190,7 +190,7 @@ Ghostship agent project through persistent lifecycle hooks; see
 Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
-Key services include Plex, Homepage, Muximux, OpenChamber, the `arr` stack,
+Key services include Plex, Homepage, Muximux, the `arr` stack,
 qBittorrent, NZBGet, RomM, Grimmory, Chaptarr, PyLoad, and CloakBrowser.
 Uptime Kuma, ntfy, and Seerr add monitoring, Android notifications, and
 approval-required media requests.
@@ -215,126 +215,27 @@ service modules.
 PyLoad has a daily `04:00` `pyload-restart-failed` timer that checks the
 internal `http://pyload:8000` API and restarts failed queue links when present.
 
-OpenChamber is disabled on `chill-penguin`; its container and idle-deployment
-units are masked declaratively. All persistent data under `/srv/apps/openchamber`
-is retained, and its existing Uptime Kuma monitor is paused without deleting
-history. To bring it back, remove the OpenChamber parking overrides in
-`hosts/chill-penguin/default.nix`, commit, and rebuild the host. Its declaration
-recreates the container using the existing home, projects, Docker state, and Nix store.
-Resume the existing OpenChamber monitor in Uptime Kuma after startup.
-
-When enabled, OpenChamber runs as a separate repo-built Podman OCI image for
-`https://openchamber.ghostship.io`. It uses the `openchamber` user at
-`3000:3000`, keeps `/workspace`, `/home/openchamber`, and Docker state under
-`/srv/apps/openchamber`, and starts systemd-managed `dockerd` plus a persistent
-`openchamber` user systemd manager. The OpenChamber web process runs as the
-container system service `openchamber-web.service`. Project-owned services and
-recurring jobs should install persisted user units and timers under
-`/home/openchamber/.config/systemd/user`, then run
-`openchamber-user-units enable-now <unit>` or
-`openchamber-user-units reload` as the `openchamber` user. Image startup runs
-executable project hooks from
-`/home/openchamber/.openchamber/hooks/{bootstrap.d,before-openchamber.d}` before
-starting OpenChamber and OpenCode, so the web runtime starts once with the
-completed setup. When
-`/workspace/ghostship-agent/tools` exists, startup also seeds
-`/home/openchamber/tools` as a compatibility link for the agent repo's
-installed command wrappers. OpenChamber installs only `@openchamber/web` and
-`opencode-ai` into
-`/home/openchamber/.local/share/openchamber-tools`, exposes
-`/home/openchamber/.local/bin` on `PATH`, keeps them updated through the
-persistent `openchamber-tool-auto-update.timer`, and does not configure a UI
-password.
-Downloaded tool updates queue a restart instead of restarting immediately;
-`openchamber-tool-update-restart.timer` applies the queued restart only after
-OpenChamber's aggregate session activity reports 30 seconds of continuous
-idle. Operator-approved host deployments may interrupt active sessions and use
-a content-stable image tag, so unrelated repository commits do not recreate the
-container. A failed image is latched instead of being restarted repeatedly; the
-next changed image or an explicit operator retry clears that block. Automated
-web-monitor recovery requires three consecutive failures and uses the idle gate
-before restarting an active but unhealthy runtime; the container health policy
-uses it before killing an otherwise active container.
-OpenCode runs with bounded provider timeouts, output-pruning compaction, and a
-retry guard that aborts only the affected session after ten attempts or ten
-minutes. Startup marks orphaned running tool calls from a previous process as
-interrupted before accepting new work.
-The web service also throttles its workload above 32 GiB and caps it at 40 GiB
-so a runaway child process is contained without forcing a host-wide OOM or a
-full OpenChamber restart.
-The container Nix store persists under `/srv/apps/openchamber/nix-root/nix`.
-Before each start, the host incrementally seeds the current image closures into
-that isolated store and refreshes GC roots; an internal root-owned `nix-daemon`
-serves builds to the unprivileged OpenChamber user. Container-built agent
-packages therefore survive image replacement without granting the container
-write access to the host's primary Nix store. The web, Docker, and Nix services
-have 30-second stop limits; the user manager has 10 seconds, and package
-maintenance keeps a longer allowance. Podman's 180-second aggregate stop
-window leaves all paths enough time to stop cleanly during an authorized idle
-restart. The host unit allows 210 seconds and the minimal container units are
-explicitly ordered into systemd shutdown.
-It includes Cloudflared for ad hoc Quick Tunnels from inside the container. Use
-`openchamber-tunnel start <name> <port>` as the `openchamber` user to expose a
-loopback web app at `http://127.0.0.1:<port>` through a generated
-`trycloudflare.com` URL, `openchamber-tunnel url <name>` to print the current
-URL, and `openchamber-tunnel stop <name>` or `openchamber-tunnel remove <name>`
-to stop or remove the user systemd tunnel service. Quick Tunnels are ephemeral
-and do not require Cloudflare account credentials.
-Use `openchamber-apply-config` as the `openchamber` user after changing
-OpenChamber or OpenCode config. It validates OpenChamber JSON config and runs
-OpenCode's native `opencode debug config` check, restarts
-`openchamber-web.service` through a narrow container-local sudoers rule, waits
-for OpenChamber plus its managed `opencode serve` subprocess to recover, and
-restores the previous last-good config snapshot if the restart does not become
-healthy. `openchamber-web.service` refreshes that last-good snapshot whenever
-it starts successfully.
+OpenChamber, the Synara T3 Code container, and the ChatGPT/Codex
+workstation are retired. Their `/srv/apps` directories, containers, images,
+units, and dashboard entries are quarantined by the shared retirement sweep in
+[`modules/self-hosted/cleanup.nix`](modules/self-hosted/cleanup.nix). Quarantine
+moves data under `/srv/retired-apps` and has no automatic purge.
 
 T3 Code runs at `https://t3code.ghostship.io`, with native
-Codex/OpenAI, OpenCode, and Antigravity ACP providers. It keeps independent
-copies of OpenChamber's projects and its own home, Docker state, and Nix store
-under `/srv/apps/t3code`. See [T3 Code setup and operations](docs/t3code.md)
-for browser access, provider sign-in, project import, and maintenance.
-Android Chrome can install it as a standalone app from the browser menu;
+Codex/OpenAI, OpenCode, and Antigravity ACP providers. It keeps its own home,
+projects, Docker state, and Nix store under `/srv/apps/t3code`. See
+[T3 Code setup and operations](docs/t3code.md) for browser access, provider
+sign-in, project import, and maintenance. Android Chrome can install it as a
+standalone app from the browser menu;
 see [Android installation](docs/t3code.md#android-installation).
+
+Windows/WSL2 desktops join the same web interface as independent worker
+environments through T3 Connect. See
+[WSL2 T3 Code workers](docs/wsl-t3-workers.md).
 
 n8n, SearXNG, and PriceBuddy are retired from the declared stack.
 Retirement quarantines inactive app directories under `/srv/retired-apps`;
-active services and Codex state are excluded. Quarantine has no automatic purge.
-
-T3 Code is the primary coding workspace. OpenChamber retains immutable tool generations,
-validated idle updates, and recoverable deployments. The existing Codex
-workstation remains available separately and is preserved during fleet switches.
-See [OpenChamber stability](docs/openchamber-idle-auto-update-design.md).
-
-ChatGPT runs at `https://codex.ghostship.io` in a Nix-built OCI development
-workstation, using the existing protected Cloudflare origin `codex:8214`.
-Its upstream Linux renderer runs directly in the browser, with browser-native
-menus, inputs and file pickers supplied by the existing Electron transport.
-The official Linux runtime, CLI and native modules stay together. No host port
-is published.
-
-Like OpenChamber, the workstation has systemd, a separate writable Nix store
-and daemon, nested Docker, and persistent home and workspace storage under
-`/srv/apps/chatgpt`. The `codex` user (`3000:3000`) owns `/home/codex` and
-`/workspace`. Use project Nix flakes for dependencies and systemd user services
-for persistent development servers.
-
-Every 15 minutes, the updater authenticates OpenAI's Linux package index,
-builds a candidate against the pinned Nix environment, checks its preload
-contract and starts it with an isolated profile. Successful candidates are
-queued for an idle restart, including when idle browser tabs remain open; failed
-activation restores the previous generation.
-The renderer is not rewritten by minified bundle searches. Web transport
-changes have their own release identity so connected pages reload on upgrades.
-
-Sign in through the web interface. The persistent home includes credentials and
-the private key used to unlock the desktop keyring on unattended boots. Native
-desktop Computer Use is unavailable in the official Linux preview. Android
-installation eligibility and mobile layouts are browser-tested; physical device
-installation remains a separate check. Background Web Push alerts and browser
-microphone capture require permission on each device. See the
-[workstation guide](docs/chatgpt-workstation.md) and
-[research and platform boundaries](docs/research/chatgpt-linux-container.md).
+active services are excluded. Quarantine has no automatic purge.
 
 Gluetun on `chill-penguin` now uses PIA through Gluetun's custom-provider
 WireGuard path instead of the native PIA OpenVPN mode. `podman-gluetun` starts

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.0] - 2026-09-21
+
+- Add a reusable `ghostship.host.roles.t3worker` role and `modules/agent-worker`
+  platform so a Windows/WSL2 desktop joins the T3 web interface as its own
+  environment. Each worker runs a persistent `t3 serve` user service with login
+  lingering, reaches the fleet through T3 Connect, and keeps independent
+  projects, threads, providers, files, and execution.
+- Install T3 and every supported provider CLI (Codex, OpenCode, Claude, Cursor,
+  Gemini, Grok, and optional Antigravity ACP) through the existing agent
+  maintenance service, and restart the worker only when an installed version
+  changes. Provider instances are seeded only when the worker has no settings.
+- Share the `ghostship-agent` skill catalog on worker hosts with that
+  repository's own installer (`--skills-only --no-guidance`), linking
+  `~/.agents/skills`, `~/.claude/skills`, and `~/.gemini/config/skills`. Rewrite
+  the repo-local `home/config/AGENTS.md` to fold in the shared catalog rules
+  alongside WSL2-specific guidance, and let Home Manager own the provider
+  instruction files so the two sources stay separate.
+- Retire OpenChamber, the Synara T3 Code container, and the ChatGPT/Codex
+  workstation: remove their modules, packages, workflow, tests, and docs, and
+  quarantine their `/srv/apps` state, containers, images, units, and dashboard
+  entries through `modules/self-hosted/cleanup.nix`. Keep the T3 Code Codex
+  provider.
+- Fix `checks.nix` referencing the already-removed `podman-synara` unit, which
+  had broken host evaluation and CI.
+- Clean retired agent artifacts from WSL2 user homes, including Paseo, Agent
+  Deck, the WSL OpenCode desktop server, old OpenChamber user units, and
+  `.openchamber` state.
+
 ## [3.14.0] - 2026-09-20
 
 - Run Tdarr automatically on chill-penguin with one CPU transcode worker, folder watch, scan on start, and atomic replacement after validation.

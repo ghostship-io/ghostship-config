@@ -44,13 +44,22 @@ let
     fi
 
     # Skills only: this host's Home Manager owns the provider AGENTS.md files,
-    # so the installer must not write its own guidance. Reuses the container
-    # installer so every provider sees the same catalog and compatibility links.
+    # so the installer must not write its own guidance. `--no-guidance` is owned
+    # by ghostship-agent; detect it so a host still links skills against a
+    # catalog revision that predates the flag instead of failing.
+    guidance_flag=""
+    if python3 "$source/tools/setup-container-agents.py" --help 2>&1 \
+      | grep -q -- '--no-guidance'; then
+      guidance_flag="--no-guidance"
+    else
+      printf 'warning: shared catalog lacks --no-guidance; provider AGENTS.md will be restored by Home Manager on the next activation\n' >&2
+    fi
+
     exec python3 "$source/tools/setup-container-agents.py" \
       --home "$HOME" \
       --source "$source" \
       --skills-only \
-      --no-guidance
+      $guidance_flag
   '';
 in
 {

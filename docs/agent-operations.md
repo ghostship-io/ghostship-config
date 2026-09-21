@@ -88,6 +88,17 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   `/home/nixos/.local/share/ghostship-agent-tools/npm`, and
   `ghostship-agent-maintenance.service` plus its timer own installing and
   upgrading those CLIs.
+- Hosts with `ghostship.host.roles.t3worker = true` also install `t3`, `grok`,
+  `claude`, and `cursor` through the same maintenance service and link the
+  shared `ghostship-agent` skill catalog with
+  `setup-container-agents.py --skills-only --no-guidance`. The worker's Home
+  Manager profile owns the provider `AGENTS.md` files, so do not let the
+  installer rewrite them. `modules/agent-worker` owns the worker unit and
+  timers; see [WSL2 T3 Code workers](wsl-t3-workers.md).
+- Worker hosts use the unified `home/config/AGENTS.md`, which folds the
+  `ghostship-agent` shared rules together with WSL2-specific guidance. The
+  Docker T3 Code container keeps using the catalog's own generated guidance; the
+  two instruction sources stay separate by design.
 - `ghostship-agent-maintenance.timer` runs on boot and every `4h` with
   `Persistent=true` so missed runs fire after WSL resumes. It also ensures the
   managed `skills.sh` repos are installed globally, refreshes global skills,

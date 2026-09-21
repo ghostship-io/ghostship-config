@@ -69,10 +69,8 @@ continue running and the switch-inhibitor checks remain enabled.
 | Input refresh exposed renamed SSH options / ragenix incompatibility | Use current Home Manager option names with the same policy and nixpkgs ragenix CLI |
 
 No SSH authorization policy change or general Cloudflare policy audit is included.
-OpenChamber remains the primary agent; the existing Codex workstation is retained.
-OpenChamber updates use validated immutable generations and coordinated drain
-checks, including pending goal continuations. Provider retries are observed
-without aborting the task. See the OpenChamber stability document for recovery.
+T3 Code is the primary agent. OpenChamber, Synara, and the ChatGPT/Codex
+workstation are retired and quarantined by the shared cleanup sweep.
 
 ## Added services
 
@@ -238,13 +236,10 @@ containers it paused and restores their health-check settings and removes the te
 Restic stores encrypted snapshots under
 `/mnt/share/Backups/ghostship/chill-penguin`. Backup selection includes app
 state, logical MariaDB exports, image/generation manifests, SSH host keys, and
-Apple Silicon firmware. Raw MariaDB directories, the retired Codex directory,
-both agent containers' nested Docker and Nix stores, node_modules, and caches
-are excluded. Current ChatGPT and OpenChamber home/workspace state is included. OpenChamber's
-remaining local files are snapshot-backed without stopping it; its nested
-Docker volumes need a separate application-aware recovery decision in the
-agent recovery procedure. Nested Btrfs subvolumes are not recursively included
-by a parent snapshot; review coverage before adding any under `/srv/apps`.
+Apple Silicon firmware. Raw MariaDB directories, T3 Code's nested Docker and Nix
+stores, node_modules, and caches are excluded. Nested Btrfs subvolumes are not
+recursively included by a parent snapshot; review coverage before adding any
+under `/srv/apps`.
 
 Timers run nightly at 23:00 UTC for backups, Sunday 21:00 for repository checks,
 monthly on day 1 at 20:00 for a 10% data sample, and Sunday 19:00 for pruning,
@@ -277,8 +272,8 @@ loss of both the server and its recovery keys, or site-wide loss.
 ## Updates and staged rollout
 
 Registry-labeled applications keep native Podman automatic updates with health
-readiness and rollback. Database digests require review. OpenChamber retains its
-existing activity-aware update behavior. Recyclarr stays on supported major 8.
+readiness and rollback. Database digests require review. Recyclarr stays on
+supported major 8.
 Nix system updates deploy committed `main` and its lock, with no local input
 refresh. The weekly workflow proposes a coordinated lock change with a patch
 version and changelog, validates before opening a draft PR, and never merges or
@@ -286,8 +281,7 @@ switches hosts. PRs created with `GITHUB_TOKEN` do not automatically trigger a
 second workflow run; use the update workflow's validation and explicitly run
 Fleet checks after review when needed.
 
-1. Merge reviewed changes after CI. Preserve the running Codex container.
-   Prestage and validate OpenChamber before its one controlled legacy restart.
+1. Merge reviewed changes after CI. Preserve the running T3 Code container.
 2. On a WSL canary, build the merged configuration, inspect changes, switch at
    an idle time, and check shells, agent launchers, SSH agent, and NFS. Then
    repeat for the second WSL host. Do not rebuild both concurrently.
@@ -325,7 +319,7 @@ mv /run/ghostship-secrets/backup.env.new /run/ghostship-secrets/backup.env
 ```
 
 Run these sequentially, stopping on any error. Do not activate the new system
-until both commands succeed and the OpenChamber candidate is validated.
+until both commands succeed.
 The normal secret projection owns this file after activation. If a hard kill
 interrupts the backup process, inspect `podman ps` for paused RomM/Grimmory
 containers and unpause them; their declarative health settings are restored by
