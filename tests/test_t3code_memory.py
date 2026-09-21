@@ -45,7 +45,10 @@ class MemoryWatchdog(unittest.TestCase):
 
 class IdleGuard(unittest.TestCase):
     def setUp(self):
-        source = (Path(__file__).resolve().parents[1] / 'modules/self-hosted/t3code.nix').read_text()
+        source = (
+            Path(__file__).resolve().parents[1]
+            / 'packages/t3code/activity-probe/probe-v1-sqlite.cjs'
+        ).read_text()
         self.query = re.search(r'`(SELECT count\(\*\) AS active FROM projection_turns.*?)`', source, re.S)[1]
         self.db = sqlite3.connect(':memory:')
         self.addCleanup(self.db.close)
