@@ -72,7 +72,6 @@ def main():
             XDG_DATA_HOME=f"{directory}/data",
             XDG_STATE_HOME=f"{directory}/state",
             AGY_ACP_FORCE_FILE_STORAGE="1",
-            ANTIGRAVITY_HARNESS_PATH="/bin/localharness_external",
         )
         log = Path(directory) / "stderr.log"
         with log.open("w") as stderr:

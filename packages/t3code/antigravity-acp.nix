@@ -52,6 +52,11 @@ stdenvNoCC.mkDerivation {
     if [ ! -x "\$runtime/agy_acp_server.par" ]; then
       runtime="$out/libexec"
     fi
+    # T3 sanitizes provider child environments, including this variable.  The
+    # ACP server nevertheless needs its helper forced through our native
+    # wrapper on ARM64: otherwise it discovers the staged x86_64 helper and
+    # QEMU crashes it during session startup.
+    export ANTIGRAVITY_HARNESS_PATH="$out/bin/localharness_external"
     ${
       lib.optionalString emulated ''
         exec ${qemu-user}/bin/qemu-x86_64 -L ${guestGlibc} -E LD_LIBRARY_PATH=${guestGlibc}/lib \

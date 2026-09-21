@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.14.2] - 2026-09-21
+
+- Make the Antigravity ACP launcher select the native ARM64 harness itself.
+  T3 Code sanitizes provider child environments, so relying on a caller-supplied
+  `ANTIGRAVITY_HARNESS_PATH` could relaunch the staged x86_64 helper under QEMU
+  and fail session startup with a generic ACP transport error.
+
 ## [3.14.1] - 2026-09-21
 
 - Make T3 Code's agent maintenance resolve current npm releases online and
