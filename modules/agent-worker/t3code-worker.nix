@@ -9,6 +9,7 @@ let
   cfg = config.ghostship.t3Worker;
   user = cfg.user;
   home = config.users.users.${user}.home or "/home/${user}";
+  uid = toString (config.users.users.${user}.uid or 1000);
   agentNpmPrefix = "${home}/.local/share/ghostship-agent-tools/npm";
   agentBinDir = "${agentNpmPrefix}/bin";
   runtimePath = lib.makeBinPath [
@@ -42,6 +43,12 @@ let
     export T3CODE_NO_BROWSER=true
     export NODE_NO_WARNINGS=1
     export PATH=${lib.escapeShellArg t3WorkerPath}:$PATH
+    # Provider subprocesses inherit this environment. Some providers expect a
+    # session runtime directory and D-Bus address; provide the worker's own.
+    export XDG_RUNTIME_DIR=/run/user/${toString uid}
+    if [ -S "$XDG_RUNTIME_DIR/bus" ]; then
+      export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+    fi
     unset LD_LIBRARY_PATH
 
     if [ ! -x ${lib.escapeShellArg "${agentBinDir}/t3"} ]; then
@@ -133,6 +140,9 @@ in
         "antigravity-acp"
       ];
 
+    # Enable the user manager across login sessions so the worker user's own
+    # `systemctl --user` tooling and any `t3 service` use survive logout. The
+    # worker server itself is a system unit, matching the Docker T3 container.
     users.users.${user}.linger = lib.mkDefault true;
 
     environment.systemPackages = lib.mkIf cfg.enableAntigravity [ antigravityAcp ];

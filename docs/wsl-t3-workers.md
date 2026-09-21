@@ -71,7 +71,7 @@ These steps are user-owned and stay outside the declarative configuration.
    ```sh
    t3 connect login --headless
    t3 connect link --headless
-   systemctl --user restart t3code-worker.service
+   sudo systemctl restart t3code-worker.service
    ```
 
    The CLI prints a browser link and a short code; approve it on any device.
@@ -84,8 +84,8 @@ These steps are user-owned and stay outside the declarative configuration.
 ## Verify
 
 ```sh
-systemctl --user status t3code-worker.service
-systemctl --user list-timers 't3code-worker-update.timer' 'ghostship-agent-sync.timer'
+systemctl status t3code-worker.service
+systemctl list-timers 't3code-worker-update.timer' 'ghostship-agent-sync.timer'
 t3 connect status
 ls ~/.agents/skills ~/.claude/skills ~/.gemini/config/skills
 codex --version && opencode --version
