@@ -72,6 +72,7 @@ let
     file
     bashInteractive
     cacert
+    openssl
   ];
 
   antigravityAcp = pkgs.callPackage ../../packages/t3code/antigravity-acp.nix { };
@@ -233,13 +234,48 @@ let
       printf 'warn: %s\n' "$1" >&2
     }
 
+    latest_agent_version() {
+      package="$1"
+
+      if ! latest_output="$(npm view --prefer-online "$package@latest" version 2>&1)"; then
+        log_warn "could not resolve the current $package version"
+        if [ -n "$latest_output" ]; then
+          printf '%s\n' "$latest_output" >&2
+        fi
+        return 1
+      fi
+
+      latest_version="$(printf '%s\n' "$latest_output" | sed -n '1p')"
+      if [ -z "$latest_version" ]; then
+        log_warn "the registry returned no current version for $package"
+        return 1
+      fi
+
+      printf '%s\n' "$latest_version"
+    }
+
+    installed_agent_version() {
+      package="$1"
+      manifest="$NPM_CONFIG_PREFIX/lib/node_modules/$package/package.json"
+
+      if [ ! -f "$manifest" ]; then
+        return 1
+      fi
+
+      node -p 'require(process.argv[1]).version' "$manifest"
+    }
+
     install_agent_cli() {
       package="$1"
       label="$2"
 
-      log_info "installing or upgrading $label"
+      if ! expected_version="$(latest_agent_version "$package")"; then
+        return 1
+      fi
 
-      if ! install_output="$(npm install -g --no-fund --no-audit "$package@latest" 2>&1)"; then
+      log_info "installing or upgrading $label to $expected_version"
+
+      if ! install_output="$(npm install -g --prefer-online --no-fund --no-audit "$package@$expected_version" 2>&1)"; then
         log_warn "$label install failed"
         if [ -n "$install_output" ]; then
           printf '%s\n' "$install_output" >&2
@@ -249,6 +285,16 @@ let
 
       if [ -n "$install_output" ]; then
         printf '%s\n' "$install_output" >&2
+      fi
+
+      if ! installed_version="$(installed_agent_version "$package")"; then
+        log_warn "$label did not install a readable package manifest"
+        return 1
+      fi
+
+      if [ "$installed_version" != "$expected_version" ]; then
+        log_warn "$label remains at $installed_version; expected $expected_version"
+        return 1
       fi
     }
 

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.14.1] - 2026-09-21
+
+- Make T3 Code's agent maintenance resolve current npm releases online and
+  verify the installed manifests, so a cached or otherwise stale T3, Codex, or
+  Claude CLI is a visible maintenance failure rather than a false success.
+- Include the OpenSSL certificate directory required by Cursor's Node runtime.
+
 ## [3.14.0] - 2026-09-20
 
 - Run Tdarr automatically on chill-penguin with one CPU transcode worker, folder watch, scan on start, and atomic replacement after validation.
