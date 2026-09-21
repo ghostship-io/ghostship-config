@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.14.3] - 2026-09-21
+
+- Bridge Google Antigravity's ACP initialization ordering so T3 Code can
+  complete its local health check and start sessions after a server restart.
+  The bridge injects the required `initialized` notification, then suppresses
+  the duplicate notification from the client.
+
 ## [3.14.2] - 2026-09-21
 
 - Make the Antigravity ACP launcher select the native ARM64 harness itself.
