@@ -19,9 +19,6 @@ let
   active = lib.filterAttrs (
     name: _:
     !(builtins.elem name [
-      "codex"
-      "openchamber"
-      "synara"
       "t3code"
     ])
   ) containers;

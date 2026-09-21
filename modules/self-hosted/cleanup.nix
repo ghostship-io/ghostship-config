@@ -391,12 +391,53 @@ let
       homepageEntries = [ "RSS-Bridge" ];
       muximuxSections = [ "RSS-Bridge" ];
     }
+    {
+      name = "openchamber";
+      paths = [ "/srv/apps/openchamber" ];
+      units = [
+        "podman-openchamber"
+        "openchamber-deploy-when-idle"
+      ];
+      timers = [ "openchamber-deploy-when-idle" ];
+      containers = [ "openchamber" ];
+      imageRefs = [ "localhost/ghostship-openchamber:openchamber" ];
+      imageRepositories = [
+        "localhost/ghostship-openchamber"
+        "ghcr.io/ghostship-io/ghostship-openchamber"
+      ];
+      homepageEntries = [ "OpenChamber" ];
+      muximuxSections = [ "OpenChamber" ];
+    }
+    {
+      name = "synara";
+      paths = [ "/srv/apps/synara" ];
+      units = [ "podman-synara" ];
+      containers = [ "synara" ];
+      # Synara reused the shared T3 Code image; never remove that repository,
+      # because the primary container still runs from it.
+      imageRefs = [ ];
+      imageRepositories = [ ];
+      homepageEntries = [ "Synara" ];
+      muximuxSections = [ "Synara" ];
+    }
+    {
+      name = "chatgpt-workstation";
+      paths = [
+        "/srv/apps/chatgpt"
+        "/srv/apps/codex"
+      ];
+      units = [ "podman-codex" ];
+      containers = [ "codex" ];
+      imageRefs = [ "localhost/ghostship-codex:codex-runtime" ];
+      imageRepositories = [ "localhost/ghostship-codex" ];
+      homepageEntries = [ "Codex" ];
+      muximuxSections = [ "Codex" ];
+    }
   ];
 
   eligibleArtifacts = lib.filter (
     artifact:
-    artifact.name != "codex"
-    && !(lib.any (name: builtins.hasAttr name config.virtualisation.oci-containers.containers) (
+    !(lib.any (name: builtins.hasAttr name config.virtualisation.oci-containers.containers) (
       artifact.containers or [ ]
     ))
   ) retiredArtifacts;

@@ -1900,6 +1900,13 @@ let
 
 in
 {
+  # The Antigravity ACP archive is unfree; keep the exception scoped to this app.
+  nixpkgs.config.allowUnfreePredicate =
+    pkg:
+    builtins.elem (lib.getName pkg) [
+      "antigravity-acp"
+    ];
+
   ghostship.agentHost.enable = true;
   ghostship.apps.t3code = {
     name = "T3 Code";
@@ -1952,12 +1959,6 @@ in
     environmentFiles = [ t3codeSecrets ];
   };
 
-  # Synara intentionally shares the immutable T3 Code image while keeping all
-  # mutable state separate. Its first start takes a crash-consistent Btrfs
-  # snapshot of T3 Code's home, workspace, and nested Docker state. T3 Code
-  # remains running throughout the migration.
-
-
   systemd.tmpfiles.rules = [
     "d /srv/apps/t3code 0755 root root -"
     "d ${t3codeDocker} 0755 root root -"
@@ -1987,19 +1988,6 @@ in
       install -d -m0755 -o 3000 -g 3000 ${t3codeHome}
       install -d -m0755 -o root -g root ${t3codeNixRoot}
       install -d -m0755 -o 3000 -g 3000 ${t3codeWorkspace}
-
-      for source in /srv/apps/openchamber/workspace/*; do
-        [ -d "$source" ] || continue
-        name="$(basename "$source")"
-        destination=${t3codeWorkspace}/"$name"
-        [ ! -e "$destination" ] || continue
-        staging="$(mktemp -d ${t3codeWorkspace}/.import.XXXXXX)"
-        trap 'rm -rf "$staging"' EXIT
-        ${pkgs.coreutils}/bin/cp -a --reflink=auto "$source/." "$staging/"
-        chown -R 3000:3000 "$staging"
-        mv "$staging" "$destination"
-        trap - EXIT
-      done
 
       nix_store_uri='local?root=${t3codeNixRoot}'
       ${pkgs.nix}/bin/nix copy \
