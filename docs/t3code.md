@@ -204,11 +204,18 @@ entry as well as the running system. Running a built system's
 `switch-to-configuration switch` directly does not advance the system profile;
 reboot can therefore return to a generation without T3 Code.
 
-The four-hour tool timer updates T3, Codex, OpenCode, and Antigravity when the
-database reports no pending or running turns, then runs `after-update.d` to
-reapply Ghostship tooling. Unknown activity defers maintenance and recovery.
-Each provider update is attempted even if another fails. Changed tools or the
-Ghostship tool package queue a server restart, which waits for T3 to become idle.
+The four-hour tool timer resolves the current registry version online before it
+updates T3, Codex, and Claude, then verifies the installed package manifest
+matches that exact version. A lookup, install, or verification failure is
+reported as maintenance failure instead of silently accepting stale tooling.
+It also updates OpenCode and Antigravity when the database reports no pending or
+running turns, then runs `after-update.d` to reapply Ghostship tooling. Unknown
+activity defers maintenance and recovery. Each provider update is attempted even
+if another fails. Changed tools or the Ghostship tool package queue a server
+restart, which waits for T3 to become idle.
+
+The image includes OpenSSL as well as the CA bundle because Cursor's Node runtime
+uses OpenSSL's compiled-in certificate directory when it probes system trust.
 Container health checks web/server
 availability; provider authentication failures do not trigger restart loops.
 

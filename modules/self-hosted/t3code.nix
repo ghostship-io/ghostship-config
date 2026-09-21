@@ -72,6 +72,7 @@ let
     file
     bashInteractive
     cacert
+    openssl
   ];
 
   antigravityAcp = pkgs.callPackage ../../packages/t3code/antigravity-acp.nix { };
@@ -233,13 +234,66 @@ let
       printf 'warn: %s\n' "$1" >&2
     }
 
+    latest_agent_version() {
+      package="$1"
+      lookup_cache="$(mktemp -d)"
+      latest_error="$lookup_cache/stderr"
+
+      if ! latest_output="$(npm view --cache "$lookup_cache" --prefer-online "$package@latest" version 2>"$latest_error")"; then
+        log_warn "could not resolve the current $package version"
+        if [ -n "$latest_output" ]; then
+          printf '%s\n' "$latest_output" >&2
+        fi
+        if [ -s "$latest_error" ]; then
+          cat "$latest_error" >&2
+        fi
+        rm -rf "$lookup_cache"
+        return 1
+      fi
+
+      if [ -s "$latest_error" ]; then
+        cat "$latest_error" >&2
+      fi
+      rm -rf "$lookup_cache"
+      if ! latest_version="$(printf '%s' "$latest_output" | node -e '
+        const input = require("fs").readFileSync(0, "utf8").trim();
+        let version = input;
+        try {
+          const parsed = JSON.parse(input);
+          if (typeof parsed === "string") version = parsed;
+        } catch (_) {}
+        if (!version || version.includes("\\n")) process.exit(1);
+        process.stdout.write(version);
+      ')"; then
+        log_warn "the registry returned an invalid version for $package"
+        return 1
+      fi
+
+      printf '%s\n' "$latest_version"
+    }
+
+    installed_agent_version() {
+      package="$1"
+      manifest="$NPM_CONFIG_PREFIX/lib/node_modules/$package/package.json"
+
+      if [ ! -f "$manifest" ]; then
+        return 1
+      fi
+
+      node -p 'require(process.argv[1]).version' "$manifest"
+    }
+
     install_agent_cli() {
       package="$1"
       label="$2"
 
-      log_info "installing or upgrading $label"
+      if ! expected_version="$(latest_agent_version "$package")"; then
+        return 1
+      fi
 
-      if ! install_output="$(npm install -g --no-fund --no-audit "$package@latest" 2>&1)"; then
+      log_info "installing or upgrading $label to $expected_version"
+
+      if ! install_output="$(npm install -g --prefer-online --no-fund --no-audit "$package@$expected_version" 2>&1)"; then
         log_warn "$label install failed"
         if [ -n "$install_output" ]; then
           printf '%s\n' "$install_output" >&2
@@ -249,6 +303,16 @@ let
 
       if [ -n "$install_output" ]; then
         printf '%s\n' "$install_output" >&2
+      fi
+
+      if ! installed_version="$(installed_agent_version "$package")"; then
+        log_warn "$label did not install a readable package manifest"
+        return 1
+      fi
+
+      if [ "$installed_version" != "$expected_version" ]; then
+        log_warn "$label remains at $installed_version; expected $expected_version"
+        return 1
       fi
     }
 
@@ -1192,6 +1256,8 @@ let
     set -eu
 
     ${t3codeRuntimeEnv}
+    export T3CODE_NODE_EXECUTABLE=${pkgs.nodejs_24}/bin/node
+    export NODE_OPTIONS="--require=${../../packages/t3code/t3-runtime-preload.cjs}"
     export XDG_RUNTIME_DIR=/run/user/3000
     cd /workspace
 

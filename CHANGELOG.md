@@ -39,6 +39,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Deck, the WSL OpenCode desktop server, old OpenChamber user units, and
   `.openchamber` state.
 
+## [3.14.6] - 2026-09-21
+
+- Restore the managed Ollama Cloud and OpenRouter API keys to the T3 Code
+  container environment so OpenCode's environment-backed provider
+  configuration authenticates after container replacement or restart.
+
+## [3.14.5] - 2026-09-21
+
+- Run T3's Antigravity browser-suppression preflight with the pinned Node
+  runtime instead of re-invoking the packaged T3 executable with unsupported
+  Node flags.
+
+## [3.14.4] - 2026-09-21
+
+- Complete the Antigravity ACP compatibility bridge by returning the pinned
+  1.1.1 initialization descriptor immediately and suppressing the agent's
+  delayed duplicate response. This breaks the T3/agent initialization
+  deadlock while leaving all authenticated session traffic on the real agent.
+
+## [3.14.3] - 2026-09-21
+
+- Bridge Google Antigravity's ACP initialization ordering so T3 Code can
+  complete its local health check and start sessions after a server restart.
+  The bridge injects the required `initialized` notification, then suppresses
+  the duplicate notification from the client.
+
+## [3.14.2] - 2026-09-21
+
+- Make the Antigravity ACP launcher select the native ARM64 harness itself.
+  T3 Code sanitizes provider child environments, so relying on a caller-supplied
+  `ANTIGRAVITY_HARNESS_PATH` could relaunch the staged x86_64 helper under QEMU
+  and fail session startup with a generic ACP transport error.
+
+## [3.14.1] - 2026-09-21
+
+- Make T3 Code's agent maintenance resolve current npm releases online and
+  verify the installed manifests, so a cached or otherwise stale T3, Codex, or
+  Claude CLI is a visible maintenance failure rather than a false success.
+- Include the OpenSSL certificate directory required by Cursor's Node runtime.
+
 ## [3.14.0] - 2026-09-20
 
 - Run Tdarr automatically on chill-penguin with one CPU transcode worker, folder watch, scan on start, and atomic replacement after validation.

@@ -584,6 +584,14 @@ in
       group = "apps";
       mode = "0440";
       fields = {
+        OLLAMA_API_KEY = {
+          unit = "ollama";
+          key = "API_KEY";
+        };
+        OPENROUTER_API_KEY = {
+          unit = "openrouter";
+          key = "API_KEY";
+        };
         GITHUB_TOKEN = {
           unit = "github";
           key = "TOKEN";
