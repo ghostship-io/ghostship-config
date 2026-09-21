@@ -99,9 +99,9 @@ in
         ${pkgs.ghostship-config}/bin/ghostship-config set "$SERVICES_FILE" "''${service_args[@]}"
 
         ${pkgs.yq-go}/bin/yq -i '
-          (.[] | select(has("Services")) | .Services) |= map(select((has("Paseo") or has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy Scraper") or has("Changedetection") or has("n8n") or has("SearXNG") or has("Windmill") or has("Hatchet") or has("Prefect")) | not))
+          (.[] | select(has("Services")) | .Services) |= map(select((has("Paseo") or has("OpenChamber") or has("Hermes") or has("Honcho") or has("Firecrawl") or has("Firecrawl Playwright") or has("PriceBuddy") or has("PriceBuddy Scraper") or has("Changedetection") or has("n8n") or has("SearXNG") or has("Windmill") or has("Hatchet") or has("Prefect")) | not))
           | (.[] | select(has("Downloads")) | .Downloads) |= map(select((has("VueTorrent")) | not))
-          | (.[] | select(has("Management")) | .Management) |= map(select((has("T3 Code") or has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG") or has("Plex Auto Languages") or has("PriceBuddy Scraper")) | not))
+          | (.[] | select(has("Management")) | .Management) |= map(select((has("T3 Code") or has("Codex") or has("Synara") or has("n8n") or has("Changedetection") or has("BookStack") or has("SearXNG") or has("Plex Auto Languages") or has("PriceBuddy Scraper")) | not))
           | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("BentoPDF") or has("ConvertX") or has("IT-Tools") or has("MeTube") or has("OmniTools")) | not))
           | (.[] | select(has("Utilities")) | .Utilities) |= map(select((has("SearXNG") or has("Firecrawl") or has("Firecrawl Playwright")) | not))
           | (.[] | select(has("Infrastructure")) | .Infrastructure) |= map(select((has("Honcho Redis") or has("Honcho DB") or has("Firecrawl Postgres") or has("Firecrawl RabbitMQ") or has("Firecrawl Redis")) | not))

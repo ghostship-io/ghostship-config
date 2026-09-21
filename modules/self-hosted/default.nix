@@ -37,9 +37,6 @@
 
     # Apps and utilities
     ./cloakbrowser.nix
-    ./openchamber-options.nix
-    ./openchamber.nix
-    ./codex.nix
     ./t3code.nix
     ../agent-host
 
