@@ -3,6 +3,7 @@
 
 import json
 import os
+import select
 import subprocess
 import sys
 import threading
@@ -85,6 +86,7 @@ def main() -> int:
     output_error: list[BaseException] = []
     suppressed_response_ids: set[object] = set()
     suppression_lock = threading.Lock()
+    child_exited = threading.Event()
 
     def forward_output() -> None:
         try:
@@ -104,13 +106,12 @@ def main() -> int:
         except (BrokenPipeError, OSError) as error:
             output_error.append(error)
 
-    output_thread = threading.Thread(target=forward_output, daemon=True)
-    output_thread.start()
-    injected_initialized = False
-    suppressed_client_initialized = False
+    def forward_input() -> None:
+        injected_initialized = False
+        suppressed_client_initialized = False
 
-    try:
-        for line in sys.stdin.buffer:
+        def forward_line(line: bytes) -> None:
+            nonlocal injected_initialized, suppressed_client_initialized
             message = decode_message(line)
             if (
                 injected_initialized
@@ -119,7 +120,7 @@ def main() -> int:
                 and message.get("method") == "initialized"
             ):
                 suppressed_client_initialized = True
-                continue
+                return
 
             initialize_id = None
             if message is not None and message.get("method") == "initialize":
@@ -137,15 +138,42 @@ def main() -> int:
                 injected_initialized = True
                 sys.stdout.buffer.write(initialize_response(initialize_id))
                 sys.stdout.buffer.flush()
-    except (BrokenPipeError, OSError):
-        pass
-    finally:
+
+        pending = b""
         try:
-            child.stdin.close()
-        except OSError:
+            while not child_exited.is_set():
+                readable, _, _ = select.select([sys.stdin.buffer], [], [], 0.1)
+                if not readable:
+                    continue
+                chunk = os.read(sys.stdin.fileno(), 65536)
+                if not chunk:
+                    if pending:
+                        forward_line(pending)
+                    break
+                pending += chunk
+                while b"\n" in pending:
+                    line, pending = pending.split(b"\n", 1)
+                    forward_line(line + b"\n")
+        except (BrokenPipeError, OSError):
             pass
+        finally:
+            try:
+                child.stdin.close()
+            except OSError:
+                pass
+
+    output_thread = threading.Thread(target=forward_output, daemon=True)
+    input_thread = threading.Thread(target=forward_input, daemon=True)
+    output_thread.start()
+    input_thread.start()
 
     status = child.wait()
+    child_exited.set()
+    input_thread.join(timeout=1)
+    try:
+        child.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
     output_thread.join(timeout=2)
     if output_error and status == 0:
         return 1
