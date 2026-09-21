@@ -97,10 +97,11 @@ let
     fi
   '';
 
-  # The existing ghostship-agent-maintenance.timer owns installing and
-  # upgrading the CLIs. This watcher only restarts the worker when an installed
-  # version changed since the worker last started, so the running server picks
-  # up the new tools without a second maintenance run or an operator login.
+  # The existing develop-role ghostship-agent-maintenance.timer owns installing
+  # and upgrading the CLIs. This watcher only restarts the worker when an
+  # installed version changed since the worker last started, so the running
+  # server picks up the new tools without a second maintenance run or an
+  # operator login.
   t3codeWorkerUpdate = pkgs.writeShellScriptBin "t3code-worker-update" ''
     set -eu
     state_file=${lib.escapeShellArg "${cfg.baseDir}/worker-tool-versions"}

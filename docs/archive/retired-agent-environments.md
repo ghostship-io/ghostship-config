@@ -27,4 +27,5 @@ and its guides are gone. `/srv/apps/chatgpt` is quarantined. The T3 Code
 
 The develop-host cleanup inventory retires the old `paseo`, `agent-deck`,
 `opencode-server`, `openchamber` user-service, and `.openchamber` artifacts from
-user homes. Worker hosts now use the shared `ghostship-agent` skill catalog.
+user homes. T3 Code workers are standalone Windows development boxes and link
+only the skills under `home/config/skills/`.

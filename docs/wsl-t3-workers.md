@@ -24,34 +24,38 @@ Import the shared modules and set the role in the host configuration:
 }
 ```
 
-The `t3worker` role is the only switch. It enables the worker platform, links
-the shared skill catalog, and selects the Home Manager worker profile. Tune it
-through `ghostship.t3Worker` when the defaults do not fit:
+The `t3worker` role is the only switch. It enables the worker platform and
+selects the Home Manager worker profile. Tune it through `ghostship.t3Worker`
+when the defaults do not fit:
 
 | Option | Default | Purpose |
 | --- | --- | --- |
 | `user` | `nixos` | User that owns the server and credentials |
 | `baseDir` | `/home/nixos/.t3` | T3 Code data directory |
 | `port` | `3774` | Loopback server port |
-| `sharedAgentSource` | `/home/nixos/.local/share/ghostship-agent` | Managed catalog checkout |
-| `sharedAgentRepo` | `git@github.com:ghostship-io/ghostship-agent.git` | Catalog remote |
-| `sharedAgentRef` | `main` | Catalog branch |
 | `enableAntigravity` | `true` | Install the Antigravity ACP provider |
+
+## Standalone-by-design
+
+A worker is a Windows development box for its own repositories, not a Ghostship
+runtime host. Only this repository's tooling is installed:
+
+- No `ghostship-agent` checkout, installer, or tool package. Provider skills
+  are limited to the small set under `home/config/skills/`, linked into
+  `~/.agents/skills`, `~/.claude/skills`, and `~/.gemini/config/skills`.
+- No shared `agent`, `bw`, CloakBrowser, Google Workspace, or Printing Press
+  tooling, and no Ghostship secrets projection.
+- Provider authentication and the T3 Connect link stay in the worker user's
+  home, untouched by declarative configuration.
 
 ## What the host runs
 
 - `t3code-worker.service` runs `t3 serve` as the worker user on loopback and
-  restarts on failure or reboot. `users.users.nixos.linger = true` keeps it
-  running without an open login session.
-- `t3code-worker-update.timer` runs every four hours. It triggers the existing
-  `ghostship-agent-maintenance.service`, which installs or upgrades T3, Codex,
-  OpenCode, Claude, Cursor, Gemini, Grok, and the shared `skills` CLI, then
-  restarts the worker only when an installed version changed.
-- `ghostship-agent-sync.timer` runs every six hours. It updates the managed
-  `ghostship-agent` checkout and runs that repository's
-  `tools/setup-container-agents.py --skills-only --no-guidance`, so the worker
-  links the same skills into `~/.agents/skills`, `~/.claude/skills`, and
-  `~/.gemini/config/skills` as the Docker T3 Code container.
+  restarts on failure or reboot.
+- `t3code-worker-update.timer` runs every four hours. It compares installed
+  T3 and provider versions against the last-seen set and restarts the worker
+  only when something changed. The develop-role maintenance timer owns the
+  actual install and upgrade.
 - Provider CLIs are seeded into `~/.t3/userdata/settings.json` only when that
   file does not exist yet. Later user changes are preserved.
 
@@ -77,15 +81,12 @@ These steps are user-owned and stay outside the declarative configuration.
    The CLI prints a browser link and a short code; approve it on any device.
    Link state persists under `~/.t3` and reconnects after reboot, WSL restart,
    or a network interruption.
-3. Authorize the worker's SSH key as a deploy key or collaborator on the
-   private `ghostship-agent` repository if the six-hour skill sync reports a
-   clone or fetch failure.
 
 ## Verify
 
 ```sh
 systemctl status t3code-worker.service
-systemctl list-timers 't3code-worker-update.timer' 'ghostship-agent-sync.timer'
+systemctl list-timers 't3code-worker-update.timer'
 t3 connect status
 ls ~/.agents/skills ~/.claude/skills ~/.gemini/config/skills
 codex --version && opencode --version

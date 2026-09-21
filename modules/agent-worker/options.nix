@@ -22,24 +22,6 @@
       description = "Loopback port for the T3 Code worker server.";
     };
 
-    sharedAgentSource = lib.mkOption {
-      type = lib.types.str;
-      default = "/home/nixos/.local/share/ghostship-agent";
-      description = "Managed checkout of the shared ghostship-agent catalog.";
-    };
-
-    sharedAgentRepo = lib.mkOption {
-      type = lib.types.str;
-      default = "git@github.com:ghostship-io/ghostship-agent.git";
-      description = "Git remote for the shared ghostship-agent catalog.";
-    };
-
-    sharedAgentRef = lib.mkOption {
-      type = lib.types.str;
-      default = "main";
-      description = "Branch of the shared ghostship-agent catalog to track.";
-    };
-
     enableAntigravity = lib.mkOption {
       type = lib.types.bool;
       default = true;
