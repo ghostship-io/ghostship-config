@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.1] - 2026-09-21
+
+- Include GNU Make in the managed agent-CLI maintenance runtime so T3's
+  Linux platform package can build its `node-pty` fallback when npm has no
+  prebuilt binary for the current Node.js ABI.
+
 ## [3.15.0] - 2026-09-21
 
 - Add a reusable `ghostship.host.roles.t3worker` role and `modules/agent-worker`

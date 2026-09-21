@@ -45,6 +45,7 @@ let
     pkgs.gawk
     pkgs.gcc
     pkgs.git
+    pkgs.gnumake
     pkgs.gnutar
     pkgs.gnugrep
     pkgs.gzip
