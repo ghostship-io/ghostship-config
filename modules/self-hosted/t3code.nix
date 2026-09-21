@@ -236,9 +236,10 @@ let
 
     latest_agent_version() {
       package="$1"
-      latest_error="$(mktemp)"
+      lookup_cache="$(mktemp -d)"
+      latest_error="$lookup_cache/stderr"
 
-      if ! latest_output="$(npm view --prefer-online "$package@latest" version 2>"$latest_error")"; then
+      if ! latest_output="$(npm view --cache "$lookup_cache" --prefer-online "$package@latest" version 2>"$latest_error")"; then
         log_warn "could not resolve the current $package version"
         if [ -n "$latest_output" ]; then
           printf '%s\n' "$latest_output" >&2
@@ -246,14 +247,14 @@ let
         if [ -s "$latest_error" ]; then
           cat "$latest_error" >&2
         fi
-        rm -f "$latest_error"
+        rm -rf "$lookup_cache"
         return 1
       fi
 
       if [ -s "$latest_error" ]; then
         cat "$latest_error" >&2
       fi
-      rm -f "$latest_error"
+      rm -rf "$lookup_cache"
       latest_version="$(printf '%s\n' "$latest_output" | sed -n '1p')"
       if [ -z "$latest_version" ]; then
         log_warn "the registry returned no current version for $package"

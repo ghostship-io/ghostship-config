@@ -10,7 +10,12 @@ SOURCE = (
 class ToolMaintenanceSource(unittest.TestCase):
     def test_npm_agents_resolve_latest_online_before_installing(self):
         self.assertIn(
-            'npm view --prefer-online "$package@latest" version', SOURCE
+            'lookup_cache="$(mktemp -d)"', SOURCE
+        )
+        self.assertIn(
+            'npm view --cache "$lookup_cache" --prefer-online '
+            '"$package@latest" version',
+            SOURCE,
         )
         self.assertIn(
             'npm install -g --prefer-online --no-fund --no-audit '
