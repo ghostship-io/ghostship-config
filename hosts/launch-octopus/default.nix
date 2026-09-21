@@ -14,6 +14,7 @@
   ghostship.host.roles = {
     develop = true;
     wsl = true;
+    t3worker = true;
   };
 
   wsl.defaultUser = "nixos";

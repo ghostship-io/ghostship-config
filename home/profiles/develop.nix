@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  osConfig,
   pkgs,
   inputs,
   ...
@@ -8,6 +9,16 @@
 
 let
   sshAgentSock = "/run/user/1000/ssh-agent";
+  # A T3 worker host gets the same workflows from the shared ghostship-agent
+  # catalog, which owns ~/.agents/skills. Keep the repo-local copies on ordinary
+  # develop hosts so the two owners never race for the same skill path.
+  t3worker = osConfig.ghostship.t3Worker.enable or false;
+  repoSkillLink = name: {
+    ".agents/skills/${name}" = {
+      source = ../config/skills/${name};
+      force = true;
+    };
+  };
 in
 {
   imports = [
@@ -20,54 +31,46 @@ in
     SSH_AUTH_SOCK = sshAgentSock;
   };
 
-  home.file = {
-    ".agents/skills/ghostship-audit-worktree" = {
-      source = ../config/skills/ghostship-audit-worktree;
-      force = true;
-    };
-    ".agents/skills/ghostship-merge-worktree" = {
-      source = ../config/skills/ghostship-merge-worktree;
-      force = true;
-    };
-    ".agents/skills/ghostship-pull-worktree" = {
-      source = ../config/skills/ghostship-pull-worktree;
-      force = true;
-    };
-    ".agents/skills/grill-me" = {
-      source = ../config/skills/grill-me;
-      force = true;
-    };
-    ".ssh/id_ed25519_dev.pub" = {
-      text = ''
-        ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMeeTWD0303kIaPcdYjWUGmGYh65TO9wd0kzayjaELhJ owner@dev
-      '';
-      force = true;
-    };
-    ".gemini/GEMINI.md" = {
-      source = ../config/AGENTS.md;
-      force = true;
-    };
-    ".config/opencode/AGENTS.md" = {
-      source = ../config/AGENTS.md;
-      force = true;
-    };
-    ".local/bin/xdg-open" = {
-      text = ''
-        #!/bin/sh
-        exit 0
-      '';
-      executable = true;
-      force = true;
-    };
-    ".local/bin/xdg-debug" = {
-      text = ''
-        #!/bin/sh
-        exit 0
-      '';
-      executable = true;
-      force = true;
-    };
-  };
+  home.file = lib.mkMerge [
+    (lib.mkIf (!t3worker) (lib.mkMerge (map repoSkillLink [
+      "ghostship-audit-worktree"
+      "ghostship-merge-worktree"
+      "ghostship-pull-worktree"
+      "grill-me"
+    ])))
+    {
+      ".ssh/id_ed25519_dev.pub" = {
+        text = ''
+          ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMeeTWD0303kIaPcdYjWUGmGYh65TO9wd0kzayjaELhJ owner@dev
+        '';
+        force = true;
+      };
+      ".gemini/GEMINI.md" = {
+        source = ../config/AGENTS.md;
+        force = true;
+      };
+      ".config/opencode/AGENTS.md" = {
+        source = ../config/AGENTS.md;
+        force = true;
+      };
+      ".local/bin/xdg-open" = {
+        text = ''
+          #!/bin/sh
+          exit 0
+        '';
+        executable = true;
+        force = true;
+      };
+      ".local/bin/xdg-debug" = {
+        text = ''
+          #!/bin/sh
+          exit 0
+        '';
+        executable = true;
+        force = true;
+      };
+    }
+  ];
 
   home.packages = with pkgs; [
     p7zip
