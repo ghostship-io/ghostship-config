@@ -1238,6 +1238,8 @@ let
     set -eu
 
     ${t3codeRuntimeEnv}
+    export T3CODE_NODE_EXECUTABLE=${pkgs.nodejs_24}/bin/node
+    export NODE_OPTIONS="--require=${../../packages/t3code/t3-runtime-preload.cjs}"
     export XDG_RUNTIME_DIR=/run/user/3000
     cd /workspace
 

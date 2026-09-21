@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.14.5] - 2026-09-21
+
+- Run T3's Antigravity browser-suppression preflight with the pinned Node
+  runtime instead of re-invoking the packaged T3 executable with unsupported
+  Node flags.
+
 ## [3.14.4] - 2026-09-21
 
 - Complete the Antigravity ACP compatibility bridge by returning the pinned
