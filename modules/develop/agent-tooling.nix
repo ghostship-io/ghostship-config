@@ -124,6 +124,27 @@ let
       fi
     }
 
+    install_cursor_cli() {
+      log_info "installing or upgrading cursor agent"
+      if ! ${pkgs.curl}/bin/curl -fsSL https://cursor.com/install | ${pkgs.bash}/bin/bash 2>&1; then
+        log_warn "cursor install failed, continuing"
+        return 0
+      fi
+      if [ -L "$HOME/.local/bin/agent" ]; then
+        agent_target="$(readlink "$HOME/.local/bin/agent" || true)"
+        if case "$agent_target" in *cursor-agent*) true;; *) false;; esac; then
+          rm -f "$HOME/.local/bin/agent"
+        fi
+      fi
+      for version_dir in "$HOME/.local/share/cursor-agent/versions"/*; do
+        if [ -d "$version_dir" ]; then
+          ln -sf "${pkgs.nodejs}/bin/node" "$version_dir/node"
+        fi
+      done
+      ln -sf "$HOME/.local/bin/cursor-agent" "${agentBinDir}/cursor" 2>/dev/null || true
+      ln -sf "$HOME/.local/bin/cursor-agent" "${agentBinDir}/cursor-agent" 2>/dev/null || true
+    }
+
     remove_stale_openspec_cli() {
       log_info "removing stale openspec CLI"
       rm -f "${agentBinDir}/openspec"
@@ -328,9 +349,11 @@ let
     mkdir -p "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
     install_agent_cli "@openai/codex" "codex"
+    install_agent_cli "@anthropic-ai/claude-code" "claude"
     install_agent_cli "@google/gemini-cli" "gemini"
     install_agent_cli "opencode-ai" "opencode"
     install_agent_cli "skills" "skills"
+    install_cursor_cli
     remove_stale_openspec_cli
     ${lib.concatMapStrings (skill: ''
       ensure_managed_global_skill "${skill.name}" "${skill.source}"

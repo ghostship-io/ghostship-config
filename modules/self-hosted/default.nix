@@ -41,6 +41,7 @@
     ./openchamber.nix
     ./codex.nix
     ./t3code.nix
+    ../agent-host
 
     # Games
     ./romm-db.nix

@@ -18,5 +18,7 @@ in
     ./gemini.nix
     ./opencode-wrapper.nix
     ./codex-wrapper.nix
+    ./claude-wrapper.nix
+    ./cursor-wrapper.nix
   ];
 }
