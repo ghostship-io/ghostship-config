@@ -60,7 +60,7 @@ agent-browser --version
 ## Browser access and provider sign-in
 
 Open `https://t3code.ghostship.io` and complete Cloudflare sign-in. No separate
-T3 pairing token is needed on desktop or mobile. The internal gateway supplies a
+T3 account is required for this web interface. The internal gateway supplies a
 native T3 bearer session for HTTP and WebSocket requests. The credential stays
 in `~/.t3code-container/access/session.json` with mode `0600`, and the gateway
 renews it before expiry. It rejects cross-origin browser requests. Cloudflare
@@ -206,18 +206,25 @@ reboot can therefore return to a generation without T3 Code.
 
 The four-hour tool timer resolves the current registry version online before it
 updates T3, Codex, and Claude, then verifies the installed package manifest
-matches that exact version. A lookup, install, or verification failure is
-reported as maintenance failure instead of silently accepting stale tooling.
+matches that exact version. T3 installs into a versioned directory and keeps
+earlier releases so an update cannot remove the web assets used by a running
+server. It installs and verifies the matching native package even when npm
+skips optional dependencies. A persistent activation marker queues the next idle
+restart if maintenance is run manually. The next server start uses the new
+release. A lookup, install, or verification failure is reported as maintenance
+failure instead of silently accepting stale tooling.
 It also updates OpenCode and Antigravity when the database reports no pending or
 running turns, then runs `after-update.d` to reapply Ghostship tooling. Unknown
-activity defers maintenance and recovery. Each provider update is attempted even
-if another fails. Changed tools or the Ghostship tool package queue a server
-restart, which waits for T3 to become idle.
+activity defers maintenance and recovery. Deferred tool checks retry on the
+one-minute maintenance timer once work becomes idle. Each provider update is
+attempted even if another fails. Changed tools or the Ghostship tool package
+queue a server restart, which waits for T3 to become idle.
 
 The image includes OpenSSL as well as the CA bundle because Cursor's Node runtime
 uses OpenSSL's compiled-in certificate directory when it probes system trust.
-Container health checks web/server
-availability; provider authentication failures do not trigger restart loops.
+Container health reports web/server failures as unhealthy. The server monitor
+restarts only after work is idle; provider authentication failures do not
+trigger restart loops.
 
 `t3code-apply-config` validates JSON/TOML and OpenCode configuration, restarts the
 server, and restores the last healthy configuration snapshot if recovery fails.
@@ -236,6 +243,7 @@ home and projects but exclude the Docker and Nix stores.
 systemctl status podman-t3code.service --no-pager
 podman exec t3code systemctl --failed --no-pager
 podman exec t3code curl -fsS http://127.0.0.1:3773/ >/dev/null
+podman exec t3code curl -fsS http://127.0.0.1:3773/.well-known/t3/environment >/dev/null
 podman exec --user 3000:3000 t3code t3 --version
 podman exec --user 3000:3000 t3code docker info
 podman exec --user 3000:3000 t3code nix store ping --store daemon

@@ -22,10 +22,6 @@ and monitoring.
 - Keep the service private to `ghostship_net`; external Cloudflare routing is
   managed outside this repository.
 
-Upstream T3 Code requires one-time pairing for remote browsers. The
-`t3code-pair` helper issues a one-hour pairing link for
-`https://t3code.ghostship.io`; paired browsers retain their session cookie.
-
 ## Providers and tools
 
 The four-hour maintenance service installs and updates:
