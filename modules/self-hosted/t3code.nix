@@ -321,9 +321,9 @@ let
     }
 
     verify_t3_release() {
-      release_dir="$1"
-      expected_version="$2"
-      manifest="$release_dir/lib/node_modules/t3/package.json"
+      local release_dir="$1" expected_version="$2"
+      local manifest="$release_dir/lib/node_modules/t3/package.json"
+      local installed_version native_manifest native_dir
       [ -x "$release_dir/bin/t3" ] && [ -f "$manifest" ] || return 1
       installed_version="$(node -p 'require(process.argv[1]).version' "$manifest")" || return 1
       [ "$installed_version" = "$expected_version" ] || return 1
@@ -338,6 +338,8 @@ let
     }
 
     install_t3_cli() {
+      local expected_version native_package release_root release_dir current_release
+      local stage_dir install_output staged_version previous_release current_tmp
       if ! expected_version="$(latest_agent_version t3)"; then
         return 1
       fi
@@ -353,9 +355,14 @@ let
       release_dir="$release_root/releases/$expected_version"
       mkdir -p "$release_root/releases"
       current_release="$(readlink -e "$release_root/current" || true)"
-      if [ -n "$current_release" ] && verify_t3_release "$current_release" "$expected_version"; then
-        release_dir="$current_release"
-      elif [ -e "$release_dir" ] && ! verify_t3_release "$release_dir" "$expected_version"; then
+      case "$current_release" in
+        "$release_root"/releases/*)
+          if verify_t3_release "$current_release" "$expected_version"; then
+            release_dir="$current_release"
+          fi
+          ;;
+      esac
+      if [ -e "$release_dir" ] && ! verify_t3_release "$release_dir" "$expected_version"; then
         log_warn "existing T3 Code release is incomplete; preserving it for running processes"
         release_dir="$release_root/releases/$expected_version-repair-$(date -u +%Y%m%dT%H%M%S%N)"
       fi
@@ -386,6 +393,10 @@ let
           return 1
         fi
         mv "$stage_dir" "$release_dir"
+        if ! verify_t3_release "$release_dir" "$expected_version"; then
+          log_warn "promoted T3 Code release is incomplete"
+          return 1
+        fi
       fi
 
       previous_release="$(readlink -e "$release_root/current" || true)"
@@ -1490,7 +1501,13 @@ let
         chown -h t3code:t3code "$HOME/.local/bin/$tool"
       fi
     done
-    if [ ! -x "$XDG_DATA_HOME/t3code-tools/t3/current/bin/t3" ] \
+    current_t3_release="$(readlink -e "$XDG_DATA_HOME/t3code-tools/t3/current" || true)"
+    case "$current_t3_release" in
+      "$XDG_DATA_HOME"/t3code-tools/t3/releases/*) ;;
+      *) current_t3_release="" ;;
+    esac
+    if [ -z "$current_t3_release" ] \
+      || [ ! -x "$current_t3_release/bin/t3" ] \
       || [ ! -x "$NPM_CONFIG_PREFIX/bin/codex" ] \
       || [ ! -x "$NPM_CONFIG_PREFIX/bin/opencode" ]; then
       if ! su-exec t3code:t3code ${t3codeToolMaintenance}/bin/t3code-tool-maintenance; then

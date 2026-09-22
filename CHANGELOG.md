@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.4] - 2026-09-22
+
+- Keep T3 release validation variables local so promotion cannot retarget the
+  active release to a temporary staging directory. Migrate an existing staged
+  installation to a verified versioned release during maintenance.
+
 ## [3.15.3] - 2026-09-22
 
 - Restore the T3 Code web interface after npm replaced the package files used
