@@ -110,7 +110,7 @@ let
         set -u
       fi
     fi
-    export PATH=$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:${t3codePath}:/bin:/usr/bin:$PATH
+    export PATH=${t3codePath}:$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:/bin:/usr/bin:$PATH
     export DOCKER_HOST=unix:///var/run/docker.sock
     export XDG_RUNTIME_DIR=/run/user/3000
     export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
@@ -185,7 +185,10 @@ let
   t3codeInstallT3Shim = pkgs.writeShellScriptBin "t3code-install-t3-shim" ''
     set -eu
 
-    target="''${1:-$NPM_CONFIG_PREFIX/bin/t3}"
+    target="''${1:-$HOME/.local/share/t3code-tools/t3/current/bin/t3}"
+    if [ ! -x "$target" ] && [ -x "$NPM_CONFIG_PREFIX/bin/t3" ]; then
+      target="$NPM_CONFIG_PREFIX/bin/t3"
+    fi
     mkdir -p "$HOME/.local/bin"
     cat > "$HOME/.local/bin/t3" <<EOF
     #!/usr/bin/env sh
@@ -225,6 +228,7 @@ let
 
     ${t3codeRuntimeEnv}
     export NODE_NO_WARNINGS=1
+    export PYTHON=${pkgs.python3}/bin/python3
 
     log_info() {
       printf 'info: %s\n' "$1" >&2
@@ -314,6 +318,85 @@ let
         log_warn "$label remains at $installed_version; expected $expected_version"
         return 1
       fi
+    }
+
+    verify_t3_release() {
+      release_dir="$1"
+      expected_version="$2"
+      manifest="$release_dir/lib/node_modules/t3/package.json"
+      [ -x "$release_dir/bin/t3" ] && [ -f "$manifest" ] || return 1
+      installed_version="$(node -p 'require(process.argv[1]).version' "$manifest")" || return 1
+      [ "$installed_version" = "$expected_version" ] || return 1
+      native_manifest="$(node -e '
+        const root = process.argv[1];
+        const name = `@t3code/t3-''${process.platform}-''${process.arch}`;
+        try { process.stdout.write(require.resolve(name + "/package.json", { paths: [root] })); }
+        catch { process.exit(1); }
+      ' "$release_dir/lib/node_modules/t3")" || return 1
+      native_dir="$(dirname "$native_manifest")"
+      [ -x "$native_dir/t3" ] && [ -s "$native_dir/client/index.html" ]
+    }
+
+    install_t3_cli() {
+      if ! expected_version="$(latest_agent_version t3)"; then
+        return 1
+      fi
+      case "$expected_version" in
+        ""|*[!a-zA-Z0-9._-]*)
+          log_warn "the registry returned an invalid T3 Code version"
+          return 1
+          ;;
+      esac
+      native_package="$(node -p '"@t3code/t3-" + process.platform + "-" + process.arch')"
+
+      release_root="$XDG_DATA_HOME/t3code-tools/t3"
+      release_dir="$release_root/releases/$expected_version"
+      mkdir -p "$release_root/releases"
+      current_release="$(readlink -e "$release_root/current" || true)"
+      if [ -n "$current_release" ] && verify_t3_release "$current_release" "$expected_version"; then
+        release_dir="$current_release"
+      elif [ -e "$release_dir" ] && ! verify_t3_release "$release_dir" "$expected_version"; then
+        log_warn "existing T3 Code release is incomplete; preserving it for running processes"
+        release_dir="$release_root/releases/$expected_version-repair-$(date -u +%Y%m%dT%H%M%S%N)"
+      fi
+      if [ ! -e "$release_dir" ]; then
+        stage_dir="$(mktemp -d "$release_root/.staging.XXXXXX")"
+        log_info "staging T3 Code $expected_version without replacing the running release"
+        # npm can report success while silently skipping the optional native
+        # payload. Install it explicitly and verify the browser bundle below.
+        if ! install_output="$(npm install -g --prefix "$stage_dir" \
+          --prefer-online --no-fund --no-audit \
+          "t3@$expected_version" "$native_package@$expected_version" 2>&1)"; then
+          log_warn "T3 Code install failed"
+          if [ -n "$install_output" ]; then
+            printf '%s\n' "$install_output" >&2
+          fi
+          rm -rf "$stage_dir"
+          return 1
+        fi
+        if ! verify_t3_release "$stage_dir" "$expected_version"; then
+          log_warn "T3 Code release is missing its executable or web client"
+          rm -rf "$stage_dir"
+          return 1
+        fi
+        if ! staged_version="$(LD_LIBRARY_PATH='${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}' "$stage_dir/bin/t3" --version)" \
+          || [ "$staged_version" != "t3 v$expected_version" ]; then
+          log_warn "staged T3 Code executable did not report $expected_version"
+          rm -rf "$stage_dir"
+          return 1
+        fi
+        mv "$stage_dir" "$release_dir"
+      fi
+
+      previous_release="$(readlink -e "$release_root/current" || true)"
+      current_tmp="$release_root/.current.new"
+      rm -f "$current_tmp"
+      ln -s "$release_dir" "$current_tmp"
+      mv -Tf "$current_tmp" "$release_root/current"
+      if [ "$previous_release" != "$release_dir" ]; then
+        printf '%s\n' "$release_dir" > "$release_root/activation.pending"
+      fi
+      log_info "T3 Code $expected_version is ready; older releases remain available to running servers"
     }
 
     install_cursor_cli() {
@@ -479,13 +562,13 @@ let
     mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
     update_status=0
-    install_agent_cli "t3" "T3 Code" || update_status=1
+    install_t3_cli || update_status=1
     install_agent_cli "@openai/codex" "codex" || update_status=1
     ${t3codeCodexRgRepair}/bin/t3code-codex-rg-repair || update_status=1
     install_agent_cli "@anthropic-ai/claude-code" "claude" || update_status=1
     install_opencode_cli || update_status=1
     install_cursor_cli || update_status=1
-    ${t3codeInstallT3Shim}/bin/t3code-install-t3-shim "$NPM_CONFIG_PREFIX/bin/t3"
+    ${t3codeInstallT3Shim}/bin/t3code-install-t3-shim
     install_user_shim "codex" "$NPM_CONFIG_PREFIX/bin/codex"
     install_user_shim "claude" "$NPM_CONFIG_PREFIX/bin/claude"
     install_opencode_user_shim "$NPM_CONFIG_PREFIX/bin/opencode"
@@ -501,6 +584,7 @@ let
 
     state_dir="/run/t3code-tool-update"
     pending_restart="$state_dir/restart.pending"
+    deferred_update="$state_dir/update-deferred.pending"
     install -d -m 0700 "$state_dir"
 
     exec 9>"$state_dir/tool-update.lock"
@@ -513,9 +597,11 @@ let
     ${t3codeIdleCheck}
 
     if systemctl is-active --quiet t3code-server.service && ! is_t3code_idle; then
+      touch "$deferred_update"
       log_info "T3 Code reports active or unknown work; tool update deferred"
       exit 0
     fi
+    rm -f "$deferred_update"
 
     user_version() {
       tool="$1"
@@ -529,6 +615,8 @@ let
     }
 
     before_t3="$(user_version t3)"
+    t3_activation_pending="$XDG_DATA_HOME/t3code-tools/t3/activation.pending"
+    before_t3_release="$(readlink -e "$XDG_DATA_HOME/t3code-tools/t3/current" || true)"
     before_codex="$(user_version codex)"
     before_claude="$(user_version claude)"
     before_cursor="$(user_version cursor)"
@@ -543,6 +631,7 @@ let
     su-exec t3code:t3code ${t3codeRunHooks}/bin/t3code-run-hooks after-update.d
 
     after_t3="$(user_version t3)"
+    after_t3_release="$(readlink -e "$XDG_DATA_HOME/t3code-tools/t3/current" || true)"
     after_codex="$(user_version codex)"
     after_claude="$(user_version claude)"
     after_cursor="$(user_version cursor)"
@@ -558,7 +647,9 @@ let
     log_info "opencode: ''${before_opencode:-missing} -> ''${after_opencode:-missing}"
     log_info "antigravity: ''${before_antigravity:-bundled} -> ''${after_antigravity:-bundled}"
 
-    if [ "$before_t3" != "$after_t3" ] \
+    if [ -f "$t3_activation_pending" ] \
+      || [ "$before_t3" != "$after_t3" ] \
+      || [ "$before_t3_release" != "$after_t3_release" ] \
       || [ "$before_codex" != "$after_codex" ] \
       || [ "$before_claude" != "$after_claude" ] \
       || [ "$before_cursor" != "$after_cursor" ] \
@@ -590,6 +681,8 @@ let
 
     state_dir="/run/t3code-tool-update"
     pending_restart="$state_dir/restart.pending"
+    deferred_update="$state_dir/update-deferred.pending"
+    t3_activation_pending="$XDG_DATA_HOME/t3code-tools/t3/activation.pending"
 
     log_info() {
       printf 'info: %s\n' "$1" >&2
@@ -597,7 +690,7 @@ let
 
     ${t3codeIdleCheck}
 
-    [ -f "$pending_restart" ] || exit 0
+    [ -f "$pending_restart" ] || [ -f "$deferred_update" ] || [ -f "$t3_activation_pending" ] || exit 0
 
     exec 9>"$state_dir/tool-update.lock"
     if ! ${pkgs.util-linux}/bin/flock -n 9; then
@@ -606,8 +699,22 @@ let
     fi
 
     if ! systemctl is-active --quiet t3code-server.service; then
-      log_info "t3code-server.service is stopped; clearing queued restart"
-      rm -f "$pending_restart"
+      log_info "t3code-server.service is stopped; the next start will use staged tools"
+      rm -f "$pending_restart" "$deferred_update" "$t3_activation_pending"
+      exit 0
+    fi
+
+    if [ ! -f "$pending_restart" ] \
+      && { [ -f "$deferred_update" ] || [ -f "$t3_activation_pending" ]; }; then
+      if ! is_t3code_idle; then
+        touch "$deferred_update"
+        log_info "T3 Code reports active or unknown work; leaving tool update queued"
+        exit 0
+      fi
+      rm -f "$deferred_update"
+      ${pkgs.util-linux}/bin/flock -u 9
+      log_info "T3 Code became idle; retrying deferred tool update"
+      systemctl start t3code-tool-auto-update.service
       exit 0
     fi
 
@@ -631,6 +738,7 @@ let
     log_info "T3 Code reports all work complete; applying queued maintenance restart"
     systemctl restart t3code-server.service
     rm -f "$pending_restart"
+    rm -f "$t3_activation_pending"
   '';
 
   t3codeDaemonMonitor = pkgs.writeShellScriptBin "t3code-server-monitor" ''
@@ -654,8 +762,10 @@ let
     if ! systemctl is-active --quiet t3code-server.service; then
       unhealthy_reason="t3code-server.service is not active"
       web_was_active=0
-    elif ! curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null; then
+    elif ! curl -fsS --max-time 5 -H 'Accept: text/html' http://127.0.0.1:3773/ >/dev/null; then
       unhealthy_reason="T3 Code web UI is not responding"
+    elif ! curl -fsS --max-time 5 http://127.0.0.1:3773/.well-known/t3/environment >/dev/null; then
+      unhealthy_reason="T3 Code environment endpoint is not responding"
     elif ! t3code_providers_healthy; then
       unhealthy_reason="Codex or OpenCode provider is unavailable"
     fi
@@ -700,8 +810,6 @@ let
   t3codeContainerHealth = pkgs.writeShellScriptBin "t3code-container-health" ''
     set -eu
 
-    ${t3codeIdleCheck}
-
     read -r uptime _ < /proc/uptime
     uptime_seconds="''${uptime%%.*}"
     if ! manager_started_usec="$(${pkgs.systemd}/bin/systemctl show -p UserspaceTimestampMonotonic --value)"; then
@@ -735,20 +843,13 @@ let
       exit 0
     fi
 
-    if ${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null; then
+    if ${pkgs.curl}/bin/curl -fsS --max-time 5 -H 'Accept: text/html' http://127.0.0.1:3773/ >/dev/null \
+      && ${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:3773/.well-known/t3/environment >/dev/null; then
       exit 0
     fi
 
-    if ! ${pkgs.systemd}/bin/systemctl is-active --quiet t3code-server.service; then
-      exit 1
-    fi
-
-    if is_t3code_idle; then
-      exit 1
-    fi
-
-    printf 'warning: T3 Code health is degraded but activity is active or unknown; container kill deferred\n' >&2
-    exit 0
+    printf 'error: T3 Code web or environment endpoint is unavailable\n' >&2
+    exit 1
   '';
 
   t3codeApplyConfig = pkgs.writeShellScriptBin "t3code-apply-config" ''
@@ -842,7 +943,8 @@ let
 
     wait_healthy() {
       for _ in $(seq 1 90); do
-        if curl -fsS --max-time 5 http://127.0.0.1:3773/ >/dev/null \
+        if curl -fsS --max-time 5 -H 'Accept: text/html' http://127.0.0.1:3773/ >/dev/null \
+          && curl -fsS --max-time 5 http://127.0.0.1:3773/.well-known/t3/environment >/dev/null \
           && t3code_providers_healthy; then
           return 0
         fi
@@ -1041,13 +1143,15 @@ let
 
     ${t3codeProviderCheck}
     for _ in $(seq 1 90); do
-      if curl -fsS --max-time 5 http://127.0.0.1:3774/ >/dev/null \
+      if curl -fsS --max-time 5 -H 'Accept: text/html' http://127.0.0.1:3774/ >/dev/null \
+        && curl -fsS --max-time 5 http://127.0.0.1:3774/.well-known/t3/environment >/dev/null \
         && t3code_providers_healthy; then
         break
       fi
       sleep 1
     done
-    curl -fsS --max-time 5 http://127.0.0.1:3774/ >/dev/null
+    curl -fsS --max-time 5 -H 'Accept: text/html' http://127.0.0.1:3774/ >/dev/null
+    curl -fsS --max-time 5 http://127.0.0.1:3774/.well-known/t3/environment >/dev/null
     t3code_providers_healthy
 
     mkdir -p "$tmp/home"
@@ -1317,19 +1421,6 @@ let
     done
   '';
 
-  t3codePair = pkgs.writeShellScriptBin "t3code-pair" ''
-    set -eu
-
-    ${t3codeRuntimeEnv}
-
-    exec t3 auth pairing create \
-      --base-dir "$T3CODE_HOME" \
-      --base-url https://t3code.ghostship.io \
-      --ttl "1h" \
-      --label "t3code.ghostship.io" \
-      "$@"
-  '';
-
   t3codeContainerSetup = pkgs.writeShellScriptBin "t3code-container-setup" ''
     set -eu
 
@@ -1399,18 +1490,20 @@ let
         chown -h t3code:t3code "$HOME/.local/bin/$tool"
       fi
     done
-    if [ ! -x "$NPM_CONFIG_PREFIX/bin/t3" ] \
+    if [ ! -x "$XDG_DATA_HOME/t3code-tools/t3/current/bin/t3" ] \
       || [ ! -x "$NPM_CONFIG_PREFIX/bin/codex" ] \
       || [ ! -x "$NPM_CONFIG_PREFIX/bin/opencode" ]; then
       if ! su-exec t3code:t3code ${t3codeToolMaintenance}/bin/t3code-tool-maintenance; then
         # Optional ACP updates must not block startup with the bundled runtime.
-        for tool in t3 codex opencode; do
+        test -x "$XDG_DATA_HOME/t3code-tools/t3/current/bin/t3" \
+          || test -x "$NPM_CONFIG_PREFIX/bin/t3" || exit 1
+        for tool in codex opencode; do
           test -x "$NPM_CONFIG_PREFIX/bin/$tool" || exit 1
         done
         printf 'warning: some updates failed; starting with installed tools\n' >&2
       fi
     fi
-    su-exec t3code:t3code ${t3codeInstallT3Shim}/bin/t3code-install-t3-shim "$NPM_CONFIG_PREFIX/bin/t3"
+    su-exec t3code:t3code ${t3codeInstallT3Shim}/bin/t3code-install-t3-shim
     su-exec t3code:t3code ${t3codeCodexRgRepair}/bin/t3code-codex-rg-repair
     su-exec t3code:t3code ${t3codeProjectBootstrap}/bin/t3code-project-bootstrap
     cat > "$HOME/.local/bin/t3code-server-run" <<'EOF'
@@ -1419,12 +1512,7 @@ let
     EOF
     chown t3code:t3code "$HOME/.local/bin/t3code-server-run"
     chmod 0755 "$HOME/.local/bin/t3code-server-run"
-    cat > "$HOME/.local/bin/t3code-pair" <<'EOF'
-    #!/bin/sh
-    exec ${t3codePair}/bin/t3code-pair "$@"
-    EOF
-    chown t3code:t3code "$HOME/.local/bin/t3code-pair"
-    chmod 0755 "$HOME/.local/bin/t3code-pair"
+    rm -f "$HOME/.local/bin/t3code-pair"
     cat > "$HOME/.local/bin/t3code-tunnel" <<'EOF'
     #!/bin/sh
     exec ${t3codeTunnel}/bin/t3code-tunnel "$@"
@@ -1476,7 +1564,6 @@ let
     t3codeDaemonRun
     t3codeAccessProxy
     t3codeProjectBootstrap
-    t3codePair
     t3codeToolMaintenance
     t3codeInstallT3Shim
     t3codeAntigravityUpdate
@@ -1728,7 +1815,7 @@ let
       Environment=XDG_RUNTIME_DIR=/run/user/3000
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
-      Environment=PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin
+      Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
       ExecStart=${t3codeBootstrap}/bin/t3code-bootstrap
       RemainAfterExit=yes
       TimeoutStartSec=20m
@@ -1758,9 +1845,9 @@ let
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
       Environment=AGENT_CLOAK_BASE_URL=http://cloakbrowser:8080
-      Environment=PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin
+      Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
       ExecStartPre=${t3codeRunHooks}/bin/t3code-run-hooks before-t3code.d
-      ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/t3code-tool-update/restart.pending
+      ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/t3code-tool-update/restart.pending /home/t3code/.local/share/t3code-tools/t3/activation.pending
       ExecStart=${t3codeDaemonRun}/bin/t3code-server-run
       ExecStartPost=${t3codeSnapshotConfig}/bin/t3code-snapshot-config
       Restart=always
@@ -1812,7 +1899,7 @@ let
 
       [Service]
       Type=oneshot
-      Environment=PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin
+      Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
       ExecStart=${t3codeToolAutoUpdate}/bin/t3code-tool-auto-update
       StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-tool-auto-update.log
       StandardError=append:/home/t3code/.t3code-container/logs/t3code-tool-auto-update.log
@@ -1846,7 +1933,7 @@ let
 
       [Service]
       Type=oneshot
-      Environment=PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin
+      Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
       ExecStart=${t3codeToolUpdateRestart}/bin/t3code-tool-update-restart
       StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-tool-update-restart.log
       StandardError=append:/home/t3code/.t3code-container/logs/t3code-tool-update-restart.log
@@ -1878,7 +1965,7 @@ let
 
       [Service]
       Type=oneshot
-      Environment=PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin
+      Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
       ExecStart=${t3codeDaemonMonitor}/bin/t3code-server-monitor
       StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-server-monitor.log
       StandardError=append:/home/t3code/.t3code-container/logs/t3code-server-monitor.log
@@ -1946,7 +2033,7 @@ let
         "NPM_CONFIG_PREFIX=/home/t3code/.local/share/t3code-tools/npm"
         "npm_config_prefix=/home/t3code/.local/share/t3code-tools/npm"
         "OPENCODE_AUTOMATION_DIR=/home/t3code/.automation"
-        "PATH=/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:${t3codePath}:/bin:/usr/bin"
+        "PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin"
         "NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
         "NIX_CONFIG=experimental-features = nix-command flakes"
@@ -2012,7 +2099,6 @@ in
       "--health-timeout=15s"
       "--health-retries=5"
       "--health-start-period=5m"
-      "--health-on-failure=kill"
     ];
     volumes = [
       "${t3codeDocker}:/var/lib/docker:rw"

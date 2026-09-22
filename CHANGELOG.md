@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.3] - 2026-09-22
+
+- Restore the T3 Code web interface after npm replaced the package files used
+  by a running server. Stage future T3 releases in versioned directories,
+  install the native package explicitly, validate the browser bundle, and
+  switch only new launches. Use the image's Python for native npm builds.
+- Retry deferred tool updates as soon as T3 becomes idle, while preserving the
+  active session and its queued restart. Check both the web page and the API
+  environment endpoint; report degraded container health without killing
+  active work.
+- Remove the unused `t3code-pair` helper from the image and persistent home.
+- Prefer image tools over stale user shims in T3 services and maintenance.
+
 ## [3.15.2] - 2026-09-21
 
 - Connect the armored-armadillo WSL worker to the main T3 web client through a
