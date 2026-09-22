@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.2] - 2026-09-21
+
+- Connect the armored-armadillo WSL worker to the main T3 web client through a
+  dedicated, Access-protected Cloudflare tunnel instead of T3 Connect. Add
+  guarded two-minute self-healing for the worker and connector; both start with
+  the NixOS WSL system and require no Windows scheduled task.
+- Add an idempotent Cloudflare tunnel provisioner that reconciles the named
+  tunnel, exact DNS record, loopback ingress, Access coverage, and private
+  connector token without placing credentials in the Nix store.
+
+## [3.15.1] - 2026-09-21
+
+- Include GNU Make in the managed agent-CLI maintenance runtime so T3's
+  Linux platform package can build its `node-pty` fallback when npm has no
+  prebuilt binary for the current Node.js ABI.
+
+## [3.15.0] - 2026-09-21
+
+- Add a reusable `ghostship.host.roles.t3worker` role and `modules/agent-worker`
+  platform so a Windows/WSL2 desktop joins the T3 web interface as its own
+  environment. Each worker runs a persistent `t3 serve` system service, reaches
+  the fleet through T3 Connect, and keeps independent projects, threads,
+  providers, files, and execution.
+- Install T3 and every supported provider CLI (Codex, OpenCode, Claude, Cursor,
+  Gemini, Grok, and optional Antigravity ACP) through the existing agent
+  maintenance service, and restart the worker only when an installed version
+  changes. Provider instances are seeded only when the worker has no settings.
+- Keep workers standalone: they receive only this repository's small skill set
+  under `home/config/skills/` and the repo-local `home/config/AGENTS.md` with
+  WSL2-specific guidance. The `ghostship-agent` catalog is not installed,
+  cloned, or executed on worker hosts.
+- Retire OpenChamber, the Synara T3 Code container, and the ChatGPT/Codex
+  workstation: remove their modules, packages, workflow, tests, and docs, and
+  quarantine their `/srv/apps` state, containers, images, units, and dashboard
+  entries through `modules/self-hosted/cleanup.nix`. Keep the T3 Code Codex
+  provider.
+- Fix `checks.nix` referencing the already-removed `podman-synara` unit, which
+  had broken host evaluation and CI.
+- Clean retired agent artifacts from WSL2 user homes, including Paseo, Agent
+  Deck, the WSL OpenCode desktop server, old OpenChamber user units, and
+  `.openchamber` state.
+
 ## [3.14.6] - 2026-09-21
 
 - Restore the managed Ollama Cloud and OpenRouter API keys to the T3 Code

@@ -45,6 +45,7 @@ let
     pkgs.gawk
     pkgs.gcc
     pkgs.git
+    pkgs.gnumake
     pkgs.gnutar
     pkgs.gnugrep
     pkgs.gzip
@@ -352,6 +353,8 @@ let
     install_agent_cli "@anthropic-ai/claude-code" "claude"
     install_agent_cli "@google/gemini-cli" "gemini"
     install_agent_cli "opencode-ai" "opencode"
+    install_agent_cli "@xai-official/grok" "grok"
+    install_agent_cli "t3" "T3 Code"
     install_agent_cli "skills" "skills"
     install_cursor_cli
     remove_stale_openspec_cli

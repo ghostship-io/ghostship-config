@@ -1,5 +1,8 @@
-{ lib, pkgs, ... }:
+{ lib, pkgs, config, ... }:
 
+let
+  roles = config.ghostship.host.roles or { };
+in
 {
   imports = [
     ./host-roles.nix
@@ -7,7 +10,12 @@
     ./user-nixos.nix
     ./users.nix
     ./secrets.nix
+    ../agent-worker
   ];
+
+  # The t3worker role is the single switch: enable the worker platform, and the
+  # Home Manager profile is selected from the same role in home/nixos.nix.
+  ghostship.t3Worker.enable = lib.mkIf (roles.t3worker or false) true;
 
   nixpkgs.overlays = [
     (import ./ghostship-pkg.nix)

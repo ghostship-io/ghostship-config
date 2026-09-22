@@ -1,20 +1,20 @@
 # T3 Code
 
 T3 Code runs at `https://t3code.ghostship.io` on `chill-penguin`. The repo builds
-`localhost/ghostship-t3code:t3code-runtime`, using OpenChamber's container
-platform: systemd, UID/GID 3000, persistent user services, nested Docker, Nix,
-build tools, Git/GitHub CLI, and Cloudflared Quick Tunnels. The access gateway
+`localhost/ghostship-t3code:t3code-runtime` with a systemd platform: UID/GID
+3000, persistent user services, nested Docker, Nix, build tools, Git/GitHub
+CLI, and Cloudflared Quick Tunnels. The access gateway
 listens on `t3code:3773` inside `ghostship_net`; the T3 backend listens only on
 container loopback port `3774`. No host ports are published.
 
 ## Projects and state
 
 The container user is `t3code`, with home `/home/t3code`. Host state lives in
-`/srv/apps/t3code/{home,workspace,docker,nix-root}`. At container startup each
-missing top-level OpenChamber project is copied to the new workspace, including
-Git history and uncommitted files. Copies use filesystem reflinks when available
-and publish only after copying completes. Existing destinations are never
-overwritten or synchronized. Project registration uses T3's native CLI.
+`/srv/apps/t3code/{home,workspace,docker,nix-root}`. At container startup each missing top-level repository is copied to the new
+workspace, including Git history and uncommitted files. Copies use filesystem
+reflinks when available and publish only after copying completes. Existing
+destinations are never overwritten or synchronized. Project registration uses
+T3's native CLI.
 
 The initial project set is `ghostship-agent`, `ghostship-newsletter`,
 `ghostship-roms`, `nixos-config`, and `OneConfig`. Stop editing a source project
@@ -22,8 +22,7 @@ while its initial copy runs if you need a consistent multi-file snapshot.
 Git `result` links and build caches can refer to the source container's store;
 rebuild them through each project's Nix flake in T3's independent store.
 
-Provider sessions, credentials, and OpenChamber's scheduled automation are
-separate from these project copies. Project-owned services can be installed in
+Provider sessions and credentials are separate from these project copies. Project-owned services can be installed in
 `~/.config/systemd/user` and enabled with `t3code-user-units enable-now <unit>`.
 Do not enable duplicate newsletter delivery or other external automations unless
 you intend both containers to run them.
@@ -231,7 +230,7 @@ Cloudflare Quick Tunnel. Container lifecycle hooks live in
 The host unit preserves running work across unrelated rebuilds. To deploy a
 changed image, explicitly restart `podman-t3code.service` during a maintenance
 window after building and switching the host configuration. Backups include the
-home and projects but exclude the Docker and Nix stores, as for OpenChamber.
+home and projects but exclude the Docker and Nix stores.
 
 ```sh
 systemctl status podman-t3code.service --no-pager

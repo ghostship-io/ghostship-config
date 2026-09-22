@@ -8,7 +8,6 @@ let
   ]);
   hosts = builtins.attrValues self.nixosConfigurations;
   agentUnits = map (name: self.nixosConfigurations.chill-penguin.config.systemd.services.${name}) [
-    "podman-codex"
     "podman-t3code"
   ];
   failures = pkgs.lib.concatMap (

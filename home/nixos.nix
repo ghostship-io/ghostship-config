@@ -7,7 +7,8 @@ in
   imports = [ ./profiles/base.nix ]
     ++ lib.optional (roles.server or false) ./profiles/server.nix
     ++ lib.optional (roles.develop or false) ./profiles/develop.nix
-    ++ lib.optional (roles.wsl or false) ./profiles/wsl.nix;
+    ++ lib.optional (roles.wsl or false) ./profiles/wsl.nix
+    ++ lib.optional (roles.t3worker or false) ./profiles/t3worker.nix;
 
   home.stateVersion = "25.11";
 }

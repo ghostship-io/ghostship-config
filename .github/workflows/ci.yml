@@ -30,22 +30,5 @@ jobs:
         run: |
           nix develop .#ci -c actionlint
           nix develop .#ci -c shellcheck -s bash -e SC1091 modules/self-hosted/backup.sh modules/self-hosted/restore-check.sh
-      - name: Check OpenChamber update and rollback state machines
-        # Ubuntu restricts user namespaces for store-path binaries. Keep the
-        # probe in a disposable container instead of changing runner policy.
-        run: |
-          # shellcheck disable=SC2016
-          nix develop .#ci -c bash -c '
-            docker run --rm --security-opt apparmor=unconfined --security-opt seccomp=unconfined \
-              --cap-add SYS_ADMIN --cap-add NET_ADMIN --security-opt systempaths=unconfined \
-              --volume /nix:/nix:ro --volume /etc/passwd:/etc/passwd:ro \
-              --volume /etc/ssl/certs:/etc/ssl/certs:ro \
-              --volume "$PWD:$PWD" \
-              --workdir "$PWD" --env PATH --env TMPDIR=/tmp --env NIX_SSL_CERT_FILE \
-              --env HOME=/root --env NIX_REMOTE=daemon \
-              --env "NIX_CONFIG=experimental-features = nix-command flakes" \
-              ubuntu:24.04 bash -c "git config --global --add safe.directory \"$PWD\" && exec bash tests/openchamber-harness.sh"
-          '
-
       - name: Scan current source for secrets
         run: nix develop .#ci -c gitleaks dir --redact --no-banner .
