@@ -157,7 +157,7 @@ in
     fi
   '';
 
-  home.activation.wslWincli = lib.hm.dag.entryAfter [ "wslHomeSymlink" ] ''
+  home.activation.wslWincli = lib.hm.dag.entryBetween [ "codexDesktopWindowsMigration" ] [ "wslHomeSymlink" ] ''
     WIN_USER=$(${windowsPowerShell} -NoProfile -ExecutionPolicy Bypass -Command '$env:UserName' 2>/dev/null | tr -d '\r')
     WIN_HOME="/mnt/c/Users/$WIN_USER"
 
