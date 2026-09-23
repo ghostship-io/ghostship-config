@@ -190,7 +190,8 @@ let
       target="$NPM_CONFIG_PREFIX/bin/t3"
     fi
     mkdir -p "$HOME/.local/bin"
-    cat > "$HOME/.local/bin/t3" <<EOF
+    temporary="$HOME/.local/bin/.t3.tmp.$$"
+    cat > "$temporary" <<EOF
     #!/usr/bin/env sh
     set -eu
     target='$target'
@@ -201,7 +202,8 @@ let
     export LD_LIBRARY_PATH='${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}'
     exec "\$target" "\$@"
     EOF
-    chmod 0755 "$HOME/.local/bin/t3"
+    chmod 0755 "$temporary"
+    mv -f "$temporary" "$HOME/.local/bin/t3"
   '';
 
   t3codeInstallGhostshipAgent = pkgs.writeShellScriptBin "t3code-install-ghostship-agent" ''
@@ -287,6 +289,94 @@ let
       node -p 'require(process.argv[1]).version' "$manifest"
     }
 
+    verify_claude_native_binary() {
+      local expected_version="$1" native_manifest="$2" native_binary="$3"
+      local native_version native_size native_output
+
+      [ -f "$native_manifest" ] || return 1
+      native_version="$(node -p 'require(process.argv[1]).version' "$native_manifest" 2>/dev/null)" || return 1
+      [ "$native_version" = "$expected_version" ] || return 1
+      [ -x "$native_binary" ] || return 1
+
+      native_size="$(${pkgs.coreutils}/bin/stat -c %s "$native_binary")" || return 1
+      case "$native_size" in
+        ""|*[!0-9]*) return 1 ;;
+      esac
+      [ "$native_size" -gt 4096 ] || return 1
+
+      native_output="$(${pkgs.coreutils}/bin/timeout --kill-after=3s 20s "$native_binary" --version 2>/dev/null)" || return 1
+      case "$native_output" in
+        "$expected_version"*) printf '%s\n' "$native_output" ;;
+        *) return 1 ;;
+      esac
+    }
+
+    install_claude_native_binary() {
+      local expected_version="$1"
+      local platform native_package native_dir native_manifest native_binary target
+      local native_output temporary installed_output install_output
+
+      platform="$(${pkgs.nodejs_24}/bin/node -e '
+        const report = process.report?.getReport?.();
+        const musl = process.platform === "linux" && report?.header?.glibcVersionRuntime === undefined;
+        process.stdout.write(process.platform + "-" + process.arch + (musl ? "-musl" : ""));
+      ')"
+      case "$platform" in
+        linux-x64|linux-arm64|linux-x64-musl|linux-arm64-musl) ;;
+        *)
+          log_warn "Claude Code has no supported native package for $platform"
+          return 1
+          ;;
+      esac
+
+      native_package="@anthropic-ai/claude-code-$platform"
+      native_dir="$NPM_CONFIG_PREFIX/lib/node_modules/$native_package"
+      native_manifest="$native_dir/package.json"
+      native_binary="$native_dir/claude"
+      target="$NPM_CONFIG_PREFIX/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+
+      if ! native_output="$(verify_claude_native_binary "$expected_version" "$native_manifest" "$native_binary" 2>/dev/null)"; then
+        log_info "installing or repairing Claude Code's $platform native package"
+        if ! install_output="$(npm install -g --force --prefer-online --no-fund --no-audit "$native_package@$expected_version" 2>&1)"; then
+          log_warn "Claude Code's $platform native package install failed"
+          if [ -n "$install_output" ]; then
+            printf '%s\n' "$install_output" >&2
+          fi
+          return 1
+        fi
+        if ! native_output="$(verify_claude_native_binary "$expected_version" "$native_manifest" "$native_binary" 2>/dev/null)"; then
+          log_warn "Claude Code's $platform native package remains missing or invalid after reinstall"
+          return 1
+        fi
+      fi
+      if [ -z "$native_output" ]; then
+        log_warn "Claude Code's $platform native executable did not report its version"
+        return 1
+      fi
+
+      temporary="$target.repair.$$"
+      rm -f "$temporary"
+      if ! ln "$native_binary" "$temporary"; then
+        log_warn "could not stage Claude Code's verified native executable"
+        return 1
+      fi
+      chmod 0755 "$temporary"
+      mv -f "$temporary" "$target"
+
+      if ! installed_output="$(${pkgs.coreutils}/bin/timeout --kill-after=3s 20s "$NPM_CONFIG_PREFIX/bin/claude" --version 2>/dev/null)"; then
+        log_warn "Claude Code's installed launcher failed its bounded version check"
+        return 1
+      fi
+      case "$installed_output" in
+        "$expected_version"*) ;;
+        *)
+          log_warn "Claude Code's installed launcher reports an unexpected version"
+          return 1
+          ;;
+      esac
+      log_info "Claude Code $expected_version is using the verified $platform native executable"
+    }
+
     install_agent_cli() {
       package="$1"
       label="$2"
@@ -316,6 +406,11 @@ let
 
       if [ "$installed_version" != "$expected_version" ]; then
         log_warn "$label remains at $installed_version; expected $expected_version"
+        return 1
+      fi
+
+      if [ "$package" = "@anthropic-ai/claude-code" ] \
+        && ! install_claude_native_binary "$expected_version"; then
         return 1
       fi
     }
@@ -539,8 +634,9 @@ let
     install_user_shim() {
       name="$1"
       target="$2"
+      temporary="$HOME/.local/bin/.$name.tmp.$$"
 
-      cat > "$HOME/.local/bin/$name" <<EOF
+      cat > "$temporary" <<EOF
     #!/usr/bin/env sh
     set -eu
     target='$target'
@@ -549,14 +645,16 @@ let
       exit 1
     fi
     exec "\$target" "\$@"
-    EOF
-      chmod 0755 "$HOME/.local/bin/$name"
+      EOF
+      chmod 0755 "$temporary"
+      mv -f "$temporary" "$HOME/.local/bin/$name"
     }
 
     install_opencode_user_shim() {
       target="$1"
+      temporary="$HOME/.local/bin/.opencode.tmp.$$"
 
-      cat > "$HOME/.local/bin/opencode" <<EOF
+      cat > "$temporary" <<EOF
     #!/usr/bin/env sh
     set -eu
     ${sourceHmSessionVarsIfPresent}
@@ -566,8 +664,9 @@ let
       exit 1
     fi
     exec "\$target" "\$@"
-    EOF
-      chmod 0755 "$HOME/.local/bin/opencode"
+      EOF
+      chmod 0755 "$temporary"
+      mv -f "$temporary" "$HOME/.local/bin/opencode"
     }
 
     mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
@@ -618,10 +717,17 @@ let
       tool="$1"
       su-exec t3code:t3code sh -c '
         tool="$1"
-        if ! command -v "$tool" >/dev/null 2>&1; then
+        tool_path="$(command -v "$tool" 2>/dev/null || true)"
+        if [ -z "$tool_path" ]; then
           exit 0
         fi
-        "$tool" --version 2>/dev/null | sed -n "1p" || true
+        version_status=0
+        version_output="$(${pkgs.coreutils}/bin/timeout --kill-after=3s 15s "$tool_path" --version 2>/dev/null)" || version_status=$?
+        if [ "$version_status" -ne 0 ]; then
+          printf "unavailable:%s\n" "$version_status"
+          exit 0
+        fi
+        printf "%s\n" "$version_output" | sed -n "1p"
       ' sh "$tool"
     }
 

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.6] - 2026-09-23
+
+- Repair Claude Code's recursive npm launcher by installing the matching
+  platform executable directly and verifying it before use. Replace CLI
+  shims atomically so existing links are not overwritten, and bound version
+  probes so a broken launcher cannot stall automatic updates.
+
 ## [3.15.5] - 2026-09-23
 
 - Ignore completed turns and old pending-start rows when deciding whether
