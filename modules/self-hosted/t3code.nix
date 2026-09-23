@@ -1750,6 +1750,7 @@ let
     t3codeInstallGhostshipAgent
     t3codeToolAutoUpdate
     t3codeToolUpdateRestart
+    t3codeProcessMemoryGuard
     t3codeDaemonMonitor
     t3codeContainerHealth
     t3codeRunHooks
