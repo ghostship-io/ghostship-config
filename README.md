@@ -433,6 +433,8 @@ Supported onboarding flow:
 - WSL hosts cap `nix.settings.max-jobs` at `8` so concurrent flake shells,
   agent sessions, and host builds do not wedge `nix-daemon` under `auto`
   parallelism.
+- WSL hosts keep the existing `dbus-daemon` system bus so live configuration
+  switches do not require a WSL restart.
 - WSL hosts also cap `nix.settings.cores` at `4` so each build job cannot
   fan out across all reported host threads and recreate the same memory-pressure
   stalls from inside a smaller job queue.
