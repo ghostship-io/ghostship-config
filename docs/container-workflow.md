@@ -7,6 +7,15 @@ environment. Keep their existing launchers, credentials, and configuration.
 Do not apply `home/profiles/develop.nix` or run
 `ghostship-agent-maintenance` here; those target the NixOS develop hosts.
 
+## Runtime memory containment
+
+The inner `t3code-server.service` shares a 32 GiB memory cgroup with provider
+tools. A container timer samples that cgroup's child processes every 5 seconds
+and sends `SIGTERM` to any non-server process above 12 GiB RSS. If it remains
+above the limit for 20 seconds, the guard sends `SIGKILL`. It validates the
+process identity and cgroup membership before signaling; the server monitor
+continues to recover the web service if it still becomes unhealthy.
+
 ## Shared skills and tools
 
 Install the existing Ghostship catalog for all three T3 Code providers:
