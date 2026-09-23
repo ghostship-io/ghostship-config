@@ -645,7 +645,7 @@ let
       exit 1
     fi
     exec "\$target" "\$@"
-      EOF
+    EOF
       chmod 0755 "$temporary"
       mv -f "$temporary" "$HOME/.local/bin/$name"
     }
@@ -664,7 +664,7 @@ let
       exit 1
     fi
     exec "\$target" "\$@"
-      EOF
+    EOF
       chmod 0755 "$temporary"
       mv -f "$temporary" "$HOME/.local/bin/opencode"
     }

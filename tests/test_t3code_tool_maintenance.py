@@ -62,6 +62,10 @@ class ToolMaintenanceSource(unittest.TestCase):
         self.assertIn('temporary="$HOME/.local/bin/.t3.tmp.$$"', SOURCE)
         self.assertIn('mv -f "$temporary" "$HOME/.local/bin/t3"', SOURCE)
 
+    def test_user_cli_shim_heredocs_close_at_the_generated_script_indent(self):
+        expected = '    exec "\\$target" "\\$@"\n    EOF\n      chmod 0755 "$temporary"'
+        self.assertEqual(SOURCE.count(expected), 2)
+
     def test_cli_version_probes_have_a_hard_timeout(self):
         self.assertIn(
             'timeout --kill-after=3s 15s "$tool_path" --version', SOURCE
