@@ -92,6 +92,7 @@
         {
           ghostship-config = (pkgs.extend (import ./modules/common/ghostship-pkg.nix)).ghostship-config;
           container-browser = pkgs.chromium;
+          wincli = pkgs.callPackage ./packages/wincli.nix { };
         }
       );
 
