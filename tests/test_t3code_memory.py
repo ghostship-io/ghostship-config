@@ -54,22 +54,53 @@ class IdleGuard(unittest.TestCase):
         self.addCleanup(self.db.close)
         self.db.executescript('''
             CREATE TABLE projection_threads(thread_id TEXT, deleted_at TEXT, latest_user_message_at TEXT);
-            CREATE TABLE projection_turns(thread_id TEXT, turn_id TEXT, state TEXT, requested_at TEXT);
+            CREATE TABLE projection_turns(
+                thread_id TEXT, turn_id TEXT, state TEXT, requested_at TEXT, completed_at TEXT
+            );
             INSERT INTO projection_threads VALUES ('a', NULL, NULL);
-            INSERT INTO projection_turns VALUES ('a', NULL, 'pending', '2026-09-01');
+            INSERT INTO projection_turns VALUES ('a', NULL, 'pending', '2026-09-01', NULL);
         ''')
 
     def idle(self):
-        return all(row[0] == 0 for row in self.db.execute(self.query))
+        return all(row[0] == 0 for row in self.db.execute(self.query, (10,)))
 
-    def test_pending_blocks_until_superseded(self):
+    def test_recent_pending_blocks_until_superseded(self):
+        now = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
+        self.db.execute(
+            "INSERT INTO projection_turns VALUES "
+            "('a', NULL, 'pending', "
+            "strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 minute'), NULL)"
+        )
         self.assertFalse(self.idle())
-        self.db.execute("INSERT INTO projection_turns VALUES ('a', 'new', 'completed', '2026-09-02')")
+        self.db.execute(
+            f"INSERT INTO projection_turns VALUES ('a', 'new', 'completed', {now}, {now})"
+        )
         self.assertTrue(self.idle())
-        self.db.execute("UPDATE projection_turns SET state='running' WHERE turn_id='new'")
+        self.db.execute(
+            "UPDATE projection_turns SET state='running', completed_at=NULL WHERE turn_id='new'"
+        )
         self.assertFalse(self.idle())
+
+    def test_completed_turns_and_old_pending_starts_are_ignored(self):
+        self.db.execute(
+            "INSERT INTO projection_turns VALUES "
+            "('a', 'finished', 'running', '2026-09-23T03:00:00Z', '2026-09-23T03:01:00Z')"
+        )
+        self.assertTrue(self.idle())
+
+    def test_completed_pending_start_is_ignored(self):
+        self.db.execute(
+            "INSERT INTO projection_turns VALUES "
+            "('a', NULL, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), "
+            "strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        )
+        self.assertTrue(self.idle())
 
     def test_deleted_thread_is_ignored(self):
+        self.db.execute(
+            "INSERT INTO projection_turns VALUES "
+            "('a', NULL, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), NULL)"
+        )
         self.db.execute("UPDATE projection_threads SET deleted_at='2026-09-03'")
         self.assertTrue(self.idle())
 
