@@ -88,6 +88,8 @@ in
   system.build.nativeUtils = lib.mkForce codexCompatibleNativeUtils;
 
   services.resolved.enable = false;
+  # Preserve the running bus implementation so WSL hosts can switch live.
+  services.dbus.implementation = "dbus";
   networking.useNetworkd = false;
   systemd.network.enable = false;
 
