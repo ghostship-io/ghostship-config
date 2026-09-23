@@ -858,6 +858,16 @@ let
     rm -f "$t3_activation_pending"
   '';
 
+  t3codeProcessMemoryGuard = pkgs.writeShellScriptBin "t3code-process-memory-guard" ''
+    set -eu
+
+    main_pid="$(${pkgs.systemd}/bin/systemctl show t3code-server.service --property MainPID --value)"
+    case "$main_pid" in
+      ""|*[!0-9]*|0) exit 0 ;;
+    esac
+    exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/process-memory-guard.py} "$main_pid"
+  '';
+
   t3codeDaemonMonitor = pkgs.writeShellScriptBin "t3code-server-monitor" ''
     set -eu
 
@@ -2157,11 +2167,45 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/t3code-process-memory-guard.service <<'EOF'
+      [Unit]
+      Description=Contain oversized T3 Code child processes
+      DefaultDependencies=no
+      After=t3code-server.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=${t3codeProcessMemoryGuard}/bin/t3code-process-memory-guard
+      StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-process-memory-guard.log
+      StandardError=append:/home/t3code/.t3code-container/logs/t3code-process-memory-guard.log
+      UMask=0077
+      TimeoutStartSec=10s
+      TasksMax=256
+      EOF
+      cat > etc/systemd/system/t3code-process-memory-guard.timer <<'EOF'
+      [Unit]
+      Description=Check T3 Code child memory every 5 seconds
+      DefaultDependencies=no
+      After=t3code-server.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Timer]
+      OnBootSec=15s
+      OnUnitActiveSec=5s
+      AccuracySec=1s
+      Unit=t3code-process-memory-guard.service
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/multi-user.target <<'EOF'
       [Unit]
       Description=T3 Code Multi-User System
       DefaultDependencies=no
-      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-tool-update-restart.timer t3code-server-monitor.timer
+      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer
       After=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -2181,6 +2225,7 @@ let
       ln -s ../t3code-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/t3code-tool-auto-update.timer
       ln -s ../t3code-tool-update-restart.timer etc/systemd/system/multi-user.target.wants/t3code-tool-update-restart.timer
       ln -s ../t3code-server-monitor.timer etc/systemd/system/multi-user.target.wants/t3code-server-monitor.timer
+      ln -s ../t3code-process-memory-guard.timer etc/systemd/system/multi-user.target.wants/t3code-process-memory-guard.timer
     '';
     fakeRootCommands = ''
       chown -R root:root nix/store nix/var/log/nix nix/var/nix

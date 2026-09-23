@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.10] - 2026-09-23
+
+- Add a 5-second T3 child-process memory guard. It terminates an oversized
+  provider/tool process before it can exhaust the shared service cgroup, while
+  leaving the server process and other work running; the existing server
+  health recovery remains the fallback.
+
 ## [3.15.9] - 2026-09-23
 
 - Run the WSL WinCLI install before Codex Desktop migration can end Home

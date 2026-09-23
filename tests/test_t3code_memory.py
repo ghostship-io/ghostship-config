@@ -1,11 +1,13 @@
 import re
 import sqlite3
+import tempfile
 import unittest
 from pathlib import Path
 
 from test_config import load
 
 watchdog = load("t3code_memory", "packages/t3code/memory-watchdog.py")
+process_guard = load("t3code_process_guard", "packages/t3code/process-memory-guard.py")
 
 
 class MemoryWatchdog(unittest.TestCase):
@@ -43,13 +45,84 @@ class MemoryWatchdog(unittest.TestCase):
             self.assertFalse(recover)
 
 
+class ProcessMemoryGuard(unittest.TestCase):
+    def sample(self, pid=22, rss=None, start_time=100):
+        return {
+            "pid": pid,
+            "rss": process_guard.PROCESS_RSS_LIMIT if rss is None else rss,
+            "start_time": start_time,
+        }
+
+    def test_selects_only_oversized_non_main_process(self):
+        samples = [
+            self.sample(pid=10, rss=16 * process_guard.GIB),
+            self.sample(pid=22, rss=11 * process_guard.GIB),
+            self.sample(pid=23, rss=14 * process_guard.GIB),
+        ]
+        self.assertEqual(
+            process_guard.select_offender(samples, main_pid=10)["pid"], 23
+        )
+        self.assertIsNone(
+            process_guard.select_offender(samples[:2], main_pid=10)
+        )
+
+    def test_terminates_then_kills_same_process_after_grace(self):
+        candidate = self.sample()
+        state, action = process_guard.evaluate(candidate, {}, 50)
+        self.assertEqual(action, process_guard.signal.SIGTERM)
+        state, action = process_guard.evaluate(candidate, state, 69)
+        self.assertIsNone(action)
+        state, action = process_guard.evaluate(candidate, state, 70)
+        self.assertEqual(action, process_guard.signal.SIGKILL)
+        _, action = process_guard.evaluate(candidate, state, 100)
+        self.assertIsNone(action)
+
+    def test_pid_reuse_restarts_term_grace_and_recovery_clears_state(self):
+        previous = {"pid": 22, "start_time": 100, "term_sent_at": 10, "signal": "TERM"}
+        state, action = process_guard.evaluate(self.sample(start_time=101), previous, 11)
+        self.assertEqual(action, process_guard.signal.SIGTERM)
+        self.assertEqual(state["term_sent_at"], 11)
+        self.assertEqual(process_guard.evaluate(None, state, 12), ({}, None))
+
+    def test_samples_only_processes_in_server_cgroup_and_excludes_main_pid(self):
+        service_path = "/system.slice/t3code-server.service"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cgroup = root / "sys/fs/cgroup" / service_path.lstrip("/")
+            cgroup.mkdir(parents=True)
+            (cgroup / "cgroup.procs").write_text("10\n22\n23\n")
+            proc = root / "proc"
+            for pid, path, rss_kib in (
+                (10, service_path, 16 * 1024 * 1024),
+                (22, service_path + "/command.scope", 13 * 1024 * 1024),
+                (23, "/system.slice/other.service", 15 * 1024 * 1024),
+            ):
+                process = proc / str(pid)
+                process.mkdir(parents=True)
+                (process / "cgroup").write_text(f"0::{path}\n")
+                (process / "status").write_text(f"Name:\ttest\nVmRSS:\t{rss_kib} kB\n")
+                (process / "stat").write_text(
+                    f"{pid} (test) S " + "0 " * 18 + "100 0\n"
+                )
+
+            samples = process_guard.sample_processes(
+                10,
+                service_path,
+                cgroup_root=root / "sys/fs/cgroup",
+                proc_root=proc,
+            )
+
+        self.assertEqual([sample["pid"] for sample in samples], [22])
+        self.assertEqual(samples[0]["start_time"], 100)
+
+
 class IdleGuard(unittest.TestCase):
     def setUp(self):
         source = (
             Path(__file__).resolve().parents[1]
             / 'packages/t3code/activity-probe/probe-v1-sqlite.cjs'
         ).read_text()
-        self.query = re.search(r'`(SELECT count\(\*\) AS active FROM projection_turns.*?)`', source, re.S)[1]
+        self.query = re.search(r'`(SELECT count\(\*\) AS active FROM projection_turns.*?)`', source, re.DOTALL)[1]
         self.db = sqlite3.connect(':memory:')
         self.addCleanup(self.db.close)
         self.db.executescript('''
