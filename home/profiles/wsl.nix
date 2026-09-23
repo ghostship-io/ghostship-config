@@ -15,6 +15,11 @@ let
   winPowerShell = pkgs.writeShellScriptBin "win-powershell" ''
     exec "${windowsPowerShell}" -NoProfile -ExecutionPolicy Bypass "$@"
   '';
+  wincliPackage = pkgs.callPackage ../../packages/wincli.nix { };
+  wincli = pkgs.writeShellScriptBin "wincli" ''
+    WIN_HOME=$(${pkgs.coreutils}/bin/readlink -f "$HOME/win-home")
+    exec "$WIN_HOME/AppData/Local/Programs/GhostshipWinCLI/${wincliPackage.version}/wincli.exe" "$@"
+  '';
   notifySend = pkgs.writeShellScriptBin "notify-send" ''
     # WSL notify-send Bridge (Forward to Windows)
     # Hardcoded to use Windows Terminal icon for branding.
@@ -95,6 +100,7 @@ in
   home.packages = [
     wslOpenWrapped
     winPowerShell
+    wincli
     notifySend
   ];
 
@@ -148,6 +154,35 @@ in
           install -m 0644 "$CANONICAL_AGENTS" "$WIN_CODEX_AGENTS"
         fi
       fi
+    fi
+  '';
+
+  home.activation.wslWincli = lib.hm.dag.entryBetween [ "codexDesktopWindowsMigration" ] [ "wslHomeSymlink" ] ''
+    WIN_USER=$(${windowsPowerShell} -NoProfile -ExecutionPolicy Bypass -Command '$env:UserName' 2>/dev/null | tr -d '\r')
+    WIN_HOME="/mnt/c/Users/$WIN_USER"
+
+    if [ -n "$WIN_USER" ] && [ -d "$WIN_HOME" ]; then
+      WINCLI_ROOT="$WIN_HOME/AppData/Local/Programs/GhostshipWinCLI"
+      WINCLI_VERSION_DIR="$WINCLI_ROOT/${wincliPackage.version}"
+
+      if [ ! -f "$WINCLI_VERSION_DIR/.complete" ]; then
+        mkdir -p "$WINCLI_VERSION_DIR"
+        ${pkgs.rsync}/bin/rsync -r --chmod=D755,F755 \
+          "${wincliPackage}/bin/" "$WINCLI_VERSION_DIR/"
+        touch "$WINCLI_VERSION_DIR/.complete"
+      fi
+
+      mkdir -p "$WINCLI_ROOT/bin"
+      printf '@echo off\r\n"%%LOCALAPPDATA%%\\Programs\\GhostshipWinCLI\\${wincliPackage.version}\\wincli.exe" %%*\r\n' \
+        > "$WINCLI_ROOT/bin/wincli.cmd"
+
+      ${windowsPowerShell} -NoProfile -ExecutionPolicy Bypass -Command '
+        $dir = Join-Path $env:LOCALAPPDATA "Programs\GhostshipWinCLI\bin"
+        $path = [Environment]::GetEnvironmentVariable("Path", "User")
+        if (-not (($path -split ";") -contains $dir)) {
+          [Environment]::SetEnvironmentVariable("Path", ($path.TrimEnd(";") + ";" + $dir), "User")
+        }
+      '
     fi
   '';
 
