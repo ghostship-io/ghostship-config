@@ -781,26 +781,67 @@ let
       unhealthy_reason="Codex or OpenCode provider is unavailable"
     fi
 
-    if [ -z "$unhealthy_reason" ]; then
+    if [ "$web_was_active" -eq 1 ]; then
       main_pid="$(systemctl show t3code-server.service --property MainPID --value)"
-      if ! unhealthy_reason="$(${pkgs.python3}/bin/python3 ${../../packages/t3code/memory-watchdog.py} "$main_pid" 2>> "$log_file")"; then
-        log_info "memory measurement unavailable; recovery deferred"
-        exit 0
+      memory_reason=""
+      if ! memory_reason="$(${pkgs.python3}/bin/python3 ${../../packages/t3code/memory-watchdog.py} "$main_pid" 2>> "$log_file")"; then
+        log_info "memory measurement unavailable; continuing health recovery"
+      elif [ -n "$memory_reason" ]; then
+        if [ -n "$unhealthy_reason" ]; then
+          unhealthy_reason="$unhealthy_reason; $memory_reason"
+        else
+          unhealthy_reason="$memory_reason"
+        fi
       fi
     fi
 
+    state_dir="/run/t3code-tool-update"
+    failure_streak_file="$state_dir/server-monitor-failures"
+    recovery_attempt_file="$state_dir/server-monitor-recovery-attempted"
+
     if [ -z "$unhealthy_reason" ]; then
+      rm -f "$failure_streak_file" "$recovery_attempt_file"
       log_info "healthy"
       exit 0
     fi
 
-    if [ "$web_was_active" -eq 1 ] && ! is_t3code_idle; then
+    install -d -m 0700 "$state_dir"
+    failure_streak=0
+    if [ -r "$failure_streak_file" ]; then
+      read -r failure_streak < "$failure_streak_file" || failure_streak=0
+    fi
+    case "$failure_streak" in
+      ""|*[!0-9]*) failure_streak=0 ;;
+    esac
+    failure_streak=$((failure_streak + 1))
+    printf '%s\n' "$failure_streak" > "$failure_streak_file.tmp"
+    mv "$failure_streak_file.tmp" "$failure_streak_file"
+
+    force_recovery=0
+    # The user-facing server has failed repeatedly; allow bounded recovery to
+    # interrupt a stuck generation instead of deferring an unusable server forever.
+    if [ "$web_was_active" -eq 0 ] || [ "$failure_streak" -ge 5 ]; then
+      force_recovery=1
+    fi
+
+    if [ -r "$recovery_attempt_file" ]; then
+      attempted_at=0
+      read -r attempted_at < "$recovery_attempt_file" || attempted_at=0
+      case "$attempted_at" in
+        ""|*[!0-9]*) attempted_at=0 ;;
+      esac
+      now="$(date +%s)"
+      if [ "$attempted_at" -gt 0 ] && [ "$((now - attempted_at))" -lt 300 ]; then
+        log_info "unhealthy: $unhealthy_reason; recovery was attempted recently; waiting for health to recover"
+        exit 0
+      fi
+    fi
+
+    if [ "$web_was_active" -eq 1 ] && [ "$force_recovery" -eq 0 ] && ! is_t3code_idle; then
       log_info "unhealthy: $unhealthy_reason; T3 Code activity is active or unknown; restart deferred"
       exit 0
     fi
 
-    state_dir="/run/t3code-tool-update"
-    install -d -m 0700 "$state_dir"
     exec 9>"$state_dir/tool-update.lock"
     if ! ${pkgs.util-linux}/bin/flock -n 9; then
       log_info "unhealthy: $unhealthy_reason; tool maintenance or restart is in progress; restart deferred"
@@ -808,12 +849,18 @@ let
     fi
 
     # Recheck after acquiring the maintenance lock, close to the restart.
-    if [ "$web_was_active" -eq 1 ] && ! is_t3code_idle; then
+    if [ "$web_was_active" -eq 1 ] && [ "$force_recovery" -eq 0 ] && ! is_t3code_idle; then
       log_info "unhealthy: $unhealthy_reason; work became active or unknown; restart deferred"
       exit 0
     fi
 
-    log_info "unhealthy: $unhealthy_reason; restarting t3code-server.service"
+    printf '%s\n' "$(date +%s)" > "$recovery_attempt_file.tmp"
+    mv "$recovery_attempt_file.tmp" "$recovery_attempt_file"
+    if [ "$force_recovery" -eq 1 ] && [ "$web_was_active" -eq 1 ]; then
+      log_info "unhealthy for $failure_streak consecutive checks: $unhealthy_reason; restarting t3code-server.service despite active or unknown work"
+    else
+      log_info "unhealthy: $unhealthy_reason; restarting t3code-server.service"
+    fi
     systemctl reset-failed t3code-server.service || true
     systemctl restart t3code-server.service
   '';

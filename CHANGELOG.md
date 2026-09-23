@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.5] - 2026-09-23
+
+- Ignore completed turns and old pending-start rows when deciding whether
+  T3 maintenance can proceed. After five consecutive unhealthy checks, the
+  server monitor performs one recovery even when activity state is stale or
+  unknown, with a cooldown before another attempt. Measure memory even when
+  the web interface is already unavailable.
+
 ## [3.15.4] - 2026-09-22
 
 - Keep T3 release validation variables local so promotion cannot retarget the
