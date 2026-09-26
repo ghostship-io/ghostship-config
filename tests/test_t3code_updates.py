@@ -12,10 +12,11 @@ updater = load("t3code_antigravity", "packages/t3code/update-antigravity.py")
 BINARIES = ("agy_acp_server.par", "localharness_external")
 
 
-def release(version="1.2.0"):
+def release(version="1.2.0", legacy=True):
+    prefix = "agy-acp-server-agy_acp_server_" if legacy else "agy-acp-server-"
     base = (
         "https://dl.google.com/agy-extensions/releases/linux/"
-        f"agy-acp-server-agy_acp_server_{version}-linux"
+        f"{prefix}{version}-linux"
     )
     return {
         "version": version,
@@ -130,6 +131,19 @@ class AntigravityUpdates(unittest.TestCase):
         _, archives = updater.release_info(release(), "x86_64")
         self.assertTrue(archives["agy_acp_server.par"].endswith("-x86_64.zip"))
         self.assertTrue(archives["localharness_external"].endswith("-x86_64.zip"))
+
+    def test_accepts_modern_archive_naming_scheme(self):
+        modern = release(version="1.2.1", legacy=False)
+        version, archives = updater.release_info(modern, "aarch64")
+        self.assertEqual(version, "1.2.1")
+        self.assertEqual(
+            archives["agy_acp_server.par"],
+            "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.2.1-linux-x86_64.zip",
+        )
+        self.assertEqual(
+            archives["localharness_external"],
+            "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.2.1-linux-arm64.zip",
+        )
 
 
 if __name__ == "__main__":
