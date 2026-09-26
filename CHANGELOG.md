@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.12] - 2026-09-26
+
+- **Idle-aware T3 Code deployment**: Queue container image updates and restarts
+  behind sustained idle, and apply them with `t3code-deploy-when-idle` only
+  after active turns and pending tasks clear, so updates no longer interrupt
+  running agent work.
+- **Fix idle gate on deploy retry**: Re-check activity on every restart attempt,
+  including the retry after a deployment that failed health verification, so a
+  leftover `applying` marker cannot bypass the idle gate while tasks are active.
+
 ## [3.15.11] - 2026-09-23
 
 - Include the T3 child-memory guard launcher in the inner image store so its
