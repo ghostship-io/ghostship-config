@@ -149,5 +149,67 @@ class TestT3CodeIdleDeployment(unittest.TestCase):
             self.assertIn("action=deployment-failed", log_content)
 
 
+
+class TestIdleGateOnRetryAfterFailure(unittest.TestCase):
+    """Regression: the idle gate must hold on every restart, including the
+    retry tick after a deployment that failed health verification.
+
+    A failed deployment leaves `applying == desired`. The gate condition must
+    still consult the activity probe so a retry cannot restart the container
+    while tasks are active.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.root = Path(self.temp_dir.name)
+        self.state_dir = self.root / "state"
+        self.home_dir = self.root / "home"
+        self.audit_log = self.root / "audit.log"
+        self.state_dir.mkdir(parents=True)
+        self.home_dir.mkdir(parents=True)
+
+    def _run(self, idle, healthy):
+        calls = []
+
+        def fake_run(cmd, *args, **kwargs):
+            calls.append(list(cmd))
+            return Mock(returncode=0)
+
+        with patch("subprocess.run", side_effect=fake_run):
+            res = deployer.run_deployment(
+                state_dir=self.state_dir,
+                home_dir=self.home_dir,
+                audit_log=self.audit_log,
+                confirm_idle_seconds=0,
+                idle_checker=Mock(return_value=idle),
+                healthy_waiter=Mock(return_value=healthy),
+                sleep_fn=Mock(),
+            )
+        restarted = any(c[:2] == ["systemctl", "restart"] for c in calls)
+        return res, restarted
+
+    def test_retry_after_failed_deploy_defers_when_tasks_active(self):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+
+        # First tick: confirmed idle, restart issued, health never verified.
+        res1, restarted1 = self._run(idle=True, healthy=False)
+        self.assertEqual(res1, 1)
+        self.assertTrue(restarted1)
+        self.assertTrue((self.state_dir / "applying").exists())
+
+        # Second tick: tasks are now active. The retry must NOT restart.
+        res2, restarted2 = self._run(idle=False, healthy=True)
+        self.assertFalse(
+            restarted2,
+            "container restarted while tasks were active (idle gate bypassed)",
+        )
+        self.assertEqual(
+            (self.state_dir / "applied").read_text().strip(), "hash1"
+        )
+        self.assertIn("action=defer", self.audit_log.read_text())
+
+
 if __name__ == "__main__":
     unittest.main()

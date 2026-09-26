@@ -173,7 +173,7 @@ def run_deployment(
         except Exception:
             pass
 
-        if is_active and applying != desired:
+        if is_active:
             if not check_idle():
                 log(audit_log, f"action=defer desired={desired} restart_pending={restart_pending} reason=active-or-unknown")
                 return 0
