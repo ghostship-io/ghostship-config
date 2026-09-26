@@ -16,14 +16,19 @@ import zipfile
 from pathlib import Path
 
 REGISTRY = "https://raw.githubusercontent.com/agentclientprotocol/registry/main/antigravity-acp/agent.json"
-SERVER_URL = (
-    "https://dl.google.com/agy-extensions/releases/linux/"
-    "agy-acp-server-agy_acp_server_{version}-linux-x86_64.zip"
+ARCHIVE_URL_PATTERN = (
+    r"^https://dl\.google\.com/agy-extensions/releases/linux/"
+    r"agy-acp-server-(?:agy_acp_server_)?{version}-linux-{arch}\.zip$"
 )
-HARNESS_URL = (
-    "https://dl.google.com/agy-extensions/releases/linux/"
-    "agy-acp-server-agy_acp_server_{version}-linux-{arch}.zip"
-)
+
+
+def _valid_archive_url(url, version, arch):
+    escaped_version = re.escape(version)
+    escaped_arch = re.escape(arch)
+    pattern = ARCHIVE_URL_PATTERN.format(
+        version=escaped_version, arch=escaped_arch
+    )
+    return bool(re.fullmatch(pattern, url))
 
 
 def release_info(metadata, machine=None):
@@ -38,13 +43,13 @@ def release_info(metadata, machine=None):
         raise ValueError("Invalid Antigravity release version")
     machine = platform.machine() if machine is None else machine
     harness_arch = "arm64" if machine in ("aarch64", "arm64") else "x86_64"
-    server = SERVER_URL.format(version=version)
-    expected_server = metadata["distribution"]["binary"]["linux-x86_64"]["archive"]
-    harness = HARNESS_URL.format(version=version, arch=harness_arch)
-    expected_harness = metadata["distribution"]["binary"][
+    server = metadata["distribution"]["binary"]["linux-x86_64"]["archive"]
+    harness = metadata["distribution"]["binary"][
         "linux-aarch64" if harness_arch == "arm64" else "linux-x86_64"
     ]["archive"]
-    if expected_server != server or expected_harness != harness:
+    if not _valid_archive_url(server, version, "x86_64") or not _valid_archive_url(
+        harness, version, harness_arch
+    ):
         raise ValueError("Unexpected Antigravity release URL")
     return version, {"agy_acp_server.par": server, "localharness_external": harness}
 

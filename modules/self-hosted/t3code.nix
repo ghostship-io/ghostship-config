@@ -9,6 +9,7 @@ let
   providerManifest = import ../../packages/t3code/provider-manifest.nix { inherit lib; };
   t3codeActivityProbe = pkgs.callPackage ../../packages/t3code/activity-probe/default.nix { };
   t3codeHome = "/srv/apps/t3code/home";
+  t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
   t3codeDocker = "/srv/apps/t3code/docker";
   t3codeNixRoot = "/srv/apps/t3code/nix-root";
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
@@ -481,7 +482,9 @@ let
           rm -rf "$stage_dir"
           return 1
         fi
-        if ! staged_version="$(LD_LIBRARY_PATH='${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}' "$stage_dir/bin/t3" --version)" \
+        if ! staged_version="$(LD_LIBRARY_PATH='${
+          lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]
+        }' "$stage_dir/bin/t3" --version)" \
           || [ "$staged_version" != "t3 v$expected_version" ]; then
           log_warn "staged T3 Code executable did not report $expected_version"
           rm -rf "$stage_dir"
@@ -2267,6 +2270,25 @@ let
     };
   };
 
+  t3codeDeploymentId = builtins.hashString "sha256" (toString t3codeImage);
+
+  t3codeDeployWhenIdleScript = pkgs.writeShellScriptBin "t3code-deploy-when-idle" ''
+    set -eu
+    exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/deploy-when-idle.py} \
+      --state-dir "${t3codeDeploymentState}" \
+      --home-dir "${t3codeHome}" \
+      --probe-bin "${t3codeActivityProbe}/bin/t3code-activity-probe" \
+      --podman-bin "${pkgs.podman}/bin/podman" \
+      --systemctl-bin "${pkgs.systemd}/bin/systemctl" \
+      --audit-log "${t3codeHome}/.t3code-container/logs/restart-audit.log" \
+      "$@"
+  '';
+
+  t3codeSafeRestart = pkgs.writeShellScriptBin "t3code-safe-restart" ''
+    set -eu
+    exec ${t3codeDeployWhenIdleScript}/bin/t3code-deploy-when-idle --safe-restart "$@"
+  '';
+
 in
 {
   # The Antigravity ACP archive is unfree; keep the exception scoped to this app.
@@ -2292,8 +2314,6 @@ in
       dropdown = false;
     };
   };
-
-
 
   virtualisation.oci-containers.containers."t3code" = {
     image = "${imageName}:${imageTag}";
@@ -2329,6 +2349,7 @@ in
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/t3code 0755 root root -"
+    "d ${t3codeDeploymentState} 0755 root root -"
     "d ${t3codeDocker} 0755 root root -"
     "d ${t3codeHome} 0755 3000 3000 -"
     "d ${t3codeNixRoot} 0755 root root -"
@@ -2392,6 +2413,43 @@ in
       install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3code-container/hooks/doctor.d
 
     '';
+  };
+
+  environment.systemPackages = [
+    t3codeDeployWhenIdleScript
+    t3codeSafeRestart
+  ];
+
+  system.activationScripts.t3code-deployment = {
+    text = ''
+      install -d -m 0755 ${t3codeDeploymentState}
+      printf '%s\n' ${lib.escapeShellArg t3codeDeploymentId} \
+        > ${t3codeDeploymentState}/desired.tmp
+      mv ${t3codeDeploymentState}/desired.tmp ${t3codeDeploymentState}/desired
+      ${pkgs.systemd}/bin/systemctl start --no-block t3code-deploy-when-idle.service || true
+    '';
+    supportsDryActivation = false;
+  };
+
+  systemd.services.t3code-deploy-when-idle = {
+    description = "Deploy a changed T3 Code image after sustained idle";
+    after = [ "podman.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${t3codeDeployWhenIdleScript}/bin/t3code-deploy-when-idle";
+      TimeoutStartSec = "25m";
+    };
+  };
+
+  systemd.timers.t3code-deploy-when-idle = {
+    description = "Check for a queued T3 Code image deployment";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "2m";
+      OnUnitActiveSec = "1m";
+      Persistent = true;
+      Unit = "t3code-deploy-when-idle.service";
+    };
   };
 
 }

@@ -234,9 +234,12 @@ Cloudflare Quick Tunnel. Container lifecycle hooks live in
 `~/.t3code-container/logs/t3code-hooks.log`. Update output is in
 `t3code-tool-auto-update.log` in the same directory.
 
-The host unit preserves running work across unrelated rebuilds. To deploy a
-changed image, explicitly restart `podman-t3code.service` during a maintenance
-window after building and switching the host configuration. Backups include the
+The host unit preserves running work across rebuilds. Image updates do not
+interrupt active tasks: `nixos-rebuild switch` stages the desired deployment ID,
+and `t3code-deploy-when-idle.timer` (running every minute) automatically applies
+the update after 30 seconds of sustained idle (no running or pending tasks in
+`state.sqlite`). Operators can also queue a safe idle-aware restart at any time
+with `t3code-safe-restart` (or pass `--force` to bypass). Backups include the
 home and projects but exclude the Docker and Nix stores.
 
 ```sh
