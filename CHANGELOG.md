@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.14] - 2026-09-27
+
+- **CloakBrowser fonts and quiet permissions**: Mount a persistent directory for
+  licensed Windows fonts and refresh Fontconfig before launch; browser profile
+  defaults now suppress permission prompts and crash restore bubbles.
+
 ## [3.15.13] - 2026-09-27
 
 - **Automatic chill-penguin upgrades**: Enable nightly `system.autoUpgrade` on
