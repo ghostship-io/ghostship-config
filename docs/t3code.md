@@ -191,14 +191,22 @@ the last minute. A service must have run for 30 minutes before memory recovery
 can restart it. Cache alone does not trigger recovery. Missing measurements or
 unknown activity defer recovery. The monitor shares the updater lock and
 rechecks activity before restarting; active work can delay recovery indefinitely.
+Memory pressure and missing providers never interrupt active work; the process
+memory guard and kernel OOM killer contain runaway children meanwhile. Only a
+stopped server, or a web UI or environment endpoint that fails five consecutive
+checks, is restarted despite active work.
 
 Maintenance ignores deleted threads and pending requests superseded by a later
-turn. Running turns, unresolved pending requests, and messages from the last
-minute still block restarts. No conversation records are modified.
+turn. Running turns, unresolved pending requests from the last 10 minutes, and
+user messages from the last 15 minutes still block restarts. No conversation records are modified.
 
 ## Maintenance
 
-Deploy with `nixos-rebuild switch --flake .#chill-penguin -L` on the host after
+`system.autoUpgrade` deploys GitHub `main` nightly (04:00 UTC plus up to 45
+minutes, with `--impure` for Asahi firmware; missed runs catch up after boot).
+It waits for a running backup and alerts through `ghostship-failure@` on
+failure; the next run retries an interrupted switch. To deploy manually, run
+`nixos-rebuild switch --impure --flake .#chill-penguin -L` on the host after
 pulling the committed configuration. This updates the system profile and boot
 entry as well as the running system. Running a built system's
 `switch-to-configuration switch` directly does not advance the system profile;
@@ -217,8 +225,9 @@ It also updates OpenCode and Antigravity when the database reports no pending or
 running turns, then runs `after-update.d` to reapply Ghostship tooling. Unknown
 activity defers maintenance and recovery. Deferred tool checks retry on the
 one-minute maintenance timer once work becomes idle. Each provider update is
-attempted even if another fails. Changed tools or the Ghostship tool package
-queue a server restart, which waits for T3 to become idle.
+attempted even if another fails. Changed provider tools or T3 settings queue a
+server restart, which waits for T3 to become idle. Ghostship tool package
+changes do not: its command wrappers load the new package on every invocation.
 
 The image includes OpenSSL as well as the CA bundle because Cursor's Node runtime
 uses OpenSSL's compiled-in certificate directory when it probes system trust.
@@ -238,7 +247,13 @@ The host unit preserves running work across rebuilds. Image updates do not
 interrupt active tasks: `nixos-rebuild switch` stages the desired deployment ID,
 and `t3code-deploy-when-idle.timer` (running every minute) automatically applies
 the update after 30 seconds of sustained idle (no running or pending tasks in
-`state.sqlite`). Operators can also queue a safe idle-aware restart at any time
+`state.sqlite`). The deployer holds the container's tool-maintenance lock
+(`~/.local/state/t3code-tool-update/tool-update.lock`, shared through the home
+bind mount) across the restart. Each container carries its deployment ID in the
+`io.ghostship.t3code.deployment` label, so after a reboot, an interrupted
+deploy, or a slow health check, a container already running the desired image
+is recorded as applied instead of restarted again. A host switch does not
+restart an in-flight deploy. Operators can also queue a safe idle-aware restart at any time
 with `t3code-safe-restart` (or pass `--force` to bypass). Backups include the
 home and projects but exclude the Docker and Nix stores.
 

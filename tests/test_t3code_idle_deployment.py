@@ -1,3 +1,5 @@
+import fcntl
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,6 +51,7 @@ class TestT3CodeIdleDeployment(unittest.TestCase):
                 idle_checker=mock_idle_checker,
                 healthy_waiter=mock_wait_healthy,
                 sleep_fn=mock_sleep,
+                deployment_reader=Mock(return_value=""),
             )
             self.assertEqual(res, 0)
             mock_idle_checker.assert_called_once()
@@ -79,6 +82,7 @@ class TestT3CodeIdleDeployment(unittest.TestCase):
                 idle_checker=mock_idle_checker,
                 healthy_waiter=mock_wait_healthy,
                 sleep_fn=mock_sleep,
+                deployment_reader=Mock(return_value=""),
             )
             self.assertEqual(res, 0)
             self.assertEqual(mock_idle_checker.call_count, 2)
@@ -109,6 +113,7 @@ class TestT3CodeIdleDeployment(unittest.TestCase):
                 idle_checker=mock_idle_checker,
                 healthy_waiter=mock_wait_healthy,
                 sleep_fn=mock_sleep,
+                deployment_reader=Mock(return_value=""),
             )
             self.assertEqual(res, 0)
             self.assertEqual(mock_idle_checker.call_count, 2)
@@ -141,6 +146,7 @@ class TestT3CodeIdleDeployment(unittest.TestCase):
                 idle_checker=mock_idle_checker,
                 healthy_waiter=mock_wait_healthy,
                 sleep_fn=mock_sleep,
+                deployment_reader=Mock(return_value=""),
             )
             self.assertEqual(res, 1)
             self.assertEqual((self.state_dir / "applied").read_text().strip(), "hash1")
@@ -148,6 +154,111 @@ class TestT3CodeIdleDeployment(unittest.TestCase):
             log_content = self.audit_log.read_text()
             self.assertIn("action=deployment-failed", log_content)
 
+
+    def test_adopts_running_deployment_without_restart(self):
+        # After a reboot or a deploy whose health check timed out, the
+        # container already runs the desired image.
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        (self.state_dir / "applying").write_text("hash2\n")
+
+        with patch("subprocess.run") as mock_run:
+            res = deployer.run_deployment(
+                state_dir=self.state_dir,
+                home_dir=self.home_dir,
+                audit_log=self.audit_log,
+                idle_checker=Mock(side_effect=AssertionError("idle not needed")),
+                deployment_reader=Mock(return_value="hash2"),
+            )
+            self.assertEqual(res, 0)
+            mock_run.assert_not_called()
+        self.assertEqual((self.state_dir / "applied").read_text().strip(), "hash2")
+        self.assertFalse((self.state_dir / "applying").exists())
+        self.assertIn("action=adopt-running", self.audit_log.read_text())
+
+    def test_requested_restart_is_not_skipped_by_running_deployment(self):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        (self.state_dir / "restart.pending").write_text("user-request\n")
+        reader = Mock(return_value="hash2")
+
+        with patch("subprocess.run", return_value=Mock(returncode=0)):
+            res = deployer.run_deployment(
+                state_dir=self.state_dir,
+                home_dir=self.home_dir,
+                audit_log=self.audit_log,
+                confirm_idle_seconds=0,
+                idle_checker=Mock(return_value=True),
+                healthy_waiter=Mock(return_value=True),
+                sleep_fn=Mock(),
+                deployment_reader=reader,
+            )
+        self.assertEqual(res, 0)
+        reader.assert_not_called()
+        self.assertIn("action=restart-container", self.audit_log.read_text())
+
+    def test_defers_while_container_tool_maintenance_holds_lock(self):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        lock = self.home_dir / deployer.TOOL_LOCK
+        lock.parent.mkdir(parents=True)
+        holder = os.open(lock, os.O_CREAT | os.O_RDWR)
+        fcntl.flock(holder, fcntl.LOCK_EX)
+        self.addCleanup(os.close, holder)
+        calls = []
+
+        def fake_run(cmd, *args, **kwargs):
+            calls.append(list(cmd))
+            return Mock(returncode=0)
+
+        with patch("subprocess.run", side_effect=fake_run):
+            res = deployer.run_deployment(
+                state_dir=self.state_dir,
+                home_dir=self.home_dir,
+                audit_log=self.audit_log,
+                confirm_idle_seconds=0,
+                idle_checker=Mock(return_value=True),
+                healthy_waiter=Mock(return_value=True),
+                sleep_fn=Mock(),
+                deployment_reader=Mock(return_value=""),
+            )
+        self.assertEqual(res, 0)
+        self.assertFalse(any(c[:2] == ["systemctl", "restart"] for c in calls))
+        self.assertIn("reason=tool-maintenance", self.audit_log.read_text())
+
+    def test_holds_tool_lock_across_container_restart(self):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        lock = self.home_dir / deployer.TOOL_LOCK
+        lock.parent.mkdir(parents=True)
+        held_during_restart = []
+
+        def fake_run(cmd, *args, **kwargs):
+            if list(cmd[:2]) == ["systemctl", "restart"]:
+                probe = os.open(lock, os.O_RDWR)
+                try:
+                    fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    held_during_restart.append(False)
+                except BlockingIOError:
+                    held_during_restart.append(True)
+                finally:
+                    os.close(probe)
+            return Mock(returncode=0)
+
+        with patch("subprocess.run", side_effect=fake_run):
+            res = deployer.run_deployment(
+                state_dir=self.state_dir,
+                home_dir=self.home_dir,
+                audit_log=self.audit_log,
+                confirm_idle_seconds=0,
+                idle_checker=Mock(return_value=True),
+                healthy_waiter=Mock(return_value=True),
+                sleep_fn=Mock(),
+                deployment_reader=Mock(return_value=""),
+            )
+        self.assertEqual(res, 0)
+        self.assertEqual(held_during_restart, [True])
+        self.assertEqual((self.state_dir / "applied").read_text().strip(), "hash2")
 
 
 class TestIdleGateOnRetryAfterFailure(unittest.TestCase):
@@ -185,6 +296,7 @@ class TestIdleGateOnRetryAfterFailure(unittest.TestCase):
                 idle_checker=Mock(return_value=idle),
                 healthy_waiter=Mock(return_value=healthy),
                 sleep_fn=Mock(),
+                deployment_reader=Mock(return_value=""),
             )
         restarted = any(c[:2] == ["systemctl", "restart"] for c in calls)
         return res, restarted

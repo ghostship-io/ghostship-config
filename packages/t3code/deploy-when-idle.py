@@ -9,6 +9,11 @@ import sys
 import time
 from datetime import datetime, timezone
 
+# The host stamps each container with the image deployment it was created from.
+DEPLOYMENT_LABEL = "io.ghostship.t3code.deployment"
+# Container tool maintenance holds this lock; the home bind mount shares it.
+TOOL_LOCK = Path(".local/state/t3code-tool-update/tool-update.lock")
+
 
 def utcnow_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -34,7 +39,7 @@ def is_live_idle(home_dir, state_db, probe_bin, podman_bin):
     2. Runs activity probe against state.sqlite.
     3. Verifies container web endpoint responds.
     """
-    tool_lock = home_dir / ".local/state/t3code-tool-update/tool-update.lock"
+    tool_lock = home_dir / TOOL_LOCK
     if tool_lock.exists():
         try:
             with open(tool_lock, "r") as f:
@@ -85,6 +90,56 @@ def is_live_idle(home_dir, state_db, probe_bin, podman_bin):
     return True
 
 
+def acquire_tool_lock(home_dir):
+    """Hold the container tool-maintenance lock across a container restart.
+
+    Returns an open descriptor, None when the container predates the shared
+    lock, or False when tool maintenance currently holds it.
+    """
+    tool_lock = Path(home_dir) / TOOL_LOCK
+    if not tool_lock.parent.is_dir():
+        return None
+    fd = os.open(str(tool_lock), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, OSError):
+        os.close(fd)
+        return False
+    return fd
+
+
+def release_tool_lock(fd):
+    if fd in (None, False):
+        return
+    try:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+def running_deployment(podman_bin):
+    """Return the deployment ID the running container was created from."""
+    try:
+        res = subprocess.run(
+            [
+                podman_bin,
+                "inspect",
+                "t3code",
+                "--format",
+                '{{ index .Config.Labels "' + DEPLOYMENT_LABEL + '" }}',
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return ""
+    if res.returncode != 0:
+        return ""
+    value = res.stdout.strip()
+    return "" if value == "<no value>" else value
+
+
 def wait_healthy(podman_bin, timeout_seconds=120):
     start = time.monotonic()
     while time.monotonic() - start < timeout_seconds:
@@ -128,6 +183,8 @@ def run_deployment(
     idle_checker=None,
     healthy_waiter=None,
     sleep_fn=time.sleep,
+    deployment_reader=None,
+    tool_lock_acquirer=None,
 ):
     state_dir = Path(state_dir)
     home_dir = Path(home_dir)
@@ -155,6 +212,19 @@ def run_deployment(
 
         if not restart_pending and (not desired or desired == applied):
             return 0
+
+        # A reboot, an interrupted deploy, or a slow health check can leave the
+        # desired image already running. Record it instead of restarting again.
+        read_deployment = deployment_reader or (lambda: running_deployment(podman_bin))
+        if desired and desired != applied and not restart_pending:
+            if read_deployment() == desired:
+                tmp_applied = state_dir / "applied.tmp"
+                tmp_applied.write_text(desired)
+                tmp_applied.replace(applied_file)
+                if applying_file.exists():
+                    applying_file.unlink()
+                log(audit_log, f"action=adopt-running desired={desired}")
+                return 0
 
         check_idle = idle_checker or (
             lambda: is_live_idle(home_dir, state_db, probe_bin, podman_bin)
@@ -185,13 +255,23 @@ def run_deployment(
                 log(audit_log, f"action=defer desired={desired} restart_pending={restart_pending} reason=activity-resumed")
                 return 0
 
-        if desired:
-            tmp_applying = state_dir / "applying.tmp"
-            tmp_applying.write_text(desired)
-            tmp_applying.replace(applying_file)
+        # Keep container tool maintenance from starting between the idle
+        # check and the restart, and never restart in the middle of it.
+        tool_lock = (tool_lock_acquirer or (lambda: acquire_tool_lock(home_dir)))()
+        if tool_lock is False:
+            log(audit_log, f"action=defer desired={desired} restart_pending={restart_pending} reason=tool-maintenance")
+            return 0
 
-        log(audit_log, f"action=restart-container desired={desired} restart_pending={restart_pending}")
-        subprocess.run([systemctl_bin, "restart", "podman-t3code.service"], check=True, timeout=300)
+        try:
+            if desired:
+                tmp_applying = state_dir / "applying.tmp"
+                tmp_applying.write_text(desired)
+                tmp_applying.replace(applying_file)
+
+            log(audit_log, f"action=restart-container desired={desired} restart_pending={restart_pending}")
+            subprocess.run([systemctl_bin, "restart", "podman-t3code.service"], check=True, timeout=300)
+        finally:
+            release_tool_lock(tool_lock)
 
         if not wait_for_health():
             log(audit_log, f"action=deployment-failed desired={desired}")

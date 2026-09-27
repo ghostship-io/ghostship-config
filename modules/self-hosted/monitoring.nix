@@ -199,4 +199,7 @@ in
   systemd.services.ghostship-backup-sample.onFailure = [ "ghostship-failure@%n.service" ];
   systemd.services.podman-auto-update.onFailure = [ "ghostship-failure@%n.service" ];
   systemd.services.ghostship-monitoring-provision.onFailure = [ "ghostship-failure@%n.service" ];
+  systemd.services.nixos-upgrade = lib.mkIf config.system.autoUpgrade.enable {
+    onFailure = [ "ghostship-failure@%n.service" ];
+  };
 }
