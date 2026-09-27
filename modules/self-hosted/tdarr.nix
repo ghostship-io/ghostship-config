@@ -214,7 +214,7 @@ path.write_text(json.dumps(data, indent=2) + "\n")
       node_id="$(${podman} exec tdarr curl -fsS http://127.0.0.1:8265/api/v2/get-nodes | jq -r "keys[0] // empty")"
       if test -n "$node_id"; then
         ${podman} exec tdarr curl -fsS -H "Content-Type: application/json" \
-          --data "{\"data\":{\"nodeID\":\"$node_id\",\"nodeUpdates\":{\"nodePaused\":false,\"workerLimits\":{\"healthcheckcpu\":0,\"healthcheckgpu\":0,\"transcodecpu\":1,\"transcodegpu\":0}}}}" \
+          --data "{\"data\":{\"nodeID\":\"$node_id\",\"nodeUpdates\":{\"nodePaused\":false,\"workerLimits\":{\"healthcheckcpu\":0,\"healthcheckgpu\":0,\"transcodecpu\":2,\"transcodegpu\":0}}}}" \
           http://127.0.0.1:8265/api/v2/update-node >/dev/null
       fi
     '';
@@ -258,7 +258,7 @@ in
       inContainer = "true";
       nodeName = "chill-penguin-cpu-pilot";
       startPaused = "false";
-      transcodecpuWorkers = "1";
+      transcodecpuWorkers = "2";
       transcodegpuWorkers = "0";
       healthcheckcpuWorkers = "0";
       healthcheckgpuWorkers = "0";
