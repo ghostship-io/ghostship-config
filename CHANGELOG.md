@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.15] - 2026-09-27
+
+- **Route foreign titles without English subtitles to review**: Detect missing
+  English subtitles in the source before changing streams or starting an
+  encode, avoiding predictable post-encode validation failures.
+
 ## [3.15.14] - 2026-09-27
 
 - **CloakBrowser fonts and quiet permissions**: Mount a persistent directory for
