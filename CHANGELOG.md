@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.18] - 2026-09-27
+
+- Remove the unused NZBGet Gluetun namespace proxy, prune its Homepage card,
+  and remove the orphaned ChatGPT card after its container retirement.
+- Provision Uptime Kuma push monitors for every declared container and report
+  missing, stopped, or unhealthy containers from the host timer.
+- Enforce Kuma's disabled-login setting through its settings API, leaving
+  Cloudflare Access as the public authentication layer.
+
 ## [3.15.17] - 2026-09-27
 
 - Ensure Homepage's house icon widget is added when the existing widgets file

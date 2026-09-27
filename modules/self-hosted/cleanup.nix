@@ -430,8 +430,21 @@ let
       containers = [ "codex" ];
       imageRefs = [ "localhost/ghostship-codex:codex-runtime" ];
       imageRepositories = [ "localhost/ghostship-codex" ];
-      homepageEntries = [ "Codex" ];
+      homepageEntries = [
+        "Codex"
+        "ChatGPT"
+      ];
       muximuxSections = [ "Codex" ];
+    }
+    {
+      name = "nzbget-edge-proxy";
+      paths = [ ];
+      units = [ "podman-nzbget-edge-proxy" ];
+      containers = [ "nzbget-edge-proxy" ];
+      imageRefs = [ ];
+      imageRepositories = [ ];
+      homepageEntries = [ "NZBGet Edge Proxy" ];
+      muximuxSections = [ ];
     }
   ];
 
