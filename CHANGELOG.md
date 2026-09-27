@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.15.17] - 2026-09-27
 
 - Ensure Homepage's house icon widget is added when the existing widgets file
-  has no logo entry.
+  has no logo entry, and add the XPlus4 shortcut to Muximux.
 
 ## [3.15.16] - 2026-09-27
 
