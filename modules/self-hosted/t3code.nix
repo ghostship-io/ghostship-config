@@ -9,6 +9,7 @@ let
   providerManifest = import ../../packages/t3code/provider-manifest.nix { inherit lib; };
   t3codeActivityProbe = pkgs.callPackage ../../packages/t3code/activity-probe/default.nix { };
   t3codeHome = "/srv/apps/t3code/home";
+  t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
   t3codeDocker = "/srv/apps/t3code/docker";
   t3codeNixRoot = "/srv/apps/t3code/nix-root";
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
@@ -16,6 +17,9 @@ let
   t3codeSecretsFile = "/run/secrets/t3code.env";
   imageName = "localhost/ghostship-t3code";
   imageTag = "t3code-runtime";
+  # Tool maintenance, the idle restart, the server monitor, and the host image
+  # deployment share this lock through the persistent home bind mount.
+  t3codeToolLock = "/home/t3code/.local/state/t3code-tool-update/tool-update.lock";
 
   t3codePackages = with pkgs; [
     nix
@@ -220,6 +224,50 @@ let
     mkdir -p "$state_dir"
     exec 8>"$state_dir/install.lock"
     ${pkgs.util-linux}/bin/flock 8
+
+    # Fast-forward the shared source checkouts so GitHub merges reach the
+    # container. Never touch a checkout that is off main, has tracked edits,
+    # is mid-merge or rebase, or has diverged; the next sync retries.
+    sync_checkout() {
+      repo="$1"
+      git_dir="$repo/.git"
+      [ -d "$git_dir" ] || return 0
+      branch="$(git -C "$repo" branch --show-current 2>/dev/null || true)"
+      if [ "$branch" != main ]; then
+        printf 'source sync: %s is on %s; skipped\n' "$repo" "''${branch:-a detached HEAD}"
+        return 0
+      fi
+      for marker in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply; do
+        if [ -e "$git_dir/$marker" ]; then
+          printf 'source sync: %s has an operation in progress; skipped\n' "$repo"
+          return 0
+        fi
+      done
+      if [ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]; then
+        printf 'source sync: %s has uncommitted changes; skipped\n' "$repo"
+        return 0
+      fi
+      if ! GIT_TERMINAL_PROMPT=0 \
+        GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=15" \
+        ${pkgs.coreutils}/bin/timeout 60 git -C "$repo" fetch --quiet origin main; then
+        printf 'warning: source sync: fetching %s failed\n' "$repo" >&2
+        return 0
+      fi
+      if ! git -C "$repo" merge --ff-only --quiet refs/remotes/origin/main; then
+        printf 'warning: source sync: %s cannot fast-forward to origin/main\n' "$repo" >&2
+      fi
+    }
+
+    # Container boot and server starts skip the network so recovery is never
+    # delayed by GitHub; the sync timer catches up after boot.
+    case "''${T3CODE_HOOK_SET:-}" in
+      bootstrap.d|before-t3code.d) skip_sync=1 ;;
+      *) skip_sync=0 ;;
+    esac
+    if [ "$skip_sync" -eq 0 ]; then
+      sync_checkout /workspace/ghostship-agent
+      sync_checkout /workspace/nixos-config
+    fi
     # Use the shared catalog installer so one owner manages provider skills,
     # command wrappers, the native browser, and their persistent Nix roots.
     exec ${t3codeSharedAgents}/bin/t3code-shared-agents "$@"
@@ -481,7 +529,9 @@ let
           rm -rf "$stage_dir"
           return 1
         fi
-        if ! staged_version="$(LD_LIBRARY_PATH='${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}' "$stage_dir/bin/t3" --version)" \
+        if ! staged_version="$(LD_LIBRARY_PATH='${
+          lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]
+        }' "$stage_dir/bin/t3" --version)" \
           || [ "$staged_version" != "t3 v$expected_version" ]; then
           log_warn "staged T3 Code executable did not report $expected_version"
           rm -rf "$stage_dir"
@@ -506,10 +556,23 @@ let
     }
 
     install_cursor_cli() {
-      log_info "installing or upgrading cursor agent"
-      if ! curl -fsSL https://cursor.com/install | bash 2>&1; then
-        log_warn "cursor install failed"
+      if ! cursor_installer="$(curl -fsSL https://cursor.com/install)"; then
+        log_warn "cursor installer download failed"
         return 1
+      fi
+      # The installer pins its release in the versions directory it creates.
+      cursor_version="$(printf '%s\n' "$cursor_installer" \
+        | sed -n 's|^FINAL_DIR=".*/cursor-agent/versions/\([^"/]*\)"$|\1|p' | head -n 1)"
+      cursor_bin="$HOME/.local/share/cursor-agent/versions/$cursor_version/cursor-agent"
+      if [ -n "$cursor_version" ] && [ -x "$cursor_bin" ] \
+        && [ "$(readlink -f "$HOME/.local/bin/cursor-agent" 2>/dev/null || true)" = "$(readlink -f "$cursor_bin")" ]; then
+        log_info "cursor agent $cursor_version is current"
+      else
+        log_info "installing or upgrading cursor agent to ''${cursor_version:-latest}"
+        if ! printf '%s\n' "$cursor_installer" | bash 2>&1; then
+          log_warn "cursor install failed"
+          return 1
+        fi
       fi
       # Remove cursor installer's takeover of ~/.local/bin/agent to protect Ghostship agent CLI
       if [ -L "$HOME/.local/bin/agent" ]; then
@@ -696,8 +759,9 @@ let
     pending_restart="$state_dir/restart.pending"
     deferred_update="$state_dir/update-deferred.pending"
     install -d -m 0700 "$state_dir"
+    install -d -m 0700 "$(dirname ${t3codeToolLock})"
 
-    exec 9>"$state_dir/tool-update.lock"
+    exec 9>${t3codeToolLock}
     ${pkgs.util-linux}/bin/flock 9
 
     log_info() {
@@ -739,7 +803,6 @@ let
     before_cursor="$(user_version cursor)"
     before_opencode="$(user_version opencode)"
     before_antigravity="$(readlink -e "$XDG_DATA_HOME/t3code-tools/antigravity/current" || true)"
-    before_agent="$(readlink -e "$HOME/.local/state/t3code-agent-tools-package" || true)"
     before_config="$(${pkgs.coreutils}/bin/sha256sum "$T3CODE_HOME/userdata/settings.json" 2>/dev/null || true)"
 
     maintenance_status=0
@@ -754,7 +817,6 @@ let
     after_cursor="$(user_version cursor)"
     after_opencode="$(user_version opencode)"
     after_antigravity="$(readlink -e "$XDG_DATA_HOME/t3code-tools/antigravity/current" || true)"
-    after_agent="$(readlink -e "$HOME/.local/state/t3code-agent-tools-package" || true)"
     after_config="$(${pkgs.coreutils}/bin/sha256sum "$T3CODE_HOME/userdata/settings.json" 2>/dev/null || true)"
 
     log_info "t3: ''${before_t3:-missing} -> ''${after_t3:-missing}"
@@ -772,7 +834,6 @@ let
       || [ "$before_cursor" != "$after_cursor" ] \
       || [ "$before_opencode" != "$after_opencode" ] \
       || [ "$before_antigravity" != "$after_antigravity" ] \
-      || [ "$before_agent" != "$after_agent" ] \
       || [ "$before_config" != "$after_config" ]; then
       pending_tmp="$pending_restart.tmp"
       {
@@ -809,7 +870,8 @@ let
 
     [ -f "$pending_restart" ] || [ -f "$deferred_update" ] || [ -f "$t3_activation_pending" ] || exit 0
 
-    exec 9>"$state_dir/tool-update.lock"
+    install -d -m 0700 "$(dirname ${t3codeToolLock})"
+    exec 9>${t3codeToolLock}
     if ! ${pkgs.util-linux}/bin/flock -n 9; then
       log_info "tool maintenance is still running; leaving restart queued"
       exit 0
@@ -885,14 +947,17 @@ let
 
     unhealthy_reason=""
     web_was_active=1
+    web_unresponsive=0
 
     if ! systemctl is-active --quiet t3code-server.service; then
       unhealthy_reason="t3code-server.service is not active"
       web_was_active=0
     elif ! curl -fsS --max-time 5 -H 'Accept: text/html' http://127.0.0.1:3773/ >/dev/null; then
       unhealthy_reason="T3 Code web UI is not responding"
+      web_unresponsive=1
     elif ! curl -fsS --max-time 5 http://127.0.0.1:3773/.well-known/t3/environment >/dev/null; then
       unhealthy_reason="T3 Code environment endpoint is not responding"
+      web_unresponsive=1
     elif ! t3code_providers_healthy; then
       unhealthy_reason="Codex or OpenCode provider is unavailable"
     fi
@@ -913,10 +978,11 @@ let
 
     state_dir="/run/t3code-tool-update"
     failure_streak_file="$state_dir/server-monitor-failures"
+    web_streak_file="$state_dir/server-monitor-web-failures"
     recovery_attempt_file="$state_dir/server-monitor-recovery-attempted"
 
     if [ -z "$unhealthy_reason" ]; then
-      rm -f "$failure_streak_file" "$recovery_attempt_file"
+      rm -f "$failure_streak_file" "$web_streak_file" "$recovery_attempt_file"
       log_info "healthy"
       exit 0
     fi
@@ -933,10 +999,27 @@ let
     printf '%s\n' "$failure_streak" > "$failure_streak_file.tmp"
     mv "$failure_streak_file.tmp" "$failure_streak_file"
 
+    # Count only consecutive web failures; memory or provider failures before
+    # a single slow response must not make it look like a stuck server.
+    web_streak=0
+    if [ "$web_unresponsive" -eq 1 ]; then
+      if [ -r "$web_streak_file" ]; then
+        read -r web_streak < "$web_streak_file" || web_streak=0
+      fi
+      case "$web_streak" in
+        ""|*[!0-9]*) web_streak=0 ;;
+      esac
+      web_streak=$((web_streak + 1))
+    fi
+    printf '%s\n' "$web_streak" > "$web_streak_file.tmp"
+    mv "$web_streak_file.tmp" "$web_streak_file"
+
     force_recovery=0
-    # The user-facing server has failed repeatedly; allow bounded recovery to
-    # interrupt a stuck generation instead of deferring an unusable server forever.
-    if [ "$web_was_active" -eq 0 ] || [ "$failure_streak" -ge 5 ]; then
+    # Only an unusable server may interrupt active work. Memory pressure and a
+    # missing provider leave the UI working, so they wait for idle; the
+    # process memory guard and kernel OOM killer contain runaway children.
+    if [ "$web_was_active" -eq 0 ] \
+      || [ "$web_streak" -ge 5 ]; then
       force_recovery=1
     fi
 
@@ -958,7 +1041,8 @@ let
       exit 0
     fi
 
-    exec 9>"$state_dir/tool-update.lock"
+    install -d -m 0700 "$(dirname ${t3codeToolLock})"
+    exec 9>${t3codeToolLock}
     if ! ${pkgs.util-linux}/bin/flock -n 9; then
       log_info "unhealthy: $unhealthy_reason; tool maintenance or restart is in progress; restart deferred"
       exit 0
@@ -973,7 +1057,7 @@ let
     printf '%s\n' "$(date +%s)" > "$recovery_attempt_file.tmp"
     mv "$recovery_attempt_file.tmp" "$recovery_attempt_file"
     if [ "$force_recovery" -eq 1 ] && [ "$web_was_active" -eq 1 ]; then
-      log_info "unhealthy for $failure_streak consecutive checks: $unhealthy_reason; restarting t3code-server.service despite active or unknown work"
+      log_info "web unresponsive for $web_streak consecutive checks: $unhealthy_reason; restarting t3code-server.service despite active or unknown work"
     else
       log_info "unhealthy: $unhealthy_reason; restarting t3code-server.service"
     fi
@@ -2103,6 +2187,40 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/t3code-ghostship-agent-sync.service <<'EOF'
+      [Unit]
+      Description=Sync and install Ghostship agent tooling from GitHub main
+      DefaultDependencies=no
+      After=t3code-bootstrap.service
+      Requires=t3code-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Service]
+      Type=oneshot
+      Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
+      ExecStart=${t3codeInstallGhostshipAgent}/bin/t3code-install-ghostship-agent
+      StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-ghostship-agent-sync.log
+      StandardError=append:/home/t3code/.t3code-container/logs/t3code-ghostship-agent-sync.log
+      TasksMax=infinity
+      EOF
+      cat > etc/systemd/system/t3code-ghostship-agent-sync.timer <<'EOF'
+      [Unit]
+      Description=Periodic Ghostship agent tooling sync
+      DefaultDependencies=no
+      After=t3code-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Timer]
+      OnBootSec=15m
+      OnUnitActiveSec=30m
+      Persistent=true
+      Unit=t3code-ghostship-agent-sync.service
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/t3code-tool-update-restart.service <<'EOF'
       [Unit]
       Description=Restart T3 Code after queued maintenance becomes idle
@@ -2206,7 +2324,7 @@ let
       [Unit]
       Description=T3 Code Multi-User System
       DefaultDependencies=no
-      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer
+      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer
       After=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -2224,6 +2342,7 @@ let
       ln -s ../t3code-server.service etc/systemd/system/multi-user.target.wants/t3code-server.service
       ln -s ../t3code-access-proxy.service etc/systemd/system/multi-user.target.wants/t3code-access-proxy.service
       ln -s ../t3code-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/t3code-tool-auto-update.timer
+      ln -s ../t3code-ghostship-agent-sync.timer etc/systemd/system/multi-user.target.wants/t3code-ghostship-agent-sync.timer
       ln -s ../t3code-tool-update-restart.timer etc/systemd/system/multi-user.target.wants/t3code-tool-update-restart.timer
       ln -s ../t3code-server-monitor.timer etc/systemd/system/multi-user.target.wants/t3code-server-monitor.timer
       ln -s ../t3code-process-memory-guard.timer etc/systemd/system/multi-user.target.wants/t3code-process-memory-guard.timer
@@ -2267,6 +2386,25 @@ let
     };
   };
 
+  t3codeDeploymentId = builtins.hashString "sha256" (toString t3codeImage);
+
+  t3codeDeployWhenIdleScript = pkgs.writeShellScriptBin "t3code-deploy-when-idle" ''
+    set -eu
+    exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/deploy-when-idle.py} \
+      --state-dir "${t3codeDeploymentState}" \
+      --home-dir "${t3codeHome}" \
+      --probe-bin "${t3codeActivityProbe}/bin/t3code-activity-probe" \
+      --podman-bin "${pkgs.podman}/bin/podman" \
+      --systemctl-bin "${pkgs.systemd}/bin/systemctl" \
+      --audit-log "${t3codeHome}/.t3code-container/logs/restart-audit.log" \
+      "$@"
+  '';
+
+  t3codeSafeRestart = pkgs.writeShellScriptBin "t3code-safe-restart" ''
+    set -eu
+    exec ${t3codeDeployWhenIdleScript}/bin/t3code-deploy-when-idle --safe-restart "$@"
+  '';
+
 in
 {
   # The Antigravity ACP archive is unfree; keep the exception scoped to this app.
@@ -2293,14 +2431,13 @@ in
     };
   };
 
-
-
   virtualisation.oci-containers.containers."t3code" = {
     image = "${imageName}:${imageTag}";
     imageFile = t3codeImage;
     pull = "never";
     labels = {
       "io.containers.autoupdate" = "disabled";
+      "io.ghostship.t3code.deployment" = t3codeDeploymentId;
     };
     ports = [ ];
     extraOptions = [
@@ -2329,6 +2466,7 @@ in
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/t3code 0755 root root -"
+    "d ${t3codeDeploymentState} 0755 root root -"
     "d ${t3codeDocker} 0755 root root -"
     "d ${t3codeHome} 0755 3000 3000 -"
     "d ${t3codeNixRoot} 0755 root root -"
@@ -2392,6 +2530,48 @@ in
       install -d -m0755 -o 3000 -g 3000 ${t3codeHome}/.t3code-container/hooks/doctor.d
 
     '';
+  };
+
+  environment.systemPackages = [
+    t3codeDeployWhenIdleScript
+    t3codeSafeRestart
+  ];
+
+  system.activationScripts.t3code-deployment = {
+    text = ''
+      install -d -m 0755 ${t3codeDeploymentState}
+      printf '%s\n' ${lib.escapeShellArg t3codeDeploymentId} \
+        > ${t3codeDeploymentState}/desired.tmp
+      mv ${t3codeDeploymentState}/desired.tmp ${t3codeDeploymentState}/desired
+      ${pkgs.systemd}/bin/systemctl start --no-block t3code-deploy-when-idle.service || true
+    '';
+    supportsDryActivation = false;
+  };
+
+  systemd.services.t3code-deploy-when-idle = {
+    description = "Deploy a changed T3 Code image after sustained idle";
+    after = [ "podman.service" ];
+    # Let an in-flight deploy finish during a host switch; the timer runs the
+    # new script on its next tick.
+    restartIfChanged = false;
+    # Fails only on a failed start attempt, which is bounded per image.
+    onFailure = [ "ghostship-failure@%n.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${t3codeDeployWhenIdleScript}/bin/t3code-deploy-when-idle";
+      TimeoutStartSec = "25m";
+    };
+  };
+
+  systemd.timers.t3code-deploy-when-idle = {
+    description = "Check for a queued T3 Code image deployment";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "2m";
+      OnUnitActiveSec = "1m";
+      Persistent = true;
+      Unit = "t3code-deploy-when-idle.service";
+    };
   };
 
 }

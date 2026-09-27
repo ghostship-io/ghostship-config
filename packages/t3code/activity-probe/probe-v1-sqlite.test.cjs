@@ -91,6 +91,15 @@ test('protects recent user activity even when no turn row is present', () => {
   assert.equal(result.status, 1, result.stderr);
 });
 
+test('protects user activity within the 15-minute grace window', () => {
+  const activeResult = runProbe({ latestUserMessageAt: minutesAgo(12) });
+  assert.equal(activeResult.status, 1, activeResult.stderr);
+
+  const idleResult = runProbe({ latestUserMessageAt: minutesAgo(16) });
+  assert.equal(idleResult.status, 0, idleResult.stderr);
+});
+
+
 test('reports unknown when the database is missing', () => {
   const result = spawnSync(process.execPath, [probePath], {
     encoding: 'utf8',

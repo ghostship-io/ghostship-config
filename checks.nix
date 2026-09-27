@@ -44,6 +44,8 @@ in
       && !unit.stopIfChanged
       && !(builtins.elem "init-ghostship-net.service" unit.requires)
     ) agentUnits;
+    assert self.nixosConfigurations.chill-penguin.config.systemd.services ? t3code-deploy-when-idle;
+    assert self.nixosConfigurations.chill-penguin.config.systemd.timers ? t3code-deploy-when-idle;
     pkgs.runCommand "ghostship-host-evaluation"
       {
         # Force complete derivation evaluation without building the fleet in CI.

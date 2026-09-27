@@ -282,7 +282,10 @@ Registry-labeled applications keep native Podman automatic updates with health
 readiness and rollback. Database digests require review. Recyclarr stays on
 supported major 8.
 Nix system updates deploy committed `main` and its lock, with no local input
-refresh. The weekly workflow proposes a coordinated lock change with a patch
+refresh. The two WSL hosts and `chill-penguin` run `system.autoUpgrade` nightly from GitHub
+`main`; `chill-penguin` adds `--impure` so pure evaluation cannot silently drop
+its Asahi peripheral firmware. The T3 Code container is never restarted by the
+switch; its image change waits for T3 Code to be idle (see `docs/t3code.md`). The weekly workflow proposes a coordinated lock change with a patch
 version and changelog, validates before opening a draft PR, and never merges or
 switches hosts. PRs created with `GITHUB_TOKEN` do not automatically trigger a
 second workflow run; use the update workflow's validation and explicitly run
@@ -292,14 +295,10 @@ Fleet checks after review when needed.
 2. On a WSL canary, build the merged configuration, inspect changes, switch at
    an idle time, and check shells, agent launchers, SSH agent, and NFS. Then
    repeat for the second WSL host. Do not rebuild both concurrently.
-3. On `chill-penguin`, pull merged main, build natively (use `--impure` if local
-   Apple firmware extraction requires it), take the initial backup using the
-   new generation's backup command and decrypted backup projection, then switch.
-   Use the bootstrap commands below during the controlled maintenance window.
+3. `chill-penguin` applies merged main automatically overnight. To deploy
+   sooner, pull merged main and switch natively with `--impure`.
 4. Check failed units, container health, NAS mounts, configuration file modes,
-   secret-dependent integrations, and active agent sessions. Run a backup,
-   repository check, and isolated restore check before enabling confidence in
-   automatic upgrades. Verify update rollback using a disposable failing image.
+   secret-dependent integrations, and active agent sessions.
 5. Verify automatic Cloudflare reconciliation, then validate Google browser login and Android
    notifications. Test Seerr approval and the existing dashboards/media flows.
 6. Boomer is intentionally deferred while offline. Its local licensed PICO-8
