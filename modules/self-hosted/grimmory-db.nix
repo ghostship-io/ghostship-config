@@ -9,6 +9,14 @@ let
   grimmory-secrets = config.ghostship.selfHostedSecrets.projections."grimmory-db".path;
 in
 {
+  ghostship.apps.grimmory-db = {
+    name = "Grimmory DB";
+    group = "Infrastructure";
+    description = "MariaDB database";
+    icon = "sh-mariadb";
+    order = 220;
+  };
+
   virtualisation.oci-containers.containers."grimmory-db" = {
     podman.sdnotify = "healthy";
     image = "docker.io/library/mariadb@sha256:2439dcd7d14010ecd1ff7a4e1c5abe8e208c34fe35290744deeeaac3569043c3";

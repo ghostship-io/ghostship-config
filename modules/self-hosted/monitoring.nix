@@ -50,7 +50,7 @@ in
     icon = "sh-uptime-kuma";
     order = 180;
     hostname = "uptime.ghostship.io";
-    origin = "http://uptime-kuma:3001";
+    origin = "http://muximux:80";
     muximux = {
       icon = "fa-heartbeat";
     };

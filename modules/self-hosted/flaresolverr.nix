@@ -10,6 +10,7 @@
     order = 250;
     hostname = "flaresolverr.ghostship.io";
     origin = "http://flaresolverr:8191";
+    muximux.enable = false;
   };
 
   virtualisation.oci-containers.containers."flaresolverr" = {

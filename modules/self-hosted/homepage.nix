@@ -78,7 +78,7 @@ in
       if [ -f "$SETTINGS_FILE" ]; then
         echo "Surgically updating Homepage settings..."
         settings_args=(
-          title=literal:"Ghostship Dashboard"
+          title=literal:""
           quicklaunch.hideInternetSearch=literal:true
         )
         ${pkgs.ghostship-config}/bin/ghostship-config set "$SETTINGS_FILE" "''${settings_args[@]}"
@@ -128,6 +128,7 @@ in
           "2.openmeteo.longitude=literal:a home coordinate"
           "2.openmeteo.timezone=literal:Pacific/Honolulu"
           "2.openmeteo.units=literal:imperial"
+          "3.logo.icon=literal:mdi-home"
         )
         ${pkgs.ghostship-config}/bin/ghostship-config set "$WIDGETS_FILE" "''${widget_args[@]}"
         ${pkgs.yq-go}/bin/yq -i 'del(.[1].search.suggestionUrl)' "$WIDGETS_FILE"

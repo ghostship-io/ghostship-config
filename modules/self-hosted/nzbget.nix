@@ -100,6 +100,14 @@ in
     ];
   };
 
+  ghostship.apps.nzbget-edge-proxy = {
+    name = "NZBGet Edge Proxy";
+    group = "Infrastructure";
+    description = "Compatibility reverse proxy";
+    icon = "mdi-server-network-outline";
+    order = 222;
+  };
+
   systemd.services.podman-nzbget = {
     after = [
       "network-online.target"

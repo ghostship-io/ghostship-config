@@ -9,6 +9,14 @@ let
   romm-secrets = config.ghostship.selfHostedSecrets.projections."romm-db".path;
 in
 {
+  ghostship.apps.romm-db = {
+    name = "RomM DB";
+    group = "Infrastructure";
+    description = "MariaDB database";
+    icon = "sh-mariadb";
+    order = 221;
+  };
+
   virtualisation.oci-containers.containers."romm-db" = {
     podman.sdnotify = "healthy";
     image = "lscr.io/linuxserver/mariadb@sha256:94f67a7e6deb4557630c9aaba08142eb2f667101d9bc6069167ae3ae21502e90";
