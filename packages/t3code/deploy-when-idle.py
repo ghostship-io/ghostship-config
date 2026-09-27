@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 DEPLOYMENT_LABEL = "io.ghostship.t3code.deployment"
 # Container tool maintenance holds this lock; the home bind mount shares it.
 TOOL_LOCK = Path(".local/state/t3code-tool-update/tool-update.lock")
+# Restarting cannot repair a broken image; stop after this many failed starts.
+MAX_DEPLOY_ATTEMPTS = 3
 
 
 def utcnow_iso():
@@ -32,12 +34,13 @@ def log(audit_log, message):
             print(f"{ts} warn: failed writing audit log: {e}", file=sys.stderr)
 
 
-def is_live_idle(home_dir, state_db, probe_bin, podman_bin):
+def is_live_idle(home_dir, state_db, probe_bin, podman_bin, require_web=True):
     """Check if T3 Code is definitely idle and safe to restart.
 
     1. Checks if internal tool-update lock is held.
     2. Runs activity probe against state.sqlite.
-    3. Verifies container web endpoint responds.
+    3. Verifies container web endpoint responds, unless retrying a container
+       already known to be unhealthy.
     """
     tool_lock = home_dir / TOOL_LOCK
     if tool_lock.exists():
@@ -65,6 +68,9 @@ def is_live_idle(home_dir, state_db, probe_bin, podman_bin):
                 return False
         except Exception:
             return False
+
+    if not require_web:
+        return True
 
     try:
         res = subprocess.run(
@@ -140,35 +146,62 @@ def running_deployment(podman_bin):
     return "" if value == "<no value>" else value
 
 
+def health_state(podman_bin):
+    """Return "healthy", "starting", or "unhealthy" for the running container.
+
+    Inspection errors report "starting" so a transient Podman failure is never
+    counted as a failed deployment.
+    """
+    try:
+        inspect_proc = subprocess.run(
+            [podman_bin, "inspect", "t3code", "--format", "{{.State.Health.Status}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return "starting"
+    if inspect_proc.returncode != 0:
+        return "starting"
+    status = inspect_proc.stdout.strip()
+    if status == "starting":
+        return "starting"
+    if status != "healthy":
+        return "unhealthy"
+    try:
+        srv_proc = subprocess.run(
+            [podman_bin, "exec", "t3code", "systemctl", "is-active", "--quiet", "t3code-server.service"],
+            timeout=10,
+        )
+        curl_proc = subprocess.run(
+            [podman_bin, "exec", "t3code", "curl", "-fsS", "--max-time", "5", "http://127.0.0.1:3773/"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+    except Exception:
+        return "starting"
+    if srv_proc.returncode == 0 and curl_proc.returncode == 0:
+        return "healthy"
+    return "unhealthy"
+
+
 def wait_healthy(podman_bin, timeout_seconds=120):
     start = time.monotonic()
     while time.monotonic() - start < timeout_seconds:
-        try:
-            inspect_proc = subprocess.run(
-                [podman_bin, "inspect", "t3code", "--format", "{{.State.Health.Status}}"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            status = inspect_proc.stdout.strip()
-            if status == "healthy":
-                srv_proc = subprocess.run(
-                    [podman_bin, "exec", "t3code", "systemctl", "is-active", "--quiet", "t3code-server.service"],
-                    timeout=10,
-                )
-                if srv_proc.returncode == 0:
-                    curl_proc = subprocess.run(
-                        [podman_bin, "exec", "t3code", "curl", "-fsS", "--max-time", "5", "http://127.0.0.1:3773/"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=10,
-                    )
-                    if curl_proc.returncode == 0:
-                        return True
-        except Exception:
-            pass
+        if health_state(podman_bin) == "healthy":
+            return True
         time.sleep(5)
     return False
+
+
+def read_failures(failures_file, desired):
+    """Return failed start attempts recorded for this deployment ID."""
+    try:
+        recorded, count = failures_file.read_text().split()
+        return int(count) if recorded == desired else 0
+    except (OSError, ValueError):
+        return 0
 
 
 def run_deployment(
@@ -185,6 +218,8 @@ def run_deployment(
     sleep_fn=time.sleep,
     deployment_reader=None,
     tool_lock_acquirer=None,
+    health_reader=None,
+    max_attempts=MAX_DEPLOY_ATTEMPTS,
 ):
     state_dir = Path(state_dir)
     home_dir = Path(home_dir)
@@ -192,6 +227,7 @@ def run_deployment(
     applied_file = state_dir / "applied"
     applying_file = state_dir / "applying"
     pending_file = state_dir / "restart.pending"
+    failures_file = state_dir / "failures"
     state_db = home_dir / ".t3/userdata/state.sqlite"
 
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -214,20 +250,36 @@ def run_deployment(
             return 0
 
         # A reboot, an interrupted deploy, or a slow health check can leave the
-        # desired image already running. Record it instead of restarting again.
+        # desired image already running. Record it once it is healthy instead
+        # of restarting again; retry an unhealthy one a bounded number of times.
         read_deployment = deployment_reader or (lambda: running_deployment(podman_bin))
+        read_health = health_reader or (lambda: health_state(podman_bin))
+        retry_unhealthy = False
         if desired and desired != applied and not restart_pending:
             if read_deployment() == desired:
-                tmp_applied = state_dir / "applied.tmp"
-                tmp_applied.write_text(desired)
-                tmp_applied.replace(applied_file)
-                if applying_file.exists():
-                    applying_file.unlink()
-                log(audit_log, f"action=adopt-running desired={desired}")
+                state = read_health()
+                if state == "starting":
+                    return 0
+                if state == "healthy":
+                    tmp_applied = state_dir / "applied.tmp"
+                    tmp_applied.write_text(desired)
+                    tmp_applied.replace(applied_file)
+                    for stale in (applying_file, failures_file):
+                        if stale.exists():
+                            stale.unlink()
+                    log(audit_log, f"action=adopt-running desired={desired}")
+                    return 0
+                retry_unhealthy = True
+            # Whether the broken image is running, exited, or never replaced
+            # the old one, stop once it has failed enough; wait for a new image.
+            if read_failures(failures_file, desired) >= max_attempts:
                 return 0
 
         check_idle = idle_checker or (
-            lambda: is_live_idle(home_dir, state_db, probe_bin, podman_bin)
+            lambda: is_live_idle(
+                home_dir, state_db, probe_bin, podman_bin,
+                require_web=not retry_unhealthy,
+            )
         )
         wait_for_health = healthy_waiter or (
             lambda: wait_healthy(podman_bin, timeout_seconds=health_timeout_seconds)
@@ -269,12 +321,25 @@ def run_deployment(
                 tmp_applying.replace(applying_file)
 
             log(audit_log, f"action=restart-container desired={desired} restart_pending={restart_pending}")
-            subprocess.run([systemctl_bin, "restart", "podman-t3code.service"], check=True, timeout=300)
+            try:
+                subprocess.run([systemctl_bin, "restart", "podman-t3code.service"], check=True, timeout=300)
+                restarted = True
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                restarted = False
         finally:
             release_tool_lock(tool_lock)
 
-        if not wait_for_health():
-            log(audit_log, f"action=deployment-failed desired={desired}")
+        if not restarted or not wait_for_health():
+            failures = read_failures(failures_file, desired) + 1
+            tmp_failures = state_dir / "failures.tmp"
+            tmp_failures.write_text(f"{desired} {failures}\n")
+            tmp_failures.replace(failures_file)
+            log(audit_log, f"action=deployment-failed desired={desired} attempt={failures}/{max_attempts}")
+            if failures == max_attempts:
+                # Drop a requested restart too; a new request retries once.
+                if pending_file.exists():
+                    pending_file.unlink()
+                log(audit_log, f"action=deployment-abandoned desired={desired} reason=unhealthy-after-{failures}-attempts")
             return 1
 
         if desired:
@@ -282,10 +347,9 @@ def run_deployment(
             tmp_applied.write_text(desired)
             tmp_applied.replace(applied_file)
 
-        if applying_file.exists():
-            applying_file.unlink()
-        if pending_file.exists():
-            pending_file.unlink()
+        for done in (applying_file, pending_file, failures_file):
+            if done.exists():
+                done.unlink()
 
         log(audit_log, f"action=deployment-complete desired={desired}")
         return 0

@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   restarts an in-flight deploy.
 - **Skip needless T3 Code restarts**: Ghostship tool package changes no longer
   queue a server restart.
+- **Bounded recovery from a broken T3 Code image**: Adopt a running new image
+  only once healthy, wait out its start period, retry an unhealthy one at most
+  three idle-gated times, alert on each failed start, then stop until a new
+  image arrives.
+- **Sync shared source checkouts**: Fast-forward `/workspace/ghostship-agent`
+  and `/workspace/nixos-config` from `origin/main` before each tooling install
+  and every 30 minutes, skipping checkouts with local work.
+- **Skip redundant Cursor downloads**: Only run the Cursor installer when its
+  pinned release is not already active.
 
 ## [3.15.12] - 2026-09-26
 
