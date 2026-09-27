@@ -27,6 +27,26 @@ class MonitoringTests(unittest.TestCase):
         self.assertEqual(len(decoded.packets), 128)
         self.assertTrue(all(packet.data == "fleet-event" for packet in decoded.packets))
 
+    def test_provisioning_removes_only_known_retired_http_monitors(self):
+        retired = {
+            "name": "Ghostship Synara",
+            "type": "http",
+        }
+        self.assertTrue(provision.is_retired_app_monitor(retired, set()))
+        self.assertFalse(
+            provision.is_retired_app_monitor(retired, {"Synara"})
+        )
+        self.assertFalse(
+            provision.is_retired_app_monitor(
+                {"name": "Ghostship Custom", "type": "http"}, set()
+            )
+        )
+        self.assertFalse(
+            provision.is_retired_app_monitor(
+                {"name": "Ghostship Synara", "type": "push"}, set()
+            )
+        )
+
     def test_container_monitor_accepts_running_containers_without_healthchecks(self):
         with patch.object(
             heartbeats.subprocess,
