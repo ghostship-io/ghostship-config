@@ -18,7 +18,12 @@
   "clipboard_sync": true,
   "auto_launch": false,
   "color_scheme": null,
+  "restore_session": false,
   "launch_args": [
+    "--disable-session-crashed-bubble",
+    "--hide-crash-restore-bubble",
+    "--deny-permission-prompts",
+    "--disable-notifications",
     "--disable-extensions-except=/data/extensions/ublock-origin-lite,/data/extensions/i-still-dont-care-about-cookies,/data/extensions/bypass-paywalls-chrome-clean",
     "--load-extension=/data/extensions/ublock-origin-lite,/data/extensions/i-still-dont-care-about-cookies,/data/extensions/bypass-paywalls-chrome-clean"
   ],
