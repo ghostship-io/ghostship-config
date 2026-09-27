@@ -34,8 +34,9 @@ flowchart LR
 
 Containers share `ghostship_net`; no new host ports are published. Plex keeps
 its existing host exposure. qBittorrent shares Gluetun's VPN namespace. NZBGet
-uses direct networking; its compatibility proxy preserves the old tunnel
-origin. Network setup remains active after success to serve shared startup
+uses direct networking at `http://nzbget:5001`; the old Gluetun namespace
+compatibility proxy is retired because the tunnel now targets NZBGet directly.
+Network setup remains active after success to serve shared startup
 dependencies. Both agent containers keep their own lifecycle and soft network
 ordering so refreshing that setup unit cannot stop their work.
 Media/download files live on the NAS, while app databases and settings
@@ -76,13 +77,15 @@ workstation are retired and quarantined by the shared cleanup sweep.
 
 | Service | Internal origin | Public hostname | Purpose and authentication |
 | --- | --- | --- | --- |
-| Uptime Kuma 2 | `http://uptime-kuma:3001` | `uptime.ghostship.io` | Internal HTTP/TCP checks plus backup/update heartbeats; existing Google Access policy, then local `the owner` account |
+| Uptime Kuma 2 | `http://uptime-kuma:3001` | `uptime.ghostship.io` | Per-container Podman health heartbeats, internal HTTP/TCP checks, and backup/update heartbeats; Cloudflare Access protects the public hostname and Kuma login is disabled behind it |
 | ntfy | `http://ntfy:8080` | `ntfy.ghostship.io` | Android operations notifications; native authentication, no browser-login redirect |
 | Seerr | `http://seerr:5055` | `requests.ghostship.io` | Plex requests routed to existing Sonarr/Radarr profiles and roots; existing Google Access policy plus Plex login |
 
 Monitoring provisioning creates missing `Ghostship ...` entries from the same
-registry. HTTP target URLs follow the registry; existing notification and
-interval choices are preserved. Independently added monitors remain untouched. HTTP checks distinguish successful responses
+registry. A host timer reports each declared container's running and health
+state every five minutes; HTTP target URLs follow the registry and existing
+notification and interval choices are preserved. Independently added monitors
+remain untouched. HTTP checks distinguish successful responses
 from redirects; pyLoad uses its direct public `/robots.txt` endpoint because its
 favicon route redirects. The provisioning client permits a bounded 256-packet
 login burst for existing monitor histories, with a regression covering a

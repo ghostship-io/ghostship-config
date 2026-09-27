@@ -11,8 +11,35 @@ import socketio
 from engineio.payload import Payload
 
 # Kuma emits heartbeat/stat packets for every monitor before acknowledging login.
-# Its populated fleet exceeds Engine.IO's default 16-packet polling limit.
+# Its populated fleet can exceed Engine.IO's default 16-packet polling limit.
 Payload.max_decode_packets = 256
+
+
+def is_owned_stale_container_monitor(monitor, current_names, previous_tokens):
+    prefix = "Ghostship container "
+    expected = {prefix + name for name in current_names}
+    return (
+        monitor["name"].startswith(prefix)
+        and monitor["name"] not in expected
+        and monitor["type"] == "push"
+        and monitor.get("pushToken") in previous_tokens
+    )
+
+
+def write_push_tokens(path, pushes):
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    temporary = path.with_suffix(".new")
+    temporary.write_text(json.dumps(pushes))
+    temporary.chmod(0o600)
+    temporary.replace(path)
+
+
+def enforce_access_only_auth(call, password):
+    settings = call("getSettings")["data"]
+    if settings.get("disableAuth") is True:
+        return
+    settings["disableAuth"] = True
+    call("setSettings", (settings, password))
 
 
 def main():
@@ -45,10 +72,14 @@ def main():
         # Query setup state explicitly; startup load can delay the setup event.
         if client.call("needSetup", timeout=20):
             call("setup", ("the owner", os.environ["KUMA_PASSWORD"]))
-        call(
-            "login",
-            {"username": "the owner", "password": os.environ["KUMA_PASSWORD"]},
-        )
+        # Kuma establishes an automatic session on connection when auth is off.
+        settings_result = client.call("getSettings", timeout=20)
+        if not settings_result or not settings_result.get("ok"):
+            call(
+                "login",
+                {"username": "the owner", "password": os.environ["KUMA_PASSWORD"]},
+            )
+        enforce_access_only_auth(call, os.environ["KUMA_PASSWORD"])
         call("getMonitorList")
         if not monitor_event.wait(15) or not notification_event.wait(15):
             raise RuntimeError("Kuma did not provide its configuration lists")
@@ -142,7 +173,7 @@ def main():
                         "notificationIDList": {str(notification_id): True},
                     },
                 )
-        pushes = {}
+        pushes = {"containers": {}}
         for name in ["backup", "updates"]:
             monitor_name = f"Ghostship {name} heartbeat"
             existing = next(
@@ -169,12 +200,68 @@ def main():
                     },
                 )
                 pushes[name] = token
+        container_names = sorted(
+            {app["container"] for app in registry.values()}
+        )
         path = Path("/var/lib/ghostship-monitoring/push.json")
-        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        temporary = path.with_suffix(".new")
-        temporary.write_text(json.dumps(pushes))
-        temporary.chmod(0o600)
-        temporary.replace(path)
+        previous_pushes = json.loads(path.read_text()) if path.exists() else {}
+        previous_container_tokens = previous_pushes.get("containers", {})
+        previous_tokens = set(previous_container_tokens.values())
+        container_monitor_names = {
+            f"Ghostship container {name}" for name in container_names
+        }
+        for listed_monitor in monitors.values():
+            if not (
+                listed_monitor["name"].startswith("Ghostship container ")
+                and listed_monitor["name"] not in container_monitor_names
+                and listed_monitor["type"] == "push"
+            ):
+                continue
+            existing = call("getMonitor", listed_monitor["id"])["monitor"]
+            if is_owned_stale_container_monitor(
+                existing, container_names, previous_tokens
+            ):
+                call("deleteMonitor", (existing["id"], False))
+        for container in container_names:
+            monitor_name = f"Ghostship container {container}"
+            existing = next(
+                (m for m in monitors.values() if m["name"] == monitor_name),
+                None,
+            )
+            if existing:
+                if existing["type"] != "push":
+                    raise RuntimeError(
+                        f"Managed container monitor {container} changed type"
+                    )
+                monitor = call("getMonitor", existing["id"])["monitor"]
+                if (
+                    monitor["pushToken"]
+                    != previous_container_tokens.get(container)
+                ):
+                    raise RuntimeError(
+                        f"Container monitor {container} conflicts with an unmanaged entry"
+                    )
+                pushes["containers"][container] = monitor["pushToken"]
+            else:
+                token = secrets.token_hex(10)
+                call(
+                    "add",
+                    {
+                        "name": monitor_name,
+                        "type": "push",
+                        "conditions": [],
+                        "pushToken": token,
+                        "interval": 600,
+                        "retryInterval": 60,
+                        "maxretries": 1,
+                        "accepted_statuscodes": ["200-299"],
+                        "notificationIDList": {str(notification_id): True},
+                    },
+                )
+                pushes["containers"][container] = token
+            # Persist each token as soon as its monitor exists so a later API
+            # failure can retry without orphaning an unrecognized monitor.
+            write_push_tokens(path, pushes)
         print("Ghostship monitors provisioned; existing entries preserved")
     finally:
         client.disconnect()
