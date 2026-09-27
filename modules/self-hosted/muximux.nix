@@ -404,6 +404,14 @@ in
             Synology.color=literal:"#3799ef"
             Synology.enabled=literal:"true"
             Synology.dd=literal:"true"
+            XPlus4.name=literal:"XPlus4"
+            XPlus4.url=literal:"https://xplus4.ghostship.io"
+            XPlus4.icon=literal:"fa-cube"
+            XPlus4.color=literal:"#109f61"
+            XPlus4.enabled=literal:"true"
+            XPlus4.scale=literal:1
+            XPlus4.dd=literal:"true"
+            XPlus4.default=literal:"false"
           )
 
           ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${mux_args[@]}"
