@@ -10,6 +10,14 @@ let
   render-recyclarr-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project recyclarr";
 in
 {
+  ghostship.apps.recyclarr = {
+    name = "Recyclarr";
+    group = "Automation";
+    description = "Servarr configuration sync";
+    icon = "mdi-sync";
+    order = 90;
+  };
+
   virtualisation.oci-containers.containers."recyclarr" = {
     image = "ghcr.io/recyclarr/recyclarr:8";
     pull = "always";

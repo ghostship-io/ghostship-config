@@ -137,12 +137,19 @@ ghostship.apps.sonarr = {
 ```
 
 Both dashboards generate their links from `hostname`, and widget URLs default
-to `origin`. RomM, Grimmory, and PyLoad retain explicit same-origin Muximux proxy
-paths. Internal-only helpers omit `hostname` and `origin`, so they receive no
-public DNS/tunnel route or Muximux link. Dashboard names must be unique and
-each registry entry must refer to a declared container. Changes are rendered at
-dashboard startup; the generated manifest changes their unit scripts, causing
-NixOS to restart the affected dashboards on a switch.
+to `origin`. RomM, Grimmory, PyLoad, and Uptime Kuma retain explicit Muximux
+proxy routes. Internal-only helpers omit `hostname` and `origin`, so they receive no
+public DNS/tunnel route or Muximux link. They still receive Homepage entries so
+their container status is visible. Dashboard names must be unique, every
+registry entry must refer to a declared container, and every declared container
+must have a registry entry. Changes are rendered at dashboard startup; the
+generated manifest changes their unit scripts, causing NixOS to restart the
+affected dashboards on a switch.
+
+Uptime Kuma keeps its same-origin iframe protection on the app itself. The
+Muximux host proxy removes that header only for the `uptime.ghostship.io` route
+and sets a `frame-ancestors` policy that allows only the protected Muximux origin
+and the service itself. Keep the public route behind Cloudflare Access.
 
 The renderer tracks its previous names under `/var/lib/ghostship-dashboards`.
 Renames/removals delete previously managed entries while preserving unrelated
