@@ -14,6 +14,20 @@ from engineio.payload import Payload
 # Its populated fleet can exceed Engine.IO's default 16-packet polling limit.
 Payload.max_decode_packets = 256
 
+RETIRED_APP_MONITORS = {
+    "Ghostship OpenChamber": "OpenChamber",
+    "Ghostship Synara": "Synara",
+}
+
+
+def is_retired_app_monitor(monitor, current_app_names):
+    app_name = RETIRED_APP_MONITORS.get(monitor["name"])
+    return (
+        app_name is not None
+        and app_name not in current_app_names
+        and monitor["type"] == "http"
+    )
+
 
 def is_owned_stale_container_monitor(monitor, current_names, previous_tokens):
     prefix = "Ghostship container "
@@ -108,6 +122,10 @@ def main():
         else:
             notification_id = notification["id"]
         registry = json.loads(Path(sys.argv[1]).read_text())
+        current_app_names = {app["name"] for app in registry.values()}
+        for monitor in monitors.values():
+            if is_retired_app_monitor(monitor, current_app_names):
+                call("deleteMonitor", (monitor["id"], False))
         endpoints = {
             app["name"]: app["origin"].rstrip("/") + app["healthPath"]
             for app in registry.values()
