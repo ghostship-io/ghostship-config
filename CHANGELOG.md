@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.16] - 2026-09-27
+
+- Allow Uptime Kuma to render inside the protected Muximux dashboard and remove
+  the non-UI FlareSolverr shortcut.
+- Add Homepage status entries for every container, enforce complete registry
+  coverage, and show Homepage's house mark without the title text.
+
 ## Unreleased
 
 ## [3.15.15] - 2026-09-27

@@ -300,6 +300,28 @@ let
         include /etc/nginx/fastcgi_params;
       }
     }
+
+    server {
+      listen 80;
+      server_name uptime.ghostship.io;
+
+      resolver 10.89.0.1 valid=30s ipv6=off;
+      set $uptime_kuma_upstream uptime-kuma:3001;
+
+      location / {
+        proxy_pass http://$uptime_kuma_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_hide_header X-Frame-Options;
+        add_header Content-Security-Policy "frame-ancestors 'self' https://apps.ghostship.io" always;
+        proxy_redirect http://$host/ https://$host/;
+      }
+    }
   '';
 in
 
