@@ -102,6 +102,14 @@ const plugin = async (args) => {
     return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
   }
 
+  const isForeign = !tags.includes("eng") && !tags.includes("en");
+  const hasSourceEnglishSubtitles = command.streams.some((stream) =>
+    stream.codec_type === "subtitle" && ["eng", "en"].includes(language(stream)));
+  if (isForeign && !hasSourceEnglishSubtitles) {
+    args.jobLog("Manual review: foreign-language title has no English subtitles in the source");
+    return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
+  }
+
   let changed = false;
   for (const stream of audio) {
     if (!tags.includes(language(stream))) {
