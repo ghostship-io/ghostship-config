@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [3.15.13] - 2026-09-27
+
+- **Automatic chill-penguin upgrades**: Enable nightly `system.autoUpgrade` on
+  `chill-penguin` with `--impure` so Asahi firmware stays enabled, fetch the
+  public repository over HTTPS, catch up missed runs after boot, wait for a
+  running backup, and alert on failure.
+- **Keep active T3 Code sessions running**: The server monitor no longer
+  force-restarts active work for memory pressure or a missing provider; only a
+  stopped server or an unresponsive web UI can interrupt active turns.
+- **Resume interrupted T3 Code deploys**: Stamp containers with their deployment
+  ID and record an already-running image as applied instead of restarting it
+  again. Share the tool-maintenance lock with the host deployer through the home
+  bind mount and hold it across the container restart. A host switch no longer
+  restarts an in-flight deploy.
+- **Skip needless T3 Code restarts**: Ghostship tool package changes no longer
+  queue a server restart.
+
 ## [3.15.12] - 2026-09-26
 
 - **Idle-aware T3 Code deployment**: Queue container image updates and restarts

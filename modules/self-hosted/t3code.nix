@@ -17,6 +17,9 @@ let
   t3codeSecretsFile = "/run/secrets/t3code.env";
   imageName = "localhost/ghostship-t3code";
   imageTag = "t3code-runtime";
+  # Tool maintenance, the idle restart, the server monitor, and the host image
+  # deployment share this lock through the persistent home bind mount.
+  t3codeToolLock = "/home/t3code/.local/state/t3code-tool-update/tool-update.lock";
 
   t3codePackages = with pkgs; [
     nix
@@ -699,8 +702,9 @@ let
     pending_restart="$state_dir/restart.pending"
     deferred_update="$state_dir/update-deferred.pending"
     install -d -m 0700 "$state_dir"
+    install -d -m 0700 "$(dirname ${t3codeToolLock})"
 
-    exec 9>"$state_dir/tool-update.lock"
+    exec 9>${t3codeToolLock}
     ${pkgs.util-linux}/bin/flock 9
 
     log_info() {
@@ -742,7 +746,6 @@ let
     before_cursor="$(user_version cursor)"
     before_opencode="$(user_version opencode)"
     before_antigravity="$(readlink -e "$XDG_DATA_HOME/t3code-tools/antigravity/current" || true)"
-    before_agent="$(readlink -e "$HOME/.local/state/t3code-agent-tools-package" || true)"
     before_config="$(${pkgs.coreutils}/bin/sha256sum "$T3CODE_HOME/userdata/settings.json" 2>/dev/null || true)"
 
     maintenance_status=0
@@ -757,7 +760,6 @@ let
     after_cursor="$(user_version cursor)"
     after_opencode="$(user_version opencode)"
     after_antigravity="$(readlink -e "$XDG_DATA_HOME/t3code-tools/antigravity/current" || true)"
-    after_agent="$(readlink -e "$HOME/.local/state/t3code-agent-tools-package" || true)"
     after_config="$(${pkgs.coreutils}/bin/sha256sum "$T3CODE_HOME/userdata/settings.json" 2>/dev/null || true)"
 
     log_info "t3: ''${before_t3:-missing} -> ''${after_t3:-missing}"
@@ -775,7 +777,6 @@ let
       || [ "$before_cursor" != "$after_cursor" ] \
       || [ "$before_opencode" != "$after_opencode" ] \
       || [ "$before_antigravity" != "$after_antigravity" ] \
-      || [ "$before_agent" != "$after_agent" ] \
       || [ "$before_config" != "$after_config" ]; then
       pending_tmp="$pending_restart.tmp"
       {
@@ -812,7 +813,8 @@ let
 
     [ -f "$pending_restart" ] || [ -f "$deferred_update" ] || [ -f "$t3_activation_pending" ] || exit 0
 
-    exec 9>"$state_dir/tool-update.lock"
+    install -d -m 0700 "$(dirname ${t3codeToolLock})"
+    exec 9>${t3codeToolLock}
     if ! ${pkgs.util-linux}/bin/flock -n 9; then
       log_info "tool maintenance is still running; leaving restart queued"
       exit 0
@@ -888,14 +890,17 @@ let
 
     unhealthy_reason=""
     web_was_active=1
+    web_unresponsive=0
 
     if ! systemctl is-active --quiet t3code-server.service; then
       unhealthy_reason="t3code-server.service is not active"
       web_was_active=0
     elif ! curl -fsS --max-time 5 -H 'Accept: text/html' http://127.0.0.1:3773/ >/dev/null; then
       unhealthy_reason="T3 Code web UI is not responding"
+      web_unresponsive=1
     elif ! curl -fsS --max-time 5 http://127.0.0.1:3773/.well-known/t3/environment >/dev/null; then
       unhealthy_reason="T3 Code environment endpoint is not responding"
+      web_unresponsive=1
     elif ! t3code_providers_healthy; then
       unhealthy_reason="Codex or OpenCode provider is unavailable"
     fi
@@ -916,10 +921,11 @@ let
 
     state_dir="/run/t3code-tool-update"
     failure_streak_file="$state_dir/server-monitor-failures"
+    web_streak_file="$state_dir/server-monitor-web-failures"
     recovery_attempt_file="$state_dir/server-monitor-recovery-attempted"
 
     if [ -z "$unhealthy_reason" ]; then
-      rm -f "$failure_streak_file" "$recovery_attempt_file"
+      rm -f "$failure_streak_file" "$web_streak_file" "$recovery_attempt_file"
       log_info "healthy"
       exit 0
     fi
@@ -936,10 +942,27 @@ let
     printf '%s\n' "$failure_streak" > "$failure_streak_file.tmp"
     mv "$failure_streak_file.tmp" "$failure_streak_file"
 
+    # Count only consecutive web failures; memory or provider failures before
+    # a single slow response must not make it look like a stuck server.
+    web_streak=0
+    if [ "$web_unresponsive" -eq 1 ]; then
+      if [ -r "$web_streak_file" ]; then
+        read -r web_streak < "$web_streak_file" || web_streak=0
+      fi
+      case "$web_streak" in
+        ""|*[!0-9]*) web_streak=0 ;;
+      esac
+      web_streak=$((web_streak + 1))
+    fi
+    printf '%s\n' "$web_streak" > "$web_streak_file.tmp"
+    mv "$web_streak_file.tmp" "$web_streak_file"
+
     force_recovery=0
-    # The user-facing server has failed repeatedly; allow bounded recovery to
-    # interrupt a stuck generation instead of deferring an unusable server forever.
-    if [ "$web_was_active" -eq 0 ] || [ "$failure_streak" -ge 5 ]; then
+    # Only an unusable server may interrupt active work. Memory pressure and a
+    # missing provider leave the UI working, so they wait for idle; the
+    # process memory guard and kernel OOM killer contain runaway children.
+    if [ "$web_was_active" -eq 0 ] \
+      || [ "$web_streak" -ge 5 ]; then
       force_recovery=1
     fi
 
@@ -961,7 +984,8 @@ let
       exit 0
     fi
 
-    exec 9>"$state_dir/tool-update.lock"
+    install -d -m 0700 "$(dirname ${t3codeToolLock})"
+    exec 9>${t3codeToolLock}
     if ! ${pkgs.util-linux}/bin/flock -n 9; then
       log_info "unhealthy: $unhealthy_reason; tool maintenance or restart is in progress; restart deferred"
       exit 0
@@ -976,7 +1000,7 @@ let
     printf '%s\n' "$(date +%s)" > "$recovery_attempt_file.tmp"
     mv "$recovery_attempt_file.tmp" "$recovery_attempt_file"
     if [ "$force_recovery" -eq 1 ] && [ "$web_was_active" -eq 1 ]; then
-      log_info "unhealthy for $failure_streak consecutive checks: $unhealthy_reason; restarting t3code-server.service despite active or unknown work"
+      log_info "web unresponsive for $web_streak consecutive checks: $unhealthy_reason; restarting t3code-server.service despite active or unknown work"
     else
       log_info "unhealthy: $unhealthy_reason; restarting t3code-server.service"
     fi
@@ -2321,6 +2345,7 @@ in
     pull = "never";
     labels = {
       "io.containers.autoupdate" = "disabled";
+      "io.ghostship.t3code.deployment" = t3codeDeploymentId;
     };
     ports = [ ];
     extraOptions = [
@@ -2434,6 +2459,9 @@ in
   systemd.services.t3code-deploy-when-idle = {
     description = "Deploy a changed T3 Code image after sustained idle";
     after = [ "podman.service" ];
+    # Let an in-flight deploy finish during a host switch; the timer runs the
+    # new script on its next tick.
+    restartIfChanged = false;
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${t3codeDeployWhenIdleScript}/bin/t3code-deploy-when-idle";

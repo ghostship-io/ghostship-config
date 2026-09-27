@@ -30,6 +30,13 @@ in
   networking.hostName = "chill-penguin";
   networking.networkmanager.enable = true;
 
+  # T3 Code image changes are applied by t3code-deploy-when-idle, never by the switch.
+  myOptions.autoUpgrade = {
+    enable = true;
+    # Pure evaluation cannot see /boot/asahi and would drop peripheral firmware.
+    extraFlags = [ "--impure" ];
+  };
+
   # Keep the live bus implementation so fleet updates do not require a reboot.
   services.dbus.implementation = "dbus";
 
