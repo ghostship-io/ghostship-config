@@ -224,6 +224,50 @@ let
     mkdir -p "$state_dir"
     exec 8>"$state_dir/install.lock"
     ${pkgs.util-linux}/bin/flock 8
+
+    # Fast-forward the shared source checkouts so GitHub merges reach the
+    # container. Never touch a checkout that is off main, has tracked edits,
+    # is mid-merge or rebase, or has diverged; the next sync retries.
+    sync_checkout() {
+      repo="$1"
+      git_dir="$repo/.git"
+      [ -d "$git_dir" ] || return 0
+      branch="$(git -C "$repo" branch --show-current 2>/dev/null || true)"
+      if [ "$branch" != main ]; then
+        printf 'source sync: %s is on %s; skipped\n' "$repo" "''${branch:-a detached HEAD}"
+        return 0
+      fi
+      for marker in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply; do
+        if [ -e "$git_dir/$marker" ]; then
+          printf 'source sync: %s has an operation in progress; skipped\n' "$repo"
+          return 0
+        fi
+      done
+      if [ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]; then
+        printf 'source sync: %s has uncommitted changes; skipped\n' "$repo"
+        return 0
+      fi
+      if ! GIT_TERMINAL_PROMPT=0 \
+        GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=15" \
+        ${pkgs.coreutils}/bin/timeout 60 git -C "$repo" fetch --quiet origin main; then
+        printf 'warning: source sync: fetching %s failed\n' "$repo" >&2
+        return 0
+      fi
+      if ! git -C "$repo" merge --ff-only --quiet refs/remotes/origin/main; then
+        printf 'warning: source sync: %s cannot fast-forward to origin/main\n' "$repo" >&2
+      fi
+    }
+
+    # Container boot and server starts skip the network so recovery is never
+    # delayed by GitHub; the sync timer catches up after boot.
+    case "''${T3CODE_HOOK_SET:-}" in
+      bootstrap.d|before-t3code.d) skip_sync=1 ;;
+      *) skip_sync=0 ;;
+    esac
+    if [ "$skip_sync" -eq 0 ]; then
+      sync_checkout /workspace/ghostship-agent
+      sync_checkout /workspace/nixos-config
+    fi
     # Use the shared catalog installer so one owner manages provider skills,
     # command wrappers, the native browser, and their persistent Nix roots.
     exec ${t3codeSharedAgents}/bin/t3code-shared-agents "$@"
@@ -512,10 +556,23 @@ let
     }
 
     install_cursor_cli() {
-      log_info "installing or upgrading cursor agent"
-      if ! curl -fsSL https://cursor.com/install | bash 2>&1; then
-        log_warn "cursor install failed"
+      if ! cursor_installer="$(curl -fsSL https://cursor.com/install)"; then
+        log_warn "cursor installer download failed"
         return 1
+      fi
+      # The installer pins its release in the versions directory it creates.
+      cursor_version="$(printf '%s\n' "$cursor_installer" \
+        | sed -n 's|^FINAL_DIR=".*/cursor-agent/versions/\([^"/]*\)"$|\1|p' | head -n 1)"
+      cursor_bin="$HOME/.local/share/cursor-agent/versions/$cursor_version/cursor-agent"
+      if [ -n "$cursor_version" ] && [ -x "$cursor_bin" ] \
+        && [ "$(readlink -f "$HOME/.local/bin/cursor-agent" 2>/dev/null || true)" = "$(readlink -f "$cursor_bin")" ]; then
+        log_info "cursor agent $cursor_version is current"
+      else
+        log_info "installing or upgrading cursor agent to ''${cursor_version:-latest}"
+        if ! printf '%s\n' "$cursor_installer" | bash 2>&1; then
+          log_warn "cursor install failed"
+          return 1
+        fi
       fi
       # Remove cursor installer's takeover of ~/.local/bin/agent to protect Ghostship agent CLI
       if [ -L "$HOME/.local/bin/agent" ]; then
@@ -2130,6 +2187,40 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/t3code-ghostship-agent-sync.service <<'EOF'
+      [Unit]
+      Description=Sync and install Ghostship agent tooling from GitHub main
+      DefaultDependencies=no
+      After=t3code-bootstrap.service
+      Requires=t3code-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Service]
+      Type=oneshot
+      Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
+      ExecStart=${t3codeInstallGhostshipAgent}/bin/t3code-install-ghostship-agent
+      StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-ghostship-agent-sync.log
+      StandardError=append:/home/t3code/.t3code-container/logs/t3code-ghostship-agent-sync.log
+      TasksMax=infinity
+      EOF
+      cat > etc/systemd/system/t3code-ghostship-agent-sync.timer <<'EOF'
+      [Unit]
+      Description=Periodic Ghostship agent tooling sync
+      DefaultDependencies=no
+      After=t3code-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Timer]
+      OnBootSec=15m
+      OnUnitActiveSec=30m
+      Persistent=true
+      Unit=t3code-ghostship-agent-sync.service
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/t3code-tool-update-restart.service <<'EOF'
       [Unit]
       Description=Restart T3 Code after queued maintenance becomes idle
@@ -2233,7 +2324,7 @@ let
       [Unit]
       Description=T3 Code Multi-User System
       DefaultDependencies=no
-      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer
+      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer
       After=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -2251,6 +2342,7 @@ let
       ln -s ../t3code-server.service etc/systemd/system/multi-user.target.wants/t3code-server.service
       ln -s ../t3code-access-proxy.service etc/systemd/system/multi-user.target.wants/t3code-access-proxy.service
       ln -s ../t3code-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/t3code-tool-auto-update.timer
+      ln -s ../t3code-ghostship-agent-sync.timer etc/systemd/system/multi-user.target.wants/t3code-ghostship-agent-sync.timer
       ln -s ../t3code-tool-update-restart.timer etc/systemd/system/multi-user.target.wants/t3code-tool-update-restart.timer
       ln -s ../t3code-server-monitor.timer etc/systemd/system/multi-user.target.wants/t3code-server-monitor.timer
       ln -s ../t3code-process-memory-guard.timer etc/systemd/system/multi-user.target.wants/t3code-process-memory-guard.timer
@@ -2462,6 +2554,8 @@ in
     # Let an in-flight deploy finish during a host switch; the timer runs the
     # new script on its next tick.
     restartIfChanged = false;
+    # Fails only on a failed start attempt, which is bounded per image.
+    onFailure = [ "ghostship-failure@%n.service" ];
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${t3codeDeployWhenIdleScript}/bin/t3code-deploy-when-idle";

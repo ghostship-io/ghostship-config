@@ -225,7 +225,8 @@ It also updates OpenCode and Antigravity when the database reports no pending or
 running turns, then runs `after-update.d` to reapply Ghostship tooling. Unknown
 activity defers maintenance and recovery. Deferred tool checks retry on the
 one-minute maintenance timer once work becomes idle. Each provider update is
-attempted even if another fails. Changed provider tools or T3 settings queue a
+attempted even if another fails. Cursor reads the release pinned by its
+installer and downloads only when that release is not already active. Changed provider tools or T3 settings queue a
 server restart, which waits for T3 to become idle. Ghostship tool package
 changes do not: its command wrappers load the new package on every invocation.
 
@@ -238,7 +239,13 @@ trigger restart loops.
 `t3code-apply-config` validates JSON/TOML and OpenCode configuration, restarts the
 server, and restores the last healthy configuration snapshot if recovery fails.
 `t3code-tunnel start <name> <port>` exposes a project server with an ephemeral
-Cloudflare Quick Tunnel. Container lifecycle hooks live in
+Cloudflare Quick Tunnel. Before installing Ghostship tooling, doctor, after-update, and the 30-minute
+`t3code-ghostship-agent-sync.timer` (first run 15 minutes after boot) fast-forward
+`/workspace/ghostship-agent` and `/workspace/nixos-config` from `origin/main`.
+They skip a checkout that is off `main`, has tracked changes, has a merge or
+rebase in progress, or cannot fast-forward. Container boot and server starts
+skip the fetch so recovery never waits on GitHub. Sync output is in
+`~/.t3code-container/logs/t3code-ghostship-agent-sync.log`. Container lifecycle hooks live in
 `~/.t3code-container/hooks/`; hook output is recorded in
 `~/.t3code-container/logs/t3code-hooks.log`. Update output is in
 `t3code-tool-auto-update.log` in the same directory.
@@ -252,7 +259,11 @@ the update after 30 seconds of sustained idle (no running or pending tasks in
 bind mount) across the restart. Each container carries its deployment ID in the
 `io.ghostship.t3code.deployment` label, so after a reboot, an interrupted
 deploy, or a slow health check, a container already running the desired image
-is recorded as applied instead of restarted again. A host switch does not
+is recorded as applied once healthy instead of restarted again; one still in
+its health start period is left alone. An unhealthy new image gets at most
+three idle-gated restarts. Each failed start alerts through
+`ghostship-failure@`; after the third the deployer stops, whether that image is running, exited, or
+never started, until a new image is desired or an operator runs `t3code-safe-restart`. A host switch does not
 restart an in-flight deploy. Operators can also queue a safe idle-aware restart at any time
 with `t3code-safe-restart` (or pass `--force` to bypass). Backups include the
 home and projects but exclude the Docker and Nix stores.

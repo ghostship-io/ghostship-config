@@ -169,6 +169,7 @@ class TestT3CodeIdleDeployment(unittest.TestCase):
                 audit_log=self.audit_log,
                 idle_checker=Mock(side_effect=AssertionError("idle not needed")),
                 deployment_reader=Mock(return_value="hash2"),
+                health_reader=Mock(return_value="healthy"),
             )
             self.assertEqual(res, 0)
             mock_run.assert_not_called()
@@ -259,6 +260,100 @@ class TestT3CodeIdleDeployment(unittest.TestCase):
         self.assertEqual(res, 0)
         self.assertEqual(held_during_restart, [True])
         self.assertEqual((self.state_dir / "applied").read_text().strip(), "hash2")
+
+    def _tick(self, idle=True, healthy=False, running="hash2", health="unhealthy", restart_ok=True):
+        calls = []
+
+        def fake_run(cmd, *args, **kwargs):
+            calls.append(list(cmd))
+            if list(cmd[:2]) == ["systemctl", "restart"] and not restart_ok:
+                raise deployer.subprocess.CalledProcessError(1, cmd)
+            return Mock(returncode=0)
+
+        with patch("subprocess.run", side_effect=fake_run):
+            res = deployer.run_deployment(
+                state_dir=self.state_dir,
+                home_dir=self.home_dir,
+                audit_log=self.audit_log,
+                confirm_idle_seconds=0,
+                idle_checker=Mock(return_value=idle),
+                healthy_waiter=Mock(return_value=healthy),
+                sleep_fn=Mock(),
+                deployment_reader=Mock(return_value=running),
+                health_reader=Mock(return_value=health),
+            )
+        restarted = any(c[:2] == ["systemctl", "restart"] for c in calls)
+        return res, restarted
+
+    def test_waits_for_starting_container_without_restart(self):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        res, restarted = self._tick(health="starting")
+        self.assertEqual(res, 0)
+        self.assertFalse(restarted)
+        self.assertEqual((self.state_dir / "applied").read_text().strip(), "hash1")
+
+    def test_unhealthy_running_image_retries_then_abandons(self):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        results = [self._tick() for _ in range(deployer.MAX_DEPLOY_ATTEMPTS)]
+        self.assertEqual(results, [(1, True)] * deployer.MAX_DEPLOY_ATTEMPTS)
+        self.assertIn("action=deployment-abandoned", self.audit_log.read_text())
+
+        # No further restarts or failures until a new image is desired.
+        self.assertEqual(self._tick(), (0, False))
+        (self.state_dir / "desired").write_text("hash3\n")
+        self.assertEqual(self._tick(running="hash2", healthy=True), (0, True))
+
+    def test_cap_holds_when_broken_image_is_not_running(self):
+        # A container that exits at start, or never replaced the old image.
+        for running in ("", "hash1"):
+            (self.state_dir / "desired").write_text("hash2\n")
+            (self.state_dir / "applied").write_text("hash1\n")
+            (self.state_dir / "failures").write_text(f"hash2 {deployer.MAX_DEPLOY_ATTEMPTS}\n")
+            self.assertEqual(self._tick(running=running), (0, False))
+            self.assertEqual(
+                (self.state_dir / "failures").read_text().split(),
+                ["hash2", str(deployer.MAX_DEPLOY_ATTEMPTS)],
+            )
+
+    def test_abandonment_is_logged_once(self):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        for _ in range(deployer.MAX_DEPLOY_ATTEMPTS + 2):
+            self._tick(running="")
+        self.assertEqual(self.audit_log.read_text().count("action=deployment-abandoned"), 1)
+
+    def test_unhealthy_retry_still_respects_idle_gate(self):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        self.assertEqual(self._tick(idle=False), (0, False))
+        self.assertIn("reason=active-or-unknown", self.audit_log.read_text())
+
+    def test_failed_restart_command_counts_as_attempt(self):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        res, restarted = self._tick(running="", restart_ok=False)
+        self.assertEqual((res, restarted), (1, True))
+        self.assertEqual((self.state_dir / "failures").read_text().split(), ["hash2", "1"])
+
+    def test_success_clears_failure_count(self):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        self._tick()
+        self.assertTrue((self.state_dir / "failures").exists())
+        self.assertEqual(self._tick(healthy=True), (0, True))
+        self.assertFalse((self.state_dir / "failures").exists())
+        self.assertEqual((self.state_dir / "applied").read_text().strip(), "hash2")
+
+    def test_repeatedly_failing_requested_restart_is_dropped(self):
+        (self.state_dir / "desired").write_text("hash1\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        (self.state_dir / "restart.pending").write_text("user-request\n")
+        for _ in range(deployer.MAX_DEPLOY_ATTEMPTS):
+            self.assertEqual(self._tick(running="hash1"), (1, True))
+        self.assertFalse((self.state_dir / "restart.pending").exists())
+        self.assertEqual(self._tick(running="hash1"), (0, False))
 
 
 class TestIdleGateOnRetryAfterFailure(unittest.TestCase):
