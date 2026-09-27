@@ -51,7 +51,7 @@ try {
      UNION ALL
      SELECT count(*) AS active FROM projection_threads
      WHERE deleted_at IS NULL
-       AND julianday(latest_user_message_at) > julianday('now', '-1 minute')`
+       AND julianday(latest_user_message_at) > julianday('now', '-15 minutes')`
   ).all(PENDING_ACTIVITY_GRACE_MINUTES);
 
   db.close();

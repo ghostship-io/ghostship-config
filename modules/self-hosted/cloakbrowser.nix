@@ -46,6 +46,7 @@ in
     ];
     volumes = [
       "/srv/apps/cloakbrowser/data:/data:rw"
+      "/srv/apps/cloakbrowser/fonts/windows:/usr/local/share/fonts/windows:ro"
       "${cloakbrowser-startup}:/cloakbrowser-startup.py:ro"
     ];
   };
@@ -54,6 +55,8 @@ in
     "d /srv/apps/cloakbrowser 0755 apps apps -"
     "d /srv/apps/cloakbrowser/data 0755 apps apps -"
     "d /srv/apps/cloakbrowser/data/extensions 0755 apps apps -"
+    "d /srv/apps/cloakbrowser/fonts 0755 apps apps -"
+    "d /srv/apps/cloakbrowser/fonts/windows 0755 apps apps -"
   ];
 
   systemd.services.cloakbrowser-extensions = {

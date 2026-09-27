@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.15.12] - 2026-09-27
+## [3.15.16] - 2026-09-27
 
 - Allow Uptime Kuma to render inside the protected Muximux dashboard and remove
   the non-UI FlareSolverr shortcut.
@@ -13,6 +13,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   coverage, and show Homepage's house mark without the title text.
 
 ## Unreleased
+
+## [3.15.15] - 2026-09-27
+
+- **Route foreign titles without English subtitles to review**: Detect missing
+  English subtitles in the source before changing streams or starting an
+  encode, avoiding predictable post-encode validation failures.
+
+## [3.15.14] - 2026-09-27
+
+- **CloakBrowser fonts and quiet permissions**: Mount a persistent directory for
+  licensed Windows fonts and refresh Fontconfig before launch; browser profile
+  defaults now suppress permission prompts and crash restore bubbles.
+
+## [3.15.13] - 2026-09-27
+
+- **Automatic chill-penguin upgrades**: Enable nightly `system.autoUpgrade` on
+  `chill-penguin` with `--impure` so Asahi firmware stays enabled, fetch the
+  public repository over HTTPS, catch up missed runs after boot, wait for a
+  running backup, and alert on failure.
+- **Keep active T3 Code sessions running**: The server monitor no longer
+  force-restarts active work for memory pressure or a missing provider; only a
+  stopped server or an unresponsive web UI can interrupt active turns.
+- **Resume interrupted T3 Code deploys**: Stamp containers with their deployment
+  ID and record an already-running image as applied instead of restarting it
+  again. Share the tool-maintenance lock with the host deployer through the home
+  bind mount and hold it across the container restart. A host switch no longer
+  restarts an in-flight deploy.
+- **Skip needless T3 Code restarts**: Ghostship tool package changes no longer
+  queue a server restart.
+- **Bounded recovery from a broken T3 Code image**: Adopt a running new image
+  only once healthy, wait out its start period, retry an unhealthy one at most
+  three idle-gated times, alert on each failed start, then stop until a new
+  image arrives.
+- **Sync shared source checkouts**: Fast-forward `/workspace/ghostship-agent`
+  and `/workspace/nixos-config` from `origin/main` before each tooling install
+  and every 30 minutes, skipping checkouts with local work.
+- **Skip redundant Cursor downloads**: Only run the Cursor installer when its
+  pinned release is not already active.
+
+## [3.15.12] - 2026-09-26
+
+- **Idle-aware T3 Code deployment**: Queue container image updates and restarts
+  behind sustained idle, and apply them with `t3code-deploy-when-idle` only
+  after active turns and pending tasks clear, so updates no longer interrupt
+  running agent work.
+- **Fix idle gate on deploy retry**: Re-check activity on every restart attempt,
+  including the retry after a deployment that failed health verification, so a
+  leftover `applying` marker cannot bypass the idle gate while tasks are active.
 
 ## [3.15.11] - 2026-09-23
 

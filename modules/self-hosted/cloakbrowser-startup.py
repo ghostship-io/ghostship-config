@@ -1,9 +1,12 @@
 import os
+import shutil
+import subprocess
 from pathlib import Path
 
 APP_DIR = Path("/app")
 MAIN_PATH = APP_DIR / "backend" / "main.py"
 CONFIG_PATH = Path("/usr/local/lib/python3.12/site-packages/cloakbrowser/config.py")
+WINDOWS_FONTS_PATH = Path("/usr/local/share/fonts/windows")
 
 ORIGINAL_CLASS = """class AuthMiddleware:
     \"\"\"Raw ASGI middleware for optional token auth.
@@ -92,9 +95,24 @@ def patch_extension_launch() -> None:
     print("CloakBrowser extension launch patch applied.")
 
 
+def refresh_font_cache() -> None:
+    fonts = [path for path in WINDOWS_FONTS_PATH.rglob("*") if path.is_file()]
+    if not fonts:
+        print(f"No Windows fonts found in {WINDOWS_FONTS_PATH}; skipping font cache refresh.")
+        return
+
+    fc_cache = shutil.which("fc-cache")
+    if fc_cache is None:
+        raise RuntimeError("Windows font files are present, but fc-cache is unavailable")
+
+    subprocess.run([fc_cache, "-f", str(WINDOWS_FONTS_PATH)], check=True)
+    print(f"Refreshed font cache for {len(fonts)} Windows font files.")
+
+
 def main() -> None:
     patch_manager()
     patch_extension_launch()
+    refresh_font_cache()
     os.execv("/entrypoint.sh", ["/entrypoint.sh"])
 
 

@@ -134,6 +134,13 @@ container, and its inner application runtime running. Restarting any of them
 terminates the agent session. This restriction also covers Podman auto-update,
 dependency restarts, host reboot, and container bootstrap/activation helpers.
 
+Host configuration changes and image updates decouple deployment from container
+interruption. `podman-t3code.service` does not restart on configuration switch.
+Instead, image updates and restarts are queued and applied by
+`t3code-deploy-when-idle` only after confirming sustained idle across active turns
+and pending tasks. If a manual host restart is required, use `t3code-safe-restart`
+rather than restarting `podman-t3code.service` directly.
+
 Record the container ID and start time plus the service MainPID before work.
 Build first; inspect the candidate unit definitions, activation scripts, and
 `switch-to-configuration dry-activate` output before a full switch. A clean
