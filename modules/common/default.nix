@@ -37,6 +37,9 @@ in
     options = "--delete-older-than 7d";
   };
 
+  # Each boot entry is metadata on the Btrfs root; retain a bounded window.
+  boot.loader.systemd-boot.configurationLimit = lib.mkDefault 10;
+
   security.pam.loginLimits = [
     {
       domain = "*";
