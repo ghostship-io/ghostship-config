@@ -9,6 +9,7 @@
     ./reliability.nix
     ./backup.nix
     ./monitoring.nix
+    ./storage-health.nix
     ./seerr.nix
     ./cleanup.nix
     ./secrets.nix
