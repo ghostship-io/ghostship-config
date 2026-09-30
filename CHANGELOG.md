@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.21] - 2026-09-30
+
+- Reclaim Btrfs metadata on a schedule and bound the churn that exhausts it.
+  Add a weekly metadata balance, a weekly unused image prune, a one GiB
+  journald cap, and a bounded systemd-boot entry count so the root filesystem
+  can no longer fill its metadata and latch read-only while `df` shows space.
+
 ## [3.15.20] - 2026-09-30
 
 - Project the OpenCode Go `GO_API_KEY` into the T3 Code container as
