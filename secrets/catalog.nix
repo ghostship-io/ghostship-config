@@ -592,6 +592,10 @@ in
           unit = "openrouter";
           key = "API_KEY";
         };
+        OPENCODE_API_KEY = {
+          unit = "opencode";
+          key = "GO_API_KEY";
+        };
         GITHUB_TOKEN = {
           unit = "github";
           key = "TOKEN";
