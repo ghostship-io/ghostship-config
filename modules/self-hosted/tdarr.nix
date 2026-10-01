@@ -355,6 +355,7 @@ in
   systemd.services.tdarr-staged-guard = {
     description = "Fail when Tdarr staging fills up and stops handing out work";
     after = [ "podman-tdarr.service" ];
+    onFailure = [ "ghostship-failure@%n.service" ];
     serviceConfig = {
       Type = "oneshot";
       ExecStart = lib.getExe stagedGuard;
