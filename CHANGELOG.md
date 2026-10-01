@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.23] - 2026-10-01
+
+- **Keep the Tdarr encoder from stalling behind policy refusals**: Tdarr stops
+  handing out work once `stagedFileLimit` items sit in the review queue, and a
+  full queue silently idles every worker. Every deterministic policy refusal
+  (unknown original language, above 1080p, HDR, interlaced, missing audio
+  language tags, commentary tracks, no original audio, foreign titles without
+  English subtitles) now ends at a local `plexSkip` node that leaves the file
+  untouched and records the item as done. The old flow parked those files at
+  `Require Review`, which is what wedged the encoder twice. `plexSkip`
+  deliberately does not use `removeFromTdarr`: deleting the record while the
+  file stays on disk makes the next scan re-queue it forever.
+- **Detect a full staging queue**: a 15-minute `tdarr-staged-guard` timer fails
+  loudly when staging reaches 90% of its limit and reports the review count, so
+  a future queue buildup is visible instead of silently idling transcodes.
+
 ## [3.15.22] - 2026-10-01
 
 - Move RomM and Grimmory into the Muximux dropdown, add an optional Muximux

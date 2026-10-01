@@ -1,7 +1,7 @@
 {
   "_id": "plex-hevc-guarded-v1",
   "name": "Plex HEVC guarded v1",
-  "description": "HEVC CRF 20 slow, original audio up to 5.1, English subtitles, full decode, and manual approval",
+  "description": "HEVC CRF 20 slow, original audio up to 5.1, English subtitles, full decode, and policy skips that never block the queue",
   "priority": 0,
   "isUiLocked": true,
   "flowPlugins": [
@@ -84,30 +84,12 @@
       "inputsDB": {}
     },
     {
-      "name": "Review Policy Exception",
-      "sourceRepo": "Community",
-      "pluginName": "requireReview",
+      "name": "Record Policy Skip",
+      "sourceRepo": "Local",
+      "pluginName": "plexSkip",
       "version": "1.0.0",
-      "id": "policy-review",
+      "id": "policy-skip",
       "position": { "x": 650, "y": 380 },
-      "inputsDB": {}
-    },
-    {
-      "name": "Remove Reviewed Exception From Queue",
-      "sourceRepo": "Community",
-      "pluginName": "removeFromTdarr",
-      "version": "1.0.0",
-      "id": "review-remove",
-      "position": { "x": 650, "y": 500 },
-      "inputsDB": {}
-    },
-    {
-      "name": "Already Compliant",
-      "sourceRepo": "Community",
-      "pluginName": "removeFromTdarr",
-      "version": "1.0.0",
-      "id": "compliant",
-      "position": { "x": 850, "y": 380 },
       "inputsDB": {}
     },
     {
@@ -124,9 +106,8 @@
     { "source": "input", "sourceHandle": "1", "target": "begin", "targetHandle": null, "id": "e01" },
     { "source": "begin", "sourceHandle": "1", "target": "policy", "targetHandle": null, "id": "e02" },
     { "source": "policy", "sourceHandle": "1", "target": "execute", "targetHandle": null, "id": "e03" },
-    { "source": "policy", "sourceHandle": "2", "target": "policy-review", "targetHandle": null, "id": "e04" },
-    { "source": "policy", "sourceHandle": "3", "target": "compliant", "targetHandle": null, "id": "e05" },
-    { "source": "policy-review", "sourceHandle": "1", "target": "review-remove", "targetHandle": null, "id": "e06" },
+    { "source": "policy", "sourceHandle": "2", "target": "policy-skip", "targetHandle": null, "id": "e04" },
+    { "source": "policy", "sourceHandle": "3", "target": "policy-skip", "targetHandle": null, "id": "e05" },
     { "source": "execute", "sourceHandle": "1", "target": "duration", "targetHandle": null, "id": "e07" },
     { "source": "duration", "sourceHandle": "1", "target": "validate", "targetHandle": null, "id": "e08" },
     { "source": "duration", "sourceHandle": "2", "target": "fail", "targetHandle": null, "id": "e09" },
