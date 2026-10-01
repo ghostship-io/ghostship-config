@@ -222,3 +222,15 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(
             before, {key: dict(parser[key]) for key in parser.sections()}
         )
+
+    def test_muximux_label_overrides_display_name(self):
+        parser = configparser.ConfigParser(interpolation=None)
+
+        unnamed = app("Homepage", "homepage.ghostship.io")
+        unnamed["muximux"]["label"] = ""
+        dashboards.muximux_entries(parser, [unnamed], [])
+        self.assertEqual(parser["Homepage"]["name"], "")
+
+        named = app("Sonarr", "sonarr.ghostship.io")
+        dashboards.muximux_entries(parser, [named], [])
+        self.assertEqual(parser["Sonarr"]["name"], "Sonarr")

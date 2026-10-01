@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.22] - 2026-10-01
+
+- Move RomM and Grimmory into the Muximux dropdown, add an optional Muximux
+  `label` so the Homepage tile renders icon-only, and set that label empty.
+
 ## [3.15.21] - 2026-09-30
 
 - Reclaim Btrfs metadata on a schedule and bound the churn that exhausts it.

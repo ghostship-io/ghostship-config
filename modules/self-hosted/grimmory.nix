@@ -26,7 +26,7 @@ in
     muximux = {
       icon = "muximux-book2";
       color = "#49da7e";
-      dropdown = false;
+      dropdown = true;
       url = "/grimmory/";
     };
   };
