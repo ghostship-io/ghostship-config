@@ -95,6 +95,11 @@ in
                 type = types.bool;
                 default = true;
               };
+              label = mkOption {
+                type = types.nullOr types.str;
+                default = null;
+                description = "Nav label; null uses the app name, empty string hides the text.";
+              };
             };
           };
         }

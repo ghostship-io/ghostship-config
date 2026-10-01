@@ -26,7 +26,7 @@ in
     muximux = {
       icon = "muximux-gamepad";
       color = "#553f99";
-      dropdown = false;
+      dropdown = true;
       url = "/romm/";
     };
   };

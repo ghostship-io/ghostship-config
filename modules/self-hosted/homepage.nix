@@ -23,6 +23,7 @@ in
       icon = "muximux-home2";
       color = "#109f61";
       dropdown = false;
+      label = "";
     };
   };
 
