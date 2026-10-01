@@ -24,7 +24,7 @@ const details = () => ({
   ],
   outputs: [
     { number: 1, tooltip: "Encode or remux" },
-    { number: 2, tooltip: "Manual review required" },
+    { number: 2, tooltip: "Left untouched; recorded as a policy skip" },
     { number: 3, tooltip: "Already compliant" },
   ],
 });
@@ -32,6 +32,11 @@ const details = () => ({
 const language = (stream) => String(stream?.tags?.language || "").trim().toLowerCase();
 const title = (stream) => String(stream?.tags?.title || "").trim().toLowerCase();
 const isCommentary = (stream) => /commentary|director|producer|screenwriter|cast and crew/.test(title(stream));
+
+const skip = (args, reason) => {
+  args.jobLog(`Skipping (policy): ${reason}`);
+  return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
+};
 
 const plugin = async (args) => {
   const lib = require("../../../../../methods/lib")();
@@ -51,8 +56,7 @@ const plugin = async (args) => {
     try {
       policy = JSON.parse(fs.readFileSync("/policy/original-languages.json", "utf8"));
     } catch (error) {
-      args.jobLog(`Original-language policy unavailable: ${error.message}`);
-      return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
+      throw new Error(`Original-language policy unavailable: ${error.message}`);
     }
     const root = Object.keys(policy.roots || {})
       .filter((candidate) => filePath === candidate || filePath.startsWith(`${candidate}/`))
@@ -63,51 +67,40 @@ const plugin = async (args) => {
   }
 
   if (tags.length === 0) {
-    args.jobLog(`Manual review: original language is unknown for ${filePath}`);
-    return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
+    return skip(args, `original language is unknown for ${filePath}`);
   }
 
   const video = command.streams.find((stream) => stream.codec_type === "video" && stream.codec_name !== "mjpeg");
-  if (!video) {
-    args.jobLog("Manual review: no primary video stream");
-    return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
-  }
+  if (!video) return skip(args, "no primary video stream");
   if (Number(video.width) > 1920 || Number(video.height) > 1080) {
-    args.jobLog("Manual review: pilot does not change video above 1080p");
-    return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
+    return skip(args, "video above 1080p is outside the pilot policy");
   }
   const transfer = String(video.color_transfer || "").toLowerCase();
   if (["smpte2084", "arib-std-b67"].includes(transfer)) {
-    args.jobLog("Manual review: pilot does not change HDR video");
-    return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
+    return skip(args, "HDR video is outside the pilot policy");
   }
   const fieldOrder = String(video.field_order || "unknown").toLowerCase();
   if (!["progressive", "unknown", ""].includes(fieldOrder)) {
-    args.jobLog(`Manual review: interlaced field order ${fieldOrder}`);
-    return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
+    return skip(args, `interlaced field order ${fieldOrder}`);
   }
 
   const audio = command.streams.filter((stream) => stream.codec_type === "audio");
   if (audio.length === 0 || audio.some((stream) => language(stream) === "")) {
-    args.jobLog("Manual review: audio language tags are missing");
-    return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
+    return skip(args, "audio language tags are missing");
   }
   if (audio.some(isCommentary)) {
-    args.jobLog("Manual review: commentary or a meaningful alternate audio track is present");
-    return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
+    return skip(args, "commentary or a meaningful alternate audio track is present");
   }
   const originals = audio.filter((stream) => tags.includes(language(stream)));
   if (originals.length === 0) {
-    args.jobLog(`Manual review: no ${languageName} audio track matches ${tags.join(",")}`);
-    return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
+    return skip(args, `no ${languageName} audio track matches ${tags.join(",")}`);
   }
 
   const isForeign = !tags.includes("eng") && !tags.includes("en");
   const hasSourceEnglishSubtitles = command.streams.some((stream) =>
     stream.codec_type === "subtitle" && ["eng", "en"].includes(language(stream)));
   if (isForeign && !hasSourceEnglishSubtitles) {
-    args.jobLog("Manual review: foreign-language title has no English subtitles in the source");
-    return { outputFileObj: args.inputFileObj, outputNumber: 2, variables: args.variables };
+    return skip(args, "foreign-language title has no English subtitles in the source");
   }
 
   let changed = false;
@@ -166,6 +159,9 @@ const plugin = async (args) => {
     plexOriginalLanguageName: languageName,
   };
   args.jobLog(`Original language: ${languageName} (${tags.join(",")})`);
+  // Output 2 is a terminal policy skip; output 3 removes an already-compliant
+  // file from the queue. Neither may ever park an item at "requireReview",
+  // because Tdarr stops handing out work once stagedFileLimit is reached.
   return {
     outputFileObj: args.inputFileObj,
     outputNumber: changed ? 1 : 3,

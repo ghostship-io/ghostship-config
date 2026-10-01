@@ -131,6 +131,30 @@ let
       cache = "/temp/tv";
     })
   ];
+  stagedGuard = pkgs.writeShellApplication {
+    name = "tdarr-staged-guard";
+    runtimeInputs = [
+      pkgs.curl
+      pkgs.jq
+    ];
+    text = ''
+      staging="$(${podman} exec tdarr curl -fsS \
+        -H 'Content-Type: application/json' \
+        --data '{"data":{"collection":"StagedJSONDB","mode":"getAll"}}' \
+        http://127.0.0.1:8265/api/v2/cruddb)"
+      staged="$(printf '%s' "$staging" | jq 'length')"
+      review="$(printf '%s' "$staging" | jq '[.[] | select(.status == "requireReview")] | length')"
+      limit="$(${podman} exec tdarr curl -fsS \
+        -H 'Content-Type: application/json' \
+        --data '{"data":{"collection":"SettingsGlobalJSONDB","mode":"getById","docID":"globalsettings"}}' \
+        http://127.0.0.1:8265/api/v2/cruddb | jq '.stagedFileLimit // 100')"
+      if test "$((staged * 100))" -lt "$((limit * 90))"; then
+        exit 0
+      fi
+      echo "Tdarr staging is $staged/$limit (review: $review); the queue can no longer hand out work" >&2
+      exit 1
+    '';
+  };
   request =
     collection: mode: docID: obj:
     pkgs.writeText "tdarr-${docID}-${mode}.json" (
@@ -326,6 +350,23 @@ in
       OnUnitActiveSec = "1h";
       RandomizedDelaySec = "5m";
       Persistent = true;
+    };
+  };
+  systemd.services.tdarr-staged-guard = {
+    description = "Fail when Tdarr staging fills up and stops handing out work";
+    after = [ "podman-tdarr.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = lib.getExe stagedGuard;
+      UMask = "0077";
+    };
+  };
+  systemd.timers.tdarr-staged-guard = {
+    description = "Check Tdarr staging headroom";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "30m";
+      OnUnitActiveSec = "15m";
     };
   };
   systemd.services.podman-tdarr = {
