@@ -61,8 +61,9 @@ def muximux_entries(config, apps, previous):
         if not mux["enable"]:
             continue
         settings = old.get(app["name"], {})
+        label = mux.get("label")
         settings.update(
-            name=app["name"],
+            name=app["name"] if label is None else label,
             url=mux["url"],
             icon=mux["icon"],
             color=mux["color"],
