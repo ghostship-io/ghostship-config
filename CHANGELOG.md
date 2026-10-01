@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.24] - 2026-10-01
+
+- **Restore Antigravity session startup**: T3 0.0.44 resolves `node` from
+  `PATH` and refuses a runtime whose resolved path or inode matches
+  `process.execPath`. The `t3-runtime-preload.cjs` shim overrode
+  `process.execPath` with the pinned Node, so T3 mistook the container's Node
+  for its own executable and failed every Antigravity session with
+  `NodeRuntimeUnavailableError` ("Antigravity sign-in requires Node.js"). Drop
+  the obsolete override; the packaged T3 now finds Node on `PATH` directly.
+
 ## [3.15.23] - 2026-10-01
 
 - **Keep the Tdarr encoder from stalling behind policy refusals**: Tdarr stops
