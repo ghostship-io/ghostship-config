@@ -23,11 +23,11 @@ hardware encoding.
 
 `tdarr-language-policy.service` reads the local Radarr and Sonarr SQLite
 databases without API credentials and atomically publishes their original
-language metadata to Tdarr. An hourly timer reconciles changes. Missing or
-unknown metadata routes a file to review. Tdarr startup idempotently installs
-the locked `Plex HEVC guarded v1` flow and pilot library. Local flow plugins
-live under `tdarr-plugins/<category>/<pluginName>/<version>/` because Tdarr
-requires that extra category layer beneath `LocalFlowPlugins`.
+language metadata to Tdarr. An hourly timer reconciles changes. Unknown
+metadata is a policy skip, not a blocking review. Tdarr startup idempotently
+installs the locked `Plex HEVC guarded v1` flow and pilot library. Local flow
+plugins live under `tdarr-plugins/<category>/<pluginName>/<version>/` because
+Tdarr requires that extra category layer beneath `LocalFlowPlugins`.
 
 ## Pilot completion
 
@@ -36,8 +36,17 @@ uses HEVC quality-based encoding, retains compatible AAC/AC-3/E-AC-3 tracks
 up to 5.1, and converts incompatible or larger channel layouts to AC-3. It
 validates duration, stream inventory, the duration-scaled size ceiling,
 meaningful savings, and a full output decode before replacing the original.
-4K, HDR, interlaced, commentary, and unknown-language titles go to review
-instead of automatic replacement.
+
+4K, HDR, interlaced, commentary, unknown-language, and missing-original-audio
+titles are deterministic policy refusals. They leave the flow through the
+local `plexSkip` plugin, which removes the item from the queue and leaves the
+file untouched; they must never wait at a `Require Review` node, because
+Tdarr refuses all work once `stagedFileLimit` items occupy the staging queue.
+The default 100-item limit silently idles the encoder when a backlog of
+non-actionable reviews accumulates, so the flow has no review branch at all.
+`tdarr-staged-guard` runs every 15 minutes and fails when staging reaches 90%
+of the limit, surfacing any future buildup instead of letting transcoding stop
+silently.
 
 Visual quality takes precedence over reaching a fixed file size. Begin the
 pilot at x265 CRF 20 with a slow preset and test grain/dark/motion sequences;
@@ -53,9 +62,10 @@ Audio must have at most six channels (5.1). Preserve mono/stereo and compatible
 original-language tracks. Downmix higher-channel layouts with a tested matrix;
 check dialogue and levels before replacement. Remove unrelated dubbed audio
 by default, retaining English full/forced subtitles. Original multilingual
-dialogue, commentary or historically meaningful alternate tracks warrant
-review. Resolve original language from authoritative item metadata and inspect
-stream tags/title; missing or contradictory tags require review, not deletion.
+dialogue, commentary or historically meaningful alternate tracks are left
+untouched and recorded as a policy skip, never silently deleted. Resolve
+original language from authoritative item metadata and inspect stream
+tags/title; missing or contradictory tags are a policy skip, not deletion.
 An English dub is not required for foreign films. Both commentary and main
 tracks must satisfy the channel limit.
 
