@@ -42,8 +42,6 @@ let
     export T3CODE_HOST=127.0.0.1
     export T3CODE_PORT=${toString cfg.port}
     export T3CODE_NO_BROWSER=true
-    export T3CODE_NODE_EXECUTABLE=${pkgs.nodejs_24}/bin/node
-    export NODE_OPTIONS="--require=${../../packages/t3code/t3-runtime-preload.cjs}"
     export NODE_NO_WARNINGS=1
     export PATH=${lib.escapeShellArg t3WorkerPath}:$PATH
     # Provider subprocesses inherit this environment. Some providers expect a
