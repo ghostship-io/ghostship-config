@@ -11,7 +11,7 @@ Keep executes directly in the separate host service. `account: User|Agent`
 selects the configured profile mapping; User → Assistant and Agent → Default.
 Each mapping declares its Google `authuser` index. Update it if sign-in order
 changes. The model does not choose profile IDs, manager addresses or executables.
-Cookies and sessions stay on the host. Amazon read tools use the existing
+Cookies and sessions stay on the host. Create/update support separate title/body fields, checklist row patches, labels and PNG/JPEG/GIF images; search accepts a label/tag alone or with text. Drawings and reminders are excluded. Amazon read tools use the existing
 anonymous shopping client and runtime home ZIP, preserving unknown costs.
 
 ## Deployment
@@ -48,7 +48,7 @@ with no fabricated data. Connection discovery alone does not prove live calls.
 
 ## State and rollback
 
-`/var/lib/ghostship-keep` contains note content, idempotency and result records;
+`/var/lib/ghostship-keep` contains note content, supplied image bytes, idempotency and result records;
 keep private and persistent and exclude from general backups. Relay state is
 scoped to `/srv/apps/ghostship-private-integrations` and excluded from backups.
 There is no automated purge. Stop only the new integration container/projection
@@ -74,3 +74,8 @@ T3 container, start time, service PID and inner application PID stayed unchanged
 The scoped units are active; full-system activation remains deferred by the session
 guard, so reboot persistence is not yet established. Scoped rollback retains Keep
 state and restores the previous integration unit/image roots.
+
+Expanded content was verified with disposable personal API notes: separate
+title/body, initially checked boxes, stable row edits/appends/removals, labels,
+image upload/read-back/removal and preservation of unrelated checklist rows.
+Refresh connection metadata to discover the new create/update/search fields.
