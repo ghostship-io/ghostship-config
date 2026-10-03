@@ -22,6 +22,7 @@ jobs:
           extra_nix_config: |
             max-jobs = 2
             cores = 2
+            access-tokens = github.com=${{ secrets.GHOSTSHIP_FLAKE_READ_TOKEN }}
       - name: Validate container development workflow
         run: nix develop .#ci --no-write-lock-file -c scripts/check
       - name: Evaluate hosts and run regression tests

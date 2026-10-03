@@ -157,18 +157,18 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1790995697,
-        "narHash": "sha256-5cU/Uz+AzZYi7D/APpPNvYSoIlD7/ipu9SVyPvp/S/Y=",
-        "ref": "refs/heads/main",
-        "rev": "923e8bcce4af0bee7ed462da43d57465c723a369",
-        "revCount": 344,
-        "type": "git",
-        "url": "ssh://git@github.com/ghostship-io/ghostship-agent"
+        "lastModified": 1790996567,
+        "narHash": "sha256-rxQn6xttSScZzTBDSr4c/msj+fXijCb7jlkAZPkyzKI=",
+        "rev": "e423ef79a6bc114b8c2b121497ad78bc4f026470",
+        "type": "github",
+        "owner": "owner",
+        "repo": "ghostship-agent"
       },
       "original": {
-        "rev": "923e8bcce4af0bee7ed462da43d57465c723a369",
-        "type": "git",
-        "url": "ssh://git@github.com/ghostship-io/ghostship-agent"
+        "type": "github",
+        "owner": "owner",
+        "repo": "ghostship-agent",
+        "rev": "e423ef79a6bc114b8c2b121497ad78bc4f026470"
       }
     },
     "ghostship-private-assistant": {
@@ -176,18 +176,18 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "lastModified": 1790995054,
-        "narHash": "sha256-kU7EUDzTs0irtfIUUetZr2zwaOmLo6mrn3h7u2WBb4Q=",
-        "ref": "refs/heads/main",
-        "rev": "25d789454565d97b187a86e7a4ede84e041c70cf",
-        "revCount": 50,
-        "type": "git",
-        "url": "ssh://git@github.com/ghostship-io/ghostship-assistant"
+        "lastModified": 1790996565,
+        "narHash": "sha256-eONzXWhMOAxVzzn4o5OXzBKkXgdaxECJ3C3KP3E1NMs=",
+        "rev": "5f954a7719c472e8861ed5f631f970920e02e095",
+        "type": "github",
+        "owner": "owner",
+        "repo": "ghostship-assistant"
       },
       "original": {
-        "rev": "25d789454565d97b187a86e7a4ede84e041c70cf",
-        "type": "git",
-        "url": "ssh://git@github.com/ghostship-io/ghostship-assistant"
+        "type": "github",
+        "owner": "owner",
+        "repo": "ghostship-assistant",
+        "rev": "5f954a7719c472e8861ed5f631f970920e02e095"
       }
     },
     "google-workspace-cli": {

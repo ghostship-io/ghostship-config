@@ -156,3 +156,47 @@ PRs and all remaining connection blockers. Synthetic, local MCP, relay and
 ChatGPT evidence are reported separately. Production reboot testing is skipped
 under the active-session constraint; restart/socket and write recovery use
 isolated synthetic services instead.
+
+CI needs the repository Actions secret `GHOSTSHIP_FLAKE_READ_TOKEN`: a fine-grained
+GitHub token with **Contents: read** for only `ghostship-io/ghostship-agent` and
+`ghostship-io/ghostship-assistant`. Nix uses it only to fetch the exact private source pins;
+it is not copied into the image or store. No Actions secret currently exists. The
+GitHub archive NAR hashes were compared with both SSH-fetched source pins and
+match exactly. Local checks and target builds do not depend on that CI secret.
+
+Verified deployment evidence (2026-10-03):
+
+- Agent implementation `e423ef79a6bc114b8c2b121497ad78bc4f026470`, assistant
+  `5f954a7719c472e8861ed5f631f970920e02e095`; linked agent PR #10 and assistant PR #9.
+- Final ARM64 image tag `2y4i2ydcym8gf0m02zjxn9jr7b7wxljl`, loaded image ID
+  `c84996b83f3c65a49cbb76925b8dca6c452c7e9473b4189642541a8acc6a36d7`,
+  User `62020:62020`. Both profiles initialize/discover from read-only Podman,
+  with no worktree mount. Keep returns policy denial through the mounted socket,
+  including after isolated broker restart; forged `confirmed` input is rejected.
+- Full Chill Penguin configuration built with `--impure` on the actual host.
+  Dry activation would stop Cloudflared and starts the T3 deployment helper, so
+  full-system activation is deferred. Only the new broker's exact Nix-generated
+  runtime unit is installed; its GC root preserves the closure. It is active with
+  personal access disabled. Runtime-linked unit installation does not enable
+  reboot recovery; the committed NixOS activation remains necessary for that.
+- T3 identity before/after scoped installation: container
+  `134b90bb20700b6180a225b997f386dbf1a1d6339d17da22be1a57884d0d50d7`,
+  start `2026-10-02 21:17:42.5084494 +0000 UTC`, MainPID `2195037`.
+- Anonymous Amazon search/item read at 02:50 UTC returned ASIN `B0DDWN12RL`
+  and a partial observation. Destination quote at 02:51 UTC returned
+  `upstream_blocked`; the live sequence stopped. Shipping, fees, currency and
+  personal eligibility stayed unknown, with no ranked winner or checkout total.
+- Agent: 442 Python tests (three existing skips), typed Google shell recovery,
+  Go semantic HTTP conflict test, fleet, shellcheck, links and flake evaluation.
+  Assistant: declared verification suite including 14 Keep core/socket tests;
+  synthetic approved writes, conflict, single-use/expiry/replay and interruption
+  recovery. NixOS: required scripts/check, host-evaluation/config-tests/package,
+  scoped credential rotation, shellcheck and redacted gitleaks. No production
+  reboot, personal authentication/mutation or fresh ChatGPT conversation ran.
+- Remote assistant verification passes. Fleet CI initially failed private SSH
+  source fetch; GitHub-source token support replaces that path. Actual fleet CI
+  still needs the owner-controlled read token. Agent repository defines no remote
+  workflow; local declared checks are the available evidence.
+
+All three PRs remain drafts while required access/review gates remain unresolved.
+Infrastructure availability is not a declaration of personal ChatGPT readiness.
