@@ -42,7 +42,7 @@ polling, local MCP readiness and live account calls separately.
 
 Open the Ghostship connection at ChatGPT Plugins and select Refresh after a
 schema/description change, then start a fresh conversation. Verify list/search/get,
-create/update/checklist/archive and Amazon search/item/destination/comparison.
+create/update/checklist/archive/delete-to-trash and Amazon search/item/destination/comparison.
 An upstream sign-in or refusal is reported as unavailable or upstream_blocked,
 with no fabricated data. Connection discovery alone does not prove live calls.
 
@@ -55,3 +55,20 @@ There is no automated purge. Stop only the new integration container/projection
 and broker when replacing their reviewed prior units/image. Retain Keep state
 and leave T3 and its inner runtime running. Runtime-only unit activation does
 not establish reboot persistence; finish declarative activation in a safe window.
+
+## Live evidence (2026-10-03)
+
+The actual Chill Penguin MCP child discovered all 13 tools. Personal User API
+calls passed list/search/get, disposable note create/update, checklist toggles
+with unrelated items preserved, archive and delete-to-trash read-back. Duplicate
+creates returned their saved result. Synthetic tests verify interruption recovery;
+fresh ChatGPT conversation calls still require the connection metadata refresh.
+CloakBrowser only acquires authentication; API calls reuse private cached sessions.
+
+Amazon search/item/delivery/comparison ran live with partial coverage. Shipping,
+mandatory fees and comparable delivered subtotals remained unknown; comparison
+returned no verified winner. The relay passed readiness and authenticated polling.
+T3 container, start time, service PID and inner application PID stayed unchanged.
+The scoped units are active; full-system activation remains deferred by the session
+guard, so reboot persistence is not yet established. Scoped rollback retains Keep
+state and restores the previous integration unit/image roots.
