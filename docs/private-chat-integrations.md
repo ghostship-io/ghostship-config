@@ -62,7 +62,9 @@ The actual Chill Penguin MCP child discovered all 13 tools. Personal User API
 calls passed list/search/get, disposable note create/update, checklist toggles
 with unrelated items preserved, archive and delete-to-trash read-back. Duplicate
 creates returned their saved result. Synthetic tests verify interruption recovery;
-fresh ChatGPT conversation calls still require the connection metadata refresh.
+The actual connected GhostShip plugin also passed list/create/get/update/archive
+and cold authentication recovery. Its cached tool metadata still needs refresh
+before deletion is available in a fresh ChatGPT conversation.
 CloakBrowser only acquires authentication; API calls reuse private cached sessions.
 
 Amazon search/item/delivery/comparison ran live with partial coverage. Shipping,
