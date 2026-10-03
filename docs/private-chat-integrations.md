@@ -58,7 +58,7 @@ HTTPS and needs no cloudflared companion. It performs no startup downloads.
 Two relays have distinct configurations/IDs, loopback-only health ports 8081/8082,
 fixed stdio children and bounded restart backoff. A subreaper kills and reaps
 orphan stdio children before replacement. Container liveness checks only a fresh
-supervisor heartbeat. Relay `/readyz`, MCP discovery and personal readiness are
+supervisor heartbeat. Local relay `/readyz`, MCP discovery, authenticated control-plane connection and personal readiness are
 separate checks; liveness performs no authentication or account operation.
 
 The image sees only scoped `/run/ghostship-integrations`, the operation socket
@@ -200,3 +200,11 @@ Verified deployment evidence (2026-10-03):
 
 All three PRs remain drafts while required access/review gates remain unresolved.
 Infrastructure availability is not a declaration of personal ChatGPT readiness.
+
+The final official-relay offline smoke launched both real stdio MCP children with
+synthetic file-referenced credentials, no network, read-only root and the same
+scoped mounts. Both `/healthz` and `/readyz` returned 200 even while disconnected.
+This establishes local relay/MCP startup, **not** OpenAI connection. Verify
+authenticated tunnel polling and fresh ChatGPT discovery before reporting relays
+connected. TERM forwarded to both groups, reaped children and exited 0. The
+temporary smoke container was removed; no production relay is running.
