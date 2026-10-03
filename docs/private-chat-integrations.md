@@ -78,4 +78,9 @@ state and restores the previous integration unit/image roots.
 Expanded content was verified with disposable personal API notes: separate
 title/body, initially checked boxes, stable row edits/appends/removals, labels,
 image upload/read-back/removal and preservation of unrelated checklist rows.
+The deployed MCP container also passed tag-only and combined text/tag search,
+missing-tag empty results, rich create/update, image replacement/removal, duplicate
+requests, stale-revision conflicts and fixture cleanup. An uploaded image with a
+transformed stored byte size was positively reconciled after the service restart
+without replay. The connected GhostShip tool read back the updated test note.
 Refresh connection metadata to discover the new create/update/search fields.
