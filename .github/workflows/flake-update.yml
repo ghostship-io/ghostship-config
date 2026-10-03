@@ -20,6 +20,7 @@ jobs:
           extra_nix_config: |
             max-jobs = 2
             cores = 2
+            access-tokens = github.com=${{ secrets.GHOSTSHIP_FLAKE_READ_TOKEN }}
       - run: nix flake update
       - run: nix develop .#ci -c python scripts/bump-flake-release.py
       - name: Validate candidate lock

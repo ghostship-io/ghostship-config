@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location('render', Path(__file__).resolve().parents[2] / 'modules/self-hosted/private-relay-render.py')
+spec = importlib.util.spec_from_file_location('render', Path(__file__).resolve().parents[1] / 'modules/self-hosted/private-relay-render.py')
 render = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(render)
 
