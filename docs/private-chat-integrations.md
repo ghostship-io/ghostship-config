@@ -53,8 +53,9 @@ keep private and persistent and exclude from general backups. Relay state is
 scoped to `/srv/apps/ghostship-private-integrations` and excluded from backups.
 There is no automated purge. Stop only the new integration container/projection
 and broker when replacing their reviewed prior units/image. Retain Keep state
-and leave T3 and its inner runtime running. Runtime-only unit activation does
-not establish reboot persistence; finish declarative activation in a safe window.
+and leave T3 and its inner runtime running. For boot rollback, restore the system profile from
+`/nix/var/nix/gcroots/ghostship-private-integrations-boot-previous` and run that
+generation's `switch-to-configuration boot`; do not reboot from an active T3 session.
 
 ## Live evidence (2026-10-03)
 
@@ -71,9 +72,13 @@ Amazon search/item/delivery/comparison ran live with partial coverage. Shipping,
 mandatory fees and comparable delivered subtotals remained unknown; comparison
 returned no verified winner. The relay passed readiness and authenticated polling.
 T3 container, start time, service PID and inner application PID stayed unchanged.
-The scoped units are active; full-system activation remains deferred by the session
-guard, so reboot persistence is not yet established. Scoped rollback retains Keep
-state and restores the previous integration unit/image roots.
+The scoped units are active. Merged sources are on all three remote `main` branches.
+The native host build with `--impure` includes `/boot/asahi` firmware; generation
+238 is installed as the next-boot default through `switch-to-configuration boot`.
+All three Ghostship units match this generation. Persistence is configured; reboot
+recovery has not been exercised. The live full-system switch remains deferred by
+the session guard because its activation hooks schedule T3 deployment. Scoped
+rollback retains Keep state and restores the previous integration unit/image roots.
 
 Expanded content was verified with disposable personal API notes: separate
 title/body, initially checked boxes, stable row edits/appends/removals, labels,

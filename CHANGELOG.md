@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.15.36] - 2026-10-03
 
 - Pin the verified merged Ghostship Agent revision for private Keep and Amazon deployment.
+- Record native host verification and next-boot generation 238 while preserving the active T3 session.
 
 ## [3.15.35] - 2026-10-03
 
