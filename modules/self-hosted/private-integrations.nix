@@ -5,15 +5,16 @@ let
   agent = inputs.ghostship-private-agent.packages.${system};
   assistant = inputs.ghostship-private-assistant.packages.${system};
   brokerConfig = pkgs.writeText "ghostship-keep-broker.json" (builtins.toJSON {
-    owner = "<owner-email>";
+    accounts = {
+      User = { profile_id = "f0fae36e-2475-4dd9-8e02-ac4bc576d7b1"; authuser = 0; };
+      Agent = { profile_id = "50a1343a-ca9b-4c08-93f0-d0c69eae6643"; authuser = 0; };
+    };
     principal = "chatgpt-personal-owner";
     client = "${agent.google-pp-cli}/bin/google-pp-cli";
-    profile_socket = "/run/ghostship-personal/ghostship-assistant/profile-broker.sock";
     runtime_dir = "/run/ghostship-personal";
     database = "/var/lib/ghostship-keep/requests.sqlite";
     socket = "/run/ghostship-keep/operations.sock";
     model_uid = 62020;
-    policy_root = "${assistant.policy}";
   });
   managerAddress = pkgs.writeShellScript "ghostship-personal-manager-address" ''
     set -eu
@@ -41,7 +42,7 @@ in {
     ghostship.apps.ghostship = {
       name = "Ghostship";
       container = "ghostship-private-integrations";
-      description = "Private Keep and Amazon tools; personal access requires reviewed activation and per-action approval";
+      description = "Private Keep and Amazon tools with configured account/profile routing";
       hostname = null;
       origin = null;
     };
@@ -52,7 +53,6 @@ in {
       isSystemUser = true; uid = 62021; group = "ghostship-personal";
       extraGroups = [ "ghostship-mcp" ];
     };
-    environment.systemPackages = [ assistant.keep-approve ];
     systemd.tmpfiles.rules = [
       "d /run/ghostship-keep 0750 ghostship-personal ghostship-mcp -"
       "d /run/ghostship-integrations 0750 root ghostship-mcp -"
@@ -70,6 +70,9 @@ in {
         RuntimeDirectory = "ghostship-personal";
         RuntimeDirectoryMode = "0700";
         UMask = "0077";
+        Environment = [ "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt" ];
+        EnvironmentFile = "-/run/ghostship-personal/manager.env";
+        ExecStartPre = "+${managerAddress}";
         ExecStart = "${assistant.keep-broker}/bin/ghostship-keep-broker --config ${brokerConfig}";
         Restart = "on-failure";
         RestartSec = 3;
@@ -80,26 +83,6 @@ in {
         ReadWritePaths = [ "/run/ghostship-keep" ];
         RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
         CapabilityBoundingSet = "";
-      };
-    };
-    # The existing protected profile broker starts only after its own explicit
-    # activation gate passes. The operation broker does not enable it.
-    systemd.services.ghostship-personal-profile-broker = {
-      description = "Protected personal browser profile broker";
-      after = [ "ghostship-keep-broker.service" "podman-cloakbrowser.service" ];
-      requires = [ "ghostship-keep-broker.service" ];
-      serviceConfig = {
-        User = "ghostship-personal";
-        Group = "ghostship-personal";
-        Environment = [ "XDG_RUNTIME_DIR=/run/ghostship-personal" "XDG_STATE_HOME=/var/lib/ghostship-keep" ];
-        EnvironmentFile = "-/run/ghostship-personal/manager.env";
-        ExecStartPre = "+${managerAddress}";
-        ExecStart = "${assistant.profile-broker}/bin/ghostship-assistant-profile-broker";
-        NoNewPrivileges = true;
-        ProtectHome = true;
-        ProtectSystem = "strict";
-        ReadWritePaths = [ "/run/ghostship-personal" "/var/lib/ghostship-keep" ];
-        UMask = "0077";
       };
     };
     systemd.services.ghostship-private-relay-config = {
