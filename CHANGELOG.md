@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.26] - 2026-10-03
+
+- Consolidate private Keep and Amazon into one Ghostship connection, official
+  relay and scoped credential bundle, retaining separate service authorization.
+
 ## [3.15.25] - 2026-10-03
 
 - Package private Ghostship Keep and Amazon MCP profiles in one immutable ARM64

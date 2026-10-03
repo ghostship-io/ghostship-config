@@ -17,20 +17,16 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - name: Require scoped private flake access
-        env:
-          PRIVATE_FLAKE_READ_TOKEN: ${{ secrets.GHOSTSHIP_FLAKE_READ_TOKEN }}
-        run: |
-          if [ -z "$PRIVATE_FLAKE_READ_TOKEN" ]; then
-            echo "::error::Set GHOSTSHIP_FLAKE_READ_TOKEN with Contents:read for ghostship-agent and ghostship-assistant."
-            exit 1
-          fi
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
         with:
           extra_nix_config: |
             max-jobs = 2
             cores = 2
-            access-tokens = github.com=${{ secrets.GHOSTSHIP_FLAKE_READ_TOKEN }}
+      - name: Import pinned private sources with read-only deploy keys
+        env:
+          GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
+          GHOSTSHIP_ASSISTANT_READ_KEY: ${{ secrets.GHOSTSHIP_ASSISTANT_READ_KEY }}
+        run: python3 scripts/ci-private-inputs.py
       - name: Validate container development workflow
         run: nix develop .#ci --no-write-lock-file -c scripts/check
       - name: Evaluate hosts and run regression tests
