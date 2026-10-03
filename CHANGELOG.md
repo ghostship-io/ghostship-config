@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.25] - 2026-10-03
+
+- Package private Ghostship Keep and Amazon MCP profiles in one immutable ARM64
+  OCI image, with separate scoped official OpenAI relays and a host-only Keep
+  approval broker. Personal activation remains disabled and relay provisioning
+  remains owner-controlled; no inbound MCP port or T3 Code restart is required.
+
 ## [3.15.24] - 2026-10-01
 
 - **Restore Antigravity session startup**: T3 0.0.44 resolves `node` from

@@ -121,7 +121,7 @@ in
         message = "Every Ghostship app must refer to a declared container.";
       }
       {
-        assertion = lib.all (name: builtins.hasAttr name apps) (
+        assertion = lib.all (name: lib.any (app: app.container == name) (builtins.attrValues apps)) (
           builtins.attrNames config.virtualisation.oci-containers.containers
         );
         message = "Every declared container must have a Homepage service entry.";
