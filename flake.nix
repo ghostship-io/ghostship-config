@@ -2,7 +2,7 @@
   description = "Unified NixOS Configuration Repository";
 
   inputs = {
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/b738b3bc0d8210ae08a208bffa36aa3576bd83a2";
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/1c9c01a857e74f0ace94f0a4e66820f26372d118";
     ghostship-private-assistant.url = "github:ghostship-io/ghostship-assistant/21b6e86e012e45536f4423a3b1dfbed5d95d439c";
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
