@@ -176,6 +176,17 @@ let
         proxy_set_header Accept-Encoding "";
         proxy_redirect / https://$host/pyload/;
         proxy_redirect http://$host/ https://$host/pyload/;
+        # pyLoad renders the Queue/Packages/Files/Logs/Settings links and theme
+        # assets as root-absolute paths (href="/queue", href="/web/..."). Those
+        # escape the /pyload/ prefix and land on Muximux's own 404, which is the
+        # black screen seen when clicking around the embedded UI. Rewrite the
+        # root-absolute references back under /pyload/ before they leave.
+        sub_filter_once off;
+        sub_filter_types text/html application/javascript text/javascript text/css;
+        sub_filter 'href="/' 'href="/pyload/';
+        sub_filter "href='/" "href='/pyload/";
+        sub_filter 'url("/' 'url("/pyload/';
+        sub_filter "url('/" "url('/pyload/";
       }
 
       location /web/ {
@@ -185,8 +196,17 @@ let
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Accept-Encoding "";
         proxy_redirect / https://$host/pyload/;
         proxy_redirect http://$host/ https://$host/pyload/;
+        # pyLoad serves a few web assets (notably /web/js/logs.js) as rendered
+        # HTML that carries the same root-absolute hrefs; rewrite those too.
+        sub_filter_once off;
+        sub_filter_types text/html application/javascript text/javascript text/css;
+        sub_filter 'href="/' 'href="/pyload/';
+        sub_filter "href='/" "href='/pyload/";
+        sub_filter 'url("/' 'url("/pyload/';
+        sub_filter "url('/" "url('/pyload/";
       }
 
       location /json/ {
