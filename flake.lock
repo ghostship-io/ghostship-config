@@ -157,9 +157,9 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1790996567,
-        "narHash": "sha256-rxQn6xttSScZzTBDSr4c/msj+fXijCb7jlkAZPkyzKI=",
-        "rev": "e423ef79a6bc114b8c2b121497ad78bc4f026470",
+        "lastModified": 1790998986,
+        "narHash": "sha256-FFn8vLh+xNbVRyeUQ9wL7wJwOsx9kHHahlOrUZJttOk=",
+        "rev": "86d679fc83e57a0f9acb9ddd312561ead37c076e",
         "type": "github",
         "owner": "owner",
         "repo": "ghostship-agent"
@@ -168,7 +168,7 @@
         "type": "github",
         "owner": "owner",
         "repo": "ghostship-agent",
-        "rev": "e423ef79a6bc114b8c2b121497ad78bc4f026470"
+        "rev": "86d679fc83e57a0f9acb9ddd312561ead37c076e"
       }
     },
     "ghostship-private-assistant": {
@@ -176,9 +176,9 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "lastModified": 1790996565,
-        "narHash": "sha256-eONzXWhMOAxVzzn4o5OXzBKkXgdaxECJ3C3KP3E1NMs=",
-        "rev": "5f954a7719c472e8861ed5f631f970920e02e095",
+        "lastModified": 1790998987,
+        "narHash": "sha256-1ueah4QHMHV21FRGmYnA2TM0WTkRZGMX7oe1uDk/Rzw=",
+        "rev": "7658bb5f965eed87620e60f79c6f87fad9143e06",
         "type": "github",
         "owner": "owner",
         "repo": "ghostship-assistant"
@@ -187,7 +187,7 @@
         "type": "github",
         "owner": "owner",
         "repo": "ghostship-assistant",
-        "rev": "5f954a7719c472e8861ed5f631f970920e02e095"
+        "rev": "7658bb5f965eed87620e60f79c6f87fad9143e06"
       }
     },
     "google-workspace-cli": {

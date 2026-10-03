@@ -166,10 +166,10 @@ match exactly. Local checks and target builds do not depend on that CI secret.
 
 Verified deployment evidence (2026-10-03):
 
-- Agent implementation `e423ef79a6bc114b8c2b121497ad78bc4f026470`, assistant
-  `5f954a7719c472e8861ed5f631f970920e02e095`; linked agent PR #10 and assistant PR #9.
-- Final ARM64 image tag `2y4i2ydcym8gf0m02zjxn9jr7b7wxljl`, loaded image ID
-  `c84996b83f3c65a49cbb76925b8dca6c452c7e9473b4189642541a8acc6a36d7`,
+- Agent implementation `86d679fc83e57a0f9acb9ddd312561ead37c076e`, assistant
+  `7658bb5f965eed87620e60f79c6f87fad9143e06`; linked agent PR #10 and assistant PR #9.
+- Final ARM64 image tag `dsd4nh816z2vnam36q3qswbav29ps026`, loaded image ID
+  `c4713bc7a2a69d3f338524a7313469214c377405cfb0638acbefddc50f71b019`,
   User `62020:62020`. Both profiles initialize/discover from read-only Podman,
   with no worktree mount. Keep returns policy denial through the mounted socket,
   including after isolated broker restart; forged `confirmed` input is rejected.
@@ -186,9 +186,9 @@ Verified deployment evidence (2026-10-03):
   and a partial observation. Destination quote at 02:51 UTC returned
   `upstream_blocked`; the live sequence stopped. Shipping, fees, currency and
   personal eligibility stayed unknown, with no ranked winner or checkout total.
-- Agent: 442 Python tests (three existing skips), typed Google shell recovery,
-  Go semantic HTTP conflict test, fleet, shellcheck, links and flake evaluation.
-  Assistant: declared verification suite including 14 Keep core/socket tests;
+- Agent: 446 Python tests (three existing skips), typed Google shell recovery,
+  Go semantic HTTP conflict and no-write-replay tests, fleet, shellcheck, links and flake evaluation.
+  Assistant: declared verification suite including 17 Keep core/socket tests;
   synthetic approved writes, conflict, single-use/expiry/replay and interruption
   recovery. NixOS: required scripts/check, host-evaluation/config-tests/package,
   scoped credential rotation, shellcheck and redacted gitleaks. No production
@@ -208,3 +208,11 @@ This establishes local relay/MCP startup, **not** OpenAI connection. Verify
 authenticated tunnel polling and fresh ChatGPT discovery before reporting relays
 connected. TERM forwarded to both groups, reaped children and exited 0. The
 temporary smoke container was removed; no production relay is running.
+
+Final hardening proves Google mutation transport never retries network ambiguity,
+429/5xx or redirects; explicit read queries retain bounded recovery. Session
+helpers preserve identity failures instead of masking them with cleanup. The
+broker reuses confirmation validators and the hash-chained audit, and reconciles
+the generated client’s exact title/text/checklist representations without replay.
+Official relay and MCP child crash recovery both passed in the disposable offline
+container; neither test establishes authenticated OpenAI connectivity.
