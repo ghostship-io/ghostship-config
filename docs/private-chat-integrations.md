@@ -18,7 +18,7 @@ branch. Exact deployed implementation pins are in `flake.lock`.
 | Keep create/update/checklist/archive | Durable one-use approvals; stable create/checklist IDs and revision preconditions | Owner blocked; each action needs a separate root-SSH owner decision | Synthetic approved writes and interruption reconciliation only |
 | Amazon search/item | Existing anonymous Printing Press client; explicit shopping authorization | Anonymous read route authorized; no personal Prime claim | Live evidence recorded below; no personal-account inference |
 | Amazon delivery/comparison | Partial provider coverage; transient destination ZIP, unknown fees preserved | Runtime home ZIP; alternate quotes do not alter personal settings | No complete checkout total or global-lowest claim |
-| Official private relays | One supervised combined stdio child in one container | Relay connected; owner-only workspace association and ChatGPT connection pending | Authenticated control-plane polling; local MCP discovery |
+| Official private relays | One supervised combined stdio child in one container | Relay connected; ChatGPT tool discovery reported by owner; workspace restriction pending | Authenticated control-plane polling; local MCP discovery |
 | ChatGPT selectable connections | One Ghostship registry entry and combined explicit tool allowlist | Actual owner entitlement and discovery still unverified | Requires fresh authenticated owner conversation |
 
 Audit findings reproduced and addressed:
@@ -262,7 +262,7 @@ control-plane status `ok`, state `polling`, last successful request
 `2026-10-03T05:45:46.411628546Z`, and zero consecutive failures. Local discovery
 in the actual container returns eleven tools plus status; Keep list access and
 forged confirmation fail through the protected broker. These observations do
-not establish ChatGPT discovery or personal Keep reads/writes.
+not establish personal Keep reads/writes; ChatGPT discovery is separately recorded below.
 
 Only the new broker, secret projection and OCI units were installed in runtime
 systemd configuration. The actual target configuration builds, but the full host
@@ -271,7 +271,7 @@ and other services. Runtime units are not a claim of reboot persistence. Keep th
 current candidate GC root and complete declarative activation in a separately
 safe maintenance window. The Keep master remains disabled pending independent
 security/final reviews and identity activation evidence. ChatGPT owner-only
-workspace association, fresh-conversation discovery and live verification remain
+workspace association and fresh-conversation live verification remain
 owner-controlled steps. No personal Keep authentication or mutation was attempted.
 Before/after evidence retains T3 container ID
 `134b90bb20700b6180a225b997f386dbf1a1d6339d17da22be1a57884d0d50d7`,
@@ -288,3 +288,8 @@ CI uses the short-lived repository-scoped Actions token solely to retrieve
 GitHub's public SSH host keys over HTTPS, avoiding the shared runner's anonymous
 API rate limit. Both deploy keys and this token are removed from subprocess
 environments; private source fetches still use separate read-only deploy keys.
+
+The owner subsequently confirmed seeing Amazon and Keep tools in ChatGPT. This
+records owner-reported discovery, without proving the exact count/schemas,
+owner-only workspace association, live tool calls or personal account access.
+Fresh-conversation Amazon calls and protected Keep activation remain pending.
