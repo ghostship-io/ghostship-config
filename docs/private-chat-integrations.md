@@ -18,7 +18,7 @@ branch. Exact deployed implementation pins are in `flake.lock`.
 | Keep create/update/checklist/archive | Durable one-use approvals; stable create/checklist IDs and revision preconditions | Owner blocked; each action needs a separate root-SSH owner decision | Synthetic approved writes and interruption reconciliation only |
 | Amazon search/item | Existing anonymous Printing Press client; explicit shopping authorization | Anonymous read route authorized; no personal Prime claim | Live evidence recorded below; no personal-account inference |
 | Amazon delivery/comparison | Partial provider coverage; transient destination ZIP, unknown fees preserved | Runtime home ZIP; alternate quotes do not alter personal settings | No complete checkout total or global-lowest claim |
-| Official private relays | One supervised combined stdio child in one container | Blocked until owner provisions one tunnel ID/Use key and owner-only workspace association | Local configuration validation; no claimed OpenAI connection |
+| Official private relays | One supervised combined stdio child in one container | Relay connected; owner-only workspace association and ChatGPT connection pending | Authenticated control-plane polling; local MCP discovery |
 | ChatGPT selectable connections | One Ghostship registry entry and combined explicit tool allowlist | Actual owner entitlement and discovery still unverified | Requires fresh authenticated owner conversation |
 
 Audit findings reproduced and addressed:
@@ -101,7 +101,8 @@ not accepted by the broker as personal mutation authorization.
    demonstrated, personal activation stays blocked.
 2. Create one private Ghostship tunnel. Put its `TUNNEL_ID` and least-privilege
    runtime `API_KEY` into the encrypted `ghostship-relay.env.age` source using
-   `secret-edit ghostship-relay`. The scaffold is empty and fails closed.
+   `secret-edit ghostship-relay`. The runtime bundle is provisioned and encrypted;
+   missing/invalid fields still fail closed.
    Never put values in Git, Nix expressions, CLI arguments, logs or chat.
 3. Deploy committed configuration using the session guard, then start only the
    new container after projection succeeds. Confirm local readiness separately
@@ -206,7 +207,8 @@ scoped mounts. Both `/healthz` and `/readyz` returned 200 even while disconnecte
 This establishes local relay/MCP startup, **not** OpenAI connection. Verify
 authenticated tunnel polling and fresh ChatGPT discovery before reporting relays
 connected. TERM forwarded to both groups, reaped children and exited 0. The
-temporary smoke container was removed; no production relay is running.
+temporary smoke container was removed; this historical smoke preceded production
+credential provisioning described below.
 
 Final hardening proves Google mutation transport never retries network ambiguity,
 429/5xx or redirects; explicit read queries retain bounded recovery. Session
@@ -242,3 +244,47 @@ runs independently on the ARM64 host; disabled Keep access and forged confirmati
 fail through the actual socket before/after broker restart. The one real official
 relay and its MCP child both recover after deliberate crashes in the disposable
 network-isolated container. No live relay credential or personal access is used.
+
+
+## Authenticated deployment evidence (2026-10-03)
+
+The owner supplied tunnel `tunnel_6ac0806704cc819188e52213f9afd272`. Its scoped
+runtime key is stored in Bitwarden and the encrypted runtime bundle, and the
+plaintext intake file is removed. The relay key cannot list organization tunnels
+(the endpoint requires an admin key); successful authenticated polling proves
+its runtime access without increasing its scope.
+
+The ARM64 container uses image tag `fi1lmnr8ymi6j0jy3k3a67xv8xycblfx`, image ID
+`31e5354601a51b98669d222f421575952b50096310310cab14b4fb9b825a6c33`.
+A real Podman health probe exposed a missing `/bin/sh`; the rebuilt image includes
+its shell and the deployed container is healthy. The official relay reported
+control-plane status `ok`, state `polling`, last successful request
+`2026-10-03T05:45:46.411628546Z`, and zero consecutive failures. Local discovery
+in the actual container returns eleven tools plus status; Keep list access and
+forged confirmation fail through the protected broker. These observations do
+not establish ChatGPT discovery or personal Keep reads/writes.
+
+Only the new broker, secret projection and OCI units were installed in runtime
+systemd configuration. The actual target configuration builds, but the full host
+switch remains deferred because its dry activation touches the active T3 session
+and other services. Runtime units are not a claim of reboot persistence. Keep the
+current candidate GC root and complete declarative activation in a separately
+safe maintenance window. The Keep master remains disabled pending independent
+security/final reviews and identity activation evidence. ChatGPT owner-only
+workspace association, fresh-conversation discovery and live verification remain
+owner-controlled steps. No personal Keep authentication or mutation was attempted.
+Before/after evidence retains T3 container ID
+`134b90bb20700b6180a225b997f386dbf1a1d6339d17da22be1a57884d0d50d7`,
+start time `2026-10-02 21:17:42.5084494 +0000 UTC`, service PID `2195037`,
+inner T3 process PID `574920` and the active Codex runtime PID `1301692`.
+
+Scoped rollback: stop only `podman-ghostship-private-integrations.service`,
+`ghostship-private-relay-config.service` and, when needed,
+`ghostship-keep-broker.service`; remove their runtime unit links before loading a
+reviewed prior configuration. Preserve `/var/lib/ghostship-keep` approval,
+idempotency and result records. Do not stop or replace T3 or its inner runtime.
+
+CI uses the short-lived repository-scoped Actions token solely to retrieve
+GitHub's public SSH host keys over HTTPS, avoiding the shared runner's anonymous
+API rate limit. Both deploy keys and this token are removed from subprocess
+environments; private source fetches still use separate read-only deploy keys.

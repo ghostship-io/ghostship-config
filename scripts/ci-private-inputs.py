@@ -23,13 +23,19 @@ def main():
         return
     credentials = {suffix: os.environ.pop('GHOSTSHIP_' + suffix.upper() + '_READ_KEY', '')
                    for suffix in ('agent', 'assistant')}
+    meta_token = os.environ.pop('GITHUB_META_TOKEN', '')
     originals = {name: nodes[name] for name in ('ghostship-private-agent', 'ghostship-private-assistant')}
     backup.write_text(json.dumps(originals))
     root = Path(tempfile.mkdtemp(prefix='ghostship-ci-sources-', dir=os.environ['RUNNER_TEMP']))
     try:
         # Authenticate the SSH host using GitHub's HTTPS-published public keys.
-        with urllib.request.urlopen('https://api.github.com/meta', timeout=30) as response:
+        headers = {'User-Agent': 'ghostship-ci-private-inputs'}
+        if meta_token:
+            headers['Authorization'] = 'Bearer ' + meta_token
+        request = urllib.request.Request('https://api.github.com/meta', headers=headers)
+        with urllib.request.urlopen(request, timeout=30) as response:
             host_keys = json.load(response)['ssh_keys']
+        del request, headers, meta_token
         known = root/'known_hosts'
         known.write_text(''.join('github.com ' + key + '\n' for key in host_keys))
         for suffix in ('agent', 'assistant'):
