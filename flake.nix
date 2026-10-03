@@ -3,7 +3,7 @@
 
   inputs = {
     ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/737b853f38fa3e459ff7cf7ff26286cd65197fef";
-    ghostship-private-assistant.url = "github:ghostship-io/ghostship-assistant/c2a0de2eba23d6078a1abb23ff93a051a574e98d";
+    ghostship-private-assistant.url = "github:ghostship-io/ghostship-assistant/c74930a89e21675c1455a84f7c716c46ad7ec42f";
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
