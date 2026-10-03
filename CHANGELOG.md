@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.33] - 2026-10-03
+
+- Refresh pinned integration sources after reconciling current shopping and host changes.
+
 ## [3.15.32] - 2026-10-03
 
 - Fix Keep session recovery by preserving Google session authentication timestamps;
@@ -47,6 +51,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   OCI image, with separate scoped official OpenAI relays and a host-only Keep
   approval broker. Personal activation remains disabled and relay provisioning
   remains owner-controlled; no inbound MCP port or T3 Code restart is required.
+
+- **Fix pyLoad iframe blacking out on Queue or Packages**: pyLoad renders its
+  Queue, Packages, Files, Logs, and Settings links plus theme assets as
+  root-absolute paths (`href="/queue"`, `href="/web/..."`). Inside Muximux's
+  `/pyload/` same-origin proxy those references escaped the prefix and landed on
+  Muximux's own `404` page, which is the black screen users saw after clicking
+  through the embedded UI. Rework the `/pyload/` and `/web/` nginx locations to
+  rewrite root-absolute `href`/`url()` references back under `/pyload/`, so
+  in-iframe navigation stays inside pyLoad.
 
 ## [3.15.24] - 2026-10-01
 
