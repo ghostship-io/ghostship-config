@@ -12,7 +12,7 @@ let
     principal = "chatgpt-personal-owner";
     client = "${agent.google-pp-cli}/bin/google-pp-cli";
     # Public first-party Keep client identifier, matching ghostship-google-web.
-    public_client_key = "AIzaSyDE7NHMUZfMoJVu-YNkK-7AXFSuL1Q9gKE";
+    public_client_key = "AIzaSyDE7NHMUZfMoJVu-YNkK-7AXFSuL1Q9gKE"; # gitleaks:allow -- public first-party client identifier
     runtime_dir = "/run/ghostship-personal";
     database = "/var/lib/ghostship-keep/requests.sqlite";
     session_dir = "/var/lib/ghostship-keep/sessions";
