@@ -22,6 +22,7 @@ jobs:
             cores = 2
       - name: Import pinned private sources with read-only deploy keys
         env:
+          GITHUB_META_TOKEN: ${{ github.token }}
           GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
           GHOSTSHIP_ASSISTANT_READ_KEY: ${{ secrets.GHOSTSHIP_ASSISTANT_READ_KEY }}
         run: python3 scripts/ci-private-inputs.py
