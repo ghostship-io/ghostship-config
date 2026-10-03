@@ -106,6 +106,7 @@ if [ ! -e "$RESTIC_REPOSITORY/config" ]; then
     restic init
 fi
 restic backup --host chill-penguin --tag ghostship \
+    --exclude "$app_snapshot/ghostship-private-integrations" \
     --exclude "$app_snapshot/codex" \
     --exclude "$app_snapshot/chatgpt/docker" \
     --exclude "$app_snapshot/chatgpt/nix-root" \

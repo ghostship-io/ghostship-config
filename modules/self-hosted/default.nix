@@ -37,6 +37,7 @@
     ./pyload.nix
 
     # Apps and utilities
+    ./private-integrations.nix
     ./cloakbrowser.nix
     ./t3code.nix
     ../agent-host
