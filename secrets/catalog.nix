@@ -26,12 +26,8 @@ let
 in
 {
   units = {
-    ghostship-keep-relay = mkUnit {
-      relativeFile = "secrets/files/sources/services/ghostship-keep-relay.env.age";
-      exports = [ "TUNNEL_ID" "API_KEY" ];
-    };
-    ghostship-amazon-relay = mkUnit {
-      relativeFile = "secrets/files/sources/services/ghostship-amazon-relay.env.age";
+    ghostship-relay = mkUnit {
+      relativeFile = "secrets/files/sources/services/ghostship-relay.env.age";
       exports = [ "TUNNEL_ID" "API_KEY" ];
     };
     backup = mkUnit {
@@ -255,20 +251,12 @@ in
   };
 
   projections = {
-    ghostship-keep-relay = {
-      fileName = "ghostship-keep-relay.env";
+    ghostship-relay = {
+      fileName = "ghostship-relay.env";
       owner = "root"; group = "root"; mode = "0400";
       fields = {
-        TUNNEL_ID = { unit = "ghostship-keep-relay"; key = "TUNNEL_ID"; };
-        API_KEY = { unit = "ghostship-keep-relay"; key = "API_KEY"; };
-      };
-    };
-    ghostship-amazon-relay = {
-      fileName = "ghostship-amazon-relay.env";
-      owner = "root"; group = "root"; mode = "0400";
-      fields = {
-        TUNNEL_ID = { unit = "ghostship-amazon-relay"; key = "TUNNEL_ID"; };
-        API_KEY = { unit = "ghostship-amazon-relay"; key = "API_KEY"; };
+        TUNNEL_ID = { unit = "ghostship-relay"; key = "TUNNEL_ID"; };
+        API_KEY = { unit = "ghostship-relay"; key = "API_KEY"; };
       };
     };
     backup = {

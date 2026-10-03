@@ -15,24 +15,23 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Require scoped private flake access
-        env:
-          PRIVATE_FLAKE_READ_TOKEN: ${{ secrets.GHOSTSHIP_FLAKE_READ_TOKEN }}
-        run: |
-          if [ -z "$PRIVATE_FLAKE_READ_TOKEN" ]; then
-            echo "::error::Set GHOSTSHIP_FLAKE_READ_TOKEN with Contents:read for ghostship-agent and ghostship-assistant."
-            exit 1
-          fi
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
         with:
           extra_nix_config: |
             max-jobs = 2
             cores = 2
-            access-tokens = github.com=${{ secrets.GHOSTSHIP_FLAKE_READ_TOKEN }}
-      - run: nix flake update
+      - name: Import pinned private sources with read-only deploy keys
+        env:
+          GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
+          GHOSTSHIP_ASSISTANT_READ_KEY: ${{ secrets.GHOSTSHIP_ASSISTANT_READ_KEY }}
+        run: python3 scripts/ci-private-inputs.py
+      - name: Refresh public inputs (private revisions are explicit pins)
+        run: python3 -c 'import json, subprocess; subprocess.run(["nix", "flake", "update", *[k for k in json.load(open("flake.lock"))["nodes"]["root"]["inputs"] if not k.startswith("ghostship-private-")]], check=True)'
       - run: nix develop .#ci -c python scripts/bump-flake-release.py
       - name: Validate candidate lock
         run: nix build -L .#checks.x86_64-linux.host-evaluation .#checks.x86_64-linux.config-tests .#checks.x86_64-linux.config-package
+      - name: Restore portable private source locks before publishing
+        run: python3 scripts/ci-private-inputs.py --restore
       - uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
           branch: maintenance/flake-inputs

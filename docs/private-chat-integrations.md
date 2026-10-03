@@ -14,12 +14,12 @@ branch. Exact deployed implementation pins are in `flake.lock`.
 
 | Capability | Implementation | Account/authorization | Live evidence |
 |---|---|---|---|
-| Keep list/search/get | Packaged semantic client and protected socket adapter | Owner blocked: master disabled, reviews and Keep-only activation absent | Synthetic protocol and broker evidence only |
+| Keep list/search/get | Packaged semantic client and protected socket adapter | Owner blocked: master disabled, reviews pending; owner scope/activation consent recorded, runtime disabled | Synthetic protocol and broker evidence only |
 | Keep create/update/checklist/archive | Durable one-use approvals; stable create/checklist IDs and revision preconditions | Owner blocked; each action needs a separate root-SSH owner decision | Synthetic approved writes and interruption reconciliation only |
 | Amazon search/item | Existing anonymous Printing Press client; explicit shopping authorization | Anonymous read route authorized; no personal Prime claim | Live evidence recorded below; no personal-account inference |
 | Amazon delivery/comparison | Partial provider coverage; transient destination ZIP, unknown fees preserved | Runtime home ZIP; alternate quotes do not alter personal settings | No complete checkout total or global-lowest claim |
-| Official private relays | Two supervised stdio children in one container | Blocked until owner provisions two distinct tunnel IDs/Use keys and owner-only workspace association | Local configuration validation; no claimed OpenAI connection |
-| ChatGPT selectable connections | Separate registry entries and explicit tool allowlists | Actual owner entitlement and discovery still unverified | Requires fresh authenticated owner conversation |
+| Official private relays | One supervised combined stdio child in one container | Blocked until owner provisions one tunnel ID/Use key and owner-only workspace association | Local configuration validation; no claimed OpenAI connection |
+| ChatGPT selectable connections | One Ghostship registry entry and combined explicit tool allowlist | Actual owner entitlement and discovery still unverified | Requires fresh authenticated owner conversation |
 
 Audit findings reproduced and addressed:
 
@@ -55,7 +55,7 @@ The immutable image contains pinned MCP SDK 1.15.0 and OpenAI runtime 0.0.15
 archive hashes in the agent Nix package). The official poller flavor uses outbound
 HTTPS and needs no cloudflared companion. It performs no startup downloads.
 
-Two relays have distinct configurations/IDs, loopback-only health ports 8081/8082,
+One relay has a scoped configuration/ID and loopback-only health port 8081,
 fixed stdio children and bounded restart backoff. A subreaper kills and reaps
 orphan stdio children before replacement. Container liveness checks only a fresh
 supervisor heartbeat. Local relay `/readyz`, MCP discovery, authenticated control-plane connection and personal readiness are
@@ -99,35 +99,30 @@ not accepted by the broker as personal mutation authorization.
    expose this fixed personal principal to a shared workspace. Read+Manage is
    required to provision, Use to run/select. If owner-only restriction cannot be
    demonstrated, personal activation stays blocked.
-2. Create two private tunnels, one for each connection. Put each distinct
-   `TUNNEL_ID` and least-privilege runtime `API_KEY` into its own encrypted source:
-   `ghostship-keep-relay.env.age` and `ghostship-amazon-relay.env.age`, using the
-   repository's existing secret workflow. Current encrypted files are empty
-   scaffolds and deliberately fail closed. Never put values in Git, Nix expressions,
-   CLI arguments, logs or chat. No matching OpenAI credential was available in the
-   inspected vault metadata.
-3. Deploy the committed configuration using the session guard, then start only
-   the new container after scoped projection succeeds. Confirm both loopback
-   `/readyz` endpoints from inside the container; confirm MCP discovery separately.
-4. In ChatGPT Settings → Security and login enable Developer mode. At
-   `https://chatgpt.com/plugins`, plus → name **Ghostship Keep**, Connection
-   **Tunnel**, select/paste its ID; repeat for **Ghostship Amazon** with the other
-   ID. Inspect seven Keep tools/four Amazon tools plus their own status tool.
-   No public marketplace package or frontend is required for these private
-   developer-mode connections.
+2. Create one private Ghostship tunnel. Put its `TUNNEL_ID` and least-privilege
+   runtime `API_KEY` into the encrypted `ghostship-relay.env.age` source using
+   `secret-edit ghostship-relay`. The scaffold is empty and fails closed.
+   Never put values in Git, Nix expressions, CLI arguments, logs or chat.
+3. Deploy committed configuration using the session guard, then start only the
+   new container after projection succeeds. Confirm local readiness separately
+   from authenticated tunnel polling and MCP discovery.
+4. Enable ChatGPT Settings → Security and login → Developer mode. At
+   `https://chatgpt.com/plugins`, plus → name **Ghostship**, Connection **Tunnel**,
+   select/paste its ID. Inspect eleven Keep/Amazon tools plus `integration_status`.
+   This is one private developer-mode connection, with no marketplace submission.
 5. Obtain assistant security/final PASS reviews for the exact revision and the
-   explicit owner Keep-only activation. Record two synthetic read-only runs with
+   explicit owner Keep-only activation (consent recorded 2026-10-03; reviews still pending). Record two synthetic read-only runs with
    commit/evidence and bind the registered Assistant identity/profile. Do not
    activate unrelated Google/retail services. Each live write is separately
    inspected/accepted using `ghostship-keep-approve` over owner-authenticated root
    SSH, as documented in the assistant repository.
-6. Start a fresh chatgpt.com conversation with both selected. Check Keep
+6. Start a fresh chatgpt.com conversation with Ghostship selected. Check Keep
    list/search/get, then an individually approved uniquely marked disposable
    note/checklist create and update with read-back. Test denial and uncertain-write
    reconciliation. Archive/cleanup needs its own decision. Check Amazon search,
    returned ASIN item/destination delivery and comparison; retain unknown costs.
 
-After metadata changes deploy the new MCP server, open each connection at ChatGPT
+After metadata changes deploy the new MCP server, open the Ghostship connection at ChatGPT
 Plugins, select **Refresh**, inspect changed schemas/tools, and start a fresh
 conversation. This is the documented procedure; actual account behavior remains
 unverified until owner connection is available.
@@ -140,8 +135,8 @@ only the exact new Nix-generated service(s) via root SSH and retain their build
 with a GC root. Defer the full switch. Do not restart T3, its inner runtime,
 CloakBrowser, or unrelated services to make this deployment work.
 
-Stop-before-start prevents two live instances using one tunnel ID. Rotation
-validates both scoped projections before replacing files; restart only the new
+Stop-before-start prevents two live instances using the tunnel ID. Rotation
+validates the scoped projection before replacing files; restart only the new
 integration container. A malformed projection leaves prior runtime files intact.
 For rollback stop `podman-ghostship-private-integrations.service` and, if needed,
 `ghostship-keep-broker.service`; restore the previous pinned image/unit and scoped
@@ -157,14 +152,18 @@ ChatGPT evidence are reported separately. Production reboot testing is skipped
 under the active-session constraint; restart/socket and write recovery use
 isolated synthetic services instead.
 
-CI needs the repository Actions secret `GHOSTSHIP_FLAKE_READ_TOKEN`: a fine-grained
-GitHub token with **Contents: read** for only `ghostship-io/ghostship-agent` and
-`ghostship-io/ghostship-assistant`. Nix uses it only to fetch the exact private source pins;
-it is not copied into the image or store. No Actions secret currently exists. The
-GitHub archive NAR hashes were compared with both SSH-fetched source pins and
-match exactly. Local checks and target builds do not depend on that CI secret.
+CI uses two repository-specific read-only deploy keys, installed as Actions
+secrets `GHOSTSHIP_AGENT_READ_KEY` and `GHOSTSHIP_ASSISTANT_READ_KEY`. The bootstrap
+fetches exact locked revisions and verifies each NAR hash before substituting CI-only local Git source locks. Private keys are temporary runner files and are never passed to Nix or included in its store. Published refresh PRs restore the portable source locks. No broad GitHub token or owner-created read PAT
+is required. Both keys were registered read-only and their exact pinned source
+hashes verified through real SSH. Rotate each by registering a replacement key,
+replacing its Actions secret and verifying CI before revoking the old key.
+Revoke through the source repository's Settings → Deploy keys. Provisioned key
+IDs: agent `165231346`, assistant `165231352`. GitHub may revoke keys if the
+credential that registered them is revoked. Fork PRs do not receive these secrets;
+private-source builds for them need a separately trusted review path.
 
-Verified deployment evidence (2026-10-03):
+Historical two-relay deployment evidence (2026-10-03, before consolidation):
 
 - Agent implementation `86d679fc83e57a0f9acb9ddd312561ead37c076e`, assistant
   `7658bb5f965eed87620e60f79c6f87fad9143e06`; linked agent PR #10 and assistant PR #9.
@@ -216,3 +215,30 @@ broker reuses confirmation validators and the hash-chained audit, and reconciles
 the generated client’s exact title/text/checklist representations without replay.
 Official relay and MCP child crash recovery both passed in the disposable offline
 container; neither test establishes authenticated OpenAI connectivity.
+
+## Single-connection migration
+
+The owner superseded the two separately selectable connections with one Ghostship
+connection. Deployment now uses one `ghostship` profile, relay, app entry and
+`ghostship-relay` secret bundle. The original empty relay scaffolds had no live
+credentials and are replaced; no provisioned tunnel or account data is deleted.
+Keep/Amazon local profiles remain for standalone verification. New services must
+add explicit schemas, deterministic adapters and policy rather than model-selected
+upstreams. Reverting this commit restores the prior two-relay topology; retain
+Keep approval state and stop the new integration before replacing any relay.
+
+Owner credential/activation consent covers Keep list/search/get with individually
+approved create/update/checklist/archive and Amazon search/item/delivery/comparison
+reads. Reviews, signed-in identity and per-action decisions remain independent.
+GitHub admin access can install an Actions secret but the available classic token
+has broad repository/workflow permissions; it is not projected into CI. Read-only deploy keys now provide the scoped CI credential.
+
+Single-connection verification: 447 Python tests pass (three existing optional
+skips); packaged SDK initialization discovers all eleven tools plus status.
+Service routing and status retrieval are verified with synthetic clients, and a
+generic approval tool is denied. Image `5dikk4niw9d654zp6kgq830k54wldms2`
+(ID `52507eff2350fb46ee6e9da0c26bdff83d97816de9371f447fabeb5ade020ffe`)
+runs independently on the ARM64 host; disabled Keep access and forged confirmation
+fail through the actual socket before/after broker restart. The one real official
+relay and its MCP child both recover after deliberate crashes in the disposable
+network-isolated container. No live relay credential or personal access is used.

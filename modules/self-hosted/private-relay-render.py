@@ -36,24 +36,20 @@ def write(name, content):
 
 
 def main():
-    profiles = dict(zip(('keep', 'amazon'), map(values, sys.argv[1:3])))
-    # Validate everything before replacing any live credential/configuration.
-    for profile, fields in profiles.items():
-        if not re.fullmatch(r'tunnel_[a-f0-9]{32}', fields.get('TUNNEL_ID', '')) or not fields.get('API_KEY'):
-            raise SystemExit(f'{profile}: owner-provisioned tunnel ID/runtime key missing')
-    if profiles['keep']['TUNNEL_ID'] == profiles['amazon']['TUNNEL_ID']:
-        raise SystemExit('Profiles require distinct tunnel IDs')
-    for index, (profile, fields) in enumerate(profiles.items()):
-        write(profile + '.key', fields['API_KEY'])
-        write(profile + '.yaml', json.dumps({
-            'config_version': 1,
-            'control_plane': {'base_url': 'https://api.openai.com', 'tunnel_id': fields['TUNNEL_ID'],
-                              'api_key': 'file:' + str(ROOT / (profile + '.key'))},
-            'health': {'listen_addr': f'127.0.0.1:{8081 + index}'},
-            'process': {'pid_file': '/tmp/' + profile + '.pid'},
-            'log': {'level': 'warn', 'format': 'json'},
-            'mcp': {'commands': [{'channel': 'main', 'command': sys.argv[3] + ' ' + profile}]},
-        }))
+    fields = values(sys.argv[1])
+    # Validate before replacing any live credential/configuration.
+    if not re.fullmatch(r'tunnel_[a-f0-9]{32}', fields.get('TUNNEL_ID', '')) or not fields.get('API_KEY'):
+        raise SystemExit('ghostship: owner-provisioned tunnel ID/runtime key missing')
+    write('ghostship.key', fields['API_KEY'])
+    write('ghostship.yaml', json.dumps({
+        'config_version': 1,
+        'control_plane': {'base_url': 'https://api.openai.com', 'tunnel_id': fields['TUNNEL_ID'],
+                          'api_key': 'file:' + str(ROOT / 'ghostship.key')},
+        'health': {'listen_addr': '127.0.0.1:8081'},
+        'process': {'pid_file': '/tmp/ghostship.pid'},
+        'log': {'level': 'warn', 'format': 'json'},
+        'mcp': {'commands': [{'channel': 'main', 'command': sys.argv[2] + ' ghostship'}]},
+    }))
     # Personal destination belongs to deployment, never to the reusable image.
     write('runtime.json', json.dumps({'home_postal_code': 'a postal code'}))
 

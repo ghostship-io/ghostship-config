@@ -30,27 +30,18 @@ let
   '';
   render = pkgs.writeShellScript "ghostship-private-relay-render" ''
     set -eu
-    ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-keep-relay
-    ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-amazon-relay
+    ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-relay
     exec ${pkgs.python3}/bin/python3 ${./private-relay-render.py} \
-      ${config.ghostship.selfHostedSecrets.projections.ghostship-keep-relay.path} \
-      ${config.ghostship.selfHostedSecrets.projections.ghostship-amazon-relay.path} \
+      ${config.ghostship.selfHostedSecrets.projections.ghostship-relay.path} \
       ${agent.private-mcp}/bin/ghostship-mcp
   '';
 in {
-  options.ghostship.privateIntegrations.enable = lib.mkEnableOption "private Ghostship Keep and Amazon MCP tunnels";
+  options.ghostship.privateIntegrations.enable = lib.mkEnableOption "private Ghostship Keep and Amazon MCP gateway";
   config = lib.mkIf cfg.enable {
-    ghostship.apps.ghostship-keep = {
-      name = "Ghostship Keep";
+    ghostship.apps.ghostship = {
+      name = "Ghostship";
       container = "ghostship-private-integrations";
-      description = "Private MCP tunnel; personal account requires reviewed activation and per-action approval";
-      hostname = null;
-      origin = null;
-    };
-    ghostship.apps.ghostship-amazon = {
-      name = "Ghostship Amazon";
-      container = "ghostship-private-integrations";
-      description = "Private anonymous shopping reads; partial delivery and pricing coverage";
+      description = "Private Keep and Amazon tools; personal access requires reviewed activation and per-action approval";
       hostname = null;
       origin = null;
     };
@@ -66,8 +57,7 @@ in {
       "d /run/ghostship-keep 0750 ghostship-personal ghostship-mcp -"
       "d /run/ghostship-integrations 0750 root ghostship-mcp -"
       "d /srv/apps/ghostship-private-integrations 0700 ghostship-mcp ghostship-mcp -"
-      "d /srv/apps/ghostship-private-integrations/keep 0700 ghostship-mcp ghostship-mcp -"
-      "d /srv/apps/ghostship-private-integrations/amazon 0700 ghostship-mcp ghostship-mcp -"
+      "d /srv/apps/ghostship-private-integrations/ghostship 0700 ghostship-mcp ghostship-mcp -"
     ];
     systemd.services.ghostship-keep-broker = {
       description = "Protected complete-operation personal Keep broker";
