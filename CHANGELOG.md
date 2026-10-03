@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.31] - 2026-10-03
+
+- Pin the Keep navigation fix and its required public browser-client identifier;
+  include the registered Assistant ChatGPT metadata workflow, delete-to-trash
+  support and private cached authentication. CloakBrowser is used for auth only.
+
 ## [3.15.30] - 2026-10-03
 
 - Route Keep accounts to Assistant/Default profiles and execute operations

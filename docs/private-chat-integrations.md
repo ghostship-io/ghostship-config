@@ -1,6 +1,6 @@
 # Private Ghostship integration
 
-One container runs the official relay and a stdio MCP child exposing seven Keep,
+One container runs the official relay and a stdio MCP child exposing eight Keep,
 four Amazon tools and integration status. The tunnel is
 `tunnel_6ac0806704cc819188e52213f9afd272`; the owner has observed Keep/Amazon tool
 discovery in ChatGPT. Runtime relay credentials live in Bitwarden and the
@@ -24,7 +24,10 @@ If full activation touches T3, install only the exact integration unit and keep
 its candidate build rooted. Do not stop T3 or the browser manager.
 
 The broker resolves the current browser-manager IP through Podman before startup.
-It leases only its own task tabs and never stops an existing browser profile.
+CloakBrowser is used only for authentication acquisition or refresh. The generated
+API client executes every note operation with private cached sessions in
+`/var/lib/ghostship-keep/sessions`. It leases only its own authentication tabs and
+never stops an existing browser profile. Session caches are excluded from backups.
 UIDs are MCP 62020 and host broker 62021; the operation socket is group-scoped.
 The non-root container has a read-only root, scoped tmpfs/state, no capabilities
 and only relay files, application state and the operation socket directory mounted.

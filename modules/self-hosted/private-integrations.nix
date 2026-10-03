@@ -11,8 +11,11 @@ let
     };
     principal = "chatgpt-personal-owner";
     client = "${agent.google-pp-cli}/bin/google-pp-cli";
+    # Public first-party Keep client identifier, matching ghostship-google-web.
+    public_client_key = "AIzaSyDE7NHMUZfMoJVu-YNkK-7AXFSuL1Q9gKE";
     runtime_dir = "/run/ghostship-personal";
     database = "/var/lib/ghostship-keep/requests.sqlite";
+    session_dir = "/var/lib/ghostship-keep/sessions";
     socket = "/run/ghostship-keep/operations.sock";
     model_uid = 62020;
   });
@@ -60,7 +63,7 @@ in {
       "d /srv/apps/ghostship-private-integrations/ghostship 0700 ghostship-mcp ghostship-mcp -"
     ];
     systemd.services.ghostship-keep-broker = {
-      description = "Protected complete-operation personal Keep broker";
+      description = "Keep API execution service with authentication-only browser access";
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         User = "ghostship-personal";
