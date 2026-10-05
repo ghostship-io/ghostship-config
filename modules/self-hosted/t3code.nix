@@ -721,6 +721,14 @@ let
     #!/usr/bin/env sh
     set -eu
     ${sourceHmSessionVarsIfPresent}
+    # Bun warns when both are set; FORCE_COLOR wins, so drop the ignored NO_COLOR.
+    if [ -n "\''${FORCE_COLOR:-}" ] && [ -n "\''${NO_COLOR:-}" ]; then
+      unset NO_COLOR
+    fi
+    # SQLite temp spills for large queries; home has far more space than /tmp.
+    tmpdir="\''${XDG_CACHE_HOME:-\$HOME/.cache}/opencode-tmp"
+    mkdir -p "\$tmpdir"
+    export TMPDIR="\$tmpdir"
     target='$target'
     if [ ! -x "\$target" ]; then
       printf 'error: opencode is not installed yet; run t3code-tool-maintenance\n' >&2
@@ -928,6 +936,16 @@ let
       ""|*[!0-9]*|0) exit 0 ;;
     esac
     exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/process-memory-guard.py} "$main_pid"
+  '';
+
+  # Daily retention: rotate operational logs, prune OpenCode's event DB, archive
+  # settled threads after 7 days, and delete threads idle for 180 days.
+  t3codeRetention = pkgs.writeShellScriptBin "t3code-retention" ''
+    set -eu
+    ${t3codeRuntimeEnv}
+    export T3_BIN="$HOME/.local/bin/t3"
+    export T3CODE_API="http://''${T3CODE_HOST}:''${T3CODE_PORT}"
+    exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/retention.py} "$@"
   '';
 
   t3codeDaemonMonitor = pkgs.writeShellScriptBin "t3code-server-monitor" ''
@@ -2318,11 +2336,50 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/t3code-retention.service <<'EOF'
+      [Unit]
+      Description=Retain T3 Code logs and archive or delete old threads
+      DefaultDependencies=no
+      After=t3code-server.service
+      Requires=t3code-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Service]
+      Type=oneshot
+      User=t3code
+      Group=t3code
+      Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
+      Environment=HOME=/home/t3code
+      Environment=T3CODE_HOME=/home/t3code/.t3
+      ExecStart=${t3codeRetention}/bin/t3code-retention
+      StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-retention.log
+      StandardError=append:/home/t3code/.t3code-container/logs/t3code-retention.log
+      TasksMax=infinity
+      TimeoutStartSec=30m
+      EOF
+      cat > etc/systemd/system/t3code-retention.timer <<'EOF'
+      [Unit]
+      Description=Daily T3 Code retention
+      DefaultDependencies=no
+      After=t3code-server.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Timer]
+      OnBootSec=25m
+      OnUnitActiveSec=24h
+      Persistent=true
+      Unit=t3code-retention.service
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/multi-user.target <<'EOF'
       [Unit]
       Description=T3 Code Multi-User System
       DefaultDependencies=no
-      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer
+      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer t3code-retention.timer
       After=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -2344,6 +2401,7 @@ let
       ln -s ../t3code-tool-update-restart.timer etc/systemd/system/multi-user.target.wants/t3code-tool-update-restart.timer
       ln -s ../t3code-server-monitor.timer etc/systemd/system/multi-user.target.wants/t3code-server-monitor.timer
       ln -s ../t3code-process-memory-guard.timer etc/systemd/system/multi-user.target.wants/t3code-process-memory-guard.timer
+      ln -s ../t3code-retention.timer etc/systemd/system/multi-user.target.wants/t3code-retention.timer
     '';
     fakeRootCommands = ''
       chown -R root:root nix/store nix/var/log/nix nix/var/nix
