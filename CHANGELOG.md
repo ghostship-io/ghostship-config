@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.37] - 2026-10-05
+
+- Add a daily `t3code-retention` service that rotates oversized operational logs,
+  prunes OpenCode's unbounded SQLite event log, archives settled threads after
+  7 days, deletes threads idle for 180 days through the orchestration API, and
+  removes archive-only worktrees under `~/.t3/worktrees` when no active thread
+  still shares the path.
+- Point the OpenCode launcher at a home-backed `TMPDIR` and clear the
+  `NO_COLOR`/`FORCE_COLOR` conflict that polluted every OpenCode stderr line.
+
 ## [3.15.36] - 2026-10-03
 
 - Pin the verified merged Ghostship Agent revision for private Keep and Amazon deployment.
