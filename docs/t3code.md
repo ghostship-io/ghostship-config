@@ -230,6 +230,18 @@ installer and downloads only when that release is not already active. Changed pr
 server restart, which waits for T3 to become idle. Ghostship tool package
 changes do not: its command wrappers load the new package on every invocation.
 
+The daily `t3code-retention` timer keeps storage bounded. It rotates container,
+provider, server-trace, and OpenCode logs that grow past 50 MiB, deletes aged
+rotated logs after 14 days, rebuilds OpenCode's SQLite database when the
+unbounded `event` table crosses 2 GiB or 100k rows (keeping projected
+session/message data), archives settled unpinned threads older than 7 days, and
+deletes unpinned threads whose latest activity is older than 180 days. When a
+thread is archived, retention also deletes its worktree under `~/.t3/worktrees`
+once no active thread still references that path (shared checkouts used by open
+threads are kept). Archive and delete go through T3's orchestration API; pinned
+threads and threads with active turns are skipped. Manual dry runs use
+`t3code-retention --dry-run`.
+
 The image includes OpenSSL as well as the CA bundle because Cursor's Node runtime
 uses OpenSSL's compiled-in certificate directory when it probes system trust.
 Container health reports web/server failures as unhealthy. The server monitor
