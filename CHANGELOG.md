@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.38] - 2026-10-06
+
+- List only directly launchable files in Boomer's ES-DE: PSP accepts DVD-style
+  `.chd`; 3DS lists the Azahar loaders (`.3ds`, `.cci`, `.zcci`, `.cxi`, `.zcxi`,
+  `.3dsx`, `.z3dsx`) and drops archives and `.cia`.
+- Add the `emulation-frontend-contract` check for the emitted Boomer
+  `es_systems.xml`, including every launchable format goship-roms deploys.
+
 ## [3.15.37] - 2026-10-05
 
 - Add a daily `t3code-retention` service that rotates oversized operational logs,

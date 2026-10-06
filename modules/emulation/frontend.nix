@@ -492,6 +492,7 @@ in
         ghostship.emulation.internal.scripts = {
           inherit
             emulationSession
+            esSystemsXml
             esdePreflight
             esdeStatus
             startEsde

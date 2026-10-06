@@ -13,8 +13,21 @@ let
   failures = pkgs.lib.concatMap (
     host: map (a: a.message) (builtins.filter (a: !a.assertion) host.config.assertions)
   ) hosts;
+  # Boomer's emitted ES-DE systems file (text only; its store references are host-platform).
+  boomerEsSystems = pkgs.writeText "boomer-es-systems.xml" (
+    builtins.unsafeDiscardStringContext
+      self.nixosConfigurations.boomer-kuwanger.config.ghostship.emulation.internal.scripts.esSystemsXml.text
+  );
 in
 {
+  emulation-frontend-contract =
+    pkgs.runCommand "ghostship-emulation-frontend-contract" { nativeBuildInputs = [ python ]; }
+      ''
+        cp -r ${self} source
+        cd source
+        EMULATION_ES_SYSTEMS_XML=${boomerEsSystems} python -m unittest -v tests.test_emulation_contract
+        touch "$out"
+      '';
   config-package = self.packages.${pkgs.stdenv.hostPlatform.system}.ghostship-config;
   config-tests =
     pkgs.runCommand "ghostship-config-tests"

@@ -98,6 +98,9 @@ let
 
   commonRetroExtensions = ".7z .7Z .zip .ZIP .rar .RAR";
   discExtensions = ".bin .BIN .cue .CUE .iso .ISO .chd .CHD .m3u .M3U";
+  # Azahar 2126 loaders (src/core/loader/loader.cpp): NCSD .3ds/.cci/.zcci, NCCH .cxi/.zcxi,
+  # homebrew .3dsx/.z3dsx; Z3DS-compressed files are read in place.
+  n3dsLaunchExtensions = ".3ds .3DS .cci .CCI .zcci .ZCCI .cxi .CXI .zcxi .ZCXI .3dsx .3DSX .z3dsx .Z3DSX";
 
   rawRomSystems = [
     {
@@ -213,7 +216,9 @@ let
       platform = "n3ds";
       theme = "n3ds";
       emulator = n3dsEmulator;
-      extensions = "${commonRetroExtensions} .3ds .3DS .3dsx .3DSX .cia .CIA .cxi .CXI";
+      # Only files Azahar boots directly: run-emulator passes the path untransformed, so no
+      # archives, and no .cia/.zcia (installation inputs that Azahar refuses to boot).
+      extensions = n3dsLaunchExtensions;
       fixedAspect = "native";
     }
     {
@@ -403,7 +408,7 @@ let
       platform = "psp";
       theme = "psp";
       emulator = "ppsspp";
-      extensions = "${commonRetroExtensions} .iso .ISO .cso .CSO .pbp .PBP";
+      extensions = "${commonRetroExtensions} .iso .ISO .cso .CSO .chd .CHD .pbp .PBP";
       fixedAspect = "16:9";
     }
   ];
@@ -491,6 +496,7 @@ in
         coreNames
         discExtensions
         n3dsEmulator
+        n3dsLaunchExtensions
         optionalPackage
         optionalPackages
         optionalSystems
