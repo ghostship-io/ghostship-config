@@ -177,18 +177,18 @@
       },
       "locked": {
         "dir": "ghostship-tools",
-        "lastModified": 1791314861,
-        "narHash": "sha256-C1vMHr34X/iCb6uEcH/NaH7xWhRkC6r1ZYJV+rISdRc=",
+        "lastModified": 1791323443,
+        "narHash": "sha256-FMBKbSdLmbddZ22cJwAotAj3Cl9cH3ZdZsasOY4Wg4Y=",
         "owner": "owner",
         "repo": "ghostship-agent",
-        "rev": "5da079735770e7f775c9b1061ae1ea02dbeb52e8",
+        "rev": "a5574ebe9aee2f535380aa3b1ba047b1aa5aa388",
         "type": "github"
       },
       "original": {
         "dir": "ghostship-tools",
         "owner": "owner",
         "repo": "ghostship-agent",
-        "rev": "5da079735770e7f775c9b1061ae1ea02dbeb52e8",
+        "rev": "a5574ebe9aee2f535380aa3b1ba047b1aa5aa388",
         "type": "github"
       }
     },
