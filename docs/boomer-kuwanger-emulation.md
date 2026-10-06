@@ -481,6 +481,17 @@ Default ES-DE mappings now use RetroAchievements-aligned cores where practical:
 Standalone defaults are PCSX2 for PS2, PPSSPP for PSP, Dolphin for GameCube
 and Wii, and Azahar for 3DS when available.
 
+ES-DE extension lists name only files `run-emulator` can hand to the emulator
+as-is. PSP accepts CHD: PPSSPP reads DVD-style CHDs (`chdman createdvd`, 2048-byte
+units); CD-style CHDs are not PSP images. The 3DS system lists only what Azahar
+boots directly: decrypted cartridge images (`.3ds`, `.cci`), Azahar-compressed
+`.zcci`, NCCH `.cxi`/`.zcxi` and homebrew `.3dsx`/`.z3dsx`. Archives are not
+listed because Azahar does not open them, and `.cia`/`.zcia` are installation
+inputs (Azahar asks to install them instead of booting). 3DS updates and DLC are
+read from Azahar's SD title store, not from ES-DE entries. The
+`emulation-frontend-contract` check tests the emitted Boomer `es_systems.xml`
+against these lists and against every launchable format goship-roms deploys.
+
 PCSX2 is managed under `/srv/emulation/xdg/config/PCSX2`. `run-emulator`
 generates its `inis/PCSX2.ini` before each PS2 launch so the setup wizard stays
 disabled, the BIOS search directory is `/srv/emulation/bios`, the PS2 ROM
