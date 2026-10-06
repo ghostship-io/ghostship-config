@@ -2,7 +2,7 @@
 let
   cfg = config.ghostship.privateIntegrations;
   system = pkgs.stdenv.hostPlatform.system;
-  agent = inputs.ghostship-private-agent.packages.${system};
+  tools = inputs.ghostship-private-tools.packages.${system};
   assistant = inputs.ghostship-private-assistant.packages.${system};
   brokerConfig = pkgs.writeText "ghostship-keep-broker.json" (builtins.toJSON {
     accounts = {
@@ -10,7 +10,7 @@ let
       Agent = { profile_id = "50a1343a-ca9b-4c08-93f0-d0c69eae6643"; authuser = 0; };
     };
     principal = "chatgpt-personal-owner";
-    client = "${agent.google-pp-cli}/bin/google-pp-cli";
+    client = "${tools.google-pp-cli}/bin/google-pp-cli";
     # Public first-party Keep client identifier, matching ghostship-google-web.
     public_client_key = "AIzaSyDE7NHMUZfMoJVu-YNkK-7AXFSuL1Q9gKE"; # gitleaks:allow -- public first-party client identifier
     runtime_dir = "/run/ghostship-personal";
@@ -37,7 +37,7 @@ let
     ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-relay
     exec ${pkgs.python3}/bin/python3 ${./private-relay-render.py} \
       ${config.ghostship.selfHostedSecrets.projections.ghostship-relay.path} \
-      ${agent.private-mcp}/bin/ghostship-mcp
+      ${tools.private-mcp}/bin/ghostship-mcp
   '';
 in {
   options.ghostship.privateIntegrations.enable = lib.mkEnableOption "private Ghostship Keep and Amazon MCP gateway";
@@ -95,8 +95,8 @@ in {
       serviceConfig = { Type = "oneshot"; ExecStart = render; UMask = "0077"; };
     };
     virtualisation.oci-containers.containers.ghostship-private-integrations = {
-      image = "ghostship-private-integrations:${agent.private-integration-image.imageTag}";
-      imageFile = agent.private-integration-image;
+      image = "ghostship-private-integrations:${tools.private-integration-image.imageTag}";
+      imageFile = tools.private-integration-image;
       pull = "never";
       user = "62020:62020";
       volumes = [
