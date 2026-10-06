@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.38] - 2026-10-06
+
+- Build the private MCP sidecar from the extracted `ghostship-tools` platform
+  (`ghostship-private-tools`) instead of `ghostship-agent`.
+- Update the CI private-source importer to recognize the renamed input and
+  preserve its `dir = "ghostship-tools"` subdirectory.
+
 ## [3.15.37] - 2026-10-05
 
 - Add a daily `t3code-retention` service that rotates oversized operational logs,
