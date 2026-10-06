@@ -21,6 +21,7 @@ in
       {
         nativeBuildInputs = [
           python
+          pkgs.git
           pkgs.php
           pkgs.util-linux
           pkgs.nodejs_24
