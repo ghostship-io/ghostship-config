@@ -5,15 +5,14 @@ let
   agent = inputs.ghostship-private-agent;
   tools = agent.packages.${system};
   assistant = inputs.ghostship-private-assistant.packages.${system};
-  # The deployment owns MCP assembly: it supplies the shopping routing and
-  # authorization policy plus the icon to the shared platform builder, rather
-  # than consuming an image built by another repo. The builder uses the
-  # platform's pinned nixpkgs and exposed session-free client subset.
+  # The deployment owns the shopping overlay: destination, retailer enablement,
+  # and personal browser/authorization policy, supplied to the shared tools at
+  # runtime. Technical routing lives in ghostship-tools and is not copied here.
   privateAddons = agent.lib.mkPrivateIntegrations {
     inherit system;
     shoppingConfig = {
-      retailers = ./private-integrations/shopping-retailers.json;
-      authorization = ./private-integrations/retailer-authorization.json;
+      overlay = ./private-integrations/shopping-overlay.json;
+      authorization = ./private-integrations/shopping-authorization.json;
     };
     mcpIcon = ./private-integrations/ghostship.png;
   };
