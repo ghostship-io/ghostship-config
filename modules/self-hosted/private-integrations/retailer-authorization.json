@@ -1,0 +1,290 @@
+{
+  "schema_version": 1,
+  "updated": "2026-09-30",
+  "purpose": "Retailer/method authorization state. The shopping skill reads this file and fails closed for any browser method without an entry. Reading a retailer's own API through a Printing Press client needs no entry.",
+  "default_disposition": "BLOCKED_PENDING_AUTHORIZATION",
+  "statuses": {
+    "AUTHORIZED": "A recorded method exists for the specific retailer and method.",
+    "PUBLIC_OFFICIAL_API": "A retailer-published official API permits the operation under its license.",
+    "MANUAL_ONLY": "Only manual user operation (site or app) is permitted; no automated collection.",
+    "BLOCKED_PENDING_AUTHORIZATION": "A browser method with no recorded entry; it is refused until one is recorded.",
+    "RETIRED": "No supported route; not a candidate for automation."
+  },
+  "retailers": {
+    "amazon": {
+      "status": "AUTHORIZED",
+      "method": "amazon-pp-cli (first-party search, product pages, and destination delivery promise) for reads",
+      "bounds": "Read-only shopping research (search, item, shipping quote). No orders, checkout, or account changes.",
+      "evidence": "Operator statement in the T3 Code session on 2026-09-26, verbatim: \"we have written authorization to continue\", given while continuing the APK retailer migration. The operator holds the written instrument; it is not in this repository.",
+      "recorded": "2026-09-26",
+      "methods": {
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "amazon-pp-cli",
+          "bounds": "Read-only search, item detail, and the destination-scoped delivery promise through the retailer's first-party server-rendered pages and the item page's own location control. No orders, checkout, or account changes.",
+          "evidence": "docs/api/amazon-web-api.md",
+          "recorded": "2026-09-30"
+        },
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only search, product details, store discovery, local inventory, pickup, and shipping quotes where the retailer supports them. No cart, checkout, purchase, or account changes.",
+          "recorded": "2026-09-28",
+          "profile": "Assistant"
+        }
+      }
+    },
+    "bestbuy": {
+      "status": "AUTHORIZED",
+      "method": "bestbuy-pp-cli (APK-derived client) and the registered Assistant CloakBrowser profile where a browser route remains",
+      "bounds": "User-asserted written authorization covers site/app automation and local/ZIP lookup only. A search ZIP or eligibility response is not a delivered price, shipping cost, delivery time, or store stock. The Developer API remains unused.",
+      "evidence": "docs/api/audits/retailer-mobile-client-audit.md; docs/api/bestbuy-shopping.md",
+      "methods": {
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only search, product details, store discovery, local inventory, pickup, and shipping quotes where the retailer supports them. No cart, checkout, purchase, or account changes.",
+          "recorded": "2026-09-28",
+          "profile": "Assistant"
+        },
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "bestbuy-pp-cli",
+          "bounds": "Read-only keyword/category search, item card, and pickup/shipping availability through the APK-derived client. No orders, checkout, or account changes. The anonymous visitor flow and platform header are the app's own; no secret is embedded.",
+          "evidence": "Operator authorization in the T3 Code session on 2026-09-30 to use the official APK and its recovered API, continuing the APK retailer migration.",
+          "recorded": "2026-09-30"
+        }
+      }
+    },
+    "costco": {
+      "status": "AUTHORIZED",
+      "method": "costco-pp-cli (APK-derived client) and official APK static analysis",
+      "bounds": "Read-only shopping research (search, category, item, price, stores, inventory, fulfillment) through the APK-derived Printing Press client, plus official APK acquisition through CloakBrowser's visible UI and static analysis. No orders, checkout, or account changes. Verification challenges, request signing, TLS pinning, and access controls are not bypassed; blocked capabilities stay blocked until the retailer supplies an access path.",
+      "evidence": "Operator authorization recorded in the T3 Code session on 2026-09-26, continuing the APK retailer migration; all read-only shopping research is approved.",
+      "recorded": "2026-09-26",
+      "methods": {
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "costco-pp-cli"
+        },
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only search, product details, store discovery, local inventory, pickup, and shipping quotes where the retailer supports them. No cart, checkout, purchase, or account changes.",
+          "recorded": "2026-09-28",
+          "profile": "Assistant"
+        }
+      }
+    },
+    "ebay_browse": {
+      "status": "PUBLIC_OFFICIAL_API",
+      "method": "ebay-pp-cli official Browse API via ghostship-ebay",
+      "bounds": "Registered application access under the Browse API license. A ZIP delivery filter is eligibility evidence, not a delivered total; use the selected item's shippingCost. Pickup is a separate filter set.",
+      "evidence": "docs/api/audits/retailer-mobile-client-audit.md; docs/api/ebay-browse-shopping.md",
+      "methods": {
+        "official_api": {
+          "status": "PUBLIC_OFFICIAL_API"
+        }
+      }
+    },
+    "ebay_html": {
+      "status": "RETIRED",
+      "method": "none (legacy HTML client removed in the CLI-only fleet reset)",
+      "evidence": "Legacy HTML client removed in the CLI-only fleet reset."
+    },
+    "foodland": {
+      "status": "AUTHORIZED",
+      "method": "foodland-pp-cli via ghostship-foodland (APK-derived client) and official APK static analysis",
+      "bounds": "Read-only shopping research (search, category, item, price, stores, inventory, fulfillment) through the APK-derived Printing Press client, plus official APK acquisition through CloakBrowser's visible UI and static analysis. No orders, checkout, or account changes. Verification challenges, request signing, TLS pinning, and access controls are not bypassed; blocked capabilities stay blocked until the retailer supplies an access path.",
+      "evidence": "Operator authorization recorded in the T3 Code session on 2026-09-26, continuing the APK retailer migration; all read-only shopping research is approved.",
+      "recorded": "2026-09-26",
+      "methods": {
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "foodland-pp-cli"
+        },
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only search, product details, store discovery, local inventory, pickup, and shipping quotes where the retailer supports them. No cart, checkout, purchase, or account changes.",
+          "recorded": "2026-09-28",
+          "profile": "Assistant"
+        }
+      }
+    },
+    "safeway": {
+      "status": "AUTHORIZED",
+      "method": "safeway-pp-cli via ghostship-safeway (APK-derived client) and official APK static analysis",
+      "bounds": "Read-only shopping research (search, category, item, price, stores, inventory, fulfillment) through the APK-derived Printing Press client, plus official APK acquisition through CloakBrowser's visible UI and static analysis. No orders, checkout, or account changes. Verification challenges, request signing, TLS pinning, and access controls are not bypassed; blocked capabilities stay blocked until the retailer supplies an access path.",
+      "evidence": "Operator authorization recorded in the T3 Code session on 2026-09-26, continuing the APK retailer migration; all read-only shopping research is approved.",
+      "recorded": "2026-09-26",
+      "methods": {
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "safeway-pp-cli"
+        },
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only search, product details, store discovery, local inventory, pickup, and shipping quotes where the retailer supports them. No cart, checkout, purchase, or account changes.",
+          "recorded": "2026-09-28",
+          "profile": "Assistant"
+        }
+      }
+    },
+    "walmart": {
+      "status": "AUTHORIZED",
+      "method": "walmart-pp-cli via ghostship-walmart (APK-derived client) and official APK static analysis",
+      "bounds": "Read-only shopping research (search, category, item, price, stores, inventory, fulfillment) through the APK-derived Printing Press client, plus official APK acquisition through CloakBrowser's visible UI and static analysis. No orders, checkout, or account changes. Verification challenges, request signing, TLS pinning, and access controls are not bypassed; blocked capabilities stay blocked until the retailer supplies an access path.",
+      "evidence": "Operator authorization recorded in the T3 Code session on 2026-09-26, continuing the APK retailer migration; all read-only shopping research is approved.",
+      "recorded": "2026-09-26",
+      "methods": {
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "walmart-pp-cli"
+        },
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only search, product details, store discovery, local inventory, pickup, and shipping quotes where the retailer supports them. No cart, checkout, purchase, or account changes.",
+          "recorded": "2026-09-28",
+          "profile": "Assistant"
+        }
+      }
+    },
+    "aliexpress": {
+      "status": "AUTHORIZED",
+      "method": "aliexpress-pp-cli (first-party web search, category, and card delivery window) and the Assistant browser where a browser route remains",
+      "bounds": "Read-only shopping research (search, category, item, price, stores, inventory, fulfillment). No orders, checkout, or account changes. Verification challenges, request signing, TLS pinning, and access controls are not bypassed; blocked capabilities stay blocked until the retailer supplies an access path.",
+      "evidence": "Operator authorization recorded in the T3 Code session on 2026-09-26, continuing the APK retailer migration; all read-only shopping research is approved.",
+      "recorded": "2026-09-26",
+      "methods": {
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "aliexpress-pp-cli",
+          "bounds": "Read-only server-rendered search, category, and the card-level delivery window. No destination-verified shipping, orders, checkout, or account changes.",
+          "evidence": "docs/api/aliexpress-web-api.md",
+          "recorded": "2026-10-01"
+        },
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only search, product details, store discovery, local inventory, pickup, and shipping quotes where the retailer supports them. No cart, checkout, purchase, or account changes.",
+          "recorded": "2026-09-28",
+          "profile": "Assistant"
+        }
+      }
+    },
+    "samsclub": {
+      "status": "AUTHORIZED",
+      "method": "samsclub-pp-cli (APK-derived client) and official APK static analysis",
+      "bounds": "Read-only shopping research (search, category, item, price, stores, inventory, fulfillment) through the APK-derived Printing Press client, plus official APK acquisition through CloakBrowser's visible UI and static analysis. No orders, checkout, or account changes. Verification challenges, request signing, TLS pinning, and access controls are not bypassed; blocked capabilities stay blocked until the retailer supplies an access path.",
+      "evidence": "Operator authorization recorded in the T3 Code session on 2026-09-26, continuing the APK retailer migration; all read-only shopping research is approved.",
+      "recorded": "2026-09-26",
+      "methods": {
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "samsclub-pp-cli",
+          "bounds": "Read-only search, item detail, club discovery, and club-scoped fulfillment availability through the APK-derived client. No orders, checkout, or account changes.",
+          "evidence": "docs/api/samsclub-api.md; docs/api/evidence/samsclub-search-apk-redacted-2026-09-26.json",
+          "recorded": "2026-10-01"
+        },
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only search, product details, store discovery, local inventory, pickup, and shipping quotes where the retailer supports them. No cart, checkout, purchase, or account changes.",
+          "recorded": "2026-09-28",
+          "profile": "Assistant"
+        }
+      }
+    },
+    "target": {
+      "status": "AUTHORIZED",
+      "method": "target-pp-cli (CDUI search/item/stores/fulfillment with a browser-acquired visitor session via the cookie bridge)",
+      "bounds": "Read-only shopping research (search, category, item, price, stores, inventory, fulfillment). No orders, checkout, or account changes. Verification challenges, request signing, TLS pinning, and access controls are not bypassed.",
+      "evidence": "Operator authorization recorded in the T3 Code session on 2026-09-26, continuing the APK retailer migration; all read-only shopping research is approved.",
+      "recorded": "2026-09-26",
+      "methods": {
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only session acquisition and API-shape discovery in the agent-owned Default profile; data requests route through target-pp-cli.",
+          "recorded": "2026-10-02",
+          "profile": "Default"
+        },
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "target-pp-cli",
+          "bounds": "Read-only CDUI search, item detail, store discovery, and store-scoped fulfillment. The session is the ordinary visitor session acquired through the cookie bridge. No orders, checkout, or account changes.",
+          "evidence": "docs/api/evidence/target-boundary-2026-10-02.json",
+          "recorded": "2026-10-02"
+        }
+      }
+    },
+    "homedepot": {
+      "status": "AUTHORIZED",
+      "method": "homedepot-pp-cli (APK-derived client) and the registered Assistant CloakBrowser profile where a browser route remains",
+      "bounds": "Read-only shopping research (search, category, item, price, stores, inventory, fulfillment). No orders, checkout, or account changes. Verification challenges, request signing, TLS pinning, and access controls are not bypassed.",
+      "evidence": "Operator authorization recorded in the T3 Code session on 2026-09-26, continuing the APK retailer migration; all read-only shopping research is approved.",
+      "recorded": "2026-09-26",
+      "methods": {
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only search, product details, store discovery, local inventory, pickup, and shipping quotes where the retailer supports them. No cart, checkout, purchase, or account changes.",
+          "recorded": "2026-09-28",
+          "profile": "Assistant"
+        },
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "homedepot-pp-cli",
+          "bounds": "Read-only keyword/category search, store discovery, and exact-item store stock through the APK-derived client. The operator supplies the app key from Bitwarden; no app secret is embedded. No orders, checkout, or account changes.",
+          "evidence": "Operator authorization in the T3 Code session on 2026-09-30 to use the official APK and its recovered API, continuing the APK retailer migration. The recovered operations are read-only and the client takes an operator-supplied key.",
+          "recorded": "2026-09-30"
+        }
+      }
+    },
+    "lowes": {
+      "status": "AUTHORIZED",
+      "method": "lowes-pp-cli (APK-derived client) for every routed capability: exact model-number item reads, store discovery, per-store inventory, and delivery eligibility",
+      "bounds": "Read-only shopping research (search, category, item, price, stores, inventory, fulfillment). No orders, checkout, or account changes. Verification challenges, request signing, TLS pinning, and access controls are not bypassed.",
+      "evidence": "Operator authorization recorded in the T3 Code session on 2026-09-26, continuing the APK retailer migration; all read-only shopping research is approved.",
+      "recorded": "2026-09-26",
+      "methods": {
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only shape discovery and ordinary visitor sessions in the agent-owned Default profile. No capability is currently routed to the browser: www.lowes.com search answers Access Denied (2026-10-03). No cart, checkout, purchase, or account changes.",
+          "recorded": "2026-10-03",
+          "profile": "Default"
+        },
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "lowes-pp-cli",
+          "bounds": "Read-only store discovery/detail, item detail by model number, per-store price/on-hand inventory, and fulfillment flags through the APK-derived client. The operator supplies the app's OAuth client pair to mint a bearer; no app secret is embedded. No orders, checkout, or account changes.",
+          "evidence": "Operator authorization in the T3 Code session on 2026-09-29 to use the official APK to recover the API, continuing the APK retailer migration. The recovered operations are read-only and the client takes operator-supplied credentials.",
+          "recorded": "2026-09-29"
+        }
+      }
+    },
+    "ebay": {
+      "status": "AUTHORIZED",
+      "method": "ebay-pp-cli (first-party web search, item detail, and country-scoped shipping) and the Assistant browser where a browser route remains",
+      "methods": {
+        "printing_press": {
+          "status": "AUTHORIZED",
+          "client": "ebay-pp-cli",
+          "bounds": "Read-only fixed-price search, item detail, and shipping evidence read from eBay's first-party server-rendered pages. Shipping is US country-scoped, not ZIP-verified. No orders, checkout, or account changes.",
+          "evidence": "docs/api/ebay-web-api.md",
+          "recorded": "2026-10-01"
+        },
+        "official_api": {
+          "status": "PUBLIC_OFFICIAL_API",
+          "bounds": "Official Buy Browse API under its license, used only with --source official and an operator keyset; a ZIP filter is eligibility evidence, not a delivered total."
+        },
+        "browser": {
+          "status": "AUTHORIZED",
+          "bounds": "Read-only search, product details, store discovery, local inventory, pickup, and shipping quotes where the retailer supports them. No cart, checkout, purchase, or account changes.",
+          "recorded": "2026-09-28",
+          "profile": "Assistant"
+        }
+      },
+      "evidence": "Operator authorization recorded in the T3 Code session on 2026-09-26, continuing the APK retailer migration; all read-only shopping research is approved.",
+      "recorded": "2026-09-27"
+    }
+  },
+  "method_keys": {
+    "printing_press": "Checked-in Printing Press client",
+    "official_api": "Documented public API",
+    "browser": "Operator browser profile reading the public website"
+  }
+}

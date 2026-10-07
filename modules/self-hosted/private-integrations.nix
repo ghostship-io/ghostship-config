@@ -2,8 +2,21 @@
 let
   cfg = config.ghostship.privateIntegrations;
   system = pkgs.stdenv.hostPlatform.system;
-  tools = inputs.ghostship-private-agent.packages.${system};
+  agent = inputs.ghostship-private-agent;
+  tools = agent.packages.${system};
   assistant = inputs.ghostship-private-assistant.packages.${system};
+  # The deployment owns MCP assembly: it supplies the shopping routing and
+  # authorization policy plus the icon to the shared platform builder, rather
+  # than consuming an image built by another repo. The builder uses the
+  # platform's pinned nixpkgs and exposed session-free client subset.
+  privateAddons = agent.lib.mkPrivateIntegrations {
+    inherit system;
+    shoppingConfig = {
+      retailers = ./private-integrations/shopping-retailers.json;
+      authorization = ./private-integrations/retailer-authorization.json;
+    };
+    mcpIcon = ./private-integrations/ghostship.png;
+  };
   brokerConfig = pkgs.writeText "ghostship-keep-broker.json" (builtins.toJSON {
     accounts = {
       User = { profile_id = "f0fae36e-2475-4dd9-8e02-ac4bc576d7b1"; authuser = 0; };
@@ -37,7 +50,7 @@ let
     ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-relay
     exec ${pkgs.python3}/bin/python3 ${./private-relay-render.py} \
       ${config.ghostship.selfHostedSecrets.projections.ghostship-relay.path} \
-      ${tools.private-mcp}/bin/ghostship-mcp
+      ${privateAddons.runtime}/bin/ghostship-mcp
   '';
 in {
   options.ghostship.privateIntegrations.enable = lib.mkEnableOption "private Ghostship Keep and Amazon MCP gateway";
@@ -95,8 +108,8 @@ in {
       serviceConfig = { Type = "oneshot"; ExecStart = render; UMask = "0077"; };
     };
     virtualisation.oci-containers.containers.ghostship-private-integrations = {
-      image = "ghostship-private-integrations:${tools.private-integration-image.imageTag}";
-      imageFile = tools.private-integration-image;
+      image = "ghostship-private-integrations:${privateAddons.image.imageTag}";
+      imageFile = privateAddons.image;
       pull = "never";
       user = "62020:62020";
       volumes = [
