@@ -5,8 +5,8 @@
     # The full agent flake, so the private-integration image packages the
     # deployment's shopping routing policy and the Ghostship icon, not just the
     # generic platform.
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/97e1b2aef67d80850000e67111fad9d319050cdd";
-    ghostship-private-assistant.url = "github:ghostship-io/ghostship-assistant/34512034ce8342f2a8ef0bec7798b30f4d2e51e1";
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/fa67b48728928815f242e966f82aa399c8e2bee5";
+    ghostship-private-assistant.url = "github:ghostship-io/ghostship-assistant/4751d4317020608744185db7992f4d9c0501405e";
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
