@@ -11,9 +11,9 @@ from pathlib import Path
 
 
 # Private flake inputs mapped to their source repository, scoped read key, and
-# optional subdirectory. The deployment consumes the full agent repository so
-# the private-integration image can package the agent-owned shopping routing
-# policy and icon alongside the ghostship-tools platform image builder.
+# optional subdirectory. The deployment consumes the agent repository for the
+# ghostship-tools platform builder; the MCP image's shopping policy and icon are
+# deployment-owned under modules/self-hosted/private-integrations/.
 SOURCES = {
     'ghostship-private-agent': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
     'ghostship-private-assistant': {'repo': 'ghostship-assistant', 'key': 'assistant', 'dir': None},
