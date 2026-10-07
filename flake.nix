@@ -2,7 +2,10 @@
   description = "Unified NixOS Configuration Repository";
 
   inputs = {
-    ghostship-private-tools.url = "github:ghostship-io/ghostship-agent/a5574ebe9aee2f535380aa3b1ba047b1aa5aa388?dir=ghostship-tools";
+    # The full agent flake, so the private-integration image packages the
+    # deployment's shopping routing policy and the Ghostship icon, not just the
+    # generic platform.
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/97e1b2aef67d80850000e67111fad9d319050cdd";
     ghostship-private-assistant.url = "github:ghostship-io/ghostship-assistant/35b75b6877a0ac3ee193b3f226d6532e80778a92";
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

@@ -11,10 +11,11 @@ from pathlib import Path
 
 
 # Private flake inputs mapped to their source repository, scoped read key, and
-# optional subdirectory. The tool platform lives in the agent repository under
-# ghostship-tools/, so its locked node carries ``dir = "ghostship-tools"``.
+# optional subdirectory. The deployment consumes the full agent repository so
+# the private-integration image can package the agent-owned shopping routing
+# policy and icon alongside the ghostship-tools platform image builder.
 SOURCES = {
-    'ghostship-private-tools': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': 'ghostship-tools'},
+    'ghostship-private-agent': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
     'ghostship-private-assistant': {'repo': 'ghostship-assistant', 'key': 'assistant', 'dir': None},
 }
 
