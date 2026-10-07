@@ -2,7 +2,7 @@
 let
   cfg = config.ghostship.privateIntegrations;
   system = pkgs.stdenv.hostPlatform.system;
-  tools = inputs.ghostship-private-tools.packages.${system};
+  tools = inputs.ghostship-private-agent.packages.${system};
   assistant = inputs.ghostship-private-assistant.packages.${system};
   brokerConfig = pkgs.writeText "ghostship-keep-broker.json" (builtins.toJSON {
     accounts = {
