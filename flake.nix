@@ -6,7 +6,7 @@
     # deployment's shopping routing policy and the Ghostship icon, not just the
     # generic platform.
     ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/fa67b48728928815f242e966f82aa399c8e2bee5";
-    ghostship-private-assistant.url = "github:ghostship-io/ghostship-assistant/4751d4317020608744185db7992f4d9c0501405e";
+    ghostship-private-assistant.url = "github:ghostship-io/ghostship-assistant/d84fac3";
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
