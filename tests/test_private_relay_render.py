@@ -26,6 +26,9 @@ class Render(unittest.TestCase):
                 config = json.loads((root/'ghostship.yaml').read_text())
                 self.assertEqual(config['control_plane']['api_key'], 'file:'+str(root/'ghostship.key'))
                 self.assertEqual(config['mcp']['commands'][0]['command'], '/nix/store/fixed/bin/ghostship-mcp ghostship')
+                # ChatGPT's connector omits notifications/initialized, so the
+                # tunnel must supply it for the stateful stdio MCP child.
+                self.assertTrue(config['mcp']['stdio_send_initialized_notification'])
                 self.assertNotIn('synthetic', (root/'ghostship.yaml').read_text())
                 self.assertEqual((root/'ghostship.key').stat().st_mode & 0o777, 0o400)
                 self.assertFalse((root/'keep.yaml').exists())

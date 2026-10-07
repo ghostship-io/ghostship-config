@@ -48,7 +48,13 @@ def main():
         'health': {'listen_addr': '127.0.0.1:8081'},
         'process': {'pid_file': '/tmp/ghostship.pid'},
         'log': {'level': 'warn', 'format': 'json'},
-        'mcp': {'commands': [{'channel': 'main', 'command': sys.argv[2] + ' ghostship'}]},
+        # ChatGPT's MCP connector completes `initialize` but does not send the
+        # `notifications/initialized` that a stateful stdio MCP server requires.
+        # The tunnel's stdio guard then rejects every `tools/call` with HTTP 409
+        # `mcp_initialization_required`. This shim makes tunnel-client send the
+        # notification itself after the forwarded `initialize` succeeds.
+        'mcp': {'commands': [{'channel': 'main', 'command': sys.argv[2] + ' ghostship'}],
+                'stdio_send_initialized_notification': True},
     }))
     # Personal destination belongs to deployment, never to the reusable image.
     write('runtime.json', json.dumps({'home_postal_code': 'a postal code'}))
