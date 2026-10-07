@@ -18,9 +18,12 @@ let
     mcpIcon = ./private-integrations/ghostship.png;
   };
   brokerConfig = pkgs.writeText "ghostship-keep-broker.json" (builtins.toJSON {
+    # Each account names the expected Google identity; the broker verifies the
+    # signed-in account on the identity page and resolves its index at session
+    # acquisition. No account index is configured or assumed.
     accounts = {
-      User = { profile_id = "f0fae36e-2475-4dd9-8e02-ac4bc576d7b1"; authuser = 0; };
-      Agent = { profile_id = "50a1343a-ca9b-4c08-93f0-d0c69eae6643"; authuser = 0; };
+      User = { profile_id = "f0fae36e-2475-4dd9-8e02-ac4bc576d7b1"; expected_email = "<owner-email>"; };
+      Agent = { profile_id = "50a1343a-ca9b-4c08-93f0-d0c69eae6643"; expected_email = "<agent-email>"; };
     };
     principal = "chatgpt-personal-owner";
     client = "${tools.google-pp-cli}/bin/google-pp-cli";
