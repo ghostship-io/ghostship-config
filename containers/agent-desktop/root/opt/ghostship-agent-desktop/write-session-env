@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Capture the running desktop session environment so agent processes and SSH
+# logins can reach the compositor, the accessibility bus and the D-Bus session.
+# Invoked from the patched startwm_wayland.sh right before lxqt-session.
+set -eu
+
+out=/config/agent-desktop/session-env
+tmp="${out}.tmp"
+umask 077
+
+{
+  env | grep -E '^(DBUS_SESSION_BUS_ADDRESS|WAYLAND_DISPLAY|DISPLAY|XDG_RUNTIME_DIR|QT_ACCESSIBILITY|GTK_MODULES|XDG_CURRENT_DESKTOP|MOZ_ENABLE_WAYLAND|XCURSOR_THEME|XCURSOR_SIZE)=' || true
+  echo 'QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1'
+} > "$tmp"
+
+mv "$tmp" "$out"
+chown 3000:3000 "$out" 2>/dev/null || true
+chmod 0600 "$out"
+
+# sshd reads ~/.ssh/environment for non-interactive commands
+# (PermitUserEnvironment yes in /etc/ssh/ghostship-sshd_config).
+cp "$out" /config/.ssh/environment
+chown 3000:3000 /config/.ssh/environment 2>/dev/null || true
+chmod 0600 /config/.ssh/environment

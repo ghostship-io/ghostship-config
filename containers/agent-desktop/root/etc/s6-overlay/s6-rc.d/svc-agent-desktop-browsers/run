@@ -1,0 +1,4 @@
+#!/usr/bin/with-contenv bash
+# Ghostship agent desktop browser owners: persistent headed Camoufox contexts
+# exposed over Playwright WebSocket endpoints.
+exec s6-setuidgid abc /opt/ghostship-agent-desktop/start-browser-owner
