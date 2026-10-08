@@ -69,12 +69,25 @@ The detection fires while the session is enabled and clears after detach.
 | C1 raw minimal CDP (attach, Page, evaluate, AXTree, Input) | clean | functional: read page text |
 | C2 Bladebro `rb attach` (`--port`) | clean | `see content` works |
 | C4 Bladebro profile mode (`rb profile`, own launch) | clean | `nav` works |
-| Playwright / Runtime-enabling clients | triggered | blocked at Home Depot |
+| C5 Playwright MCP Chrome extension | not promoted | Playwright-based; enables Runtime |
+| C6 Chrome DevTools MCP | not promoted | broad domain set including Runtime |
+| Chrome extension transport (no CDP) | unavailable | branded Chrome 155 ignores `--load-extension`; a policy-installed CRX would be required |
 
 Bladebro's real-browser lane does not call `Runtime.enable`, so it passes the
 same detector as the no-CDP baseline. Playwright enables Runtime and is
-detected. C5/C6 (Playwright MCP Chrome extension, Chrome DevTools MCP) were
-not run: both are Runtime-enabling clients and are lower priority.
+detected. C5/C6 were not run: both are Runtime-enabling clients and therefore
+fail the Phase 1 detector by construction.
+
+### Chrome extension transport
+
+An unpacked MV3 extension (`tools/ext/`, driven over the local command
+channel in `tools/run_extension.py`) was evaluated as the non-CDP
+alternative. **Branded Google Chrome 155 ignores `--load-extension` and
+`--disable-extensions-except`**: the extension never starts, so the transport
+is unavailable without an enterprise policy and a hosted CRX. Given the
+constraint to preserve official Google Chrome and avoid permanent launcher
+changes, native desktop control (Pelorus/Selkies) remains the non-CDP
+fallback, and Bladebro attach the validated automation path.
 
 ## Phase 4 — Home Depot journey
 
