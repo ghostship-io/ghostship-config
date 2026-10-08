@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Ghostship CDP diagnostic</title>
+  <style>body{font-family:monospace;margin:16px}</style>
+</head>
+<body>
+  <h1 id="verdict">waiting</h1>
+  <pre id="detail"></pre>
+  <script>
+    (function () {
+      var run = new URLSearchParams(location.search).get('run') || 'unknown';
+      window.__firstTrap = null;
+      window.__lastCheck = null;
+
+      function cdpCheckMain() {
+        var detected = false;
+        var original = Error.prepareStackTrace;
+        Error.prepareStackTrace = function () { detected = true; return original; };
+        try { console.log(new Error('ghostship-cdp-probe')); } catch (e) {}
+        Error.prepareStackTrace = original;
+        return detected;
+      }
+
+      var worker = null;
+      var workerResult = null;
+      try {
+        var source = [
+          'self.onmessage = function () {',
+          '  var detected = false;',
+          '  var original = Error.prepareStackTrace;',
+          '  Error.prepareStackTrace = function () { detected = true; return original; };',
+          '  try { console.log(new Error("ghostship-cdp-probe-worker")); } catch (e) {}',
+          '  Error.prepareStackTrace = original;',
+          '  postMessage(detected);',
+          '};',
+        ].join('\n');
+        var blob = new Blob([source], { type: 'application/javascript' });
+        worker = new Worker(URL.createObjectURL(blob));
+        worker.onmessage = function (event) { workerResult = event.data; };
+      } catch (e) {}
+
+      function snapshot() {
+        window.__seq = (window.__seq || 0) + 1;
+        var main = cdpCheckMain();
+        if (main && !window.__firstTrap) window.__firstTrap = Date.now();
+        try { if (worker) worker.postMessage('check'); } catch (e) {}
+        window.__lastCheck = { main: main, worker: workerResult, t: Date.now() };
+        return {
+          seq: window.__seq,
+          t: Date.now(),
+          cdpMain: main,
+          cdpWorker: workerResult,
+          firstCdpT: window.__firstTrap,
+          webdriver: navigator.webdriver,
+          ua: navigator.userAgent,
+          outer: [outerWidth, outerHeight],
+          inner: [innerWidth, innerHeight],
+          focus: document.hasFocus(),
+          visible: document.visibilityState,
+        };
+      }
+
+      function report() {
+        var payload = snapshot();
+        var verdict = document.getElementById('verdict');
+        if (verdict) {
+          verdict.textContent = (payload.cdpMain || payload.cdpWorker)
+            ? 'CDP SERIALIZATION DETECTED (main=' + payload.cdpMain + ' worker=' + payload.cdpWorker + ')'
+            : 'baseline (no CDP serialization)';
+        }
+        var detail = document.getElementById('detail');
+        if (detail) detail.textContent = JSON.stringify(payload, null, 1);
+        fetch('/report?run=' + encodeURIComponent(run), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).catch(function () {});
+      }
+
+      setInterval(report, 1500);
+      report();
+    })();
+  </script>
+</body>
+</html>
