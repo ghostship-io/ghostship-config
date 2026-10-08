@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.40] - 2026-10-08
+
+- Add the Ghostship agent desktop: a persistent LXQt + labwc Selkies
+  workstation on `chill-penguin` built from the LinuxServer `ubuntu-lxqt`
+  image with pinned Camoufox/Playwright, Pelorus AT-SPI desktop control, key
+  based SSH and supervised browser owners.
+- Expose a token authenticated automation proxy on a private
+  `agent_desktop_net` shared with t3code, and route `desktop.ghostship.io`
+  through the existing Cloudflare tunnel and Access policy.
+- Document the endpoints, profiles, GUI automation, updates and recovery in
+  `docs/agent-desktop.md`.
+
 ## [3.15.39] - 2026-10-06
 
 - Provide `git` to the `ghostship-config-tests` derivation; the t3code retention
