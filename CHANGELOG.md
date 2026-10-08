@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.44] - 2026-10-08
+
+- Add the CDP detection test tooling (dependency-free client, local detector
+  page, variant matrix, retailer journey runner) and document the isolation
+  result: `Runtime.enable` is the only operation deviceandbrowserinfo's
+  detector observes, while attachment, Page/Network/DOM/Accessibility/Input
+  and one-shot evaluation stay clean.
+- Validate Home Depot end to end with Bladebro real-lane attach and the raw
+  minimal CDP client; Playwright and Runtime-enabling clients remain blocked.
+- Evaluate the Chrome extension transport: branded Chrome 155 ignores
+  `--load-extension`, so non-CDP alternatives need enterprise policy or
+  native desktop control.
+- Harden the CDP regression runner to fail on missing results, zero page
+  samples, Chrome startup failures and unsuccessful commands, and load the
+  desktop session environment so timers or `podman exec` can run the tools.
+- Strengthen the retailer runner: live product links only, distinct product
+  counts, page-completeness markers, explicit 403/challenge detection, and
+  a reload step; the no-CDP control stays screenshot-only.
+
 ## [3.15.43] - 2026-10-08
 
 - Restore PulseAudio and add Noto Color Emoji so the desktop browser exposes

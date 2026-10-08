@@ -21,7 +21,8 @@ Read on demand:
   container: [container workflow](docs/container-workflow.md).
 - Windows/WSL2 worker environments: [WSL2 T3 Code workers](docs/wsl-t3-workers.md).
 - Agent desktop (browsers, GUI automation, human access):
-  [agent desktop](docs/agent-desktop.md).
+  [agent desktop](docs/agent-desktop.md). CDP detection testing:
+  [cdp detection](docs/cdp-detection.md).
 - NixOS/WSL, secrets, service activation, or host-specific pitfalls: the
   relevant section of [operating notes](docs/agent-operations.md).
 - Boomer emulation or controller changes: [emulation guide](docs/boomer-kuwanger-emulation.md)
