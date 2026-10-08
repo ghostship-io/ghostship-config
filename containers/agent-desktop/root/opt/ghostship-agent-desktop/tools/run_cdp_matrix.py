@@ -100,7 +100,7 @@ def kill_profile_chrome(profile):
     time.sleep(1)
 
 
-def launch_chrome(profile, port, url):
+def launch_chrome(profile, port, url, log_name="chrome"):
     command = [
         CHROME,
         f"--user-data-dir={profile}",
@@ -115,10 +115,13 @@ def launch_chrome(profile, port, url):
     if port:
         command.append(f"--remote-debugging-port={port}")
     command.append(url)
+    log_dir = BASE_DIR / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log = open(log_dir / f"{log_name}.log", "ab")
     return subprocess.Popen(
         command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log,
+        stderr=log,
         stdin=subprocess.DEVNULL,
         start_new_session=True,
     )
@@ -157,10 +160,15 @@ def make_seed(seed_dir):
         return
     seed_dir.parent.mkdir(parents=True, exist_ok=True)
     port = PORT_BASE - 1
-    process = launch_chrome(str(seed_dir), port, f"http://127.0.0.1:{REPORT_PORT}/diag.html?run=seed")
+    process = launch_chrome(str(seed_dir), port, f"http://127.0.0.1:{REPORT_PORT}/diag.html?run=seed", log_name="seed")
     wait_ready(port, timeout=30)
     time.sleep(12)
     stop_chrome(process, str(seed_dir))
+    for lock in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        try:
+            (seed_dir / lock).unlink()
+        except OSError:
+            pass
     print(f"[matrix] seed profile created at {seed_dir}", flush=True)
 
 
@@ -176,7 +184,7 @@ def run_variant(variant, ops, seed_dir, keep_profile=False):
     with REPORTS_LOCK:
         REPORTS.pop(run_id, None)
 
-    process = launch_chrome(str(profile), port, f"http://127.0.0.1:{REPORT_PORT}/diag.html?run={run_id}")
+    process = launch_chrome(str(profile), port, f"http://127.0.0.1:{REPORT_PORT}/diag.html?run={run_id}", log_name=f"{variant}")
     ready = wait_ready(port, timeout=40) if port else True
     if variant == "A0":
         time.sleep(10)
@@ -215,6 +223,7 @@ def run_variant(variant, ops, seed_dir, keep_profile=False):
         "after_detected": any(detected(r) for r in after),
         "worker_detected": any(r.get("cdpWorker") for r in reports),
         "detected_reports": sum(1 for r in reports if detected(r)),
+        "samples_after": len(after),
         "first_fired_seq": first_fired.get("seq") if first_fired else None,
         "first_fired_t": first_fired.get("t") if first_fired else None,
         "op_started": t0,
@@ -282,6 +291,7 @@ def run_driver_variant(variant, seed_dir, keep_profile=False):
     output = ""
     error = None
     executed = []
+    ready = False
     t0 = time.time()
     if spec["launch"]:
         port = PORT_BASE + 20
@@ -309,6 +319,7 @@ def run_driver_variant(variant, seed_dir, keep_profile=False):
             code3, out3 = run_bladebro(blade_home, ["nav", diag_url])
             executed.append(f"rb mode profile exit={code1}; rb profile exit={code2}; nav exit={code3}")
             output = (out1 + out2 + out3)[-800:]
+            ready = code3 == 0
         except Exception as exc:
             error = str(exc)
 
@@ -333,6 +344,7 @@ def run_driver_variant(variant, seed_dir, keep_profile=False):
         "variant": variant,
         "kind": spec["kind"],
         "ops": sorted(CLEAN_OPS) if spec["kind"] == "raw_clean" else ["bladebro"],
+        "ready": ready,
         "executed": executed,
         "error": error,
         "output": output,
@@ -341,6 +353,7 @@ def run_driver_variant(variant, seed_dir, keep_profile=False):
         "after_detected": any(detected(r) for r in after),
         "worker_detected": any(r.get("cdpWorker") for r in reports),
         "detected_reports": sum(1 for r in reports if detected(r)),
+        "samples_after": len(after),
         "final": reports[-1] if reports else None,
     }
     if not keep_profile:
@@ -364,9 +377,9 @@ def run_b2(seed_dir):
         with REPORTS_LOCK:
             REPORTS.pop("B2a", None)
             REPORTS.pop("B2b", None)
-        processes.append(launch_chrome(str(profiles[0]), 0, f"http://127.0.0.1:{REPORT_PORT}/diag.html?run=B2a"))
+        processes.append(launch_chrome(str(profiles[0]), 0, f"http://127.0.0.1:{REPORT_PORT}/diag.html?run=B2a", log_name="B2a"))
         port = PORT_BASE + 30
-        processes.append(launch_chrome(str(profiles[1]), port, f"http://127.0.0.1:{REPORT_PORT}/diag.html?run=B2b"))
+        processes.append(launch_chrome(str(profiles[1]), port, f"http://127.0.0.1:{REPORT_PORT}/diag.html?run=B2b", log_name="B2b"))
         if not wait_ready(port, timeout=40):
             raise RuntimeError("B2b chrome not ready")
         time.sleep(5)
@@ -391,7 +404,34 @@ def run_b2(seed_dir):
             shutil.rmtree(profile, ignore_errors=True)
 
 
+SESSION_ENV_PATH = "/config/agent-desktop/session-env"
+SESSION_KEYS = (
+    "WAYLAND_DISPLAY",
+    "DISPLAY",
+    "XDG_RUNTIME_DIR",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "QT_ACCESSIBILITY",
+    "GTK_MODULES",
+    "XDG_CURRENT_DESKTOP",
+    "QT_LINUX_ACCESSIBILITY_ALWAYS_ON",
+)
+
+
+def load_session_env():
+    """Make the tools usable from podman exec or a timer, not just SSH."""
+    path = pathlib.Path(SESSION_ENV_PATH)
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key in SESSION_KEYS:
+            os.environ.setdefault(key, value)
+
+
 def main():
+    load_session_env()
     global OUT_DIR
     parser = argparse.ArgumentParser()
     parser.add_argument("--variants", default=",".join(VARIANTS))

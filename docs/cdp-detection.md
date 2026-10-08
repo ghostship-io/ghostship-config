@@ -133,6 +133,12 @@ Run inside the desktop container:
 python3 /opt/ghostship-agent-desktop/tools/check_cdp_regression.py
 ```
 
-It asserts A6/A10/C2 stay clean and A13 still detects. Re-run it after every
-Bladebro or Chrome update; `tools/run_cdp_matrix.py` reproduces the full
-matrix, and `tools/run_retailer.py` the retailer journey.
+It asserts A6/A10/C2 stay clean and A13 still detects, and fails on missing
+results, fewer than five page samples, Chrome startup failures, command
+errors or unsuccessful commands. The tools load the desktop session
+environment themselves, so a timer or `podman exec` can run them. The
+retailer runner requires live extracted product links (never a fallback),
+distinct products, prices, complete pages and a successful reload, and
+classifies 403s, challenges and incomplete pages explicitly. Re-run the
+regression after every Bladebro or Chrome update; `tools/run_cdp_matrix.py`
+reproduces the full matrix and `tools/run_retailer.py` the retailer journey.
