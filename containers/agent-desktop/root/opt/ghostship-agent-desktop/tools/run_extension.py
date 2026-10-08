@@ -163,7 +163,34 @@ def stats(text):
     }
 
 
+SESSION_ENV_PATH = "/config/agent-desktop/session-env"
+SESSION_KEYS = (
+    "WAYLAND_DISPLAY",
+    "DISPLAY",
+    "XDG_RUNTIME_DIR",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "QT_ACCESSIBILITY",
+    "GTK_MODULES",
+    "XDG_CURRENT_DESKTOP",
+    "QT_LINUX_ACCESSIBILITY_ALWAYS_ON",
+)
+
+
+def load_session_env():
+    """Make the tools usable from podman exec or a timer, not just SSH."""
+    path = pathlib.Path(SESSION_ENV_PATH)
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key in SESSION_KEYS:
+            os.environ.setdefault(key, value)
+
+
 def main():
+    load_session_env()
     profile = sys.argv[1]
     out_dir = pathlib.Path(sys.argv[2])
     out_dir.mkdir(parents=True, exist_ok=True)
