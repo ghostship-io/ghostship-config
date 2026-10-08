@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Manage extra on-demand Chrome instances with the same minimal command line
+# as the supervised Agent and Personal instances.
+#
+# Usage:
+#   ghostship-chrome-instance start <name> <port>
+#   ghostship-chrome-instance stop <name>
+#   ghostship-chrome-instance list
+set -eu
+
+bin=/opt/ghostship-agent-desktop/run-chrome
+base=/config/agent-desktop/chrome
+logs=/config/agent-desktop/logs
+action=${1:-}
+
+case "$action" in
+  start)
+    name=${2:?usage: ghostship-chrome-instance start <name> <port>}
+    port=${3:?usage: ghostship-chrome-instance start <name> <port>}
+    case "$name" in
+      *[!A-Za-z0-9_-]* | '') echo "invalid instance name: $name" >&2; exit 2 ;;
+    esac
+    case "$port" in
+      *[!0-9]* | '') echo "invalid port: $port" >&2; exit 2 ;;
+    esac
+    if pgrep -f -- "--user-data-dir=$base/$name" >/dev/null 2>&1; then
+      echo "instance $name is already running" >&2
+      exit 1
+    fi
+    mkdir -p "$logs"
+    nohup "$bin" "$name" "$port" >"$logs/$name.log" 2>&1 &
+    echo "started $name on 127.0.0.1:$port (pid $!)"
+    ;;
+  stop)
+    name=${2:?usage: ghostship-chrome-instance stop <name>}
+    if pkill -f -- "--user-data-dir=$base/$name"; then
+      echo "stopped $name"
+    else
+      echo "instance $name is not running" >&2
+      exit 1
+    fi
+    ;;
+  list)
+    for dir in "$base"/*; do
+      [ -d "$dir" ] || continue
+      name=$(basename "$dir")
+      port=$(pgrep -af -- "--user-data-dir=$base/$name" 2>/dev/null \
+        | grep -oE -- '--remote-debugging-port=[0-9]+' | head -1 | cut -d= -f2 || true)
+      if [ -n "$port" ]; then
+        echo "$name running 127.0.0.1:$port"
+      else
+        echo "$name stopped"
+      fi
+    done
+    ;;
+  *)
+    echo "usage: ghostship-chrome-instance <start <name> <port>|stop <name>|list>" >&2
+    exit 2
+    ;;
+esac
