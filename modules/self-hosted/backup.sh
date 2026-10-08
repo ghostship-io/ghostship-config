@@ -121,6 +121,13 @@ restic backup --host chill-penguin --tag ghostship \
     --exclude "$retired_snapshot/*/*/docker" \
     --exclude "$retired_snapshot/*/*/nix-root" \
     --exclude '**/node_modules' --exclude '**/.cache' \
+    --exclude "$app_snapshot/agent-desktop/config/agent-desktop/chrome/*/Default/Cache" \
+    --exclude "$app_snapshot/agent-desktop/config/agent-desktop/chrome/*/Default/Code Cache" \
+    --exclude "$app_snapshot/agent-desktop/config/agent-desktop/chrome/*/Default/GPUCache" \
+    --exclude "$app_snapshot/agent-desktop/config/agent-desktop/chrome/*/GrShaderCache" \
+    --exclude "$app_snapshot/agent-desktop/config/agent-desktop/chrome/*/ShaderCache" \
+    --exclude "$app_snapshot/agent-desktop/config/agent-desktop/chrome/*/component_crx_cache" \
+    --exclude "$app_snapshot/agent-desktop/config/agent-desktop/logs" \
     "$app_snapshot" "$retired_snapshot" "$state/exports" "$state/recovery" /etc/ssh /boot/asahi \
     /var/lib/ghostship-cloudflare /var/lib/ghostship-dashboards
 restic forget --host chill-penguin --tag ghostship --keep-daily 7 --keep-weekly 5 --keep-monthly 12
