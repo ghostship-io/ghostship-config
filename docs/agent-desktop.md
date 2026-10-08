@@ -48,6 +48,12 @@ restarts, image updates and container replacement. A human logs into a
 service in the `personal` window through Selkies and agents keep using the
 same instance. Neither port is published outside the container.
 
+The environment keeps the signals a real desktop would have: GPU-backed
+WebGL, enabled sandbox, PulseAudio audio devices, Noto Color Emoji, a
+timezone matching the network location, and the detection/fingerprint
+bookmark set from the retired CloakBrowser profiles (shipped as managed
+Chrome bookmarks).
+
 For an extra isolated instance (parallel or untrusted work), use the blessed
 launcher so the command line stays identical to the supervised instances:
 
@@ -221,21 +227,24 @@ restarts it.
 
 The desktop keeps the browser environment coherent so mainstream sites do
 not flag it unnecessarily: the container timezone matches the egress
-location, Chrome runs with its sandbox enabled, and the GPU is passed
-through so WebGL reports the real Apple GPU rather than being disabled.
+location, Chrome runs with its sandbox enabled, the GPU is passed through so
+WebGL reports the real Apple GPU, audio hardware and emoji fonts are present,
+and the CloakBrowser detection/fingerprint bookmark set is shipped as managed
+Chrome bookmarks.
 
 Measured on 2026-10-08:
 
+- **Home Depot**: loads normally when no CDP client is attached — even with
+  the DevTools port open — including search results (223 products on a
+  cordless drill search). **Any active CDP client (Bladebro, Playwright)
+  gets an Akamai 403 and the error page**, because Akamai/PerimeterX detect
+  the CDP connection (`isAutomatedWithCDP`, "Developer Tools: Yes").
 - **Lowe's**: search and product pages load and `see extract auto` returns
-  structured products (20 rows on a cordless drill search).
-- **Home Depot**: the homepage loads, but search, category and product
-  URLs return Home Depot's error page. The page is a HUMAN/PerimeterX
-  behavioral challenge; it is served to any Chrome in this environment,
-  including a plain Chrome with no DevTools port and Bladebro's isolated
-  stealth lane, so it is not caused by the driver. Remediation options:
-  complete the challenge manually through Selkies once in the persistent
-  profile and retry, or route the browser through a residential proxy
-  (`BLADE_PROXY`) that Home Depot trusts. Automated bypass is not assumed.
+  structured products.
+- Third-party bot tests agree: without CDP, deviceandbrowserinfo reports
+  "You are human", Fingerprint reports no bot/VM/proxy, and rebrowser shows
+  no leaks; with CDP, the same browser is flagged.
 
-When adding retailer fixes, prefer coherence (timezone, GPU, locale,
-sandbox) over patches, and record challenge behaviour honestly.
+For bot-managed sites, drive Chrome through Selkies (manual) or Pelorus
+compositor input (agents) instead of Bladebro's CDP session. Never assume
+automated bypass works; record challenge behaviour honestly.

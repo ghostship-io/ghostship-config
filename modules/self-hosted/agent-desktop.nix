@@ -97,7 +97,8 @@ in
       SELKIES_MANUAL_RESOLUTION = "true";
       SELKIES_ENABLE_RESIZE = "false";
       SELKIES_FRAMERATE = "30-30";
-      SELKIES_AUDIO_ENABLED = "false";
+      SELKIES_AUDIO_ENABLED = "true";
+      SELKIES_AUDIO_ON_START = "false";
       SELKIES_MICROPHONE_ENABLED = "false";
       SELKIES_WEBCAM_ENABLED = "false";
       NO_WEBCAM = "true";
