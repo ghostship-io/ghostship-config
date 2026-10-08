@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.43] - 2026-10-08
+
+- Restore PulseAudio and add Noto Color Emoji so the desktop browser exposes
+  real audio devices and emoji fonts instead of container-only stubs.
+- Ship the CloakBrowser detection/fingerprint bookmark set as managed Chrome
+  bookmarks on both profiles.
+- Record that Akamai/PerimeterX detect active CDP clients: Home Depot works
+  without CDP (manual Selkies or Pelorus input) and returns 403 to
+  Bladebro/Playwright sessions.
+
 ## [3.15.42] - 2026-10-08
 
 - Run Google Chrome as a native Wayland client so Selkies touch gestures
