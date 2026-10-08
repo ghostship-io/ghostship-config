@@ -157,36 +157,17 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1791432168,
-        "narHash": "sha256-mTRXbJNdbXhiSSbnE8JHT1fGzvOO0ThVq52BdPmCxGQ=",
+        "lastModified": 1791443089,
+        "narHash": "sha256-vf/iNDtFOBDYSu2uUqQiuDT6dhtDh1Wd5++2LcqQWO8=",
         "owner": "owner",
         "repo": "ghostship-agent",
-        "rev": "3c893fffec2b092ec6d5e31ad120fc4872426d55",
+        "rev": "7baa4795d2b04df48c328962684d0e6579e34e14",
         "type": "github"
       },
       "original": {
         "owner": "owner",
         "repo": "ghostship-agent",
-        "rev": "3c893fffec2b092ec6d5e31ad120fc4872426d55",
-        "type": "github"
-      }
-    },
-    "ghostship-private-assistant": {
-      "inputs": {
-        "nixpkgs": "nixpkgs_3"
-      },
-      "locked": {
-        "lastModified": 1791353754,
-        "narHash": "sha256-UIvACKZjHFnu5rssR5cKWombNFXLSO3qXkinuqSs01g=",
-        "owner": "owner",
-        "repo": "ghostship-assistant",
-        "rev": "144d369c14973caf8a0c71d50c0c85d1dce040dd",
-        "type": "github"
-      },
-      "original": {
-        "owner": "owner",
-        "repo": "ghostship-assistant",
-        "rev": "144d369c14973caf8a0c71d50c0c85d1dce040dd",
+        "rev": "7baa4795d2b04df48c328962684d0e6579e34e14",
         "type": "github"
       }
     },
@@ -350,22 +331,6 @@
     },
     "nixpkgs_3": {
       "locked": {
-        "lastModified": 1782847189,
-        "narHash": "sha256-twXPFqFsrrY5r28Zh7Homgcp2gUMBgQ6WDS98Q/3xFI=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "b6018f87da91d19d0ab4cf979885689b469cdd41",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-25.11",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_4": {
-      "locked": {
         "lastModified": 1788614874,
         "narHash": "sha256-7QYjT2vHLuX9Z1pdxHXDKCbh1CR3D/2rywB9Tx0MPRg=",
         "owner": "NixOS",
@@ -408,12 +373,11 @@
       "inputs": {
         "apple-silicon": "apple-silicon",
         "ghostship-private-agent": "ghostship-private-agent",
-        "ghostship-private-assistant": "ghostship-private-assistant",
         "home-manager": "home-manager",
         "nix-index-database": "nix-index-database",
         "nixos-hardware": "nixos-hardware",
         "nixos-wsl": "nixos-wsl",
-        "nixpkgs": "nixpkgs_4",
+        "nixpkgs": "nixpkgs_3",
         "ragenix": "ragenix"
       }
     },

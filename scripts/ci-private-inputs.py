@@ -16,7 +16,7 @@ from pathlib import Path
 # deployment-owned under modules/self-hosted/private-integrations/.
 SOURCES = {
     'ghostship-private-agent': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
-    'ghostship-private-assistant': {'repo': 'ghostship-assistant', 'key': 'assistant', 'dir': None},
+
 }
 
 
