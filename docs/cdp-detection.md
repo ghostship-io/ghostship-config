@@ -97,9 +97,25 @@ are not retried.
 
 | Driver | Home | Search | Products | Product page | Reload | Verdict |
 | --- | --- | --- | --- | --- | --- | --- |
-| no-CDP control | ok | grid renders (225 results) | grid visible | template renders (stale test URL) | — | works |
-| Bladebro `nav --port` | ok | redirected browse page | 13 products, prices | loaded | ok | **works** |
-| raw minimal CDP | ok | browse page | 13 prices | loaded | ok | **works** |
+| no-CDP control | ok | grid renders (225 results) | grid visible | screenshot only | — | works |
+| Bladebro `nav --port` | ok | redirected browse page | 12 distinct products, prices | loaded | ok | **works** |
+| raw minimal CDP | ok | browse page | 15 distinct products, prices | loaded | ok | **works** |
+
+The hardened runner requires live extracted product links (never a fallback),
+distinct products, prices, complete pages and a successful reload, and
+classifies 403s, challenges and incomplete pages explicitly.
+
+### Retailer matrix (Bladebro attach, 2026-10-08)
+
+| Site | Result | Distinct products | Prices |
+| --- | --- | --- | --- |
+| Home Depot | ok | 15 | 13 |
+| Lowe's | ok | 24 | 61 |
+| Amazon | ok | 122 | 198 |
+| Walmart | ok | 97 | 266 |
+| Target | ok | 74 | 66 |
+
+No challenge, 403 or error markers on any of the five.
 
 `_abck` remained present; success was judged from rendered content only.
 deviceandbrowserinfo under a Bladebro attach reports **"You are human!"**
@@ -122,8 +138,29 @@ deviceandbrowserinfo under a Bladebro attach reports **"You are human!"**
 | Site | CDP | Notes |
 | --- | --- | --- |
 | Home Depot | Bladebro attach or raw clean CDP | Playwright/Runtime blocked |
-| Lowe's | any validated driver | |
+| Lowe's, Amazon, Walmart, Target | Bladebro attach | validated 2026-10-08 |
 | Default | validate with the matrix | fall back to Pelorus/manual |
+
+## Upgrades and rollback
+
+Known-good pins live in `containers/agent-desktop/Containerfile`: Google
+Chrome `155.0.8059.39-1` (SHA-256 per architecture), Bladebro `4.2.2`
+(SHA-256 per architecture), and the base image digest. The current pins are
+the validated set recorded above.
+
+Upgrade procedure:
+
+1. Bump the pin and checksums in the Containerfile.
+2. Rebuild the image and restart the desktop container.
+3. Run `tools/check_cdp_regression.py` inside the container; it must pass.
+4. Run `tools/run_retailer.py --driver bladebro` on a seasoned profile and
+   confirm `journey_ok: true` for Home Depot, then spot-check Lowe's.
+5. Promote only when both pass.
+
+Rollback: revert the pin commit and rebuild. Image tags are
+content-addressed, so the previous image returns unchanged, and
+`storage-health` keeps recent tags for roughly a week. Profiles and
+authentication are untouched by either direction.
 
 ## Regression
 
