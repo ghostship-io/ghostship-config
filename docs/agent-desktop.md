@@ -234,11 +234,12 @@ Chrome bookmarks.
 
 Measured on 2026-10-08:
 
-- **Home Depot**: loads normally when no CDP client is attached — even with
-  the DevTools port open — including search results (223 products on a
-  cordless drill search). **Any active CDP client (Bladebro, Playwright)
-  gets an Akamai 403 and the error page**, because Akamai/PerimeterX detect
-  the CDP connection (`isAutomatedWithCDP`, "Developer Tools: Yes").
+- **Home Depot**: Bladebro's real-lane attach and the raw minimal CDP client
+  both complete the journey (home → search → 13 extracted products → product
+  page → reload). Playwright and any client that calls `Runtime.enable` are
+  blocked; see [CDP detection testing](cdp-detection.md) for the isolation
+  matrix and the per-site driver preference. The DevTools port can stay open
+  as long as no Runtime-enabling client attaches.
 - **Lowe's**: search and product pages load and `see extract auto` returns
   structured products.
 - Third-party bot tests agree: without CDP, deviceandbrowserinfo reports
