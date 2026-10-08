@@ -108,6 +108,66 @@ in {
       requiredBy = [ "podman-ghostship-private-integrations.service" ];
       serviceConfig = { Type = "oneshot"; ExecStart = render; UMask = "0077"; };
     };
+    # The ChatGPT MCP runs isolated with a scrubbed environment, so the T3 bridge
+    # reads its server URL and a scoped bearer token from files. The T3 server
+    # binds loopback on the host; this loopback-only socat relay exposes it to
+    # the ghostship_net gateway so the container can reach it, and a refresher
+    # keeps a long-lived orchestration-scoped token current.
+    systemd.services.ghostship-t3-bridge-relay = {
+      description = "Forward the ghostship_net gateway to the loopback T3 server";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "t3code-server.service" ];
+      serviceConfig = {
+        ExecStart = "${pkgs.socat}/bin/socat TCP-LISTEN:3775,bind=10.89.0.1,reuseaddr,fork TCP:127.0.0.1:3774";
+        Restart = "on-failure";
+        RestartSec = 3;
+        DynamicUser = true;
+        NoNewPrivileges = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        PrivateTmp = true;
+        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+        CapabilityBoundingSet = "";
+      };
+    };
+    systemd.services.ghostship-t3-bridge-token = {
+      description = "Issue a scoped T3 session token for the ChatGPT MCP bridge";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "t3code-server.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        User = "ghostship-mcp";
+        Group = "ghostship-mcp";
+        Environment = "T3CODE_HOME=/home/t3code/.t3";
+        ExecStart = pkgs.writeShellScript "ghostship-t3-bridge-token" ''
+          set -eu
+          token="$(/home/t3code/.local/bin/t3 auth session issue --ttl 30d --label ghostship-chatgpt-mcp --token-only)"
+          printf '%s' "$token" > /run/ghostship-integrations/t3-token.new
+          chmod 0400 /run/ghostship-integrations/t3-token.new
+          mv /run/ghostship-integrations/t3-token.new /run/ghostship-integrations/t3-token
+        '';
+        UMask = "0077";
+      };
+    };
+    systemd.timers.ghostship-t3-bridge-token = {
+      wantedBy = [ "timers.target" ];
+      timerConfig = { OnCalendar = "daily"; Persistent = true; RandomizedDelaySec = 600; };
+    };
+    systemd.services.ghostship-t3-bridge-server = {
+      description = "Publish the T3 bridge server URL for the ChatGPT MCP";
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = pkgs.writeShellScript "ghostship-t3-bridge-server" ''
+          set -eu
+          printf 'http://10.89.0.1:3775' > /run/ghostship-integrations/t3-server.json.new
+          chmod 0444 /run/ghostship-integrations/t3-server.json.new
+          mv /run/ghostship-integrations/t3-server.json.new /run/ghostship-integrations/t3-server.json
+        '';
+        UMask = "0077";
+      };
+    };
     virtualisation.oci-containers.containers.ghostship-private-integrations = {
       image = "ghostship-private-integrations:${privateAddons.image.imageTag}";
       imageFile = privateAddons.image;
