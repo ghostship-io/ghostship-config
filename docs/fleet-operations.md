@@ -45,11 +45,13 @@ copy of the bulk media library.
 
 ## Audit findings and changes
 
-Apple Silicon support remains pinned to the compatible revision. Newer upstream
-support requires `/boot/vendorfw/firmware.cpio`, rebuilt using the Asahi installer
-from macOS; this server currently has `/boot/asahi/all_firmware.tar.gz`. Schedule
-that firmware maintenance separately before advancing the hardware input. The
-verified live bootloader is systemd-boot with an uncompressed ARM64 Image.
+Apple Silicon support tracks `nixos-apple-silicon/main` again, now on the Asahi
+7.1.13 kernel. The module reads peripheral firmware from
+`/boot/vendorfw/firmware.cpio`, which the Asahi installer rebuilds from macOS;
+re-run that maintenance before adopting an upstream revision that changes the
+firmware contract (the 2026-07-30 move from `/boot/asahi/all_firmware.tar.gz`
+to the open-os-interop layout was one such change). The verified live
+bootloader is systemd-boot with an uncompressed ARM64 Image.
 
 chill-penguin explicitly retains its running `dbus` implementation. The updated
 nixpkgs default is `broker`; changing a running system bus requires a separate

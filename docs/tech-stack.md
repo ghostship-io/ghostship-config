@@ -6,8 +6,8 @@
 - **Home Manager**: For managing user-level configurations and dotfiles across all systems.
 
 ## Hardware Support (Apple Silicon)
-- **Kernel**: Official Asahi 6.19.9 (provided by `nixos-apple-silicon`).
-- **Firmware Handling**: `asahi-fwextract` used during system activation; uncompressed firmware store (`firmwareCompression = "none"`) to ensure kernel compatibility.
+- **Kernel**: Official Asahi 7.1.13 (provided by `nixos-apple-silicon`).
+- **Firmware Handling**: Peripheral firmware unpacked from `/boot/vendorfw/firmware.cpio` during the build; uncompressed firmware store (`firmwareCompression = "none"`) to ensure kernel compatibility.
 - **Cross-Compilation**: Cross-compiled ARM64 installer built on x86_64 using `.#installer-bootstrap`.
 - **nixos-apple-silicon**: Community-maintained repository of optimized hardware configurations.
 

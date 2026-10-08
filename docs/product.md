@@ -41,10 +41,10 @@ To create a robust, modular, and reproducible NixOS configuration repository tha
     - Leverage Btrfs subvolumes for data isolation and snapshots.
     - Declaratively manage all application configurations and secrets.
 - **Kernel & Hardware Support**:
-    - **Kernel**: Official Asahi 6.19.9 kernel provided by the `nixos-apple-silicon` project.
+    - **Kernel**: Official Asahi 7.1.13 kernel provided by the `nixos-apple-silicon` project.
     - **Boot Flow**: m1n1 (Stage 1) -> m1n1 (Stage 2 payload: boot.bin) -> U-Boot -> systemd-boot -> Kernel.
     - **Multi-Die Support**: Full utilization of the M1 Ultra multi-die architecture (20 cores, 48-core GPU).
-    - **Peripheral Firmware**: Automatically extracted from `/boot/asahi/` and deployed uncompressed for maximum compatibility.
+    - **Peripheral Firmware**: Extracted from `/boot/vendorfw/firmware.cpio` (rebuilt from macOS with the Asahi installer) and deployed uncompressed for maximum compatibility.
 
 ### launch-octopus
 - **Purpose**: Primary WSL2 development environment on Windows 11.

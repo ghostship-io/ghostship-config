@@ -420,8 +420,8 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   `ghostship-config set` to delete them.
 - For Apple Silicon:
   keep `hardware.firmwareCompression = "none"`;
-  treat `/boot/asahi` as `chill-penguin`-specific;
-  use `--impure` when firmware extraction reads `/boot/asahi`;
+  treat `/boot/vendorfw/firmware.cpio` as `chill-penguin`-specific;
+  use `--impure` when firmware extraction reads `/boot/vendorfw`;
   use the official `nixos-apple-silicon` ISO build path.
 - On `chill-penguin`, the working GRUB target is `/boot/grub/grub.cfg`, and the
   Apple Silicon boot chain requires a gzip-compressed kernel.

@@ -1,8 +1,8 @@
 { pkgs, lib, ... }:
 
 let
-  asahiFirmwareDirectory = /boot/asahi;
-  hasAsahiFirmwareDirectory = builtins.pathExists asahiFirmwareDirectory;
+  vendorfwDirectory = /boot/vendorfw;
+  hasVendorfwFirmware = builtins.pathExists (vendorfwDirectory + "/firmware.cpio");
 in
 {
   imports = [
@@ -21,10 +21,10 @@ in
   hardware.asahi = {
     enable = true;
     setupAsahiSound = false;
-    extractPeripheralFirmware = hasAsahiFirmwareDirectory;
+    extractPeripheralFirmware = hasVendorfwFirmware;
   }
-  // lib.optionalAttrs hasAsahiFirmwareDirectory {
-    peripheralFirmwareDirectory = asahiFirmwareDirectory;
+  // lib.optionalAttrs hasVendorfwFirmware {
+    peripheralFirmwareDirectory = vendorfwDirectory;
   };
   hardware.firmwareCompression = "none";
 
