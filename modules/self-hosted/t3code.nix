@@ -105,7 +105,6 @@ let
     # Ghostship agent desktop automation endpoints (private automation network).
     export AGENT_DESKTOP_API_URL="''${AGENT_DESKTOP_API_URL:-http://10.89.7.2:7080}"
     export AGENT_DESKTOP_PELORUS_URL="''${AGENT_DESKTOP_PELORUS_URL:-http://10.89.7.2:7080/pelorus}"
-    export AGENT_DESKTOP_PLAYWRIGHT_BASE="''${AGENT_DESKTOP_PLAYWRIGHT_BASE:-ws://10.89.7.2:7080/playwright}"
     export AGENT_DESKTOP_SSH_HOST="''${AGENT_DESKTOP_SSH_HOST:-10.89.7.2}"
     export AGENT_DESKTOP_SSH_PORT="''${AGENT_DESKTOP_SSH_PORT:-2222}"
     export AGENT_DESKTOP_SSH_USER="''${AGENT_DESKTOP_SSH_USER:-abc}"

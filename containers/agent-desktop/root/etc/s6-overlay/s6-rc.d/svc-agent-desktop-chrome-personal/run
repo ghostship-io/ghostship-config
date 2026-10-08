@@ -1,0 +1,3 @@
+#!/usr/bin/with-contenv bash
+# Persistent authenticated Google Chrome for the personal identity.
+exec s6-setuidgid abc /opt/ghostship-agent-desktop/run-chrome personal 9223

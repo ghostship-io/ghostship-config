@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Shared Bladebro environment for the persistent real Chrome instances.
+# Usage: bladebro-env <agent|personal> <bladebro args...>
+set -eu
+
+identity=$1
+shift
+
+export HOME=/config
+
+# Attach mode does not need a display, but diagnostics and any visible-mode
+# commands do; inherit the running desktop session.
+if [ -r /config/agent-desktop/session-env ]; then
+  set -a
+  . /config/agent-desktop/session-env
+  set +a
+fi
+
+export CHROME_PATH=/usr/bin/google-chrome-stable
+export BLADE_LANE=real
+export BLADE_NO_UPDATE_CHECK=1
+export BLADE_HOME="/config/agent-desktop/bladebro/$identity"
+export BLADE_PROFILE_DIR="/config/agent-desktop/chrome/$identity"
+
+case "$identity" in
+  agent) port=9222 ;;
+  personal) port=9223 ;;
+  *)
+    echo "unknown Bladebro identity: $identity" >&2
+    exit 2
+    ;;
+esac
+
+install -d -m 0700 "$BLADE_HOME"
+
+# Fixed debug ports are not discovered through DevToolsActivePort; point
+# Bladebro at the instance explicitly. `rb mode attach` keeps the
+# real-browser lane from ever launching or owning a browser.
+/usr/local/bin/bladebro rb mode attach >/dev/null 2>&1 || true
+
+exec /usr/local/bin/bladebro "$@" --port "$port"
