@@ -1,0 +1,47 @@
+{
+  "ManagedBookmarks": [
+    {
+      "name": "Detection Tests",
+      "children": [
+        { "name": "Rebrowser Bot Detector", "url": "https://bot-detector.rebrowser.net/" },
+        { "name": "Incolumitas", "url": "https://bot.incolumitas.com/" },
+        { "name": "Sannysoft", "url": "https://bot.sannysoft.com/" },
+        { "name": "BrowserScan Bot", "url": "https://www.browserscan.net/bot-detection" },
+        { "name": "FingerprintJS Demo", "url": "https://demo.fingerprint.com/web-scraping" },
+        { "name": "Pixelscan", "url": "https://pixelscan.net/fingerprint-check" },
+        { "name": "CreepJS", "url": "https://abrahamjuliot.github.io/creepjs/" },
+        { "name": "Fingerprint Scan", "url": "https://fingerprint-scan.com/" },
+        { "name": "DeviceInfo Bot", "url": "https://deviceandbrowserinfo.com/are_you_a_bot" }
+      ]
+    },
+    {
+      "name": "Fingerprint",
+      "children": [
+        { "name": "BrowserLeaks Canvas", "url": "https://browserleaks.com/canvas" },
+        { "name": "BrowserLeaks WebGL", "url": "https://browserleaks.com/webgl" },
+        { "name": "BrowserLeaks Fonts", "url": "https://browserleaks.com/fonts" },
+        { "name": "BrowserLeaks JavaScript", "url": "https://browserleaks.com/javascript" },
+        { "name": "FingerprintJS OSS", "url": "https://fingerprintjs.github.io/fingerprintjs/" },
+        { "name": "Audio FP", "url": "https://audiofingerprint.openwpm.com/" },
+        { "name": "DeviceInfo", "url": "https://deviceandbrowserinfo.com/info_device" }
+      ]
+    },
+    {
+      "name": "Headers & TLS",
+      "children": [
+        { "name": "httpbin headers", "url": "https://httpbin.org/headers" },
+        { "name": "httpbin IP", "url": "https://httpbin.org/ip" },
+        { "name": "TLS Fingerprint", "url": "https://tls.browserleaks.com/" }
+      ]
+    },
+    {
+      "name": "reCAPTCHA",
+      "children": [
+        { "name": "Google v3 Demo", "url": "https://recaptcha-demo.appspot.com/recaptcha-v3-request-scores.php" },
+        { "name": "Turnstile Demo", "url": "https://peet.ws/turnstile-test/non-interactive.html" },
+        { "name": "The Home Depot", "url": "https://www.homedepot.com/" },
+        { "name": "Lowe's", "url": "https://www.lowes.com/" }
+      ]
+    }
+  ]
+}
