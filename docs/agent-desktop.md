@@ -48,17 +48,22 @@ restarts, image updates and container replacement. A human logs into a
 service in the `personal` window through Selkies and agents keep using the
 same instance. Neither port is published outside the container.
 
-For an extra isolated instance (parallel or untrusted work), launch one with
-a unique profile and port over SSH:
+For an extra isolated instance (parallel or untrusted work), use the blessed
+launcher so the command line stays identical to the supervised instances:
 
 ```sh
 ssh -i ~/.ssh/id_agent_desktop -p 2222 abc@10.89.7.2 \
-  'mkdir -p /config/agent-desktop/chrome/task-1 && \
-   ghostship-desktop-exec google-chrome-stable \
-     --user-data-dir=/config/agent-desktop/chrome/task-1 \
-     --remote-debugging-port=9224 --remote-debugging-address=127.0.0.1 \
-     --no-sandbox --no-first-run --disable-gpu about:blank &'
+  ghostship-chrome-instance start task-1 9224
+ssh -i ~/.ssh/id_agent_desktop -p 2222 abc@10.89.7.2 \
+  'bladebro nav https://example.com --port 9224'
+ssh -i ~/.ssh/id_agent_desktop -p 2222 abc@10.89.7.2 \
+  ghostship-chrome-instance stop task-1
 ```
+
+Chrome is launched with a deliberately minimal command line: a custom
+profile, a loopback DevTools port, first-run/crash UX suppression, the basic
+password store, the US locale and a 1600x900 window. No sandbox, GPU or
+fingerprint flags.
 
 Never open one profile directory in two browser processes.
 
