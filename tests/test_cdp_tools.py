@@ -50,5 +50,24 @@ class MatrixDefinitionTest(unittest.TestCase):
         self.assertFalse(expected["C2"])
 
 
+class ExtensionTransportTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.ext = TOOLS / "ext"
+
+    def test_manifest_is_valid_mv3(self):
+        import json
+
+        manifest = json.loads((self.ext / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["manifest_version"], 3)
+        self.assertIn("tabs", manifest["permissions"])
+        self.assertIn("scripting", manifest["permissions"])
+
+    def test_service_worker_present(self):
+        source = (self.ext / "background.js").read_text(encoding="utf-8")
+        self.assertIn("chrome.scripting.executeScript", source)
+        self.assertIn("/ext/next", source)
+
+
 if __name__ == "__main__":
     unittest.main()

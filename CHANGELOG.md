@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and one-shot evaluation stay clean.
 - Validate Home Depot end to end with Bladebro real-lane attach and the raw
   minimal CDP client; Playwright and Runtime-enabling clients remain blocked.
+- Evaluate the Chrome extension transport: branded Chrome 155 ignores
+  `--load-extension`, so non-CDP alternatives need enterprise policy or
+  native desktop control.
 
 ## [3.15.43] - 2026-10-08
 
