@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Ghostship Agent Desktop init. Runs as root before the s6 services start.
+set -euo pipefail
+
+DATA=/config/agent-desktop
+LABWC_STARTWM=/defaults/startwm_wayland.sh
+
+# Persistent state for profiles, SSH keys, browser endpoints and the
+# session environment. Owned by the container user (PUID/PGID 3000).
+install -d -o 3000 -g 3000 -m 0755 "$DATA" "$DATA/profiles" "$DATA/browsers"
+install -d -o 3000 -g 3000 -m 0700 "$DATA/ssh" "$DATA/ssh/host" /config/.ssh
+
+# xdg-runtime lives under /config, created by the baseimage init with the
+# same ownership; keep a session env file next to it.
+
+# Pelorus window enumeration needs labwc's IPC socket. The stock baseimage
+# start script launches labwc without -i; patch it in place (a container
+# recreation re-applies this from the derived image).
+if ! grep -q 'labwc -i' "$LABWC_STARTWM"; then
+  sed -i 's|^\( *\)labwc &$|\1labwc -i \&|' "$LABWC_STARTWM"
+fi
+
+# Capture the desktop session environment for services and SSH logins by
+# calling our helper right before lxqt-session starts.
+if ! grep -q 'write-session-env' "$LABWC_STARTWM"; then
+  sed -i 's|^\( *\)lxqt-session -w /bin/true$|\1/opt/ghostship-agent-desktop/write-session-env\n\1lxqt-session -w /bin/true|' "$LABWC_STARTWM"
+fi
+
+# Persistent sshd host key.
+if [ ! -f "$DATA/ssh/host/ssh_host_ed25519_key" ]; then
+  ssh-keygen -q -t ed25519 -N '' -C agent-desktop -f "$DATA/ssh/host/ssh_host_ed25519_key"
+fi
+chown -R 3000:3000 "$DATA/ssh"
+chmod 0600 "$DATA/ssh/host/ssh_host_ed25519_key"
+[ -f "$DATA/ssh/authorized_keys" ] && chmod 0600 "$DATA/ssh/authorized_keys"
+
+# The desktop is a workstation, not an indexer: stop tracking services if a
+# baseimage update reintroduces them.
+pkill -f 'tracker-miner-fs' 2>/dev/null || true
+pkill -f 'tracker-store' 2>/dev/null || true
+pkill -f 'baloo_file' 2>/dev/null || true
+
+echo "[agent-desktop] init complete"
