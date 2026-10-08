@@ -30,17 +30,17 @@ pkill -f -- "--user-data-dir=$data" 2>/dev/null || true
 sleep 1
 rm -f "$data/SingletonLock" "$data/SingletonCookie" "$data/SingletonSocket"
 
+# Deliberately minimal, ordinary command line: a custom profile (required,
+# and Chrome 136+ refuses CDP on the default profile dir), a loopback-only
+# DevTools port for Bladebro, and first-run/crash UX suppression so headed
+# startup is deterministic. No sandbox, GPU or fingerprint flags.
 exec /usr/bin/google-chrome-stable \
   --user-data-dir="$data" \
   --remote-debugging-port="$port" \
-  --remote-debugging-address=127.0.0.1 \
-  --remote-allow-origins=* \
   --no-first-run \
   --no-default-browser-check \
   --hide-crash-restore-bubble \
-  --disable-features=Translate,MediaRouter \
   --password-store=basic \
   --lang=en-US \
   --window-size=1600,900 \
-  --window-position=0,0 \
   about:blank

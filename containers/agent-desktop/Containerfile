@@ -89,6 +89,7 @@ RUN chmod 0755 \
       /etc/s6-overlay/s6-rc.d/svc-agent-desktop-chrome-personal/run \
       /etc/s6-overlay/s6-rc.d/svc-agent-desktop-sshd/run \
  && ln -sf /opt/ghostship-agent-desktop/desktop-exec /usr/local/bin/ghostship-desktop-exec \
+ && ln -sf /opt/ghostship-agent-desktop/ghostship-chrome-instance /usr/local/bin/ghostship-chrome-instance \
  && ln -sf /opt/ghostship-agent-desktop/bladebro-mcp-agent /usr/local/bin/bladebro-mcp-agent \
  && ln -sf /opt/ghostship-agent-desktop/bladebro-mcp-personal /usr/local/bin/bladebro-mcp-personal \
  && ln -sf /opt/ghostship-agent-desktop/bladebro-cli-agent /usr/local/bin/bladebro-agent \

@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Chrome reports the real GPU instead of disabled WebGL, and re-enable
   Chrome's sandbox. Lowe's search and product pages now load with
   structured extraction.
+- Launch Chrome with a deliberately minimal command line (custom profile,
+  loopback DevTools port, first-run/crash UX suppression, locale and window
+  size only) and add `ghostship-chrome-instance` for on-demand instances.
 - Keep Pelorus native GUI control and the authenticated desktop proxy with a
   reduced Pelorus-only surface.
 
