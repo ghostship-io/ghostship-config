@@ -102,6 +102,14 @@ let
     export T3CODE_HOST=127.0.0.1
     export T3CODE_PORT=3774
     export T3CODE_NO_BROWSER=true
+    # Ghostship agent desktop automation endpoints (private automation network).
+    export AGENT_DESKTOP_API_URL="''${AGENT_DESKTOP_API_URL:-http://10.89.7.2:7080}"
+    export AGENT_DESKTOP_PELORUS_URL="''${AGENT_DESKTOP_PELORUS_URL:-http://10.89.7.2:7080/pelorus}"
+    export AGENT_DESKTOP_PLAYWRIGHT_BASE="''${AGENT_DESKTOP_PLAYWRIGHT_BASE:-ws://10.89.7.2:7080/playwright}"
+    export AGENT_DESKTOP_SSH_HOST="''${AGENT_DESKTOP_SSH_HOST:-10.89.7.2}"
+    export AGENT_DESKTOP_SSH_PORT="''${AGENT_DESKTOP_SSH_PORT:-2222}"
+    export AGENT_DESKTOP_SSH_USER="''${AGENT_DESKTOP_SSH_USER:-abc}"
+    export AGENT_DESKTOP_SSH_KEY="''${AGENT_DESKTOP_SSH_KEY:-$HOME/.ssh/id_agent_desktop}"
     # Project-pinned Nix programs must use their own runtime libraries.
     unset LD_LIBRARY_PATH
     hm_session_vars="$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
@@ -2503,6 +2511,7 @@ in
       "--stop-timeout=180"
       "--hostname=t3code.ghostship.io"
       "--network=ghostship_net"
+      "--network=agent_desktop_net"
       "--health-cmd=${t3codeContainerHealth}/bin/t3code-container-health"
       "--health-interval=30s"
       "--health-timeout=15s"

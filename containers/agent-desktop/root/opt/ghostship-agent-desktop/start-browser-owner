@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Start the Camoufox browser owner with the running desktop session
+# environment. Runs under s6; the browser cache lives in the persistent
+# /config home so it survives image updates.
+set -eu
+
+export HOME=/config
+export PATH="/opt/ghostship-agent-desktop/venv/bin:${PATH}"
+
+for _ in $(seq 1 600); do
+  if [ -r /config/agent-desktop/session-env ]; then
+    break
+  fi
+  echo "[browser-owner] waiting for the desktop session environment"
+  sleep 1
+done
+
+if [ ! -r /config/agent-desktop/session-env ]; then
+  echo "[browser-owner] session environment never appeared" >&2
+  exit 1
+fi
+
+set -a
+. /config/agent-desktop/session-env
+set +a
+export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+
+if [ ! -f /config/.cache/camoufox/config.json ]; then
+  echo "[browser-owner] installing the Camoufox browser into /config"
+  /opt/ghostship-agent-desktop/venv/bin/python -m camoufox fetch
+fi
+
+exec /opt/ghostship-agent-desktop/venv/bin/python \
+  /opt/ghostship-agent-desktop/browser_owner.py

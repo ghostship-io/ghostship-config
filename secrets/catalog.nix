@@ -26,6 +26,10 @@ let
 in
 {
   units = {
+    agent-desktop = mkUnit {
+      relativeFile = "secrets/files/sources/services/agent-desktop.env.age";
+      exports = [ "API_TOKEN" ];
+    };
     ghostship-relay = mkUnit {
       relativeFile = "secrets/files/sources/services/ghostship-relay.env.age";
       exports = [ "TUNNEL_ID" "API_KEY" ];
@@ -590,6 +594,16 @@ in
       };
     };
 
+    agent-desktop = {
+      fileName = "agent-desktop.env";
+      owner = "apps";
+      group = "apps";
+      mode = "0440";
+      fields.AGENT_DESKTOP_API_TOKEN = {
+        unit = "agent-desktop";
+        key = "API_TOKEN";
+      };
+    };
     t3code = {
       fileName = "t3code.env";
       owner = "apps";
@@ -623,6 +637,10 @@ in
         BW_PASSWORD = {
           unit = "bitwarden";
           key = "BW_PASSWORD";
+        };
+        AGENT_DESKTOP_API_TOKEN = {
+          unit = "agent-desktop";
+          key = "API_TOKEN";
         };
       };
     };

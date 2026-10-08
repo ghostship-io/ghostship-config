@@ -1,0 +1,5 @@
+#!/usr/bin/with-contenv bash
+# Key-based SSH access for agents (software installs, GUI helpers).
+mkdir -p /run/sshd
+chmod 0755 /run/sshd
+exec /usr/sbin/sshd -D -e -f /etc/ssh/ghostship-sshd_config

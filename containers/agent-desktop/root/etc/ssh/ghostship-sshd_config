@@ -1,0 +1,19 @@
+# Ghostship Agent Desktop sshd configuration.
+# Key-based automation access only. The authorized_keys file is provisioned by
+# the host module under /srv/apps/agent-desktop/config/agent-desktop/ssh.
+Port 2222
+AddressFamily inet
+ListenAddress 0.0.0.0
+HostKey /config/agent-desktop/ssh/host/ssh_host_ed25519_key
+PidFile /run/sshd-agent-desktop.pid
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AuthorizedKeysFile /config/agent-desktop/ssh/authorized_keys /config/agent-desktop/ssh/authorized_keys.local
+PermitUserEnvironment yes
+StrictModes no
+AllowUsers abc
+AllowTcpForwarding no
+X11Forwarding no
+Subsystem sftp /usr/lib/openssh/sftp-server
