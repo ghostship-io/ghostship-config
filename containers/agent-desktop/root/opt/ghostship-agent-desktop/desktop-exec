@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Run a command with the graphical desktop session environment.
+# Usage: ghostship-desktop-exec <command> [args...]
+set -eu
+
+if [ -r /config/agent-desktop/session-env ]; then
+  set -a
+  . /config/agent-desktop/session-env
+  set +a
+fi
+
+exec "$@"

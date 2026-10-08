@@ -1,0 +1,5 @@
+#!/usr/bin/with-contenv bash
+# Ghostship agent desktop automation API (authenticated Pelorus + Playwright
+# proxy). Token comes from the agent-desktop secret projection.
+exec s6-setuidgid abc \
+  /opt/ghostship-agent-desktop/venv/bin/python /opt/ghostship-agent-desktop/agent_desktop_api.py
