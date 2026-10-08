@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.41] - 2026-10-08
+
+- Replace Camoufox in the agent desktop with Google Chrome stable, pinned by
+  version and SHA-256, as the default LXQt/XDG browser; retire the Camoufox
+  runtime, browser cache and Playwright WebSocket forwarding.
+- Run persistent Agent and Personal Chrome instances under independent s6
+  services with fixed loopback DevTools ports and profile directories that
+  preserve authentication across restarts and image updates.
+- Integrate Bladebro, pinned by version and SHA-256, in real-browser attach
+  mode and provision its MCP servers automatically for t3code over SSH with a
+  pinned desktop host key.
+- Keep the browser environment coherent for mainstream sites: match the
+  container timezone to the egress location, pass through `/dev/dri` so
+  Chrome reports the real GPU instead of disabled WebGL, and re-enable
+  Chrome's sandbox. Lowe's search and product pages now load with
+  structured extraction.
+- Keep Pelorus native GUI control and the authenticated desktop proxy with a
+  reduced Pelorus-only surface.
+
 ## [3.15.40] - 2026-10-08
 
 - Add the Ghostship agent desktop: a persistent LXQt + labwc Selkies

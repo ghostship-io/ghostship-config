@@ -1,48 +1,57 @@
 # Ghostship Agent Desktop
 #
 # Extends the LinuxServer Selkies Webtop Ubuntu LXQt image with:
-#   - a pinned Camoufox + Playwright Python environment (Rust and C build
-#     dependencies stay in the builder stage and never reach the runtime image)
+#   - Google Chrome stable, version and checksum pinned, as the desktop and
+#     automation browser
+#   - Bladebro, version and checksum pinned, in real-browser attach mode
+#   - a pinned Playwright Python environment for in-session clients
 #   - OpenSSH server for key-based GUI automation and software installation
-#   - s6 services for the automation API proxy, the browser owners and sshd
+#   - s6 services for the automation API proxy, the Chrome instances and sshd
 #
 # The NixOS module builds this image on the target host with a
 # content-addressed tag; the build context is this directory.
 #
-# The base digest is pinned for reproducible rebuilds. Refresh it together
-# with the packages below when updating the desktop.
-
-FROM lscr.io/linuxserver/webtop:ubuntu-lxqt@sha256:92db2b409b2d72914d93fec49f0f96d6da9bb9a497d1dd51d1ca9df4cedf94ac AS python-builder
-
-RUN apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      build-essential \
-      libzstd-dev \
-      python3-dev \
-      python3-venv \
-      rustc \
-      cargo \
- && rm -rf /var/lib/apt/lists/*
-
-# Camoufox pins Playwright below 1.63; Browser.bind() and multi-client
-# BrowserType.connect() require Playwright 1.59 or newer.
-# fpgen's model is fetched here and the tree is owned by the container user
-# (PUID 3000) because fpgen materializes the model on first use at runtime.
-RUN python3 -m venv /opt/ghostship-agent-desktop/venv \
- && /opt/ghostship-agent-desktop/venv/bin/pip install --no-cache-dir --upgrade pip \
- && /opt/ghostship-agent-desktop/venv/bin/pip install --no-cache-dir \
-      "camoufox==0.5.8" \
-      "playwright==1.62.0" \
- && /opt/ghostship-agent-desktop/venv/bin/python -m fpgen fetch \
- && rm -rf /root/.cache/camoufox \
- && chown -R 3000:3000 /opt/ghostship-agent-desktop
+# The base image and both binaries are pinned for reproducible rebuilds.
+# Refresh the digests, versions and checksums together when updating.
 
 FROM lscr.io/linuxserver/webtop:ubuntu-lxqt@sha256:92db2b409b2d72914d93fec49f0f96d6da9bb9a497d1dd51d1ca9df4cedf94ac
 
-RUN apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+ARG CHROME_VERSION=155.0.8059.39-1
+ARG CHROME_SHA256_ARM64=3556494580a71ecee15cbeb3b6ce23bf3af360bc053d90d3105241c2247da52b
+ARG CHROME_SHA256_AMD64=c58aa0f2cd66179c9f050e062c882d27aa9b9f8c2b7c73fee3498560b5ed0b38
+ARG BLADEBRO_VERSION=4.2.2
+ARG BLADEBRO_SHA256_ARM64=35d1ae1e0870bb73c18d96fc4f59d6ab6982c167dc6657072be35897b5be4484
+ARG BLADEBRO_SHA256_AMD64=ffcdd3c203b0d070e8787e14687942ebc0924ba21c04d39a7bcdf70b328f0779
+
+RUN set -eux; \
+    arch=$(dpkg --print-architecture); \
+    case "$arch" in \
+      arm64) chrome_sha=$CHROME_SHA256_ARM64; blade_sha=$BLADEBRO_SHA256_ARM64; blade_asset=bladebro-linux-arm64 ;; \
+      amd64) chrome_sha=$CHROME_SHA256_AMD64; blade_sha=$BLADEBRO_SHA256_AMD64; blade_asset=bladebro-linux-x64 ;; \
+      *) echo "unsupported architecture: $arch" >&2; exit 1 ;; \
+    esac; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ca-certificates \
       openssh-server \
- && rm -rf /var/lib/apt/lists/*
+      python3-venv; \
+    curl -fsSL -o /tmp/google-chrome.deb \
+      "https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROME_VERSION}_${arch}.deb"; \
+    echo "$chrome_sha  /tmp/google-chrome.deb" | sha256sum -c -; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends /tmp/google-chrome.deb; \
+    rm -f /tmp/google-chrome.deb /etc/apt/sources.list.d/google-chrome.list; \
+    curl -fsSL -o /usr/local/bin/bladebro \
+      "https://github.com/dondai44423/bladebro/releases/download/v${BLADEBRO_VERSION}/${blade_asset}"; \
+    echo "$blade_sha  /usr/local/bin/bladebro" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/bladebro; \
+    rm -rf /var/lib/apt/lists/*
+
+# Playwright is used by in-session clients; Chrome itself is driven by
+# Bladebro over the DevTools protocol.
+RUN python3 -m venv /opt/ghostship-agent-desktop/venv \
+ && /opt/ghostship-agent-desktop/venv/bin/pip install --no-cache-dir --upgrade pip \
+ && /opt/ghostship-agent-desktop/venv/bin/pip install --no-cache-dir "playwright==1.63.0" \
+ && chown -R 3000:3000 /opt/ghostship-agent-desktop
 
 # The desktop does not run audio, cron or a nested Docker daemon; keep those
 # s6 services out of the boot bundle entirely.
@@ -51,7 +60,24 @@ RUN rm -f \
       /etc/s6-overlay/s6-rc.d/user/contents.d/svc-cron \
       /etc/s6-overlay/s6-rc.d/user/contents.d/svc-docker
 
-COPY --from=python-builder /opt/ghostship-agent-desktop/venv /opt/ghostship-agent-desktop/venv
+# Google Chrome is the default browser. The baseimage's bundled Chromium
+# stays installed because the desktop shares its runtime dependencies, but
+# its launchers are removed so it cannot shadow Chrome.
+RUN rm -f \
+      /usr/share/applications/chromium.desktop \
+      /usr/share/applications/chromium-browser.desktop \
+      /usr/share/applications/wrapped-chromium.desktop; \
+    printf '%s\n' \
+      '[Default Applications]' \
+      'x-scheme-handler/http=google-chrome.desktop;' \
+      'x-scheme-handler/https=google-chrome.desktop;' \
+      'text/html=google-chrome.desktop;' \
+      > /etc/xdg/mimeapps.list; \
+    update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/google-chrome-stable 200; \
+    update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/bin/google-chrome-stable 200; \
+    update-alternatives --set x-www-browser /usr/bin/google-chrome-stable; \
+    update-alternatives --set gnome-www-browser /usr/bin/google-chrome-stable
+
 COPY root/ /
 
 RUN chmod 0755 \
@@ -59,6 +85,11 @@ RUN chmod 0755 \
       /etc/profile.d/ghostship-desktop.sh \
       /opt/ghostship-agent-desktop/* \
       /etc/s6-overlay/s6-rc.d/svc-agent-desktop-api/run \
-      /etc/s6-overlay/s6-rc.d/svc-agent-desktop-browsers/run \
+      /etc/s6-overlay/s6-rc.d/svc-agent-desktop-chrome-agent/run \
+      /etc/s6-overlay/s6-rc.d/svc-agent-desktop-chrome-personal/run \
       /etc/s6-overlay/s6-rc.d/svc-agent-desktop-sshd/run \
- && ln -sf /opt/ghostship-agent-desktop/desktop-exec /usr/local/bin/ghostship-desktop-exec
+ && ln -sf /opt/ghostship-agent-desktop/desktop-exec /usr/local/bin/ghostship-desktop-exec \
+ && ln -sf /opt/ghostship-agent-desktop/bladebro-mcp-agent /usr/local/bin/bladebro-mcp-agent \
+ && ln -sf /opt/ghostship-agent-desktop/bladebro-mcp-personal /usr/local/bin/bladebro-mcp-personal \
+ && ln -sf /opt/ghostship-agent-desktop/bladebro-cli-agent /usr/local/bin/bladebro-agent \
+ && ln -sf /opt/ghostship-agent-desktop/bladebro-cli-personal /usr/local/bin/bladebro-personal

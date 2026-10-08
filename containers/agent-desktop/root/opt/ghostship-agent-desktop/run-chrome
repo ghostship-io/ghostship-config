@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Launch one persistent Google Chrome instance for the agent desktop.
+# Usage: run-chrome <identity> <port>
+set -eu
+
+identity=$1
+port=$2
+data=/config/agent-desktop/chrome/$identity
+
+export HOME=/config
+
+for _ in $(seq 1 600); do
+  [ -r /config/agent-desktop/session-env ] && break
+  echo "[run-chrome:$identity] waiting for the desktop session environment"
+  sleep 1
+done
+if [ ! -r /config/agent-desktop/session-env ]; then
+  echo "[run-chrome:$identity] session environment never appeared" >&2
+  exit 1
+fi
+set -a
+. /config/agent-desktop/session-env
+set +a
+
+mkdir -p "$data"
+
+# Recover from an unclean shutdown: kill leftovers for this profile and drop
+# Singleton* files so Chrome does not think the profile is locked elsewhere.
+pkill -f -- "--user-data-dir=$data" 2>/dev/null || true
+sleep 1
+rm -f "$data/SingletonLock" "$data/SingletonCookie" "$data/SingletonSocket"
+
+exec /usr/bin/google-chrome-stable \
+  --user-data-dir="$data" \
+  --remote-debugging-port="$port" \
+  --remote-debugging-address=127.0.0.1 \
+  --remote-allow-origins=* \
+  --no-first-run \
+  --no-default-browser-check \
+  --hide-crash-restore-bubble \
+  --disable-features=Translate,MediaRouter \
+  --password-store=basic \
+  --lang=en-US \
+  --window-size=1600,900 \
+  --window-position=0,0 \
+  about:blank

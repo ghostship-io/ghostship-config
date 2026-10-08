@@ -34,7 +34,7 @@ let
     keydir=/var/lib/ghostship/agent-desktop
 
     ${pkgs.coreutils}/bin/install -d -o 3000 -g 3000 -m 0755 /srv/apps/agent-desktop /srv/apps/agent-desktop/config
-    ${pkgs.coreutils}/bin/install -d -o 3000 -g 3000 -m 0700 "$data" "$data/ssh" "$data/browsers" "$data/profiles"
+    ${pkgs.coreutils}/bin/install -d -o 3000 -g 3000 -m 0700 "$data" "$data/ssh" "$data/chrome" "$data/bladebro"
     ${pkgs.coreutils}/bin/install -d -m 0700 "$keydir"
     ${pkgs.coreutils}/bin/install -d -o 3000 -g 3000 -m 0700 /srv/apps/t3code/home/.ssh
 
@@ -55,6 +55,11 @@ let
     ${pkgs.coreutils}/bin/touch "$data/ssh/authorized_keys.local"
     ${pkgs.coreutils}/bin/chown 3000:3000 "$data/ssh/authorized_keys.local"
     ${pkgs.coreutils}/bin/chmod 0600 "$data/ssh/authorized_keys.local"
+  '';
+
+  agent-desktop-mcp = pkgs.writeShellScriptBin "ghostship-agent-desktop-mcp" ''
+    exec ${pkgs.python3.withPackages (ps: [ ps.json5 ps.tomli-w ])}/bin/python3 \
+      ${./agent-desktop-mcp.py} "$@"
   '';
 in
 {
@@ -81,7 +86,9 @@ in
     environment = {
       PUID = "3000";
       PGID = "3000";
-      TZ = "Etc/UTC";
+      # Match the egress network location (Hawaiian Telcom) so browser
+      # timezone checks stay coherent; update if the host's uplink changes.
+      TZ = "Pacific/Honolulu";
       TITLE = "Ghostship Desktop";
       START_DOCKER = "false";
       PELORUS = "true";
@@ -107,6 +114,7 @@ in
     extraOptions = [
       "--network=agent_desktop_net:ip=10.89.7.2"
       "--network=ghostship_net"
+      "--device=/dev/dri"
       "--shm-size=1g"
       "--memory=16g"
       "--health-cmd=/usr/bin/curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null"
@@ -154,6 +162,38 @@ in
       UMask = "0077";
     };
     script = "${agent-desktop-ssh-provision}/bin/ghostship-agent-desktop-ssh-provision";
+  };
+
+  systemd.services.agent-desktop-mcp = {
+    description = "Provision Bladebro MCP access from t3code to the agent desktop";
+    after = [
+      "agent-desktop-ssh.service"
+      "podman-agent-desktop.service"
+    ];
+    wants = [ "podman-agent-desktop.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      Restart = "on-failure";
+      RestartSec = 15;
+      UMask = "0077";
+    };
+    script = ''
+      exec ${agent-desktop-mcp}/bin/ghostship-agent-desktop-mcp \
+        --home /srv/apps/t3code/home \
+        --host-key /srv/apps/agent-desktop/config/agent-desktop/ssh/host/ssh_host_ed25519_key.pub
+    '';
+  };
+
+  systemd.timers.agent-desktop-mcp = {
+    description = "Refresh Bladebro MCP access for all t3code agents";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "10min";
+      OnUnitActiveSec = "daily";
+      Persistent = true;
+    };
   };
 
   systemd.tmpfiles.rules = [

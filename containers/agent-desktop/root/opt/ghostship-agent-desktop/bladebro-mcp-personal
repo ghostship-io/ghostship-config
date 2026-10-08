@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /opt/ghostship-agent-desktop/bladebro-env personal mcp
