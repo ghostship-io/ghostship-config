@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.45] - 2026-10-08
+
+- Validate the Bladebro driver across Home Depot, Lowe's, Amazon, Walmart
+  and Target: all five load with distinct products and prices and no
+  challenge markers.
+- Record the concurrency results (three parallel agents with separate tabs,
+  independent Agent/Personal profiles, client kills leaving Chrome and tabs
+  intact, authentication surviving a Chrome restart).
+- Document the driver policy (Bladebro default, Playwright optional, Pelorus
+  for native and CDP-incompatible sites) and the upgrade/rollback runbook
+  for the pinned Chrome and Bladebro versions.
+
 ## [3.15.44] - 2026-10-08
 
 - Add the CDP detection test tooling (dependency-free client, local detector
