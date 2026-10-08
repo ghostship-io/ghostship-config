@@ -11,8 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Home Manager, `nixos-hardware`, `nixos-wsl`, and `nix-index-database`;
   `chill-penguin` moves to the Asahi 7.1.13 kernel.
 - Track `nixos-apple-silicon/main` again and read peripheral firmware from
-  `/boot/vendorfw/firmware.cpio`; the host must complete the Asahi installer's
-  vendor-firmware rebuild from macOS before this generation is deployed.
+  `/boot/vendorfw/firmware.cpio`. The advance regenerated that cpio from the
+  saved `/boot/asahi` raw firmware with `asahi-fwextract`, which reproduces the
+  currently active firmware byte-for-byte; ALS calibration is not part of the
+  saved data and still requires a later Asahi installer pass from macOS.
 
 ## [3.15.39] - 2026-10-06
 
