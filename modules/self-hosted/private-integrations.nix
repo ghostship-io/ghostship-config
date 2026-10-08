@@ -4,15 +4,14 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   agent = inputs.ghostship-private-agent;
   tools = agent.packages.${system};
-  assistant = inputs.ghostship-private-assistant.packages.${system};
-  # The deployment owns the shopping overlay: destination, retailer enablement,
-  # and personal browser/authorization policy, supplied to the shared tools at
-  # runtime. Technical routing lives in ghostship-tools and is not copied here.
+  # The deployment owns the shopping overlay (destination and retailer
+  # enablement), supplied to the shared tools at runtime. Technical routing
+  # lives in ghostship-tools and is not copied here. The Keep broker is now an
+  # agent package, so the deployment has one platform input.
   privateAddons = agent.lib.mkPrivateIntegrations {
     inherit system;
     shoppingConfig = {
       overlay = ./private-integrations/shopping-overlay.json;
-      authorization = ./private-integrations/shopping-authorization.json;
     };
     mcpIcon = ./private-integrations/ghostship.png;
   };
@@ -91,7 +90,7 @@ in {
         Environment = [ "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt" ];
         EnvironmentFile = "-/run/ghostship-personal/manager.env";
         ExecStartPre = "+${managerAddress}";
-        ExecStart = "${assistant.keep-broker}/bin/ghostship-keep-broker --config ${brokerConfig}";
+        ExecStart = "${tools.keep-broker}/bin/ghostship-keep-broker --config ${brokerConfig}";
         Restart = "on-failure";
         RestartSec = 3;
         NoNewPrivileges = true;
