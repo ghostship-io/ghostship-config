@@ -249,3 +249,17 @@ Measured on 2026-10-08:
 For bot-managed sites, drive Chrome through Selkies (manual) or Pelorus
 compositor input (agents) instead of Bladebro's CDP session. Never assume
 automated bypass works; record challenge behaviour honestly.
+
+## Driver policy
+
+- **Bladebro real-lane attach is the default driver** for agents: it uses
+  the persistent Google Chrome instances, never launches replacement
+  browsers, and does not call `Runtime.enable`, so bot-managed sites accept
+  it (Home Depot, Lowe's, Amazon, Walmart and Target all validated).
+- **Playwright stays optional** for compatible workflows; connect it over an
+  SSH tunnel to the loopback DevTools port and avoid `Runtime.enable` on
+  sites that detect it.
+- **Pelorus and Selkies remain** for native GUI automation and for sites
+  where even clean CDP is challenged.
+- No fingerprint spoofing, extra browser framework, or custom orchestration
+  layer is used; Chrome stays an ordinary desktop installation.
