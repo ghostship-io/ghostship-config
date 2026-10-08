@@ -33,6 +33,7 @@ let
     data=/srv/apps/agent-desktop/config/agent-desktop
     keydir=/var/lib/ghostship/agent-desktop
 
+    ${pkgs.coreutils}/bin/install -d -o 3000 -g 3000 -m 0755 /srv/apps/agent-desktop /srv/apps/agent-desktop/config
     ${pkgs.coreutils}/bin/install -d -o 3000 -g 3000 -m 0700 "$data" "$data/ssh" "$data/browsers" "$data/profiles"
     ${pkgs.coreutils}/bin/install -d -m 0700 "$keydir"
     ${pkgs.coreutils}/bin/install -d -o 3000 -g 3000 -m 0700 /srv/apps/t3code/home/.ssh
