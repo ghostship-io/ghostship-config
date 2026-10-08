@@ -36,9 +36,10 @@
     };
 
     apple-silicon = {
-      # Newer revisions require vendorfw/firmware.cpio rebuilt from macOS.
-      # Keep this host's existing firmware supported until that maintenance.
-      url = "github:nix-community/nixos-apple-silicon/9fe29a63b23005acfcd1324a9e78b6241226cdb1";
+      # This module reads peripheral firmware from /boot/vendorfw/firmware.cpio,
+      # which the Asahi installer rebuilds from macOS. Re-run that maintenance
+      # before adopting an upstream revision with a new firmware contract.
+      url = "github:nix-community/nixos-apple-silicon/main";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

@@ -188,7 +188,7 @@ nixos-rebuild build -L --impure --flake .#chill-penguin
 
 Run long or prompt-driven remote work in detached tmux, then inspect its output
 with `capture-pane` and provide input with `send-keys`. The `--impure` flag on
-Chill Penguin allows extraction from its local `/boot/asahi` firmware; the
+Chill Penguin allows extraction from its local `/boot/vendorfw` firmware; the
 container's pure evaluation cannot validate that hardware-specific step.
 Verify affected live services after switching. Other hosts use their own
 explicit flake target, root SSH access, and host-specific deployment procedure.

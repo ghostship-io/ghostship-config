@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.40] - 2026-10-08
+
+- Refresh the coordinated public Nix inputs, including `nixpkgs`,
+  Home Manager, `nixos-hardware`, `nixos-wsl`, and `nix-index-database`;
+  `chill-penguin` moves to the Asahi 7.1.13 kernel.
+- Track `nixos-apple-silicon/main` again and read peripheral firmware from
+  `/boot/vendorfw/firmware.cpio`; the host must complete the Asahi installer's
+  vendor-firmware rebuild from macOS before this generation is deployed.
+
 ## [3.15.39] - 2026-10-06
 
 - Provide `git` to the `ghostship-config-tests` derivation; the t3code retention
