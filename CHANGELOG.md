@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.42] - 2026-10-08
+
+- Run Google Chrome as a native Wayland client so Selkies touch gestures
+  and Pelorus scroll injection reach the browser; XWayland Chrome ignored
+  compositor wheel events, which broke touch scrolling and manual scroll.
+
 ## [3.15.41] - 2026-10-08
 
 - Replace Camoufox in the agent desktop with Google Chrome stable, pinned by

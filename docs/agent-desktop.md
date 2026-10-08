@@ -61,7 +61,8 @@ ssh -i ~/.ssh/id_agent_desktop -p 2222 abc@10.89.7.2 \
 ```
 
 Chrome is launched with a deliberately minimal command line: a custom
-profile, a loopback DevTools port, first-run/crash UX suppression, the basic
+profile, a loopback DevTools port, native Wayland so compositor input
+injection reaches the browser, first-run/crash UX suppression, the basic
 password store, the US locale and a 1600x900 window. No sandbox, GPU or
 fingerprint flags.
 
@@ -165,6 +166,16 @@ Additional operator keys can be appended to
 and proxied CNAME are reconciled by `ghostship-cloudflare-sync`, and Access
 uses the shared Google identity policy. Mouse, keyboard, clipboard and file
 transfers are enabled; audio, webcam, gamepads and printing are off.
+
+### Touch input
+
+The Selkies client supports touch devices directly: tap clicks, drag moves
+the pointer, long-press is a right click, and a two-finger drag scrolls.
+The side menu also offers **Trackpad Mode** and a **Keyboard Button** for
+mobile. Chrome runs as a native Wayland client so compositor-injected wheel
+events from those gestures reach the browser; if scrolling seems dead,
+make sure the pointer is over the page (not the tab strip) and try toggling
+Trackpad Mode in the side menu.
 
 ## Updates and rollback
 
