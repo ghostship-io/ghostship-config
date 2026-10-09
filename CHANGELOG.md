@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.50] - 2026-10-09
+
+- Align the shared MCP and coding-agent package at 0.8.5, including the
+  verified installed eBay client module path. MCP schemas remain unchanged.
+
 ## [3.15.49] - 2026-10-09
 
 - Pin shared MCP 0.8.4: browser-only eBay active/sold/completed evidence,
