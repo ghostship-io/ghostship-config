@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.54
+
+- Pin MCP 0.8.9 product matching, rejecting conflicting selected variants and incomplete verified identity evidence before ranking offers. Full retailer and client acceptance remain pending.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
