@@ -2468,6 +2468,30 @@ let
     exec ${t3codeDeployWhenIdleScript}/bin/t3code-deploy-when-idle --safe-restart "$@"
   '';
 
+  # The container owns a persistent, isolated Nix store at ${t3codeNixRoot}/nix.
+  # podman-t3code seeds it from the image closure on every deployment (nix copy)
+  # and agent sessions build into it, but nothing ever garbage-collects it, so
+  # dead paths and build results accumulate without bound. Nix GC honors GC
+  # roots and active temporary roots, so it cannot delete a path a running
+  # session still needs, and it never restarts the container. Serialize against
+  # backups and image maintenance through the shared lock.
+  t3codeNixStoreGc = pkgs.writeShellApplication {
+    name = "t3code-nix-store-gc";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux
+      pkgs.podman
+    ];
+    text = ''
+      if test -z "$(podman ps --quiet --filter 'name=^t3code$')"; then
+        echo "t3code container is not running; skipping isolated Nix store GC" >&2
+        exit 0
+      fi
+      flock -w 300 /run/ghostship-maintenance.lock \
+        podman exec t3code nix store gc
+    '';
+  };
+
 in
 {
   # The Antigravity ACP archive is unfree; keep the exception scoped to this app.
@@ -2635,6 +2659,34 @@ in
       OnUnitActiveSec = "1m";
       Persistent = true;
       Unit = "t3code-deploy-when-idle.service";
+    };
+  };
+
+  # Reclaim the container's unbounded isolated Nix store. nix store gc deletes
+  # only paths unreachable from GC roots, so live profiles, active sessions, and
+  # in-flight builds are preserved; it never restarts the container. Idle I/O
+  # keeps it out of the way of transcodes and other host work.
+  systemd.services.t3code-nix-store-gc = {
+    description = "Garbage-collect the T3 Code container's isolated Nix store";
+    after = [ "podman-t3code.service" ];
+    wants = [ "podman-t3code.service" ];
+    onFailure = [ "ghostship-failure@%n.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = lib.getExe t3codeNixStoreGc;
+      TimeoutStartSec = "2h";
+      Nice = 10;
+      IOSchedulingClass = "idle";
+    };
+  };
+
+  systemd.timers.t3code-nix-store-gc = {
+    description = "Daily garbage collection of the T3 Code container Nix store";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      Persistent = true;
+      RandomizedDelaySec = "1h";
     };
   };
 
