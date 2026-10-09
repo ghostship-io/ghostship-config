@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.53] - 2026-10-09
+
+- Pin shared MCP 0.8.8 with durable tab/job ownership across PID namespaces,
+  interrupted-write reconciliation without replay and explicit diagnostic limits.
+- Restore the previous session when managed desktop Chrome restarts. Renderer
+  hang root cause and unattended recovery remain pending acceptance.
+
 ## [3.15.52] - 2026-10-09
 
 - Pin shared MCP 0.8.7: coding agents and the OpenAI relay use one persistent
