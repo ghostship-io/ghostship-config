@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.46] - 2026-10-09
+
+- **Garbage-collect the T3 Code container's isolated Nix store**: the container
+  keeps its own persistent store at `/srv/apps/t3code/nix-root/nix`. Every image
+  deployment `nix copy`s a fresh closure into it and agent sessions build into
+  it, but nothing ever collected it, so dead paths accumulated without bound.
+  A daily `t3code-nix-store-gc` timer now runs `nix store gc` inside the running
+  container under the shared maintenance lock. GC removes only paths unreachable
+  from GC roots, so live profiles, active sessions, and in-flight builds are
+  preserved, and it never restarts the container. It skips when the container is
+  not running.
+
 ## [3.15.45] - 2026-10-08
 
 - Validate the Bladebro driver across Home Depot, Lowe's, Amazon, Walmart
