@@ -65,6 +65,8 @@ in {
     ];
     systemd.services.ghostship-keep-broker = {
       description = "Keep API execution service with Agent Desktop authentication";
+      # Keep SSH available independently of the pinned agent package revision.
+      path = [ pkgs.openssh pkgs.coreutils ];
       wantedBy = [ "multi-user.target" ];
       after = [ "ghostship-desktop-bridge.service" ];
       requires = [ "ghostship-desktop-bridge.service" ];
