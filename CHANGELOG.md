@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.52] - 2026-10-09
+
+- Pin shared MCP 0.8.7: coding agents and the OpenAI relay use one persistent
+  canonical backend with independent sessions and reusable identity-bound workers.
+  Connector refresh and broader shopping acceptance remain pending.
+
 ## [3.15.51] - 2026-10-09
 
 - Pin shared MCP 0.8.6 with Standard search budgets, canonical product matching,
