@@ -113,6 +113,53 @@ in {
     # runs inside the `t3code` container on ghostship_net, reachable by name
     # through its access proxy at t3code:3773; this one unit publishes the URL
     # and a scoped session token. Update = bump the agent flake pin only.
+    #
+    # Agent Desktop bridge: the same isolated MCP runs the parallel Bladebro
+    # worker transport, so it needs the desktop SSH contract. This unit
+    # publishes the t3code desktop key, its pinned host key, and the desktop
+    # address into /run/ghostship-integrations; the MCP wrapper reads them by
+    # file. The address is the agent_desktop_net IP because the desktop's
+    # pinned known_hosts entry is `[10.89.7.2]:2222`; the desktop also answers
+    # on ghostship_net (10.89.0.213) but the host key entry would not match.
+    systemd.services.ghostship-desktop-bridge = {
+      description = "Publish the Agent Desktop SSH contract for the ChatGPT MCP";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "agent-desktop-ssh.service" "agent-desktop-mcp.service" ];
+      wants = [ "agent-desktop-ssh.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = pkgs.writeShellScript "ghostship-desktop-bridge" ''
+          set -eu
+          umask 077
+          install -d -m 0750 -o root -g ghostship-mcp /run/ghostship-integrations
+          install -m 0440 -o root -g ghostship-mcp \
+            /srv/apps/t3code/home/.ssh/known_hosts_agent_desktop \
+            /run/ghostship-integrations/agent-desktop-known-hosts.new
+          install -m 0440 -o root -g ghostship-mcp \
+            /srv/apps/t3code/home/.ssh/id_agent_desktop \
+            /run/ghostship-integrations/agent-desktop-key.new
+          printf '10.89.7.2' > /run/ghostship-integrations/agent-desktop-host.new
+          chmod 0444 /run/ghostship-integrations/agent-desktop-host.new
+          mv /run/ghostship-integrations/agent-desktop-known-hosts.new \
+             /run/ghostship-integrations/agent-desktop-known-hosts
+          mv /run/ghostship-integrations/agent-desktop-key.new \
+             /run/ghostship-integrations/agent-desktop-key
+          mv /run/ghostship-integrations/agent-desktop-host.new \
+             /run/ghostship-integrations/agent-desktop-host
+        '';
+        UMask = "0077";
+      };
+    };
+    systemd.timers.ghostship-desktop-bridge = {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "20min";
+        OnUnitActiveSec = "daily";
+        Persistent = true;
+        RandomizedDelaySec = 300;
+      };
+    };
     systemd.services.ghostship-t3-bridge = {
       description = "Publish the T3 bridge endpoint and session token for the ChatGPT MCP";
       wantedBy = [ "multi-user.target" ];
