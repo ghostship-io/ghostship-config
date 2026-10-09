@@ -7,27 +7,31 @@ discovery in ChatGPT. Runtime relay credentials live in Bitwarden and the
 age-encrypted scoped secret bundle, outside Git plaintext and the Nix store.
 No public origin, inbound port or browser debugging endpoint is exposed.
 
-Keep executes directly in the separate host service. `account: User|Agent`
-selects the configured profile mapping; User → Assistant and Agent → Default.
-Each mapping declares its Google `authuser` index. Update it if sign-in order
-changes. The model does not choose profile IDs, manager addresses or executables.
+Keep executes in the separate host service. `account: User|Agent`
+selects the persistent Agent Desktop Chrome identity: User → `personal` (port 9223),
+Agent → `agent` (port 9222). The broker verifies the signed-in Google
+account and resolves its current `authuser` index dynamically. Neither a
+CloakBrowser profile ID nor a second Chrome process is required.
 Cookies and sessions stay on the host. Create/update support separate title/body fields, checklist row patches, labels and PNG/JPEG/GIF images; search accepts a label/tag alone or with text. Drawings and reminders are excluded. Amazon read tools use the existing
 anonymous shopping client and runtime home ZIP, preserving unknown costs.
 
 ## Deployment
 
-Build pinned agent and assistant sources, then run
+Build the pinned `ghostship-agent` and `nixos-config` revisions, then run
 `nix develop .#ci -c scripts/check` and build the actual Chill Penguin target.
 Stage new Nix files before evaluating. Preserve the active T3 session using
 [the session guard](container-workflow.md#preserve-the-active-t3-code-session).
-If full activation touches T3, install only the exact integration unit and keep
-its candidate build rooted. Do not stop T3 or the browser manager.
+If full activation touches T3, install only the integration units required for
+the migration while preserving the running T3 service and Agent Desktop sessions.
 
-The broker resolves the current browser-manager IP through Podman before startup.
-CloakBrowser is used only for authentication acquisition or refresh. The generated
-API client executes every note operation with private cached sessions in
-`/var/lib/ghostship-keep/sessions`. It leases only its own authentication tabs and
-never stops an existing browser profile. Session caches are excluded from backups.
+The `ghostship-desktop-bridge` service installs the desktop SSH key, pinned host
+key and address into `/run/ghostship-integrations/`. The host Keep broker reads
+that same contract using `GHOSTSHIP_BROWSER_DRIVER=desktop`. The private MCP
+container joins both `ghostship_net` (T3 access) and `agent_desktop_net` (Chrome
+access), and uses the same identity mapping. The generated API client executes
+note operations using private cached sessions in `/var/lib/ghostship-keep/sessions`.
+It leases its own authentication tab, never stops Chrome, and excludes caches
+from backups.
 UIDs are MCP 62020 and host broker 62021; the operation socket is group-scoped.
 The non-root container has a read-only root, scoped tmpfs/state, no capabilities
 and only relay files, application state and the operation socket directory mounted.
@@ -66,7 +70,8 @@ creates returned their saved result. Synthetic tests verify interruption recover
 The actual connected GhostShip plugin also passed list/create/get/update/archive
 and cold authentication recovery. Its cached tool metadata still needs refresh
 before deletion is available in a fresh ChatGPT conversation.
-CloakBrowser only acquires authentication; API calls reuse private cached sessions.
+These October 3 observations predate the Agent Desktop cutover. They do not
+establish that the new SSH bridge and broker deployment have passed live testing.
 
 Amazon search/item/delivery/comparison ran live with partial coverage. Shipping,
 mandatory fees and comparable delivered subtotals remained unknown; comparison
