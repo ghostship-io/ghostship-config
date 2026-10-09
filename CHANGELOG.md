@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.48] - 2026-10-09
+
+- Update the shared Ghostship MCP to 0.8.3: exact-tab ownership checks,
+  interrupted-worker cleanup, independent primary/detail pages, concurrent
+  registry reconciliation and accurate mutation idempotence annotations.
+  Worker fixtures passed 100 rounds at 1/2/4/8 workers in both identities.
+
 ## [3.15.47] - 2026-10-09
 
 - Pin the shared Ghostship MCP to the tested 0.8.2 catalog and browser runtime.
