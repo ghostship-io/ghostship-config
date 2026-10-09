@@ -1,19 +1,22 @@
 # Private Ghostship integration
 
-One container runs the official relay and a stdio MCP child exposing eight Keep,
-four Amazon tools and integration status. The tunnel is
-`tunnel_6ac0806704cc819188e52213f9afd272`; the owner has observed Keep/Amazon tool
-discovery in ChatGPT. Runtime relay credentials live in Bitwarden and the
-age-encrypted scoped secret bundle, outside Git plaintext and the Nix store.
-No public origin, inbound port or browser debugging endpoint is exposed.
-
+One private container runs the official relay and one persistent Ghostship MCP
+runtime. Coding clients and the relay connect to independent SDK sessions on the
+same private Unix endpoint. Tool definitions and handlers come from the pinned
+`ghostship-agent` capability catalog. The tunnel is
+`tunnel_6ac0806704cc819188e52213f9afd272`. Runtime relay credentials live in
+Bitwarden and the age-encrypted scoped secret bundle, outside Git plaintext and
+the Nix store. No public origin, inbound port or browser debugging endpoint is
+exposed. Cached client discovery needs its supported refresh independently of
+a successful fresh-client discovery.
 Keep executes in the separate host service. `account: User|Agent`
 selects the persistent Agent Desktop Chrome identity: User → `personal` (port 9223),
 Agent → `agent` (port 9222). The broker verifies the signed-in Google
 account and resolves its current `authuser` index dynamically. Neither a
 CloakBrowser profile ID nor a second Chrome process is required.
-Cookies and sessions stay on the host. Create/update support separate title/body fields, checklist row patches, labels and PNG/JPEG/GIF images; search accepts a label/tag alone or with text. Drawings and reminders are excluded. Amazon read tools use the existing
-anonymous shopping client and runtime home ZIP, preserving unknown costs.
+Cookies and sessions stay on the host. Create/update support separate title/body fields, checklist row patches, labels and PNG/JPEG/GIF images; search accepts a label/tag alone or with text. Drawings and reminders are excluded. Canonical shopping calls use the selected Agent Desktop browser identity and
+runtime home ZIP, preserving unknown costs. Native controls, eligibility and
+checkout evidence still need retailer acceptance; consumer migration is incomplete.
 
 ## Deployment
 
@@ -45,8 +48,9 @@ records across restarts. Health probes inspect only process state; measure relay
 polling, local MCP readiness and live account calls separately.
 
 Open the Ghostship connection at ChatGPT Plugins and select Refresh after a
-schema/description change, then start a fresh conversation. Verify list/search/get,
-create/update/checklist/archive/delete-to-trash and Amazon search/item/destination/comparison.
+schema/description change, then start a fresh conversation. Compare the discovered catalog and integration status from fresh coding and
+OpenAI connections, then exercise the same browser, Google and shopping calls.
+Fresh status success does not validate a cached schema or authenticated workflows.
 An upstream sign-in or refusal is reported as unavailable or upstream_blocked,
 with no fabricated data. Connection discovery alone does not prove live calls.
 
