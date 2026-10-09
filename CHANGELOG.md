@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.47] - 2026-10-09
+
+- Pin the shared Ghostship MCP to the tested 0.8.2 catalog and browser runtime.
+  Coding agents and the private ChatGPT relay use the same server. Integration
+  diagnostics expose the pinned source revision, image tag, catalog hash, and
+  backend connectivity for deployment and connector discovery checks.
+
 ## [3.15.46] - 2026-10-09
 
 - **Garbage-collect the T3 Code container's isolated Nix store**: the container
