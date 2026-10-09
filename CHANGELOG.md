@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.51] - 2026-10-09
+
+- Pin shared MCP 0.8.6 with Standard search budgets, canonical product matching,
+  destination/offer safeguards and bounded per-worker diagnostics. Retailer
+  workflow and price benchmark acceptance remains pending.
+
 ## [3.15.50] - 2026-10-09
 
 - Align the shared MCP and coding-agent package at 0.8.5, including the
