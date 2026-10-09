@@ -207,6 +207,7 @@ in {
       imageFile = privateAddons.image;
       pull = "never";
       user = "62020:62020";
+      environment.GHOSTSHIP_MCP_IMAGE_VERSION = "ghostship-private-integrations:${privateAddons.image.imageTag}";
       volumes = [
         "/run/ghostship-integrations:/run/ghostship-integrations:ro"
         "/run/ghostship-keep:/run/ghostship-keep:ro"
