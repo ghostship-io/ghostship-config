@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.55
+
+- Pin MCP 0.8.10 fresh-price/condition/eligibility evidence and concurrent job-store initialization fixes. Full retailer and cached client acceptance remain pending.
+
 ## 3.15.54
 
 - Pin MCP 0.8.9 product matching, rejecting conflicting selected variants and incomplete verified identity evidence before ranking offers. Full retailer and client acceptance remain pending.
