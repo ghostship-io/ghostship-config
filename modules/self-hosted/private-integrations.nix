@@ -20,8 +20,8 @@ let
     # signed-in account on the identity page and resolves its index at session
     # acquisition. No account index is configured or assumed.
     accounts = {
-      User = { profile_id = "f0fae36e-2475-4dd9-8e02-ac4bc576d7b1"; expected_email = "<owner-email>"; };
-      Agent = { profile_id = "50a1343a-ca9b-4c08-93f0-d0c69eae6643"; expected_email = "<agent-email>"; };
+      User = { identity = "personal"; expected_email = "<owner-email>"; };
+      Agent = { identity = "agent"; expected_email = "<agent-email>"; };
     };
     principal = "chatgpt-personal-owner";
     client = "${tools.google-pp-cli}/bin/google-pp-cli";
@@ -33,19 +33,6 @@ let
     socket = "/run/ghostship-keep/operations.sock";
     model_uid = 62020;
   });
-  managerAddress = pkgs.writeShellScript "ghostship-personal-manager-address" ''
-    set -eu
-    address=$(${pkgs.podman}/bin/podman inspect --format '{{(index .NetworkSettings.Networks "ghostship_net").IPAddress}}' cloakbrowser)
-    ${pkgs.python3}/bin/python3 - "$address" <<'PYTHON'
-    import ipaddress, os, sys
-    address = str(ipaddress.ip_address(sys.argv[1]))
-    path = "/run/ghostship-personal/manager.env"
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o400)
-    with os.fdopen(fd, "w") as handle:
-        handle.write("GHOSTSHIP_PERSONAL_MANAGER_URL=http://" + address + ":8080\n")
-    os.chown(path, 62021, 62021)
-    PYTHON
-  '';
   render = pkgs.writeShellScript "ghostship-private-relay-render" ''
     set -eu
     ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-relay
@@ -77,8 +64,10 @@ in {
       "d /srv/apps/ghostship-private-integrations/ghostship 0700 ghostship-mcp ghostship-mcp -"
     ];
     systemd.services.ghostship-keep-broker = {
-      description = "Keep API execution service with authentication-only browser access";
+      description = "Keep API execution service with Agent Desktop authentication";
       wantedBy = [ "multi-user.target" ];
+      after = [ "ghostship-desktop-bridge.service" ];
+      requires = [ "ghostship-desktop-bridge.service" ];
       serviceConfig = {
         User = "ghostship-personal";
         Group = "ghostship-mcp";
@@ -87,9 +76,18 @@ in {
         RuntimeDirectory = "ghostship-personal";
         RuntimeDirectoryMode = "0700";
         UMask = "0077";
-        Environment = [ "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt" ];
-        EnvironmentFile = "-/run/ghostship-personal/manager.env";
-        ExecStartPre = "+${managerAddress}";
+        # The broker is host-side, not in the MCP container: supply the same
+        # mounted desktop SSH key/host contract explicitly. No manager or
+        # secondary browser is needed for authenticated Keep operations.
+        Environment = [
+          "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+          "GHOSTSHIP_BROWSER_DRIVER=desktop"
+          "AGENT_DESKTOP_SSH_HOST=10.89.7.2"
+          "AGENT_DESKTOP_SSH_PORT=2222"
+          "AGENT_DESKTOP_SSH_USER=abc"
+          "AGENT_DESKTOP_SSH_KEY=/run/ghostship-integrations/agent-desktop-key"
+          "AGENT_DESKTOP_SSH_KNOWN_HOSTS=/run/ghostship-integrations/agent-desktop-known-hosts"
+        ];
         ExecStart = "${tools.keep-broker}/bin/ghostship-keep-broker --config ${brokerConfig}";
         Restart = "on-failure";
         RestartSec = 3;
@@ -125,7 +123,7 @@ in {
       description = "Publish the Agent Desktop SSH contract for the ChatGPT MCP";
       wantedBy = [ "multi-user.target" ];
       after = [ "agent-desktop-ssh.service" "agent-desktop-mcp.service" ];
-      wants = [ "agent-desktop-ssh.service" ];
+      requires = [ "agent-desktop-ssh.service" "agent-desktop-mcp.service" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -214,9 +212,10 @@ in {
       ];
       extraOptions = [
         "--read-only" "--cap-drop=ALL" "--security-opt=no-new-privileges"
-        # Join ghostship_net so the T3 bridge can reach the `t3code` access
-        # proxy; the container keeps its own state on mounted volumes.
+        # Both networks are required: ghostship_net reaches T3 and
+        # agent_desktop_net reaches the persistent Chrome SSH endpoint.
         "--network=ghostship_net"
+        "--network=agent_desktop_net"
         "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777"
         "--pids-limit=64" "--memory=512m" "--cpus=2"
         "--health-cmd=test -f /tmp/supervisor-live && test $(( $(date +%s) - $(stat -c %Y /tmp/supervisor-live) )) -lt 10"
@@ -224,8 +223,10 @@ in {
       ];
     };
     systemd.services.podman-ghostship-private-integrations = {
-      after = [ "ghostship-keep-broker.service" "init-ghostship-net.service" ];
-      requires = [ "ghostship-keep-broker.service" "init-ghostship-net.service" ];
+      after = [ "ghostship-keep-broker.service" "ghostship-desktop-bridge.service"
+                "init-ghostship-net.service" "init-agent-desktop-net.service" ];
+      requires = [ "ghostship-keep-broker.service" "ghostship-desktop-bridge.service"
+                   "init-ghostship-net.service" "init-agent-desktop-net.service" ];
       # One stdio relay per ID: systemd/Podman stop the old instance first.
       restartIfChanged = true;
     };
