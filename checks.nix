@@ -10,6 +10,12 @@ let
   agentUnits = map (name: self.nixosConfigurations.chill-penguin.config.systemd.services.${name}) [
     "podman-t3code"
   ];
+  # Every binary a container unit starts must be seeded into the isolated Nix
+  # store and rooted through podman-t3code's preStart, or the daily store GC
+  # deletes it and the unit silently fails (e.g. the retention timer).
+  t3codeImagePreStart =
+    self.nixosConfigurations.chill-penguin.config.systemd.services.podman-t3code.preStart;
+  t3codeImageSeedsRetention = pkgs.lib.hasInfix "t3code-retention" t3codeImagePreStart;
   failures = pkgs.lib.concatMap (
     host: map (a: a.message) (builtins.filter (a: !a.assertion) host.config.assertions)
   ) hosts;
@@ -47,6 +53,7 @@ in
     ) agentUnits;
     assert self.nixosConfigurations.chill-penguin.config.systemd.services ? t3code-deploy-when-idle;
     assert self.nixosConfigurations.chill-penguin.config.systemd.timers ? t3code-deploy-when-idle;
+    assert t3codeImageSeedsRetention;
     pkgs.runCommand "ghostship-host-evaluation"
       {
         # Force complete derivation evaluation without building the fleet in CI.

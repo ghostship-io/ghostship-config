@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.47] - 2026-10-10
+
+- **Stop mid-turn T3 Code restarts**: the shared activity probe that gates
+  tool maintenance, memory recovery, and host deployments only counted a turn
+  as running while its `completed_at` was null. T3 Code stamps `completed_at`
+  on a running turn when a mid-turn checkpoint diff completes, so a long Codex
+  or Claude turn stopped counting as active once its pending request and user
+  message windows lapsed. The server monitor then restarted
+  `t3code-server.service` for sustained memory pressure and interrupted the
+  work that was still running (observed on 2026-10-10 at 06:28 and 08:20 UTC).
+  The probe now also treats a provider session that is starting or running as
+  active work, the same authoritative signal T3 Code uses to keep a turn
+  unsettled. Regression tests cover a checkpointed running turn and sessions
+  without a turn row.
+- **Keep the retention timer alive across store GC**: `t3code-retention` was
+  missing from the container image contents, so the daily isolated-store GC
+  deleted its binary and the enabled `t3code-retention.timer` failed to exec
+  with no log line. OpenCode's unbounded event log then grew to 10 GiB
+  (`event` table alone 8.5 GiB), server traces exceeded the retained count, and
+  the container previously hit ENOSPC on 2026-09-30, breaking tool updates and
+  agent installs. Add the retention package to the seeded and rooted image
+  contents, and assert in `checks.nix` that `podman-t3code` seeds it.
+
 ## [3.15.46] - 2026-10-09
 
 - **Garbage-collect the T3 Code container's isolated Nix store**: the container

@@ -197,8 +197,11 @@ stopped server, or a web UI or environment endpoint that fails five consecutive
 checks, is restarted despite active work.
 
 Maintenance ignores deleted threads and pending requests superseded by a later
-turn. Running turns, unresolved pending requests from the last 10 minutes, and
-user messages from the last 15 minutes still block restarts. No conversation records are modified.
+turn. Live provider sessions that are still starting or running, unresolved
+pending requests from the last 10 minutes, and user messages from the last 15
+minutes block restarts. A session that is starting or running keeps its turn
+active even after a mid-turn checkpoint stamps `completed_at` on the turn row;
+only the session leaving the running state settles the turn. No conversation records are modified.
 
 ## Maintenance
 
@@ -239,8 +242,16 @@ deletes unpinned threads whose latest activity is older than 180 days. When a
 thread is archived, retention also deletes its worktree under `~/.t3/worktrees`
 once no active thread still references that path (shared checkouts used by open
 threads are kept). Archive and delete go through T3's orchestration API; pinned
-threads and threads with active turns are skipped. Manual dry runs use
+ threads and threads with active turns are skipped. Manual dry runs use
 `t3code-retention --dry-run`.
+
+The container's isolated Nix store at `/srv/apps/t3code/nix-root/nix` is
+garbage-collected daily on the host. GC roots only the paths in the image
+contents (`t3codeImageContents`), which `podman-t3code` seeds and symlinks under
+the store's `gcroots` on every start. Every binary a container unit can start
+must be in that list, or a GC deletes it and the unit fails to exec with no log
+line; `t3code-retention` was the missing entry that let OpenCode's event log
+grow to 10 GiB.
 
 The image includes OpenSSL as well as the CA bundle because Cursor's Node runtime
 uses OpenSSL's compiled-in certificate directory when it probes system trust.
