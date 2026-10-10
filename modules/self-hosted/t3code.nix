@@ -1859,6 +1859,7 @@ let
     t3codeToolUpdateRestart
     t3codeProcessMemoryGuard
     t3codeDaemonMonitor
+    t3codeRetention
     t3codeContainerHealth
     t3codeRunHooks
     t3codeSharedAgents

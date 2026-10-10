@@ -51,7 +51,16 @@ try {
      UNION ALL
      SELECT count(*) AS active FROM projection_threads
      WHERE deleted_at IS NULL
-       AND julianday(latest_user_message_at) > julianday('now', '-15 minutes')`
+       AND julianday(latest_user_message_at) > julianday('now', '-15 minutes')
+     UNION ALL
+     -- A provider session that is starting or running is active work even when
+     -- the turn row disagrees. T3 Code stamps completed_at on running turns
+     -- when a mid-turn checkpoint diff completes, so completed_at alone cannot
+     -- mark a turn finished; only the session leaving running settles it.
+     SELECT count(*) AS active FROM projection_thread_sessions AS session
+     JOIN projection_threads AS thread USING (thread_id)
+     WHERE thread.deleted_at IS NULL
+       AND session.status IN ('starting', 'running')`
   ).all(PENDING_ACTIVITY_GRACE_MINUTES);
 
   db.close();
