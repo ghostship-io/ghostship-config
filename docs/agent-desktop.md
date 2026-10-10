@@ -123,30 +123,26 @@ Prefer Bladebro for routine agent work.
 
 ## Native GUI automation (Pelorus)
 
-Pelorus is unchanged; the proxy forwards only the desktop-control surface.
-Use `httpx` directly.
+Use the managed `ghostship-gui` wrapper locally. It handles SSH application
+launches internally and uses the canonical generated Pelorus CLI for API calls.
 
-```python
-import os
-import httpx
-
-base = os.environ["AGENT_DESKTOP_API_URL"]
-headers = {"Authorization": f"Bearer {os.environ['AGENT_DESKTOP_API_TOKEN']}"}
-client = httpx.Client(base_url=base, headers=headers, timeout=120)
-
-state = client.get("/pelorus/api/state").json()          # text desktop state
-windows = client.get("/pelorus/api/windows").json()      # geometry per window
-tree = client.get(f"/pelorus/api/desktop/explore/{pid}").json()
-png = client.get("/pelorus/api/desktop/screenshot").json()["data"]
-client.post("/pelorus/api/desktop/control", json={"action": "left_click", "coordinate": [640, 400]})
-client.post("/pelorus/api/desktop/control", json={"action": "type", "text": "hello"})
-client.post(f"/pelorus/api/desktop/close/{pid}")          # close a window
+```sh
+ghostship-gui windows
+ghostship-gui launch -- xmessage 'Owned test window'
+ghostship-gui explore --pid 1234
+ghostship-gui screenshot --pid 1234
+ghostship-gui batch --pid 1234 --actions '[{"action":"type","text":"hello"}]'
 ```
 
-Use Bladebro for browser operations and Pelorus for other graphical Linux
-applications: install/launch utilities over SSH, inspect controls with
-`/api/desktop/explore`, interact with `control`, and fall back to
-screenshots when an application has no accessibility tree.
+Batches acquire both browser-profile locks in a fixed order, confirm the target
+PID's focus before each input, and stop on uncertain responses without replay.
+Browser workers use the same locks across both identities for foreground input;
+DOM reads and navigation remain parallel. Screenshots are private local PNGs,
+and accessibility text is bounded. Ambiguous window targets fail before input.
+Use Bladebro for browser workflows and this wrapper for native applications.
+
+The image normalizes known Pixelflux control responses to Pelorus's required
+`result` field. Backend errors remain errors; unknown responses fail explicitly.
 
 ## SSH and software installation
 
@@ -207,6 +203,21 @@ podman exec -u 0 agent-desktop google-chrome-stable --version
 podman exec -u 0 agent-desktop bladebro -v
 ```
 
+Chrome starts with a fresh New Tab page after relaunch. Managed policy
+`RestoreOnStartup=5` and the launcher omit session restoration; existing tabs
+are not reopened. After stopping its profile, the launcher removes only tab/session
+restoration files to cover unclean exits too. Cookies, credentials, history,
+and site storage remain. This follows
+the user's October 10 request and supersedes the earlier session-restoration
+setting. The policy file is
+`containers/agent-desktop/root/etc/opt/chrome/policies/managed/ghostship-desktop.json`.
+
+Memory Saver discarding and background tab freezing are disabled so parallel
+workers keep their page execution state. Background mode is disabled so closing
+Chrome does not leave background apps running. These are supported Chrome
+policies, not timing or throughput measurements. Inspect `chrome://policy` to
+confirm the deployed browser accepts them before running workflow benchmarks.
+
 Recovery: the s6 services relaunch Chrome after a crash; the run script
 reaps stale processes and `Singleton*` locks for its profile first, so
 unclean shutdowns recover automatically. If an instance is wedged,
@@ -263,3 +274,11 @@ automated bypass works; record challenge behaviour honestly.
   where even clean CDP is challenged.
 - No fingerprint spoofing, extra browser framework, or custom orchestration
   layer is used; Chrome stays an ordinary desktop installation.
+
+
+Agent Desktop has a 4,096-task bound and a 16 GiB memory bound. Linux task
+counts include threads; parallel workers can exhaust the default 2,048-task
+bound before memory fills. Apply a task-bound change to the existing container
+with `podman update --pids-limit=4096 agent-desktop`, preserving its container
+identity and the active T3 session. Check `pids.current` and `pids.events` in the
+desktop cgroup when validating parallel workloads.

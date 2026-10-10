@@ -30,6 +30,13 @@ pkill -f -- "--user-data-dir=$data" 2>/dev/null || true
 sleep 1
 rm -f "$data/SingletonLock" "$data/SingletonCookie" "$data/SingletonSocket"
 
+# The desktop's startup contract is a fresh tab even after an unclean exit.
+# Remove only tab/session restoration files once this profile is stopped;
+# keep cookies, login data, site storage, history and other profile settings.
+rm -f -- "$data/Default/Sessions/"Session_* "$data/Default/Sessions/"Tabs_* \
+  "$data/Default/Current Session" "$data/Default/Last Session" \
+  "$data/Default/Current Tabs" "$data/Default/Last Tabs"
+
 # Deliberately minimal, ordinary command line: a custom profile (required,
 # and Chrome 136+ refuses CDP on the default profile dir), a loopback-only
 # DevTools port for Bladebro, native Wayland so compositor input injection

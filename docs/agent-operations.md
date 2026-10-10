@@ -533,15 +533,12 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   re-persisting `pricebuddy-agent.env`, and post-start verification should only
   gate Ghostship-managed wiring such as env generation, scraper reachability,
   and final bearer-token shape.
-- On `chill-penguin`, `pricebuddy-scraper` now runs as a local CloakBrowser+Playwright sidecar; keep its health check pointed at `/health`, which must validate a real browser launch rather than only process liveness.
 - On `chill-penguin`, Muximux intentionally omits Honcho while keeping
   PriceBuddy in the dropdown immediately after Bazarr; Homepage remains the
   place where Honcho stays visible.
 - Muximux does not tolerate `user = "3000:3000"` in the current image; keep it
   on `0:3000`.
 - Bazarr's authoritative config is `/srv/apps/bazarr/config/config.yaml`.
-- The standalone `cloakhq/cloakbrowser-manager` service runs on `chill-penguin` for direct profile management on `ghostship_net`; do not add Gluetun/VPN coupling unless explicitly requested.
-- CloakBrowser consumer images live under `containers/` and are built locally into content-addressed `localhost/...` tags from Nix-managed contexts; `pricebuddy-scraper` and `changedetection` both run embedded local CloakBrowser Playwright sessions with `humanize=True` instead of depending on the manager/CDP path.
 - n8n on `chill-penguin` should stay as a single SQLite-backed service with state persisted under `/srv/apps/n8n`; keep browser access behind Cloudflare and expect a one-time manual Muximux reorder after deployment so the live tile sits directly under Bazarr.
 - Chaptarr on `chill-penguin` should follow the standard arr service pattern: keep its config under `/srv/apps/chaptarr`, mount the shared downloads root at `/downloads`, mount `/mnt/share/Library/Books` plus `/mnt/share/Library/Audiobooks` as separate library roots, and source its API key from the `chaptarr` source projection. Grimmory should keep both library roots mounted because it is the primary consumption UI, and the generated Muximux dropdown order should place Chaptarr before Bazarr.
 - Gluetun on `chill-penguin` should stay on Gluetun's custom-provider WireGuard path for PIA. `podman-gluetun` should start from the cached winner at `/srv/apps/gluetun/pia-wireguard-selection.json` or do only a provisional latency pick when no cache exists, regenerate `/run/secrets/gluetun-runtime.env` from that active winner during startup, and rely on `gluetun-pia-selector` to rerank Vancouver port-forward-capable WireGuard servers 5 minutes after boot and every 8 hours thereafter. The selector should pin Vancouver, benchmark the top 10 Vancouver servers with a bounded generic HTTPS download pull, and restart Gluetun only when a materially faster Vancouver winner is found while keeping PIA VPN-side port forwarding plus qBittorrent port reconciliation wired through Gluetun's native hooks and the generic `/v1/portforward` monitor path.

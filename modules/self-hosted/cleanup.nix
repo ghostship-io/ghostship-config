@@ -8,6 +8,21 @@
 let
   retiredArtifacts = [
     {
+      name = "cloakbrowser";
+      # Retire execution and images without deleting saved browser profiles.
+      paths = [ ];
+      units = [
+        "podman-cloakbrowser"
+        "cloakbrowser-extensions"
+      ];
+      timers = [ "cloakbrowser-extensions" ];
+      containers = [ "cloakbrowser" ];
+      imageRefs = [ "docker.io/cloakhq/cloakbrowser-manager:latest" ];
+      imageRepositories = [ "docker.io/cloakhq/cloakbrowser-manager" ];
+      homepageEntries = [ "CloakBrowser" ];
+      muximuxSections = [ "CloakBrowser" ];
+    }
+    {
       name = "bookstack";
       paths = [
         "/srv/apps/bookstack"

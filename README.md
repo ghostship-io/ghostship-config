@@ -191,7 +191,7 @@ Only Plex exposes host ports; every other service is intended to stay on
 internal networking and be reached through the reverse-proxy/tunnel path.
 
 Key services include Plex, Homepage, Muximux, the `arr` stack,
-qBittorrent, NZBGet, RomM, Grimmory, Chaptarr, PyLoad, and CloakBrowser.
+qBittorrent, NZBGet, RomM, Grimmory, Chaptarr, PyLoad, and Agent Desktop.
 Uptime Kuma, ntfy, and Seerr add monitoring, Android notifications, and
 approval-required media requests.
 
@@ -268,10 +268,10 @@ require any application-specific benchmark credentials.
 
 Chaptarr now extends the arr stack to books and audiobooks. It should mount the shared downloads root at `/downloads`, manage `/mnt/share/Library/Books` and `/mnt/share/Library/Audiobooks` as separate library roots, and stay visible in Homepage plus the Muximux dropdown immediately before Bazarr. Grimmory is still the primary reading and listening surface, so it also mounts both library roots. Public `chaptarr.ghostship.io` exposure is managed by its Nix service declaration alongside its dashboard entries.
 
-CloakBrowser runs again as a standalone manager on `chill-penguin` for direct
-profile management, alongside the embedded browser contract used by
-repo-managed scraping images. The manager stays on the internal
-`ghostship_net` network and does not use Gluetun. Retired scraper services are not part of this declared inventory.
+Browser automation uses Agent Desktop's authenticated Chrome profiles.
+CloakBrowser is retired: its manager, extension jobs and dashboard route are
+removed, and cleanup retires its container and images without deleting saved
+profile data. Retired scraper services are not part of the declared inventory.
 
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions

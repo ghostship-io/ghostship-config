@@ -369,9 +369,10 @@ The 2026-10-10 security review retained these operator-approved trust choices:
 services remain unauthenticated on the Docker network; developer/agent tools
 keep their broad privileges and mutable automatic updates; service secrets
 retain the shared apps-account model; Gluetun's HTTP proxy remains available
-on the shared network; and CloakBrowser retains its Origin-header handling.
-These choices leave supply-chain, lateral-access, shared-secret, and browser
-request-origin risks unresolved. Emulation findings are deferred while Boomer
+on the shared network.
+These choices leave supply-chain, lateral-access and shared-secret risks
+unresolved. CloakBrowser was retired independently during this review; its
+findings remain in progress until activation removes the old enabled units. Emulation findings are deferred while Boomer
 is offline.
 
 Trusted LAN clients also retain the Plex/qBittorrent login bypass. Gluetun
