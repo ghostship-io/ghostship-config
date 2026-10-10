@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.69
+
+- Pin the desktop locking correction: outer MCP batches and nested workers acquire both profile locks in the same order.
+
 ## 3.15.68
 
 - Pin the retired-browser platform and managed Bladebro/GUI wrappers to the shared MCP source and package.
