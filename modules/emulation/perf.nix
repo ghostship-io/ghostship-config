@@ -594,7 +594,8 @@ let
         if not path or not os.path.exists(path):
             return ""
         with open(path, encoding="utf-8", errors="replace") as handle:
-            return handle.read()
+            # Bound diagnostics even when an emulator produces enormous logs.
+            return handle.read(4 * 1024 * 1024)
 
 
     def threshold_for(system, emulator_id):
@@ -638,12 +639,13 @@ let
 
     combined_log = (text(stderr_path) + "\n" + text(retroarch_log)).lower()
     status = launch_status
-    missing_runtime_log = re.search(r"(missing|required|cannot open).*?(bios|firmware|keys|prod\.keys|title\.keys|mcpx|bootrom|system card)|(bios|firmware|keys|prod\.keys|title\.keys|mcpx|bootrom|system card).*?(missing|not found|required|cannot open)", combined_log)
+    import runpy
+    missing_runtime_log = runpy.run_path("${./runtime-log.py}")["missing_runtime"](combined_log)
     fbneo_content_ready = system_id == "fbneo" and (
         "[fbneo] no missing files, proceeding" in combined_log
         or "[fbneo] romset found at" in combined_log
     )
-    fbneo_explicit_missing = system_id == "fbneo" and re.search(r"\[fbneo\].*(missing files|required files|missing rom|missing bios)", combined_log)
+    fbneo_explicit_missing = system_id == "fbneo" and any("[fbneo]" in line and any(term in line for term in ("missing files", "required files", "missing rom", "missing bios")) for line in combined_log.splitlines())
     if launch_status == "missing-rom":
         status = "missing-rom"
     elif missing_runtime_log and (system_id != "fbneo" or not fbneo_content_ready or fbneo_explicit_missing):
@@ -786,6 +788,9 @@ let
 
   syncPerfConfig = pkgs.writeShellScriptBin "sync-perf-config" ''
     set -euo pipefail
+    if [ "$(id -u)" = 0 ]; then
+      exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- "$0" "$@"
+    fi
     install -d -m 0755 -o ${cfg.user} -g ${cfg.group} \
       "${cfg.configRoot}/perf" \
       "${cfg.dataRoot}/logs/perf"

@@ -2741,15 +2741,11 @@ PY
           rom_dir="$(dirname "$rom_path")"
           asset_source="$rom_dir/data"
           asset_target="$ryujinx_sdcard_dir/data"
-          if [ -d "$asset_source" ]; then
-            if [ ! -e "$asset_target" ] || [ -L "$asset_target" ]; then
-              ln -sfn "$asset_source" "$asset_target"
-              log_event "runtime" "linked Ryubing homebrew data: $asset_target -> $asset_source"
-            elif [ -d "$asset_target" ]; then
-              log_event "runtime" "kept existing Ryubing sdcard data directory: $asset_target"
-            else
-              log_event "warning" "Ryubing sdcard data path exists and is not a directory or symlink: $asset_target"
-            fi
+          if [ -e "$asset_source" ] || [ -L "$asset_source" ]; then
+            ${pkgs.python3}/bin/python3 ${./homebrew-assets.py} "$asset_source" "$asset_target" \
+              || log_event "warning" "refused unsafe Ryubing homebrew assets"
+          elif [ -L "$asset_target" ]; then
+            rm -- "$asset_target"
           fi
           ;;
       esac
@@ -3703,6 +3699,9 @@ EOF
 
   syncEmulatorConfigs = pkgs.writeShellScriptBin "sync-emulator-configs" ''
         set -euo pipefail
+        if [ "$(id -u)" = 0 ]; then
+          exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- "$0" "$@"
+        fi
         export PATH=${emu.scriptPath}:$PATH
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} \
           "${cfg.configRoot}/display" \
@@ -3742,7 +3741,7 @@ EOF
           chmod 0644 "$ps2_soulcalibur_playlist.tmp"
           mv "$ps2_soulcalibur_playlist.tmp" "$ps2_soulcalibur_playlist"
         fi
-        runuser -u ${cfg.user} -- env PCSX2_CONFIG_ONLY=1 ${runEmulator}/bin/run-emulator ps2 pcsx2 "$ps2_soulcalibur_disc"
+        env PCSX2_CONFIG_ONLY=1 ${runEmulator}/bin/run-emulator ps2 pcsx2 "$ps2_soulcalibur_disc"
         xemu_data_dir="${cfg.dataRoot}/xdg/share/xemu/xemu"
         xemu_bios_dir="${cfg.biosRoot}/xbox"
         install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$xemu_data_dir"
@@ -4217,7 +4216,7 @@ EOF
         "ryubing": "inherits SDL Switch label hints from run-emulator, installs the newest local firmware archive into Ryubing's registered firmware store, uses managed Vulkan/docked/fullscreen Ryubing settings, and maps Minus + X to F4, Minus + A to F8, Square/Capture to F5, and Minus + Plus twice to exit through the per-launch broker",
         "supermodel": "inherits SDL Switch label hints from run-emulator; Minus + Plus twice exits through the per-launch broker",
         "teknoparrot": "inherits SDL Switch label hints through the Wine launch path where supported; Minus + Plus twice exits through the per-launch broker",
-        "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1/R1 are User 1/User 2, L2/R2 are alt fire/fire, Minus toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
+        "gzdoom": "run-emulator executes the managed GZDoom control cfg: A is Use/Confirm, B is Jump/Back, X crouches, Y reloads, D-pad left/right select previous/next weapon, D-pad up/down select/use inventory, L1 is User 1, R1 is alt fire, L2 is User 2, R2 is primary fire, L3 is speed/run, Minus toggles automap, Start/+ opens menu, and right stick controls look with 25% vertical sensitivity",
         "pico8": "fallback plain PICO-8 launch using an explicit managed -home directory; D-pad or left stick moves, physical B is O/primary, physical A is X/secondary, and Start/+ opens pause/menu",
         "pico8-hotkeys": "default PICO-8 launch with the standalone broker for screenshot, GIF save, cart reset, and pause/menu chords"
       },

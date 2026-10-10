@@ -49,8 +49,8 @@ let
         if [ -n "''${WAYLAND_DISPLAY:-}" ] && command -v foot >/dev/null 2>&1; then
           exec foot -T ${lib.escapeShellArg title} -f monospace:size=${fontSize} -- emulation-settings-tui ${mode}
         fi
-        exec emulation-settings-tui ${mode}
       } >>"$log_file" 2>&1
+      exec emulation-settings-tui ${mode}
     '';
 
   restartEsdeDelayed = pkgs.writeShellScript "restart-esde-delayed" (
@@ -96,7 +96,34 @@ let
 
   syncEsdeTools = pkgs.writeShellScriptBin "sync-esde-tools" ''
     set -euo pipefail
+    if [ "$(id -u)" = 0 ]; then
+      exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- "$0" "$@"
+    fi
     install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "${cfg.dataRoot}/tools"
+    # Remove only retired generated menu links; retain operator-created tools.
+    for retired in \
+      "Audio Status.sh" \
+      "Bluetooth Pair Controller.sh" \
+      "Bluetooth Reconnect Controllers.sh" \
+      "Bluetooth Status.sh" \
+      "Display Profile Override.sh" \
+      "Display Profile Test.sh" \
+      "ES-DE Scrape Missing Media.sh" \
+      "ES-DE Scraper Status.sh" \
+      "Launch Log Review.sh" \
+      "Performance Tests.sh" \
+      "Player Assignment.sh" \
+      "ROM Coverage Check.sh" \
+      "RetroAchievements Status.sh" \
+      "RetroArch Core Status.sh" \
+      "RetroArch Graphics Profiles.sh" \
+      "RetroArch Shader Profiles.sh" \
+      "Smoke Tests.sh" \
+      "Wi-Fi Connect.sh" \
+      "Wi-Fi Status.sh"; do
+      retired_path="${cfg.dataRoot}/tools/$retired"
+      [ ! -L "$retired_path" ] || rm -- "$retired_path"
+    done
     ${lib.concatMapStringsSep "\n" (tool: ''
       ln -sfn ${lib.getExe (builtins.getAttr tool.target toolScripts)} "${cfg.dataRoot}/tools/${tool.file}"
       chown -h ${cfg.user}:${cfg.group} "${cfg.dataRoot}/tools/${tool.file}" || true
@@ -121,6 +148,7 @@ in
              unit == "wifi-5ghz-only.service" ||
              unit == "controller-leds.service" ||
              unit == "controller-leds-apply.service" ||
+             unit == "controller-leds-write.service" ||
              unit == "controller-autoconnect.service" ||
              unit == "restart-esde.service") &&
             (verb == "start" || verb == "stop" || verb == "restart")) {
