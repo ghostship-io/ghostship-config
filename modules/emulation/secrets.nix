@@ -8,6 +8,9 @@ let
 
   renderScraperSettings = pkgs.writeShellScriptBin "render-esde-scraper-settings" ''
     set -euo pipefail
+    if [ "$(id -u)" = 0 ]; then
+      exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- "$0" "$@"
+    fi
     export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.python3 ]}:$PATH
     secret_env="/run/ghostship-secrets/emulation-scraper.env"
     settings="${cfg.esde.appDataDir}/settings/es_settings.xml"
@@ -25,7 +28,7 @@ let
     settings_path = Path(sys.argv[2])
 
     values = {}
-    for raw_line in env_path.read_text().splitlines():
+    for raw_line in (env_path.read_text().splitlines() if env_path.is_file() else []):
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -74,6 +77,7 @@ let
     fd, tmp = tempfile.mkstemp(prefix="es_settings.", dir=str(settings_path.parent))
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         handle.write('<?xml version="1.0"?>\n')
+        # ES-DE loads settings as top-level siblings with pugixml, not a root wrapper.
         for entry in root:
             handle.write(ET.tostring(entry, encoding="unicode"))
             handle.write("\n")
@@ -86,29 +90,14 @@ let
 
   renderRetroAchievementsSettings = pkgs.writeShellScriptBin "render-retroachievements-settings" ''
     set -euo pipefail
+    if [ "$(id -u)" = 0 ]; then
+      exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- "$0" "$@"
+    fi
     export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.python3 ]}:$PATH
     secret_env="/run/ghostship-secrets/emulation-retroachievements.env"
     retroarch_cfg="${cfg.configRoot}/retroarch/retroachievements.cfg"
     pcsx2_secrets="${cfg.dataRoot}/xdg/config/PCSX2/inis/secrets.ini"
     status_json="${cfg.configRoot}/retroachievements/status.json"
-    [ -r "$secret_env" ] || {
-      install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$retroarch_cfg")"
-      install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$pcsx2_secrets")"
-      install -d -m 0755 -o ${cfg.user} -g ${cfg.group} "$(dirname "$status_json")"
-      printf 'cheevos_enable = "false"\n' >"$retroarch_cfg.tmp"
-      chown ${cfg.user}:${cfg.group} "$retroarch_cfg.tmp"
-      chmod 0640 "$retroarch_cfg.tmp"
-      mv "$retroarch_cfg.tmp" "$retroarch_cfg"
-      printf '[Achievements]\n' >"$pcsx2_secrets.tmp"
-      chown ${cfg.user}:${cfg.group} "$pcsx2_secrets.tmp"
-      chmod 0640 "$pcsx2_secrets.tmp"
-      mv "$pcsx2_secrets.tmp" "$pcsx2_secrets"
-      jq -n --arg checked_at "$(date -u +%FT%TZ)" '{checked_at:$checked_at, retroarch:"missing-secret-projection", standalone:"manual-login-required"}' >"$status_json.tmp"
-      chown ${cfg.user}:${cfg.group} "$status_json.tmp"
-      chmod 0644 "$status_json.tmp"
-      mv "$status_json.tmp" "$status_json"
-      exit 0
-    }
     python3 - "$secret_env" "$retroarch_cfg" "$pcsx2_secrets" "$status_json" <<'PY'
     import json
     import os
@@ -124,7 +113,7 @@ let
     status_path = Path(sys.argv[4])
 
     values = {}
-    for raw_line in env_path.read_text().splitlines():
+    for raw_line in (env_path.read_text().splitlines() if env_path.is_file() else []):
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -228,6 +217,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
+        UMask = "0077";
       };
       path = [ pkgs.coreutils pkgs.gawk renderRetroAchievementsSettings renderScraperSettings ];
       script = ''
@@ -247,7 +237,7 @@ in
           chown ${cfg.user}:${cfg.group} "$scraper_projection.tmp"
           chmod 0440 "$scraper_projection.tmp"
           mv "$scraper_projection.tmp" "$scraper_projection"
-          render-esde-scraper-settings || true
+          ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- ${lib.getExe renderScraperSettings}
         fi
 
         retroachievements_secret_path="${config.age.secrets.retroachievements.path}"
@@ -268,7 +258,7 @@ in
           chmod 0440 "$retroachievements_projection.tmp"
           mv "$retroachievements_projection.tmp" "$retroachievements_projection"
         fi
-        render-retroachievements-settings || true
+        ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- ${lib.getExe renderRetroAchievementsSettings}
       '';
     };
   };

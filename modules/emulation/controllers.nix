@@ -11,15 +11,16 @@ let
   controllerLeds = pkgs.writeShellScriptBin "controller-leds" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:$PATH
+    if [ "$(id -u)" = 0 ]; then
+      exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- "$0" "$@"
+    fi
     state_dir="${cfg.configRoot}/controllers"
     runtime_dir="/run/ghostship-emulation/controllers"
     order_file="$state_dir/player-order.json"
     last_state_file="$state_dir/led-state.tsv"
     lock_file="$runtime_dir/controller-leds.lock"
     log_file="${cfg.dataRoot}/logs/controller-leds.log"
-    last_led_status=""
     mode="''${1:-loop}"
-    led_write_delay="0.5"
     mkdir -p "$state_dir" "$runtime_dir" "$(dirname "$log_file")"
     touch "$log_file" "$lock_file"
     chown ${cfg.user}:${cfg.group} "$state_dir" "$runtime_dir" "$log_file" "$lock_file" || true
@@ -265,88 +266,10 @@ let
       desired_led_rows | sort
     }
 
-    find_device_root() {
-      mac="$1"
-      max_attempts="''${2:-1}"
-      delay="''${3:-0}"
-      mac_upper="$(printf '%s' "$mac" | tr '[:lower:]' '[:upper:]')"
-      attempt=1
-      while [ "$attempt" -le "$max_attempts" ]; do
-        for event in /sys/class/input/event*; do
-          [ -r "$event/device/uniq" ] || continue
-          uniq="$(tr '[:lower:]' '[:upper:]' <"$event/device/uniq" 2>/dev/null || true)"
-          [ "$uniq" = "$mac_upper" ] || continue
-          input_path="$(readlink -f "$event/device" 2>/dev/null || true)"
-          [ -n "$input_path" ] || continue
-          dirname "$(dirname "$input_path")"
-          return 0
-        done
-        attempt=$((attempt + 1))
-        if [ "$attempt" -le "$max_attempts" ]; then
-          sleep "$delay"
-        fi
-      done
-      return 1
-    }
-
     apply_leds() {
-      force="''${1:-false}"
-      found=0
-      changed=0
-      pending_leds="$(mktemp)"
-      while IFS=$'\t' read -r player mac; do
-        [ -n "''${player:-}" ] || continue
-        root_attempts=1
-        root_delay=0
-        if [ "$force" = true ]; then
-          root_attempts=20
-          root_delay=0.1
-        fi
-        device_root="$(find_device_root "$mac" "$root_attempts" "$root_delay" || true)"
-        [ -n "''${device_root:-}" ] || continue
-        for led in "$device_root"/leds/*:green:player-[1-4]; do
-          [ -e "$led/brightness" ] || continue
-          led_name="$(basename "$led")"
-          led_index="''${led_name##*:green:player-}"
-          case "$led_index" in
-            [1-4])
-              found=1
-              if [ "$led_index" -le "$player" ]; then
-                desired=1
-              else
-                desired=0
-              fi
-              current="$(cat "$led/brightness" 2>/dev/null || echo unknown)"
-              if [ "$current" != "$desired" ]; then
-                printf '%s\t%s\n' "$desired" "$led/brightness" >>"$pending_leds"
-                changed=1
-              fi
-              ;;
-          esac
-        done
-      done < <(desired_led_rows)
-
-      while IFS=$'\t' read -r value path; do
-        [ -n "''${path:-}" ] || continue
-        [ -e "$path" ] || continue
-        if ! timeout -k 1s 0.7s sh -c 'printf "%s\n" "$1" > "$2"' sh "$value" "$path" 2>/dev/null; then
-          echo "$(date -u +%FT%TZ) skipped slow controller LED write: $path" >>"$log_file"
-        fi
-        sleep "$led_write_delay"
-      done <"$pending_leds"
-      rm -f "$pending_leds"
-
-      if [ "$found" = 0 ]; then
-        status="no supported controller LED sysfs entries found"
-      elif [ "$changed" = 0 ]; then
-        status="controller LED entries already match player order"
-      else
-        status="updated controller LED entries"
-      fi
-      if [ "$status" != "$last_led_status" ]; then
-        echo "$(date -u +%FT%TZ) $status" >>"$log_file"
-        last_led_status="$status"
-      fi
+      # The root worker accepts no caller paths or commands and only writes
+      # kernel-owned controller LED brightness files.
+      systemctl start --no-block controller-leds-write.service
     }
 
     run_once() {
@@ -356,7 +279,7 @@ let
       fi
       sanitize_known_bad_order
       if record_connected_devices; then
-        apply_leds true || true
+        apply_leds || true
         state="$(desired_led_state || true)"
         printf '%s\n' "$state" >"$last_state_file"
         chown ${cfg.user}:${cfg.group} "$last_state_file" || true
@@ -383,8 +306,11 @@ let
         if record_connected_devices; then
           state="$(desired_led_state || true)"
           previous="$(cat "$last_state_file" 2>/dev/null || true)"
+          # Retry the separate writer even if an earlier run saw late sysfs
+          # nodes or overlapped another controller connection. It skips LEDs
+          # whose brightness already matches.
+          apply_leds || true
           if [ "$state" != "$previous" ]; then
-            apply_leds false || true
             printf '%s\n' "$state" >"$last_state_file"
             chown ${cfg.user}:${cfg.group} "$last_state_file" || true
           fi
@@ -401,11 +327,11 @@ let
     set -euo pipefail
     export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.bluez pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.jq pkgs.systemd ]}:$PATH
     log_file="${cfg.dataRoot}/logs/controller-bluetooth-latency.log"
-    mkdir -p "$(dirname "$log_file")"
-    if ! touch "$log_file" 2>/dev/null; then
-      log_file="/tmp/controller-bluetooth-latency-$(id -u).log"
-      touch "$log_file"
+    if [ "$(id -u)" = 0 ]; then
+      log_file="/var/log/ghostship-emulation/controller-bluetooth-latency.log"
     fi
+    mkdir -p "$(dirname "$log_file")"
+    touch "$log_file"
 
     log() {
       echo "$(date -u +%FT%TZ) $*" >>"$log_file"
@@ -464,15 +390,15 @@ let
 
   controllerAutoconnect = pkgs.writeShellScriptBin "controller-autoconnect" ''
     set -euo pipefail
+    if [ "$(id -u)" = 0 ]; then
+      exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- "$0" "$@"
+    fi
     export PATH=${emu.scriptPath}:$PATH
     log_file="${cfg.dataRoot}/logs/controller-autoconnect.log"
     cursor_file="${cfg.dataRoot}/config/controllers/autoconnect-cursor"
     mkdir -p "$(dirname "$log_file")"
     mkdir -p "$(dirname "$cursor_file")"
-    if ! touch "$log_file" 2>/dev/null; then
-      log_file="/tmp/controller-autoconnect-$(id -u).log"
-      touch "$log_file"
-    fi
+    touch "$log_file"
 
     log() {
       echo "$(date -u +%FT%TZ) $*" >>"$log_file"
@@ -637,6 +563,9 @@ let
 
   controllerUsbPair = pkgs.writeShellScriptBin "controller-usb-pair" ''
     set -euo pipefail
+    if [ "$(id -u)" = 0 ]; then
+      exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- "$0" "$@"
+    fi
     export PATH=${emu.scriptPath}:$PATH
     log_file="${cfg.dataRoot}/logs/controller-usb-pair.log"
     mkdir -p "$(dirname "$log_file")"
@@ -648,6 +577,9 @@ let
 
   switchUsbBtPair = pkgs.writeShellScriptBin "switch-usb-bt-pair" ''
     set -euo pipefail
+    if [ "$(id -u)" = 0 ]; then
+      exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- "$0" "$@"
+    fi
     export PATH=${emu.scriptPath}:$PATH
     log_file="${cfg.dataRoot}/logs/switch-usb-bt-pair.log"
     mkdir -p "$(dirname "$log_file")"
@@ -781,15 +713,25 @@ PY
   controllerReconcileEvents = pkgs.writeShellScriptBin "controller-reconcile-events" ''
     set -euo pipefail
     export PATH=${emu.scriptPath}:${lib.makeBinPath [ pkgs.dbus pkgs.systemd ]}:$PATH
-    state_dir="${cfg.configRoot}/controllers"
+    state_dir="/run/ghostship-controller-reconcile"
     trigger_file="$state_dir/reconcile-event"
     worker_lock="$state_dir/reconcile-event.lock"
-    log_file="${cfg.dataRoot}/logs/controller-reconcile-events.log"
+    log_file="/var/log/ghostship-emulation/controller-reconcile-events.log"
     mkdir -p "$state_dir" "$(dirname "$log_file")"
     touch "$log_file"
 
+    last_trigger=-2
+    device_path=""
     trigger_reconcile() {
       reason="$1"
+      # Bound work before any external query or fork, even during event churn.
+      [ "$((SECONDS - last_trigger))" -ge 2 ] || return 0
+      last_trigger=$SECONDS
+      [ -n "$device_path" ] || return 0
+      timeout 2s busctl --system get-property org.bluez "$device_path" org.bluez.Device1 Paired 2>/dev/null | grep -qx 'b true' || return 0
+      controller_info="$(timeout 2s busctl --system get-property org.bluez "$device_path" org.bluez.Device1 Modalias 2>/dev/null || true)"
+      controller_info+="$(timeout 2s busctl --system get-property org.bluez "$device_path" org.bluez.Device1 Alias 2>/dev/null || true)"
+      printf '%s\n' "$controller_info" | grep -Eiq 'v057ep2009|v2dc8p(301a|310b)|pro controller|joy-con|joycon|8bitdo ultimate' || return 0
       echo "$(date -u +%FT%TZ) bluez connected change: $reason" >>"$log_file"
       date +%s%N >"$trigger_file"
       (
@@ -814,6 +756,10 @@ PY
             *"member=PropertiesChanged"*)
               in_device=0
               saw_connected=0
+              device_path=""
+              if [[ "$line" =~ path=([^\;]+)\; ]]; then
+                device_path="''${BASH_REMATCH[1]}"
+              fi
               ;;
             *'string "org.bluez.Device1"'*)
               in_device=1
@@ -1052,10 +998,32 @@ in
         "controller-bluetooth-tuning.service"
       ];
       serviceConfig = {
+        User = cfg.user;
+        Group = cfg.group;
+        NoNewPrivileges = true;
+        CapabilityBoundingSet = "";
         ExecStart = "${lib.getExe controllerLeds}";
         Restart = "always";
         RestartSec = "5s";
         TimeoutStopSec = "5s";
+      };
+    };
+
+    systemd.services.controller-leds-write = {
+      description = "Write only controller player LED brightness";
+      after = [ "emulation-setup.service" ];
+      unitConfig = {
+        StartLimitIntervalSec = "10s";
+        StartLimitBurst = 5;
+      };
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${pkgs.python3}/bin/python3 ${./controller-led-write.py} ${pkgs.util-linux}/bin/setpriv ${pkgs.coreutils}/bin/head ${cfg.user} ${cfg.group} ${cfg.configRoot}/controllers/player-order.json";
+        NoNewPrivileges = true;
+        CapabilityBoundingSet = [ "CAP_SETUID" "CAP_SETGID" ];
+        ProtectSystem = "strict";
+        ReadWritePaths = [ "/sys/devices" ];
+        TimeoutStartSec = "15s";
       };
     };
 
@@ -1068,6 +1036,10 @@ in
       ];
       unitConfig.StartLimitIntervalSec = 0;
       serviceConfig = {
+        User = cfg.user;
+        Group = cfg.group;
+        NoNewPrivileges = true;
+        CapabilityBoundingSet = "";
         Type = "oneshot";
         ExecStart = "${lib.getExe controllerLeds} apply";
         TimeoutStartSec = "30s";
@@ -1082,6 +1054,10 @@ in
       ];
       unitConfig.StartLimitIntervalSec = 0;
       serviceConfig = {
+        User = cfg.user;
+        Group = cfg.group;
+        NoNewPrivileges = true;
+        CapabilityBoundingSet = "";
         Type = "oneshot";
         ExecStart = "${lib.getExe controllerUsbPair}";
         TimeoutStartSec = "45s";
@@ -1114,6 +1090,9 @@ in
         "controller-leds.service"
       ];
       serviceConfig = {
+        RuntimeDirectory = "ghostship-controller-reconcile";
+        RuntimeDirectoryMode = "0700";
+        LogsDirectory = "ghostship-emulation";
         ExecStart = "${lib.getExe controllerReconcileEvents}";
         Restart = "always";
         RestartSec = "2s";
@@ -1149,9 +1128,10 @@ in
         Type = "oneshot";
         RemainAfterExit = true;
         TimeoutStartSec = "20s";
+        LogsDirectory = "ghostship-emulation";
       };
       script = ''
-        log_file="${cfg.dataRoot}/logs/controller-bluetooth-tuning.log"
+        log_file="/var/log/ghostship-emulation/controller-bluetooth-tuning.log"
         mkdir -p "$(dirname "$log_file")"
         touch "$log_file"
 
@@ -1208,6 +1188,7 @@ in
       unitConfig.StartLimitIntervalSec = 0;
       serviceConfig = {
         Type = "oneshot";
+        LogsDirectory = "ghostship-emulation";
         ExecStart = "${lib.getExe controllerBluetoothLowLatency}";
         TimeoutStartSec = "8s";
       };

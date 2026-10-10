@@ -53,12 +53,13 @@ class InputEvent:
     source: str = "unknown"
 
 
-def run_cmd(args, timeout=20):
+def run_cmd(args, timeout=20, input_text=None):
     try:
         proc = subprocess.run(
             args,
             text=True,
             capture_output=True,
+            input=input_text,
             timeout=timeout,
             check=False,
         )
@@ -1850,8 +1851,10 @@ class WifiBackend:
     def connect_network(self, ssid, password=None):
         args = ["nmcli", "--wait", "45", "device", "wifi", "connect", ssid]
         if password:
-            args.extend(["password", password])
-        code, out, err = run_cmd(args, timeout=55)
+            args.insert(1, "--ask")
+        code, out, err = run_cmd(args, timeout=55, input_text=password + "\n" if password else None)
+        if password:
+            out, err = out.replace(password, "[redacted]"), err.replace(password, "[redacted]")
         self.apply_policy()
         return code, out, err
 
@@ -1933,7 +1936,7 @@ class SettingsApp:
                 {
                     "label": "Show Paired",
                     "detail_only": True,
-                    "detail": self.bluetooth_paired_lines,
+                    "detail": self.bluetooth_paired_lines(),
                     "action": self.bluetooth_paired,
                 },
                 {
@@ -2569,7 +2572,7 @@ def smoke_test(mode):
             assert all(f"{button} ->" in button_text for button in SWITCH_PRO_BUTTONS if button)
             hotkey_text = "\n".join(row["detail"][row["detail"].index("Hotkeys") + 1 :])
             assert all(f"{combo} ->" in hotkey_text for combo in HOTKEY_COMBOS)
-            assert any("Star" in line for line in row["detail"])
+            assert any("Star -> Turbo" in line for line in row["detail"])
             assert any("Square" in line for line in row["detail"])
             assert not any(line.strip().startswith("Note:") for line in row["detail"])
             assert not any("Turbo: Star + <Button>" in line for line in row["detail"])
