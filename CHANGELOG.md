@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.72] - 2026-10-10
+
+- Read existing Kuma notification types from their serialized configuration,
+  preserving the notification ID while updating the ntfy URL and credential.
+
 ## [3.15.71] - 2026-10-10
 
 - Replace Homepage's host Podman socket with a restricted read-only Unix

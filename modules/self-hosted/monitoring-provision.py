@@ -71,7 +71,7 @@ def reconcile_ntfy_notification(call, notifications, password):
         "ntfypassword": password,
         "ntfyPriority": 3,
     }
-    if existing is not None and existing["type"] != "ntfy":
+    if existing is not None and json.loads(existing["config"])["type"] != "ntfy":
         raise RuntimeError("Managed ntfy notification changed type")
     notification_id = existing["id"] if existing is not None else None
     return call("addNotification", (settings, notification_id))["id"]
