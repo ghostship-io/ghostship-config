@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.75] - 2026-10-10
+
+- Pin ghostship-agent 0.8.24: the Ghostship MCP adds the read-only `orca_profiles`
+  tool for Orca Cloud profiles on the Assistant identity.
+
 ## [3.15.74] - 2026-10-10
 
 - Prepare offline Boomer security fixes: run setup and controller state as kiosk,
