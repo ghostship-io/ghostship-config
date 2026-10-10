@@ -135,6 +135,9 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
 
   syncEsdeConfig = pkgs.writeShellScriptBin "sync-esde-config" ''
     set -euo pipefail
+    if [ "$(id -u)" = 0 ]; then
+      exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- "$0" "$@"
+    fi
     export PATH=${emu.scriptPath}:${
       lib.makeBinPath (
         [
@@ -247,6 +250,7 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
     fd, tmp = tempfile.mkstemp(prefix="es_settings.", dir=str(settings_path.parent))
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         handle.write('<?xml version="1.0"?>\n')
+        # ES-DE loads settings as top-level siblings with pugixml, not a root wrapper.
         for entry in root:
             handle.write(ET.tostring(entry, encoding="unicode"))
             handle.write("\n")
@@ -271,20 +275,18 @@ ${lib.concatMapStringsSep "\n" (mkAlternateCommand system) (system.alternateEmul
     pico8_source="/mnt/z/Library/ROMs/roms/$pico8_folder"
     pico8_target="${cfg.romRoot}/$pico8_folder"
     if [ -d "$pico8_source" ] && [ -d "$pico8_target" ]; then
-      if ! find -L "$pico8_target" -maxdepth 1 -type f \( -name '*.png' -o -name '*.PNG' \) -print -quit | grep -q .; then
-        printf '%s\n' \
-          "Celeste Classic.p8.png|Celeste Classic.png" \
-          "Celeste Classic 2 - Lani's Trek.p8.png|Celeste Classic 2 - Lani's Trek.png" \
-          "Just One Boss.p8.png|Just One Boss.png" \
-          "PICOHOT.p8.png|PICOHOT.png" \
-          "POOM.p8.png|POOM.png" \
-          "Pico Tetris.p8.png|Pico Tetris.png" \
-          | while IFS='|' read -r source_cart target_cart; do
-          if [ -f "$pico8_source/$source_cart" ] && [ ! -e "$pico8_target/$target_cart" ]; then
-            ln -s "$pico8_source/$source_cart" "$pico8_target/$target_cart"
-          fi
-        done
-      fi
+      printf '%s\n' \
+        "Celeste Classic.p8.png|Celeste Classic.png" \
+        "Celeste Classic 2 - Lani's Trek.p8.png|Celeste Classic 2 - Lani's Trek.png" \
+        "Just One Boss.p8.png|Just One Boss.png" \
+        "PICOHOT.p8.png|PICOHOT.png" \
+        "POOM.p8.png|POOM.png" \
+        "Pico Tetris.p8.png|Pico Tetris.png" \
+        | while IFS='|' read -r source_cart target_cart; do
+        if [ -f "$pico8_source/$source_cart" ] && [ ! -e "$pico8_target/$target_cart" ]; then
+          ln -sfn "$pico8_source/$source_cart" "$pico8_target/$target_cart"
+        fi
+      done
     fi
 
     ln -sfn "${cfg.dataRoot}" /home/${cfg.user}/Emulation
@@ -538,6 +540,10 @@ in
           wantedBy = [ "multi-user.target" ];
           before = lib.optionals (cfg.startup.mode == "kiosk") [ "greetd.service" ];
           serviceConfig = {
+            User = cfg.user;
+            Group = cfg.group;
+            NoNewPrivileges = true;
+            CapabilityBoundingSet = "";
             Type = "oneshot";
             RemainAfterExit = true;
           };
