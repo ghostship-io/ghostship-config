@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.65
+
+- Pin Ghostship MCP 0.8.20: verified checkbox activation and worker transport recovery. Live ChatGPT tool validation remains skipped as requested.
+
 ## 3.15.64
 
 - Clear only Chrome tab/session restoration files before managed launch so an unclean exit also starts fresh. Preserve cookies, credentials, history, and site storage.
