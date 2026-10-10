@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.60
+
+- Pin Ghostship MCP 0.8.15: native-input workflow transactions, Drive row selection, and observed item identity/fee evidence. ChatGPT authentication remains deferred.
+
 ## 3.15.59
 
 - Pin MCP 0.8.14 accessible role actions and foreground native-input isolation; DOM reads remain parallel. Full retailer/Google/consumer acceptance remains pending.

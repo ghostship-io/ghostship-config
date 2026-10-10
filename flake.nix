@@ -5,7 +5,7 @@
     # One platform: the full agent flake builds the private-integration image,
     # the Keep broker, and the capability runtime with this deployment's
     # shopping overlay and icon.
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/929ae5c1d26429f949cbf36b62f7b81d7d629540";
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/10a62d6e1acf3f793c772f4a5fa5f5a4c96381e2";
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
