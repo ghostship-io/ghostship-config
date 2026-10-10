@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.66
+
+- Install coding-agent commands from the same pinned Ghostship package as the shared MCP. Boot and periodic source sync no longer rebuild an older main checkout over the tested connector.
+
 ## 3.15.65
 
 - Pin Ghostship MCP 0.8.20: verified checkbox activation and worker transport recovery. Live ChatGPT tool validation remains skipped as requested.

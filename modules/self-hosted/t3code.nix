@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  inputs,
   ...
 }:
 
@@ -1395,6 +1396,7 @@ let
     set -eu
     ${t3codeRuntimeEnv}
     exec ${pkgs.python3}/bin/python ${../../scripts/setup-container-agents.py} \
+      --tools-package ${inputs.ghostship-private-agent.packages.${pkgs.stdenv.hostPlatform.system}.default} \
       "$@"
   '';
 
