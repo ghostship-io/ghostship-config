@@ -21,14 +21,24 @@ class MonitoringTests(unittest.TestCase):
     def test_existing_ntfy_notification_is_updated_without_changing_its_id(self):
         api = Mock(return_value={"id": 7})
         notification_id = provision.reconcile_ntfy_notification(
-            api, [{"name": "Ghostship ntfy", "id": 7, "type": "ntfy",
-                   "ntfyserverurl": "http://ntfy"}], "rotated-password"
+            api, [{"name": "Ghostship ntfy", "id": 7,
+                   "config": json.dumps({"type": "ntfy", "ntfyserverurl": "http://ntfy"})}],
+            "rotated-password"
         )
         self.assertEqual(notification_id, 7)
         event, (settings, existing_id) = api.call_args.args
         self.assertEqual((event, existing_id), ("addNotification", 7))
         self.assertEqual(settings["ntfyserverurl"], "http://ntfy:8080")
         self.assertEqual(settings["ntfypassword"], "rotated-password")
+
+    def test_existing_managed_notification_of_another_type_is_not_overwritten(self):
+        api = Mock()
+        with self.assertRaisesRegex(RuntimeError, "changed type"):
+            provision.reconcile_ntfy_notification(
+                api, [{"name": "Ghostship ntfy", "id": 7,
+                       "config": json.dumps({"type": "smtp"})}], "rotated-password"
+            )
+        api.assert_not_called()
 
     def test_populated_fleet_login_burst_can_be_decoded(self):
         # Login sends multiple heartbeat/stat events per monitor before its ACK.
