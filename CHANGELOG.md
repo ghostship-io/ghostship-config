@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.63
+
+- Start Agent Desktop Chrome with a fresh tab after relaunch while preserving profiles and sign-ins. Disable background mode, Memory Saver discarding, and background tab freezing for predictable browser workers.
+
 ## 3.15.62
 
 - Pin Ghostship MCP 0.8.19: bounded worker RPC framing, guarded SSH startup, and private loopback OAuth callbacks. ChatGPT authentication remains deferred.

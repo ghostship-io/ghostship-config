@@ -1,0 +1,6 @@
+{
+  "RestoreOnStartup": 5,
+  "BackgroundModeEnabled": false,
+  "HighEfficiencyModeEnabled": false,
+  "BackgroundTabFreezingEnabled": false
+}

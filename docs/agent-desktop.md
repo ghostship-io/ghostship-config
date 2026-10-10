@@ -207,6 +207,19 @@ podman exec -u 0 agent-desktop google-chrome-stable --version
 podman exec -u 0 agent-desktop bladebro -v
 ```
 
+Chrome starts with a fresh New Tab page after relaunch. Managed policy
+`RestoreOnStartup=5` and the launcher omit session restoration; existing tabs
+are not reopened. Profile data and persistent sign-ins remain. This follows
+the user's October 10 request and supersedes the earlier session-restoration
+setting. The policy file is
+`containers/agent-desktop/root/etc/opt/chrome/policies/managed/ghostship-desktop.json`.
+
+Memory Saver discarding and background tab freezing are disabled so parallel
+workers keep their page execution state. Background mode is disabled so closing
+Chrome does not leave background apps running. These are supported Chrome
+policies, not timing or throughput measurements. Inspect `chrome://policy` to
+confirm the deployed browser accepts them before running workflow benchmarks.
+
 Recovery: the s6 services relaunch Chrome after a crash; the run script
 reaps stale processes and `Singleton*` locks for its profile first, so
 unclean shutdowns recover automatically. If an instance is wedged,
