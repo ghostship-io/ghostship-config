@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.67
+
+- Retire CloakBrowser completely: remove its service, extension timer, dashboard route, installers, and T3 environment/wiring. Cleanup removes retired execution artifacts and images while preserving saved profile data.
+
 ## 3.15.66
 
 - Install coding-agent commands from the same pinned Ghostship package as the shared MCP. Boot and periodic source sync no longer rebuild an older main checkout over the tested connector.

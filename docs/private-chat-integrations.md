@@ -13,7 +13,7 @@ Keep executes in the separate host service. `account: User|Agent`
 selects the persistent Agent Desktop Chrome identity: User → `personal` (port 9223),
 Agent → `agent` (port 9222). The broker verifies the signed-in Google
 account and resolves its current `authuser` index dynamically. Neither a
-CloakBrowser profile ID nor a second Chrome process is required.
+legacy profile ID nor a second Chrome process is required.
 Cookies and sessions stay on the host. Create/update support separate title/body fields, checklist row patches, labels and PNG/JPEG/GIF images; search accepts a label/tag alone or with text. Drawings and reminders are excluded. Canonical shopping calls use the selected Agent Desktop browser identity and
 runtime home ZIP, preserving unknown costs. Native controls, eligibility and
 checkout evidence still need retailer acceptance; consumer migration is incomplete.

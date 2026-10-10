@@ -1767,7 +1767,7 @@ let
       ln -s /workspace/ghostship-agent/tools "$HOME/tools"
       chown -h t3code:t3code "$HOME/tools"
     fi
-    for tool in agent ghostship-cloakbrowser; do
+    for tool in agent; do
       if [ -x "$HOME/tools/bin/$tool" ]; then
         ln -sfn "$HOME/tools/bin/$tool" "$HOME/.local/bin/$tool"
         chown -h t3code:t3code "$HOME/.local/bin/$tool"
@@ -2134,7 +2134,6 @@ let
       Environment=XDG_RUNTIME_DIR=/run/user/3000
       Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/3000/bus
       Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
-      Environment=AGENT_CLOAK_BASE_URL=http://cloakbrowser:8080
       Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
       ExecStartPre=${t3codeRunHooks}/bin/t3code-run-hooks before-t3code.d
       ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/t3code-tool-update/restart.pending /home/t3code/.local/share/t3code-tools/t3/activation.pending
@@ -2442,7 +2441,6 @@ let
         "T3CODE_HOST=127.0.0.1"
         "T3CODE_PORT=3774"
         "T3CODE_NO_BROWSER=true"
-        "AGENT_CLOAK_BASE_URL=http://cloakbrowser:8080"
       ];
       WorkingDir = "/home/t3code";
       ExposedPorts = {
