@@ -261,6 +261,18 @@ class RetentionSource(unittest.TestCase):
         self.assertIn("packages/t3code/retention.py", source)
         self.assertIn("unset NO_COLOR", source)
 
+    def test_retention_bundles_the_prune_sibling(self):
+        # retention.py imports opencode-db-prune.py as a sibling, so the wrapper
+        # must run it from a directory that contains both, never as a lone store
+        # file where the sibling is absent.
+        source = (
+            Path(__file__).resolve().parents[1] / "modules/self-hosted/t3code.nix"
+        ).read_text()
+        self.assertIn("t3code-retention-tools", source)
+        self.assertIn("$out/opencode-db-prune.py", source)
+        self.assertIn("${t3codeRetentionTools}/retention.py", source)
+        self.assertNotIn("python3 ${../../packages/t3code/retention.py}", source)
+
 
 if __name__ == "__main__":
     unittest.main()
