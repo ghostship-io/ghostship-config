@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.48] - 2026-10-10
+
+- **Fix the T3 Code retention OpenCode prune**: the retention wrapper ran
+  `packages/t3code/retention.py` as a lone store file, so its
+  `load_opencode_prune()` sibling lookup resolved to
+  `/nix/store/opencode-db-prune.py` and failed on every run. OpenCode's
+  unbounded event log was never rebuilt, which is why `opencode.db` reached
+  10 GiB. Bundle both modules in one store directory so the sibling import
+  works, and assert the bundled invocation in `tests/test_t3code_retention.py`.
+
 ## [3.15.47] - 2026-10-10
 
 - **Stop mid-turn T3 Code restarts**: the shared activity probe that gates
