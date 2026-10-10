@@ -945,6 +945,14 @@ let
     exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/process-memory-guard.py} "$main_pid"
   '';
 
+  # retention.py imports opencode-db-prune.py as a sibling. Interpolating the
+  # lone file puts it at the store root, where the sibling is absent, so the
+  # OpenCode prune failed on every run. Bundle both modules in one directory.
+  t3codeRetentionTools = pkgs.runCommand "t3code-retention-tools" { } ''
+    install -Dm0444 ${../../packages/t3code/retention.py} $out/retention.py
+    install -Dm0444 ${../../packages/t3code/opencode-db-prune.py} $out/opencode-db-prune.py
+  '';
+
   # Daily retention: rotate operational logs, prune OpenCode's event DB, archive
   # settled threads after 7 days, and delete threads idle for 180 days.
   t3codeRetention = pkgs.writeShellScriptBin "t3code-retention" ''
@@ -952,7 +960,7 @@ let
     ${t3codeRuntimeEnv}
     export T3_BIN="$HOME/.local/bin/t3"
     export T3CODE_API="http://''${T3CODE_HOST}:''${T3CODE_PORT}"
-    exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/retention.py} "$@"
+    exec ${pkgs.python3}/bin/python3 ${t3codeRetentionTools}/retention.py "$@"
   '';
 
   t3codeDaemonMonitor = pkgs.writeShellScriptBin "t3code-server-monitor" ''
