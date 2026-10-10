@@ -73,12 +73,34 @@ in
       "podman-romm-db.service"
     ];
     unitConfig = {
-      StartLimitIntervalSec = "1d";
+      StartLimitIntervalSec = "1h";
       StartLimitBurst = 5;
     };
     serviceConfig = {
       RestartSec = "30s";
       TimeoutStartSec = lib.mkForce "5m";
+    };
+  };
+
+  systemd.services.romm-recovery = {
+    description = "Retry RomM after its bounded restart window";
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.systemd ];
+    script = ''
+      # Never restart a running service, or erase its restart counters.
+      if [ "$(systemctl show podman-romm.service --property=ActiveState --value)" = failed ] &&
+         [ "$(systemctl show podman-romm.service --property=Result --value)" = start-limit-hit ]; then
+        systemctl start podman-romm.service
+      fi
+    '';
+  };
+  systemd.timers.romm-recovery = {
+    description = "Recheck rate-limited RomM recovery hourly";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "hourly";
+      Persistent = true;
+      Unit = "romm-recovery.service";
     };
   };
 
@@ -90,6 +112,13 @@ in
   ];
 
   systemd.services.podman-romm.preStart = ''
+    # Refuse to replace persisted credentials when secret installation fails.
+    set -a
+    . "${romm-secrets}"
+    set +a
+    : "''${ROMM_DB_USER:?Required RomM database user is missing}"
+    : "''${ROMM_DB_PASS:?Required RomM database password is missing}"
+    : "''${ROMM_AUTH_SECRET:?Required RomM auth secret is missing}"
     CONFIG_DIR="/srv/apps/romm"
     CONFIG_FILE="$CONFIG_DIR/config/config.yml"
     ENV_FILE="$CONFIG_DIR/romm.env"

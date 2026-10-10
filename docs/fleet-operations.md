@@ -161,6 +161,20 @@ fields and widgets are authoritative; edit their module to make changes stick.
 Adding another public container needs one app declaration, not three separate
 lists. Keep its Homepage secrets projection current when adding widget keys.
 
+Homepage container status uses the restricted Unix socket broker in
+`modules/self-hosted/homepage.nix`. It permits container lists, health filters,
+and one-shot statistics. Container inspection, logs, filesystem archives,
+execution, and lifecycle operations are denied. Homepage mounts the broker
+directory read-only and has no host Podman socket or Podman group membership.
+
+FlareSolverr retains its unauthenticated internal API. Its fixed IPv4/MAC and
+`flaresolverr-egress` service deny new connections to private peers and the
+host, except Podman's DNS resolver. Established replies to internal API callers
+and public-site egress remain allowed. The bridge rules cover traffic between
+containers as well as routed traffic. Verify the rules with
+`python3 tests/check_flaresolverr_egress.py modules/self-hosted/flaresolverr-egress.nft`
+as root with `ip` and `nft` available; the test uses isolated network namespaces.
+
 The legacy Muximux runtime receives an atomic settings writer at startup. It
 publishes the INI and PHP access guard together; the old in-place header rewrite
 could corrupt settings during concurrent requests. Both native and Kuma health
@@ -232,7 +246,8 @@ ghostship-backup sample
 ghostship-backup restore-check
 ```
 
-The backup command holds a maintenance lock shared with Podman auto-update,
+The backup command holds a maintenance lock shared with Podman auto-update
+and the entire NixOS automatic upgrade,
 requires a real NFS mount, and uses the encrypted `backup` secret. It briefly
 pauses the active RomM/Grimmory containers, exports both MariaDB engines,
 snapshots `/srv` read-only (or the root subvolume when `/srv` is an ordinary
@@ -240,6 +255,20 @@ directory in the declared root layout), and resumes the same containers before t
 the snapshot. Health recovery is disabled during the bounded pause and restored
 afterward; no image pull or service restart occurs. Exact image IDs and the
 generation manifest are recorded before pausing.
+
+RomM's database root password comes from the encrypted `romm-db-admin` unit.
+The database's post-start migration updates every existing root account and
+checks that passwordless login fails. It also accepts the new password on
+repeated runs, so an interrupted migration can converge. Backups read the
+password inside the database container. Restore validation continues to use
+an isolated temporary database; it does not change the live engine or data.
+
+Private-source GitHub Actions jobs use the `private-source-ci` environment.
+Its required reviewer is `owner`; approval releases the environment-scoped,
+read-only agent deploy key. Repository-level private-source keys must remain
+absent so another pull-request workflow cannot bypass the environment gate.
+Review changes to the import script and workflow before approving a run.
+
 SQLite databases and WAL files are captured together. Failure handling resumes
 containers it paused and restores their health-check settings and removes the temporary Btrfs snapshot.
 
@@ -333,6 +362,33 @@ The normal secret projection owns this file after activation. If a hard kill
 interrupts the backup process, inspect `podman ps` for paused RomM/Grimmory
 containers and unpause them; their declarative health settings are restored by
 the next normal unit start. Signal/error traps handle ordinary failures.
+
+## Security review decisions
+
+The 2026-10-10 security review retained these operator-approved trust choices:
+services remain unauthenticated on the Docker network; developer/agent tools
+keep their broad privileges and mutable automatic updates; service secrets
+retain the shared apps-account model; Gluetun's HTTP proxy remains available
+on the shared network; and CloakBrowser retains its Origin-header handling.
+These choices leave supply-chain, lateral-access, shared-secret, and browser
+request-origin risks unresolved. Emulation findings are deferred while Boomer
+is offline.
+
+Trusted LAN clients also retain the Plex/qBittorrent login bypass. Gluetun
+retains Podman-gateway DNS for internal names, leaving VPN DNS leakage
+unresolved. The Armored Armadillo WSL host remains a production-secret
+recipient. These were separate operator decisions in the same review.
+The operator also retains manually managed mutable passwords, direct Keep
+writes through the owner connection, and existing Tdarr scratch storage. Stale
+passwords, compromised connection access, and shared-filesystem exhaustion
+remain risks. qBittorrent retains indefinite errored-torrent retries, with
+resource-exhaustion risk recorded. Synology restricts NFS clients by IP; the trusted-LAN mount is
+retained, with server spoofing and unencrypted traffic still possible.
+
+RomM permits five service starts per hour. Its hourly recovery timer starts
+only a failed unit whose result is `start-limit-hit`; it never restarts a
+running unit or resets rate-limit counters. This bounds retry frequency while
+allowing recovery after the window expires.
 
 ## Upstream contracts
 

@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.49] - 2026-10-10
+
+- Replace Homepage's host Podman socket with a restricted read-only Unix
+  broker; deny container inspection, logs, archives, execution, and control.
+- Restrict FlareSolverr to public-site egress while retaining internal API
+  access and Podman DNS. Cover both bridge peers and routed traffic.
+- Require protected approval for private-source CI and migrate RomM's existing
+  root accounts to an encrypted password, including authenticated backups.
+- Remove host-root file mutations from desktop MCP provisioning, extension
+  refresh, qBittorrent configuration, and Tdarr node configuration. Keep
+  auto-resume state outside the container's writable tree.
+- Harden XML parsing, require critical secrets before config writes, accept
+  interspersed config CLI options, and protect NZBGet/Docker Hub credentials.
+- Keep VPN credentials out of curl arguments, preserve fallback ordering,
+  reconcile existing ntfy alerts, refresh T3 bridge tokens, and keep GC from
+  starting a stopped T3 container. Hold the upgrade maintenance lock throughout
+  the build and switch.
+- Scope iframe-audit Access headers to trusted HTTPS origins and recheck each
+  redirect; remove inline-token deployment guidance. Prune OpenCode events
+  under SQLite's write lock without replacing live clients' database inode.
+- Preserve independent ACP request IDs and handle missing retailer page titles
+  and command failures. Preserve dynamic RomM WebSocket paths and queries.
+  Add hourly recovery after RomM exhausts its bounded restart window.
+  Record retained trust choices and defer emulation work.
+
 ## [3.15.48] - 2026-10-10
 
 - **Fix the T3 Code retention OpenCode prune**: the retention wrapper ran

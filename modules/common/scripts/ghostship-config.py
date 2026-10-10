@@ -99,8 +99,15 @@ class ValueResolver:
 
 class XMLDriver:
     def __init__(self, content):
-        self.root = etree.fromstring(content.encode("utf-8"))
+        parser = etree.XMLParser(
+            resolve_entities=False, load_dtd=False, no_network=True
+        )
+        self.root = etree.fromstring(content.encode("utf-8"), parser=parser)
         self.tree = etree.ElementTree(self.root)
+        if self.tree.docinfo.doctype:
+            raise ValueError(
+                "DOCTYPE declarations are not allowed in configuration XML"
+            )
         self.dirty = False
 
     def set(self, path, value):
@@ -1173,7 +1180,7 @@ def main():
         help="Fail before writing if referenced secrets are missing or empty",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_intermixed_args()
 
     if args.test:
         run_self_tests()

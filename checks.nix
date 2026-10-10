@@ -5,6 +5,8 @@ let
     ps.ruamel-yaml
     ps.requests
     ps.python-socketio
+    ps.json5
+    ps.tomli-w
   ]);
   hosts = builtins.attrValues self.nixosConfigurations;
   agentUnits = map (name: self.nixosConfigurations.chill-penguin.config.systemd.services.${name}) [
@@ -31,6 +33,7 @@ in
           pkgs.php
           pkgs.util-linux
           pkgs.nodejs_24
+          pkgs.nginx
         ];
       }
       ''

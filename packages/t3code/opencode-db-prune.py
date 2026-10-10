@@ -6,8 +6,9 @@ appends every update to an event-sourcing `event` table with no retention
 dominates `~/.local/share/opencode/opencode.db` and eventually makes ordinary
 queries fail with "database or disk is full".
 
-This tool rebuilds the database without `event` / `event_sequence` rows when
-those tables cross a size or row threshold, keeping projected session data.
+This tool deletes `event` / `event_sequence` rows and vacuums in place when
+those tables cross a size or row threshold, keeping projected session data
+and the database inode used by connected clients.
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ import argparse
 import os
 import sqlite3
 import sys
-import time
 from pathlib import Path
 
 GIB = 1024**3
@@ -90,76 +90,35 @@ def should_prune(metrics: dict, *, event_bytes: int, event_rows: int) -> bool:
     return metrics["event_bytes"] >= event_bytes or metrics["event_rows"] >= event_rows
 
 
-def db_is_busy(db_path: Path) -> bool:
-    """Return True when another connection holds a write lock."""
+def prune_in_place(db_path: Path) -> dict | None:
+    """Prune under SQLite's write lock, preserving open clients' database inode."""
+    con = sqlite3.connect(str(db_path), timeout=0.1)
     try:
-        con = sqlite3.connect(str(db_path), timeout=0.1)
+        con.execute("PRAGMA foreign_keys=OFF")
         try:
             con.execute("BEGIN IMMEDIATE")
-            con.rollback()
-        finally:
-            con.close()
-    except sqlite3.OperationalError as exc:
-        if "locked" in str(exc).lower() or "busy" in str(exc).lower():
-            return True
-        raise
-    return False
-
-
-def rebuild_without_events(src: Path, dst: Path) -> dict:
-    """Copy src into dst, leaving event tables empty."""
-    if dst.exists():
-        dst.unlink()
-    src_con = sqlite3.connect(f"file:{src}?mode=ro", uri=True, timeout=5)
-    try:
-        tables = [
-            row[0]
-            for row in src_con.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' "
-                "AND name NOT LIKE 'sqlite_%' ORDER BY 1"
-            )
-        ]
-        table_sql = list(
-            src_con.execute(
-                "SELECT name, sql FROM sqlite_master WHERE type='table' "
-                "AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL"
-            )
-        )
-        index_sql = list(
-            src_con.execute(
-                "SELECT name, sql FROM sqlite_master WHERE type='index' AND sql IS NOT NULL"
-            )
-        )
+        except sqlite3.OperationalError as error:
+            if "locked" in str(error).lower() or "busy" in str(error).lower():
+                return None
+            raise
+        tables = [row[0] for row in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%'"
+        )]
+        for table in SKIP_TABLES:
+            if table in tables:
+                con.execute('DELETE FROM "' + table + '"')
+        con.commit()
+        # VACUUM retains the inode and incorporates committed writes, including
+        # clients that were already connected before maintenance started.
+        con.execute("VACUUM")
+        if con.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            raise RuntimeError("pruned database failed quick_check")
+        kept = sum(con.execute('SELECT COUNT(*) FROM "' + table.replace('"', '""') + '"').fetchone()[0]
+                   for table in tables if table not in SKIP_TABLES)
+        return {"size": db_path.stat().st_size, "kept_rows": kept}
     finally:
-        src_con.close()
-
-    dst_con = sqlite3.connect(str(dst))
-    try:
-        dst_con.execute("PRAGMA journal_mode=OFF")
-        dst_con.execute("PRAGMA synchronous=OFF")
-        dst_con.execute(f"ATTACH DATABASE '{src}' AS old")
-        for _name, sql in table_sql:
-            dst_con.execute(sql)
-        for _name, sql in index_sql:
-            dst_con.execute(sql)
-        kept = 0
-        for table in tables:
-            if table in SKIP_TABLES:
-                continue
-            dst_con.execute(f'INSERT INTO main."{table}" SELECT * FROM old."{table}"')
-            kept += dst_con.execute(f'SELECT COUNT(*) FROM main."{table}"').fetchone()[0]
-            dst_con.commit()
-        dst_con.execute("DETACH DATABASE old")
-        dst_con.execute("PRAGMA journal_mode=WAL")
-        dst_con.execute("PRAGMA synchronous=NORMAL")
-        dst_con.commit()
-        check = dst_con.execute("PRAGMA quick_check").fetchone()[0]
-        if check != "ok":
-            raise RuntimeError(f"rebuilt database failed quick_check: {check}")
-    finally:
-        dst_con.close()
-
-    return {"tables": tables, "kept_rows": kept, "size": dst.stat().st_size}
+        con.close()
 
 
 def rotate_log(log_path: Path, *, max_bytes: int) -> bool:
@@ -217,39 +176,15 @@ def prune(
 
     if dry_run:
         print(
-            "info: would rebuild opencode db without event/event_sequence rows",
+            "info: would prune opencode event/event_sequence rows and vacuum in place",
             file=sys.stderr,
         )
         return 0
 
-    if db_is_busy(db_path):
-        print(
-            "warning: opencode db is busy; event prune deferred",
-            file=sys.stderr,
-        )
+    result = prune_in_place(db_path)
+    if result is None:
+        print("warning: opencode db is busy; event prune deferred", file=sys.stderr)
         return 0
-
-    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-    rebuilt = db_path.with_name(f"opencode.db.rebuilt-{stamp}")
-    backup = db_path.with_name(f"opencode.db.pre-prune-{stamp}")
-    try:
-        result = rebuild_without_events(db_path, rebuilt)
-        # Swap atomically relative to readers that reopen the path.
-        db_path.replace(backup)
-        for side in (
-            db_path.with_name("opencode.db-wal"),
-            db_path.with_name("opencode.db-shm"),
-        ):
-            if side.exists():
-                side.unlink()
-        rebuilt.replace(db_path)
-        # Drop the pre-prune copy once the new file is in place; reclaiming disk
-        # is the point of this maintenance.
-        backup.unlink()
-    except Exception:
-        if rebuilt.exists():
-            rebuilt.unlink()
-        raise
 
     print(
         "info: pruned opencode event log; "

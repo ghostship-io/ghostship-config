@@ -11,6 +11,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   check:
+    environment: private-source-ci
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -26,7 +27,6 @@ jobs:
         env:
           GITHUB_META_TOKEN: ${{ github.token }}
           GHOSTSHIP_AGENT_READ_KEY: ${{ secrets.GHOSTSHIP_AGENT_READ_KEY }}
-          GHOSTSHIP_ASSISTANT_READ_KEY: ${{ secrets.GHOSTSHIP_ASSISTANT_READ_KEY }}
         run: python3 scripts/ci-private-inputs.py
       - name: Validate container development workflow
         run: nix develop .#ci --no-write-lock-file -c scripts/check

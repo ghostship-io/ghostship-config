@@ -276,6 +276,7 @@ def configure_bypass_paywalls(root: Path) -> None:
 def make_readable(path: Path) -> None:
     user = pwd.getpwnam("apps")
     for root, dirs, files in os.walk(path):
+        dirs[:] = [name for name in dirs if not (Path(root) / name).is_symlink()]
         os.chown(root, user.pw_uid, user.pw_gid)
         os.chmod(root, 0o755)
         for dirname in dirs:
@@ -284,6 +285,8 @@ def make_readable(path: Path) -> None:
             os.chmod(item, 0o755)
         for filename in files:
             item = os.path.join(root, filename)
+            if os.path.islink(item):
+                continue
             os.chown(item, user.pw_uid, user.pw_gid)
             os.chmod(item, 0o644)
 

@@ -2678,7 +2678,6 @@ in
   systemd.services.t3code-nix-store-gc = {
     description = "Garbage-collect the T3 Code container's isolated Nix store";
     after = [ "podman-t3code.service" ];
-    wants = [ "podman-t3code.service" ];
     onFailure = [ "ghostship-failure@%n.service" ];
     serviceConfig = {
       Type = "oneshot";

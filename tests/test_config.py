@@ -21,6 +21,30 @@ projection = load("projection", "modules/self-hosted/secret-project.py")
 
 
 class ConfigTests(unittest.TestCase):
+    def test_xml_rejects_external_and_internal_dtds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            secret = Path(directory) / "secret"
+            secret.write_text("private-value")
+            for declaration in (
+                f'<!DOCTYPE Config [<!ENTITY leak SYSTEM "{secret.as_uri()}">]>',
+                '<!DOCTYPE Config [<!ENTITY leak "expanded">]>',
+            ):
+                with self.subTest(declaration=declaration), self.assertRaises(ValueError):
+                    config.XMLDriver(declaration + "<Config>&leak;</Config>")
+
+    def test_cli_accepts_secret_options_between_positionals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "config.env"
+            source = Path(directory) / "secret.env"
+            target.write_text("KEY=old\n")
+            source.write_text("SECRET=new\n")
+            with patch.object(config.sys, "argv", [
+                "ghostship-config", "set", str(target),
+                "--secrets-file", str(source), "--require-secrets", "KEY=env:SECRET",
+            ]):
+                config.main()
+            self.assertEqual(target.read_text(), "KEY=new\n")
+
     def test_secret_round_trip(self):
         values = [
             "",
