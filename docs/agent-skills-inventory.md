@@ -16,7 +16,6 @@ available through their owning provider when the plugin is active.
 | `ghostship-agent-tooling` | Existing Ghostship catalog |
 | `ghostship-audit-worktree` | Existing Ghostship catalog |
 | `ghostship-bitwarden` | Existing Ghostship catalog |
-| `ghostship-cloakbrowser` | Existing Ghostship catalog |
 | `ghostship-google-workspace` | Existing Ghostship catalog |
 | `ghostship-merge-worktree` | Existing Ghostship catalog |
 | `ghostship-openchamber` | Existing Ghostship catalog |
