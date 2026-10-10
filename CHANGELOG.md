@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.61
+
+- Pin Ghostship MCP 0.8.17: resilient coding connections without tool replay, exact owned-tab lifecycle, and collector context support. ChatGPT authentication remains deferred.
+
 ## 3.15.60
 
 - Pin Ghostship MCP 0.8.15: native-input workflow transactions, Drive row selection, and observed item identity/fee evidence. ChatGPT authentication remains deferred.
