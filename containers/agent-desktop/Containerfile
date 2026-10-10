@@ -81,6 +81,9 @@ RUN rm -f \
 
 COPY root/ /
 
+RUN python3 /opt/ghostship-agent-desktop/pelorus-control-patch.py \
+      /lsiopy/lib/python3.14/site-packages/src/rest.py
+
 RUN chmod 0755 \
       /custom-cont-init.d/* \
       /etc/profile.d/ghostship-desktop.sh \

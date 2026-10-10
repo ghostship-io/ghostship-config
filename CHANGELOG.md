@@ -1,11 +1,6 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [3.15.49] - 2026-10-10
+## [3.15.71] - 2026-10-10
 
 - Replace Homepage's host Podman socket with a restricted read-only Unix
   broker; deny container inspection, logs, archives, execution, and control.
@@ -13,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   access and Podman DNS. Cover both bridge peers and routed traffic.
 - Require protected approval for private-source CI and migrate RomM's existing
   root accounts to an encrypted password, including authenticated backups.
-- Remove host-root file mutations from desktop MCP provisioning, extension
-  refresh, qBittorrent configuration, and Tdarr node configuration. Keep
+- Remove host-root file mutations from desktop MCP provisioning,
+  qBittorrent configuration, and Tdarr node configuration. Keep
   auto-resume state outside the container's writable tree.
 - Harden XML parsing, require critical secrets before config writes, accept
   interspersed config CLI options, and protect NZBGet/Docker Hub credentials.
@@ -29,6 +24,125 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and command failures. Preserve dynamic RomM WebSocket paths and queries.
   Add hourly recovery after RomM exhausts its bounded restart window.
   Record retained trust choices and defer emulation work.
+
+## 3.15.70
+
+- Integrate shared MCP/browser/GUI activation with main’s T3 activity-probe and retention fixes, preserving active-session restart protections.
+
+## 3.15.69
+
+- Pin the desktop locking correction: outer MCP batches and nested workers acquire both profile locks in the same order.
+
+## 3.15.68
+
+- Pin the retired-browser platform and managed Bladebro/GUI wrappers to the shared MCP source and package.
+- Normalize Pelorus control responses so successful backend input returns a valid REST result; preserve errors and reject unknown responses.
+
+## 3.15.67
+
+- Retire CloakBrowser completely: remove its service, extension timer, dashboard route, installers, and T3 environment/wiring. Cleanup removes retired execution artifacts and images while preserving saved profile data.
+
+## 3.15.66
+
+- Install coding-agent commands from the same pinned Ghostship package as the shared MCP. Boot and periodic source sync no longer rebuild an older main checkout over the tested connector.
+
+## 3.15.65
+
+- Pin Ghostship MCP 0.8.20: verified checkbox activation and worker transport recovery. Live ChatGPT tool validation remains skipped as requested.
+
+## 3.15.64
+
+- Clear only Chrome tab/session restoration files before managed launch so an unclean exit also starts fresh. Preserve cookies, credentials, history, and site storage.
+
+## 3.15.63
+
+- Start Agent Desktop Chrome with a fresh tab after relaunch while preserving profiles and sign-ins. Disable background mode, Memory Saver discarding, and background tab freezing for predictable browser workers.
+
+## 3.15.62
+
+- Pin Ghostship MCP 0.8.19: bounded worker RPC framing, guarded SSH startup, and private loopback OAuth callbacks. ChatGPT authentication remains deferred.
+- Set the Agent Desktop task bound to 4,096 under its existing 16 GiB memory bound after parallel browser workloads reached the default 2,048-task limit. Apply the task bound without restarting T3 or the desktop container.
+
+## 3.15.61
+
+- Pin Ghostship MCP 0.8.17: resilient coding connections without tool replay, exact owned-tab lifecycle, and collector context support. ChatGPT authentication remains deferred.
+
+## 3.15.60
+
+- Pin Ghostship MCP 0.8.15: native-input workflow transactions, Drive row selection, and observed item identity/fee evidence. ChatGPT authentication remains deferred.
+
+## 3.15.59
+
+- Pin MCP 0.8.14 accessible role actions and foreground native-input isolation; DOM reads remain parallel. Full retailer/Google/consumer acceptance remains pending.
+
+## 3.15.58
+
+- Pin MCP 0.8.13 Target native title/identity extraction and unknown variant price ranges. Full retailer/Google/consumer acceptance remains pending.
+
+## 3.15.57
+
+- Pin MCP 0.8.12 fresh offer evidence, bounded parallel verification and compact job history. Full retailer/Google/consumer acceptance remains pending.
+
+## 3.15.56
+
+- Pin MCP 0.8.11 typed retailer failure outcomes with conservative interrupted-mutation uncertainty and no replay. Retailer and cached client acceptance remain incomplete.
+
+## 3.15.55
+
+- Pin MCP 0.8.10 fresh-price/condition/eligibility evidence and concurrent job-store initialization fixes. Full retailer and cached client acceptance remain pending.
+
+## 3.15.54
+
+- Pin MCP 0.8.9 product matching, rejecting conflicting selected variants and incomplete verified identity evidence before ranking offers. Full retailer and client acceptance remain pending.
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [3.15.53] - 2026-10-09
+
+- Pin shared MCP 0.8.8 with durable tab/job ownership across PID namespaces,
+  interrupted-write reconciliation without replay and explicit diagnostic limits.
+- Restore the previous session when managed desktop Chrome restarts. Renderer
+  hang root cause and unattended recovery remain pending acceptance.
+
+## [3.15.52] - 2026-10-09
+
+- Pin shared MCP 0.8.7: coding agents and the OpenAI relay use one persistent
+  canonical backend with independent sessions and reusable identity-bound workers.
+  Connector refresh and broader shopping acceptance remain pending.
+
+## [3.15.51] - 2026-10-09
+
+- Pin shared MCP 0.8.6 with Standard search budgets, canonical product matching,
+  destination/offer safeguards and bounded per-worker diagnostics. Retailer
+  workflow and price benchmark acceptance remains pending.
+
+## [3.15.50] - 2026-10-09
+
+- Align the shared MCP and coding-agent package at 0.8.5, including the
+  verified installed eBay client module path. MCP schemas remain unchanged.
+
+## [3.15.49] - 2026-10-09
+
+- Pin shared MCP 0.8.4: browser-only eBay active/sold/completed evidence,
+  explicit sign-in outcomes and retired legacy/API clients. Unknown mandatory
+  fees require checkout evidence; listing location no longer implies zero fees.
+
+## [3.15.48] - 2026-10-09
+
+- Update the shared Ghostship MCP to 0.8.3: exact-tab ownership checks,
+  interrupted-worker cleanup, independent primary/detail pages, concurrent
+  registry reconciliation and accurate mutation idempotence annotations.
+  Worker fixtures passed 100 rounds at 1/2/4/8 workers in both identities.
+
+## [3.15.47] - 2026-10-09
+
+- Pin the shared Ghostship MCP to the tested 0.8.2 catalog and browser runtime.
+  Coding agents and the private ChatGPT relay use the same server. Integration
+  diagnostics expose the pinned source revision, image tag, catalog hash, and
+  backend connectivity for deployment and connector discovery checks.
 
 ## [3.15.48] - 2026-10-10
 
