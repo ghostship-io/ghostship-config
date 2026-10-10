@@ -37,7 +37,6 @@ rm -f "$data/SingletonLock" "$data/SingletonCookie" "$data/SingletonSocket"
 # suppression so headed startup is deterministic. No sandbox, GPU or
 # fingerprint flags.
 exec /usr/bin/google-chrome-stable \
-  --restore-last-session \
   --user-data-dir="$data" \
   --remote-debugging-port="$port" \
   --ozone-platform=wayland \
