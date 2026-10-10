@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.70
+
+- Integrate shared MCP/browser/GUI activation with main’s T3 activity-probe and retention fixes, preserving active-session restart protections.
+
 ## 3.15.69
 
 - Pin the desktop locking correction: outer MCP batches and nested workers acquire both profile locks in the same order.
@@ -114,6 +118,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Coding agents and the private ChatGPT relay use the same server. Integration
   diagnostics expose the pinned source revision, image tag, catalog hash, and
   backend connectivity for deployment and connector discovery checks.
+
+## [3.15.48] - 2026-10-10
+
+- **Fix the T3 Code retention OpenCode prune**: the retention wrapper ran
+  `packages/t3code/retention.py` as a lone store file, so its
+  `load_opencode_prune()` sibling lookup resolved to
+  `/nix/store/opencode-db-prune.py` and failed on every run. OpenCode's
+  unbounded event log was never rebuilt, which is why `opencode.db` reached
+  10 GiB. Bundle both modules in one store directory so the sibling import
+  works, and assert the bundled invocation in `tests/test_t3code_retention.py`.
+
+## [3.15.47] - 2026-10-10
+
+- **Stop mid-turn T3 Code restarts**: the shared activity probe that gates
+  tool maintenance, memory recovery, and host deployments only counted a turn
+  as running while its `completed_at` was null. T3 Code stamps `completed_at`
+  on a running turn when a mid-turn checkpoint diff completes, so a long Codex
+  or Claude turn stopped counting as active once its pending request and user
+  message windows lapsed. The server monitor then restarted
+  `t3code-server.service` for sustained memory pressure and interrupted the
+  work that was still running (observed on 2026-10-10 at 06:28 and 08:20 UTC).
+  The probe now also treats a provider session that is starting or running as
+  active work, the same authoritative signal T3 Code uses to keep a turn
+  unsettled. Regression tests cover a checkpointed running turn and sessions
+  without a turn row.
+- **Keep the retention timer alive across store GC**: `t3code-retention` was
+  missing from the container image contents, so the daily isolated-store GC
+  deleted its binary and the enabled `t3code-retention.timer` failed to exec
+  with no log line. OpenCode's unbounded event log then grew to 10 GiB
+  (`event` table alone 8.5 GiB), server traces exceeded the retained count, and
+  the container previously hit ENOSPC on 2026-09-30, breaking tool updates and
+  agent installs. Add the retention package to the seeded and rooted image
+  contents, and assert in `checks.nix` that `podman-t3code` seeds it.
 
 ## [3.15.46] - 2026-10-09
 

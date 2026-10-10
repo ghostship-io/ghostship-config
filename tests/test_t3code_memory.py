@@ -130,6 +130,7 @@ class IdleGuard(unittest.TestCase):
             CREATE TABLE projection_turns(
                 thread_id TEXT, turn_id TEXT, state TEXT, requested_at TEXT, completed_at TEXT
             );
+            CREATE TABLE projection_thread_sessions(thread_id TEXT, status TEXT, active_turn_id TEXT);
             INSERT INTO projection_threads VALUES ('a', NULL, NULL);
             INSERT INTO projection_turns VALUES ('a', NULL, 'pending', '2026-09-01', NULL);
         ''')
@@ -182,3 +183,37 @@ class IdleGuard(unittest.TestCase):
         self.assertTrue(self.idle())
         self.db.execute("UPDATE projection_threads SET latest_user_message_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
         self.assertFalse(self.idle())
+
+    def test_running_session_keeps_checkpointed_turn_active(self):
+        # A mid-turn checkpoint stamps completed_at on a turn that is still
+        # running; the provider session status is authoritative.
+        self.db.execute('DELETE FROM projection_turns')
+        self.db.execute(
+            "INSERT INTO projection_turns VALUES "
+            "('a', 'turn-1', 'running', "
+            "strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 minutes'), "
+            "strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-59 minutes'))"
+        )
+        self.db.execute(
+            "INSERT INTO projection_thread_sessions VALUES ('a', 'running', 'turn-1')"
+        )
+        self.assertFalse(self.idle())
+        self.db.execute(
+            "UPDATE projection_thread_sessions SET status='ready' WHERE thread_id='a'"
+        )
+        self.assertTrue(self.idle())
+
+    def test_live_session_blocks_without_a_turn_row(self):
+        self.db.execute('DELETE FROM projection_turns')
+        for status in ('starting', 'running'):
+            self.db.execute('DELETE FROM projection_thread_sessions')
+            self.db.execute(
+                "INSERT INTO projection_thread_sessions VALUES ('a', ?, NULL)", (status,)
+            )
+            self.assertFalse(self.idle(), status)
+        for status in ('ready', 'stopped', 'error'):
+            self.db.execute('DELETE FROM projection_thread_sessions')
+            self.db.execute(
+                "INSERT INTO projection_thread_sessions VALUES ('a', ?, NULL)", (status,)
+            )
+            self.assertTrue(self.idle(), status)
