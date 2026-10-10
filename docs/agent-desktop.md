@@ -123,30 +123,26 @@ Prefer Bladebro for routine agent work.
 
 ## Native GUI automation (Pelorus)
 
-Pelorus is unchanged; the proxy forwards only the desktop-control surface.
-Use `httpx` directly.
+Use the managed `ghostship-gui` wrapper locally. It handles SSH application
+launches internally and uses the canonical generated Pelorus CLI for API calls.
 
-```python
-import os
-import httpx
-
-base = os.environ["AGENT_DESKTOP_API_URL"]
-headers = {"Authorization": f"Bearer {os.environ['AGENT_DESKTOP_API_TOKEN']}"}
-client = httpx.Client(base_url=base, headers=headers, timeout=120)
-
-state = client.get("/pelorus/api/state").json()          # text desktop state
-windows = client.get("/pelorus/api/windows").json()      # geometry per window
-tree = client.get(f"/pelorus/api/desktop/explore/{pid}").json()
-png = client.get("/pelorus/api/desktop/screenshot").json()["data"]
-client.post("/pelorus/api/desktop/control", json={"action": "left_click", "coordinate": [640, 400]})
-client.post("/pelorus/api/desktop/control", json={"action": "type", "text": "hello"})
-client.post(f"/pelorus/api/desktop/close/{pid}")          # close a window
+```sh
+ghostship-gui windows
+ghostship-gui launch -- xmessage 'Owned test window'
+ghostship-gui explore --pid 1234
+ghostship-gui screenshot --pid 1234
+ghostship-gui batch --pid 1234 --actions '[{"action":"type","text":"hello"}]'
 ```
 
-Use Bladebro for browser operations and Pelorus for other graphical Linux
-applications: install/launch utilities over SSH, inspect controls with
-`/api/desktop/explore`, interact with `control`, and fall back to
-screenshots when an application has no accessibility tree.
+Batches acquire both browser-profile locks in a fixed order, confirm the target
+PID's focus before each input, and stop on uncertain responses without replay.
+Browser workers use the same locks across both identities for foreground input;
+DOM reads and navigation remain parallel. Screenshots are private local PNGs,
+and accessibility text is bounded. Ambiguous window targets fail before input.
+Use Bladebro for browser workflows and this wrapper for native applications.
+
+The image normalizes known Pixelflux control responses to Pelorus's required
+`result` field. Backend errors remain errors; unknown responses fail explicitly.
 
 ## SSH and software installation
 
