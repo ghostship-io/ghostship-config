@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.15.74] - 2026-10-10
+
+- Prepare offline Boomer security fixes: run setup and controller state as kiosk,
+  confine privileged LED writes, protect Bluetooth logs/locks, and bound event work.
+- Copy homebrew assets without following symlinks, keep Wi-Fi passwords off argv,
+  replace unsafe secret fallbacks, and bound performance-log classification.
+- Repair PICO-8 aliases, retired Tools links, console TUI output, controller policy
+  metadata, and exact Star mapping tests; retain owner-accepted emulation risks.
+
 ## [3.15.73] - 2026-10-10
 
 - Remove the active private relay identifier from public integration documentation.

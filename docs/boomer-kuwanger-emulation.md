@@ -7,6 +7,34 @@ launch helper for maintenance sessions. It keeps writable emulator state under
 `/srv/emulation` and launches every configured system through the repo-managed
 `run-emulator` wrapper.
 
+## Security preparation while Boomer is offline
+
+The 2026-10-10 review prepares configuration fixes; deployment and hardware
+verification remain pending until Boomer is online. Setup and emulator-secret
+renderers run as `kiosk`. Setup has no capabilities; the root secret service
+only creates projections in the root-owned `/run/ghostship-secrets` directory
+before invoking renderers as kiosk. ES-DE settings deliberately remain top-level
+XML siblings, matching ES-DE 3.4.1's pugixml loader.
+
+Controller state and locks are written by kiosk. The separate
+`controller-leds-write` root worker reads player order as kiosk and writes only
+kernel-discovered player LED brightness paths. Privileged Bluetooth logs live
+in root-owned `/var/log/ghostship-emulation`; the event coalescer keeps its locks
+in root-owned `/run/ghostship-controller-reconcile`, filters paired supported
+controllers, and limits incoming reconciliation triggers to one per two seconds.
+
+The owner accepts host-wide kiosk hotkey injection, privileged GameMode tuning,
+unsigned upstream Canary updates, and unencrypted persistent swap. These risks
+remain; this preparation does not change those workflows.
+
+Before closing prepared findings as Fixed, activate the committed configuration
+on Boomer and verify setup/secret units, controller LEDs and reconnects, TUI
+Bluetooth/Wi-Fi actions, emulator launches, PICO-8 aliases, and smoke/performance
+tools. Check existing file ownership: writers now fail on root-owned or unsafe
+paths instead of repairing arbitrary targets as root. Do not blindly recurse
+with root `chown` through the kiosk-owned tree. No activation on other fleet
+hosts is required for this Boomer-only change.
+
 ## Runtime Layout
 
 - `/srv/emulation/roms`: local ROM root, mounted from the 4 TB Btrfs filesystem
@@ -108,10 +136,13 @@ scripts/update-ryubing-canary /root/nixos-config
 Nix still needs a fixed hash, so the build itself stays reproducible; the
 updater is the intentional step that converts "latest Canary" into a Nix pin.
 Switch homebrew `.nro` entries can keep their asset folders beside the launched
-file. When `run-emulator` sees a sibling `data/` directory, it links that
-directory into Ryubing's emulated SD card at
-`/srv/emulation/xdg/config/Ryujinx/sdcard/data`, replacing only an existing
-symlink. Proprietary keys stay operator-managed under
+file. When `run-emulator` sees a sibling `data/` directory, it copies regular
+files into an isolated snapshot in Ryubing's emulated SD card at
+`/srv/emulation/xdg/config/Ryujinx/sdcard/data`. Symlinks and special files in
+the supplied assets are refused, including links inside subdirectories. Guest
+writes affect the snapshot, which is refreshed on the next launch;
+operator-created ordinary SD-card data directories are retained. Proprietary
+keys stay operator-managed under
 `/srv/emulation/bios/switch` and are exposed to Ryubing's runtime system
 directory at launch. Firmware also stays operator-managed in that BIOS folder:
 `run-emulator` selects the newest local `Firmware*.zip`, extracts its NCA files

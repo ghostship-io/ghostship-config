@@ -259,6 +259,9 @@ let
 
   syncRetroarchConfig = pkgs.writeShellScriptBin "sync-retroarch-config" ''
     set -euo pipefail
+    if [ "$(id -u)" = 0 ]; then
+      exec ${pkgs.util-linux}/bin/runuser -u ${cfg.user} -- "$0" "$@"
+    fi
     export PATH=${config.ghostship.emulation.internal.lib.scriptPath}:$PATH
 
     install -d -m 0755 -o ${cfg.user} -g ${cfg.group} \

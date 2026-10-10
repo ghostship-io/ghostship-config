@@ -44,7 +44,6 @@ in
     "d /srv/emulation/cache 0755 kiosk kiosk -"
     "d /srv/emulation/cache/mesa-shaders 0755 kiosk kiosk -"
     "d /srv/emulation/staging 0755 kiosk kiosk -"
-    "d /srv/emulation/tmp 1777 root root -"
   ];
 
   # Minisforum HX100G specific hardware tweaks:
