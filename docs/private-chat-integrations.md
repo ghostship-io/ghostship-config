@@ -3,10 +3,9 @@
 One private container runs the official relay and one persistent Ghostship MCP
 runtime. Coding clients and the relay connect to independent SDK sessions on the
 same private Unix endpoint. Tool definitions and handlers come from the pinned
-`ghostship-agent` capability catalog. The tunnel is
-`tunnel_6ac0806704cc819188e52213f9afd272`. Runtime relay credentials live in
-Bitwarden and the age-encrypted scoped secret bundle, outside Git plaintext and
-the Nix store. No public origin, inbound port or browser debugging endpoint is
+`ghostship-agent` capability catalog. The tunnel identifier and runtime relay
+credentials live in Bitwarden and the age-encrypted scoped secret bundle,
+outside Git plaintext and the Nix store. No public origin, inbound port or browser debugging endpoint is
 exposed. Cached client discovery needs its supported refresh independently of
 a successful fresh-client discovery.
 Keep executes in the separate host service. `account: User|Agent`

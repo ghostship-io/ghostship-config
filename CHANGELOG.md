@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.73] - 2026-10-10
+
+- Remove the active private relay identifier from public integration documentation.
+
 ## [3.15.72] - 2026-10-10
 
 - Read existing Kuma notification types from their serialized configuration,
