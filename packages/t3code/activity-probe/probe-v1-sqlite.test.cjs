@@ -8,7 +8,7 @@ const { DatabaseSync } = require('node:sqlite');
 
 const probePath = path.join(__dirname, 'probe-v1-sqlite.cjs');
 
-function runProbe({ turns = [], latestUserMessageAt = null } = {}) {
+function runProbe({ turns = [], sessions = [], latestUserMessageAt = null } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 't3-activity-probe-'));
   const databasePath = path.join(directory, 'state.sqlite');
   const db = new DatabaseSync(databasePath);
@@ -27,13 +27,27 @@ function runProbe({ turns = [], latestUserMessageAt = null } = {}) {
       started_at TEXT,
       completed_at TEXT
     );
+    CREATE TABLE projection_thread_sessions (
+      thread_id TEXT PRIMARY KEY,
+      status TEXT NOT NULL,
+      active_turn_id TEXT
+    );
   `);
-  const threadIds = new Set(['thread-1', ...turns.map((turn) => turn.threadId ?? 'thread-1')]);
+  const threadIds = new Set([
+    'thread-1',
+    ...turns.map((turn) => turn.threadId ?? 'thread-1'),
+    ...sessions.map((session) => session.threadId ?? 'thread-1'),
+  ]);
   const insertThread = db.prepare(
     'INSERT INTO projection_threads (thread_id, deleted_at, latest_user_message_at) VALUES (?, NULL, ?)',
   );
   for (const threadId of threadIds) {
     insertThread.run(threadId, threadId === 'thread-1' ? latestUserMessageAt : null);
+  }
+  for (const session of sessions) {
+    db.prepare(
+      'INSERT INTO projection_thread_sessions (thread_id, status, active_turn_id) VALUES (?, ?, ?)',
+    ).run(session.threadId ?? 'thread-1', session.status, session.activeTurnId ?? null);
   }
   for (const [index, turn] of turns.entries()) {
     db.prepare(
@@ -63,7 +77,7 @@ function runProbe({ turns = [], latestUserMessageAt = null } = {}) {
 const now = () => new Date().toISOString();
 const minutesAgo = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
 
-test('ignores completed running rows and old durable pending rows', () => {
+test('ignores stale completed running rows and old durable pending rows', () => {
   const result = runProbe({
     turns: [
       { state: 'running', requestedAt: minutesAgo(20), completedAt: now() },
@@ -72,6 +86,32 @@ test('ignores completed running rows and old durable pending rows', () => {
     ],
   });
   assert.equal(result.status, 0, result.stderr);
+});
+
+test('keeps a running turn active while its provider session is running', () => {
+  // T3 Code stamps completed_at on a running turn when a mid-turn checkpoint
+  // diff completes; only the session leaving running settles the turn.
+  const result = runProbe({
+    turns: [{ state: 'running', requestedAt: minutesAgo(60), completedAt: minutesAgo(59) }],
+    sessions: [{ status: 'running', activeTurnId: 'turn-1' }],
+  });
+  assert.equal(result.status, 1, result.stderr);
+});
+
+test('treats a starting or running session as active without a turn row', () => {
+  const starting = runProbe({ sessions: [{ status: 'starting' }] });
+  assert.equal(starting.status, 1, starting.stderr);
+
+  const running = runProbe({ sessions: [{ status: 'running' }] });
+  assert.equal(running.status, 1, running.stderr);
+});
+
+test('does not treat a ready or stopped session as active', () => {
+  const ready = runProbe({ sessions: [{ status: 'ready' }] });
+  assert.equal(ready.status, 0, ready.stderr);
+
+  const stopped = runProbe({ sessions: [{ status: 'stopped' }] });
+  assert.equal(stopped.status, 0, stopped.stderr);
 });
 
 test('protects a newly submitted pending turn during the dispatch grace period', () => {

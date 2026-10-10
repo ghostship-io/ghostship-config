@@ -167,6 +167,7 @@
       "original": {
         "owner": "owner",
         "repo": "ghostship-agent",
+        "rev": "666b5ac4a2380a52a572f337078fd804576cf537",
         "type": "github"
       }
     },
