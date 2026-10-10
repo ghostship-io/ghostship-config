@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.56
+
+- Pin MCP 0.8.11 typed retailer failure outcomes with conservative interrupted-mutation uncertainty and no replay. Retailer and cached client acceptance remain incomplete.
+
 ## 3.15.55
 
 - Pin MCP 0.8.10 fresh-price/condition/eligibility evidence and concurrent job-store initialization fixes. Full retailer and cached client acceptance remain pending.
