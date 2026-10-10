@@ -56,6 +56,27 @@ def enforce_access_only_auth(call, password):
     call("setSettings", (settings, password))
 
 
+def reconcile_ntfy_notification(call, notifications, password):
+    existing = next(
+        (n for n in notifications if n["name"] == "Ghostship ntfy"), None
+    )
+    settings = {
+        "name": "Ghostship ntfy",
+        "type": "ntfy",
+        "isDefault": False,
+        "ntfyserverurl": "http://ntfy:8080",
+        "ntfytopic": "operations",
+        "ntfyAuthenticationMethod": "usernamePassword",
+        "ntfyusername": "publisher",
+        "ntfypassword": password,
+        "ntfyPriority": 3,
+    }
+    if existing is not None and existing["type"] != "ntfy":
+        raise RuntimeError("Managed ntfy notification changed type")
+    notification_id = existing["id"] if existing is not None else None
+    return call("addNotification", (settings, notification_id))["id"]
+
+
 def main():
     client = socketio.Client(request_timeout=15, reconnection=False)
     monitors = {}
@@ -97,30 +118,9 @@ def main():
         call("getMonitorList")
         if not monitor_event.wait(15) or not notification_event.wait(15):
             raise RuntimeError("Kuma did not provide its configuration lists")
-        notification = next(
-            (n for n in notifications if n["name"] == "Ghostship ntfy"), None
+        notification_id = reconcile_ntfy_notification(
+            call, notifications, os.environ["NTFY_PUBLISH_PASSWORD"]
         )
-        if notification is None:
-            result = call(
-                "addNotification",
-                (
-                    {
-                        "name": "Ghostship ntfy",
-                        "type": "ntfy",
-                        "isDefault": False,
-                        "ntfyserverurl": "http://ntfy:8080",
-                        "ntfytopic": "operations",
-                        "ntfyAuthenticationMethod": "usernamePassword",
-                        "ntfyusername": "publisher",
-                        "ntfypassword": os.environ["NTFY_PUBLISH_PASSWORD"],
-                        "ntfyPriority": 3,
-                    },
-                    None,
-                ),
-            )
-            notification_id = result["id"]
-        else:
-            notification_id = notification["id"]
         registry = json.loads(Path(sys.argv[1]).read_text())
         current_app_names = {app["name"] for app in registry.values()}
         for monitor in monitors.values():

@@ -18,6 +18,18 @@ heartbeats = load(
 
 
 class MonitoringTests(unittest.TestCase):
+    def test_existing_ntfy_notification_is_updated_without_changing_its_id(self):
+        api = Mock(return_value={"id": 7})
+        notification_id = provision.reconcile_ntfy_notification(
+            api, [{"name": "Ghostship ntfy", "id": 7, "type": "ntfy",
+                   "ntfyserverurl": "http://ntfy"}], "rotated-password"
+        )
+        self.assertEqual(notification_id, 7)
+        event, (settings, existing_id) = api.call_args.args
+        self.assertEqual((event, existing_id), ("addNotification", 7))
+        self.assertEqual(settings["ntfyserverurl"], "http://ntfy:8080")
+        self.assertEqual(settings["ntfypassword"], "rotated-password")
+
     def test_populated_fleet_login_burst_can_be_decoded(self):
         # Login sends multiple heartbeat/stat events per monitor before its ACK.
         burst = Payload(

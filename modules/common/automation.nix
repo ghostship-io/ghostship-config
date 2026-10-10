@@ -34,10 +34,11 @@ in
       };
 
       systemd.services.nixos-upgrade = {
-        # A switch retried after an interrupted upgrade is idempotent; only
-        # avoid starting while a backup holds the maintenance lock.
-        preStart = ''
-          ${pkgs.util-linux}/bin/flock -w 3600 /run/ghostship-maintenance.lock true
+        # Keep the backup lock for the entire build and switch, rather than
+        # releasing it in a separate pre-start process.
+        script = lib.mkBefore ''
+          exec 9>/run/ghostship-maintenance.lock
+          ${pkgs.util-linux}/bin/flock -w 3600 9 || exit 1
         '';
       };
     })

@@ -218,10 +218,9 @@ class OpenCodePrune(unittest.TestCase):
             opencode_prune.should_prune(metrics, event_bytes=1000, event_rows=100)
         )
 
-    def test_rebuild_keeps_projected_rows_and_clears_events(self):
+    def test_prune_keeps_live_writers_and_projected_rows(self):
         with tempfile.TemporaryDirectory() as directory:
             src = Path(directory) / "opencode.db"
-            dst = Path(directory) / "opencode.db.new"
             import sqlite3
 
             con = sqlite3.connect(src)
@@ -237,18 +236,37 @@ class OpenCodePrune(unittest.TestCase):
                 INSERT INTO message VALUES ('m1','s1','body');
                 """
             )
-            con.close()
-            result = opencode_prune.rebuild_without_events(src, dst)
-            check = sqlite3.connect(dst)
+            inode = src.stat().st_ino
+            result = opencode_prune.prune_in_place(src)
+            self.assertEqual(src.stat().st_ino, inode)
+            # A connection opened before maintenance must still write to the
+            # database the application reopens afterward.
+            con.execute("INSERT INTO message VALUES ('m2','s1','new body')")
+            con.commit()
+            check = sqlite3.connect(src)
             self.assertEqual(check.execute("SELECT COUNT(*) FROM event").fetchone()[0], 0)
             self.assertEqual(
                 check.execute("SELECT COUNT(*) FROM event_sequence").fetchone()[0], 0
             )
             self.assertEqual(check.execute("SELECT COUNT(*) FROM session").fetchone()[0], 1)
-            self.assertEqual(check.execute("SELECT COUNT(*) FROM message").fetchone()[0], 1)
+            self.assertEqual(check.execute("SELECT COUNT(*) FROM message").fetchone()[0], 2)
             self.assertEqual(check.execute("PRAGMA quick_check").fetchone()[0], "ok")
             self.assertGreater(result["kept_rows"], 0)
             check.close()
+            con.close()
+
+    def test_prune_defers_while_another_writer_holds_the_lock(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "opencode.db"
+            writer = sqlite3.connect(path)
+            try:
+                writer.executescript("CREATE TABLE event (id INTEGER); INSERT INTO event VALUES (1);")
+                writer.execute("BEGIN IMMEDIATE")
+                self.assertIsNone(opencode_prune.prune_in_place(path))
+                self.assertEqual(writer.execute("SELECT COUNT(*) FROM event").fetchone()[0], 1)
+            finally:
+                writer.close()
 
 
 class RetentionSource(unittest.TestCase):

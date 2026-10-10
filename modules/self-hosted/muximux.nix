@@ -278,7 +278,7 @@ let
         }
 
         location /ws/socket.io/ {
-            proxy_pass http://$romm_upstream/ws/socket.io/;
+            proxy_pass http://$romm_upstream;
             proxy_http_version 1.1;
             proxy_set_header Host romm:8080;
             proxy_set_header X-Forwarded-Host $host;

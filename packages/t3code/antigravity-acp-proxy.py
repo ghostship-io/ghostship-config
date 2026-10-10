@@ -95,6 +95,8 @@ def main() -> int:
                 with suppression_lock:
                     suppress = (
                         message is not None
+                        and "method" not in message
+                        and (("result" in message) != ("error" in message))
                         and message.get("id") in suppressed_response_ids
                     )
                     if suppress:

@@ -7,6 +7,16 @@
 
 let
   romm-secrets = config.ghostship.selfHostedSecrets.projections."romm-db".path;
+  migrateRootPassword = pkgs.writeShellApplication {
+    name = "romm-db-root-password";
+    runtimeInputs = [
+      pkgs.python3
+      pkgs.podman
+    ];
+    text = ''
+      exec python3 ${./romm-db-password.py} ${config.ghostship.selfHostedSecrets.units.romm-db-admin.path}
+    '';
+  };
 in
 {
   ghostship.apps.romm-db = {
@@ -37,7 +47,6 @@ in
       PGID = "3000";
       TZ = "UTC";
       MYSQL_ROOT_HOST = "127.0.0.1";
-      MYSQL_ALLOW_EMPTY_PASSWORD = "yes";
       MYSQL_DATABASE = "romm";
       CLI_OPTS = "--log-bin-trust-function-creators=1";
     };
@@ -61,9 +70,11 @@ in
     touch "$ENV_FILE"
 
     romm_db_args=(
+      --require-secrets
       --secrets-file "${romm-secrets}"
       MYSQL_USER=env:ROMM_DB_USER
       MYSQL_PASSWORD=env:ROMM_DB_PASS
+      MYSQL_ROOT_PASSWORD=env:MYSQL_ROOT_PASSWORD
     )
 
     ${pkgs.ghostship-config}/bin/ghostship-config set "$ENV_FILE" "''${romm_db_args[@]}"
@@ -71,4 +82,5 @@ in
     chown 3000:3000 "$ENV_FILE"
     chmod 600 "$ENV_FILE"
   '';
+  systemd.services.podman-romm-db.postStart = lib.getExe migrateRootPassword;
 }

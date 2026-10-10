@@ -66,6 +66,13 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${cloakbrowser-extensions}";
+      User = "apps";
+      Group = "apps";
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      ReadWritePaths = [ "/srv/apps/cloakbrowser/data/extensions" ];
     };
   };
 

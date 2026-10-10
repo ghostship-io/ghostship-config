@@ -113,7 +113,7 @@ let
               public_key="$(printf '%s' "$private_key" | ${pkgs.wireguard-tools}/bin/wg pubkey)"
 
               addkey_json="$(
-                curl -4 -fsS             --connect-to "$wg_host::$wg_ip:"             --cacert "$ca_cert"             --get             --data-urlencode "pt=$token"             --data-urlencode "pubkey=$public_key"             --max-time 10             "https://$wg_host:1337/addKey" 2>/dev/null
+                PIA_CURL_TOKEN="$token" python3 ${./gluetun-curl-secrets.py} add-key | curl --config - -4 -fsS             --connect-to "$wg_host::$wg_ip:"             --cacert "$ca_cert"             --get              --data-urlencode "pubkey=$public_key"             --max-time 10             "https://$wg_host:1337/addKey" 2>/dev/null
               )" || return 1
 
               if [ "$(printf '%s' "$addkey_json" | jq -r '.status // empty')" != "OK" ]; then
@@ -210,7 +210,7 @@ let
             fi
 
             token="$(
-              curl -fsSL --request POST           https://www.privateinternetaccess.com/api/client/v2/token           --form "username=$pia_user"           --form "password=$pia_pass"           | jq -r '.token // empty'
+              PIA_CURL_USER="$pia_user" PIA_CURL_PASSWORD="$pia_pass" python3 ${./gluetun-curl-secrets.py} token | curl --config - -fsSL --request POST           https://www.privateinternetaccess.com/api/client/v2/token           | jq -r '.token // empty'
             )"
             if [ -z "$token" ]; then
               fail_or_keep_cache "Failed to obtain a PIA token for server selection"
@@ -332,7 +332,7 @@ let
             switch_required=0
             if [ -z "$current_host" ]; then
               switch_required=1
-            elif [ "$current_region_name" != "$preferred_region_name" ]; then
+            elif [[ "$current_region_name" != *"$preferred_region_name"* ]]; then
               switch_required=1
             elif [ "$current_benchmark_url" != "$benchmark_url" ]; then
               switch_required=1
@@ -400,6 +400,7 @@ let
       coreutils
       curl
       jq
+      python3
       wireguard-tools
     ];
     text = ''
@@ -445,7 +446,9 @@ let
             jq -c '
               [.winner] + (.fallbacks // []) + (.top_servers // [])
               | map(select(.wg_ip != null and .wg_host != null))
-              | unique_by(.wg_host)
+              | reduce .[] as $candidate ([];
+                  if any(.[]; .wg_host == $candidate.wg_host) then .
+                  else . + [$candidate] end)
               | .[]
             ' "$cache_file" > "$candidates_file"
             if [ ! -s "$candidates_file" ]; then
@@ -454,10 +457,9 @@ let
             fi
 
             token="$(
-              curl -fsSL --request POST \
+              PIA_CURL_USER="$pia_user" PIA_CURL_PASSWORD="$pia_pass" python3 ${./gluetun-curl-secrets.py} token | \
+                curl --config - -fsSL --request POST \
                 https://www.privateinternetaccess.com/api/client/v2/token \
-                --form "username=$pia_user" \
-                --form "password=$pia_pass" \
               | jq -r '.token // empty'
             )"
             if [ -z "$token" ]; then
@@ -482,13 +484,13 @@ let
                 continue
               fi
               wireguard_json="$(
-                curl -4 -fsSL \
+                PIA_CURL_TOKEN="$token" python3 ${./gluetun-curl-secrets.py} add-key | \
+                curl --config - -4 -fsSL \
                   --connect-timeout 10 \
                   --max-time 20 \
                   --connect-to "$wg_host::$wg_ip:" \
                   --cacert "$ca_cert" \
                   --get \
-                  --data-urlencode "pt=$token" \
                   --data-urlencode "pubkey=$public_key" \
                   "https://$wg_host:1337/addKey" 2>/dev/null
               )" || {
@@ -556,7 +558,9 @@ let
                     })
                   | .fallbacks = (((.fallbacks // []) + (.top_servers // []))
                       | map(select(.wg_host != $winner.wg_host))
-                      | unique_by(.wg_host))' \
+                      | reduce .[] as $candidate ([];
+                          if any(.[]; .wg_host == $candidate.wg_host) then .
+                          else . + [$candidate] end))' \
                 "$cache_file" > "$cache_file.tmp"
               mv "$cache_file.tmp" "$cache_file"
               chmod 600 "$cache_file"

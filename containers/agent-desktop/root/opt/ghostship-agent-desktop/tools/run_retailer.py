@@ -194,7 +194,7 @@ def stats(text, products=None):
 
 def title_from_nav(output):
     match = re.search(r"title:\s*(.+)", output or "")
-    return match.group(1).strip() if match else None
+    return match.group(1).strip() if match else ""
 
 
 def parse_bladebro_extract(output):
@@ -234,7 +234,7 @@ def run_bladebro(args, out_dir, results):
             "driver": "bladebro",
             "step": "home",
             "exit": code,
-            "result": classify(title_from_nav(output) + "\n" + home_text, None),
+            "result": classify(title_from_nav(output) + "\n" + home_text, None) if code == 0 else "command_failed",
             "title": title_from_nav(output),
             "stats": stats(home_text),
         }
@@ -244,11 +244,14 @@ def run_bladebro(args, out_dir, results):
     time.sleep(5)
     search_text = send_bladebro_text(home)
     search_title = title_from_nav(output)
+    navigation_code = code
     code, extract_output = bladebro(home, ["see", "extract", "auto", "--port", str(PORT)])
     parsed = parse_bladebro_extract(extract_output)
     extraction_ok = len(parsed["products"]) >= 3 and any(item.get("price") for item in parsed["items"])
     search_result = classify(search_title + "\n" + search_text, "search")
-    if search_result == "incomplete" and extraction_ok:
+    if navigation_code != 0 or code != 0:
+        search_result = "command_failed"
+    elif search_result == "incomplete" and extraction_ok:
         search_result = "ok"
     results.append(
         {
@@ -274,7 +277,7 @@ def run_bladebro(args, out_dir, results):
                 "step": "product",
                 "exit": code,
                 "url": product_url,
-                "result": classify(title_from_nav(output) + "\n" + product_text, "product"),
+                "result": classify(title_from_nav(output) + "\n" + product_text, "product") if code == 0 else "command_failed",
                 "title": title_from_nav(output),
                 "stats": stats(product_text),
                 "screenshot": screenshot(out_dir, "bladebro-product"),
@@ -298,7 +301,7 @@ def run_bladebro(args, out_dir, results):
             "driver": "bladebro",
             "step": "reload",
             "exit": code,
-            "result": classify(title_from_nav(output) + "\n" + reload_text, "product"),
+            "result": classify(title_from_nav(output) + "\n" + reload_text, "product") if code == 0 else "command_failed",
         }
     )
     stop(process, profile)

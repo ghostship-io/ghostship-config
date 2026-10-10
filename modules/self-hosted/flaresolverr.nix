@@ -1,4 +1,10 @@
-{ ... }:
+{ pkgs, ... }:
+
+let
+  egressRules = pkgs.writeText "flaresolverr-egress.nft" (
+    builtins.readFile ./flaresolverr-egress.nft
+  );
+in
 
 {
   ghostship.apps.flaresolverr = {
@@ -22,6 +28,9 @@
     };
     extraOptions = [
       "--network=ghostship_net"
+      "--ip=10.89.0.16"
+      "--mac-address=02:89:00:00:00:16"
+      "--cap-drop=NET_RAW,NET_ADMIN"
       "--health-cmd=curl -f --connect-timeout 5 http://127.0.0.1:8191/ || exit 1"
       "--health-interval=30s"
       "--health-timeout=10s"
@@ -33,6 +42,24 @@
       TZ = "UTC";
       LOG_LEVEL = "info";
     };
+  };
+
+  # Keep the internal API reachable, but deny new outbound connections to
+  # private services. Bridge filtering also covers peers on the same network.
+  systemd.services.flaresolverr-egress = {
+    before = [ "podman-flaresolverr.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${pkgs.nftables}/bin/nft -f ${egressRules}";
+      ExecStop = "${pkgs.nftables}/bin/nft destroy table inet ghostship_flaresolverr";
+      ExecStopPost = "${pkgs.nftables}/bin/nft destroy table bridge ghostship_flaresolverr";
+    };
+  };
+  systemd.services.podman-flaresolverr = {
+    requires = [ "flaresolverr-egress.service" ];
+    after = [ "flaresolverr-egress.service" ];
+    bindsTo = [ "flaresolverr-egress.service" ];
   };
 
   systemd.tmpfiles.rules = [
