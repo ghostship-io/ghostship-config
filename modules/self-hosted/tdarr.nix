@@ -226,7 +226,7 @@ let
 
       node_config=/srv/apps/tdarr/configs/Tdarr_Node_Config.json
       if test -f "$node_config"; then
-        python3 -c '
+        ${pkgs.util-linux}/bin/runuser -u apps -g apps -- python3 -c '
 import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
 data = json.loads(path.read_text())

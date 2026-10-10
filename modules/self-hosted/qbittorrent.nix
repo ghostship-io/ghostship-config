@@ -32,9 +32,13 @@ let
       fi
     fi
 
+    # All mutations beneath the application-owned tree run without host root.
+    if [ "$(${pkgs.coreutils}/bin/id -u)" = 0 ]; then
+      exec ${pkgs.util-linux}/bin/runuser -u apps -g apps -- "$0"
+    fi
+
     # 1. Ensure directories exist
     mkdir -p "$CONFIG_DIR/qBittorrent"
-    chown -R 3000:3000 "$CONFIG_DIR"
 
     # 2. Remove the legacy manual VueTorrent download state. The supported
     # Nix store mount now supplies the UI inside the container.
@@ -93,7 +97,8 @@ let
     TUN_INTERFACE="tun0"
     TUN_IP=""
 
-    ${pkgs.coreutils}/bin/install -d -m 0777 "$DOWNLOAD_TEMP_DIR"
+    ${pkgs.util-linux}/bin/runuser -u apps -g apps -- \
+      ${pkgs.coreutils}/bin/install -d -m 0777 "$(dirname "$DOWNLOAD_TEMP_DIR")" "$DOWNLOAD_TEMP_DIR"
 
     if [ ! -f "$CONFIG_FILE" ]; then
       exit 0
@@ -118,16 +123,19 @@ let
       BitTorrent.Session\\InterfaceAddress=literal:$TUN_IP
     )
 
-    ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_bind_args[@]}"
-    ${pkgs.gnused}/bin/sed -i 's/^WebUI\\Address = /WebUI\\Address=/' "$CONFIG_FILE"
-    ${pkgs.coreutils}/bin/rm -f "$LOCK_FILE"
+    ${pkgs.util-linux}/bin/runuser -u apps -g apps -- \
+      ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${vt_bind_args[@]}"
+    ${pkgs.util-linux}/bin/runuser -u apps -g apps -- \
+      ${pkgs.gnused}/bin/sed -i 's/^WebUI\\Address = /WebUI\\Address=/' "$CONFIG_FILE"
+    ${pkgs.util-linux}/bin/runuser -u apps -g apps -- ${pkgs.coreutils}/bin/rm -f "$LOCK_FILE"
     echo "Primed qBittorrent binding for $TUN_INTERFACE/$TUN_IP before startup."
   '';
   qbittorrent-auto-resume-script = pkgs.writeShellScriptBin "qbittorrent-auto-resume" ''
     #!/bin/sh
     set -eu
 
-    STATE_DIR="/srv/apps/qbittorrent"
+    # Keep root-written state outside the container's writable configuration.
+    STATE_DIR="/var/lib/qbittorrent-auto-resume"
     STATE_FILE="$STATE_DIR/auto-resume-attempts.json"
     QBT_API="http://127.0.0.1:5000/api/v2"
 
@@ -275,6 +283,8 @@ in
         serviceConfig = {
           Type = "oneshot";
           ExecStart = "${qbittorrent-auto-resume-script}/bin/qbittorrent-auto-resume";
+          StateDirectory = "qbittorrent-auto-resume";
+          StateDirectoryMode = "0700";
         };
       };
 

@@ -35,6 +35,12 @@ class AntigravityAcpProxyTest(unittest.TestCase):
                             print(json.dumps({
                                 "jsonrpc": "2.0",
                                 "id": 1,
+                                "method": "session/request_permission",
+                                "params": {},
+                            }), flush=True)
+                            print(json.dumps({
+                                "jsonrpc": "2.0",
+                                "id": 1,
                                 "result": {"delayedInitialize": True},
                             }), flush=True)
                             print(json.dumps({
@@ -68,12 +74,14 @@ class AntigravityAcpProxyTest(unittest.TestCase):
         responses = [json.loads(line) for line in result.stdout.splitlines()]
         self.assertEqual(responses[0]["id"], 1)
         self.assertEqual(responses[0]["result"]["protocolVersion"], 1)
-        self.assertEqual(responses[1]["id"], 2)
+        self.assertEqual(responses[1]["method"], "session/request_permission")
+        self.assertEqual(responses[1]["id"], 1)
+        self.assertEqual(responses[2]["id"], 2)
         self.assertEqual(
-            responses[1]["result"]["methods"],
+            responses[2]["result"]["methods"],
             ["initialize", "initialized", "session/new"],
         )
-        self.assertEqual(responses[1]["result"]["initializedCount"], 1)
+        self.assertEqual(responses[2]["result"]["initializedCount"], 1)
 
     def test_exits_when_agent_exits_while_client_stdin_remains_open(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

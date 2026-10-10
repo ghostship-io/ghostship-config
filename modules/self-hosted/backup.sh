@@ -89,7 +89,8 @@ for app in romm grimmory; do
     fi
 done
 # SQLite applications recover their atomically captured DB + WAL together.
-timeout 120 podman exec romm-db mariadb-dump --user=root --single-transaction --routines --events --all-databases > "$state/exports/romm.sql"
+# shellcheck disable=SC2016
+timeout 120 podman exec romm-db sh -c 'export MYSQL_PWD="$MYSQL_ROOT_PASSWORD"; exec mariadb-dump --user=root --single-transaction --routines --events --all-databases' > "$state/exports/romm.sql"
 # Expand the database password inside its container, never in the host shell.
 # shellcheck disable=SC2016
 timeout 120 podman exec grimmory-db sh -c 'export MYSQL_PWD="$MYSQL_ROOT_PASSWORD"; exec mariadb-dump --user=root --single-transaction --routines --events --all-databases' > "$state/exports/grimmory.sql"

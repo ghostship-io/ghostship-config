@@ -58,7 +58,12 @@ let
   '';
 
   agent-desktop-mcp = pkgs.writeShellScriptBin "ghostship-agent-desktop-mcp" ''
-    exec ${pkgs.python3.withPackages (ps: [ ps.json5 ps.tomli-w ])}/bin/python3 \
+    exec ${
+      pkgs.python3.withPackages (ps: [
+        ps.json5
+        ps.tomli-w
+      ])
+    }/bin/python3 \
       ${./agent-desktop-mcp.py} "$@"
   '';
 in
@@ -180,6 +185,12 @@ in
       Restart = "on-failure";
       RestartSec = 15;
       UMask = "0077";
+      User = "apps";
+      Group = "apps";
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      ReadWritePaths = [ "/srv/apps/t3code/home" ];
     };
     script = ''
       exec ${agent-desktop-mcp}/bin/ghostship-agent-desktop-mcp \

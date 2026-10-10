@@ -166,7 +166,6 @@ in {
       after = [ "podman-t3code.service" ];
       serviceConfig = {
         Type = "oneshot";
-        RemainAfterExit = true;
         ExecStart = pkgs.writeShellScript "ghostship-t3-bridge" ''
           set -eu
           umask 077

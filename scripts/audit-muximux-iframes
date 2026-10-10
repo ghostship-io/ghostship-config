@@ -56,6 +56,15 @@ done
 
 cd "$repo_root"
 
+python3 - "$url" <<'PY'
+import sys
+from urllib.parse import urlsplit
+url = urlsplit(sys.argv[1])
+if (url.scheme != "https" or url.username or url.password or url.port not in (None, 443)
+        or not (url.hostname or "").endswith(".ghostship.io")):
+    raise SystemExit("Audit URL must be an HTTPS Ghostship service hostname")
+PY
+
 if [ ! -f .envrc ]; then
   echo "Missing .envrc with Cloudflare Access credentials" >&2
   exit 1
@@ -96,20 +105,8 @@ if [ ! -d "$cache_root/node_modules/playwright" ]; then
   )
 fi
 
-headers_json="$(
-  python3 - <<'PY'
-import json
-import os
-
-print(json.dumps({
-    "CF-Access-Client-Id": os.environ["CF_ACCESS_CLIENT_ID"],
-    "CF-Access-Client-Secret": os.environ["CF_ACCESS_CLIENT_SECRET"],
-}))
-PY
-)"
-
 echo "Opening $url through agent-browser session '$session'..."
-AGENT_BROWSER_SESSION="$session" agent-browser --headers "$headers_json" --ignore-https-errors open "$url" >/dev/null
+AGENT_BROWSER_SESSION="$session" agent-browser open about:blank >/dev/null
 AGENT_BROWSER_SESSION="$session" agent-browser wait 2500 >/dev/null
 cdp_url="$(AGENT_BROWSER_SESSION="$session" agent-browser get cdp-url)"
 
@@ -157,11 +154,28 @@ function classify(result) {
 
 (async () => {
   const browser = await chromium.connectOverCDP(cdpUrl);
-  const context = browser.contexts()[0];
-  let page = context.pages().find(candidate => candidate.url().startsWith(targetUrl));
-  if (!page) page = context.pages()[0];
-
-  await page.setExtraHTTPHeaders(headers);
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await context.route('**/*', async route => {
+    const request = route.request();
+    const requestHeaders = { ...request.headers() };
+    delete requestHeaders['cf-access-client-id'];
+    delete requestHeaders['cf-access-client-secret'];
+    const requestUrl = new URL(request.url());
+    const trusted = requestUrl.protocol === 'https:'
+      && requestUrl.hostname.endsWith('.ghostship.io')
+      && (!requestUrl.port || requestUrl.port === '443');
+    if (!trusted) {
+      await route.continue({ headers: requestHeaders });
+      return;
+    }
+    // Fetch a single hop. Fulfilling redirects makes the browser issue a new
+    // intercepted request, so credentials never follow a redirect off-site.
+    const response = await route.fetch({
+      headers: { ...requestHeaders, ...headers }, maxRedirects: 0,
+    });
+    await route.fulfill({ response });
+  });
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await sleep(2500);
 

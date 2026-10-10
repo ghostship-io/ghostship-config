@@ -9,6 +9,7 @@ let
   dockerhub-secrets = config.ghostship.selfHostedSecrets.projections.dockerhub.path;
   dockerhub-auth-script = pkgs.writeShellScriptBin "podman-dockerhub-auth" ''
         set -eu
+        umask 077
 
         if [ ! -f "${dockerhub-secrets}" ]; then
           echo "Waiting for Docker Hub secrets at ${dockerhub-secrets}..."
@@ -84,7 +85,7 @@ in
           };
           script = ''
             ${pkgs.podman}/bin/podman network inspect ghostship_net >/dev/null 2>&1 || \
-            ${pkgs.podman}/bin/podman network create ghostship_net
+            ${pkgs.podman}/bin/podman network create --subnet 10.89.0.0/24 ghostship_net
           '';
         };
 
