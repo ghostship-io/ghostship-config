@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.59
+
+- Pin MCP 0.8.14 accessible role actions and foreground native-input isolation; DOM reads remain parallel. Full retailer/Google/consumer acceptance remains pending.
+
 ## 3.15.58
 
 - Pin MCP 0.8.13 Target native title/identity extraction and unknown variant price ranges. Full retailer/Google/consumer acceptance remains pending.
