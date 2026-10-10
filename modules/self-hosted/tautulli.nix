@@ -71,6 +71,7 @@ in
         ${render-tautulli-secrets}
 
         tautulli_args=(
+          --require-secrets
           --secrets-file "${tautulli-secrets}"
           General.first_run_complete=literal:1
           General.http_proxy=literal:1

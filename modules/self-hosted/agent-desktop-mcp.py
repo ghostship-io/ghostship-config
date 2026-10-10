@@ -14,6 +14,7 @@ import pathlib
 import shutil
 import stat
 import sys
+import tempfile
 import time
 
 import json5
@@ -49,17 +50,28 @@ def file_mode(path, default=0o644):
 def write_file(path, data, uid, gid, mode=None):
     if mode is None:
         mode = file_mode(path, 0o600)
-    tmp = f"{path}.tmp.{os.getpid()}"
-    with open(tmp, "w", encoding="utf-8") as handle:
-        handle.write(data)
-    os.chown(tmp, uid, gid)
-    os.chmod(tmp, mode)
-    os.replace(tmp, path)
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            os.fchown(handle.fileno(), uid, gid)
+            os.fchmod(handle.fileno(), mode)
+            handle.write(data)
+        os.replace(tmp, path)
+    finally:
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
 
 
 def backup(path):
-    if path.exists() and not path.with_name(path.name + ".pre-bladebro").exists():
-        shutil.copy2(path, path.with_name(path.name + ".pre-bladebro"))
+    if not path.exists():
+        return
+    destination = path.with_name(path.name + ".pre-bladebro")
+    try:
+        fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    except FileExistsError:
+        return
+    with os.fdopen(fd, "wb") as output, path.open("rb") as source:
+        shutil.copyfileobj(source, output)
 
 
 def wrapper_path(home, identity):
@@ -245,6 +257,13 @@ def main():
     parser.add_argument("--gid", type=int, default=3000)
     parser.add_argument("--wait", type=int, default=180)
     args = parser.parse_args()
+
+    # Never traverse a container-writable home with host-root privileges,
+    # including when this helper is invoked outside its systemd service.
+    if os.geteuid() == 0:
+        os.setgroups([])
+        os.setgid(args.gid)
+        os.setuid(args.uid)
 
     home = pathlib.Path(args.home).resolve()
     host_key = pathlib.Path(args.host_key)

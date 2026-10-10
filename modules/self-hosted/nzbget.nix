@@ -100,6 +100,8 @@
           Server1.Cipher=literal:TLS_AES_256_GCM_SHA384
           Server1.Connections=literal:30
           Server2.Active=literal:no
+          Server2.Username=literal:""
+          Server2.Password=literal:""
           ArticleCache=literal:500
           DirectWrite=literal:no
           ScriptDir=literal:/scripts
@@ -126,7 +128,7 @@
         ${pkgs.ghostship-config}/bin/ghostship-config set "$CONFIG_FILE" "''${nzb_args[@]}"
 
         chown 3000:3000 "$CONFIG_FILE"
-        chmod 644 "$CONFIG_FILE"
+        chmod 600 "$CONFIG_FILE"
       fi
     '';
   };

@@ -32,7 +32,10 @@ in
     };
     ghostship-relay = mkUnit {
       relativeFile = "secrets/files/sources/services/ghostship-relay.env.age";
-      exports = [ "TUNNEL_ID" "API_KEY" ];
+      exports = [
+        "TUNNEL_ID"
+        "API_KEY"
+      ];
     };
     backup = mkUnit {
       relativeFile = "secrets/files/sources/services/backup.env.age";
@@ -188,6 +191,11 @@ in
       ];
     };
 
+    romm-db-admin = mkUnit {
+      relativeFile = "secrets/files/sources/services/romm-db-admin.env.age";
+      exports = [ "MYSQL_ROOT_PASSWORD" ];
+    };
+
     romm = mkUnit {
       relativeFile = "secrets/files/sources/services/romm.env.age";
       exports = [
@@ -257,10 +265,18 @@ in
   projections = {
     ghostship-relay = {
       fileName = "ghostship-relay.env";
-      owner = "root"; group = "root"; mode = "0400";
+      owner = "root";
+      group = "root";
+      mode = "0400";
       fields = {
-        TUNNEL_ID = { unit = "ghostship-relay"; key = "TUNNEL_ID"; };
-        API_KEY = { unit = "ghostship-relay"; key = "API_KEY"; };
+        TUNNEL_ID = {
+          unit = "ghostship-relay";
+          key = "TUNNEL_ID";
+        };
+        API_KEY = {
+          unit = "ghostship-relay";
+          key = "API_KEY";
+        };
       };
     };
     backup = {
@@ -781,6 +797,10 @@ in
       group = "apps";
       mode = "0440";
       fields = {
+        MYSQL_ROOT_PASSWORD = {
+          unit = "romm-db-admin";
+          key = "MYSQL_ROOT_PASSWORD";
+        };
         ROMM_DB_USER = {
           unit = "romm";
           key = "DB_USER";

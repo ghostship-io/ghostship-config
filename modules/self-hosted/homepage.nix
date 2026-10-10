@@ -8,6 +8,9 @@
 let
   homepage-secrets = config.ghostship.selfHostedSecrets.projections.homepage.path;
   render-homepage-secrets = "${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project homepage";
+  brokerConfig = pkgs.writeText "homepage-podman-broker.conf" (
+    builtins.readFile ./homepage-podman-broker.conf
+  );
 in
 
 {
@@ -37,7 +40,6 @@ in
     user = "3000:3000";
     extraOptions = [
       "--network=ghostship_net"
-      "--group-add=989"
       "--group-add=131"
       "--health-cmd=wget -q --spider --tries=1 --timeout=5 http://127.0.0.1:3000/ || exit 1"
       "--health-interval=30s"
@@ -52,11 +54,40 @@ in
     };
     volumes = [
       "/srv/apps/homepage:/app/config:rw"
-      "/run/podman/podman.sock:/var/run/podman.sock:ro"
+      "/run/homepage-podman-broker:/run/homepage-podman-broker:ro"
       "/sys/class/net:/sys/class/net:ro"
       "/sys/devices/platform:/sys/devices/platform:ro"
     ];
     environmentFiles = [ config.ghostship.selfHostedSecrets.projections.homepage.containerPath ];
+  };
+
+  systemd.services.homepage-podman-broker = {
+    description = "Restricted read-only Podman API for Homepage";
+    wantedBy = [ "multi-user.target" ];
+    requires = [ "podman.socket" ];
+    after = [ "podman.socket" ];
+    before = [ "podman-homepage.service" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.nginx}/bin/nginx -e stderr -p /run/homepage-podman-broker -c ${brokerConfig}";
+      Restart = "on-failure";
+      DynamicUser = true;
+      User = "homepage-podman-broker";
+      Group = "apps";
+      SupplementaryGroups = [ "podman" ];
+      RuntimeDirectory = "homepage-podman-broker";
+      RuntimeDirectoryMode = "0750";
+      UMask = "0007";
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      RestrictAddressFamilies = [ "AF_UNIX" ];
+      CapabilityBoundingSet = "";
+    };
+  };
+  systemd.services.podman-homepage = {
+    requires = [ "homepage-podman-broker.service" ];
+    after = [ "homepage-podman-broker.service" ];
   };
 
   systemd.tmpfiles.rules = [
@@ -139,7 +170,7 @@ in
       if [ -f "$DOCKER_FILE" ]; then
         echo "Surgically updating Homepage docker config..."
         docker_args=(
-          chill-penguin.socket=literal:/var/run/podman.sock
+          chill-penguin.socket=literal:/run/homepage-podman-broker/podman.sock
         )
         ${pkgs.ghostship-config}/bin/ghostship-config set "$DOCKER_FILE" "''${docker_args[@]}"
       fi
