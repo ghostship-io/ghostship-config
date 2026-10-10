@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.58
+
+- Pin MCP 0.8.13 Target native title/identity extraction and unknown variant price ranges. Full retailer/Google/consumer acceptance remains pending.
+
 ## 3.15.57
 
 - Pin MCP 0.8.12 fresh offer evidence, bounded parallel verification and compact job history. Full retailer/Google/consumer acceptance remains pending.
