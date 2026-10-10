@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.57
+
+- Pin MCP 0.8.12 fresh offer evidence, bounded parallel verification and compact job history. Full retailer/Google/consumer acceptance remains pending.
+
 ## 3.15.56
 
 - Pin MCP 0.8.11 typed retailer failure outcomes with conservative interrupted-mutation uncertainty and no replay. Retailer and cached client acceptance remain incomplete.
