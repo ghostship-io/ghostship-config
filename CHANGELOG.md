@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.15.64
+
+- Clear only Chrome tab/session restoration files before managed launch so an unclean exit also starts fresh. Preserve cookies, credentials, history, and site storage.
+
 ## 3.15.63
 
 - Start Agent Desktop Chrome with a fresh tab after relaunch while preserving profiles and sign-ins. Disable background mode, Memory Saver discarding, and background tab freezing for predictable browser workers.
