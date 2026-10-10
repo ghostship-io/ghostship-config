@@ -263,3 +263,11 @@ automated bypass works; record challenge behaviour honestly.
   where even clean CDP is challenged.
 - No fingerprint spoofing, extra browser framework, or custom orchestration
   layer is used; Chrome stays an ordinary desktop installation.
+
+
+Agent Desktop has a 4,096-task bound and a 16 GiB memory bound. Linux task
+counts include threads; parallel workers can exhaust the default 2,048-task
+bound before memory fills. Apply a task-bound change to the existing container
+with `podman update --pids-limit=4096 agent-desktop`, preserving its container
+identity and the active T3 session. Check `pids.current` and `pids.events` in the
+desktop cgroup when validating parallel workloads.

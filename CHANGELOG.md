@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.15.62
+
+- Pin Ghostship MCP 0.8.19: bounded worker RPC framing, guarded SSH startup, and private loopback OAuth callbacks. ChatGPT authentication remains deferred.
+- Set the Agent Desktop task bound to 4,096 under its existing 16 GiB memory bound after parallel browser workloads reached the default 2,048-task limit. Apply the task bound without restarting T3 or the desktop container.
+
 ## 3.15.61
 
 - Pin Ghostship MCP 0.8.17: resilient coding connections without tool replay, exact owned-tab lifecycle, and collector context support. ChatGPT authentication remains deferred.

@@ -118,6 +118,7 @@ in
       "--device=/dev/dri"
       "--shm-size=1g"
       "--memory=16g"
+      "--pids-limit=4096"
       "--health-cmd=/usr/bin/curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null"
       "--health-interval=30s"
       "--health-timeout=10s"
