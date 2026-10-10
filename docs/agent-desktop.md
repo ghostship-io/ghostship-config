@@ -209,7 +209,9 @@ podman exec -u 0 agent-desktop bladebro -v
 
 Chrome starts with a fresh New Tab page after relaunch. Managed policy
 `RestoreOnStartup=5` and the launcher omit session restoration; existing tabs
-are not reopened. Profile data and persistent sign-ins remain. This follows
+are not reopened. After stopping its profile, the launcher removes only tab/session
+restoration files to cover unclean exits too. Cookies, credentials, history,
+and site storage remain. This follows
 the user's October 10 request and supersedes the earlier session-restoration
 setting. The policy file is
 `containers/agent-desktop/root/etc/opt/chrome/policies/managed/ghostship-desktop.json`.
