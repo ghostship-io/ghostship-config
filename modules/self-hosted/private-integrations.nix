@@ -6,7 +6,7 @@ let
   tools = agent.packages.${system};
   # The deployment owns the shopping overlay (destination and retailer
   # enablement), supplied to the shared tools at runtime. Technical routing
-  # lives in ghostship-tools and is not copied here. The Keep broker is now an
+  # lives in the ghostship-agent platform and is not copied here. The Keep broker is now an
   # agent package, so the deployment has one platform input.
   privateAddons = agent.lib.mkPrivateIntegrations {
     inherit system;
