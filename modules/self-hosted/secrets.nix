@@ -15,9 +15,11 @@ let
       "shared-runtime"
     ]
   ) catalog.units;
-  projectionCatalog = lib.filterAttrs (
-    name: _: !(lib.hasPrefix "emulation-" name)
-  ) catalog.projections;
+  # Modules add consumer-scoped projections (for example the MCP service
+  # executor) through ghostship.secretProjections; names must not collide.
+  projectionCatalog =
+    lib.filterAttrs (name: _: !(lib.hasPrefix "emulation-" name)) catalog.projections
+    // config.ghostship.secretProjections;
   projectionDir = "/run/ghostship-secrets";
 
   mkAgeSecret =
@@ -67,6 +69,17 @@ let
   };
 in
 {
+  options.ghostship.secretProjections = lib.mkOption {
+    type = lib.types.attrsOf lib.types.attrs;
+    default = { };
+    description = ''
+      Additional secret projections in the secrets/catalog.nix projection
+      format. A field is either { unit, key } (a secret value) or { value }
+      (a non-secret literal such as a base URL). `raw = true` writes the main
+      file unquoted too, for dotenv readers that do not unquote shell syntax.
+    '';
+  };
+
   options.ghostship.selfHostedSecrets = lib.mkOption {
     type = lib.types.attrs;
     default = { };
@@ -74,6 +87,15 @@ in
   };
 
   config = {
+    assertions = [
+      {
+        assertion = lib.all (name: !(builtins.hasAttr name catalog.projections)) (
+          builtins.attrNames config.ghostship.secretProjections
+        );
+        message = "ghostship.secretProjections must not redefine a secrets/catalog.nix projection.";
+      }
+    ];
+
     age.identityPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
 
     age.secrets = lib.mapAttrs (_: meta: mkAgeSecret meta) unitCatalog;

@@ -33,16 +33,84 @@ let
     socket = "/run/ghostship-keep/operations.sock";
     model_uid = 62020;
   });
+  # Generic service executor (ghostship_services): one dotenv file per
+  # credential projection named in ghostship-agent's
+  # tools/python/ghostship_services/inventory.py, read at call time from
+  # /run/ghostship-secrets/<id>.env inside the container. The MCP server
+  # scrubs its environment, so each file also carries the service's base URL
+  # (the internal ghostship_net origin). Only executable inventory services
+  # are listed, each with only the variables the inventory declares; never
+  # add cloudflare-management or other broad projections here.
+  apps = config.ghostship.apps;
+  serviceCredentials = {
+    sonarr = { base = apps.sonarr.origin; secrets.SONARR_API_KEY = { unit = "sonarr"; key = "API_KEY"; }; };
+    radarr = { base = apps.radarr.origin; secrets.RADARR_API_KEY = { unit = "radarr"; key = "API_KEY"; }; };
+    prowlarr = { base = apps.prowlarr.origin; secrets.PROWLARR_API_KEY = { unit = "prowlarr"; key = "API_KEY"; }; };
+    # Bazarr's client keeps /api in its base URL.
+    bazarr = { base = apps.bazarr.origin + "/api"; secrets.BAZARR_API_KEY = { unit = "bazarr"; key = "API_KEY"; }; };
+    chaptarr = { base = apps.chaptarr.origin; secrets.CHAPTARR_API_KEY = { unit = "chaptarr"; key = "API_KEY"; }; };
+    pyload = { base = apps.pyload.origin; secrets.PYLOAD_API_KEY = { unit = "pyload"; key = "API_KEY"; }; };
+    romm = {
+      base = apps.romm.origin;
+      secrets = {
+        ROMM_USERNAME = { unit = "romm"; key = "USER"; };
+        ROMM_PASSWORD = { unit = "romm"; key = "PASS"; };
+      };
+    };
+    # qBittorrent trusts ghostship_net (AuthSubnetWhitelist); NZBGet's control
+    # password is empty; the ntfy adapter reads only the public health route.
+    qbittorrent = { base = apps.qbittorrent.origin; secrets = { }; };
+    nzbget = { base = apps.nzbget.origin; secrets = { }; };
+    ntfy = { base = apps.ntfy.origin; secrets = { }; };
+  };
+  serviceProjection = id: "ghostship-service-${id}";
+  serviceSecretsDir = "/run/ghostship-secrets/ghostship-services";
+  serviceProjections = lib.mapAttrs' (
+    id: svc:
+    lib.nameValuePair (serviceProjection id) {
+      fileName = "ghostship-services/${id}.env";
+      owner = "root";
+      group = "ghostship-mcp";
+      mode = "0440";
+      # The inventory's dotenv reader does not unquote shell syntax.
+      raw = true;
+      fields = svc.secrets // { "${lib.toUpper id}_BASE_URL".value = svc.base; };
+    }
+  ) serviceCredentials;
+
+  # Post-deploy skills reconciliation (docs/skills-distribution.md in
+  # ghostship-agent). The app pins the deployed flake source and revision.
+  skillsCli = agent.apps.${system}.ghostship-skills.program;
+  waitForMcpHealthy = pkgs.writeShellScript "ghostship-wait-mcp-healthy" ''
+    set -eu
+    for _ in $(seq 1 60); do
+      state=$(${pkgs.podman}/bin/podman inspect --format '{{.State.Health.Status}}' \
+        ghostship-private-integrations 2>/dev/null || true)
+      [ "$state" = healthy ] && exit 0
+      sleep 5
+    done
+    echo "ghostship-private-integrations did not become healthy" >&2
+    exit 1
+  '';
+
   render = pkgs.writeShellScript "ghostship-private-relay-render" ''
     set -eu
     ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-relay
+    for projection in ${lib.escapeShellArgs (builtins.attrNames serviceProjections)}; do
+      ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project "$projection"
+    done
     exec ${pkgs.python3}/bin/python3 ${./private-relay-render.py} \
       ${config.ghostship.selfHostedSecrets.projections.ghostship-relay.path} \
       ${privateAddons.runtime}/bin/ghostship-mcp
   '';
 in {
   options.ghostship.privateIntegrations.enable = lib.mkEnableOption "private Ghostship Keep and Amazon MCP gateway";
-  config = lib.mkIf cfg.enable {
+  options.ghostship.privateIntegrations.skillsReconcile.enable = lib.mkEnableOption ''
+    unattended ChatGPT skills publication after each ghostship-agent deploy
+    (package, publish-chatgpt, verify-chatgpt on the Assistant/personal
+    identity through the Agent Desktop). Off until the user approves
+    unattended publication from the host'';
+  config = lib.mkIf cfg.enable (lib.mkMerge [ {
     ghostship.apps.ghostship = {
       name = "Ghostship";
       container = "ghostship-private-integrations";
@@ -57,7 +125,9 @@ in {
       isSystemUser = true; uid = 62021; group = "ghostship-personal";
       extraGroups = [ "ghostship-mcp" ];
     };
+    ghostship.secretProjections = serviceProjections;
     systemd.tmpfiles.rules = [
+      "d ${serviceSecretsDir} 0750 root ghostship-mcp -"
       "d /run/ghostship-keep 0750 ghostship-personal ghostship-mcp -"
       "d /run/ghostship-integrations 0750 root ghostship-mcp -"
       "d /srv/apps/ghostship-private-integrations 0700 ghostship-mcp ghostship-mcp -"
@@ -210,6 +280,8 @@ in {
       volumes = [
         "/run/ghostship-integrations:/run/ghostship-integrations:ro"
         "/run/ghostship-keep:/run/ghostship-keep:ro"
+        # Service executor credentials: the runtime's default directory.
+        "${serviceSecretsDir}:/run/ghostship-secrets:ro"
         "/srv/apps/ghostship-private-integrations:/state:rw"
       ];
       extraOptions = [
@@ -236,5 +308,59 @@ in {
       # One stdio relay per ID: systemd/Podman stop the old instance first.
       restartIfChanged = true;
     };
-  };
+  }
+  (lib.mkIf cfg.skillsReconcile.enable {
+    assertions = [ {
+      assertion = (agent.apps.${system} or { }) ? ghostship-skills;
+      message = "skillsReconcile needs a ghostship-agent pin that provides apps.ghostship-skills.";
+    } ];
+    # Runs once per deployed ghostship-agent revision (restart trigger), after
+    # the MCP container is healthy. Needs: the Agent Desktop SSH contract
+    # published by ghostship-desktop-bridge (key, known_hosts, 10.89.7.2:2222),
+    # a signed-in ChatGPT session on the `personal` (Assistant) identity, and
+    # the plugin id committed in config/skills/chatgpt-plugin.json.
+    systemd.services.ghostship-skills-reconcile = {
+      description = "Package, publish and verify Ghostship skills on ChatGPT after deploy";
+      wantedBy = [ "multi-user.target" ];
+      wants = [ "network-online.target" ];
+      after = [ "network-online.target" "podman-ghostship-private-integrations.service"
+                "ghostship-desktop-bridge.service" ];
+      requires = [ "podman-ghostship-private-integrations.service" "ghostship-desktop-bridge.service" ];
+      restartTriggers = [ agent.outPath ];
+      path = [ pkgs.openssh pkgs.coreutils pkgs.git ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = "ghostship-mcp";
+        Group = "ghostship-mcp";
+        StateDirectory = "ghostship-skills";
+        StateDirectoryMode = "0700";
+        UMask = "0077";
+        Environment = [
+          "HOME=/var/lib/ghostship-skills"
+          "XDG_STATE_HOME=/var/lib/ghostship-skills"
+          "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+          "GHOSTSHIP_BROWSER_DRIVER=desktop"
+          "AGENT_DESKTOP_SSH_HOST=10.89.7.2"
+          "AGENT_DESKTOP_SSH_PORT=2222"
+          "AGENT_DESKTOP_SSH_USER=abc"
+          "AGENT_DESKTOP_SSH_KEY=/run/ghostship-integrations/agent-desktop-key"
+          "AGENT_DESKTOP_SSH_KNOWN_HOSTS=/run/ghostship-integrations/agent-desktop-known-hosts"
+        ];
+        # podman inspect needs root; the publication itself does not.
+        ExecStartPre = "+${waitForMcpHealthy}";
+        ExecStart = [
+          "${skillsCli} package"
+          "${skillsCli} publish-chatgpt"
+          "${skillsCli} verify-chatgpt"
+        ];
+        TimeoutStartSec = "30min";
+        NoNewPrivileges = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        PrivateTmp = true;
+      };
+    };
+  })
+  ]);
 }

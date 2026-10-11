@@ -159,5 +159,36 @@ class ConfigTests(unittest.TestCase):
             )
 
 
+    def test_raw_projection_writes_literals_and_unquoted_values(self):
+        import grp
+        import pwd
+
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "input.env"
+            target = Path(directory) / "services" / "svc.env"
+            value = "quote's and $literal"
+            source.write_text(f"KEY={shlex.quote(value)}\nOTHER=unused\n")
+            projection.SPEC = {
+                "units": {"test": {"path": str(source)}},
+                "projections": {
+                    "svc": {
+                        "path": str(target),
+                        "mode": "0600",
+                        "raw": True,
+                        "owner": pwd.getpwuid(os.getuid()).pw_name,
+                        "group": grp.getgrgid(os.getgid()).gr_name,
+                        "fields": {
+                            "SVC_API_KEY": {"unit": "test", "key": "KEY"},
+                            "SVC_BASE_URL": {"value": "http://svc:8080"},
+                        },
+                    }
+                },
+            }
+            projection.write_projection("svc")
+            expected = f"SVC_API_KEY={value}\nSVC_BASE_URL=http://svc:8080\n"
+            self.assertEqual(target.read_text(), expected)
+            self.assertEqual(target.with_suffix(".env.container").read_text(), expected)
+
+
 if __name__ == "__main__":
     unittest.main()

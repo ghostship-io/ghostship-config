@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.15.83] - 2026-10-11
+
+- Project least-privilege credentials for the ghostship-agent generic service
+  executor into the private integrations container (read-only at
+  `/run/ghostship-secrets/<service>.env`): Sonarr, Radarr, Prowlarr, Bazarr,
+  Chaptarr, pyLoad and RomM secrets plus internal base URLs for those and
+  qBittorrent, NZBGet and ntfy. Projections now accept non-secret literal
+  fields and unquoted (`raw`) output.
+- Add `ghostship.privateIntegrations.skillsReconcile.enable` (off): a
+  post-deploy oneshot that packages, publishes and verifies the ChatGPT
+  skills plugin once the MCP container is healthy.
+
 ## [3.15.82] - 2026-10-11
 
 - Raise the private integrations container memory limit from 1 GiB to 4 GiB.

@@ -28,7 +28,7 @@ in
       assertion = lib.all (
         name:
         name == "cloudflare-management"
-        || !(lib.any (field: field.unit == "cloudflare" && field.key == "API_TOKEN") (
+        || !(lib.any (field: (field.unit or null) == "cloudflare" && (field.key or null) == "API_TOKEN") (
           builtins.attrValues config.ghostship.selfHostedSecrets.projections.${name}.fields
         ))
       ) (builtins.attrNames config.ghostship.selfHostedSecrets.projections);
