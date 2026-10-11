@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.78] - 2026-10-11
+
+- Raise the private integrations container to 512 pids and 1 GiB: parallel
+  agent windows drive up to 8 Bladebro workers per identity, and the old
+  64-pid cap failed worker starts with EAGAIN.
+- Pin ghostship-agent 0.8.25 (one window per agent, per-retailer tabs).
+
 ## [3.15.77] - 2026-10-11
 
 - Start Agent Desktop Chrome on demand: the agent and personal s6 services no
