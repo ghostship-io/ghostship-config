@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.82] - 2026-10-11
+
+- Raise the private integrations container memory limit from 1 GiB to 4 GiB.
+
 ## [3.15.81] - 2026-10-11
 
 - Stop idle deploys from interrupting T3 Code work: the activity probe now treats
