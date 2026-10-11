@@ -13,6 +13,13 @@ const path = require('node:path');
 // Old pending-start placeholders can outlive the request that created them.
 // Only protect a recent request from racing a maintenance restart.
 const PENDING_ACTIVITY_GRACE_MINUTES = 10;
+// Subagents, background commands, and turn wrap-up keep writing thread
+// activity after the turn row settles. Require this long without any.
+const QUIET_MINUTES = 10;
+// Claude background tasks (shells, subagents, monitors) outlive their turn and
+// always record a terminal event. Bound the lookback so one lost to a crash
+// cannot block maintenance indefinitely.
+const OPEN_TASK_LOOKBACK_HOURS = 12;
 
 const stateDb = process.env.T3CODE_STATE_DB ||
   (process.env.T3CODE_HOME ? path.join(process.env.T3CODE_HOME, 'userdata/state.sqlite') : null) ||
@@ -60,8 +67,40 @@ try {
      SELECT count(*) AS active FROM projection_thread_sessions AS session
      JOIN projection_threads AS thread USING (thread_id)
      WHERE thread.deleted_at IS NULL
-       AND session.status IN ('starting', 'running')`
-  ).all(PENDING_ACTIVITY_GRACE_MINUTES);
+       AND session.status IN ('starting', 'running')
+     UNION ALL
+     SELECT count(*) AS active FROM projection_threads AS thread
+     JOIN projection_thread_activities AS activity USING (thread_id)
+     WHERE thread.deleted_at IS NULL
+       AND activity.created_at >
+         strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' minutes')
+     UNION ALL
+     SELECT count(*) AS active FROM (
+       SELECT kind, status, row_number() OVER (
+         PARTITION BY task_id
+         -- A task that starts and settles in the same millisecond is settled.
+         ORDER BY created_at DESC, kind = 'task.started', sequence DESC
+       ) AS rank
+       FROM (
+         SELECT activity.kind, activity.created_at, activity.sequence,
+           json_extract(activity.payload_json, '$.taskId') AS task_id,
+           json_extract(activity.payload_json, '$.taskType') AS task_type,
+           json_extract(activity.payload_json, '$.status') AS status
+         FROM projection_threads AS thread
+         JOIN projection_thread_activities AS activity USING (thread_id)
+         WHERE thread.deleted_at IS NULL
+           AND activity.kind IN ('task.started', 'task.updated', 'task.completed')
+           AND activity.created_at >
+             strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' hours')
+       )
+       -- Codex agents carry no task type and never settle; their work shows
+       -- up as recent activity instead.
+       WHERE task_id IS NOT NULL AND task_type IS NOT NULL
+         AND (kind <> 'task.updated' OR status IS NOT NULL)
+     )
+     WHERE rank = 1
+       AND (kind = 'task.started' OR (kind = 'task.updated' AND status = 'running'))`
+  ).all(PENDING_ACTIVITY_GRACE_MINUTES, QUIET_MINUTES, OPEN_TASK_LOOKBACK_HOURS);
 
   db.close();
 

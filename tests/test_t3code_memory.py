@@ -131,12 +131,15 @@ class IdleGuard(unittest.TestCase):
                 thread_id TEXT, turn_id TEXT, state TEXT, requested_at TEXT, completed_at TEXT
             );
             CREATE TABLE projection_thread_sessions(thread_id TEXT, status TEXT, active_turn_id TEXT);
+            CREATE TABLE projection_thread_activities(
+                thread_id TEXT, kind TEXT, payload_json TEXT, created_at TEXT, sequence INTEGER
+            );
             INSERT INTO projection_threads VALUES ('a', NULL, NULL);
             INSERT INTO projection_turns VALUES ('a', NULL, 'pending', '2026-09-01', NULL);
         ''')
 
     def idle(self):
-        return all(row[0] == 0 for row in self.db.execute(self.query, (10,)))
+        return all(row[0] == 0 for row in self.db.execute(self.query, (10, 10, 12)))
 
     def test_recent_pending_blocks_until_superseded(self):
         now = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"
