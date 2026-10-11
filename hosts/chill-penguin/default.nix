@@ -13,6 +13,7 @@ in
 
   # Apple Silicon support - handled by nixos-apple-silicon
   ghostship.privateIntegrations.enable = true;
+  ghostship.privateIntegrations.skillsReconcile.enable = true;
 
   ghostship.host.roles = {
     server = true;
