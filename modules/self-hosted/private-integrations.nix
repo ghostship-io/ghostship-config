@@ -223,7 +223,7 @@ in {
         # Each agent window drives parallel tabs through a pool of up to 8
         # Bladebro workers per identity (an SSH client plus reader threads
         # each); the pids limit counts threads.
-        "--pids-limit=512" "--memory=1g" "--cpus=2"
+        "--pids-limit=512" "--memory=4g" "--cpus=2"
         "--health-cmd=test -f /tmp/supervisor-live && test $(( $(date +%s) - $(stat -c %Y /tmp/supervisor-live) )) -lt 10"
         "--health-interval=30s" "--health-timeout=5s" "--health-retries=3"
       ];
