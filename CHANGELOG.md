@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.80] - 2026-10-11
+
+- Pin ghostship-agent 0.8.27 (AliExpress checkout quotes, Best Buy filament weights).
+
 ## [3.15.79] - 2026-10-11
 
 - Pin ghostship-agent 0.8.26 (named tabs, category routing, AliExpress shipping minimums).
