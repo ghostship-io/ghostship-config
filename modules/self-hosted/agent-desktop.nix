@@ -6,9 +6,13 @@
 }:
 
 let
-  containers-root = ../../containers/agent-desktop;
-  containers-root-str = toString containers-root;
-  containers-hash = builtins.substring 11 12 containers-root-str;
+  # Copy only the build context so the image tag and unit change with the
+  # container sources, not with every commit to this repository.
+  containers-root = builtins.path {
+    path = ../../containers/agent-desktop;
+    name = "ghostship-agent-desktop-context";
+  };
+  containers-hash = builtins.substring 11 12 containers-root;
   agent-desktop-image = "localhost/ghostship-agent-desktop:${containers-hash}";
   agent-desktop-image-build = pkgs.writeShellScriptBin "ghostship-build-agent-desktop-image" ''
     set -eu

@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.76] - 2026-10-11
+
+- Tag and build the Agent Desktop image from its own content-addressed
+  `containers/agent-desktop` context, so unrelated nixos-config commits no
+  longer change `podman-agent-desktop.service` or restart the desktop.
+
 ## [3.15.75] - 2026-10-10
 
 - Pin ghostship-agent 0.8.24: the Ghostship MCP adds the read-only `orca_profiles`
