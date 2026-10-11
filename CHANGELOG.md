@@ -8,6 +8,8 @@
   minutes on plain `about:blank` only. The `abc` group controls both services
   through `s6-svperms`, so crash restart stays and an idle stop stays down.
 - Keep background and occluded Chrome tabs rendering and running timers.
+- Accept bursts of concurrent Agent Desktop SSH handshakes (`MaxStartups
+  200:30:400`), since parallel agents issue many short browser-control commands.
 
 ## [3.15.76] - 2026-10-11
 
