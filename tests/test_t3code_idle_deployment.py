@@ -93,6 +93,63 @@ class TestT3CodeIdleDeployment(unittest.TestCase):
             self.assertIn("action=idle-confirmation", log_content)
             self.assertIn("reason=activity-resumed", log_content)
 
+    def _tick_unit_state(self, state, returncode):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        calls = []
+
+        def fake_run(cmd, *args, **kwargs):
+            calls.append(list(cmd))
+            if list(cmd[:2]) == ["systemctl", "is-active"]:
+                return Mock(returncode=returncode, stdout=f"{state}\n")
+            return Mock(returncode=0)
+
+        idle_checker = Mock(return_value=True)
+        with patch("subprocess.run", side_effect=fake_run):
+            res = deployer.run_deployment(
+                state_dir=self.state_dir,
+                home_dir=self.home_dir,
+                audit_log=self.audit_log,
+                confirm_idle_seconds=0,
+                idle_checker=idle_checker,
+                healthy_waiter=Mock(return_value=True),
+                sleep_fn=Mock(),
+                deployment_reader=Mock(return_value=""),
+            )
+        restarted = any(c[:2] == ["systemctl", "restart"] for c in calls)
+        return res, restarted, idle_checker
+
+    def test_never_restarts_a_unit_that_is_starting_or_stopping(self):
+        # Restarting a unit mid-start killed the container another restart
+        # was bringing up.
+        for state in ("activating", "deactivating", "reloading"):
+            res, restarted, _ = self._tick_unit_state(state, returncode=3)
+            self.assertEqual(res, 0)
+            self.assertFalse(restarted, state)
+        self.assertIn("reason=unit-transitioning", self.audit_log.read_text())
+
+    def test_stopped_unit_starts_without_idle_gate(self):
+        for state in ("inactive", "failed"):
+            (self.state_dir / "applied").write_text("hash1\n")
+            res, restarted, idle_checker = self._tick_unit_state(state, returncode=3)
+            self.assertEqual(res, 0)
+            self.assertTrue(restarted, state)
+            idle_checker.assert_not_called()
+
+    def test_unknown_unit_state_defers(self):
+        (self.state_dir / "desired").write_text("hash2\n")
+        (self.state_dir / "applied").write_text("hash1\n")
+        with patch("subprocess.run", side_effect=OSError("systemctl unavailable")):
+            res = deployer.run_deployment(
+                state_dir=self.state_dir,
+                home_dir=self.home_dir,
+                audit_log=self.audit_log,
+                idle_checker=Mock(return_value=True),
+                deployment_reader=Mock(return_value=""),
+            )
+        self.assertEqual(res, 0)
+        self.assertIn("reason=unit-state-unknown", self.audit_log.read_text())
+
     def test_applies_update_after_sustained_idle_and_healthy_verification(self):
         (self.state_dir / "desired").write_text("hash2\n")
         (self.state_dir / "applied").write_text("hash1\n")
