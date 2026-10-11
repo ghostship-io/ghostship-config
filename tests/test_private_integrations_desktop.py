@@ -35,5 +35,19 @@ class DesktopWiringTest(unittest.TestCase):
         self.assertIn('Agent = { identity = "agent";', source)
 
 
+    def test_service_credentials_are_scoped_and_read_only(self):
+        source = self.source
+        self.assertIn('"${serviceSecretsDir}:/run/ghostship-secrets:ro"', source)
+        self.assertIn('group = "ghostship-mcp";', source)
+        projections = source.split("serviceCredentials = {", 1)[1].split("\n  };", 1)[0]
+        self.assertNotIn("cloudflare", projections)
+        self.assertNotIn("DB_PASS", projections)
+
+    def test_skills_reconcile_is_opt_in(self):
+        source = self.source
+        self.assertIn("skillsReconcile.enable = lib.mkEnableOption", source)
+        self.assertIn("lib.mkIf cfg.skillsReconcile.enable", source)
+
+
 if __name__ == "__main__":
     unittest.main()

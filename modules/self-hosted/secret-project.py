@@ -43,6 +43,9 @@ def write_projection(name):
     rendered = {}
     cache = {}
     for target_key, source in projection["fields"].items():
+        if "value" in source:
+            rendered[target_key] = source["value"]
+            continue
         unit_name = source["unit"]
         source_key = source["key"]
         if unit_name not in cache:
@@ -63,7 +66,9 @@ def write_projection(name):
                 for key, value in rendered.items():
                     if any(c in value for c in ("\n", "\r", "\x00")):
                         raise ValueError(f"Unsupported multiline secret {key}")
-                    encoded = value if raw else shlex.quote(value)
+                    encoded = (
+                        value if raw or projection.get("raw") else shlex.quote(value)
+                    )
                     handle.write(f"{key}={encoded}\n")
                 handle.flush()
                 os.fsync(handle.fileno())
