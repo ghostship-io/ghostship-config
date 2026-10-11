@@ -276,8 +276,14 @@ skip the fetch so recovery never waits on GitHub. Sync output is in
 The host unit preserves running work across rebuilds. Image updates do not
 interrupt active tasks: `nixos-rebuild switch` stages the desired deployment ID,
 and `t3code-deploy-when-idle.timer` (running every minute) automatically applies
-the update after 30 seconds of sustained idle (no running or pending tasks in
-`state.sqlite`). The deployer holds the container's tool-maintenance lock
+the update after 30 seconds of sustained idle. The activity probe reads
+`state.sqlite`: idle means no running or recently pending turn, no starting or
+running provider session, no user message in 15 minutes, no thread activity in
+10 minutes, and no unsettled Claude background task (shell, subagent, or
+monitor) started in the last 12 hours. Background tasks outlive the turn that
+started them, so a settled turn alone does not prove idle. The deployer leaves a
+unit that is starting or stopping alone; only a stopped or failed unit is
+started without the idle gate. The deployer holds the container's tool-maintenance lock
 (`~/.local/state/t3code-tool-update/tool-update.lock`, shared through the home
 bind mount) across the restart. Each container carries its deployment ID in the
 `io.ghostship.t3code.deployment` label, so after a reboot, an interrupted

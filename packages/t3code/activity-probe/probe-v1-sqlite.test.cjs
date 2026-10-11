@@ -8,7 +8,7 @@ const { DatabaseSync } = require('node:sqlite');
 
 const probePath = path.join(__dirname, 'probe-v1-sqlite.cjs');
 
-function runProbe({ turns = [], sessions = [], latestUserMessageAt = null } = {}) {
+function runProbe({ turns = [], sessions = [], activities = [], latestUserMessageAt = null } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 't3-activity-probe-'));
   const databasePath = path.join(directory, 'state.sqlite');
   const db = new DatabaseSync(databasePath);
@@ -32,11 +32,20 @@ function runProbe({ turns = [], sessions = [], latestUserMessageAt = null } = {}
       status TEXT NOT NULL,
       active_turn_id TEXT
     );
+    CREATE TABLE projection_thread_activities (
+      activity_id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      sequence INTEGER
+    );
   `);
   const threadIds = new Set([
     'thread-1',
     ...turns.map((turn) => turn.threadId ?? 'thread-1'),
     ...sessions.map((session) => session.threadId ?? 'thread-1'),
+    ...activities.map((activity) => activity.threadId ?? 'thread-1'),
   ]);
   const insertThread = db.prepare(
     'INSERT INTO projection_threads (thread_id, deleted_at, latest_user_message_at) VALUES (?, NULL, ?)',
@@ -48,6 +57,18 @@ function runProbe({ turns = [], sessions = [], latestUserMessageAt = null } = {}
     db.prepare(
       'INSERT INTO projection_thread_sessions (thread_id, status, active_turn_id) VALUES (?, ?, ?)',
     ).run(session.threadId ?? 'thread-1', session.status, session.activeTurnId ?? null);
+  }
+  for (const [index, activity] of activities.entries()) {
+    db.prepare(
+      'INSERT INTO projection_thread_activities (activity_id, thread_id, kind, payload_json, created_at, sequence) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(
+      `activity-${index}`,
+      activity.threadId ?? 'thread-1',
+      activity.kind,
+      JSON.stringify(activity.payload ?? {}),
+      activity.createdAt,
+      index,
+    );
   }
   for (const [index, turn] of turns.entries()) {
     db.prepare(
@@ -139,6 +160,71 @@ test('protects user activity within the 15-minute grace window', () => {
   assert.equal(idleResult.status, 0, idleResult.stderr);
 });
 
+
+const bash = (taskId, extra = {}) => ({ taskId, taskType: 'local_bash', ...extra });
+
+test('protects thread activity within the quiet window', () => {
+  const recent = runProbe({ activities: [{ kind: 'tool.completed', createdAt: minutesAgo(8) }] });
+  assert.equal(recent.status, 1, recent.stderr);
+
+  const quiet = runProbe({ activities: [{ kind: 'tool.completed', createdAt: minutesAgo(11) }] });
+  assert.equal(quiet.status, 0, quiet.stderr);
+});
+
+test('protects a background task that outlives its turn', () => {
+  const result = runProbe({
+    turns: [{ state: 'completed', requestedAt: minutesAgo(60), completedAt: minutesAgo(59) }],
+    activities: [{ kind: 'task.started', payload: bash('b1'), createdAt: minutesAgo(45) }],
+  });
+  assert.equal(result.status, 1, result.stderr);
+});
+
+test('protects a backgrounded task whose latest update has no status', () => {
+  const result = runProbe({
+    activities: [
+      { kind: 'task.started', payload: bash('b1'), createdAt: minutesAgo(45) },
+      { kind: 'task.updated', payload: bash('b1', { isBackgrounded: true }), createdAt: minutesAgo(30) },
+    ],
+  });
+  assert.equal(result.status, 1, result.stderr);
+});
+
+test('settles a background task by its terminal event', () => {
+  for (const [kind, status] of [
+    ['task.completed', 'completed'],
+    ['task.completed', 'stopped'],
+    ['task.updated', 'cancelled'],
+  ]) {
+    const result = runProbe({
+      activities: [
+        { kind: 'task.started', payload: bash('b1'), createdAt: minutesAgo(45) },
+        { kind, payload: bash('b1', { status }), createdAt: minutesAgo(30) },
+      ],
+    });
+    assert.equal(result.status, 0, `${kind} ${status}: ${result.stderr}`);
+  }
+});
+
+test('settles a task that starts and completes in the same instant', () => {
+  const at = minutesAgo(30);
+  const result = runProbe({
+    activities: [
+      { kind: 'task.completed', payload: bash('b1', { status: 'completed' }), createdAt: at },
+      { kind: 'task.started', payload: bash('b1'), createdAt: at },
+    ],
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('ignores untyped agent tasks and tasks beyond the lookback', () => {
+  const result = runProbe({
+    activities: [
+      { kind: 'task.updated', payload: { taskId: 'codex-1', status: 'running' }, createdAt: minutesAgo(60) },
+      { kind: 'task.started', payload: bash('b1'), createdAt: minutesAgo(13 * 60) },
+    ],
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
 
 test('reports unknown when the database is missing', () => {
   const result = spawnSync(process.execPath, [probePath], {
