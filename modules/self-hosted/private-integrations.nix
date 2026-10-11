@@ -220,7 +220,10 @@ in {
         "--network=ghostship_net"
         "--network=agent_desktop_net"
         "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777"
-        "--pids-limit=64" "--memory=512m" "--cpus=2"
+        # Each agent window drives parallel tabs through a pool of up to 8
+        # Bladebro workers per identity (an SSH client plus reader threads
+        # each); the pids limit counts threads.
+        "--pids-limit=512" "--memory=1g" "--cpus=2"
         "--health-cmd=test -f /tmp/supervisor-live && test $(( $(date +%s) - $(stat -c %Y /tmp/supervisor-live) )) -lt 10"
         "--health-interval=30s" "--health-timeout=5s" "--health-retries=3"
       ];
