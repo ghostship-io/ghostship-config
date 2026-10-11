@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.81] - 2026-10-11
+
+- Stop idle deploys from interrupting T3 Code work: the activity probe now treats
+  unsettled Claude background tasks and any thread activity in the last 10
+  minutes as active, and the deployer never restarts a unit that is mid-start.
+
 ## [3.15.80] - 2026-10-11
 
 - Pin ghostship-agent 0.8.27 (AliExpress checkout quotes, Best Buy filament weights).

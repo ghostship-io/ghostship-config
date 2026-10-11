@@ -285,15 +285,23 @@ def run_deployment(
             lambda: wait_healthy(podman_bin, timeout_seconds=health_timeout_seconds)
         )
 
-        is_active = False
+        # Only a stopped or failed unit may restart without the idle gate. A
+        # unit mid-start or mid-stop belongs to another restart; restarting it
+        # again kills the container it is bringing up.
         try:
             res = subprocess.run(
-                [systemctl_bin, "is-active", "--quiet", "podman-t3code.service"],
+                [systemctl_bin, "is-active", "podman-t3code.service"],
+                capture_output=True,
+                text=True,
                 timeout=10,
             )
-            is_active = (res.returncode == 0)
         except Exception:
-            pass
+            log(audit_log, f"action=defer desired={desired} restart_pending={restart_pending} reason=unit-state-unknown")
+            return 0
+        is_active = res.returncode == 0
+        if not is_active and (res.stdout or "").strip() not in ("inactive", "failed"):
+            log(audit_log, f"action=defer desired={desired} restart_pending={restart_pending} reason=unit-transitioning")
+            return 0
 
         if is_active:
             if not check_idle():
