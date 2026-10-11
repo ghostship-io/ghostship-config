@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.84] - 2026-10-11
+
+- Pin ghostship-agent 0.9.0 (generic service executor, explicit browser
+  leases, bounded-wait jobs, skills distribution) and enable
+  `skillsReconcile` on chill-penguin.
+
 ## [3.15.83] - 2026-10-11
 
 - Project least-privilege credentials for the ghostship-agent generic service
