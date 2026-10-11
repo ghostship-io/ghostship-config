@@ -8,8 +8,8 @@ browsers, and Bladebro as the MCP browser driver.
 
 Everything is defined in `modules/self-hosted/agent-desktop.nix` and
 `containers/agent-desktop/`. The desktop lifecycle is independent of t3code:
-it starts at boot, keeps its browsers across t3code restarts, and can be
-updated without touching the T3 Code container.
+it starts at boot, keeps its browser profiles across t3code restarts, and can
+be updated without touching the T3 Code container.
 
 ## Endpoints
 
@@ -34,7 +34,7 @@ proxied.
 
 ## Google Chrome browsers
 
-Two persistent Chrome instances run under independent s6 services, launched
+Two on-demand Chrome instances run under independent s6 services, launched
 as the desktop user inside the LXQt session:
 
 | Identity | Profile | DevTools |
@@ -47,6 +47,35 @@ lives in the profile directories and survives client disconnects, agent
 restarts, image updates and container replacement. A human logs into a
 service in the `personal` window through Selkies and agents keep using the
 same instance. Neither port is published outside the container.
+
+Chrome does not start at boot. Both services
+(`svc-agent-desktop-chrome-agent`, `svc-agent-desktop-chrome-personal`) are
+outside the s6-rc `user` bundle, so s6 supervises them in the down state:
+
+- **Start:** `chrome-ensure <agent|personal>` (as `abc` over SSH) starts the
+  identity's service if its DevTools port does not answer and waits up to 60 s
+  (`CHROME_ENSURE_TIMEOUT_SECONDS`) for `/json/version`. It exits 0 once
+  reachable and non-zero with a stderr message on a bad identity or timeout.
+  It is idempotent and serialised per identity by
+  `/tmp/ghostship-chrome-ensure-<identity>.lock`. The Bladebro wrappers call it
+  before attaching; a human starts the personal window the same way from a
+  desktop terminal.
+- **Idle stop:** `svc-agent-desktop-chrome-idle` samples `/json/list` every
+  60 s (`CHROME_IDLE_CHECK_SECONDS`). When an identity's only page targets have
+  been plain `about:blank` for 10 minutes (`CHROME_IDLE_TIMEOUT_SECONDS`, 600),
+  it stops that service and logs one line. Any other page, including a page a
+  human opened and agent windows anchored at
+  `about:blank#ghostship-window-<token>`, and any `chrome-ensure` call reset
+  the clock.
+- **Supervision:** starting is `s6-svc -u` and stopping is `s6-svc -d`, so s6
+  relaunches a crashed Chrome while it is wanted up and keeps an idle-stopped
+  one down until the next `chrome-ensure`. The idle service grants the `abc`
+  group control of both services with `s6-svperms -G abc` at boot; no sudo is
+  involved.
+
+Clients: the ghostship-agent client calls `chrome-ensure <identity>` over SSH
+before its first CDP call whenever `/json/version` is unreachable. Other CDP
+clients must do the same.
 
 The environment keeps the signals a real desktop would have: GPU-backed
 WebGL, enabled sandbox, PulseAudio audio devices, Noto Color Emoji, a
@@ -69,7 +98,11 @@ ssh -i ~/.ssh/id_agent_desktop -p 2222 abc@10.89.7.2 \
 Chrome is launched with a deliberately minimal command line: a custom
 profile, a loopback DevTools port, native Wayland so compositor input
 injection reaches the browser, first-run/crash UX suppression, the basic
-password store, the US locale and a 1600x900 window. No sandbox, GPU or
+password store, the US locale and a 1600x900 window. Because many agent tabs
+share one window, background-timer throttling, renderer backgrounding and
+occluded-window backgrounding are disabled (`--disable-background-timer-throttling`,
+`--disable-renderer-backgrounding`, `--disable-backgrounding-occluded-windows`)
+so background tabs keep rendering and running timers. No sandbox, GPU or
 fingerprint flags.
 
 Never open one profile directory in two browser processes.
@@ -77,8 +110,9 @@ Never open one profile directory in two browser processes.
 ## Bladebro MCP
 
 Bladebro is installed from its pinned upstream release and driven in
-real-browser mode against the existing Chrome instances: it attaches to the
-fixed DevTools port, never launches or owns a browser, and applies no page
+real-browser mode against the desktop Chrome instances: its wrappers run
+`chrome-ensure` first, then it attaches to the fixed DevTools port, never
+launches or owns a browser, and applies no page
 patches (`BLADE_LANE=real`). Self-updates are disabled; the binary is
 updated through the desktop image.
 
@@ -197,7 +231,7 @@ Trackpad Mode in the side menu.
 ```sh
 systemctl status podman-agent-desktop.service agent-desktop-mcp.service
 podman logs --tail 100 agent-desktop            # s6 + service logs
-podman exec agent-desktop s6-rc -a list         # svc-agent-desktop-* services
+podman exec agent-desktop s6-rc -a list         # boot services; Chrome is on demand
 podman inspect agent-desktop --format '{{.State.Health.Status}}'
 podman exec -u 0 agent-desktop google-chrome-stable --version
 podman exec -u 0 agent-desktop bladebro -v
@@ -218,11 +252,13 @@ Chrome does not leave background apps running. These are supported Chrome
 policies, not timing or throughput measurements. Inspect `chrome://policy` to
 confirm the deployed browser accepts them before running workflow benchmarks.
 
-Recovery: the s6 services relaunch Chrome after a crash; the run script
-reaps stale processes and `Singleton*` locks for its profile first, so
-unclean shutdowns recover automatically. If an instance is wedged,
+Recovery: while an instance is wanted up, s6 relaunches Chrome after a crash;
+the run script reaps stale processes and `Singleton*` locks for its profile
+first, so unclean shutdowns recover automatically. If an instance is wedged,
 `podman exec -u 0 agent-desktop pkill -f 'user-data-dir=.*/agent'` and s6
-restarts it.
+restarts it. `podman exec agent-desktop s6-svstat
+/run/service/svc-agent-desktop-chrome-agent` shows whether an identity is up,
+down after an idle stop, or never started.
 
 ## Known limits
 
@@ -264,7 +300,7 @@ automated bypass works; record challenge behaviour honestly.
 ## Driver policy
 
 - **Bladebro real-lane attach is the default driver** for agents: it uses
-  the persistent Google Chrome instances, never launches replacement
+  the on-demand Google Chrome instances (started by `chrome-ensure`), never launches replacement
   browsers, and does not call `Runtime.enable`, so bot-managed sites accept
   it (Home Depot, Lowe's, Amazon, Walmart and Target all validated).
 - **Playwright stays optional** for compatible workflows; connect it over an

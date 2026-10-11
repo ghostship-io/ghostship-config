@@ -1,0 +1,9 @@
+#!/usr/bin/with-contenv bash
+# Stop on-demand Chrome instances that sit idle on about:blank.
+# s6 creates each service's supervise/ directory root-only; grant the abc
+# group control (s6-svc) and status so chrome-ensure over SSH and this
+# watcher can start and stop Chrome without root.
+s6-svperms -G abc \
+  /run/service/svc-agent-desktop-chrome-agent \
+  /run/service/svc-agent-desktop-chrome-personal
+exec s6-setuidgid abc /opt/ghostship-agent-desktop/chrome-idle

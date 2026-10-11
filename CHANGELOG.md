@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.15.77] - 2026-10-11
+
+- Start Agent Desktop Chrome on demand: the agent and personal s6 services no
+  longer start at boot; `chrome-ensure <identity>` starts one and waits for
+  DevTools, and `svc-agent-desktop-chrome-idle` stops an identity after 10
+  minutes on plain `about:blank` only. The `abc` group controls both services
+  through `s6-svperms`, so crash restart stays and an idle stop stays down.
+- Keep background and occluded Chrome tabs rendering and running timers.
+
 ## [3.15.76] - 2026-10-11
 
 - Tag and build the Agent Desktop image from its own content-addressed

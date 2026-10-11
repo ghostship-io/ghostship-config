@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Stop an on-demand Chrome identity once its only page targets have been plain
+# about:blank for CHROME_IDLE_TIMEOUT_SECONDS. Run by the
+# svc-agent-desktop-chrome-idle s6 service as abc.
+#
+# Environment:
+#   CHROME_IDLE_CHECK_SECONDS    sampling interval (default 60)
+#   CHROME_IDLE_TIMEOUT_SECONDS  idle time before stopping (default 600)
+#
+# Any other page, including about:blank#ghostship-window-<token> agent
+# anchors and pages a human opened, resets the idle clock, as does a
+# chrome-ensure call. The stop is `s6-svc -d`, so supervision keeps the
+# service down until the next chrome-ensure.
+set -u
+
+check=${CHROME_IDLE_CHECK_SECONDS:-60}
+timeout=${CHROME_IDLE_TIMEOUT_SECONDS:-600}
+for value in "$check" "$timeout"; do
+  case "$value" in
+    '' | *[!0-9]* | 0)
+      echo "[chrome-idle] check and timeout must be positive whole seconds" >&2
+      exit 2
+      ;;
+  esac
+done
+
+declare -A idle_since=()
+
+port_for() {
+  case "$1" in
+    agent) echo 9222 ;;
+    personal) echo 9223 ;;
+  esac
+}
+
+# Exit 0 when the /json/list document on stdin has no page target other than
+# plain about:blank.
+only_blank_pages() {
+  python3 -I -c '
+import json, sys
+targets = json.load(sys.stdin)
+pages = [t for t in targets if t.get("type") == "page"]
+sys.exit(0 if all(t.get("url") == "about:blank" for t in pages) else 1)
+'
+}
+
+reachable() {
+  curl -fsS --max-time 2 -o /dev/null "http://127.0.0.1:$1/json/version" 2>/dev/null
+}
+
+mtime() {
+  stat -c %Y "$1" 2>/dev/null || echo 0
+}
+
+# Stop under the chrome-ensure lock so a concurrent ensure either wins first
+# (and its fresh lock mtime cancels the stop) or waits until Chrome is down.
+# shellcheck disable=SC2094 # stat reads only the lock file's mtime.
+stop_identity() {
+  local identity=$1 port=$2 since=$3
+  local lock=/tmp/ghostship-chrome-ensure-$identity.lock
+  local service=/run/service/svc-agent-desktop-chrome-$identity
+  (
+    flock -n 9 || exit 1
+    [ "$(mtime "$lock")" -le "$since" ] || exit 1
+    /command/s6-svc -d "$service" || exit 1
+    for _ in $(seq 1 60); do
+      reachable "$port" || break
+      sleep 0.5
+    done
+  ) 9>>"$lock"
+}
+
+echo "[chrome-idle] stopping Chrome after ${timeout}s on about:blank only (checking every ${check}s)"
+
+while :; do
+  now=$(date +%s)
+  for identity in agent personal; do
+    port=$(port_for "$identity")
+    if ! list=$(curl -fsS --max-time 5 "http://127.0.0.1:$port/json/list" 2>/dev/null) \
+      || ! only_blank_pages <<<"$list" 2>/dev/null; then
+      unset "idle_since[$identity]"
+      continue
+    fi
+    since=${idle_since[$identity]:-}
+    ensured=$(mtime "/tmp/ghostship-chrome-ensure-$identity.lock")
+    if [ -z "$since" ] || [ "$ensured" -gt "$since" ]; then
+      idle_since[$identity]=$now
+      continue
+    fi
+    if [ $((now - since)) -ge "$timeout" ]; then
+      if stop_identity "$identity" "$port" "$since"; then
+        echo "[chrome-idle] stopped $identity Chrome (port $port) after $((now - since))s with only about:blank pages"
+      fi
+      unset "idle_since[$identity]"
+    fi
+  done
+  sleep "$check"
+done

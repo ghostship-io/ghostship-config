@@ -9,7 +9,7 @@ outside Git plaintext and the Nix store. No public origin, inbound port or brows
 exposed. Cached client discovery needs its supported refresh independently of
 a successful fresh-client discovery.
 Keep executes in the separate host service. `account: User|Agent`
-selects the persistent Agent Desktop Chrome identity: User → `personal` (port 9223),
+selects the on-demand Agent Desktop Chrome identity: User → `personal` (port 9223),
 Agent → `agent` (port 9222). The broker verifies the signed-in Google
 account and resolves its current `authuser` index dynamically. Neither a
 legacy profile ID nor a second Chrome process is required.

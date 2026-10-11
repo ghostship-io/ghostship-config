@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared Bladebro environment for the persistent real Chrome instances.
+# Shared Bladebro environment for the on-demand real Chrome instances.
 # Usage: bladebro-env <agent|personal> <bladebro args...>
 set -eu
 
@@ -32,6 +32,10 @@ case "$identity" in
 esac
 
 install -d -m 0700 "$BLADE_HOME"
+
+# Chrome starts on demand; make sure this identity's instance is up before
+# attaching. chrome-ensure writes only to stderr, keeping MCP stdout clean.
+/opt/ghostship-agent-desktop/chrome-ensure "$identity"
 
 # Fixed debug ports are not discovered through DevToolsActivePort; point
 # Bladebro at the instance explicitly. `rb mode attach` keeps the

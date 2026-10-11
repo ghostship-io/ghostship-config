@@ -1,3 +1,5 @@
 #!/usr/bin/with-contenv bash
-# Persistent authenticated Google Chrome for the personal identity.
+# On-demand authenticated Google Chrome for the personal identity. Not in the
+# user bundle: s6 supervises it down at boot; chrome-ensure starts it and
+# svc-agent-desktop-chrome-idle stops it.
 exec s6-setuidgid abc /opt/ghostship-agent-desktop/run-chrome personal 9223
