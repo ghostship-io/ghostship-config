@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch one persistent Google Chrome instance for the agent desktop.
+# Launch one Google Chrome instance for the agent desktop.
 # Usage: run-chrome <identity> <port>
 set -eu
 
@@ -41,8 +41,9 @@ rm -f -- "$data/Default/Sessions/"Session_* "$data/Default/Sessions/"Tabs_* \
 # and Chrome 136+ refuses CDP on the default profile dir), a loopback-only
 # DevTools port for Bladebro, native Wayland so compositor input injection
 # (Selkies touch scrolling) reaches the browser, and first-run/crash UX
-# suppression so headed startup is deterministic. No sandbox, GPU or
-# fingerprint flags.
+# suppression so headed startup is deterministic. Many agent tabs share one
+# window, so background and occluded tabs keep their timers and rendering.
+# No sandbox, GPU or fingerprint flags.
 exec /usr/bin/google-chrome-stable \
   --user-data-dir="$data" \
   --remote-debugging-port="$port" \
@@ -50,6 +51,9 @@ exec /usr/bin/google-chrome-stable \
   --no-first-run \
   --no-default-browser-check \
   --hide-crash-restore-bubble \
+  --disable-background-timer-throttling \
+  --disable-renderer-backgrounding \
+  --disable-backgrounding-occluded-windows \
   --password-store=basic \
   --lang=en-US \
   --window-size=1600,900 \

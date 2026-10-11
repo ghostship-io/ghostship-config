@@ -215,7 +215,8 @@ in {
       extraOptions = [
         "--read-only" "--cap-drop=ALL" "--security-opt=no-new-privileges"
         # Both networks are required: ghostship_net reaches T3 and
-        # agent_desktop_net reaches the persistent Chrome SSH endpoint.
+        # agent_desktop_net reaches the Agent Desktop SSH endpoint, which
+        # starts on-demand Chrome with chrome-ensure.
         "--network=ghostship_net"
         "--network=agent_desktop_net"
         "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777"

@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Start one identity's on-demand Chrome and wait until its DevTools endpoint
+# answers. Idempotent and safe to run concurrently.
+#
+# Usage: chrome-ensure <agent|personal>
+# Environment: CHROME_ENSURE_TIMEOUT_SECONDS (default 60)
+#
+# Exits 0 once http://127.0.0.1:<port>/json/version answers; non-zero with a
+# message on stderr for an unknown identity, a failed start or a timeout.
+# Runs as abc: the chrome-idle service grants the abc group s6 control over
+# both Chrome services, so no root is needed.
+set -eu
+
+identity=${1:-}
+case "$identity" in
+  agent) port=9222 ;;
+  personal) port=9223 ;;
+  *)
+    echo "chrome-ensure: unknown identity '${identity}' (expected agent or personal)" >&2
+    exit 2
+    ;;
+esac
+
+# Keep the shared lock file owned by abc even when invoked as root.
+if [ "$(id -u)" = 0 ]; then
+  exec /command/s6-setuidgid abc "$0" "$@"
+fi
+
+timeout=${CHROME_ENSURE_TIMEOUT_SECONDS:-60}
+case "$timeout" in
+  '' | *[!0-9]*)
+    echo "chrome-ensure: CHROME_ENSURE_TIMEOUT_SECONDS must be a whole number of seconds" >&2
+    exit 2
+    ;;
+esac
+
+service=/run/service/svc-agent-desktop-chrome-$identity
+lock=/tmp/ghostship-chrome-ensure-$identity.lock
+deadline=$((SECONDS + timeout))
+
+reachable() {
+  curl -fsS --max-time 2 -o /dev/null "http://127.0.0.1:$port/json/version" 2>/dev/null
+}
+
+# The lock serialises concurrent callers with each other and with the idle
+# stop; its mtime tells the idle watcher that a client just asked for Chrome.
+exec 9>>"$lock"
+if ! flock -w "$timeout" 9; then
+  echo "chrome-ensure: timed out after ${timeout}s waiting for $lock" >&2
+  exit 1
+fi
+
+if ! reachable; then
+  if ! /command/s6-svc -u "$service"; then
+    echo "chrome-ensure: cannot start $service (missing s6 control permission?)" >&2
+    exit 1
+  fi
+  until reachable; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "chrome-ensure: $identity Chrome DevTools on 127.0.0.1:$port not reachable after ${timeout}s" >&2
+      exit 1
+    fi
+    sleep 0.5
+  done
+fi
+
+touch "$lock"
