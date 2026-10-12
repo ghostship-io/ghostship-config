@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.15.95] - 2026-10-12
+
+- Pin ghostship-agent 0.15.0:
+  - results are trimmed and paginated instead of dropped;
+  - services take sort/limit;
+  - media records carry public cover URLs;
+  - ChatGPT output alignment.
+
 ## [3.15.94] - 2026-10-12
 
 - Pin ghostship-agent 0.14.1: `health` op `sources` passes the result contract.
