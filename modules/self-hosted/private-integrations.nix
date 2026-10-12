@@ -50,6 +50,19 @@ let
     bazarr = { base = apps.bazarr.origin + "/api"; secrets.BAZARR_API_KEY = { unit = "bazarr"; key = "API_KEY"; }; };
     chaptarr = { base = apps.chaptarr.origin; secrets.CHAPTARR_API_KEY = { unit = "chaptarr"; key = "API_KEY"; }; };
     pyload = { base = apps.pyload.origin; secrets.PYLOAD_API_KEY = { unit = "pyload"; key = "API_KEY"; }; };
+    # plex-pp-cli sends PLEX_USER_TOKEN as X-Plex-Token; it is the same token
+    # Plex Auto Languages uses (plex unit API_KEY).
+    plex = { base = apps.plex.origin; secrets.PLEX_USER_TOKEN = { unit = "plex"; key = "API_KEY"; }; };
+    tautulli = { base = apps.tautulli.origin; secrets.TAUTULLI_API_KEY = { unit = "tautulli"; key = "API_KEY"; }; };
+    # grimmory-pp-cli logs in with these and keeps the JWT in memory; the
+    # database credentials stay out.
+    grimmory = {
+      base = apps.grimmory.origin;
+      secrets = {
+        GRIMMORY_USERNAME = { unit = "grimmory"; key = "USER"; };
+        GRIMMORY_PASSWORD = { unit = "grimmory"; key = "PASS"; };
+      };
+    };
     romm = {
       base = apps.romm.origin;
       secrets = {

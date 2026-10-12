@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.15.85] - 2026-10-12
+
+- Pin ghostship-agent 0.9.1 (Plex, Tautulli and Grimmory service backends) and
+  project their executor credentials into the private integrations container:
+  the Plex token as `PLEX_USER_TOKEN`, the Tautulli API key, and the Grimmory
+  application login (not its database credentials), each with the internal
+  base URL.
+
 ## [3.15.84] - 2026-10-11
 
 - Pin ghostship-agent 0.9.0 (generic service executor, explicit browser
