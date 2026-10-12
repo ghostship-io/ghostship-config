@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.97] - 2026-10-12
+
+- Pin ghostship-agent 0.16.0: the listed tool surface is compressed to about 27 KB.
+
 ## [3.15.96] - 2026-10-12
 
 - Pin ghostship-agent 0.15.1 (facade op descriptions).
