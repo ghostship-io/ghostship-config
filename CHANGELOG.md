@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.90] - 2026-10-12
+
+- Pin ghostship-agent 0.13.0:
+  - the MCP server lists 15 op-dispatch tools instead of 40;
+  - the ChatGPT skills bundle adds `ghostship-services` and `ghostship-browser`.
+
 ## [3.15.89] - 2026-10-12
 
 - Pin ghostship-agent 0.12.0, which adds read and write support for every service.
