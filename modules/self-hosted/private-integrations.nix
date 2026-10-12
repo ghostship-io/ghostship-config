@@ -392,6 +392,9 @@ in {
       pull = "never";
       user = "62020:62020";
       environment.GHOSTSHIP_MCP_IMAGE_VERSION = "ghostship-private-integrations:${privateAddons.image.imageTag}";
+      # health op query type documents: only these Drive folders (and their subfolders) are read, so other
+      # people's records in the shared Healthcare folder stay out. "the owner" and "HealthConnect".
+      environment.GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS = "1zZTtDHRv09HayWZ0IzNWIOZDxM9rnpB-,1VLTMH9t2oD_texoqmZZCMYf2sCpagBKp";
       volumes = [
         "/run/ghostship-integrations:/run/ghostship-integrations:ro"
         "/run/ghostship-keep:/run/ghostship-keep:ro"
