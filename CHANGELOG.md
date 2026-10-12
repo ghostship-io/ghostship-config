@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.92] - 2026-10-12
+
+- Pin ghostship-agent `main` acf76bd8. The unified platform line, with every release through 0.13.1, is merged into `main`.
+
 ## [3.15.91] - 2026-10-12
 
 - Pin ghostship-agent 0.13.1:
