@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.89] - 2026-10-12
+
+- Pin ghostship-agent 0.12.0, which adds read and write support for every service.
+- The host operations broker allowlists the config files of Homepage, Muximux, Plex Auto Languages and Recyclarr for read and replace.
+- Restic restores go to `/var/lib/ghostship-backup/restore`.
+
 ## [3.15.88] - 2026-10-12
 
 - Pin ghostship-agent 0.11.0 (regenerated service clients, confirm gates, chill-penguin host service, ntfy message polling). The host operations broker reports disk usage for `/`, `/srv`, `/nix` and the NAS share.

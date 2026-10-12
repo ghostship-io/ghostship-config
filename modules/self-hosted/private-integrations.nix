@@ -144,6 +144,19 @@ let
       grimmory-db = { container = "grimmory-db"; password_env = "MYSQL_ROOT_PASSWORD"; };
     };
     recyclarr.container = "recyclarr";
+    # Config files of services without an API that the MCP may read and replace
+    # (atomic, with a timestamped copy). Startup patches only registry-owned
+    # entries, so other edits persist.
+    config_files = {
+      homepage = {
+        dir = "/srv/apps/homepage";
+        container = "homepage";
+        files = [ "services.yaml" "settings.yaml" "bookmarks.yaml" "widgets.yaml" "docker.yaml" "custom.css" "custom.js" ];
+      };
+      muximux = { dir = "/srv/apps/muximux/www/muximux"; container = "muximux"; files = [ "settings.ini.php" ]; };
+      plex-auto-languages = { dir = "/srv/apps/plex-auto-languages"; container = "plex-auto-languages"; files = [ "config.yaml" ]; };
+      recyclarr = { dir = "/srv/apps/recyclarr"; container = "recyclarr"; files = [ "recyclarr.yml" "settings.yml" ]; };
+    };
     host.mounts = [ "/" "/srv" "/nix" "/mnt/share" ];
     backup = {
       env_file = config.ghostship.selfHostedSecrets.projections.backup.path;
@@ -151,6 +164,7 @@ let
       cache_dir = "/var/cache/ghostship-backup";
       host = "chill-penguin";
       jobs = [ "backup" "check" "sample" "prune" ];
+      restore_root = "/var/lib/ghostship-backup/restore";
     };
     kuma = {
       container = "uptime-kuma";
