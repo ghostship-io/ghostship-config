@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.94] - 2026-10-12
+
+- Pin ghostship-agent 0.14.1: `health` op `sources` passes the result contract.
+
 ## [3.15.93] - 2026-10-12
 
 - Pin ghostship-agent 0.14.0 (`main` 25cab8c6): the `health` tool (Health Connect export, Ultrahuman, Wyze scale history) and the Ultrahuman and Wyze services.
