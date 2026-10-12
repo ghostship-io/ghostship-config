@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.99] - 2026-10-12
+
+- Pin ghostship-agent 0.16.2: the ChatGPT skills plugin carries all 26 ChatGPT-capable skills.
+
 ## [3.15.98] - 2026-10-12
 
 - Pin ghostship-agent 0.16.1 (cover display guidance).
