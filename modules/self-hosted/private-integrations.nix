@@ -144,6 +144,7 @@ let
       grimmory-db = { container = "grimmory-db"; password_env = "MYSQL_ROOT_PASSWORD"; };
     };
     recyclarr.container = "recyclarr";
+    host.mounts = [ "/" "/srv" "/nix" "/mnt/share" ];
     backup = {
       env_file = config.ghostship.selfHostedSecrets.projections.backup.path;
       repository = "/mnt/share/Backups/ghostship/chill-penguin";
