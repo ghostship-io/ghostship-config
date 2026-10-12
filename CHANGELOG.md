@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.15.86] - 2026-10-12
+
+- Pin ghostship-agent 0.10.0 (every service executable through `services_*`).
+- Add `ghostship-hostops-broker`: the agent's allowlisted host operations broker, run as root and reachable only by the MCP container user over `/run/ghostship-hostops/ops.sock`, which is mounted read-only into the container. It drives:
+  - container status, logs and restart for every OCI container, except restarting `t3code` and the MCP container;
+  - MariaDB reads;
+  - restic status, snapshots and runs;
+  - Recyclarr sync;
+  - Uptime Kuma;
+  - read-only Cloudflare;
+  - ntfy publishing.
+
+  Restic, Cloudflare management, Kuma and ntfy credentials stay on the host.
+- Project Gluetun and Tdarr executor credentials (Tdarr: base URL only). Render Seerr's self-generated API key from its settings into its projection.
+
 ## [3.15.85] - 2026-10-12
 
 - Pin ghostship-agent 0.9.1 (Plex, Tautulli and Grimmory service backends) and

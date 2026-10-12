@@ -63,6 +63,11 @@ let
         GRIMMORY_PASSWORD = { unit = "grimmory"; key = "PASS"; };
       };
     };
+    # The control server role grants this key its status routes; settings reads
+    # (VPN credentials) are gated by the executor.
+    gluetun = { base = "http://gluetun:8000"; secrets.GLUETUN_API_KEY = { unit = "gluetun"; key = "HTTP_CONTROL_SERVER_API_KEY"; }; };
+    # Tdarr runs without authentication on ghostship_net.
+    tdarr = { base = apps.tdarr.origin; secrets = { }; };
     romm = {
       base = apps.romm.origin;
       secrets = {
@@ -106,12 +111,69 @@ let
     exit 1
   '';
 
+  # Seerr generates its API key into its own settings; project it (with the
+  # internal base URL) the same way as the agenix-backed service credentials.
+  renderSeerr = pkgs.writeText "ghostship-render-seerr.py" ''
+    import json, os, sys
+    target = sys.argv[1]
+    try:
+        key = json.load(open("/srv/apps/seerr/settings.json"))["main"]["apiKey"]
+    except (OSError, KeyError, ValueError):
+        sys.exit(0)  # Seerr not initialized yet; the service stays unconfigured
+    tmp = target + ".new"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o440)
+    with os.fdopen(fd, "w") as handle:
+        handle.write("SEERR_API_KEY=" + key + "\nSEERR_BASE_URL=${apps.seerr.origin}\n")
+    os.chown(tmp, 0, 62020)
+    os.replace(tmp, target)
+  '';
+
+  # Host operations broker: allowlisted host operations for the MCP container
+  # (container lifecycle, MariaDB reads, restic, Recyclarr, Uptime Kuma,
+  # read-only Cloudflare, ntfy publish). Host credentials stay on the host.
+  hostopsConfig = pkgs.writeText "ghostship-hostops.json" (builtins.toJSON {
+    socket = "/run/ghostship-hostops/ops.sock";
+    client_uid = 62020;
+    socket_gid = 62020;
+    containers = lib.mapAttrs (name: _: {
+      restart = !(builtins.elem name [ "t3code" "ghostship-private-integrations" ]);
+    }) config.virtualisation.oci-containers.containers;
+    databases = {
+      romm-db = { container = "romm-db"; password_env = "MYSQL_ROOT_PASSWORD"; };
+      grimmory-db = { container = "grimmory-db"; password_env = "MYSQL_ROOT_PASSWORD"; };
+    };
+    recyclarr.container = "recyclarr";
+    backup = {
+      env_file = config.ghostship.selfHostedSecrets.projections.backup.path;
+      repository = "/mnt/share/Backups/ghostship/chill-penguin";
+      cache_dir = "/var/cache/ghostship-backup";
+      host = "chill-penguin";
+      jobs = [ "backup" "check" "sample" "prune" ];
+    };
+    kuma = {
+      container = "uptime-kuma";
+      port = 3001;
+      username = "the owner";
+      env_file = config.ghostship.selfHostedSecrets.projections.monitoring.path;
+    };
+    cloudflare.env_file = config.ghostship.selfHostedSecrets.projections.cloudflare-management.path;
+    ntfy = {
+      container = "ntfy";
+      port = 8080;
+      username = "publisher";
+      env_file = config.ghostship.selfHostedSecrets.projections.monitoring.path;
+      topics = [ "operations" ];
+      default_topic = "operations";
+    };
+  });
+
   render = pkgs.writeShellScript "ghostship-private-relay-render" ''
     set -eu
     ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project ghostship-relay
     for projection in ${lib.escapeShellArgs (builtins.attrNames serviceProjections)}; do
       ${config.ghostship.selfHostedSecrets.render}/bin/ghostship-secret-project "$projection"
     done
+    ${pkgs.python3}/bin/python3 ${renderSeerr} ${serviceSecretsDir}/seerr.env
     exec ${pkgs.python3}/bin/python3 ${./private-relay-render.py} \
       ${config.ghostship.selfHostedSecrets.projections.ghostship-relay.path} \
       ${privateAddons.runtime}/bin/ghostship-mcp
@@ -146,6 +208,28 @@ in {
       "d /srv/apps/ghostship-private-integrations 0700 ghostship-mcp ghostship-mcp -"
       "d /srv/apps/ghostship-private-integrations/ghostship 0700 ghostship-mcp ghostship-mcp -"
     ];
+    # Root because the operations drive podman, systemctl and restic; every
+    # operation is a fixed argv from the allowlist in the agent's
+    # ghostship_hostops.ops, and only uid 62020 (the MCP container) may connect.
+    systemd.services.ghostship-hostops-broker = {
+      description = "Allowlisted host operations for the Ghostship MCP container";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "podman.socket" "network-online.target" ];
+      wants = [ "network-online.target" ];
+      path = [ pkgs.podman pkgs.systemd pkgs.restic pkgs.coreutils ];
+      environment.SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+      serviceConfig = {
+        ExecStart = "${tools.hostops-broker}/bin/ghostship-hostops-broker --config ${hostopsConfig}";
+        RuntimeDirectory = "ghostship-hostops";
+        RuntimeDirectoryMode = "0750";
+        Group = "ghostship-mcp";
+        UMask = "0007";
+        Restart = "on-failure";
+        RestartSec = 3;
+        NoNewPrivileges = true;
+        PrivateTmp = true;
+      };
+    };
     systemd.services.ghostship-keep-broker = {
       description = "Keep API execution service with Agent Desktop authentication";
       # Keep SSH available independently of the pinned agent package revision.
@@ -293,6 +377,7 @@ in {
       volumes = [
         "/run/ghostship-integrations:/run/ghostship-integrations:ro"
         "/run/ghostship-keep:/run/ghostship-keep:ro"
+        "/run/ghostship-hostops:/run/ghostship-hostops:ro"
         # Service executor credentials: the runtime's default directory.
         "${serviceSecretsDir}:/run/ghostship-secrets:ro"
         "/srv/apps/ghostship-private-integrations:/state:rw"
@@ -315,9 +400,11 @@ in {
     };
     systemd.services.podman-ghostship-private-integrations = {
       after = [ "ghostship-keep-broker.service" "ghostship-desktop-bridge.service"
+                "ghostship-hostops-broker.service"
                 "init-ghostship-net.service" "init-agent-desktop-net.service" ];
       requires = [ "ghostship-keep-broker.service" "ghostship-desktop-bridge.service"
                    "init-ghostship-net.service" "init-agent-desktop-net.service" ];
+      wants = [ "ghostship-hostops-broker.service" ];
       # One stdio relay per ID: systemd/Podman stop the old instance first.
       restartIfChanged = true;
     };
