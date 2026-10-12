@@ -125,6 +125,7 @@ let
     with os.fdopen(fd, "w") as handle:
         handle.write("SEERR_API_KEY=" + key + "\nSEERR_BASE_URL=${apps.seerr.origin}\n")
     os.chown(tmp, 0, 62020)
+    os.chmod(tmp, 0o440)  # the render unit's umask drops group read from os.open
     os.replace(tmp, target)
   '';
 
