@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.96] - 2026-10-12
+
+- Pin ghostship-agent 0.15.1 (facade op descriptions).
+
 ## [3.15.95] - 2026-10-12
 
 - Pin ghostship-agent 0.15.0:
