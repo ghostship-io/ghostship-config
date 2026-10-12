@@ -239,6 +239,12 @@ in
       ];
     };
 
+    # Ultrahuman UltraSignal personal API token (Bitwarden ultrahuman.com, field api_token).
+    ultrahuman = mkUnit {
+      relativeFile = "secrets/files/sources/providers/ultrahuman.env.age";
+      exports = [ "API_TOKEN" ];
+    };
+
     tautulli = mkUnit {
       relativeFile = "secrets/files/sources/services/tautulli.env.age";
       exports = [ "API_KEY" ];
