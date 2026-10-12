@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.91] - 2026-10-12
+
+- Pin ghostship-agent 0.13.1:
+  - pages settle adaptively after navigation;
+  - the desktop lock is held only across a batch's native-input steps.
+
 ## [3.15.90] - 2026-10-12
 
 - Pin ghostship-agent 0.13.0:
