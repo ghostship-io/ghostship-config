@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.100] - 2026-10-12
+
+- Pin ghostship-agent 0.16.3 (AlohaQ skill removed).
+
 ## [3.15.99] - 2026-10-12
 
 - Pin ghostship-agent 0.16.2: the ChatGPT skills plugin carries all 26 ChatGPT-capable skills.
