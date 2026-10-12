@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.87] - 2026-10-12
+
+- Make the rendered Seerr executor credential group-readable (0440) so the MCP container can read it.
+
 ## [3.15.86] - 2026-10-12
 
 - Pin ghostship-agent 0.10.0 (every service executable through `services_*`).
