@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.93] - 2026-10-12
+
+- Pin ghostship-agent 0.14.0 (`main` 25cab8c6): the `health` tool (Health Connect export, Ultrahuman, Wyze scale history) and the Ultrahuman and Wyze services.
+- New agenix unit `ultrahuman` (`API_TOKEN`) projected to the MCP container as the `ultrahuman` service credential.
+
 ## [3.15.92] - 2026-10-12
 
 - Pin ghostship-agent `main` acf76bd8. The unified platform line, with every release through 0.13.1, is merged into `main`.

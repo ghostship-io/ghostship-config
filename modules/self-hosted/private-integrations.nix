@@ -80,6 +80,8 @@ let
     qbittorrent = { base = apps.qbittorrent.origin; secrets = { }; };
     nzbget = { base = apps.nzbget.origin; secrets = { }; };
     ntfy = { base = apps.ntfy.origin; secrets = { }; };
+    # Public cloud API (the health tool's ring data); the token is the owner's personal token.
+    ultrahuman = { base = "https://partner.ultrahuman.com"; secrets.ULTRAHUMAN_API_TOKEN = { unit = "ultrahuman"; key = "API_TOKEN"; }; };
   };
   serviceProjection = id: "ghostship-service-${id}";
   serviceSecretsDir = "/run/ghostship-secrets/ghostship-services";
