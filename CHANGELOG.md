@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.88] - 2026-10-12
+
+- Pin ghostship-agent 0.11.0 (regenerated service clients, confirm gates, chill-penguin host service, ntfy message polling). The host operations broker reports disk usage for `/`, `/srv`, `/nix` and the NAS share.
+
 ## [3.15.87] - 2026-10-12
 
 - Make the rendered Seerr executor credential group-readable (0440) so the MCP container can read it.
