@@ -30,7 +30,7 @@ pkill -f -- "--user-data-dir=$data" 2>/dev/null || true
 sleep 1
 rm -f "$data/SingletonLock" "$data/SingletonCookie" "$data/SingletonSocket"
 
-# The desktop's startup contract is a fresh tab even after an unclean exit.
+# The desktop's startup contract is no restored tabs even after an unclean exit.
 # Remove only tab/session restoration files once this profile is stopped;
 # keep cookies, login data, site storage, history and other profile settings.
 rm -f -- "$data/Default/Sessions/"Session_* "$data/Default/Sessions/"Tabs_* \
@@ -41,8 +41,10 @@ rm -f -- "$data/Default/Sessions/"Session_* "$data/Default/Sessions/"Tabs_* \
 # and Chrome 136+ refuses CDP on the default profile dir), a loopback-only
 # DevTools port for Bladebro, native Wayland so compositor input injection
 # (Selkies touch scrolling) reaches the browser, and first-run/crash UX
-# suppression so headed startup is deterministic. Many agent tabs share one
-# window, so background and occluded tabs keep their timers and rendering.
+# suppression so headed startup is deterministic. --no-startup-window runs the
+# profile in the background with no window until an agent claims one
+# (Target.createTarget with newWindow); agent windows may sit behind others,
+# so background and occluded tabs keep their timers and rendering.
 # No sandbox, GPU or fingerprint flags.
 exec /usr/bin/google-chrome-stable \
   --user-data-dir="$data" \
@@ -57,4 +59,4 @@ exec /usr/bin/google-chrome-stable \
   --password-store=basic \
   --lang=en-US \
   --window-size=1600,900 \
-  about:blank
+  --no-startup-window

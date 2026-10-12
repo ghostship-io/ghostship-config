@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.15.103] - 2026-10-13
+
+- Pin ghostship-agent 0.19.0: browser window leases lapse after 10 idle minutes and 2 hours in total, close when a coding-agent session ends, hold at most 6 tabs, sweep the popups their pages opened, and publish their expiry in the window's home tab.
+- Agent Desktop: Chrome starts with no window (`--no-startup-window`), and the
+  idle watcher runs `chrome-lease-reaper`, which closes windows whose
+  `about:blank#ghostship-window-<token>.<expires>` lease expired more than
+  `CHROME_LEASE_SLACK_SECONDS` (120) ago, with their popups.
+
 ## [3.15.102] - 2026-10-13
 
 - Pin ghostship-agent 0.18.2: Wyze weigh-ins from the Wyze API (every weigh-in, true time zones, kg).
