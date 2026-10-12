@@ -60,13 +60,23 @@ outside the s6-rc `user` bundle, so s6 supervises them in the down state:
   `/tmp/ghostship-chrome-ensure-<identity>.lock`. The Bladebro wrappers call it
   before attaching; a human starts the personal window the same way from a
   desktop terminal.
+- **No startup window:** Chrome runs with `--no-startup-window`, so a started
+  profile has no window until an agent creates one with
+  `Target.createTarget {newWindow: true, background: true}`.
+- **Lease reaping:** each agent window's home tab is
+  `about:blank#ghostship-window-<token>.<expires>` (Unix seconds), which the
+  leasing runtime slides while the lease is in use. Every idle check runs
+  `chrome-lease-reaper` on each reachable identity: once `expires` is more
+  than 120 s past (`CHROME_LEASE_SLACK_SECONDS`), it closes that window's
+  tabs and the popups they opened, anchor last, and logs one line. Legacy
+  anchors without `.<expires>`, unexpired leases and other windows are never
+  closed, whichever host opened them.
 - **Idle stop:** `svc-agent-desktop-chrome-idle` samples `/json/list` every
-  60 s (`CHROME_IDLE_CHECK_SECONDS`). When an identity's only page targets have
-  been plain `about:blank` for 10 minutes (`CHROME_IDLE_TIMEOUT_SECONDS`, 600),
-  it stops that service and logs one line. Any other page, including a page a
-  human opened and agent windows anchored at
-  `about:blank#ghostship-window-<token>`, and any `chrome-ensure` call reset
-  the clock.
+  60 s (`CHROME_IDLE_CHECK_SECONDS`). When an identity has had no page
+  targets, or only plain `about:blank` ones, for 10 minutes
+  (`CHROME_IDLE_TIMEOUT_SECONDS`, 600), it stops that service and logs one
+  line. Any other page, including a page a human opened and agent anchors in
+  either form, and any `chrome-ensure` call reset the clock.
 - **Supervision:** starting is `s6-svc -u` and stopping is `s6-svc -d`, so s6
   relaunches a crashed Chrome while it is wanted up and keeps an idle-stopped
   one down until the next `chrome-ensure`. The idle service grants the `abc`
