@@ -58,6 +58,12 @@ in
     assert self.nixosConfigurations.chill-penguin.config.systemd.services ? t3code-deploy-when-idle;
     assert self.nixosConfigurations.chill-penguin.config.systemd.timers ? t3code-deploy-when-idle;
     assert t3codeImageSeedsRetention;
+    # Temporary CAD checkouts once filled a 32 GiB tmpfs and stalled the
+    # shared T3 cgroup. Check the evaluated mount and its writable sticky mode.
+    assert builtins.elem "/srv/apps/t3code/tmp:/tmp:rw"
+      self.nixosConfigurations.chill-penguin.config.virtualisation.oci-containers.containers.t3code.volumes;
+    assert builtins.elem "d /srv/apps/t3code/tmp 1777 root root -"
+      self.nixosConfigurations.chill-penguin.config.systemd.tmpfiles.rules;
     pkgs.runCommand "ghostship-host-evaluation"
       {
         # Force complete derivation evaluation without building the fleet in CI.
