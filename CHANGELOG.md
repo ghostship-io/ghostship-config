@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.105] - 2026-10-13
+
+- Keep T3 temporary checkouts on disk instead of Podman's systemd tmpfs, with a writable sticky directory and evaluated mount regression checks.
+- Raise the shared memory reclaim threshold to 36 GiB, retaining the 40 GiB hard ceiling, to recover the existing RAM-backed temporary workload without restarting active sessions.
+
 ## [3.15.104] - 2026-10-13
 
 - Contain combined T3 tool memory when anonymous allocations cause cgroup reclaim stalls, even when each tool is below 12 GiB. Protect the native T3 server behind its Node launcher and timestamp containment actions.
