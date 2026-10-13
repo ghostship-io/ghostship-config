@@ -239,6 +239,12 @@ in
       ];
     };
 
+    # Wyze account login for the scale API (Bitwarden wyze.com: email, account_password, key_id, api_key).
+    wyze = mkUnit {
+      relativeFile = "secrets/files/sources/providers/wyze.env.age";
+      exports = [ "EMAIL" "PASSWORD" "KEY_ID" "API_KEY" ];
+    };
+
     # Ultrahuman UltraSignal personal API token (Bitwarden ultrahuman.com, field api_token).
     ultrahuman = mkUnit {
       relativeFile = "secrets/files/sources/providers/ultrahuman.env.age";

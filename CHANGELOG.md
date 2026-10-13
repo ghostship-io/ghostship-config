@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.102] - 2026-10-13
+
+- Pin ghostship-agent 0.18.2: Wyze weigh-ins from the Wyze API (every weigh-in, true time zones, kg).
+- New agenix unit `wyze` (`EMAIL`, `PASSWORD`, `KEY_ID`, `API_KEY`) projected to the MCP container as the `wyze` service credential.
+
 ## [3.15.101] - 2026-10-12
 
 - Pin ghostship-agent 0.18.1: `health` op `types` and `query` over every Health Connect type, Ultrahuman lab biomarkers, full sleep and metrics, Wyze weigh-ins, and health documents with their text (OCR for scans).
