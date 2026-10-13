@@ -2504,6 +2504,9 @@ let
 
 in
 {
+  # Permit a guard-only deployment without replacing the active T3 container.
+  system.build.t3codeProcessMemoryGuard = t3codeProcessMemoryGuard;
+
   # The Antigravity ACP archive is unfree; keep the exception scoped to this app.
   nixpkgs.config.allowUnfreePredicate =
     pkg:
