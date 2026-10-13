@@ -87,6 +87,44 @@ def under_memory_pressure(cgroup_root, service_path):
         return False
 
 
+def configure_oom_protection(main_pid, service_path, cgroup_root, proc_root):
+    """Protect server PIDs and clear inherited protection from provider/tools."""
+    cgroup = cgroup_root / service_path.lstrip("/")
+    for pid_file in cgroup.rglob("cgroup.procs"):
+        try:
+            pids = [int(value) for value in pid_file.read_text().split()]
+        except (OSError, ValueError):
+            continue
+        for pid in pids:
+            try:
+                # Pin the PID across validation and the procfs write. A proc
+                # directory descriptor cannot be redirected to a reused PID.
+                fd = os.open(proc_root / str(pid), os.O_RDONLY | os.O_DIRECTORY)
+            except OSError:
+                continue
+            try:
+                current = read_process(proc_root, pid)
+                if current is None or not is_in_cgroup(read_cgroup(proc_root, pid) or "", service_path):
+                    continue
+                protected = is_server_process(proc_root, pid, main_pid)
+                score = -1000 if protected else 500
+                score_fd = os.open('oom_score_adj', os.O_RDONLY, dir_fd=fd)
+                try:
+                    previous_score = int(os.read(score_fd, 32))
+                finally:
+                    os.close(score_fd)
+                if previous_score != score:
+                    score_fd = os.open('oom_score_adj', os.O_WRONLY | os.O_TRUNC, dir_fd=fd)
+                    try:
+                        os.write(score_fd, str(score).encode())
+                    finally:
+                        os.close(score_fd)
+            except (OSError, ValueError) as error:
+                print(f'T3 OOM protection unavailable pid={pid}: {error}', file=sys.stderr)
+            finally:
+                os.close(fd)
+
+
 def sample_processes(
     main_pid, service_path, cgroup_root=CGROUP_ROOT, proc_root=PROC_ROOT
 ):
@@ -224,6 +262,7 @@ def run_guard(main_pid, cgroup_root=CGROUP_ROOT, proc_root=PROC_ROOT, state_file
     relative = Path(service_path.lstrip("/"))
     if ".." in relative.parts:
         raise SystemExit("invalid T3 server cgroup path")
+    configure_oom_protection(main_pid, service_path, cgroup_root, proc_root)
     samples = sample_processes(main_pid, service_path, cgroup_root, proc_root)
     pressure = under_memory_pressure(cgroup_root, service_path)
     rss_limit = PRESSURE_RSS_FLOOR if pressure else PROCESS_RSS_LIMIT
