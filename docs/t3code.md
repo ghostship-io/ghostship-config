@@ -169,7 +169,7 @@ installed/ready badge as proof of model access.
 ## Memory budget
 
 The T3 server service includes all provider processes and their child tools in
-one cgroup. It has a 32 GiB `MemoryHigh` threshold and a 40 GiB `MemoryMax`
+one cgroup. It has a 36 GiB `MemoryHigh` threshold and a 40 GiB `MemoryMax`
 ceiling on Chill Penguin. The previous 12/16 GiB limits caused repeated CLI
 health-check and Git timeouts once the combined workload exceeded 12 GiB,
 even when the host had available memory.
@@ -178,8 +178,20 @@ When direct CLI probes succeed but T3 probes time out, inspect
 `memory.events` and `memory.pressure` in the service cgroup. Increasing probe
 timeouts does not fix memory reclaim stalls. The limits can be applied to the
 running service with `systemctl set-property --runtime t3code-server.service
-MemoryHigh=32G MemoryMax=40G` inside the container as root, without restarting
+MemoryHigh=36G MemoryMax=40G` inside the container as root, without restarting
 active agents; the image configuration supplies the same limits on recreation.
+
+Podman's systemd mode creates a RAM-backed `/tmp` unless a mount overrides it.
+T3 now binds `/srv/apps/t3code/tmp` to `/tmp` with mode `1777`. On October 13,
+CAD evaluation checkouts occupied about 30 GiB of tmpfs, charged as `shmem`
+to the server cgroup. With no swap, those pages could not be reclaimed;
+the 32 GiB high threshold stalled the UI despite modest process RSS.
+Inspect `shmem` in `memory.stat` and `df -h /tmp` as well as anonymous memory.
+Raising the running threshold to 36 GiB restored HTTP responses without a
+restart or deleting work. The disk mount takes effect on the next explicitly
+authorized container recreation; do not remount over active temporary files.
+The disk directory retains files across recreations; preserve active work when
+cleaning it, and monitor its disk usage rather than treating it as disposable RAM.
 
 The one-minute server monitor records the main process RSS, combined anonymous
 memory, total cgroup memory, and memory pressure in
