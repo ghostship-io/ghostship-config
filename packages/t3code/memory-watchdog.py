@@ -1,4 +1,4 @@
-"""Report sustained memory pressure; the caller owns idle checks and restart."""
+"""Record memory diagnostics and veto server restarts during memory pressure."""
 import json
 import os
 from pathlib import Path
@@ -6,6 +6,13 @@ import sys
 import time
 
 GIB = 1024**3
+
+
+def blocks_restart(sample):
+    # Reclaim may cause the web timeout. Protect the server immediately,
+    # independent of sustained-alert counts and the service-age cooldown.
+    return (sample['anon'] >= 8 * GIB or sample['pressure'] > 0
+            or sample.get('recent_pressure', 0) > 0)
 
 
 def evaluate(sample, previous):
@@ -35,6 +42,7 @@ def main():
         "anon": int(memory["anon"]),
         "rss": int(Path(f"/proc/{pid}/statm").read_text().split()[1]) * os.sysconf("SC_PAGE_SIZE"),
         "pressure": float(dict(field.split("=") for field in pressure.split()[1:])["avg60"]),
+        "recent_pressure": float(dict(field.split("=") for field in pressure.split()[1:])["avg10"]),
     }
     state_file = Path("/run/t3code-tool-update/memory-watchdog.json")
     try:
@@ -49,8 +57,8 @@ def main():
     temporary.write_text(json.dumps(state))
     temporary.replace(state_file)
     print("memory sample " + json.dumps({**sample, "high_samples": state["count"]}), file=sys.stderr)
-    if recover:
-        print("sustained high process memory or memory pressure")
+    if blocks_restart(sample):
+        print("high anonymous memory or reclaim pressure; server restart prohibited")
 
 
 if __name__ == "__main__":

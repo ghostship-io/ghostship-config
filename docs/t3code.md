@@ -169,7 +169,7 @@ installed/ready badge as proof of model access.
 ## Memory budget
 
 The T3 server service includes all provider processes and their child tools in
-one cgroup. It has a 24 GiB `MemoryHigh` threshold and a 32 GiB `MemoryMax`
+one cgroup. It has a 32 GiB `MemoryHigh` threshold and a 40 GiB `MemoryMax`
 ceiling on Chill Penguin. The previous 12/16 GiB limits caused repeated CLI
 health-check and Git timeouts once the combined workload exceeded 12 GiB,
 even when the host had available memory.
@@ -178,20 +178,21 @@ When direct CLI probes succeed but T3 probes time out, inspect
 `memory.events` and `memory.pressure` in the service cgroup. Increasing probe
 timeouts does not fix memory reclaim stalls. The limits can be applied to the
 running service with `systemctl set-property --runtime t3code-server.service
-MemoryHigh=24G MemoryMax=32G` inside the container as root, without restarting
+MemoryHigh=32G MemoryMax=40G` inside the container as root, without restarting
 active agents; the image configuration supplies the same limits on recreation.
 
 The one-minute server monitor records the main process RSS, combined anonymous
 memory, total cgroup memory, and memory pressure in
 `~/.t3code-container/logs/t3code-server-monitor.log`. These distinguish process
 growth from reclaimable file cache; high usage alone does not prove a leak.
-Three consecutive high samples trigger idle-only recovery: either 8 GiB of
-anonymous memory, or 20 GiB total with at least 10% full memory stall time over
-the last minute. A service must have run for 30 minutes before memory recovery
-can restart it. Cache alone does not trigger recovery. Missing measurements or
-unknown activity defer recovery. The monitor shares the updater lock and
-rechecks activity before restarting; active work can delay recovery indefinitely.
-Memory pressure and missing providers do not by themselves restart active work.
+Memory observations are diagnostic and never trigger a server restart, even
+while idle. At least 8 GiB of anonymous memory, any full reclaim stalls over
+the last ten or sixty seconds, or an unavailable memory measurement veto web
+recovery. Pressure-related web failures reset the recovery streak; memory is
+checked again immediately before any recovery attempt. Missing providers wait
+for idle. The monitor shares the updater lock and rechecks activity before
+restarting for non-memory failures.
+
 The five-second process guard protects both the service MainPID and the native
 `t3 serve` child spawned by npm's Node launcher. It stops one tool over 12 GiB
 RSS, or the largest tool of at least 1 GiB when total memory reaches
@@ -205,9 +206,12 @@ after recovery, and escalates TERM to KILL after 20 seconds if the tool still
 qualifies through its own RSS or continuing pressure.
 Containment can abort the selected tool, but leaves other sessions running;
 timestamped actions in `t3code-process-memory-guard.log` identify the reason.
-Only a
-stopped server, or a web UI or environment endpoint that fails five consecutive
-checks, is restarted despite active work.
+The guard also sets `oom_score_adj=-1000` on the launcher and native server,
+making them ineligible for kernel OOM selection. Provider and tool processes
+receive `500`, including newly spawned children that inherited server immunity.
+This preserves the server when the 40 GiB hard limit or host pressure requires
+an OOM victim. Recovery may start a stopped server; forced recovery of a web
+endpoint requires five consecutive failures with no memory veto.
 
 Maintenance ignores deleted threads and pending requests superseded by a later
 turn. Live provider sessions that are still starting or running, unresolved

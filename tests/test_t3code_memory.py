@@ -1,4 +1,5 @@
 import re
+import os
 import sqlite3
 import subprocess
 import sys
@@ -14,6 +15,15 @@ process_guard = load("t3code_process_guard", "packages/t3code/process-memory-gua
 
 
 class MemoryWatchdog(unittest.TestCase):
+    def test_memory_veto_is_immediate_and_includes_recent_reclaim(self):
+        for sample in (
+            {'anon': 9 * watchdog.GIB, 'pressure': 0},
+            {'anon': watchdog.GIB, 'pressure': 0.01},
+            {'anon': watchdog.GIB, 'pressure': 0, 'recent_pressure': 0.01},
+        ):
+            self.assertTrue(watchdog.blocks_restart(sample))
+        self.assertFalse(watchdog.blocks_restart({'anon': watchdog.GIB, 'pressure': 0}))
+
     def sample(self, **patch):
         return dict(pid=10, time=1000, age=3600, anon=9 * watchdog.GIB,
                     current=12 * watchdog.GIB, pressure=0, **patch)
@@ -48,6 +58,50 @@ class MemoryWatchdog(unittest.TestCase):
             self.assertFalse(recover)
 
 
+class ServerMonitorPolicy(unittest.TestCase):
+    def test_real_monitor_shell_never_restarts_for_pressure_or_unknown_memory(self):
+        source = (Path(__file__).resolve().parents[1] / 'modules/self-hosted/t3code.nix').read_text()
+        body = source.split('t3codeDaemonMonitor = pkgs.writeShellScriptBin "t3code-server-monitor" \'\'')[1].split("\n  '';", 1)[0]
+        for mode, expected in [('pressure', False), ('unknown', False), ('late-pressure', False), ('clear', True)]:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                state = root / 'state'
+                state.mkdir()
+                (state / 'server-monitor-web-failures').write_text('4\n')
+                probe = root / 'memory-probe'
+                probe.write_text('#!/bin/sh\n' + {
+                    'pressure': 'echo pressure\n',
+                    'unknown': 'exit 1\n',
+                    'late-pressure': f'if [ -f "{root}/sampled" ]; then echo pressure; fi; touch "{root}/sampled"\n',
+                    'clear': 'exit 0\n',
+                }[mode])
+                probe.chmod(0o755)
+                script = body.replace('${t3codeRuntimeEnv}', '')
+                script = script.replace('${t3codeIdleCheck}', 'is_t3code_idle() { return 0; }')
+                script = script.replace('${t3codeProviderCheck}', 't3code_providers_healthy() { return 0; }')
+                script = script.replace('${pkgs.python3}/bin/python3 ${../../packages/t3code/memory-watchdog.py}', str(probe))
+                script = script.replace('${pkgs.util-linux}/bin/flock', 'true')
+                script = script.replace('${t3codeToolLock}', str(root / 'lock'))
+                script = script.replace('/run/t3code-tool-update', str(state))
+                self.assertNotIn('${', script)
+                # Run the repository's actual shell branches with controlled probes.
+                prelude = f'''systemctl() {{
+                  case "$1" in
+                    is-active) return 0;;
+                    show) echo 10;;
+                    restart) touch "{root}/restarted";;
+                  esac
+                }}
+                curl() {{ return 1; }}
+                '''
+                result = subprocess.run(['bash', '-c', prelude + script],
+                    env={**os.environ, 'HOME': str(root)}, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual((root / 'restarted').exists(), expected)
+                if not expected:
+                    self.assertFalse((state / 'server-monitor-web-failures').exists())
+
+
 class ProcessMemoryGuard(unittest.TestCase):
     def fixture(self, root):
         service = process_guard.EXPECTED_CGROUP
@@ -76,7 +130,20 @@ class ProcessMemoryGuard(unittest.TestCase):
             (process / 'status').write_text(f'VmRSS:\t{rss * 1024 * 1024} kB\n')
             (process / 'stat').write_text(f'{pid} (test) S {ppid} ' + '0 ' * 17 + '100 0\n')
             (process / 'cmdline').write_bytes(('\0'.join(args) + '\0').encode())
+            (process / 'oom_score_adj').write_text('0\n')
         return cgroup, proc
+
+    def test_only_server_processes_keep_kernel_oom_immunity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, proc = self.fixture(root)
+            # Tools inherit the protected native server's initial score.
+            (proc / '22/oom_score_adj').write_text('-1000')
+            process_guard.configure_oom_protection(10, process_guard.EXPECTED_CGROUP, root / 'cgroup', proc)
+            for pid in (10, 11):
+                self.assertEqual(int((proc / str(pid) / 'oom_score_adj').read_text()), -1000)
+            for pid in (22, 23):
+                self.assertEqual(int((proc / str(pid) / 'oom_score_adj').read_text()), 500)
 
     def test_native_server_is_protected_behind_node_launcher(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -156,6 +223,7 @@ class ProcessMemoryGuard(unittest.TestCase):
                 process = proc / str(child.pid)
                 process.mkdir()
                 (process / 'cgroup').write_text(f'0::{process_guard.EXPECTED_CGROUP}\n')
+                (process / 'oom_score_adj').write_text('0')
                 for name in ('stat', 'status', 'cmdline'):
                     (process / name).symlink_to(Path('/proc') / str(child.pid) / name)
                 # Scale the selection floor, not the signaling path. The fixture

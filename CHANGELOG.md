@@ -3,6 +3,8 @@
 ## [3.15.104] - 2026-10-13
 
 - Contain combined T3 tool memory when anonymous allocations cause cgroup reclaim stalls, even when each tool is below 12 GiB. Protect the native T3 server behind its Node launcher and timestamp containment actions.
+- Never restart T3 for memory pressure, including pressure-induced web timeouts. Memory measurements veto web recovery immediately, reset its failure streak, and are rechecked before recovery.
+- Protect T3's launcher and native server from kernel OOM selection, keep tools eligible, and increase the shared reclaim/hard limits to 32/40 GiB on Chill Penguin's 64 GiB host.
 
 ## [3.15.103] - 2026-10-13
 

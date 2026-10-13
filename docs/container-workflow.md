@@ -9,12 +9,10 @@ Do not apply `home/profiles/develop.nix` or run
 
 ## Runtime memory containment
 
-The inner `t3code-server.service` shares a 32 GiB memory cgroup with provider
-tools. A container timer samples that cgroup's child processes every 5 seconds
-and sends `SIGTERM` to any non-server process above 12 GiB RSS. If it remains
-above the limit for 20 seconds, the guard sends `SIGKILL`. It validates the
-process identity and cgroup membership before signaling; the server monitor
-continues to recover the web service if it still becomes unhealthy.
+The inner `t3code-server.service` shares a memory cgroup with provider tools.
+The [memory budget and containment policy](t3code.md#memory-budget) prioritizes
+the server: 32/40 GiB reclaim/hard limits, kernel OOM protection for its launcher
+and native server, and tool containment instead of memory-driven restarts.
 
 ## Shared skills and tools
 

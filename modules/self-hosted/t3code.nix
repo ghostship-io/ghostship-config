@@ -982,6 +982,7 @@ let
     unhealthy_reason=""
     web_was_active=1
     web_unresponsive=0
+    memory_blocks_restart=0
 
     if ! systemctl is-active --quiet t3code-server.service; then
       unhealthy_reason="t3code-server.service is not active"
@@ -1000,13 +1001,10 @@ let
       main_pid="$(systemctl show t3code-server.service --property MainPID --value)"
       memory_reason=""
       if ! memory_reason="$(${pkgs.python3}/bin/python3 ${../../packages/t3code/memory-watchdog.py} "$main_pid" 2>> "$log_file")"; then
-        log_info "memory measurement unavailable; continuing health recovery"
+        memory_blocks_restart=1
+        memory_reason="memory measurement unavailable"
       elif [ -n "$memory_reason" ]; then
-        if [ -n "$unhealthy_reason" ]; then
-          unhealthy_reason="$unhealthy_reason; $memory_reason"
-        else
-          unhealthy_reason="$memory_reason"
-        fi
+        memory_blocks_restart=1
       fi
     fi
 
@@ -1014,6 +1012,13 @@ let
     failure_streak_file="$state_dir/server-monitor-failures"
     web_streak_file="$state_dir/server-monitor-web-failures"
     recovery_attempt_file="$state_dir/server-monitor-recovery-attempted"
+
+    if [ "$web_was_active" -eq 1 ] && [ "$memory_blocks_restart" -eq 1 ]; then
+      # Pressure-induced timeouts must never accumulate toward forced recovery.
+      rm -f "$failure_streak_file" "$web_streak_file"
+      log_info "$memory_reason; keeping t3code-server.service running"
+      exit 0
+    fi
 
     if [ -z "$unhealthy_reason" ]; then
       rm -f "$failure_streak_file" "$web_streak_file" "$recovery_attempt_file"
@@ -1049,9 +1054,7 @@ let
     mv "$web_streak_file.tmp" "$web_streak_file"
 
     force_recovery=0
-    # Only an unusable server may interrupt active work. Memory pressure and a
-    # missing provider leave the UI working, so they wait for idle; the
-    # process memory guard and kernel OOM killer contain runaway children.
+    # Web failures authorize recovery only after memory pressure is ruled out.
     if [ "$web_was_active" -eq 0 ] \
       || [ "$web_streak" -ge 5 ]; then
       force_recovery=1
@@ -1086,6 +1089,16 @@ let
     if [ "$web_was_active" -eq 1 ] && [ "$force_recovery" -eq 0 ] && ! is_t3code_idle; then
       log_info "unhealthy: $unhealthy_reason; work became active or unknown; restart deferred"
       exit 0
+    fi
+
+    if [ "$web_was_active" -eq 1 ]; then
+      # Pressure may begin while health probes or lock acquisition are running.
+      if ! memory_reason="$(${pkgs.python3}/bin/python3 ${../../packages/t3code/memory-watchdog.py} "$main_pid" 2>> "$log_file")" \
+        || [ -n "$memory_reason" ]; then
+        rm -f "$failure_streak_file" "$web_streak_file"
+        log_info "memory pressure or unknown measurement before recovery; keeping t3code-server.service running"
+        exit 0
+      fi
     fi
 
     printf '%s\n' "$(date +%s)" > "$recovery_attempt_file.tmp"
@@ -2157,8 +2170,8 @@ let
       StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-server.service.log
       StandardError=append:/home/t3code/.t3code-container/logs/t3code-server.service.log
       # This cgroup includes every provider and its tools, not only the web server.
-      MemoryHigh=24G
-      MemoryMax=32G
+      MemoryHigh=32G
+      MemoryMax=40G
       OOMPolicy=continue
       TasksMax=infinity
 
@@ -2504,8 +2517,9 @@ let
 
 in
 {
-  # Permit a guard-only deployment without replacing the active T3 container.
+  # Permit memory-policy deployment without replacing the active T3 container.
   system.build.t3codeProcessMemoryGuard = t3codeProcessMemoryGuard;
+  system.build.t3codeServerMonitor = t3codeDaemonMonitor;
 
   # The Antigravity ACP archive is unfree; keep the exception scoped to this app.
   nixpkgs.config.allowUnfreePredicate =
