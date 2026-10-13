@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.104] - 2026-10-13
+
+- Contain combined T3 tool memory when anonymous allocations cause cgroup reclaim stalls, even when each tool is below 12 GiB. Protect the native T3 server behind its Node launcher and timestamp containment actions.
+
 ## [3.15.103] - 2026-10-13
 
 - Pin ghostship-agent 0.19.0: browser window leases lapse after 10 idle minutes and 2 hours in total, close when a coding-agent session ends, hold at most 6 tabs, sweep the popups their pages opened, and publish their expiry in the window's home tab.

@@ -1,8 +1,11 @@
 import re
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from test_config import load
 
@@ -46,6 +49,126 @@ class MemoryWatchdog(unittest.TestCase):
 
 
 class ProcessMemoryGuard(unittest.TestCase):
+    def fixture(self, root):
+        service = process_guard.EXPECTED_CGROUP
+        cgroup = root / 'cgroup' / service.lstrip('/')
+        cgroup.mkdir(parents=True)
+        # Replay the Oct 11 stall: 24 GiB high limit, ~20 GiB anonymous,
+        # >10% full memory pressure, with tools individually below 12 GiB.
+        for name, value in {
+            'cgroup.procs': '10\n11\n22\n23\n',
+            'memory.high': str(24 * process_guard.GIB),
+            'memory.current': str(24 * process_guard.GIB + 1024),
+            'memory.stat': f'anon {20 * process_guard.GIB}\n',
+            'memory.pressure': 'full avg10=25.00 avg60=25.00 avg300=0.00 total=1\n',
+        }.items():
+            (cgroup / name).write_text(value)
+        proc = root / 'proc'
+        for pid, ppid, rss, args in [
+            (10, 1, 1, ['node', '/tools/bin/t3', 'serve']),
+            (11, 10, 1, ['/tools/lib/node_modules/@t3code/t3-linux-arm64/t3', 'serve']),
+            (22, 11, 9, ['python', 'cad.py']),
+            (23, 11, 8, ['python', 'cad2.py']),
+        ]:
+            process = proc / str(pid)
+            process.mkdir(parents=True)
+            (process / 'cgroup').write_text(f'0::{service}\n')
+            (process / 'status').write_text(f'VmRSS:\t{rss * 1024 * 1024} kB\n')
+            (process / 'stat').write_text(f'{pid} (test) S {ppid} ' + '0 ' * 17 + '100 0\n')
+            (process / 'cmdline').write_bytes(('\0'.join(args) + '\0').encode())
+        return cgroup, proc
+
+    def test_native_server_is_protected_behind_node_launcher(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, proc = self.fixture(root)
+            (proc / '11/status').write_text(f'VmRSS:\t{13 * 1024 * 1024} kB\n')
+            samples = process_guard.sample_processes(
+                10, process_guard.EXPECTED_CGROUP, root / 'cgroup', proc
+            )
+            self.assertNotIn(11, [sample['pid'] for sample in samples])
+
+    def test_combined_pressure_stops_one_tool_and_recovers_without_server_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cgroup, proc = self.fixture(root)
+            actions = []
+            def send(pidfd, sig):
+                actions.append((pidfd, sig))
+            with patch.object(process_guard.os, 'pidfd_open', side_effect=lambda pid, _: pid), \
+                 patch.object(process_guard.os, 'close'), \
+                 patch.object(process_guard.signal, 'pidfd_send_signal', side_effect=send), \
+                 patch.object(process_guard.time, 'monotonic', return_value=50):
+                process_guard.run_guard(10, root / 'cgroup', proc, root / 'state.json')
+                self.assertEqual(actions, [(22, process_guard.signal.SIGTERM)])
+                # Recovery cancels escalation even if the tool is still live.
+                (cgroup / 'memory.pressure').write_text('full avg10=0 avg60=0 total=1\n')
+                process_guard.run_guard(10, root / 'cgroup', proc, root / 'state.json')
+                self.assertEqual(actions, [(22, process_guard.signal.SIGTERM)])
+
+    def test_pressure_guard_ignores_cache_missing_measurements_and_recovery_race(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cgroup, proc = self.fixture(root)
+            self.assertTrue(process_guard.under_memory_pressure(root / 'cgroup', process_guard.EXPECTED_CGROUP))
+            (cgroup / 'memory.stat').write_text(f'anon {process_guard.GIB}\n')
+            self.assertFalse(process_guard.under_memory_pressure(root / 'cgroup', process_guard.EXPECTED_CGROUP))
+            (cgroup / 'memory.high').write_text('max')
+            self.assertFalse(process_guard.under_memory_pressure(root / 'cgroup', process_guard.EXPECTED_CGROUP))
+            with patch.object(process_guard.os, 'pidfd_open', return_value=22), \
+                 patch.object(process_guard.os, 'close'), \
+                 patch.object(process_guard.signal, 'pidfd_send_signal') as send:
+                sent, _ = process_guard.signal_process(
+                    22, 100, 10, process_guard.EXPECTED_CGROUP,
+                    process_guard.signal.SIGTERM, root / 'cgroup', proc
+                )
+                self.assertFalse(sent)
+                send.assert_not_called()
+
+    def test_signaling_rechecks_native_server_protection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, proc = self.fixture(root)
+            (proc / '11/status').write_text(f'VmRSS:\t{13 * 1024 * 1024} kB\n')
+            with patch.object(process_guard.os, 'pidfd_open', return_value=11), \
+                 patch.object(process_guard.os, 'close'), \
+                 patch.object(process_guard.signal, 'pidfd_send_signal') as send:
+                sent, reason = process_guard.signal_process(
+                    11, 100, 10, process_guard.EXPECTED_CGROUP,
+                    process_guard.signal.SIGTERM, root / 'cgroup', proc
+                )
+                self.assertFalse(sent)
+                self.assertEqual(reason, 'T3 server process is protected')
+                send.assert_not_called()
+
+    def test_pressure_guard_signals_a_real_disposable_child(self):
+        child = subprocess.Popen(
+            [sys.executable, '-c',
+             "import time; data=bytearray(64*1024**2); print('ready',flush=True); time.sleep(60)"],
+            stdout=subprocess.PIPE, text=True,
+        )
+        try:
+            self.assertEqual(child.stdout.readline().strip(), 'ready')
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                cgroup, proc = self.fixture(root)
+                (cgroup / 'cgroup.procs').write_text(f'10\n11\n{child.pid}\n')
+                process = proc / str(child.pid)
+                process.mkdir()
+                (process / 'cgroup').write_text(f'0::{process_guard.EXPECTED_CGROUP}\n')
+                for name in ('stat', 'status', 'cmdline'):
+                    (process / name).symlink_to(Path('/proc') / str(child.pid) / name)
+                # Scale the selection floor, not the signaling path. The fixture
+                # supplies pressure while real procfs supplies identity and RSS.
+                with patch.object(process_guard, 'PRESSURE_RSS_FLOOR', 32 * 1024**2):
+                    process_guard.run_guard(10, root / 'cgroup', proc, root / 'state.json')
+                self.assertEqual(child.wait(timeout=5), -process_guard.signal.SIGTERM)
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+            child.stdout.close()
+
     def sample(self, pid=22, rss=None, start_time=100):
         return {
             "pid": pid,

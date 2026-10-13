@@ -191,8 +191,21 @@ the last minute. A service must have run for 30 minutes before memory recovery
 can restart it. Cache alone does not trigger recovery. Missing measurements or
 unknown activity defer recovery. The monitor shares the updater lock and
 rechecks activity before restarting; active work can delay recovery indefinitely.
-Memory pressure and missing providers never interrupt active work; the process
-memory guard and kernel OOM killer contain runaway children meanwhile. Only a
+Memory pressure and missing providers do not by themselves restart active work.
+The five-second process guard protects both the service MainPID and the native
+`t3 serve` child spawned by npm's Node launcher. It stops one tool over 12 GiB
+RSS, or the largest tool of at least 1 GiB when total memory reaches
+`memory.high`, anonymous memory exceeds 75% of that limit, and full reclaim
+stalls exceed 10% over ten seconds. This handles combined tool allocations
+below the individual limit: on October 11, about 20 GiB of anonymous memory
+at the 24 GiB high limit stalled the UI until the watchdog restarted two active
+sessions. Cache usage alone does not trigger tool termination. The guard
+rechecks pressure and process identity before signaling, cancels escalation
+after recovery, and escalates TERM to KILL after 20 seconds if the tool still
+qualifies through its own RSS or continuing pressure.
+Containment can abort the selected tool, but leaves other sessions running;
+timestamped actions in `t3code-process-memory-guard.log` identify the reason.
+Only a
 stopped server, or a web UI or environment endpoint that fails five consecutive
 checks, is restarted despite active work.
 

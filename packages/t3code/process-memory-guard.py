@@ -1,4 +1,4 @@
-"""Stop an oversized T3 child process before it can exhaust the shared service cgroup."""
+"""Contain tool memory without signaling the T3 server or its Node launcher."""
 
 import json
 import os
@@ -9,6 +9,7 @@ from pathlib import Path
 
 GIB = 1024**3
 PROCESS_RSS_LIMIT = 12 * GIB
+PRESSURE_RSS_FLOOR = GIB
 TERM_GRACE_SECONDS = 20
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 PROC_ROOT = Path("/proc")
@@ -55,6 +56,37 @@ def is_in_cgroup(path, service_path):
     return path == service_path or path.startswith(service_path.rstrip("/") + "/")
 
 
+def is_server_process(proc_root, pid, main_pid):
+    if pid == main_pid:
+        return True
+    try:
+        process = proc_root / str(pid)
+        stat = (process / "stat").read_text().rsplit(")", 1)[1].split()
+        argv = (process / "cmdline").read_bytes().split(b"\0")
+        # npm's Node launcher spawns the native server instead of execing it.
+        # Providers and tool children must remain eligible for containment.
+        return (int(stat[1]) == main_pid and len(argv) > 1
+                and Path(os.fsdecode(argv[0])).name == "t3" and argv[1] == b"serve")
+    except (OSError, ValueError, IndexError):
+        return False
+
+
+def under_memory_pressure(cgroup_root, service_path):
+    """Require actual reclaim stalls and substantial anonymous memory, not cache."""
+    cgroup = cgroup_root / service_path.lstrip("/")
+    try:
+        high = int((cgroup / "memory.high").read_text())
+        current = int((cgroup / "memory.current").read_text())
+        memory = dict(line.split() for line in (cgroup / "memory.stat").read_text().splitlines())
+        full = next(line for line in (cgroup / "memory.pressure").read_text().splitlines()
+                    if line.startswith("full "))
+        pressure = dict(field.split("=") for field in full.split()[1:])
+        return high > 0 and current >= high and int(memory["anon"]) >= high * 3 // 4 \
+            and float(pressure["avg10"]) >= 10
+    except (OSError, ValueError, KeyError, StopIteration):
+        return False
+
+
 def sample_processes(
     main_pid, service_path, cgroup_root=CGROUP_ROOT, proc_root=PROC_ROOT
 ):
@@ -75,7 +107,7 @@ def sample_processes(
 
     samples = []
     for pid in pids:
-        if pid == main_pid:
+        if is_server_process(proc_root, pid, main_pid):
             continue
         if not is_in_cgroup(read_cgroup(proc_root, pid) or "", service_path):
             continue
@@ -145,9 +177,12 @@ def signal_process(
     try:
         current = read_process(proc_root, pid)
         current_cgroup = read_cgroup(proc_root, pid)
+        if is_server_process(proc_root, pid, main_pid):
+            return False, "T3 server process is protected"
         if current is None or current["start_time"] != start_time:
             return False, "process identity changed before signaling"
-        if current["rss"] < PROCESS_RSS_LIMIT:
+        rss_limit = PRESSURE_RSS_FLOOR if under_memory_pressure(cgroup_root, service_path) else PROCESS_RSS_LIMIT
+        if current["rss"] < rss_limit:
             return False, "process memory fell below the limit before signaling"
         if current_cgroup is None or not is_in_cgroup(current_cgroup, service_path):
             return False, "process left the server cgroup before signaling"
@@ -179,11 +214,8 @@ def save_state(path, state):
     temporary.replace(path)
 
 
-def main():
-    if len(sys.argv) != 2 or not sys.argv[1].isdigit():
-        raise SystemExit("usage: process-memory-guard.py MAIN_PID")
-    main_pid = int(sys.argv[1])
-    service_path = read_cgroup(PROC_ROOT, main_pid)
+def run_guard(main_pid, cgroup_root=CGROUP_ROOT, proc_root=PROC_ROOT, state_file=STATE_FILE):
+    service_path = read_cgroup(proc_root, main_pid)
     if service_path != EXPECTED_CGROUP:
         raise SystemExit(
             "T3 server is not in its expected cgroup; refusing to signal processes"
@@ -192,22 +224,24 @@ def main():
     relative = Path(service_path.lstrip("/"))
     if ".." in relative.parts:
         raise SystemExit("invalid T3 server cgroup path")
-    samples = sample_processes(main_pid, service_path)
-    previous = load_state()
+    samples = sample_processes(main_pid, service_path, cgroup_root, proc_root)
+    pressure = under_memory_pressure(cgroup_root, service_path)
+    rss_limit = PRESSURE_RSS_FLOOR if pressure else PROCESS_RSS_LIMIT
+    previous = load_state(state_file)
     pending = next(
         (
             sample
             for sample in samples
             if sample["pid"] == previous.get("pid")
             and sample["start_time"] == previous.get("start_time")
-            and sample["rss"] >= PROCESS_RSS_LIMIT
+            and sample["rss"] >= rss_limit
         ),
         None,
     )
-    candidate = pending or select_offender(samples, main_pid)
+    candidate = pending or select_offender(samples, main_pid, rss_limit)
     state, action = evaluate(candidate, previous, time.monotonic())
     if action is None:
-        save_state(STATE_FILE, state)
+        save_state(state_file, state)
         return
 
     sent, reason = signal_process(
@@ -216,13 +250,17 @@ def main():
         main_pid,
         service_path,
         action,
+        cgroup_root,
+        proc_root,
     )
     if sent:
-        save_state(STATE_FILE, state)
+        save_state(state_file, state)
         name = signal.Signals(action).name
         print(
-            f"oversized T3 child pid={candidate['pid']} "
-            f"rss_gib={candidate['rss'] / GIB:.2f} signal={name}",
+            f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} "
+            f"T3 child pid={candidate['pid']} "
+            f"rss_gib={candidate['rss'] / GIB:.2f} signal={name} "
+            f"reason={'cgroup-pressure' if pressure else 'process-limit'}",
             file=sys.stderr,
         )
     else:
@@ -232,10 +270,16 @@ def main():
             "process memory fell below the limit before signaling",
             "process left the server cgroup before signaling",
         }:
-            save_state(STATE_FILE, {})
+            save_state(state_file, {})
         print(
             f"T3 child guard skipped pid={candidate['pid']}: {reason}", file=sys.stderr
         )
+
+
+def main():
+    if len(sys.argv) != 2 or not sys.argv[1].isdigit():
+        raise SystemExit("usage: process-memory-guard.py MAIN_PID")
+    run_guard(int(sys.argv[1]))
 
 
 if __name__ == "__main__":
