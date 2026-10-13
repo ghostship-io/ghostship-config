@@ -82,6 +82,16 @@ let
     ntfy = { base = apps.ntfy.origin; secrets = { }; };
     # Public cloud API (the health tool's ring data); the token is the owner's personal token.
     ultrahuman = { base = "https://partner.ultrahuman.com"; secrets.ULTRAHUMAN_API_TOKEN = { unit = "ultrahuman"; key = "API_TOKEN"; }; };
+    # Wyze scale weigh-ins (health tool) through wyze-sdk: account login plus developer API key.
+    wyze = {
+      base = "https://api.wyzecam.com";
+      secrets = {
+        WYZE_EMAIL = { unit = "wyze"; key = "EMAIL"; };
+        WYZE_PASSWORD = { unit = "wyze"; key = "PASSWORD"; };
+        WYZE_KEY_ID = { unit = "wyze"; key = "KEY_ID"; };
+        WYZE_API_KEY = { unit = "wyze"; key = "API_KEY"; };
+      };
+    };
   };
   serviceProjection = id: "ghostship-service-${id}";
   serviceSecretsDir = "/run/ghostship-secrets/ghostship-services";
