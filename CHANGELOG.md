@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.106] - 2026-10-13
+
+- Pin GhostShip Agent 0.20.0 for exact-ASIN verification, bounded deep search, sampled price history, silent baselines and retailer cart contracts with explicit coverage gaps.
+- Preserve active T3 sessions while activating the updated GhostShip runtime.
+
 ## [3.15.105] - 2026-10-13
 
 - Keep T3 temporary checkouts on disk instead of Podman's systemd tmpfs, with a writable sticky directory and evaluated mount regression checks.
