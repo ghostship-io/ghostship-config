@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.107] - 2026-10-13
+
+- Pin GhostShip Agent 0.20.1 for bounded shopping output, literal model matching, selected spool/variant evidence, Best Buy destination verification and read-only quantity promotion quotes.
+- Preserve the active T3 session while activating the updated shopping runtime.
+
 ## [3.15.106] - 2026-10-13
 
 - Pin GhostShip Agent 0.20.0 for exact-ASIN verification, bounded deep search, sampled price history, silent baselines and retailer cart contracts with explicit coverage gaps.
