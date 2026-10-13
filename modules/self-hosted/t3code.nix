@@ -12,6 +12,7 @@ let
   t3codeHome = "/srv/apps/t3code/home";
   t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
   t3codeDocker = "/srv/apps/t3code/docker";
+  t3codeTmp = "/srv/apps/t3code/tmp";
   t3codeNixRoot = "/srv/apps/t3code/nix-root";
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
   t3codeSecrets = config.ghostship.selfHostedSecrets.projections.t3code.path;
@@ -2170,7 +2171,7 @@ let
       StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-server.service.log
       StandardError=append:/home/t3code/.t3code-container/logs/t3code-server.service.log
       # This cgroup includes every provider and its tools, not only the web server.
-      MemoryHigh=32G
+      MemoryHigh=36G
       MemoryMax=40G
       OOMPolicy=continue
       TasksMax=infinity
@@ -2569,6 +2570,9 @@ in
       "--health-start-period=5m"
     ];
     volumes = [
+      # Podman's systemd mode otherwise mounts /tmp as tmpfs. Temporary
+      # checkouts must not consume the shared server/provider memory budget.
+      "${t3codeTmp}:/tmp:rw"
       "${t3codeDocker}:/var/lib/docker:rw"
       "${t3codeWorkspace}:/workspace:rw"
       "${t3codeHome}:/home/t3code:rw"
@@ -2583,6 +2587,7 @@ in
     "d /srv/apps/t3code 0755 root root -"
     "d ${t3codeDeploymentState} 0755 root root -"
     "d ${t3codeDocker} 0755 root root -"
+    "d ${t3codeTmp} 1777 root root -"
     "d ${t3codeHome} 0755 3000 3000 -"
     "d ${t3codeNixRoot} 0755 root root -"
     "d ${t3codeNixRoot}/nix 0755 root root -"
@@ -2606,6 +2611,7 @@ in
 
       install -d -m0755 -o root -g root /srv/apps/t3code
       install -d -m0755 -o root -g root ${t3codeDocker}
+      install -d -m1777 -o root -g root ${t3codeTmp}
       install -d -m0755 -o 3000 -g 3000 ${t3codeHome}
       install -d -m0755 -o root -g root ${t3codeNixRoot}
       install -d -m0755 -o 3000 -g 3000 ${t3codeWorkspace}
