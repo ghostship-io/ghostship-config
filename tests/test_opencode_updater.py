@@ -28,6 +28,7 @@ class OpenCodeUpdater(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.bin = self.root / "bin"
         self.bin.mkdir()
+        self.assertIsNotNone(shutil.which("pgrep"), "process guard tests require procps")
         # Scope the process guard to this test's fixture; real host jobs must not
         # make an isolated promotion test defer activation.
         self.script("pgrep", f'''            #!/usr/bin/env python3
