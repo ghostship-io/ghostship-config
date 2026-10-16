@@ -105,6 +105,11 @@ in
       exports = [ "TOKEN" ];
     };
 
+    groq = mkUnit {
+      relativeFile = "secrets/files/sources/providers/groq.env.age";
+      exports = [ "API_KEY" ];
+    };
+
     id-ed25519-dev = mkUnit {
       relativeFile = "secrets/files/sources/home/id_ed25519_dev.age";
       recipientGroup = "editors";
@@ -638,6 +643,10 @@ in
       group = "apps";
       mode = "0440";
       fields = {
+        GROQ_API_KEY = {
+          unit = "groq";
+          key = "API_KEY";
+        };
         OLLAMA_API_KEY = {
           unit = "ollama";
           key = "API_KEY";
