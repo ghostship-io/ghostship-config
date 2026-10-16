@@ -189,14 +189,17 @@ owns execution through the same durable runtime store. Restart either unit
 independently, waiting for graceful scheduler shutdown before starting its
 replacement. The MCP mounts the socket directory so a recreated socket remains
 visible. Its dedicated bearer comes from the encrypted source and is separate
-from provider keys. Verify the real mounted socket and authenticated request
+from provider keys. Activation refreshes the managed CLI through the pinned
+installer with `--managed-only`, preserving provider and global Git settings.
+Verify the real mounted socket and authenticated request
 path after deployment, then repeat after a broker restart.
 
 The pool policy lives in `modules/self-hosted/inference-pool.json`, separately
 from OpenCode configuration. Deployment seeds only the public synthetic fixture
-when absent and preserves an existing fixture and Git history. The allowlist and
-trusted test command apply only to that fixture; expanding either requires an
-explicit policy change.
+when absent and preserves an existing fixture and Git history. The policy lists
+approved repositories for selected-file reviews with public or private
+sensitivity; broker roots derive from that same list. Trusted test commands are
+configured per repository; the existing test command belongs to the fixture.
 
 An explicit later instruction scheduling a T3 Code restart is required to
 override this guard; ordinary authorization to deploy is insufficient.
