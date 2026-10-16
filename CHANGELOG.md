@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.15.109] - 2026-10-16
+
+- Add encrypted inference provider bundles for Groq, Google AI Studio, NVIDIA,
+  Hugging Face, Vercel AI Gateway, Cloudflare Workers AI, and Cohere, projecting
+  their credentials into the T3 Code runtime environment.
+- Keep the dedicated Workers AI token and account separate from Cloudflare's
+  management credential bundle.
+
 ## [3.15.108] - 2026-10-16
 
 - Pin GhostShip Agent 0.21.0: retailer skills and generic browser shopping, with Costco local warehouse inventory retained through the generic service executor.

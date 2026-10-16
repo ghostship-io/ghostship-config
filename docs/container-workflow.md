@@ -157,6 +157,22 @@ changed directives from the built Nix unit; reset list directives such as
 only the intended service. Retain the candidate as a GC root. Remove the runtime
 drop-in during the later full switch so it cannot mask newer generated commands.
 
+For targeted secret updates, build and retain the committed Nix renderer and
+encrypted sources, decrypt only the intended units, and render only their consumer
+projection. Atomic replacement of `/run/ghostship-secrets/t3code.env` leaves the
+running container's `/run/secrets/t3code.env` bound to its previous inode. Compare
+the actual mounted content; refreshing the host path alone is insufficient.
+
+Refresh that inode from a disposable private clone of the container's mount
+namespace. Open its root directory before `setns`, use that descriptor to `chroot`,
+then `unshare` the mount namespace and make propagation private. Remount only the
+clone's existing secret bind writable, write the verified projection, restore
+read-only protection, and exit the clone. Creating a new bind of the old unlinked
+inode fails. Verify credential equality in process, preservation of existing
+credential bytes, the real container's read-only mount, and unchanged T3 identity
+and PIDs. New commands can source `/run/secrets/t3code.env`; existing process
+environments retain their previous values.
+
 An explicit later instruction scheduling a T3 Code restart is required to
 override this guard; ordinary authorization to deploy is insufficient.
 
