@@ -97,6 +97,12 @@ in
       exports = [ "API_KEY" ];
     };
 
+    inference-bridge-token = mkUnit {
+      relativeFile = "secrets/files/sources/services/inference-bridge-token.age";
+      format = "raw";
+      exports = [ ];
+    };
+
     discord = mkUnit {
       relativeFile = "secrets/files/sources/providers/discord.env.age";
       exports = [
