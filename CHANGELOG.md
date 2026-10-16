@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.15.110] - 2026-10-16
+
+- Pin Ghostship Agent 0.22.0 and run separate supervised inference broker and
+  scheduler processes in T3, with a dedicated encrypted token and a local Unix
+  socket for the MCP.
+- Persist the worker pool's provider policy and public synthetic fixture
+  separately from the main OpenCode configuration.
+
 ## [3.15.109] - 2026-10-16
 
 - Add encrypted inference provider bundles for Groq, Google AI Studio, NVIDIA,
