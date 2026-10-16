@@ -148,6 +148,14 @@ new service's Nix-generated unit through root SSH and retain its build as a
 GC root. Report the deferred full-system switch. Never stop T3 Code to make a
 deployment pass. Verify the recorded identity, start time, and MainPID afterward.
 
+Before a full switch during an active session, hold the idle deployment helper
+with a task-named runtime drop-in whose `[Unit]` sets
+`ConditionPathExists=!/run/<task>-session-guard`, and create that marker. Verify
+`systemctl start t3code-deploy-when-idle` remains inactive with
+`ConditionResult=no`. A runtime mask cannot override the existing store-backed
+`/etc` unit. Keep the marker and drop-in until the active session ends; they
+vanish on host reboot. Preserve other deployment guard drop-ins.
+
 For targeted activation on NixOS, `/etc/systemd/system` is store-backed and
 read-only. A unit linked under `/run/systemd/system` also has lower precedence
 than its existing `/etc` unit. Use a task-named runtime drop-in containing the
@@ -172,6 +180,23 @@ inode fails. Verify credential equality in process, preservation of existing
 credential bytes, the real container's read-only mount, and unchanged T3 identity
 and PIDs. New commands can source `/run/secrets/t3code.env`; existing process
 environments retain their previous values.
+
+The inference broker and scheduler are separate host units using `podman exec`
+into the existing T3 container. Their pinned closures are copied into its Nix
+store without replacing the container image or its application runtime. The
+broker owns only authenticated Unix HTTP submission and status; the scheduler
+owns execution through the same durable runtime store. Restart either unit
+independently, waiting for graceful scheduler shutdown before starting its
+replacement. The MCP mounts the socket directory so a recreated socket remains
+visible. Its dedicated bearer comes from the encrypted source and is separate
+from provider keys. Verify the real mounted socket and authenticated request
+path after deployment, then repeat after a broker restart.
+
+The pool policy lives in `modules/self-hosted/inference-pool.json`, separately
+from OpenCode configuration. Deployment seeds only the public synthetic fixture
+when absent and preserves an existing fixture and Git history. The allowlist and
+trusted test command apply only to that fixture; expanding either requires an
+explicit policy change.
 
 An explicit later instruction scheduling a T3 Code restart is required to
 override this guard; ordinary authorization to deploy is insufficient.
