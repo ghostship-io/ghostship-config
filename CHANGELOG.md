@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.108] - 2026-10-16
+
+- Pin GhostShip Agent 0.21.0: retailer skills and generic browser shopping, with Costco local warehouse inventory retained through the generic service executor.
+- Retire the unused shopping overlay argument and preserve the active T3 session during activation.
+
 ## [3.15.107] - 2026-10-13
 
 - Pin GhostShip Agent 0.20.1 for bounded shopping output, literal model matching, selected spool/variant evidence, Best Buy destination verification and read-only quantity promotion quotes.
