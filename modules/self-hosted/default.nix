@@ -39,6 +39,7 @@
     # Apps and utilities
     ./agent-desktop.nix
     ./private-integrations.nix
+    ./inference-bridge.nix
     ./t3code.nix
     ../agent-host
 
