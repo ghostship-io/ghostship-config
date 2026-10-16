@@ -16,7 +16,16 @@ let
     unset LD_LIBRARY_PATH
     exec ${pkgs.python3}/bin/python ${inputs.ghostship-private-agent}/tools/setup-container-agents.py \
       --source ${inputs.ghostship-private-agent} --home ${containerHome} \
-      --tools-package ${tools.default} --managed-only
+      --tools-package ${tools.default} --managed-only "$@"
+  '';
+  sourceSync = import ../../packages/t3code/source-sync.nix {
+    inherit lib pkgs;
+    installer = managedInstall;
+  };
+  syncOverride = pkgs.writeText "t3code-ghostship-agent-sync-managed.conf" ''
+    [Service]
+    ExecStart=
+    ExecStart=${sourceSync}/bin/t3code-install-ghostship-agent
   '';
   poolConfig = ./inference-pool.json;
   repositories = (builtins.fromJSON (builtins.readFile poolConfig)).repositories;
@@ -25,13 +34,22 @@ let
     umask 077
     # Copy pinned inference and managed tools without replacing the active T3 runtime.
     ${pkgs.nix}/bin/nix copy --no-check-sigs \
-      --to local?root=/srv/apps/t3code/nix-root ${broker} ${scheduler} ${managedInstall}
+      --to local?root=/srv/apps/t3code/nix-root ${broker} ${scheduler} ${managedInstall} ${sourceSync} ${syncOverride}
     install -d -m0755 /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge
     ln -sfn ${broker} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/package
     ln -sfn ${scheduler} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/scheduler
     ln -sfn ${managedInstall} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/managed-installer
+    ln -sfn ${sourceSync} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/source-sync
+    ln -sfn ${syncOverride} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/source-sync-override
+    install -d -m0700 -o3000 -g3000 ${hostHome}/.local/state/t3code-shared-agents
+    ln -sfn ${managedInstall} ${hostHome}/.local/state/t3code-shared-agents/managed-installer
+    # Override only the old image's scheduled installer, preserving its timer and repo sync.
+    ${pkgs.podman}/bin/podman exec --user 0:0 t3code ${pkgs.coreutils}/bin/install \
+      -D -m0644 ${syncOverride} \
+      /run/systemd/system/t3code-ghostship-agent-sync.service.d/50-nixos-managed-installer.conf
+    ${pkgs.podman}/bin/podman exec --user 0:0 t3code systemctl daemon-reload
     ${pkgs.podman}/bin/podman exec --user 3000:3000 --env HOME=${containerHome} \
-      t3code ${managedInstall}
+      --env T3CODE_HOOK_SET=bootstrap.d t3code ${sourceSync}/bin/t3code-install-ghostship-agent
     install -d -m0750 -o3000 -g62020 ${hostHome}/${state} ${hostHome}/${state}/socket
     install -d -m0750 -o0 -g62020 /run/ghostship-integrations /run/ghostship-integrations/inference-socket
     install -m0600 -o3000 -g62020 ${token} ${hostHome}/${state}/token.new
