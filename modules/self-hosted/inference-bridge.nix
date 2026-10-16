@@ -12,16 +12,25 @@ let
   endpoint = pkgs.writeText "inference-server.json" (builtins.toJSON {
     socket = "/run/ghostship-integrations/inference-socket/inference.sock";
   });
+  managedInstall = pkgs.writeShellScript "ghostship-managed-agents-refresh" ''
+    exec ${pkgs.python3}/bin/python ${inputs.ghostship-private-agent}/tools/setup-container-agents.py \
+      --source ${inputs.ghostship-private-agent} --home ${containerHome} \
+      --tools-package ${tools.default} --managed-only
+  '';
   poolConfig = ./inference-pool.json;
+  repositories = (builtins.fromJSON (builtins.readFile poolConfig)).repositories;
   publish = pkgs.writeShellScript "ghostship-inference-bridge-prepare" ''
     set -eu
     umask 077
-    # Install only the pinned broker and scheduler closures; the active T3 runtime stays running.
+    # Copy pinned inference and managed tools without replacing the active T3 runtime.
     ${pkgs.nix}/bin/nix copy --no-check-sigs \
-      --to local?root=/srv/apps/t3code/nix-root ${broker} ${scheduler}
+      --to local?root=/srv/apps/t3code/nix-root ${broker} ${scheduler} ${managedInstall}
     install -d -m0755 /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge
     ln -sfn ${broker} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/package
     ln -sfn ${scheduler} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/scheduler
+    ln -sfn ${managedInstall} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/managed-installer
+    ${pkgs.podman}/bin/podman exec --user 3000:3000 --env HOME=${containerHome} \
+      t3code ${managedInstall}
     install -d -m0750 -o3000 -g62020 ${hostHome}/${state} ${hostHome}/${state}/socket
     install -d -m0750 -o0 -g62020 /run/ghostship-integrations /run/ghostship-integrations/inference-socket
     install -m0600 -o3000 -g62020 ${token} ${hostHome}/${state}/token.new
@@ -61,7 +70,7 @@ in
       restartTriggers = [ config.age.secrets.inference-bridge-token.file poolConfig ];
       serviceConfig = {
         ExecStartPre = publish;
-        ExecStart = lib.escapeShellArgs [
+        ExecStart = lib.escapeShellArgs ([
           "${pkgs.podman}/bin/podman" "exec" "--user" "3000:62020"
           "--env" "HOME=${containerHome}"
           "--env" "XDG_STATE_HOME=${containerHome}/.local/state"
@@ -70,8 +79,7 @@ in
           "--token-file" "${containerHome}/${state}/token"
           "--socket" "${containerHome}/${state}/socket/inference.sock"
           "--socket-gid" "62020"
-          "--repository-root" "${containerHome}/${fixture}"
-        ];
+        ] ++ lib.concatMap (repository: [ "--repository-root" repository ]) repositories);
         Restart = "on-failure";
         RestartSec = 10;
         TimeoutStartSec = 300;
