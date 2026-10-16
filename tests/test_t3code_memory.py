@@ -62,7 +62,7 @@ class ServerMonitorPolicy(unittest.TestCase):
     def test_real_monitor_shell_never_restarts_for_pressure_or_unknown_memory(self):
         source = (Path(__file__).resolve().parents[1] / 'modules/self-hosted/t3code.nix').read_text()
         body = source.split('t3codeDaemonMonitor = pkgs.writeShellScriptBin "t3code-server-monitor" \'\'')[1].split("\n  '';", 1)[0]
-        for mode, expected in [('pressure', False), ('unknown', False), ('late-pressure', False), ('clear', True)]:
+        for mode, expected in [('pressure', False), ('unknown', False), ('late-pressure', False), ('clear', True), ('v2-busy', False)]:
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 state = root / 'state'
@@ -74,10 +74,15 @@ class ServerMonitorPolicy(unittest.TestCase):
                     'unknown': 'exit 1\n',
                     'late-pressure': f'if [ -f "{root}/sampled" ]; then echo pressure; fi; touch "{root}/sampled"\n',
                     'clear': 'exit 0\n',
+                    'v2-busy': 'exit 0\n',
                 }[mode])
                 probe.chmod(0o755)
                 script = body.replace('${t3codeRuntimeEnv}', '')
                 script = script.replace('${t3codeIdleCheck}', 'is_t3code_idle() { return 0; }')
+                if mode == 'v2-busy':
+                    (root / 'userdata').mkdir()
+                    (root / 'userdata/statev2.sqlite').touch()
+                    script = script.replace('is_t3code_idle() { return 0; }', 'is_t3code_idle() { return 2; }')
                 script = script.replace('${t3codeProviderCheck}', 't3code_providers_healthy() { return 0; }')
                 script = script.replace('${pkgs.python3}/bin/python3 ${../../packages/t3code/memory-watchdog.py}', str(probe))
                 script = script.replace('${pkgs.util-linux}/bin/flock', 'true')
@@ -95,10 +100,13 @@ class ServerMonitorPolicy(unittest.TestCase):
                 curl() {{ return 1; }}
                 '''
                 result = subprocess.run(['bash', '-c', prelude + script],
-                    env={**os.environ, 'HOME': str(root)}, capture_output=True, text=True)
+                    env={**os.environ, 'HOME': str(root), 'T3CODE_HOME': str(root)}, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual((root / 'restarted').exists(), expected)
-                if not expected:
+                if mode == 'v2-busy':
+                    log = (root / '.t3code-container/logs/t3code-server-monitor.log').read_text()
+                    self.assertIn('activity is active or unknown; restart deferred', log)
+                elif not expected:
                     self.assertFalse((state / 'server-monitor-web-failures').exists())
 
 

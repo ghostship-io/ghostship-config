@@ -11,6 +11,7 @@ import os
 import secrets
 import shutil
 import socket
+import sqlite3
 import subprocess
 import tempfile
 import time
@@ -87,7 +88,16 @@ def main():
             OPENCODE_DISABLE_AUTOUPDATE="1",
             OPENCODE_SERVER_PASSWORD=secrets.token_hex(32),
         )
+        legacy_id = None
         if args.opencode_db:
+            with sqlite3.connect(
+                args.opencode_db.as_uri() + "?mode=ro", uri=True
+            ) as db:
+                row = db.execute(
+                    "SELECT id FROM session ORDER BY time_updated DESC LIMIT 1"
+                ).fetchone()
+                assert row, "migration rehearsal requires an existing V1 session"
+                legacy_id = row[0]
             target = root / "data/opencode/opencode.db"
             target.parent.mkdir(parents=True)
             shutil.copyfile(args.opencode_db, target)
@@ -152,6 +162,28 @@ def main():
                     url = f"http://127.0.0.1:{oc_port}/api"
                     info = wait_for(proc, f"{url}/info", password)
                     assert info["version"] == args.opencode_version
+                    if legacy_id:
+                        deadline = time.monotonic() + 180
+                        while True:
+                            migration = request(
+                                f"{url}/experimental/migration/v1", password
+                            )
+                            if migration["status"] == "completed":
+                                break
+                            assert migration["status"] in ("running", "required"), (
+                                "V1 migration failed"
+                            )
+                            if time.monotonic() >= deadline:
+                                raise TimeoutError(
+                                    "V1 migration did not finish within 180 seconds"
+                                )
+                            time.sleep(0.5)
+                        imported = request(f"{url}/session/{legacy_id}", password)
+                        assert imported["data"]["id"] == legacy_id
+                        print(
+                            "PASS existing V1 session readable through V2 API",
+                            flush=True,
+                        )
                     try:
                         request(f"{url}/session")
                     except urllib.error.HTTPError as error:

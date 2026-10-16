@@ -1196,6 +1196,11 @@ let
       || [ "$web_streak" -ge 5 ]; then
       force_recovery=1
     fi
+    # V2 leaves stale V1 activity behind. Repeated HTTP failures cannot prove
+    # that its active turns are safe to interrupt; retain the running server.
+    if [ "$web_was_active" -eq 1 ] && [ -e "$T3CODE_HOME/userdata/statev2.sqlite" ]; then
+      force_recovery=0
+    fi
 
     if [ -r "$recovery_attempt_file" ]; then
       attempted_at=0
@@ -1555,7 +1560,9 @@ let
     ${t3codeRuntimeEnv}
     exec ${pkgs.python3}/bin/python ${../../scripts/setup-container-agents.py} \
       --source ${inputs.ghostship-private-agent} \
-      --tools-package ${inputs.ghostship-private-agent.packages.${pkgs.stdenv.hostPlatform.system}.default} \
+      --tools-package ${
+        inputs.ghostship-private-agent.packages.${pkgs.stdenv.hostPlatform.system}.default
+      } \
       "$@"
   '';
 
