@@ -113,6 +113,50 @@ Upstream: [provider setup](https://github.com/pingdotgg/t3code/blob/main/docs/us
 [Antigravity sign-in](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-antigravity.md),
 and [official ACP registry](https://github.com/agentclientprotocol/registry/tree/main/antigravity-acp).
 
+## OpenCode 2 upgrades
+
+OpenCode 2 uses `@opencode/cli`; `opencode-ai@latest` remains on version 1.
+Maintenance resolves the stable version, installs its matching native package
+into an immutable prefix, and probes its version and authenticated `/api/info`
+in disposable state before selecting it. Failed installation or probes retain
+the old executable. Existing release directories remain available to running
+processes. The user shim and legacy npm launcher resolve the same selected
+release after promotion.
+
+Build `.#nixosConfigurations.chill-penguin.config.system.build.t3codeToolMaintenance`
+to obtain the exact updater without building or activating the container image.
+Its `--stage-opencode` mode only stages and probes OpenCode; it leaves the
+production launchers, database, other providers, and T3 server untouched.
+Keep the built closure rooted in both host and container stores when staging
+through root SSH.
+
+The first promotion of an existing V1 installation requires
+`OPENCODE_ALLOW_V2_MIGRATION=1`. Before setting it, pause every producer of
+OpenCode jobs, let all existing OpenCode processes exit, and take a consistent
+SQLite backup. The process guard defers promotion while any OpenCode process
+remains. Version 2 converts session history in the shared database; reverting
+the executable alone is insufficient rollback. Restore the matching backup
+with all OpenCode processes stopped if rollback is required. Fresh homes with
+no V1 installation or database can install V2 directly.
+
+Rehearse migration in a disposable container with separate home and no
+production mounts, using `tests/t3code-upgrade-smoke.py --help`. Pass absolute
+candidate paths and expected versions, plus `--opencode-db` pointing to a
+consistent V1 backup. It checks T3's V2 endpoint, waits for OpenCode's background
+migration, reads an existing V1 session, creates a session, rejects anonymous
+API access, and confirms persistence after restarting only the canary server.
+It supplies no account credentials or model prompts.
+
+For already-deployed V1 maintenance scripts after T3 moves to Orchestrator V2,
+run the committed `scripts/t3code-v2-maintenance-guard` as root on the host.
+It reloads only maintenance unit definitions and selects the unsupported probe
+adapter so updates/restarts defer. The legacy server-monitor oneshot is skipped
+on V2 because it can bypass its probe after repeated HTTP failures. Podman
+health checks and process memory containment remain active. These `/run`
+drop-ins expire on host reboot/container replacement; deploy the committed
+probe and monitor fixes before removing them. Automatic maintenance remains
+deferred until a V2 activity adapter is implemented and verified.
+
 ## Android installation
 
 Open `https://t3code.ghostship.io` in Android Chrome and complete Cloudflare
@@ -305,12 +349,16 @@ skip the fetch so recovery never waits on GitHub. Sync output is in
 The host unit preserves running work across rebuilds. Image updates do not
 interrupt active tasks: `nixos-rebuild switch` stages the desired deployment ID,
 and `t3code-deploy-when-idle.timer` (running every minute) automatically applies
-the update after 30 seconds of sustained idle. The activity probe reads
+the update after 30 seconds of sustained idle. The V1 activity probe reads
 `state.sqlite`: idle means no running or recently pending turn, no starting or
 running provider session, no user message in 15 minutes, no thread activity in
 10 minutes, and no unsettled Claude background task (shell, subagent, or
 monitor) started in the last 12 hours. Background tasks outlive the turn that
-started them, so a settled turn alone does not prove idle. The deployer leaves a
+started them, so a settled turn alone does not prove idle. Orchestrator V2 keeps
+that V1 database after switching to `statev2.sqlite`; its stale projections
+cannot establish idle. Until a V2 adapter is verified, the probe returns unknown
+when V2 state exists, and automatic updates and restarts defer. Missing state
+also returns unknown. The deployer leaves a
 unit that is starting or stopping alone; only a stopped or failed unit is
 started without the idle gate. The deployer holds the container's tool-maintenance lock
 (`~/.local/state/t3code-tool-update/tool-update.lock`, shared through the home
