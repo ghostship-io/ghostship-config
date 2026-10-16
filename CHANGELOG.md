@@ -3,8 +3,8 @@
 ## [3.15.109] - 2026-10-16
 
 - Add encrypted inference provider bundles for Groq, Google AI Studio, NVIDIA,
-  Hugging Face, Vercel AI Gateway, and Cloudflare Workers AI, projecting their
-  credentials into the T3 Code runtime environment.
+  Hugging Face, Vercel AI Gateway, Cloudflare Workers AI, and Cohere, projecting
+  their credentials into the T3 Code runtime environment.
 - Keep the dedicated Workers AI token and account separate from Cloudflare's
   management credential bundle.
 

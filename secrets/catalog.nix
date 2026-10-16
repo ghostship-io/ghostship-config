@@ -92,6 +92,11 @@ in
       ];
     };
 
+    cohere = mkUnit {
+      relativeFile = "secrets/files/sources/providers/cohere.env.age";
+      exports = [ "API_KEY" ];
+    };
+
     discord = mkUnit {
       relativeFile = "secrets/files/sources/providers/discord.env.age";
       exports = [
@@ -686,6 +691,10 @@ in
         HF_TOKEN = {
           unit = "huggingface";
           key = "TOKEN";
+        };
+        COHERE_API_KEY = {
+          unit = "cohere";
+          key = "API_KEY";
         };
         AI_GATEWAY_API_KEY = {
           unit = "vercel-ai-gateway";
