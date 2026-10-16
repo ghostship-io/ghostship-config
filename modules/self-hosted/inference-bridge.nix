@@ -13,6 +13,7 @@ let
     socket = "/run/ghostship-integrations/inference-socket/inference.sock";
   });
   managedInstall = pkgs.writeShellScript "ghostship-managed-agents-refresh" ''
+    unset LD_LIBRARY_PATH
     exec ${pkgs.python3}/bin/python ${inputs.ghostship-private-agent}/tools/setup-container-agents.py \
       --source ${inputs.ghostship-private-agent} --home ${containerHome} \
       --tools-package ${tools.default} --managed-only
