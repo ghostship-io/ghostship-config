@@ -5,6 +5,8 @@
 - Allow selected private-file inference reviews in the approved Ghostship
   checkout and derive broker repository roots from the shared pool policy.
 - Retain the public fixture and its repository-specific trusted test command.
+- Keep Cohere request ceilings unchanged while allowing a documented internal
+  500k-token daily ceiling and bounded 4096-token review output.
 - Refresh the pinned managed CLI during inference activation while preserving
   provider configuration and global Git settings.
 

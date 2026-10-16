@@ -175,6 +175,19 @@
         "model_ids": [
           "north-mini-code-1-0"
         ]
+      },
+      "limits": {
+        "rpm": 5,
+        "rpd": 30,
+        "rmonthly": 900,
+        "tpd": 500000,
+        "max_output": 4096
+      },
+      "limits_basis": {
+        "checked_at": "2026-10-16",
+        "rate_limits_source": "https://docs.cohere.com/docs/rate-limits",
+        "model_source": "https://docs.cohere.com/docs/north-mini-code-1.0",
+        "note": "North Mini Code only, free until rate limits; published trial limits are 20 requests/minute and 1000 calls/month. The retained 5 RPM, 30 RPD and 900 calls per rolling 31 days are internal ceilings. 500000 tokens/day is a finite internal safety ceiling, not a published provider entitlement; no token/day limit is published on the cited rate-limit page. Output is capped at 4096 tokens below the model maximum of 64K."
       }
     },
     "kilo": {
