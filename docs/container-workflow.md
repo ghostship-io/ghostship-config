@@ -148,6 +148,15 @@ new service's Nix-generated unit through root SSH and retain its build as a
 GC root. Report the deferred full-system switch. Never stop T3 Code to make a
 deployment pass. Verify the recorded identity, start time, and MainPID afterward.
 
+For targeted activation on NixOS, `/etc/systemd/system` is store-backed and
+read-only. A unit linked under `/run/systemd/system` also has lower precedence
+than its existing `/etc` unit. Use a task-named runtime drop-in containing the
+changed directives from the built Nix unit; reset list directives such as
+`ExecStart` before appending their generated replacements. Verify the loaded
+`ExecStart`/`ExecStartPre` and `DropInPaths` after `daemon-reload`, then restart
+only the intended service. Retain the candidate as a GC root. Remove the runtime
+drop-in during the later full switch so it cannot mask newer generated commands.
+
 An explicit later instruction scheduling a T3 Code restart is required to
 override this guard; ordinary authorization to deploy is insufficient.
 
