@@ -191,8 +191,15 @@ replacement. The MCP mounts the socket directory so a recreated socket remains
 visible. Its dedicated bearer comes from the encrypted source and is separate
 from provider keys. Activation refreshes the managed CLI through the pinned
 installer with `--managed-only`, preserving provider and global Git settings.
-Verify the real mounted socket and authenticated request
-path after deployment, then repeat after a broker restart.
+The host also projects the installer at
+`~/.local/state/t3code-shared-agents/managed-installer` and updates only the
+container sync service's `ExecStart` through a runtime drop-in. Both this command
+and future images share the same guarded repository-sync script. Preserve its
+30-minute timer and run the actual sync service twice after activation: checking
+the CLI immediately after a one-time refresh misses an old image's later writer.
+The host recreates the override on activation/container startup. Verify the real
+mounted socket and authenticated request path after deployment, then repeat after
+a broker restart.
 
 The pool policy lives in `modules/self-hosted/inference-pool.json`, separately
 from OpenCode configuration. Deployment seeds only the public synthetic fixture

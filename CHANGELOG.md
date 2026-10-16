@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.113] - 2026-10-16
+
+- Keep scheduled T3 source sync on the host-projected managed installer so an
+  older running image cannot reinstall an obsolete CLI or shared instructions.
+- Share the existing guarded repository sync between future images and the
+  session-safe service override; retain timer behavior and provider settings.
+
 ## [3.15.112] - 2026-10-16
 
 - Allow selected private-file inference reviews in the approved Ghostship
