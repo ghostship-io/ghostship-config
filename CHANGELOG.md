@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.111] - 2026-10-16
+
+- Pin the inference MCP response contract fix so live status, cancellation, and
+  paged result responses reach clients after the durable broker operation.
+
 ## [3.15.110] - 2026-10-16
 
 - Pin Ghostship Agent 0.22.0 and run separate supervised inference broker and
