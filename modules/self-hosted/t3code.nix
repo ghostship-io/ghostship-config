@@ -687,6 +687,7 @@ let
         env["HOME"] = root
         password = secrets.token_urlsafe(24)
         env["OPENCODE_SERVER_PASSWORD"] = password
+        env["OPENCODE_DISABLE_AUTOUPDATE"] = "1"
         for key, folder in (("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"),
                             ("XDG_CACHE_HOME", "cache"), ("XDG_STATE_HOME", "state"),
                             ("XDG_RUNTIME_DIR", "run"), ("TMPDIR", "tmp")):
@@ -725,7 +726,8 @@ let
                     raise RuntimeError("OpenCode probe server did not become ready within 30s")
             except Exception:
                 log.seek(0)
-                sys.stderr.write(log.read().decode(errors="replace")[-4000:])
+                message = log.read().decode(errors="replace")
+                sys.stderr.write(message.replace(password, "[redacted]")[-4000:])
                 raise
             finally:
                 try:
@@ -741,7 +743,7 @@ let
 
     install_opencode_cli() {
       local expected_version platform_package release_root release_dir stage_dir
-      local install_output current_tmp launcher_tmp current_release
+      local install_output current_tmp launcher_tmp current_release legacy_path legacy_install=0
       # OpenCode 2 moved to @opencode/cli; opencode-ai@latest still ships v1.
       # Fail closed if the stable channel ever points outside the selected major.
       expected_version="$(latest_agent_version @opencode/cli)" || return 1
@@ -792,7 +794,19 @@ let
         return 0
       fi
       current_release="$(readlink -e "$release_root/current" || true)"
-      if [ -z "$current_release" ] && [ "''${OPENCODE_ALLOW_V2_MIGRATION:-0}" != 1 ]; then
+      for legacy_path in "$XDG_DATA_HOME/opencode/opencode.db" \
+        "''${OPENCODE_DB:-$XDG_DATA_HOME/opencode/opencode.db}" \
+        "$NPM_CONFIG_PREFIX/bin/opencode" \
+        "$NPM_CONFIG_PREFIX/lib/node_modules/opencode-ai" \
+        "$NPM_CONFIG_PREFIX/lib/node_modules/@opencode-ai/cli" \
+        "$NPM_CONFIG_PREFIX/lib/node_modules/@opencode/cli"; do
+        if [ -e "$legacy_path" ] || [ -L "$legacy_path" ]; then
+          legacy_install=1
+          break
+        fi
+      done
+      if [ -z "$current_release" ] && [ "$legacy_install" -eq 1 ] \
+        && [ "''${OPENCODE_ALLOW_V2_MIGRATION:-0}" != 1 ]; then
         log_warn "OpenCode $expected_version is staged only; first v2 activation requires a consistent database backup, no running OpenCode processes, and OPENCODE_ALLOW_V2_MIGRATION=1"
         return 0
       fi

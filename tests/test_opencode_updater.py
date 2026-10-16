@@ -91,6 +91,7 @@ class OpenCodeUpdater(unittest.TestCase):
             #!/usr/bin/env python3
             import base64, http.server, json, os, pathlib, sys, time
             assert "OPENCODE_DB" not in os.environ
+            assert os.environ["OPENCODE_DISABLE_AUTOUPDATE"] == "1"
             assert "OPENCODE_CONFIG_CONTENT" not in os.environ
             assert pathlib.Path.cwd() == pathlib.Path(os.environ["HOME"])
             for key in ("XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "TMPDIR"):
@@ -100,6 +101,11 @@ class OpenCodeUpdater(unittest.TestCase):
                 sys.exit(0)
             pathlib.Path(SERVER_PID_FILE).write_text(str(os.getpid()))
             if MODE == "crash":
+                sys.exit(23)
+            if MODE == "leak":
+                password = os.environ["OPENCODE_SERVER_PASSWORD"]
+                pathlib.Path(PASSWORD_FILE).write_text(password)
+                print("probe password " + password, file=sys.stderr)
                 sys.exit(23)
             if MODE == "hang":
                 time.sleep(120)
@@ -115,7 +121,7 @@ class OpenCodeUpdater(unittest.TestCase):
                 def log_message(self, *args):
                     pass
             http.server.HTTPServer(("127.0.0.1", int(sys.argv[-1])), Handler).serve_forever()
-        ''').replace("VERSION", repr("2.0.30")).replace("MODE", repr(mode)).replace("SERVER_PID_FILE", repr(str(self.root / "probe.pid")))
+        ''').replace("VERSION", repr("2.0.30")).replace("MODE", repr(mode)).replace("SERVER_PID_FILE", repr(str(self.root / "probe.pid"))).replace("PASSWORD_FILE", repr(str(self.root / "probe.password")))
 
     def run_installer(self, stage_cli=False, **env):
         script = "set -eu\nlog_info() { printf '%s\\n' \"$1\" >&2; }\nlog_warn() { log_info \"$1\"; }\n"
@@ -141,7 +147,7 @@ class OpenCodeUpdater(unittest.TestCase):
         self.assertTrue((legacy / "retained").exists())
         self.assertFalse(list(self.releases.parent.glob(".staging.*")))
         # The promoted executable resolves its immutable prefix even via npm's link.
-        version_env = {"PATH": self.env["PATH"], "HOME": str(self.root)}
+        version_env = {"PATH": self.env["PATH"], "HOME": str(self.root), "OPENCODE_DISABLE_AUTOUPDATE": "1"}
         version_env.update({key: str(self.root / key) for key in
                             ("XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "TMPDIR")})
         version = subprocess.run([str(self.launcher), "--version"], env=version_env, cwd=self.root, text=True, capture_output=True)
@@ -216,6 +222,36 @@ class OpenCodeUpdater(unittest.TestCase):
         self.assertEqual(self.current.resolve(), self.old)
         self.assertFalse(self.launcher.is_symlink())
         self.assertTrue((self.releases / "2.0.30/bin/opencode").is_file())
+
+    def test_clean_home_activates_without_migration_flag(self):
+        self.current.unlink()
+        self.launcher.unlink()
+        result = self.run_installer(OPENCODE_ALLOW_V2_MIGRATION="0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.current.resolve(), self.releases / "2.0.30")
+        self.assertEqual(self.launcher.resolve(), self.current.resolve() / "bin/opencode")
+        self.assertTrue(os.access(self.launcher, os.X_OK))
+
+    def test_existing_database_requires_migration_flag_without_legacy_launcher(self):
+        self.current.unlink()
+        self.launcher.unlink()
+        database = self.data / "opencode/opencode.db"
+        database.parent.mkdir(parents=True)
+        database.write_text("existing database")
+        result = self.run_installer(OPENCODE_ALLOW_V2_MIGRATION="0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.current.exists())
+        self.assertFalse(self.launcher.exists())
+        self.assertEqual(database.read_text(), "existing database")
+        self.assertIn("consistent database backup", result.stderr)
+
+    def test_failed_probe_redacts_its_password(self):
+        result = self.run_installer(NATIVE_FIXTURE=self.native("leak"))
+        self.assertNotEqual(result.returncode, 0)
+        password = (self.root / "probe.password").read_text()
+        self.assertNotIn(password, result.stderr)
+        self.assertIn("probe password [redacted]", result.stderr)
+        self.assertEqual(self.current.resolve(), self.old)
 
     def test_first_v2_activation_requires_explicit_migration_authorization(self):
         self.current.unlink()
