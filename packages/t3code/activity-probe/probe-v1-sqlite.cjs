@@ -29,13 +29,30 @@ if (!stateDb) {
   process.exit(2);
 }
 
-if (!fs.existsSync(stateDb)) {
-  process.exit(2);
-}
-
 try {
+  // V2 leaves the old database and legacy projections behind. Their idle
+  // state says nothing about V2 runs or background tasks. Until a V2 adapter
+  // is verified, its presence must block maintenance, even with an explicit
+  // T3CODE_STATE_DB selecting the stale V1 file.
+  const v2Db = path.join(path.dirname(stateDb), 'statev2.sqlite');
+  try {
+    fs.statSync(v2Db);
+    process.stderr.write('probe unknown: V2 activity adapter unavailable\n');
+    process.exit(2);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+
   const { DatabaseSync } = require('node:sqlite');
   const db = new DatabaseSync(stateDb, { readOnly: true });
+
+  if (db.prepare(
+    "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name GLOB 'orchestration_v2_*' LIMIT 1"
+  ).get()) {
+    db.close();
+    process.stderr.write('probe unknown: V2 activity adapter unavailable\n');
+    process.exit(2);
+  }
 
   const rows = db.prepare(
     `SELECT count(*) AS active FROM projection_turns AS turn

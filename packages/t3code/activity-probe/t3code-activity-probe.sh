@@ -15,12 +15,8 @@ case "$ADAPTER" in
     exec node "$DIR/probe-v1-sqlite.cjs" "$@"
     ;;
   v2-api)
-    # Placeholder for future V2 orchestration status API
-    if [ -n "${T3CODE_API_URL:-}" ]; then
-      exit 2
-    else
-      exec node "$DIR/probe-v1-sqlite.cjs" "$@"
-    fi
+    # No verified V2 adapter exists; never fall back to stale V1 state.
+    exit 2
     ;;
   *)
     echo "unknown activity probe adapter: $ADAPTER" >&2
