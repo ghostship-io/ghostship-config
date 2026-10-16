@@ -882,6 +882,11 @@ let
       printf 'error: opencode is not installed yet; run t3code-tool-maintenance\n' >&2
       exit 1
     fi
+    case "\$(readlink -f -- "\$target")" in
+      '$XDG_DATA_HOME/t3code-tools/opencode/releases/'*/bin/opencode)
+        exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/opencode-compat.py} "\$target" "\$@"
+        ;;
+    esac
     exec "\$target" "\$@"
     EOF
       chmod 0755 "$temporary"
@@ -895,8 +900,14 @@ let
         install_opencode_cli
         exit 0
         ;;
+      --activate-opencode)
+        install_opencode_cli
+        [ -L "$XDG_DATA_HOME/t3code-tools/opencode/current" ] || exit 1
+        install_opencode_user_shim "$NPM_CONFIG_PREFIX/bin/opencode"
+        exit 0
+        ;;
       "") ;;
-      *) log_warn "usage: t3code-tool-maintenance [--stage-opencode]"; exit 2 ;;
+      *) log_warn "usage: t3code-tool-maintenance [--stage-opencode|--activate-opencode]"; exit 2 ;;
     esac
 
     mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
