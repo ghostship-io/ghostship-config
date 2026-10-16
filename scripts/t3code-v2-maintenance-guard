@@ -34,6 +34,10 @@ for unit in t3code-tool-auto-update t3code-tool-update-restart t3code-server-mon
   printf '[Service]\nEnvironment=T3CODE_ACTIVITY_PROBE_ADAPTER=%s\n' "$1" \
     > "/run/systemd/system/$unit.service.d/$2"
 done
+# The old monitor can bypass its idle probe after repeated web failures.
+# Skip that oneshot on V2; Podman health and process containment stay active.
+printf "%s\n" "ExecCondition=/bin/sh -c 'test ! -e /home/t3code/.t3/userdata/statev2.sqlite'" \
+  >> "/run/systemd/system/t3code-server-monitor.service.d/$2"
 systemctl daemon-reload
 for unit in t3code-tool-auto-update t3code-tool-update-restart t3code-server-monitor; do
   systemctl show "$unit.service" -p Environment --value | tr ' ' '\n' \
