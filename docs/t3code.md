@@ -68,6 +68,14 @@ Access remains the public authentication boundary. The gateway grants automatic
 access only to the actual Cloudflared TCP peer and container loopback; other
 containers retain native T3 authentication. Forwarded headers cannot grant access.
 
+After a T3 authorization-scope change, a still-valid gateway token can lack new
+permissions, such as `diagnostics:read`, and the UI reports that diagnostics and
+usage are unavailable. Confirm the gateway's `/api/auth/session` permissions,
+verify that a newly issued native session has the required grant, then revoke
+only the cached gateway session by its public session ID. The gateway renews it
+on the next request without a service restart. Refresh the browser to reload
+its session permissions; keep all bearer values inside the process using them.
+
 Use **Settings > Providers** for model-account sign-in:
 
 - **Codex / OpenAI:** run `codex login --device-auth` in a T3 project terminal,
