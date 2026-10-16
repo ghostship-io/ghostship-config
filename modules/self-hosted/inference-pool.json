@@ -226,8 +226,9 @@
       ]
     }
   },
-  "public_repositories": [
-    "/home/t3code/.local/state/ghostship/free-inference/public-fixture"
+  "repositories": [
+    "/home/t3code/.local/state/ghostship/free-inference/public-fixture",
+    "/workspace/ghostship-agent-free-inference"
   ],
   "test_commands": {
     "/home/t3code/.local/state/ghostship/free-inference/public-fixture": [
