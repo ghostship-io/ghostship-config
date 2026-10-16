@@ -2,8 +2,11 @@
 
 ## [3.15.109] - 2026-10-16
 
-- Add the encrypted Groq provider source and project its API key as
-  `GROQ_API_KEY` in the T3 Code runtime environment.
+- Add encrypted inference provider bundles for Groq, Google AI Studio, NVIDIA,
+  Hugging Face, Vercel AI Gateway, and Cloudflare Workers AI, projecting their
+  credentials into the T3 Code runtime environment.
+- Keep the dedicated Workers AI token and account separate from Cloudflare's
+  management credential bundle.
 
 ## [3.15.108] - 2026-10-16
 

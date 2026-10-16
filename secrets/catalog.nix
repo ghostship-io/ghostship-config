@@ -84,6 +84,14 @@ in
       ];
     };
 
+    cloudflare-workers-ai = mkUnit {
+      relativeFile = "secrets/files/sources/providers/cloudflare-workers-ai.env.age";
+      exports = [
+        "API_KEY"
+        "ACCOUNT_ID"
+      ];
+    };
+
     discord = mkUnit {
       relativeFile = "secrets/files/sources/providers/discord.env.age";
       exports = [
@@ -108,6 +116,16 @@ in
     groq = mkUnit {
       relativeFile = "secrets/files/sources/providers/groq.env.age";
       exports = [ "API_KEY" ];
+    };
+
+    google-ai-studio = mkUnit {
+      relativeFile = "secrets/files/sources/providers/google-ai-studio.env.age";
+      exports = [ "API_KEY" ];
+    };
+
+    huggingface = mkUnit {
+      relativeFile = "secrets/files/sources/providers/huggingface.env.age";
+      exports = [ "TOKEN" ];
     };
 
     id-ed25519-dev = mkUnit {
@@ -143,6 +161,11 @@ in
 
     ollama = mkUnit {
       relativeFile = "secrets/files/sources/providers/ollama.env.age";
+      exports = [ "API_KEY" ];
+    };
+
+    nvidia = mkUnit {
+      relativeFile = "secrets/files/sources/providers/nvidia.env.age";
       exports = [ "API_KEY" ];
     };
 
@@ -275,6 +298,11 @@ in
         "OPENVPN_USER"
         "OPENVPN_PASS"
       ];
+    };
+
+    vercel-ai-gateway = mkUnit {
+      relativeFile = "secrets/files/sources/providers/vercel-ai-gateway.env.age";
+      exports = [ "API_KEY" ];
     };
 
   };
@@ -646,6 +674,30 @@ in
         GROQ_API_KEY = {
           unit = "groq";
           key = "API_KEY";
+        };
+        GOOGLE_GENERATIVE_AI_API_KEY = {
+          unit = "google-ai-studio";
+          key = "API_KEY";
+        };
+        NVIDIA_API_KEY = {
+          unit = "nvidia";
+          key = "API_KEY";
+        };
+        HF_TOKEN = {
+          unit = "huggingface";
+          key = "TOKEN";
+        };
+        AI_GATEWAY_API_KEY = {
+          unit = "vercel-ai-gateway";
+          key = "API_KEY";
+        };
+        CLOUDFLARE_WORKERS_AI_API_KEY = {
+          unit = "cloudflare-workers-ai";
+          key = "API_KEY";
+        };
+        CLOUDFLARE_ACCOUNT_ID = {
+          unit = "cloudflare-workers-ai";
+          key = "ACCOUNT_ID";
         };
         OLLAMA_API_KEY = {
           unit = "ollama";
