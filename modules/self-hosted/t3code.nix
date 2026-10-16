@@ -633,74 +633,199 @@ let
     }
 
     install_opencode_platform_wrapper() {
-      platform_package="$1"
-      fallback_bin="$NPM_CONFIG_PREFIX/lib/node_modules/$platform_package/bin/opencode"
-
-      if [ ! -x "$fallback_bin" ]; then
-        log_warn "$platform_package binary is missing"
-        return 1
-      fi
-
+      local prefix="$1" platform_package="$2" loader temporary
       loader="$(find_nix_glibc_loader || true)"
-
-      rm -f "$NPM_CONFIG_PREFIX/bin/opencode"
-      cat > "$NPM_CONFIG_PREFIX/bin/opencode" <<EOF
+      temporary="$prefix/bin/.opencode.new"
+      mkdir -p "$prefix/bin"
+      cat > "$temporary" <<EOF
     #!/usr/bin/env sh
     set -eu
     ${sourceHmSessionVarsIfPresent}
-    fallback_bin='$fallback_bin'
+    release_dir="\$(dirname -- "\$(dirname -- "\$(readlink -f -- "\$0")")")"
+    native_bin="\$release_dir/lib/node_modules/$platform_package/bin/opencode"
     loader='$loader'
-    if [ -n "\$loader" ]; then
-      exec "\$loader" --library-path "\''${loader%/*}" "\$fallback_bin" "\$@"
+    if [ -n "\$loader" ] && [ ! -x "/lib/$(opencode_loader_name)" ]; then
+      exec "\$loader" --library-path "\''${loader%/*}" "\$native_bin" "\$@"
     fi
-    exec "\$fallback_bin" "\$@"
+    exec "\$native_bin" "\$@"
     EOF
-      chmod 0755 "$NPM_CONFIG_PREFIX/bin/opencode"
+      chmod 0755 "$temporary"
+      mv -f "$temporary" "$prefix/bin/opencode"
+    }
+
+    verify_opencode_release() {
+      local prefix="$1" expected_version="$2" platform_package="$3"
+      local manifest installed_version
+      for manifest in "$prefix/lib/node_modules/@opencode/cli/package.json" \
+        "$prefix/lib/node_modules/$platform_package/package.json"; do
+        [ -f "$manifest" ] || return 1
+        installed_version="$(node -p 'require(process.argv[1]).version' "$manifest")" || return 1
+        [ "$installed_version" = "$expected_version" ] || return 1
+      done
+      [ -x "$prefix/bin/opencode" ] \
+        && [ -x "$prefix/lib/node_modules/$platform_package/bin/opencode" ] || return 1
+      # Never load the user's plugins, credentials, database, or shared service.
+      # The probe owns its private process group and kills it even on failure.
+      ${pkgs.python3}/bin/python3 - "$prefix/bin/opencode" "$expected_version" <<'PY'
+    import base64
+    import json
+    import os
+    import secrets
+    import signal
+    import socket
+    import subprocess
+    import sys
+    import tempfile
+    import time
+    import urllib.request
+
+    binary, version = sys.argv[1:]
+    with tempfile.TemporaryDirectory(prefix="opencode-probe-") as root:
+        env = {key: os.environ[key] for key in
+               ("PATH", "LD_LIBRARY_PATH", "SSL_CERT_FILE", "SSL_CERT_DIR", "NIX_SSL_CERT_FILE")
+               if key in os.environ}
+        env["HOME"] = root
+        password = secrets.token_urlsafe(24)
+        env["OPENCODE_SERVER_PASSWORD"] = password
+        for key, folder in (("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"),
+                            ("XDG_CACHE_HOME", "cache"), ("XDG_STATE_HOME", "state"),
+                            ("XDG_RUNTIME_DIR", "run"), ("TMPDIR", "tmp")):
+            env[key] = os.path.join(root, folder)
+            os.mkdir(env[key], 0o700)
+        output = subprocess.check_output([binary, "--version"], env=env, cwd=root,
+                                         text=True, timeout=15).strip()
+        if output != f"opencode v{version}":
+            raise RuntimeError(f"OpenCode reports {output!r}, expected {version}")
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+        with tempfile.TemporaryFile() as log:
+            server = subprocess.Popen([binary, "serve", "--hostname", "127.0.0.1",
+                                       "--port", str(port)], env=env, cwd=root,
+                                      stdout=log, stderr=log, start_new_session=True)
+            try:
+                deadline = time.monotonic() + 30
+                # Bypass user proxy settings, including system urllib handlers.
+                client = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                while time.monotonic() < deadline:
+                    if server.poll() is not None:
+                        raise RuntimeError("OpenCode probe server exited before readiness")
+                    try:
+                        request = urllib.request.Request(f"http://127.0.0.1:{port}/api/info",
+                            headers={"Authorization": "Basic " + base64.b64encode(
+                                f"opencode:{password}".encode()).decode()})
+                        with client.open(request, timeout=1) as response:
+                            info = json.load(response)
+                        if info.get("version") == version and info.get("pid") == server.pid:
+                            break
+                    except (OSError, ValueError):
+                        pass
+                    time.sleep(0.1)
+                else:
+                    raise RuntimeError("OpenCode probe server did not become ready within 30s")
+            except Exception:
+                log.seek(0)
+                sys.stderr.write(log.read().decode(errors="replace")[-4000:])
+                raise
+            finally:
+                try:
+                    os.killpg(server.pid, signal.SIGTERM)
+                    server.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    os.killpg(server.pid, signal.SIGKILL)
+                    server.wait(timeout=3)
+                except ProcessLookupError:
+                    server.wait(timeout=3)
+    PY
     }
 
     install_opencode_cli() {
-      log_info "installing or upgrading opencode"
-
-      rm -f "$NPM_CONFIG_PREFIX/bin/opencode"
-
-      if install_output="$(npm install -g --no-fund --no-audit opencode-ai@latest 2>&1)"; then
-        if [ -n "$install_output" ]; then
+      local expected_version platform_package release_root release_dir stage_dir
+      local install_output current_tmp launcher_tmp current_release
+      # OpenCode 2 moved to @opencode/cli; opencode-ai@latest still ships v1.
+      # Fail closed if the stable channel ever points outside the selected major.
+      expected_version="$(latest_agent_version @opencode/cli)" || return 1
+      if ! printf '%s\n' "$expected_version" | ${pkgs.gnugrep}/bin/grep -Eq '^2\.[0-9]+\.[0-9]+$'; then
+        log_warn "refusing OpenCode version outside the stable v2 channel: $expected_version"
+        return 1
+      fi
+      case "$(uname -m)" in
+        aarch64|arm64) platform_package="@opencode/cli-linux-arm64" ;;
+        x86_64|amd64)
+          platform_package="@opencode/cli-linux-x64"
+          if ! ${pkgs.gnugrep}/bin/grep -qwi avx2 /proc/cpuinfo; then
+            platform_package="$platform_package-baseline"
+          fi
+          ;;
+        *) log_warn "unsupported OpenCode architecture: $(uname -m)"; return 1 ;;
+      esac
+      release_root="$XDG_DATA_HOME/t3code-tools/opencode"
+      release_dir="$release_root/releases/$expected_version"
+      mkdir -p "$release_root/releases"
+      if [ -e "$release_dir" ] && ! verify_opencode_release "$release_dir" "$expected_version" "$platform_package"; then
+        # Existing releases may still back running processes: never repair in place.
+        release_dir="$release_dir-repair-$(date -u +%Y%m%dT%H%M%S%N)"
+      fi
+      if [ ! -e "$release_dir" ]; then
+        stage_dir="$(mktemp -d "$release_root/.staging.XXXXXX")"
+        log_info "staging OpenCode $expected_version"
+        # Install the native payload explicitly at exactly the resolved version.
+        # Ignore postinstall: it performs unbounded probes and fallback downloads.
+        if ! install_output="$(npm install -g --prefix "$stage_dir" \
+          --ignore-scripts --omit=optional --prefer-online --no-fund --no-audit \
+          "@opencode/cli@$expected_version" "$platform_package@$expected_version" 2>&1)"; then
+          log_warn "OpenCode staged install failed"
           printf '%s\n' "$install_output" >&2
+          rm -rf "$stage_dir"
+          return 1
         fi
+        if ! install_opencode_platform_wrapper "$stage_dir" "$platform_package" \
+          || ! verify_opencode_release "$stage_dir" "$expected_version" "$platform_package"; then
+          log_warn "OpenCode staged release failed verification; keeping the current executable"
+          rm -rf "$stage_dir"
+          return 1
+        fi
+        mv "$stage_dir" "$release_dir" || return 1
+      fi
+      if [ "''${OPENCODE_STAGE_ONLY:-0}" = 1 ]; then
+        log_info "OpenCode $expected_version is staged; activation was deferred"
         return 0
       fi
-
-      log_warn "opencode install failed, trying platform package"
-      if [ -n "$install_output" ]; then
-        printf '%s\n' "$install_output" >&2
+      current_release="$(readlink -e "$release_root/current" || true)"
+      if [ -z "$current_release" ] && [ "''${OPENCODE_ALLOW_V2_MIGRATION:-0}" != 1 ]; then
+        log_warn "OpenCode $expected_version is staged only; first v2 activation requires a consistent database backup, no running OpenCode processes, and OPENCODE_ALLOW_V2_MIGRATION=1"
+        return 0
       fi
-
-      case "$(uname -m)" in
-        aarch64|arm64)
-          platform_package="opencode-linux-arm64"
-          ;;
-        x86_64|amd64)
-          platform_package="opencode-linux-x64"
-          ;;
-        *)
-          log_warn "unsupported opencode fallback architecture: $(uname -m)"
-          return 1
-          ;;
-      esac
-
-      if ! platform_output="$(npm install -g --no-fund --no-audit "$platform_package@latest" 2>&1)"; then
-        log_warn "$platform_package install failed"
-        if [ -n "$platform_output" ]; then
-          printf '%s\n' "$platform_output" >&2
+      # A v1 process can share the database that v2 migrates. Conservatively defer
+      # all promotions while any OpenCode process exists, including v2 clients.
+      if ${pkgs.procps}/bin/pgrep -i -x 'opencode|opencode2|opencode.exe' >/dev/null \
+        || ${pkgs.procps}/bin/pgrep -i -f '^([^[:space:]]*/)?(opencode|opencode2|opencode\.exe)([[:space:]]|$)' >/dev/null; then
+        log_info "OpenCode $expected_version is staged only; activation waits for running OpenCode processes to exit"
+        return 0
+      fi
+      current_tmp="$release_root/.current.new.$$"
+      launcher_tmp="$NPM_CONFIG_PREFIX/bin/.opencode.new.$$"
+      if ! ln -s "$release_dir" "$current_tmp" \
+        || ! ln -s "$release_root/current/bin/opencode" "$launcher_tmp"; then
+        rm -f "$current_tmp" "$launcher_tmp"
+        return 1
+      fi
+      if ! mv -Tf "$current_tmp" "$release_root/current"; then
+        rm -f "$current_tmp" "$launcher_tmp"
+        return 1
+      fi
+      # Replace npm's legacy launcher atomically, retaining its old package files.
+      if ! mv -Tf "$launcher_tmp" "$NPM_CONFIG_PREFIX/bin/opencode"; then
+        rm -f "$launcher_tmp"
+        if [ -n "$current_release" ]; then
+          ln -s "$current_release" "$current_tmp"
+          mv -Tf "$current_tmp" "$release_root/current"
+        else
+          rm -f "$release_root/current"
         fi
         return 1
       fi
-
-      if [ -n "$platform_output" ]; then
-        printf '%s\n' "$platform_output" >&2
-      fi
-
-      install_opencode_platform_wrapper "$platform_package"
+      log_info "OpenCode $expected_version is ready; older releases remain available"
     }
 
     install_user_shim() {
@@ -748,6 +873,17 @@ let
       chmod 0755 "$temporary"
       mv -f "$temporary" "$HOME/.local/bin/opencode"
     }
+
+    # A canary run must not touch another provider or replace any user launcher.
+    case "''${1:-}" in
+      --stage-opencode)
+        export OPENCODE_STAGE_ONLY=1
+        install_opencode_cli
+        exit 0
+        ;;
+      "") ;;
+      *) log_warn "usage: t3code-tool-maintenance [--stage-opencode]"; exit 2 ;;
+    esac
 
     mkdir -p "$HOME/.local/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$NPM_CONFIG_PREFIX/bin" "$NPM_CONFIG_PREFIX/lib"
 
@@ -2521,6 +2657,7 @@ in
   # Permit memory-policy deployment without replacing the active T3 container.
   system.build.t3codeProcessMemoryGuard = t3codeProcessMemoryGuard;
   system.build.t3codeServerMonitor = t3codeDaemonMonitor;
+  system.build.t3codeToolMaintenance = t3codeToolMaintenance;
 
   # The Antigravity ACP archive is unfree; keep the exception scoped to this app.
   nixpkgs.config.allowUnfreePredicate =
