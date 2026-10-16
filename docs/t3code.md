@@ -127,6 +127,10 @@ Build `.#nixosConfigurations.chill-penguin.config.system.build.t3codeToolMainten
 to obtain the exact updater without building or activating the container image.
 Its `--stage-opencode` mode only stages and probes OpenCode; it leaves the
 production launchers, database, other providers, and T3 server untouched.
+Use `--activate-opencode` with the migration flag below for an OpenCode-only
+promotion; it does not update other providers or restart T3. Its user launcher
+translates legacy `run --dir` into the working directory and lowercases legacy
+log levels, preserving existing noninteractive research commands on V2.
 Keep the built closure rooted in both host and container stores when staging
 through root SSH.
 

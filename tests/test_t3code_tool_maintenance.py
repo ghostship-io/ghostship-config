@@ -65,6 +65,7 @@ class ToolMaintenanceSource(unittest.TestCase):
     def test_user_cli_shim_heredocs_close_at_the_generated_script_indent(self):
         expected = '    exec "\\$target" "\\$@"\n    EOF\n      chmod 0755 "$temporary"'
         self.assertEqual(SOURCE.count(expected), 2)
+        self.assertIn('${../../packages/t3code/opencode-compat.py} "\\$target" "\\$@"', SOURCE)
 
     def test_cli_version_probes_have_a_hard_timeout(self):
         self.assertIn(

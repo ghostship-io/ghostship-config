@@ -2,6 +2,7 @@
 
 ## [3.15.108] - 2026-10-16
 
+- Preserve existing research launchers on OpenCode 2 and provide an OpenCode-only activation command without restarting T3.
 - Stage OpenCode 2 from its separate stable package in verified immutable releases, preserving the old executable on failure and requiring an explicit first database migration.
 - Fail closed on T3 Orchestrator V2 activity rather than trusting the stale V1 database; missing databases also block host deployment.
 - Add disposable-container release and database-migration smoke checks and a maintenance-only safety guard that preserves the active runtime.
