@@ -1,0 +1,256 @@
+{
+  "max_workers": 2,
+  "providers": {
+    "groq": {
+      "enabled": true,
+      "free_only": true,
+      "authorization": "the owner 2026-10-16 supplied requested free-provider keys",
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://console.groq.com/docs/rate-limits",
+        "checked_at": "2026-10-16T11:05:08.621583+00:00",
+        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "provider_wide": true
+      }
+    },
+    "google": {
+      "enabled": true,
+      "free_only": true,
+      "authorization": "the owner 2026-10-16 supplied requested free-provider keys",
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://ai.google.dev/gemini-api/docs/pricing",
+        "checked_at": "2026-10-16T11:05:08.621583+00:00",
+        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "provider_wide": true
+      }
+    },
+    "nvidia": {
+      "enabled": true,
+      "free_only": true,
+      "authorization": "the owner 2026-10-16 supplied requested free-provider keys",
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "evaluation"
+      ],
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://docs.api.nvidia.com/nim/docs/product",
+        "checked_at": "2026-10-16T11:05:08.621583+00:00",
+        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "provider_wide": true
+      },
+      "suspended_reason": "Evaluation adapter validation failed; repair and explicit resume required"
+    },
+    "cloudflare-workers-ai": {
+      "enabled": true,
+      "free_only": true,
+      "authorization": "the owner 2026-10-16 supplied requested free-provider keys",
+      "base_url": "https://api.cloudflare.com/client/v4/accounts/the owner's local area/ai/v1",
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "checked_at": "2026-10-16T11:05:08.621583+00:00",
+        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "provider_wide": true
+      },
+      "suspended_reason": "Live adapter/access validation failed; repair and explicit resume required"
+    },
+    "vercel": {
+      "enabled": true,
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://vercel.com/docs/ai-gateway/pricing",
+        "checked_at": "2026-10-16T11:05:08.621583+00:00",
+        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "provider_wide": true
+      }
+    },
+    "openrouter": {
+      "enabled": true,
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://openrouter.ai/docs/api-reference/limits",
+        "checked_at": "2026-10-16T11:05:08.621583+00:00",
+        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "provider_wide": true
+      }
+    },
+    "opencode": {
+      "enabled": true,
+      "data_policy_approved": false,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "reason": "Unattended-use grant pending resolution of general hosted terms versus official API documentation",
+      "workload_grant": {
+        "unattended_allowed": false
+      }
+    },
+    "huggingface": {
+      "enabled": true,
+      "free_only": true,
+      "free_credit_verified": false,
+      "reason": "Awaiting checked remaining free allowance; no credit spending guessed",
+      "data_policy_approved": false,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ]
+    },
+    "zai": {
+      "enabled": false,
+      "reason": "No API key supplied",
+      "data_policy_approved": false,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ]
+    },
+    "cohere": {
+      "enabled": true,
+      "models": [
+        "north-mini-code-1-0"
+      ],
+      "authorization": "the owner supplied free Cohere key; only zero-priced North Mini Code; development work only",
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://docs.cohere.com/docs/north-mini-code-1.0",
+        "checked_at": "2026-10-16T11:05:08.621583+00:00",
+        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "model_ids": [
+          "north-mini-code-1-0"
+        ]
+      },
+      "limits": {
+        "rpm": 5,
+        "rpd": 30,
+        "rmonthly": 900,
+        "tpd": 500000,
+        "max_output": 4096
+      },
+      "limits_basis": {
+        "checked_at": "2026-10-16",
+        "rate_limits_source": "https://docs.cohere.com/docs/rate-limits",
+        "model_source": "https://docs.cohere.com/docs/north-mini-code-1.0",
+        "note": "North Mini Code only, free until rate limits; published trial limits are 20 requests/minute and 1000 calls/month. The retained 5 RPM, 30 RPD and 900 calls per rolling 31 days are internal ceilings. 500000 tokens/day is a finite internal safety ceiling, not a published provider entitlement; no token/day limit is published on the cited rate-limit page. Output is capped at 4096 tokens below the model maximum of 64K."
+      }
+    },
+    "kilo": {
+      "enabled": true,
+      "anonymous": true,
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "workload_grant": {
+        "provider_wide": true,
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://kilo.ai/docs/gateway/authentication",
+        "checked_at": "2026-10-16T12:03:42.260908+00:00",
+        "expires_at": "2026-10-23T12:03:42.260908+00:00"
+      },
+      "reason": "Official anonymous free API, pinned :free models only; one shared per-IP ledger"
+    },
+    "requesty": {
+      "enabled": false,
+      "reason": "Awaiting owner API key and verified free-plan/workload grant",
+      "data_policy_approved": false,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ]
+    },
+    "mistral": {
+      "enabled": false,
+      "reason": "Awaiting owner API key and verified free-plan/workload grant",
+      "data_policy_approved": false,
+      "allowed_workloads": [
+        "evaluation"
+      ]
+    },
+    "orcarouter": {
+      "enabled": false,
+      "reason": "Awaiting owner API key and verified free-plan/workload grant",
+      "data_policy_approved": false,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ]
+    }
+  },
+  "repositories": [
+    "/home/t3code/.local/state/ghostship/free-inference/public-fixture",
+    "/workspace/ghostship-agent-free-inference"
+  ],
+  "test_commands": {
+    "/home/t3code/.local/state/ghostship/free-inference/public-fixture": [
+      [
+        "/nix/store/lfh101cfjj8p8npcari9hk0lbqi33yvh-python3-3.14.7/bin/python3",
+        "-m",
+        "unittest",
+        "test_calc"
+      ]
+    ]
+  }
+}
