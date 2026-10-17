@@ -20,7 +20,8 @@ def installer_functions():
     source = textwrap.dedent(source).replace("''${", "${")
     source = source.replace("${sourceHmSessionVarsIfPresent}", "")
     source = re.sub(r"\$\{pkgs\.[\w]+\}/bin/", "", source)
-    return source
+    # Generated launchers use /usr/bin/env, which the Nix build sandbox lacks.
+    return source.replace("#!/usr/bin/env sh", "#!/bin/sh")
 
 
 class OpenCodeUpdater(unittest.TestCase):
