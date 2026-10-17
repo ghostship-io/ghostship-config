@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.116] - 2026-10-17
+
+- Pin GhostShip Agent `main` at 0.22.1 (free inference pool and relay health
+  merged; content identical to the previously deployed branch pin).
+
 ## [3.15.115] - 2026-10-17
 
 - Fully retire CloakBrowser: quarantine `/srv/apps/cloakbrowser` profiles and
