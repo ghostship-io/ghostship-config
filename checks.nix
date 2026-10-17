@@ -33,6 +33,7 @@ in
           pkgs.php
           pkgs.util-linux
           pkgs.nodejs_24
+          pkgs.procps
           pkgs.nginx
         ];
       }

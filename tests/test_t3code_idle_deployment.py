@@ -1,5 +1,6 @@
 import fcntl
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,26 @@ from unittest.mock import Mock, patch
 from test_config import load
 
 deployer = load("t3code_deploy_when_idle", "packages/t3code/deploy-when-idle.py")
+
+
+class TestLiveActivityProbeGate(unittest.TestCase):
+    def test_missing_v1_database_still_runs_real_probe_and_blocks(self):
+        probe = Path(__file__).resolve().parents[1] / "packages/t3code/activity-probe/t3code-activity-probe.sh"
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            state = home / "state.sqlite"
+            for only_v2 in (False, True):
+                with self.subTest(only_v2=only_v2):
+                    if only_v2:
+                        with sqlite3.connect(home / "statev2.sqlite") as db:
+                            db.executescript("""
+                                CREATE TABLE orchestration_v2_projection_runs (status TEXT);
+                                INSERT INTO orchestration_v2_projection_runs VALUES ('running');
+                            """)
+                        db.close()
+                    self.assertFalse(deployer.is_live_idle(
+                        home, state, str(probe), "podman", require_web=False,
+                    ))
 
 
 class TestT3CodeIdleDeployment(unittest.TestCase):

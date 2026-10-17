@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.15.117] - 2026-10-17
+
+- Preserve existing research launchers on OpenCode 2 and provide an OpenCode-only activation command without restarting T3.
+- Stage OpenCode 2 from its separate stable package in verified immutable releases, preserving the old executable on failure and requiring an explicit first database migration.
+- Never trust the stale V1 database once T3 has migrated to V2; missing databases also block host deployment. V2 activity uses the `v2-sqlite` probe from 3.15.114.
+- Add disposable-container release and database-migration smoke checks and a maintenance-only safety guard that preserves the active runtime.
+- Stop projecting `OPENCODE_API_KEY`: OpenCode retired API keys, and the expired key shadowed OAuth logins and made Zen reject even free models.
+
 ## [3.15.116] - 2026-10-17
 
 - Pin GhostShip Agent `main` at 0.22.1 (free inference pool and relay health
