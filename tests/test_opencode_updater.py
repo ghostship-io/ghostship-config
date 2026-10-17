@@ -21,6 +21,8 @@ def installer_functions():
     source = source.replace("${sourceHmSessionVarsIfPresent}", "")
     source = re.sub(r"\$\{pkgs\.[\w]+\}/bin/", "", source)
     # Generated launchers use /usr/bin/env, which the Nix build sandbox lacks.
+    # Fixture "native" binaries are scripts; never run them through a host glibc loader.
+    source += "\nfind_nix_glibc_loader() { return 1; }\n"
     return source.replace("#!/usr/bin/env sh", "#!/bin/sh")
 
 
