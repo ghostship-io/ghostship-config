@@ -148,13 +148,10 @@ new service's Nix-generated unit through root SSH and retain its build as a
 GC root. Report the deferred full-system switch. Never stop T3 Code to make a
 deployment pass. Verify the recorded identity, start time, and MainPID afterward.
 
-Before a full switch during an active session, hold the idle deployment helper
-with a task-named runtime drop-in whose `[Unit]` sets
-`ConditionPathExists=!/run/<task>-session-guard`, and create that marker. Verify
-`systemctl start t3code-deploy-when-idle` remains inactive with
-`ConditionResult=no`. A runtime mask cannot override the existing store-backed
-`/etc` unit. Keep the marker and drop-in until the active session ends; they
-vanish on host reboot. Preserve other deployment guard drop-ins.
+The idle deployment helper protects active sessions itself: its probe reads T3
+Code 2's `statev2.sqlite` and defers while a run, subagent or thread launch is
+open, a user message is under 15 minutes old, or turn items changed in the last
+10 minutes. No session guard is needed before a full switch.
 
 For targeted activation on NixOS, `/etc/systemd/system` is store-backed and
 read-only. A unit linked under `/run/systemd/system` also has lower precedence
@@ -162,8 +159,9 @@ than its existing `/etc` unit. Use a task-named runtime drop-in containing the
 changed directives from the built Nix unit; reset list directives such as
 `ExecStart` before appending their generated replacements. Verify the loaded
 `ExecStart`/`ExecStartPre` and `DropInPaths` after `daemon-reload`, then restart
-only the intended service. Retain the candidate as a GC root. Remove the runtime
-drop-in during the later full switch so it cannot mask newer generated commands.
+only the intended service. Retain the candidate as a GC root. Every full switch
+removes runtime drop-ins and shadowed runtime unit links of declared units
+(`clear-runtime-unit-overrides`); runtime masks stay.
 
 For targeted secret updates, build and retain the committed Nix renderer and
 encrypted sources, decrypt only the intended units, and render only their consumer
