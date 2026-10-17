@@ -13,9 +13,9 @@ selects the on-demand Agent Desktop Chrome identity: User → `personal` (port 9
 Agent → `agent` (port 9222). The broker verifies the signed-in Google
 account and resolves its current `authuser` index dynamically. Neither a
 legacy profile ID nor a second Chrome process is required.
-Cookies and sessions stay on the host. Create/update support separate title/body fields, checklist row patches, labels and PNG/JPEG/GIF images; search accepts a label/tag alone or with text. Drawings and reminders are excluded. Canonical shopping calls use the selected Agent Desktop browser identity and
-runtime home ZIP, preserving unknown costs. Native controls, eligibility and
-checkout evidence still need retailer acceptance; consumer migration is incomplete.
+Cookies and sessions stay on the host. Create/update support separate title/body fields, checklist row patches, labels and PNG/JPEG/GIF images; search accepts a label/tag alone or with text. Drawings and reminders are excluded. Shopping website actions use retailer skills and generic browser tools. Costco
+local warehouse inventory retains its generated client through the generic
+service executor; unknown costs and eligibility remain explicit.
 
 ## Deployment
 
@@ -25,6 +25,13 @@ Stage new Nix files before evaluating. Preserve the active T3 session using
 [the session guard](container-workflow.md#preserve-the-active-t3-code-session).
 If full activation touches T3, install only the integration units required for
 the migration while preserving the running T3 service and Agent Desktop sessions.
+Use the runtime drop-in procedure in the session guard; linking a replacement
+unit in `/run/systemd/system` does not override a store-backed `/etc` unit.
+Include `ghostship-private-relay-config.service` and run its generated renderer
+before restarting the MCP container: the scoped relay configuration contains
+an absolute runtime path that changes with the platform pin. Restart
+`ghostship-skills-reconcile.service` afterward to publish and verify the pinned
+skills. Verify loaded command paths as well as service state.
 
 The `ghostship-desktop-bridge` service installs the desktop SSH key, pinned host
 key and address into `/run/ghostship-integrations/`. The host Keep broker reads
@@ -48,7 +55,7 @@ polling, local MCP readiness and live account calls separately.
 
 Open the Ghostship connection at ChatGPT Plugins and select Refresh after a
 schema/description change, then start a fresh conversation. Compare the discovered catalog and integration status from fresh coding and
-OpenAI connections, then exercise the same browser, Google and shopping calls.
+OpenAI connections, then exercise browser and retained API operations.
 Fresh status success does not validate a cached schema or authenticated workflows.
 An upstream sign-in or refusal is reported as unavailable or upstream_blocked,
 with no fabricated data. Connection discovery alone does not prove live calls.

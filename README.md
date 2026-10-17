@@ -270,8 +270,8 @@ Chaptarr now extends the arr stack to books and audiobooks. It should mount the 
 
 Browser automation uses Agent Desktop's authenticated Chrome profiles.
 CloakBrowser is retired: its manager, extension jobs and dashboard route are
-removed, and cleanup retires its container and images without deleting saved
-profile data. Retired scraper services are not part of the declared inventory.
+removed, and cleanup retires its container, images and runtime masks and moves
+its profile data to `/srv/retired-apps`. Retired scraper services are not part of the declared inventory.
 
 RomM currently runs cleanly on the upstream `rommapp/romm:latest` image
 without the old post-start bundle rewrite. Validate future iframe regressions

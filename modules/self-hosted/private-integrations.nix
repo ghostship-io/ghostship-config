@@ -4,15 +4,9 @@ let
   system = pkgs.stdenv.hostPlatform.system;
   agent = inputs.ghostship-private-agent;
   tools = agent.packages.${system};
-  # The deployment owns the shopping overlay (destination and retailer
-  # enablement), supplied to the shared tools at runtime. Technical routing
-  # lives in the ghostship-agent platform and is not copied here. The Keep broker is now an
-  # agent package, so the deployment has one platform input.
+  # The platform owns the runtime and generated service clients; the deployment supplies its icon.
   privateAddons = agent.lib.mkPrivateIntegrations {
     inherit system;
-    shoppingConfig = {
-      overlay = ./private-integrations/shopping-overlay.json;
-    };
     mcpIcon = ./private-integrations/ghostship.png;
   };
   brokerConfig = pkgs.writeText "ghostship-keep-broker.json" (builtins.toJSON {

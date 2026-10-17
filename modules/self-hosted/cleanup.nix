@@ -9,8 +9,9 @@ let
   retiredArtifacts = [
     {
       name = "cloakbrowser";
-      # Retire execution and images without deleting saved browser profiles.
-      paths = [ ];
+      # Fully retired: the Agent Desktop carries its bookmarks; profiles and
+      # extensions move to /srv/retired-apps.
+      paths = [ "/srv/apps/cloakbrowser" ];
       units = [
         "podman-cloakbrowser"
         "cloakbrowser-extensions"
@@ -475,6 +476,17 @@ let
     lib.concatMapStringsSep "\n" command (artifact.${field} or [ ]);
 in
 lib.mkIf (config.networking.hostName == "chill-penguin") {
+  # A full switch is authoritative: runtime drop-ins and unit links left by
+  # targeted activations or session guards would otherwise keep shadowing the
+  # generated units (a stale relay renderer once pinned a removed MCP runtime).
+  system.activationScripts.clear-runtime-unit-overrides = {
+    deps = [ "etc" ];
+    text = ''
+      PATH=${lib.makeBinPath [ pkgs.coreutils ]}:$PATH ${pkgs.bash}/bin/bash \
+        ${./clear-runtime-unit-overrides.sh} /run/systemd/system /etc/systemd/system
+    '';
+  };
+
   # A system service starts after switch-to-configuration has stopped units
   # removed by the new generation. Activation scripts run too early and would
   # preserve those still-active retired containers until a second rebuild.
@@ -486,6 +498,7 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
     serviceConfig.Type = "oneshot";
     script = ''
       retirement_dir="/srv/retired-apps/$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ)"
+      masks_removed=false
 
       # Preserve every missing OpenChamber repository before its source tree is
       # quarantined. Existing T3 projects remain authoritative and untouched.
@@ -526,6 +539,15 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
         ${pkgs.podman}/bin/podman exec --user 3000:3000 t3code \
           /bin/t3code-project-bootstrap
       fi
+
+      # Masks that stopped a unit before its retirement outlive the unit.
+      remove_runtime_mask() {
+        mask="/run/systemd/system/$1"
+        if [ -L "$mask" ] && [ "$(${pkgs.coreutils}/bin/readlink "$mask")" = /dev/null ]; then
+          ${pkgs.coreutils}/bin/rm -f "$mask"
+          masks_removed=true
+        fi
+      }
 
       cleanup_retired_path() {
         path="$1"
@@ -626,6 +648,8 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
           '')}
           if [ "$protected" = false ]; then
           ${commands "paths" artifact (path: "cleanup_retired_path ${lib.escapeShellArg path}")}
+          ${commands "units" artifact (unit: "remove_runtime_mask ${lib.escapeShellArg "${unit}.service"}")}
+          ${commands "timers" artifact (timer: "remove_runtime_mask ${lib.escapeShellArg "${timer}.timer"}")}
           ${commands "imageRefs" artifact (ref: "remove_image_ref ${lib.escapeShellArg ref}")}
           ${commands "imageRepositories" artifact (
             ref: "remove_image_repository ${lib.escapeShellArg ref}"
@@ -640,6 +664,9 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
           # Named volumes and quarantine data require explicit operator removal.
         fi
       '') eligibleArtifacts}
+      if [ "$masks_removed" = true ]; then
+        ${pkgs.systemd}/bin/systemctl daemon-reload
+      fi
     '';
   };
 }

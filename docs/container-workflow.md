@@ -148,6 +148,64 @@ new service's Nix-generated unit through root SSH and retain its build as a
 GC root. Report the deferred full-system switch. Never stop T3 Code to make a
 deployment pass. Verify the recorded identity, start time, and MainPID afterward.
 
+The idle deployment helper protects active sessions itself: its probe reads T3
+Code 2's `statev2.sqlite` and defers while a run, subagent or thread launch is
+open, a user message is under 15 minutes old, or turn items changed in the last
+10 minutes. No session guard is needed before a full switch.
+
+For targeted activation on NixOS, `/etc/systemd/system` is store-backed and
+read-only. A unit linked under `/run/systemd/system` also has lower precedence
+than its existing `/etc` unit. Use a task-named runtime drop-in containing the
+changed directives from the built Nix unit; reset list directives such as
+`ExecStart` before appending their generated replacements. Verify the loaded
+`ExecStart`/`ExecStartPre` and `DropInPaths` after `daemon-reload`, then restart
+only the intended service. Retain the candidate as a GC root. Every full switch
+removes runtime drop-ins and shadowed runtime unit links of declared units
+(`clear-runtime-unit-overrides`); runtime masks stay.
+
+For targeted secret updates, build and retain the committed Nix renderer and
+encrypted sources, decrypt only the intended units, and render only their consumer
+projection. Atomic replacement of `/run/ghostship-secrets/t3code.env` leaves the
+running container's `/run/secrets/t3code.env` bound to its previous inode. Compare
+the actual mounted content; refreshing the host path alone is insufficient.
+
+Refresh that inode from a disposable private clone of the container's mount
+namespace. Open its root directory before `setns`, use that descriptor to `chroot`,
+then `unshare` the mount namespace and make propagation private. Remount only the
+clone's existing secret bind writable, write the verified projection, restore
+read-only protection, and exit the clone. Creating a new bind of the old unlinked
+inode fails. Verify credential equality in process, preservation of existing
+credential bytes, the real container's read-only mount, and unchanged T3 identity
+and PIDs. New commands can source `/run/secrets/t3code.env`; existing process
+environments retain their previous values.
+
+The inference broker and scheduler are separate host units using `podman exec`
+into the existing T3 container. Their pinned closures are copied into its Nix
+store without replacing the container image or its application runtime. The
+broker owns only authenticated Unix HTTP submission and status; the scheduler
+owns execution through the same durable runtime store. Restart either unit
+independently, waiting for graceful scheduler shutdown before starting its
+replacement. The MCP mounts the socket directory so a recreated socket remains
+visible. Its dedicated bearer comes from the encrypted source and is separate
+from provider keys. Activation refreshes the managed CLI through the pinned
+installer with `--managed-only`, preserving provider and global Git settings.
+The host also projects the installer at
+`~/.local/state/t3code-shared-agents/managed-installer` and updates only the
+container sync service's `ExecStart` through a runtime drop-in. Both this command
+and future images share the same guarded repository-sync script. Preserve its
+30-minute timer and run the actual sync service twice after activation: checking
+the CLI immediately after a one-time refresh misses an old image's later writer.
+The host recreates the override on activation/container startup. Verify the real
+mounted socket and authenticated request path after deployment, then repeat after
+a broker restart.
+
+The pool policy lives in `modules/self-hosted/inference-pool.json`, separately
+from OpenCode configuration. Deployment seeds only the public synthetic fixture
+when absent and preserves an existing fixture and Git history. The policy lists
+approved repositories for selected-file reviews with public or private
+sensitivity; broker roots derive from that same list. Trusted test commands are
+configured per repository; the existing test command belongs to the fixture.
+
 An explicit later instruction scheduling a T3 Code restart is required to
 override this guard; ordinary authorization to deploy is insufficient.
 

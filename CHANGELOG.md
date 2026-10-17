@@ -1,11 +1,76 @@
 # Changelog
 
-## [3.15.108] - 2026-10-16
+## [3.15.117] - 2026-10-17
 
 - Preserve existing research launchers on OpenCode 2 and provide an OpenCode-only activation command without restarting T3.
 - Stage OpenCode 2 from its separate stable package in verified immutable releases, preserving the old executable on failure and requiring an explicit first database migration.
-- Fail closed on T3 Orchestrator V2 activity rather than trusting the stale V1 database; missing databases also block host deployment.
+- Never trust the stale V1 database once T3 has migrated to V2; missing databases also block host deployment. V2 activity uses the `v2-sqlite` probe from 3.15.114.
 - Add disposable-container release and database-migration smoke checks and a maintenance-only safety guard that preserves the active runtime.
+
+## [3.15.116] - 2026-10-17
+
+- Pin GhostShip Agent `main` at 0.22.1 (free inference pool and relay health
+  merged; content identical to the previously deployed branch pin).
+
+## [3.15.115] - 2026-10-17
+
+- Fully retire CloakBrowser: quarantine `/srv/apps/cloakbrowser` profiles and
+  extensions into `/srv/retired-apps` and remove the runtime masks that
+  outlived its units.
+
+## [3.15.114] - 2026-10-17
+
+- Clear runtime drop-ins and shadowed runtime unit links of declared units on
+  every full switch; a leftover targeted-activation drop-in kept rendering the
+  ChatGPT relay with a removed MCP runtime path. Runtime masks stay.
+- Detect T3 Code 2 activity from `statev2.sqlite` in the idle-deploy probe
+  (open runs, subagents and launches, recent user messages and turn items), so
+  queued T3 updates no longer need a disabling override or session guard.
+- Pin GhostShip Agent 0.22.1: a crash-looping relay now marks the MCP
+  container unhealthy and `integration_status` reports the relay state.
+
+## [3.15.113] - 2026-10-16
+
+- Keep scheduled T3 source sync on the host-projected managed installer so an
+  older running image cannot reinstall an obsolete CLI or shared instructions.
+- Share the existing guarded repository sync between future images and the
+  session-safe service override; retain timer behavior and provider settings.
+
+## [3.15.112] - 2026-10-16
+
+- Allow selected private-file inference reviews in the approved Ghostship
+  checkout and derive broker repository roots from the shared pool policy.
+- Retain the public fixture and its repository-specific trusted test command.
+- Keep Cohere request ceilings unchanged while allowing a documented internal
+  500k-token daily ceiling and bounded 4096-token review output.
+- Refresh the pinned managed CLI during inference activation while preserving
+  provider configuration and global Git settings.
+
+## [3.15.111] - 2026-10-16
+
+- Pin the inference MCP response contract fix so live status, cancellation, and
+  paged result responses reach clients after the durable broker operation.
+
+## [3.15.110] - 2026-10-16
+
+- Pin Ghostship Agent 0.22.0 and run separate supervised inference broker and
+  scheduler processes in T3, with a dedicated encrypted token and a local Unix
+  socket for the MCP.
+- Persist the worker pool's provider policy and public synthetic fixture
+  separately from the main OpenCode configuration.
+
+## [3.15.109] - 2026-10-16
+
+- Add encrypted inference provider bundles for Groq, Google AI Studio, NVIDIA,
+  Hugging Face, Vercel AI Gateway, Cloudflare Workers AI, and Cohere, projecting
+  their credentials into the T3 Code runtime environment.
+- Keep the dedicated Workers AI token and account separate from Cloudflare's
+  management credential bundle.
+
+## [3.15.108] - 2026-10-16
+
+- Pin GhostShip Agent 0.21.0: retailer skills and generic browser shopping, with Costco local warehouse inventory retained through the generic service executor.
+- Retire the unused shopping overlay argument and preserve the active T3 session during activation.
 
 ## [3.15.107] - 2026-10-13
 
