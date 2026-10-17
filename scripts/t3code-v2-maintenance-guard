@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Run as root on the container host. Reloads maintenance units only.
+set -euo pipefail
+
+test "$(id -u)" -eq 0
+container=t3code
+adapter=disabled-for-v2
+dropin=90-v2-activity-guard.conf
+
+# Fail before writing if either deployed wrapper ignores the adapter setting.
+host_probe=$(systemctl cat t3code-deploy-when-idle.service | sed -n 's/.*--activity-probe \([^ ]*\).*/\1/p' | head -n 1)
+if [ -z "$host_probe" ]; then
+  # The host script embeds the store path rather than passing it as a flag.
+  host_script=$(systemctl show t3code-deploy-when-idle.service -p ExecStart --value | sed -n 's/.*path=\([^ ;]*\).*/\1/p')
+  host_probe=$(sed -n 's/.*--probe-bin \([^ ]*\).*/\1/p' "$host_script" | tr -d "'\"")
+fi
+test -x "$host_probe"
+status=0
+T3CODE_ACTIVITY_PROBE_ADAPTER="$adapter" "$host_probe" >/dev/null 2>&1 || status=$?
+test "$status" -eq 2
+status=0
+podman exec --env "T3CODE_ACTIVITY_PROBE_ADAPTER=$adapter" "$container" "$host_probe" >/dev/null 2>&1 || status=$?
+test "$status" -eq 2
+
+install -d /run/systemd/system/t3code-deploy-when-idle.service.d
+printf '[Service]\nEnvironment=T3CODE_ACTIVITY_PROBE_ADAPTER=%s\n' "$adapter" \
+  > "/run/systemd/system/t3code-deploy-when-idle.service.d/$dropin"
+systemctl daemon-reload
+
+podman exec -i "$container" bash -s -- "$adapter" "$dropin" <<'INNER'
+set -euo pipefail
+for unit in t3code-tool-auto-update t3code-tool-update-restart t3code-server-monitor; do
+  install -d "/run/systemd/system/$unit.service.d"
+  printf '[Service]\nEnvironment=T3CODE_ACTIVITY_PROBE_ADAPTER=%s\n' "$1" \
+    > "/run/systemd/system/$unit.service.d/$2"
+done
+# The old monitor can bypass its idle probe after repeated web failures.
+# Skip that oneshot on V2; Podman health and process containment stay active.
+printf "%s\n" "ExecCondition=/bin/sh -c 'test ! -e /home/t3code/.t3/userdata/statev2.sqlite'" \
+  >> "/run/systemd/system/t3code-server-monitor.service.d/$2"
+systemctl daemon-reload
+for unit in t3code-tool-auto-update t3code-tool-update-restart t3code-server-monitor; do
+  systemctl show "$unit.service" -p Environment --value | tr ' ' '\n' \
+    | grep -Fx "T3CODE_ACTIVITY_PROBE_ADAPTER=$1"
+done
+INNER
+systemctl show t3code-deploy-when-idle.service -p Environment --value | tr ' ' '\n' \
+  | grep -Fx "T3CODE_ACTIVITY_PROBE_ADAPTER=$adapter"
+printf 'Maintenance now fails closed for V2; no services restarted. Guard lasts until reboot/container replacement.\n'

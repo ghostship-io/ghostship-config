@@ -38,7 +38,8 @@ def is_live_idle(home_dir, state_db, probe_bin, podman_bin, require_web=True):
     """Check if T3 Code is definitely idle and safe to restart.
 
     1. Checks if internal tool-update lock is held.
-    2. Runs activity probe against state.sqlite.
+    2. Requires the activity probe to positively confirm idle, including when
+       the configured database is missing or a newer schema exists.
     3. Verifies container web endpoint responds, unless retrying a container
        already known to be unhealthy.
     """
@@ -54,20 +55,19 @@ def is_live_idle(home_dir, state_db, probe_bin, podman_bin, require_web=True):
         except Exception:
             pass
 
-    if state_db.is_file():
-        env = dict(os.environ, T3CODE_STATE_DB=str(state_db))
-        try:
-            res = subprocess.run(
-                [probe_bin],
-                env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=10,
-            )
-            if res.returncode != 0:
-                return False
-        except Exception:
+    env = dict(os.environ, T3CODE_STATE_DB=str(state_db))
+    try:
+        res = subprocess.run(
+            [probe_bin],
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+        if res.returncode != 0:
             return False
+    except Exception:
+        return False
 
     if not require_web:
         return True

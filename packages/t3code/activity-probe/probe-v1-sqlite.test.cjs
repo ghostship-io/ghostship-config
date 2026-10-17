@@ -8,7 +8,10 @@ const { DatabaseSync } = require('node:sqlite');
 
 const probePath = path.join(__dirname, 'probe-v1-sqlite.cjs');
 
-function runProbe({ turns = [], sessions = [], activities = [], latestUserMessageAt = null } = {}) {
+function runProbe({
+  turns = [], sessions = [], activities = [], latestUserMessageAt = null,
+  v2Schema = null, selectedSchema = null, adapter = null,
+} = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 't3-activity-probe-'));
   const databasePath = path.join(directory, 'state.sqlite');
   const db = new DatabaseSync(databasePath);
@@ -83,12 +86,24 @@ function runProbe({ turns = [], sessions = [], activities = [], latestUserMessag
       turn.completedAt ?? null,
     );
   }
+  if (selectedSchema !== null) db.exec(selectedSchema);
   db.close();
 
   try {
-    return spawnSync(process.execPath, [probePath], {
+    if (v2Schema !== null) {
+      const v2 = new DatabaseSync(path.join(directory, 'statev2.sqlite'));
+      v2.exec(v2Schema);
+      v2.close();
+    }
+    return spawnSync(adapter ? 'bash' : process.execPath, [
+      adapter ? path.join(__dirname, 't3code-activity-probe.sh') : probePath,
+    ], {
       encoding: 'utf8',
-      env: { ...process.env, T3CODE_STATE_DB: databasePath },
+      env: {
+        ...process.env,
+        T3CODE_STATE_DB: databasePath,
+        ...(adapter ? { T3CODE_ACTIVITY_PROBE_ADAPTER: adapter, T3CODE_API_URL: '' } : {}),
+      },
     });
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
@@ -232,4 +247,48 @@ test('reports unknown when the database is missing', () => {
     env: { ...process.env, T3CODE_STATE_DB: path.join(os.tmpdir(), 'missing-t3-state.sqlite') },
   });
   assert.equal(result.status, 2);
+});
+
+test('never treats stale idle V1 state as idle while a V2 turn is running', () => {
+  const result = runProbe({ v2Schema: `
+    CREATE TABLE orchestration_v2_projection_provider_turns (
+      provider_turn_id TEXT, status TEXT, completed_at TEXT
+    );
+    INSERT INTO orchestration_v2_projection_provider_turns VALUES ('turn-1', 'running', NULL);
+  ` });
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /V2 activity adapter unavailable/);
+});
+
+test('blocks a V2 background task after the V1 turn has settled', () => {
+  const result = runProbe({
+    turns: [{ state: 'completed', requestedAt: minutesAgo(60), completedAt: minutesAgo(59) }],
+    v2Schema: `
+      CREATE TABLE orchestration_v2_projection_subagents (subagent_id TEXT, status TEXT);
+      INSERT INTO orchestration_v2_projection_subagents VALUES ('agent-1', 'running');
+    `,
+  });
+  assert.equal(result.status, 2, result.stderr);
+});
+
+test('blocks an unknown V2 schema instead of consulting idle V1 state', () => {
+  const result = runProbe({ v2Schema: 'CREATE TABLE future_activity (state TEXT);' });
+  assert.equal(result.status, 2, result.stderr);
+});
+
+test('blocks V2 tables even when an explicit database has a different filename', () => {
+  const result = runProbe({
+    selectedSchema: 'CREATE TABLE orchestration_v2_projection_runs (status TEXT);',
+  });
+  assert.equal(result.status, 2, result.stderr);
+});
+
+test('reports unknown for an incompatible V1 schema', () => {
+  const result = runProbe({ selectedSchema: 'DROP TABLE projection_turns;' });
+  assert.equal(result.status, 2, result.stderr);
+});
+
+test('unsupported V2 API adapter cannot fall back to idle V1 state without a URL', () => {
+  const result = runProbe({ adapter: 'v2-api' });
+  assert.equal(result.status, 2, result.stderr);
 });
