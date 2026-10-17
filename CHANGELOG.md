@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.115] - 2026-10-17
+
+- Fully retire CloakBrowser: quarantine `/srv/apps/cloakbrowser` profiles and
+  extensions into `/srv/retired-apps` and remove the runtime masks that
+  outlived its units.
+
 ## [3.15.114] - 2026-10-17
 
 - Clear runtime drop-ins and shadowed runtime unit links of declared units on
