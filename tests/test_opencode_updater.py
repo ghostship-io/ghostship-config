@@ -11,6 +11,8 @@ import unittest
 from pathlib import Path
 
 SOURCE = (Path(__file__).resolve().parents[1] / "modules/self-hosted/t3code.nix").read_text()
+# The Nix build sandbox has no /usr/bin/env; fixtures run under this interpreter.
+SHEBANG = f"#!{sys.executable}"
 
 
 def installer_functions():
@@ -84,7 +86,7 @@ class OpenCodeUpdater(unittest.TestCase):
 
     def script(self, name, source):
         target = self.bin / name
-        target.write_text(textwrap.dedent(source).lstrip())
+        target.write_text(textwrap.dedent(source).lstrip().replace("#!/usr/bin/env python3", SHEBANG))
         target.chmod(0o755)
 
     def native(self, mode="healthy"):
@@ -122,7 +124,7 @@ class OpenCodeUpdater(unittest.TestCase):
                 def log_message(self, *args):
                     pass
             http.server.HTTPServer(("127.0.0.1", int(sys.argv[-1])), Handler).serve_forever()
-        ''').replace("VERSION", repr("2.0.30")).replace("MODE", repr(mode)).replace("SERVER_PID_FILE", repr(str(self.root / "probe.pid"))).replace("PASSWORD_FILE", repr(str(self.root / "probe.password")))
+        ''').replace("#!/usr/bin/env python3", SHEBANG).replace("VERSION", repr("2.0.30")).replace("MODE", repr(mode)).replace("SERVER_PID_FILE", repr(str(self.root / "probe.pid"))).replace("PASSWORD_FILE", repr(str(self.root / "probe.password")))
 
     def run_installer(self, stage_cli=False, **env):
         script = "set -eu\nlog_info() { printf '%s\\n' \"$1\" >&2; }\nlog_warn() { log_info \"$1\"; }\n"
