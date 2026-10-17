@@ -475,6 +475,17 @@ let
     lib.concatMapStringsSep "\n" command (artifact.${field} or [ ]);
 in
 lib.mkIf (config.networking.hostName == "chill-penguin") {
+  # A full switch is authoritative: runtime drop-ins and unit links left by
+  # targeted activations or session guards would otherwise keep shadowing the
+  # generated units (a stale relay renderer once pinned a removed MCP runtime).
+  system.activationScripts.clear-runtime-unit-overrides = {
+    deps = [ "etc" ];
+    text = ''
+      PATH=${lib.makeBinPath [ pkgs.coreutils ]}:$PATH ${pkgs.bash}/bin/bash \
+        ${./clear-runtime-unit-overrides.sh} /run/systemd/system /etc/systemd/system
+    '';
+  };
+
   # A system service starts after switch-to-configuration has stopped units
   # removed by the new generation. Activation scripts run too early and would
   # preserve those still-active retired containers until a second rebuild.

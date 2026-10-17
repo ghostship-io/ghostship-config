@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.15.114] - 2026-10-17
+
+- Clear runtime drop-ins and shadowed runtime unit links of declared units on
+  every full switch; a leftover targeted-activation drop-in kept rendering the
+  ChatGPT relay with a removed MCP runtime path. Runtime masks stay.
+- Detect T3 Code 2 activity from `statev2.sqlite` in the idle-deploy probe
+  (open runs, subagents and launches, recent user messages and turn items), so
+  queued T3 updates no longer need a disabling override or session guard.
+- Pin GhostShip Agent 0.22.1: a crash-looping relay now marks the MCP
+  container unhealthy and `integration_status` reports the relay state.
+
 ## [3.15.113] - 2026-10-16
 
 - Keep scheduled T3 source sync on the host-projected managed installer so an
