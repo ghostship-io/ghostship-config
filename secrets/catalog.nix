@@ -124,6 +124,41 @@ in
       exports = [ "TOKEN" ];
     };
 
+    kilo = mkUnit {
+      relativeFile = "secrets/files/sources/providers/kilo.env.age";
+      exports = [ "API_KEY" ];
+    };
+
+    requesty = mkUnit {
+      relativeFile = "secrets/files/sources/providers/requesty.env.age";
+      exports = [ "API_KEY" ];
+    };
+
+    orcarouter = mkUnit {
+      relativeFile = "secrets/files/sources/providers/orcarouter.env.age";
+      exports = [ "API_KEY" ];
+    };
+
+    inception = mkUnit {
+      relativeFile = "secrets/files/sources/providers/inception.env.age";
+      exports = [ "API_KEY" ];
+    };
+
+    mistral = mkUnit {
+      relativeFile = "secrets/files/sources/providers/mistral.env.age";
+      exports = [ "API_KEY" ];
+    };
+
+    upstage = mkUnit {
+      relativeFile = "secrets/files/sources/providers/upstage.env.age";
+      exports = [ "API_KEY" ];
+    };
+
+    poolside = mkUnit {
+      relativeFile = "secrets/files/sources/providers/poolside.env.age";
+      exports = [ "API_KEY" ];
+    };
+
     groq = mkUnit {
       relativeFile = "secrets/files/sources/providers/groq.env.age";
       exports = [ "API_KEY" ];
@@ -720,6 +755,34 @@ in
         };
         OPENROUTER_API_KEY = {
           unit = "openrouter";
+          key = "API_KEY";
+        };
+        KILO_API_KEY = {
+          unit = "kilo";
+          key = "API_KEY";
+        };
+        REQUESTY_API_KEY = {
+          unit = "requesty";
+          key = "API_KEY";
+        };
+        ORCAROUTER_API_KEY = {
+          unit = "orcarouter";
+          key = "API_KEY";
+        };
+        INCEPTION_API_KEY = {
+          unit = "inception";
+          key = "API_KEY";
+        };
+        MISTRAL_API_KEY = {
+          unit = "mistral";
+          key = "API_KEY";
+        };
+        UPSTAGE_API_KEY = {
+          unit = "upstage";
+          key = "API_KEY";
+        };
+        POOLSIDE_API_KEY = {
+          unit = "poolside";
           key = "API_KEY";
         };
         GITHUB_TOKEN = {
