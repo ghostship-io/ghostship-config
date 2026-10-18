@@ -1,5 +1,5 @@
 {
-  "max_workers": 2,
+  "max_workers": 8,
   "providers": {
     "groq": {
       "enabled": true,
@@ -44,21 +44,22 @@
     "nvidia": {
       "enabled": true,
       "free_only": true,
-      "authorization": "the owner 2026-10-16 supplied requested free-provider keys",
+      "authorization": "the owner 2026-10-18: make the free worker pool first class; free models only; no China-hosted providers",
       "data_policy_approved": true,
       "allowed_workloads": [
-        "evaluation"
+        "development",
+        "evaluation",
+        "research"
       ],
       "workload_grant": {
         "official_api": true,
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://docs.api.nvidia.com/nim/docs/product",
-        "checked_at": "2026-10-16T11:05:08.621583+00:00",
-        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00",
         "provider_wide": true
-      },
-      "suspended_reason": "Evaluation adapter validation failed; repair and explicit resume required"
+      }
     },
     "cloudflare-workers-ai": {
       "enabled": true,
@@ -79,8 +80,7 @@
         "checked_at": "2026-10-16T11:05:08.621583+00:00",
         "expires_at": "2026-10-23T11:05:08.621583+00:00",
         "provider_wide": true
-      },
-      "suspended_reason": "Live adapter/access validation failed; repair and explicit resume required"
+      }
     },
     "vercel": {
       "enabled": true,
@@ -95,10 +95,15 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://vercel.com/docs/ai-gateway/pricing",
-        "checked_at": "2026-10-16T11:05:08.621583+00:00",
-        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00",
         "provider_wide": true
-      }
+      },
+      "free_only": true,
+      "excluded_models": [
+        "reflection/beam-free"
+      ],
+      "authorization": "the owner 2026-10-18: make the free worker pool first class; free models only; no China-hosted providers"
     },
     "openrouter": {
       "enabled": true,
@@ -211,22 +216,42 @@
       "reason": "Official anonymous free API, pinned :free models only; one shared per-IP ledger"
     },
     "requesty": {
-      "enabled": false,
-      "reason": "Awaiting owner API key and verified free-plan/workload grant",
-      "data_policy_approved": false,
+      "enabled": true,
+      "data_policy_approved": true,
       "allowed_workloads": [
         "development",
         "evaluation",
         "research"
-      ]
+      ],
+      "free_only": true,
+      "authorization": "the owner 2026-10-18: make the free worker pool first class; free models only; no China-hosted providers",
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://www.requesty.ai/terms",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00",
+        "provider_wide": true
+      }
     },
     "mistral": {
-      "enabled": false,
-      "reason": "Awaiting owner API key and verified free-plan/workload grant",
-      "data_policy_approved": false,
+      "enabled": true,
+      "data_policy_approved": true,
       "allowed_workloads": [
         "evaluation"
-      ]
+      ],
+      "free_only": true,
+      "authorization": "the owner 2026-10-18: make the free worker pool first class; free models only; no China-hosted providers; Free plan, pay-as-you-go off, training opt-out set",
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://docs.mistral.ai/admin/billing-usage/usage-limits",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00",
+        "provider_wide": true
+      }
     },
     "orcarouter": {
       "enabled": false,
@@ -237,6 +262,26 @@
         "evaluation",
         "research"
       ]
+    },
+    "kilo-keyed": {
+      "enabled": true,
+      "free_only": true,
+      "authorization": "the owner 2026-10-18: make the free worker pool first class; free models only; no China-hosted providers",
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://kilo.ai/docs/getting-started/using-kilo-for-free",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00",
+        "provider_wide": true
+      }
     }
   },
   "repositories": [
@@ -252,5 +297,14 @@
         "test_calc"
       ]
     ]
-  }
+  },
+  "client_shares": {
+    "goship-research": 0.7,
+    "default": 0.3
+  },
+  "probe_schedule": true,
+  "admission_schedule": true,
+  "admission_max_per_cycle": 4,
+  "benchmark_dirs": [],
+  "validator_commands": []
 }
