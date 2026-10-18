@@ -19,7 +19,10 @@
         "checked_at": "2026-10-16T11:05:08.621583+00:00",
         "expires_at": "2026-10-23T11:05:08.621583+00:00",
         "provider_wide": true
-      }
+      },
+      "china_hosting_workloads": [
+        "research"
+      ]
     },
     "google": {
       "enabled": true,
@@ -59,7 +62,10 @@
         "checked_at": "2026-10-18T20:00:00+00:00",
         "expires_at": "2026-10-25T20:00:00+00:00",
         "provider_wide": true
-      }
+      },
+      "china_hosting_workloads": [
+        "research"
+      ]
     },
     "cloudflare-workers-ai": {
       "enabled": true,
@@ -80,7 +86,10 @@
         "checked_at": "2026-10-16T11:05:08.621583+00:00",
         "expires_at": "2026-10-23T11:05:08.621583+00:00",
         "provider_wide": true
-      }
+      },
+      "china_hosting_workloads": [
+        "research"
+      ]
     },
     "vercel": {
       "enabled": true,
@@ -103,7 +112,10 @@
       "excluded_models": [
         "reflection/beam-free"
       ],
-      "authorization": "the owner 2026-10-18: make the free worker pool first class; free models only; no China-hosted providers"
+      "authorization": "the owner 2026-10-18: make the free worker pool first class; free models only; no China-hosted providers",
+      "china_hosting_workloads": [
+        "research"
+      ]
     },
     "openrouter": {
       "enabled": true,
@@ -121,7 +133,10 @@
         "checked_at": "2026-10-16T11:05:08.621583+00:00",
         "expires_at": "2026-10-23T11:05:08.621583+00:00",
         "provider_wide": true
-      }
+      },
+      "china_hosting_workloads": [
+        "research"
+      ]
     },
     "opencode": {
       "enabled": true,
@@ -134,7 +149,10 @@
       "reason": "Unattended-use grant pending resolution of general hosted terms versus official API documentation",
       "workload_grant": {
         "unattended_allowed": false
-      }
+      },
+      "china_hosting_workloads": [
+        "research"
+      ]
     },
     "huggingface": {
       "enabled": true,
@@ -146,15 +164,30 @@
         "development",
         "evaluation",
         "research"
+      ],
+      "china_hosting_workloads": [
+        "research"
       ]
     },
     "zai": {
-      "enabled": false,
-      "reason": "No API key supplied",
-      "data_policy_approved": false,
+      "enabled": true,
+      "data_policy_approved": true,
       "allowed_workloads": [
         "development",
         "evaluation",
+        "research"
+      ],
+      "authorization": "the owner 2026-10-18: \"allow free research to include china providers as well\"; Z.ai prepaid account, $0 balance, auto-recharge off; zero-priced GLM Flash models only",
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://docs.z.ai/guides/overview/pricing",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00",
+        "provider_wide": true
+      },
+      "china_hosting_workloads": [
         "research"
       ]
     },
@@ -213,7 +246,10 @@
         "checked_at": "2026-10-16T12:03:42.260908+00:00",
         "expires_at": "2026-10-23T12:03:42.260908+00:00"
       },
-      "reason": "Official anonymous free API, pinned :free models only; one shared per-IP ledger"
+      "reason": "Official anonymous free API, pinned :free models only; one shared per-IP ledger",
+      "china_hosting_workloads": [
+        "research"
+      ]
     },
     "requesty": {
       "enabled": true,
@@ -233,16 +269,21 @@
         "checked_at": "2026-10-18T20:00:00+00:00",
         "expires_at": "2026-10-25T20:00:00+00:00",
         "provider_wide": true
-      }
+      },
+      "china_hosting_workloads": [
+        "research"
+      ]
     },
     "mistral": {
       "enabled": true,
       "data_policy_approved": true,
       "allowed_workloads": [
-        "evaluation"
+        "development",
+        "evaluation",
+        "research"
       ],
       "free_only": true,
-      "authorization": "the owner 2026-10-18: make the free worker pool first class; free models only; no China-hosted providers; Free plan, pay-as-you-go off, training opt-out set",
+      "authorization": "the owner 2026-10-18: make the free worker pool first class; free models only; no China-hosted providers; Free plan, pay-as-you-go off, training opt-out set; all workloads (the owner 2026-10-18: get as many free providers working as possible)",
       "workload_grant": {
         "official_api": true,
         "never_bill": true,
@@ -251,15 +292,33 @@
         "checked_at": "2026-10-18T20:00:00+00:00",
         "expires_at": "2026-10-25T20:00:00+00:00",
         "provider_wide": true
+      },
+      "billing_verified": {
+        "basis": "Mistral Free plan, pay-as-you-go off, no payment method (coordinator check 2026-10-18)",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00"
       }
     },
     "orcarouter": {
-      "enabled": false,
-      "reason": "Awaiting owner API key and verified free-plan/workload grant",
-      "data_policy_approved": false,
+      "enabled": true,
+      "data_policy_approved": true,
       "allowed_workloads": [
         "development",
         "evaluation",
+        "research"
+      ],
+      "free_only": true,
+      "authorization": "the owner 2026-10-18: \"singapore provider is fine too\"; zero-priced routes only, and only routes with recorded non-China upstream hosting (none published as of 2026-10-18)",
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://www.orcarouter.ai/models?price=free",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00",
+        "provider_wide": true
+      },
+      "china_hosting_workloads": [
         "research"
       ]
     },
@@ -278,6 +337,102 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://kilo.ai/docs/getting-started/using-kilo-for-free",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00",
+        "provider_wide": true
+      },
+      "china_hosting_workloads": [
+        "research"
+      ]
+    },
+    "upstage": {
+      "enabled": true,
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "free_only": true,
+      "authorization": "the owner 2026-10-18: get as many free providers working as possible; $10 welcome coupon to 2027-01-16, no payment method, no auto-recharge",
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://console.upstage.ai/docs/getting-started",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00",
+        "provider_wide": true
+      },
+      "billing_verified": {
+        "basis": "$10 welcome coupon, no payment method, no auto-recharge (coordinator check 2026-10-18)",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00"
+      },
+      "free_credit_verified": true,
+      "credit_expires_at": "2027-01-16T00:00:00Z"
+    },
+    "inception": {
+      "enabled": true,
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "free_only": true,
+      "authorization": "the owner 2026-10-18: get as many free providers working as possible; free plan 100M tokens once, no card",
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://docs.inceptionlabs.ai/get-started/rate-limits",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00",
+        "provider_wide": true
+      },
+      "billing_verified": {
+        "basis": "Inception Free plan (100M tokens once), no card (coordinator check 2026-10-18)",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-25T20:00:00+00:00"
+      }
+    },
+    "poolside": {
+      "enabled": true,
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "free_only": true,
+      "authorization": "the owner 2026-10-18: get as many free providers working as possible; free Laguna until the 2026-10-31 shutdown, training opt-out set",
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://poolside.ai/",
+        "checked_at": "2026-10-18T20:00:00+00:00",
+        "expires_at": "2026-10-31T23:59:59+00:00",
+        "provider_wide": true
+      }
+    },
+    "ovh": {
+      "enabled": true,
+      "anonymous": true,
+      "data_policy_approved": true,
+      "allowed_workloads": [
+        "development",
+        "evaluation",
+        "research"
+      ],
+      "free_only": true,
+      "authorization": "the owner 2026-10-18: get as many free providers working as possible; OVHcloud AI Endpoints anonymous lane (no key), 2 RPM per IP per model",
+      "workload_grant": {
+        "official_api": true,
+        "never_bill": true,
+        "unattended_allowed": true,
+        "source": "https://docs.ovhcloud.com/en/guides/public-cloud/ai-machine-learning/ai-endpoints-getting-started",
         "checked_at": "2026-10-18T20:00:00+00:00",
         "expires_at": "2026-10-25T20:00:00+00:00",
         "provider_wide": true

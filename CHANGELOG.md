@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.15.122] - 2026-10-18
+
+- Pin GhostShip Agent main at `81fb9234` (free inference 0.24.0, PR #28, and 0.24.1, PR #29: OpenRouter pin drift pause, probes prefer strict routes).
+  - Gate request rewriting fixes Upstage and Cloudflare.
+  - New free providers: Upstage, Inception, Poolside, OVH, plus Mistral on its Free plan. OrcaRouter is enabled.
+  - Routing ignores where a model was developed and fails closed on unknown aggregator hosting. OpenRouter gets a hosting allowlist pin.
+  - A new `light` workload admits weaker models.
+- Pool accounts:
+  - Add Upstage, Inception, Poolside, OVH (anonymous) and Z.ai; enable OrcaRouter; open Mistral to all workloads.
+  - Billing attestations for Upstage, Mistral and Inception.
+  - `china_hosting_workloads: ["research"]` on the aggregator and research accounts (the owner 2026-10-18: free research may include China providers; Singapore is fine).
+- Project Z.ai's key (`ZHIPU_API_KEY`) from a new encrypted provider unit.
+
 ## [3.15.121] - 2026-10-18
 
 - Free inference pool reads its credentials from a copy in the T3 container's tmpfs `/run` (`GHOSTSHIP_FREE_INFERENCE_PROJECTION`), refreshed by the bridge prepare step and a path unit whenever `/run/ghostship-secrets/t3code.env` changes. The container's single-file bind mount keeps the old inode after the projector's rename, so new provider keys stayed invisible without a T3 restart.
