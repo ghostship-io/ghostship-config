@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.119] - 2026-10-18
+
+- Pin GhostShip Agent main at `5c176689` (free inference pool as the first-class worker framework, PR #26): registry as data with live probes, bounded OpenCode agent jobs (request budgets, allowlisted fetch, confined sandbox), adaptive concurrency and client shares, admission benches, no China-hosted routes by default.
+- Project the free-provider keys Kilo, Requesty, OrcaRouter, Inception, Mistral, Upstage and Poolside into `t3code.env` from new encrypted provider units.
+- Pool: 8 workers (goship-research 0.7 / default 0.3), scheduled probes and admissions; un-suspend NVIDIA (research allowed) and Cloudflare Workers AI; Vercel free-only without `beam-free`; enable keyed Kilo and Requesty, and Mistral for evaluation.
+
 ## [3.15.118] - 2026-10-18
 
 - Start the free inference bridge only after the T3 container's `t3code-container-setup` finishes: its boot-time `chown -R t3code:t3code ~/.local` reset the bridge socket and token to group `t3code` after the bridge set group 62020, so every MCP `inference_*` call returned "unavailable" after the 2026-10-17 container replacement.

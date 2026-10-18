@@ -135,7 +135,7 @@ in
           "--env" "XDG_STATE_HOME=${containerHome}/.local/state"
           "--env" "GHOSTSHIP_FREE_INFERENCE_CONFIG=${containerHome}/.config/ghostship/free-inference.json"
           "t3code" "${scheduler}/bin/agent" "free-inference" "serve"
-          "--workers" "2" "--max-jobs" "2" "--poll-seconds" "60"
+          "--workers" "8" "--max-jobs" "8" "--poll-seconds" "60"
         ];
         Restart = "on-failure";
         RestartSec = 10;
