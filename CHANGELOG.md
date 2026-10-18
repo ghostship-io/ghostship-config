@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.122] - 2026-10-18
+
+- Add a Plex AppArmor profile in complain mode, separating startup utilities from the server domain and pinning executable/library paths to the inspected container.
+- Require declared Internet-facing apps to carry enabled AppArmor policies and recorded explicit approval for access outside Cloudflare Access. Attach profiles through Podman and fail startup when a profile is unavailable; isolate dynamic interpreters with minimal resource permissions.
+- Revoke ntfy's native-auth Cloudflare Access bypass, require identity protection for tunnel routes, and retain an additional ntfy AppArmor profile behind Access.
+- Collect private daily audit evidence with confinement checks, an audit heartbeat, journal continuity checks, and a seven-day observation window that resets on policy/image/boot changes or telemetry gaps. Document daily review and the transition to enforcement.
+
 ## [3.15.121] - 2026-10-18
 
 - Free inference pool reads its credentials from a copy in the T3 container's tmpfs `/run` (`GHOSTSHIP_FREE_INFERENCE_PROJECTION`), refreshed by the bridge prepare step and a path unit whenever `/run/ghostship-secrets/t3code.env` changes. The container's single-file bind mount keeps the old inode after the projector's rename, so new provider keys stayed invisible without a T3 restart.

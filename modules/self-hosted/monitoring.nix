@@ -56,6 +56,7 @@ in
     };
   };
   ghostship.apps.ntfy = {
+    apparmorProfile = "ghostship-ntfy";
     healthPath = "/v1/health";
     name = "ntfy";
     group = "Infrastructure";
@@ -64,7 +65,6 @@ in
     order = 190;
     hostname = "ntfy.ghostship.io";
     origin = "http://ntfy:8080";
-    access = "native";
     muximux = {
       icon = "fa-bell";
     };

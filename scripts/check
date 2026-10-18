@@ -13,6 +13,15 @@ actionlint
 git diff --check
 git diff --cached --check
 
+printf 'Checking AppArmor policy, evidence collector, and public-service guards\n'
+apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
+  -I modules/self-hosted modules/self-hosted/plex-apparmor.profile
+apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
+  modules/self-hosted/ntfy-apparmor.profile
+python3 -m unittest discover -s tests -p test_apparmor_review.py
+python3 -m unittest discover -s tests -p test_cloudflare_access.py
+nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
+
 printf 'Evaluating development shells for both Linux architectures\n'
 for system in x86_64-linux aarch64-linux; do
   for shell in ci default browser; do
