@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.121] - 2026-10-18
+
+- Free inference pool reads its credentials from a copy in the T3 container's tmpfs `/run` (`GHOSTSHIP_FREE_INFERENCE_PROJECTION`), refreshed by the bridge prepare step and a path unit whenever `/run/ghostship-secrets/t3code.env` changes. The container's single-file bind mount keeps the old inode after the projector's rename, so new provider keys stayed invisible without a T3 restart.
+
 ## [3.15.120] - 2026-10-18
 
 - Pin Ghostship Agent main at `e714db00` to activate the lean engineering workflow, writing standard, manual pattern review and repository cleanup skills, with verified behavioral evaluation fixtures.

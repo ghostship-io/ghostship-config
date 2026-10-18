@@ -28,6 +28,25 @@ let
     ExecStart=${sourceSync}/bin/t3code-install-ghostship-agent
   '';
   poolConfig = ./inference-pool.json;
+  # The container bind-mounts the single file /run/ghostship-secrets/t3code.env; the projector
+  # replaces it by rename, so a running container keeps the old inode until it restarts
+  # (2026-10-18: new provider keys stayed invisible). The pool reads a copy in the container's
+  # own tmpfs /run instead, refreshed whenever the host projection changes.
+  hostProjection = "/run/ghostship-secrets/t3code.env";
+  projection = "/run/ghostship-free-inference/credentials.env";
+  writeProjection = pkgs.writeShellScript "ghostship-inference-credentials-write" ''
+    set -eu
+    umask 077
+    ${pkgs.coreutils}/bin/cat > ${projection}.new
+    ${pkgs.coreutils}/bin/mv -fT ${projection}.new ${projection}
+  '';
+  syncCredentials = pkgs.writeShellScript "ghostship-inference-credentials-sync" ''
+    set -eu
+    ${pkgs.nix}/bin/nix copy --no-check-sigs --to local?root=/srv/apps/t3code/nix-root ${writeProjection}
+    ${pkgs.podman}/bin/podman exec --user 0:0 t3code ${pkgs.coreutils}/bin/install \
+      -d -m0750 -o3000 -g62020 ${builtins.dirOf projection}
+    ${pkgs.podman}/bin/podman exec -i --user 3000:62020 t3code ${writeProjection} < ${hostProjection}
+  '';
   repositories = (builtins.fromJSON (builtins.readFile poolConfig)).repositories;
   publish = pkgs.writeShellScript "ghostship-inference-bridge-prepare" ''
     set -eu
@@ -53,6 +72,7 @@ let
     ln -sfn ${managedInstall} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/managed-installer
     ln -sfn ${sourceSync} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/source-sync
     ln -sfn ${syncOverride} /srv/apps/t3code/nix-root/nix/var/nix/gcroots/ghostship-inference-bridge/source-sync-override
+    ${syncCredentials}
     install -d -m0700 -o3000 -g3000 ${hostHome}/.local/state/t3code-shared-agents
     ln -sfn ${managedInstall} ${hostHome}/.local/state/t3code-shared-agents/managed-installer
     # Override only the old image's scheduled installer, preserving its timer and repo sync.
@@ -106,6 +126,7 @@ in
           "--env" "HOME=${containerHome}"
           "--env" "XDG_STATE_HOME=${containerHome}/.local/state"
           "--env" "GHOSTSHIP_FREE_INFERENCE_CONFIG=${containerHome}/.config/ghostship/free-inference.json"
+          "--env" "GHOSTSHIP_FREE_INFERENCE_PROJECTION=${projection}"
           "t3code" "${broker}/bin/ghostship-free-inference-bridge"
           "--token-file" "${containerHome}/${state}/token"
           "--socket" "${containerHome}/${state}/socket/inference.sock"
@@ -134,6 +155,7 @@ in
           "--env" "HOME=${containerHome}"
           "--env" "XDG_STATE_HOME=${containerHome}/.local/state"
           "--env" "GHOSTSHIP_FREE_INFERENCE_CONFIG=${containerHome}/.config/ghostship/free-inference.json"
+          "--env" "GHOSTSHIP_FREE_INFERENCE_PROJECTION=${projection}"
           "t3code" "${scheduler}/bin/agent" "free-inference" "serve"
           "--workers" "8" "--max-jobs" "8" "--poll-seconds" "60"
         ];
@@ -142,6 +164,21 @@ in
         TimeoutStopSec = 900;
         NoNewPrivileges = true;
         PrivateTmp = true;
+        UMask = "0077";
+      };
+    };
+    # Refresh the pool's copy whenever the host projection is replaced.
+    systemd.paths.ghostship-inference-credentials = {
+      wantedBy = [ "multi-user.target" ];
+      pathConfig.PathChanged = hostProjection;
+    };
+    systemd.services.ghostship-inference-credentials = {
+      description = "Copy the current T3 credential projection to the free inference pool";
+      after = [ "ghostship-inference-bridge.service" ];
+      requisite = [ "ghostship-inference-bridge.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = syncCredentials;
         UMask = "0077";
       };
     };
