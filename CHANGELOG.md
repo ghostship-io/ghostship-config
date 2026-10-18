@@ -2,7 +2,7 @@
 
 ## [3.15.122] - 2026-10-18
 
-- Pin GhostShip Agent main at `f6273799` (free inference 0.24.0, PR #28).
+- Pin GhostShip Agent main at `81fb9234` (free inference 0.24.0, PR #28, and 0.24.1, PR #29: OpenRouter pin drift pause, probes prefer strict routes).
   - Gate request rewriting fixes Upstage and Cloudflare.
   - New free providers: Upstage, Inception, Poolside, OVH, plus Mistral on its Free plan. OrcaRouter is enabled.
   - Routing ignores where a model was developed and fails closed on unknown aggregator hosting. OpenRouter gets a hosting allowlist pin.
