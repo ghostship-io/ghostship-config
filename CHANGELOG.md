@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.120] - 2026-10-18
+
+- Pin Ghostship Agent main at `e714db00` to activate the lean engineering workflow, writing standard, manual pattern review and repository cleanup skills, with verified behavioral evaluation fixtures.
+
 ## [3.15.119] - 2026-10-18
 
 - Pin GhostShip Agent main at `5c176689` (free inference pool as the first-class worker framework, PR #26): registry as data with live probes, bounded OpenCode agent jobs (request budgets, allowlisted fetch, confined sandbox), adaptive concurrency and client shares, admission benches, no China-hosted routes by default.
