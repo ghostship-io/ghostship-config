@@ -62,6 +62,7 @@ class Cloudflare:
 def matches(domain, hostname):
     return domain == hostname or (
         domain.startswith("*.") and hostname.endswith(domain[1:])
+        and hostname.count(".") == domain.count(".")
     )
 
 
@@ -130,6 +131,10 @@ def typed_service_token(selector):
 
 def validate_access(apps, routes):
     for hostname in routes:
+        # Tunnel wildcards route deeper names than Access wildcards protect.
+        # Require explicit routes so every routed hostname can be verified.
+        if "*" in hostname:
+            raise ValueError(f"Wildcard tunnel ingress is not supported: {hostname}")
         covering = [
             (application, domain)
             for application in apps
@@ -142,6 +147,10 @@ def validate_access(apps, routes):
         ):
             raise ValueError(f"No browser Access protection for {hostname}")
         for app, _ in covering:
+            if app.get("options_preflight_bypass"):
+                raise ValueError(
+                    f"Unauthenticated OPTIONS bypass for {hostname}; inspect it first"
+                )
             policies = app.get("policies")
             if not isinstance(policies, list) or not policies:
                 raise ValueError(
@@ -171,9 +180,7 @@ def validate_access(apps, routes):
                 raise ValueError(
                     f"Unexpected Access policy for {hostname}; inspect it first"
                 )
-            if not browser_allow or GOOGLE_IDP not in app.get(
-                "allowed_idps", []
-            ):
+            if not browser_allow or set(app.get("allowed_idps", [])) != {GOOGLE_IDP}:
                 raise ValueError(
                     f"No restricted Google identity Access policy for {hostname}"
                 )

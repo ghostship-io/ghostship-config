@@ -127,7 +127,7 @@ class T3WorkerTunnelTests(unittest.TestCase):
         tunnel.validate_access(
             app,
             [
-                {"decision": "allow", "include": [{"email": {}}]},
+                {"decision": "allow", "include": [{"email": {"email": "user@example.com"}}]},
                 {
                     "decision": "non_identity",
                     "include": [{"service_token": {"token_id": "scoped"}}],
@@ -135,6 +135,17 @@ class T3WorkerTunnelTests(unittest.TestCase):
             ],
             "armored-armadillo-t3.ghostship.io",
         )
+
+    def test_access_rejects_preflight_and_anonymous_service_auth(self):
+        identity = {"decision": "allow", "include": [{"email": {"email": "user@example.com"}}]}
+        for app, policies in [
+            ({"allowed_idps": [tunnel.GOOGLE_IDP], "options_preflight_bypass": True}, [identity]),
+            ({"allowed_idps": [tunnel.GOOGLE_IDP]},
+             [identity, {"decision": "non_identity", "include": [{"everyone": {}}]}]),
+            ({"allowed_idps": [tunnel.GOOGLE_IDP]}, [{"decision": "allow", "include": [{"email": {}}]}]),
+        ]:
+            with self.assertRaises(RuntimeError):
+                tunnel.validate_access(app, policies, "armored-armadillo-t3.ghostship.io")
 
 
 if __name__ == "__main__":
