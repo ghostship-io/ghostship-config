@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.118] - 2026-10-18
+
+- Start the free inference bridge only after the T3 container's `t3code-container-setup` finishes: its boot-time `chown -R t3code:t3code ~/.local` reset the bridge socket and token to group `t3code` after the bridge set group 62020, so every MCP `inference_*` call returned "unavailable" after the 2026-10-17 container replacement.
+
 ## [3.15.117] - 2026-10-17
 
 - Preserve existing research launchers on OpenCode 2 and provide an OpenCode-only activation command without restarting T3.
