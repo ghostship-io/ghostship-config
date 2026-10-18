@@ -5,6 +5,7 @@
     # Infra
     ./common.nix
     ./app-registry.nix
+    ./apparmor.nix
     ./cloudflare-sync.nix
     ./reliability.nix
     ./backup.nix

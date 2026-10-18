@@ -20,7 +20,7 @@ flowchart LR
   Nix --> Penguin[chill-penguin / Podman]
   Browser[Browser / Google login] --> Access[Cloudflare Access]
   Access --> Tunnel[Cloudflare Tunnel]
-  Android[Android ntfy / native login] --> Tunnel
+  Android[ntfy clients / approved Access authentication required] --> Tunnel
   Tunnel --> Penguin
   Penguin --> Local[Local Btrfs /srv/apps]
   Penguin --> NAS[NFS media and downloads]
@@ -78,7 +78,7 @@ workstation are retired and quarantined by the shared cleanup sweep.
 | Service | Internal origin | Public hostname | Purpose and authentication |
 | --- | --- | --- | --- |
 | Uptime Kuma 2 | `http://uptime-kuma:3001` | `uptime.ghostship.io` | Per-container Podman health heartbeats, internal HTTP/TCP checks, and backup/update heartbeats; Cloudflare Access protects the public hostname and Kuma login is disabled behind it |
-| ntfy | `http://ntfy:8080` | `ntfy.ghostship.io` | Android operations notifications; native authentication, no browser-login redirect |
+| ntfy | `http://ntfy:8080` | `ntfy.ghostship.io` | Operations notifications; Cloudflare Access plus native ntfy authentication |
 | Seerr | `http://seerr:5055` | `requests.ghostship.io` | Plex requests routed to existing Sonarr/Radarr profiles and roots; existing Google Access policy plus Plex login |
 
 Monitoring provisioning creates missing `Ghostship ...` entries from the same
@@ -101,8 +101,10 @@ ntfy denies anonymous access and signup. `publisher` can write only to
 instance. Open `secret-edit monitoring` privately to retrieve credentials:
 `KUMA_PASSWORD` is the initial Kuma and ntfy administrator password;
 `NTFY_READER_PASSWORD` is the Android subscriber password. In the Android ntfy
-app, add server `https://ntfy.ghostship.io`, user `android`, and topic
-`operations`. No iOS relay or WARP dependency is configured. A manual
+app, the configured server is `https://ntfy.ghostship.io`, user `android`, and topic
+`operations`. The old browser-login bypass was revoked on 2026-10-18. Native
+Android delivery may be unavailable until an Access-compatible method is approved;
+do not restore a bypass for compatibility. No iOS relay or WARP dependency is configured. A manual
 `ghostship-alert 'Ghostship notification test'` checks delivery after rollout.
 
 Seerr provisioning authenticates using the existing Plex token, selects the

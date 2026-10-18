@@ -1,7 +1,8 @@
-# Runtime permissions shared by the startup and Plex server domains.
+# Runtime permissions for the Plex server domain only.
   "@{ghostship_plex_pms}/Plex Media Scanner" rix,
   "@{ghostship_plex_pms}/Plex Transcoder" rix,
-  "@{ghostship_plex_pms}/Plex Script Host" rix,
+  # Named transition resolves to the sibling interpreter domain, not server//python.
+  "@{ghostship_plex_pms}/Plex Script Host" px -> ghostship-plex//python,
   "@{ghostship_plex_pms}/Plex Tuner Service" rix,
   "@{ghostship_plex_pms}/Plex DLNA Server" rix,
   "@{ghostship_plex_pms}/Plex Media Fingerprinter" rix,
@@ -94,5 +95,6 @@
   network unix stream,
   network unix dgram,
   signal (receive) peer=ghostship-plex,
+  signal (send, receive) peer=ghostship-plex//python,
   signal (send, receive) peer=ghostship-plex//server,
   signal (receive) peer=unconfined,

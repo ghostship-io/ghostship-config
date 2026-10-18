@@ -7,6 +7,14 @@
   push, and open a draft PR. Resolve CI failures, merge conflicts, and review
   comments; mark ready when checks pass. Leave merging to the user.
 - Bump `VERSION` and update `CHANGELOG.md` for completed changes.
+- Cloudflare Access bypasses, direct Internet listeners and public IPv6 rules
+  require explicit user approval recorded in the service configuration. Every
+  Internet-facing service requires an enabled, attached AppArmor profile; use
+  narrow executable, interpreter, file and library permissions. See
+  [public-service policy](docs/plex-apparmor.md) before changing exposure.
+- Prefer extremely strict AppArmor allowlists in complain mode while learning.
+  Add permissions only for verified legitimate workloads; isolate interpreters
+  with narrowly scoped resources. Enforce only after the documented learning gate.
 - Deploy through committed Git changes and direct root SSH on the target host.
   If push or SSH access fails, report the blocker. Do not call `sudo`.
 - Every use of this repository must preserve the active T3 Code session:
@@ -15,6 +23,8 @@
   [container workflow](docs/container-workflow.md#preserve-the-active-t3-code-session).
 
 Read on demand:
+
+- Internet-facing services or Plex AppArmor review: [public-service policy and learning workflow](docs/plex-apparmor.md).
 
 - Agent instructions or skills: use the installed `writing-for-agents` skill.
 - T3 Code setup, shared tools, skill discovery, or deployment from this
