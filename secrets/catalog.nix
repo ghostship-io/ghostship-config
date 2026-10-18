@@ -154,6 +154,11 @@ in
       exports = [ "API_KEY" ];
     };
 
+    zai = mkUnit {
+      relativeFile = "secrets/files/sources/providers/zai.env.age";
+      exports = [ "API_KEY" ];
+    };
+
     poolside = mkUnit {
       relativeFile = "secrets/files/sources/providers/poolside.env.age";
       exports = [ "API_KEY" ];
@@ -779,6 +784,10 @@ in
         };
         UPSTAGE_API_KEY = {
           unit = "upstage";
+          key = "API_KEY";
+        };
+        ZHIPU_API_KEY = {
+          unit = "zai";
           key = "API_KEY";
         };
         POOLSIDE_API_KEY = {
