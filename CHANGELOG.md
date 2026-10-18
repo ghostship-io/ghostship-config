@@ -1,11 +1,24 @@
 # Changelog
 
-## [3.15.122] - 2026-10-18
+## [3.15.123] - 2026-10-18
 
 - Add a Plex AppArmor profile in complain mode, separating startup utilities from the server domain and pinning executable/library paths to the inspected container.
 - Require declared Internet-facing apps to carry enabled AppArmor policies and recorded explicit approval for access outside Cloudflare Access. Attach profiles through Podman and fail startup when a profile is unavailable; isolate dynamic interpreters with minimal resource permissions.
 - Revoke ntfy's native-auth Cloudflare Access bypass, require identity protection for explicit tunnel routes, reject unauthenticated preflight and unscoped service-token admission in both tunnel provisioners, and retain an additional ntfy AppArmor profile behind Access.
 - Collect private daily audit evidence with confinement checks, an audit heartbeat, journal continuity checks, and a seven-day observation window that resets on policy/image/boot changes or telemetry gaps. Document daily review and the transition to enforcement.
+
+## [3.15.122] - 2026-10-18
+
+- Pin GhostShip Agent main at `81fb9234` (free inference 0.24.0, PR #28, and 0.24.1, PR #29: OpenRouter pin drift pause, probes prefer strict routes).
+  - Gate request rewriting fixes Upstage and Cloudflare.
+  - New free providers: Upstage, Inception, Poolside, OVH, plus Mistral on its Free plan. OrcaRouter is enabled.
+  - Routing ignores where a model was developed and fails closed on unknown aggregator hosting. OpenRouter gets a hosting allowlist pin.
+  - A new `light` workload admits weaker models.
+- Pool accounts:
+  - Add Upstage, Inception, Poolside, OVH (anonymous) and Z.ai; enable OrcaRouter; open Mistral to all workloads.
+  - Billing attestations for Upstage, Mistral and Inception.
+  - `china_hosting_workloads: ["research"]` on the aggregator and research accounts (the owner 2026-10-18: free research may include China providers; Singapore is fine).
+- Project Z.ai's key (`ZHIPU_API_KEY`) from a new encrypted provider unit.
 
 ## [3.15.121] - 2026-10-18
 
