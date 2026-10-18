@@ -214,15 +214,22 @@ transaction across Access, tunnel configuration, and DNS.
 
 Browser services must already be covered by the existing Google Access policy.
 The reconciler validates that coverage and refuses unexpected bypass policies;
-it does not rewrite the shared wildcard or identity rules. ntfy alone receives
-a specific Access application with a bypass policy so its native authentication
-works from Android. Its server denies anonymous access and signup. If that
-specific app exists outside this manager or its policy has drifted, sync stops
-for inspection. No other service can request the native-auth exception.
+it does not rewrite shared wildcard or identity rules. ntfy's former native-auth
+bypass was revoked on 2026-10-18 and its specific Access application now requires
+the approved Google identity. The reconciler never creates bypass applications.
+All existing and proposed tunnel hostnames, including unmanaged rules and
+path-specific overrides, require complete policy evidence and restrictive identity
+or explicitly scoped service-token selectors. Unauthenticated OPTIONS bypasses
+are rejected too. Tunnel routes must name explicit hostnames: tunnel wildcards
+can route deeper names than Access wildcards protect and are rejected.
+Direct Internet exposure outside Access requires recorded
+explicit user approval and an AppArmor profile; compatibility is not approval.
 
 After rollout, verify unauthenticated browser requests redirect to Google Access,
-allowed users reach the apps, anonymous ntfy reads/publishes return 401/403, and
-the Android read-only user receives a test but cannot publish. Keep frame
+allowed users reach the apps, and external anonymous ntfy requests reach Access
+rather than the origin. Internal ntfy authentication still denies anonymous
+reads/publishes. Android notification delivery needs an approved Access-compatible
+method; do not restore the old exception as a recovery step. Keep frame
 protections; use a separate tab where an application or Access requires it.
 
 The API credential lives in the encrypted `cloudflare` source bundle. Create a

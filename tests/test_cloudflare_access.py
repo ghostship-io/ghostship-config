@@ -34,6 +34,22 @@ def application(domain="*.ghostship.io", policies=None):
 
 
 class AccessTests(unittest.TestCase):
+    def test_access_wildcard_covers_only_one_subdomain_level(self):
+        with self.assertRaisesRegex(ValueError, "No browser Access"):
+            cloudflare.validate_access([application()], {"nested.ntfy.ghostship.io": {}})
+
+    def test_additional_identity_provider_is_not_implicitly_approved(self):
+        access = application()
+        access["allowed_idps"].append("unapproved-provider")
+        with self.assertRaisesRegex(ValueError, "restricted Google"):
+            cloudflare.validate_access([access], {"ntfy.ghostship.io": {}})
+
+    def test_preflight_cannot_bypass_access(self):
+        access = application()
+        access["options_preflight_bypass"] = True
+        with self.assertRaisesRegex(ValueError, "OPTIONS bypass"):
+            cloudflare.validate_access([access], {"ntfy.ghostship.io": {}})
+
     def test_native_marker_does_not_skip_access(self):
         for hostname in ("ntfy.ghostship.io", "sonarr.ghostship.io"):
             with (
@@ -59,7 +75,15 @@ class AccessTests(unittest.TestCase):
         cloudflare.validate_access(
             [app], {"ntfy.ghostship.io": {"access": "native"}}
         )
-        cloudflare.validate_access([app], {"*.ghostship.io": {}})
+
+    def test_wildcard_ingress_is_rejected_even_with_matching_access(self):
+        for apps in (
+            [application()],
+            [application(), application("nested.legacy.ghostship.io",
+                                        [{"decision": "bypass"}])],
+        ):
+            with self.assertRaisesRegex(ValueError, "Wildcard tunnel ingress"):
+                cloudflare.validate_access(apps, {"*.ghostship.io": {}})
 
     def test_unsafe_decisions_and_insufficient_evidence_fail(self):
         policies = [
@@ -292,7 +316,7 @@ class AccessTests(unittest.TestCase):
                 "path": "/api",
                 "service": "http://legacy:80",
             },
-            {"hostname": "*.ghostship.io", "service": "http://legacy:80"},
+            {"hostname": "other.ghostship.io", "service": "http://legacy:80"},
             {"service": "http_status:404"},
         ]
         original = copy.deepcopy(ingress)
