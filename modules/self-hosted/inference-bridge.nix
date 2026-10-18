@@ -32,6 +32,18 @@ let
   publish = pkgs.writeShellScript "ghostship-inference-bridge-prepare" ''
     set -eu
     umask 077
+    # A replaced container runs t3code-container-setup at boot, whose `chown -R t3code:t3code
+    # ~/.local` would reset the bridge socket and token to group t3code after this script
+    # sets group 62020, locking the MCP container out (2026-10-17). Start only once it is done.
+    for _ in $(seq 600); do
+      if ${pkgs.podman}/bin/podman exec --user 0:0 t3code \
+          systemctl is-active --quiet t3code-container-setup.service; then
+        break
+      fi
+      sleep 2
+    done
+    ${pkgs.podman}/bin/podman exec --user 0:0 t3code \
+      systemctl is-active --quiet t3code-container-setup.service
     # Copy pinned inference and managed tools without replacing the active T3 runtime.
     ${pkgs.nix}/bin/nix copy --no-check-sigs \
       --to local?root=/srv/apps/t3code/nix-root ${broker} ${scheduler} ${managedInstall} ${sourceSync} ${syncOverride}
@@ -101,7 +113,8 @@ in
         ] ++ lib.concatMap (repository: [ "--repository-root" repository ]) repositories);
         Restart = "on-failure";
         RestartSec = 10;
-        TimeoutStartSec = 300;
+        # container setup may take up to its own 20-minute start timeout
+        TimeoutStartSec = 1500;
         TimeoutStopSec = 90;
         NoNewPrivileges = true;
         PrivateTmp = true;
