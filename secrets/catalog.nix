@@ -119,6 +119,14 @@ in
       ];
     };
 
+    hooks = mkUnit {
+      relativeFile = "secrets/files/sources/services/hooks.env.age";
+      exports = [
+        "GITHUB_WEBHOOK_SECRET"
+        "CLOUDFLARE_WEBHOOK_SECRET"
+      ];
+    };
+
     github = mkUnit {
       relativeFile = "secrets/files/sources/providers/github.env.age";
       exports = [ "TOKEN" ];

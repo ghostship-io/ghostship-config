@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.15.132] - 2026-10-19
+
+- Add `hooks.ghostship.io`, the webhook receiver for GitHub-driven T3 engineering and Cloudflare alerts (ghostship-agent 0.25.0, pinned at `d61a5415`):
+  - Cloudflare Access bypasses exactly `POST /github` and `POST /cloudflare` (the owner 2026-10-19, recorded as `cloudflareBypassApproval`); every other path still requires Google identity. The receiver verifies GitHub's HMAC signature or the Cloudflare webhook secret itself, runs AppArmor-confined in complain mode, and shares an internal network only with cloudflared. It has no egress.
+  - The registry gains `cloudflareBypassPaths`, which requires an approval and an AppArmor profile. `ghostship-cloudflare-sync` accepts a path-scoped Access app only when every domain is an approved exact path and the app's only policy is bypass-everyone.
+  - The coordinator re-reads each GitHub event from GitHub and routes your issues, comments, reviews and PRs to one T3 thread per issue. It files regression issues for failing base-branch CI and publishes Cloudflare alerts to ntfy.
+  - New encrypted unit `hooks` (`GITHUB_WEBHOOK_SECRET`, `CLOUDFLARE_WEBHOOK_SECRET`; copy in Bitwarden `hooks.ghostship.io`).
+
 ## [3.15.131] - 2026-10-19
 
 - The flow collector remembers each container's addresses for a day, so connections recorded before Podman recreated a container (and gave it a new address) keep the container's name instead of `lan:<address>`. A reused address always belongs to its current owner.

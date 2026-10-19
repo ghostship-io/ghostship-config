@@ -30,4 +30,10 @@ assert fails "Containers must use their declared AppArmor profile." {
     "--security-opt=apparmor=unconfined"
   ];
 };
+assert fails "Cloudflare Access path bypasses require recorded explicit user approval and an AppArmor profile." {
+  ghostship.apps.hooks.cloudflareBypassApproval = lib.mkForce null;
+};
+assert fails "Cloudflare Access path bypasses require recorded explicit user approval and an AppArmor profile." {
+  ghostship.apps.hooks.apparmorProfile = lib.mkForce null;
+};
 true
