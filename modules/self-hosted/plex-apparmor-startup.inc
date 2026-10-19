@@ -5,6 +5,8 @@
   /{,usr/}bin/{bash,dash,sh,env,with-contenv} rix,
   /usr/bin/{cat,chmod,chown,cp,crontab,cut,find,grep,head,id,ln,lsiown,mkdir,readlink,rm,sed,sleep,sort,stat,tr,uname} rix,
   /usr/bin/{awk,mawk,nc.openbsd} rix,
+  # The inspected image's /usr/bin/sleep resolves to this Rust coreutils path.
+  /usr/lib/cargo/bin/coreutils/sleep rix,
   /usr/sbin/cron rix,
 
   # Resolve /command symlinks to version-pinned package executables. Execline
