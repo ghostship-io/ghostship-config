@@ -65,6 +65,25 @@ explicit user approval and is not an automatic recovery step.
 
 ## Daily review
 
+### Verify after every system switch
+
+A full switch removes task-specific runtime overrides. Until this configuration
+is merged and deployed from main, a switch can unload the policies, recreate
+healthy containers without profiles, remove the collector timer and restart the
+upgrade timer. This happened during PR99's deployment on 2026-10-19; the collector
+recorded the confinement gap and reset both observation windows.
+
+After every switch, verify the loaded profile modes, each container's declared
+profile and every host PID's actual label, a fresh collector heartbeat, audit lost
+counter, and both collector and host-upgrade timer states. Preserve gap evidence;
+do not count time between the last verified sample and restored verification.
+Container health alone is insufficient. Restore only the committed, reviewed
+profiles; do not authorize broad permissions to recover learning credit. Keep
+host upgrades paused while main would remove confinement, and resume them only
+after the merged configuration and post-switch evidence are verified.
+
+### Scheduled review
+
 The host collector runs at 08:30 UTC. The T3 task reviews it at 09:00 UTC and
 posts here. Use the existing task rather than creating a duplicate. Resolve the
 current repository revision and PR before editing; an old task checkout may be

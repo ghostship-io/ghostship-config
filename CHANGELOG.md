@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.15.123] - 2026-10-18
+## [3.15.124] - 2026-10-19
 
 - Add a Plex AppArmor profile in complain mode, separating startup utilities from the server domain and pinning executable/library paths to the inspected container.
 - Include the AppArmor parser in Podman's wrapper so profile attachment works after the first AppArmor boot.
@@ -8,6 +8,10 @@
 - Require declared Internet-facing apps to carry enabled AppArmor policies and recorded explicit approval for access outside Cloudflare Access. Attach profiles through Podman and fail startup when a profile is unavailable; isolate dynamic interpreters with minimal resource permissions.
 - Revoke ntfy's native-auth Cloudflare Access bypass, require identity protection for explicit tunnel routes, reject unauthenticated preflight and unscoped service-token admission in both tunnel provisioners, and retain an additional ntfy AppArmor profile behind Access.
 - Collect private daily audit evidence with confinement checks, an audit heartbeat, journal continuity checks, and a seven-day observation window that resets on policy/image/boot changes or telemetry gaps. Document daily review and the transition to enforcement.
+## [3.15.123] - 2026-10-19
+
+- Pin Ghostship Agent at `68d0549a` to expose NAS filesystem inspection and no-overwrite moves.
+- Limit the broker to Downloads, TV and Movies on the NFS-mounted NAS; derive Sonarr, Radarr and Plex access-check identities from their container users.
 
 ## [3.15.122] - 2026-10-18
 
