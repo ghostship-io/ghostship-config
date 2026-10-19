@@ -139,22 +139,40 @@ def desired_config(hostname, port):
 
 def validate_access(application, policies, hostname):
     allowed = [policy for policy in policies if policy.get("decision") == "allow"]
-    public_allow = any(
-        any("everyone" in selector for selector in policy.get("include", []))
-        for policy in allowed
-    )
+    def restricted_identity(selector):
+        if not isinstance(selector, dict) or len(selector) != 1:
+            return False
+        kind, value = next(iter(selector.items()))
+        field = {"email": "email", "email_domain": "domain"}.get(kind)
+        return bool(field and isinstance(value, dict)
+                    and isinstance(value.get(field), str)
+                    and value[field].strip() and "*" not in value[field])
+
+    def scoped_service_token(selector):
+        return (isinstance(selector, dict) and set(selector) == {"service_token"}
+                and isinstance(selector["service_token"], dict)
+                and isinstance(selector["service_token"].get("token_id"), str)
+                and bool(selector["service_token"]["token_id"].strip())
+                and selector["service_token"]["token_id"] != "*")
+
+    def restricted_policy(policy):
+        if policy.get("decision") == "deny":
+            return True
+        include = policy.get("include")
+        if not isinstance(include, list) or not include:
+            return False
+        check = {"allow": restricted_identity, "non_identity": scoped_service_token}.get(policy.get("decision"))
+        return check is not None and all(check(selector) for selector in include)
+
     if (
         set(application.get("allowed_idps", [])) != {GOOGLE_IDP}
         or not allowed
-        or public_allow
-        # Ghostship's scoped service-token policy is intentionally shared with
-        # browser apps for authenticated monitoring. It is not an anonymous
-        # bypass; reject only bypass and public "everyone" admission here.
-        or any(policy.get("decision") == "bypass" for policy in policies)
+        or application.get("options_preflight_bypass")
+        or not all(restricted_policy(policy) for policy in policies)
     ):
         raise RuntimeError(
             f"Cloudflare Access for {hostname} must require the approved "
-            "identity provider and must not allow everyone or bypass"
+            "identity provider and restricted identity/service-token policies without bypass"
         )
 
 

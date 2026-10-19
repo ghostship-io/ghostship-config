@@ -114,6 +114,7 @@
               bash
               coreutils
               actionlint
+              apparmor-parser
               shellcheck
               gitleaks
               python3

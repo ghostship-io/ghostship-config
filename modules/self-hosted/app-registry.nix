@@ -63,12 +63,20 @@ in
               default = null;
               description = "Public internal HTTP endpoint for Uptime Kuma.";
             };
-            access = mkOption {
-              type = types.enum [
-                "google"
-                "native"
-              ];
-              default = "google";
+            cloudflareBypassApproval = mkOption {
+              type = types.nullOr (types.strMatching ".+");
+              default = null;
+              description = "Reference to explicit user approval for direct Internet access outside Cloudflare Access. Never inferred from app/client requirements.";
+            };
+            public = mkOption {
+              type = types.bool;
+              default = false;
+              description = "Internet reachable without the Cloudflare Access gate (including router forwards). Requires an AppArmor profile.";
+            };
+            apparmorProfile = mkOption {
+              type = types.nullOr (types.strMatching "[a-zA-Z0-9_-]+");
+              default = null;
+              description = "Declared AppArmor policy attached to this application's container.";
             };
             widget = mkOption {
               type = types.attrs;
@@ -149,10 +157,10 @@ in
         message = "Ghostship apps need both hostname and origin, or neither.";
       }
       {
-        assertion = lib.all (app: app.access != "native" || app.hostname == "ntfy.ghostship.io") (
+        assertion = lib.all (app: !app.public || app.cloudflareBypassApproval != null) (
           builtins.attrValues apps
         );
-        message = "Only ntfy has an approved native-auth Access exception.";
+        message = "Internet access outside Cloudflare Access requires recorded explicit user approval.";
       }
     ];
     systemd.tmpfiles.rules = [ "d /var/lib/ghostship-dashboards 0700 root root -" ];

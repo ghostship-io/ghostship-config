@@ -1,0 +1,262 @@
+import contextlib
+import importlib.util
+import io
+import json
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+from unittest.mock import patch
+
+SPEC = importlib.util.spec_from_file_location(
+    "apparmor_review", Path(__file__).resolve().parents[1] / "modules/self-hosted/apparmor-review.py")
+review = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(review)
+DAY = review.DAY
+GOOD = {"healthy": True, "heartbeat": True, "reasons": [], "policy_hash": "hash1",
+        "image": "image1", "profile": "ghostship-plex", "mode": "complain", "source": "/policy"}
+CONFIG = {"containers": {"plex": {"profile": "ghostship-plex", "source": "/policy", "mode": "complain"}}}
+MESSAGE = ('apparmor="ALLOWED" operation="open" profile="ghostship-plex" '
+           'name="/private/token" requested_mask="r" denied_mask="r" '
+           'args="secret" env="secret"')
+
+
+def week():
+    state = None
+    for day in range(8):
+        state = review.advance(state, GOOD, [], (day + 1) * DAY, True)
+    return state
+
+
+class Coverage(unittest.TestCase):
+    def test_full_week_and_daily_samples(self):
+        state = week()
+        self.assertTrue(review.status(state, 8 * DAY)["ready"])
+        state = None
+        for minute in range(8):
+            state = review.advance(state, GOOD, [], DAY + minute * 60, True)
+        self.assertFalse(review.status(state, DAY + 7 * 60)["ready"])
+        self.assertFalse(review.status(week(), 10 * DAY)["ready"])
+
+    def test_daily_timer_jitter_does_not_discard_samples(self):
+        state = None
+        for day in range(9):
+            stamp = (day + 1) * DAY + (120 if day % 2 == 0 else 0)
+            state = review.advance(state, GOOD, [], stamp, True)
+        self.assertTrue(review.status(state, stamp)["ready"])
+
+    def test_seven_samples_not_seven_full_days(self):
+        state = None
+        for day in range(7):
+            state = review.advance(state, GOOD, [], (day + 1) * DAY, True)
+        self.assertFalse(review.status(state, 7 * DAY)["ready"])
+
+    def test_gap_cannot_count_outage(self):
+        state = review.advance(week(), GOOD, [], 10 * DAY, True)
+        self.assertIsNone(state["coverage_start"])
+        state = review.advance(state, GOOD, [], 11 * DAY, True)
+        self.assertEqual(state["coverage_start"], 11 * DAY)
+        self.assertFalse(review.status(state, 11 * DAY)["ready"])
+
+    def test_health_and_audit_failures_reset(self):
+        for reason in ("apparmor-disabled", "process-profile-mismatch", "loaded-mode-mismatch"):
+            state = review.advance(week(), {**GOOD, "healthy": False, "reasons": [reason]}, [], 9 * DAY, True)
+            self.assertIsNone(state["coverage_start"])
+        for obs, audit in (({**GOOD, "heartbeat": False}, True), (GOOD, False)):
+            state = review.advance(week(), obs, [], 9 * DAY, audit)
+            self.assertIsNone(state["coverage_start"])
+
+    def test_identity_changes_reset(self):
+        for field in ("image", "policy_hash", "profile", "mode", "boot_id"):
+            state = review.advance(week(), {**GOOD, field: "changed"}, [], 9 * DAY, True)
+            self.assertEqual(state["last_policy_change"], 9 * DAY)
+            self.assertEqual(state["coverage_start"], 9 * DAY)
+            self.assertFalse(review.status(state, 9 * DAY)["ready"])
+
+    def test_clock_regression_resets(self):
+        state = review.advance(week(), GOOD, [], 7 * DAY, True)
+        self.assertIsNone(state["coverage_start"])
+
+    def test_all_events_block_until_explicit_expected_review(self):
+        event = review.parse_event(8 * DAY, MESSAGE, "ghostship-plex")
+        state = review.advance(week(), GOOD, [event], 9 * DAY, True)
+        self.assertFalse(review.status(state, 9 * DAY)["ready"])
+        state["reviews"] = {event["id"]: {"classification": "legitimate-needs-policy"}}
+        self.assertFalse(review.status(state, 9 * DAY)["ready"])
+        state["reviews"][event["id"]]["classification"] = "expected-denial"
+        self.assertTrue(review.status(state, 9 * DAY)["ready"])
+        # A new image must never silently discard unreviewed evidence.
+        state["reviews"] = {}
+        state = review.advance(state, {**GOOD, "image": "new"}, [], 10 * DAY, True)
+        self.assertIn(event["id"], state["events"])
+
+    def test_initial_24h_events_are_not_discarded(self):
+        event = review.parse_event(DAY - 100, MESSAGE, "ghostship-plex")
+        state = review.advance(None, GOOD, [event], DAY, True)
+        self.assertIn(event["id"], state["events"])
+
+
+class Collection(unittest.TestCase):
+    def test_parse_projection_and_exact_profile(self):
+        event = review.parse_event(1, MESSAGE, "ghostship-plex")
+        self.assertEqual(event["name"], "/private/token")
+        self.assertNotIn("args", event)
+        self.assertNotIn("env", event)
+        self.assertIsNone(review.parse_event(1, MESSAGE, "ghostship-plex-extra"))
+        child = MESSAGE.replace('profile="ghostship-plex"', 'profile="ghostship-plex//server"')
+        self.assertEqual(review.parse_event(1, child, "ghostship-plex")["profile"],
+                         "ghostship-plex//server")
+        self.assertFalse(review.heartbeat_event(event))
+
+    def test_only_observed_probe_excluded(self):
+        message = ('apparmor="AUDIT" operation="open" profile="ghostship-plex" '
+                   f'name="{review.HEARTBEAT_PATH}" requested_mask="r"')
+        intentional = review.parse_event(100, message, "ghostship-plex")
+        unrelated = review.parse_event(99, message, "ghostship-plex")
+        with patch.object(review, "inspect_container", return_value=GOOD.copy()), \
+                patch.object(review, "probe", return_value=intentional), \
+                patch.object(review, "journal", return_value=[(99, message), (100, message)]), \
+                patch.object(review.time, "time", return_value=101):
+            state = review.collect(CONFIG, {}, 100)
+        self.assertEqual(list(state["containers"]["plex"]["events"]), [unrelated["id"]])
+
+    def test_successful_probe_requires_exact_event_in_window(self):
+        message = ('apparmor="AUDIT" operation="open" profile="ghostship-plex" '
+                   f'name="{review.HEARTBEAT_PATH}" requested_mask="r" comm="cat"')
+        row = json.dumps({"__REALTIME_TIMESTAMP": "101000000", "MESSAGE": message})
+        with patch.object(review.time, "time", side_effect=[100, 102]), \
+                patch.object(review.subprocess, "run", side_effect=[
+                    subprocess.CompletedProcess([], 0), subprocess.CompletedProcess([], 0, stdout=row)]):
+            event = review.probe("plex", "ghostship-plex")
+        self.assertTrue(review.heartbeat_event(event))
+        self.assertTrue(review.heartbeat_event({**event, "apparmor": "ALLOWED", "denied_mask": "r"}))
+        self.assertFalse(review.heartbeat_event({**event, "operation": "exec"}))
+        self.assertFalse(review.heartbeat_event({**event, "name": "/somewhere/else"}))
+        self.assertFalse(review.heartbeat_event({**event, "apparmor": "DENIED"}))
+
+    def test_probe_fails_closed(self):
+        with patch.object(review.subprocess, "run", side_effect=subprocess.TimeoutExpired("probe", 2)):
+            self.assertIsNone(review.probe("plex", "ghostship-plex"))
+
+    def test_all_host_pids_checked_without_env_inspection(self):
+        reads = {"/policy": b"policy", "/sys/module/apparmor/parameters/enabled": "Y",
+                 review.HEARTBEAT_PATH: "boot1",
+                 "/sys/kernel/security/apparmor/profiles": "ghostship-plex (complain)\n",
+                 "/proc/10/attr/current": "ghostship-plex (complain)",
+                 "/proc/11/attr/current": "unconfined"}
+        with patch.object(review.Path, "read_bytes", lambda p: reads[str(p)]), \
+                patch.object(review.Path, "read_text", lambda p: reads[str(p)]), \
+                patch.object(review, "run", side_effect=[json.dumps({"image": "id", "running": True,
+                                                                      "profile": "ghostship-plex"}),
+                                                        "HPID\n10\n11\n", "lost 0\n"]) as run:
+            observation = review.inspect_container("plex", CONFIG["containers"]["plex"])
+        self.assertFalse(observation["healthy"])
+        self.assertIn("process-profile-mismatch", observation["reasons"])
+        self.assertEqual(len(observation["processes"]), 2)
+        self.assertNotIn(".Config", str(run.call_args_list))
+
+    def test_transient_tools_profile_is_allowed_but_not_required_running(self):
+        config = {"profile": "ghostship-ntfy", "mode": "complain", "source": "/policy",
+                  "processProfiles": ["ghostship-ntfy", "ghostship-ntfy//tools"],
+                  "requiredProcessProfiles": ["ghostship-ntfy"]}
+        reads = {"/policy": b"policy", review.HEARTBEAT_PATH: "boot1",
+                 "/sys/module/apparmor/parameters/enabled": "Y",
+                 "/sys/kernel/security/apparmor/profiles":
+                 "ghostship-ntfy (complain)\nghostship-ntfy//tools (complain)\n",
+                 "/proc/10/attr/current": "ghostship-ntfy (complain)"}
+        with patch.object(review.Path, "read_bytes", lambda p: reads[str(p)]), \
+                patch.object(review.Path, "read_text", lambda p: reads[str(p)]), \
+                patch.object(review, "run", side_effect=[
+                    json.dumps({"image": "id", "running": True, "profile": "ghostship-ntfy"}),
+                    "HPID\n10\n", "lost 0\n"]):
+            self.assertTrue(review.inspect_container("ntfy", config)["healthy"])
+
+    def test_missing_previous_journal_anchor_resets_coverage(self):
+        old = week()
+        old["audit_anchor"] = {"id": "missing", "time": 8 * DAY - 1}
+        message = ('apparmor="AUDIT" operation="open" profile="ghostship-plex" '
+                   f'name="{review.HEARTBEAT_PATH}" requested_mask="r"')
+        heartbeat = review.parse_event(9 * DAY, message, "ghostship-plex")
+        with patch.object(review, "inspect_container", return_value=GOOD.copy()), \
+                patch.object(review, "probe", return_value=heartbeat), \
+                patch.object(review, "journal", return_value=[(9 * DAY, message)]), \
+                patch.object(review.time, "time", return_value=9 * DAY):
+            state = review.collect(CONFIG, {"containers": {"plex": old}}, 9 * DAY)
+        self.assertIsNone(state["containers"]["plex"]["coverage_start"])
+        self.assertIn("audit-collection-failed", state["containers"]["plex"]["reasons"])
+
+    def test_audit_error_resets(self):
+        with patch.object(review, "inspect_container", return_value=GOOD.copy()), \
+                patch.object(review, "probe", return_value={"id": "heartbeat", "time": 9 * DAY}), \
+                patch.object(review, "journal", side_effect=ValueError()), \
+                patch.object(review.time, "time", return_value=9 * DAY):
+            state = review.collect(CONFIG, {"containers": {"plex": week()}}, 9 * DAY)
+        self.assertIsNone(state["containers"]["plex"]["coverage_start"])
+
+    def test_loss_without_profile_field_cannot_count_as_quiet(self):
+        message = ('apparmor="AUDIT" operation="open" profile="ghostship-plex" '
+                   f'name="{review.HEARTBEAT_PATH}" requested_mask="r"')
+        previous = {}
+        for day in range(8):
+            stamp = (day + 1) * DAY
+            heartbeat = review.parse_event(stamp, message, "ghostship-plex")
+            rows = [(stamp, message), (stamp, "audit: audit_lost=45 audit_backlog_limit=64")]
+            if day:
+                rows.append((stamp - DAY, message))
+            with patch.object(review, "inspect_container", return_value=GOOD.copy()), \
+                    patch.object(review, "probe", return_value=heartbeat), \
+                    patch.object(review, "journal", return_value=rows), \
+                    patch.object(review.time, "time", return_value=stamp):
+                previous = review.collect(CONFIG, previous, stamp)
+        entry = previous["containers"]["plex"]
+        self.assertFalse(review.status(entry, 8 * DAY)["ready"])
+        self.assertIn("audit-collection-failed", entry["reasons"])
+
+    def test_kernel_lost_counter_resets_even_without_loss_log(self):
+        state = review.advance(week(), {**GOOD, "audit_lost": 2}, [], 9 * DAY, True)
+        self.assertIsNone(state["coverage_start"])
+        self.assertIn("kernel-audit-loss-counter-changed", state["reasons"])
+
+
+class FilesAndCLI(unittest.TestCase):
+    def test_report_only_does_not_create_state_or_probe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.json"
+            config.write_text(json.dumps(CONFIG))
+            directory = Path(tmp) / "absent"
+            with patch.object(review.os, "geteuid", return_value=0), \
+                    patch.object(review, "collect") as collect, contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(review.main(["--config", str(config), "--state-dir", str(directory),
+                                              "--report-only"]), 0)
+            self.assertFalse(directory.exists())
+            collect.assert_not_called()
+            self.assertFalse(json.loads(output.getvalue())["containers"]["plex"]["ready"])
+
+    def test_atomic_private_state_review_and_safe_stdout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            config = directory / "config.json"
+            config.write_text(json.dumps(CONFIG))
+            event = review.parse_event(8 * DAY, MESSAGE, "ghostship-plex")
+            state = review.advance(week(), GOOD, [event], 9 * DAY, True)
+            review.write_state(directory, {"schema_version": 1, "containers": {"plex": state}})
+            self.assertEqual((directory / "evidence.json").stat().st_mode & 0o777, 0o600)
+            args = ["--config", str(config), "--state-dir", str(directory), "--review", event["id"],
+                    "--classification", "expected-denial", "--note", "Reviewed intentional negative test"]
+            original_stat = Path.stat
+            def root_stat(path, **kwargs):
+                parts = list(original_stat(path, **kwargs))
+                parts[4] = 0
+                return review.os.stat_result(parts)
+            with patch.object(review.os, "geteuid", return_value=0), \
+                    patch.object(Path, "stat", root_stat), contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(review.main(args), 0)
+                saved = review.read_state(directory)
+            self.assertNotIn("/private/token", output.getvalue())
+            self.assertEqual(saved["containers"]["plex"]["reviews"][event["id"]]["classification"],
+                             "expected-denial")
+            self.assertEqual(list(directory.glob(".evidence-*")), [])
+
+
+if __name__ == "__main__":
+    unittest.main()
