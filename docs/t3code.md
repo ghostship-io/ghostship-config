@@ -318,6 +318,16 @@ installer and downloads only when that release is not already active. Changed pr
 server restart, which waits for T3 to become idle. Ghostship tool package
 changes do not: its command wrappers load the new package on every invocation.
 
+T3 shows a provider "Update available" notice when the npm registry's `latest`
+tag is newer than the installed Codex, Claude, OpenCode or Grok version. The
+ten-minute `t3code-provider-update-watch.timer` reads those same registry
+entries and the installed manifests, and starts the tool updater once for each
+newly published version. The updater keeps its idle and OpenCode process
+guards. T3 re-probes provider versions every five minutes, so the notice clears
+after installation without waiting for the queued restart. If an update stays
+blocked, the watcher does not retrigger for the same version; the four-hour
+timer keeps retrying. Watcher output goes to the tool update log.
+
 The daily `t3code-retention` timer keeps storage bounded. It rotates container,
 provider, server-trace, and OpenCode logs that grow past 50 MiB, deletes aged
 rotated logs after 14 days, rebuilds OpenCode's SQLite database when the

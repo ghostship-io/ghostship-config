@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.126] - 2026-10-19
+
+- Start T3 Code tool maintenance within ten minutes of a new Codex, Claude, OpenCode or Grok release, using the npm registry check that drives T3's provider update notice. The existing idle and OpenCode process guards still apply.
+
 ## [3.15.125] - 2026-10-19
 
 - Trim T3 Code's OpenCode model list: `t3code-opencode-model-catalog` rebuilds a models.dev catalog from OpenCode's cache at server start and every tool auto-update, keeping Ollama Cloud, OpenCode Go and OpenRouter models released in the last 183 days that support tool calls (OpenRouter free models only) plus the configured default and small models; other providers pass through. T3 Code's OpenCode reads it through `OPENCODE_MODELS_PATH`, because OpenCode 2 ignores provider whitelists. Today this lists 57 models instead of 446, so `orchestrator_capabilities` shrinks by about 120 KB. The free-inference pool's isolated OpenCode keeps the full catalog.
