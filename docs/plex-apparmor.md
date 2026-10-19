@@ -15,6 +15,10 @@ the user; an agent must never invent an approval reference to satisfy evaluation
 Plex's retained direct streaming is the currently approved exception. All
 Cloudflare-managed HTTP routes still require Access protection, including Plex's
 hostname; its direct port is the separate approved entrypoint.
+The user opened that forward manually on the router and declined UPnP and
+NAT-PMP (2026-10-19, Chill Penguin campaign #102). Keep Plex on manual port
+mapping (`ManualPortMappingMode=1`). Its NAT-PMP requests to the bridge gateway
+(UDP 5351) are expected to stay dropped; never allow them through.
 
 This inventory describes the actual Internet boundary: router forwards and
 Cloudflare routes without Access protection. A port bound on the host for LAN
