@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.139] - 2026-10-19
+
+- `ghostship-synology-health` polls the Synology NAS every 10 minutes over SNMPv3 authPriv (SHA, AES) and publishes to the operations topic: system status, power and fan failures, system and disk temperature, disk status and health, degraded or crashed RAID, and `/volume*` usage at 85% and 95%. Each finding fires once, repeats daily while it persists and resolves when it clears; a failed poll raises its own alert and keeps the earlier ones active instead of resolving them. The SNMP user is the new `synology-snmp` secret unit (Bitwarden `chill-penguin/synology`); its passphrases reach net-snmp through a private `snmp.conf`, never the command line. The unit alerts through `ghostship-failure@`. Until SNMPv3 is enabled on DSM with those credentials, the poll alert fires daily.
+
 ## [3.15.138] - 2026-10-19
 
 - Recorded the user's decision that Plex's router forward is manual, with UPnP and NAT-PMP declined. The public-service policy notes that Plex stays on manual port mapping, and that its NAT-PMP requests to the bridge gateway stay dropped. Verified: the host firewall already drops UDP 5351 from the container bridge, and SSDP does not leave the bridge.
