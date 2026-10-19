@@ -12,6 +12,7 @@
     ./backup.nix
     ./monitoring.nix
     ./storage-health.nix
+    ./synology-health.nix
     ./seerr.nix
     ./cleanup.nix
     ./secrets.nix
