@@ -195,6 +195,14 @@ let
       --probe ${../../tests/t3code-acp-smoke.py}
   '';
 
+  # Starts tool maintenance when T3 would show a provider "Update available".
+  t3codeProviderUpdateWatch = pkgs.writeShellScriptBin "t3code-provider-update-watch" ''
+    set -eu
+    exec ${pkgs.python3}/bin/python ${../../packages/t3code/provider-update-watch.py} \
+      --tools-root /home/t3code/.local/share/t3code-tools \
+      --state-file /run/t3code-tool-update/provider-watch.last
+  '';
+
   t3codeInstallT3Shim = pkgs.writeShellScriptBin "t3code-install-t3-shim" ''
     set -eu
 
@@ -2350,6 +2358,38 @@ let
       [Install]
       WantedBy=multi-user.target
       EOF
+      cat > etc/systemd/system/t3code-provider-update-watch.service <<'EOF'
+      [Unit]
+      Description=Start tool maintenance when a provider update is published
+      DefaultDependencies=no
+      After=t3code-bootstrap.service
+      Requires=t3code-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Service]
+      Type=oneshot
+      Environment=PATH=${t3codePath}:/bin:/usr/bin
+      ExecStart=${t3codeProviderUpdateWatch}/bin/t3code-provider-update-watch
+      StandardOutput=append:/home/t3code/.t3code-container/logs/t3code-tool-auto-update.log
+      StandardError=append:/home/t3code/.t3code-container/logs/t3code-tool-auto-update.log
+      EOF
+      cat > etc/systemd/system/t3code-provider-update-watch.timer <<'EOF'
+      [Unit]
+      Description=Check for provider releases T3 Code would advise
+      DefaultDependencies=no
+      After=t3code-bootstrap.service
+      Conflicts=shutdown.target
+      Before=shutdown.target
+
+      [Timer]
+      OnBootSec=5m
+      OnUnitActiveSec=10m
+      Unit=t3code-provider-update-watch.service
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
       cat > etc/systemd/system/t3code-ghostship-agent-sync.service <<'EOF'
       [Unit]
       Description=Sync and install Ghostship agent tooling from GitHub main
@@ -2526,7 +2566,7 @@ let
       [Unit]
       Description=T3 Code Multi-User System
       DefaultDependencies=no
-      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer t3code-retention.timer
+      Wants=t3code-container-setup.service nix-daemon.socket nix-daemon.service user@3000.service dockerd.service t3code-bootstrap.service t3code-server.service t3code-access-proxy.service t3code-tool-auto-update.timer t3code-provider-update-watch.timer t3code-ghostship-agent-sync.timer t3code-tool-update-restart.timer t3code-server-monitor.timer t3code-process-memory-guard.timer t3code-retention.timer
       After=t3code-container-setup.service nix-daemon.socket user@3000.service dockerd.service
       AllowIsolate=yes
       EOF
@@ -2544,6 +2584,7 @@ let
       ln -s ../t3code-server.service etc/systemd/system/multi-user.target.wants/t3code-server.service
       ln -s ../t3code-access-proxy.service etc/systemd/system/multi-user.target.wants/t3code-access-proxy.service
       ln -s ../t3code-tool-auto-update.timer etc/systemd/system/multi-user.target.wants/t3code-tool-auto-update.timer
+      ln -s ../t3code-provider-update-watch.timer etc/systemd/system/multi-user.target.wants/t3code-provider-update-watch.timer
       ln -s ../t3code-ghostship-agent-sync.timer etc/systemd/system/multi-user.target.wants/t3code-ghostship-agent-sync.timer
       ln -s ../t3code-tool-update-restart.timer etc/systemd/system/multi-user.target.wants/t3code-tool-update-restart.timer
       ln -s ../t3code-server-monitor.timer etc/systemd/system/multi-user.target.wants/t3code-server-monitor.timer
