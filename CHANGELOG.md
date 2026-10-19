@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.140] - 2026-10-19
+
+- Notification coverage is declared once in `notify-coverage.nix`: every `ghostship-*` and `podman-*` service and a named list of other custom units report failures to `operations` through `ghostship-failure@`, which now names the unit's description, result and exit status. Previously 17 units had a failure path; the containers, brokers, bridges, network setup units and download helpers failed silently. Exemptions carry a reason, and evaluation fails when a covered unit loses its path or the module names a missing unit.
+- Backup jobs post their restic summary lines silently to `informational` through the new `ghostship-success@`.
+- New daily `ghostship-storage-check` alerts `operations` when the root filesystem is read-only or a Btrfs device error counter is nonzero.
+
 ## [3.15.139] - 2026-10-19
 
 - `ghostship-synology-health` polls the Synology NAS every 10 minutes over SNMPv3 authPriv (SHA, AES) and publishes to the operations topic: system status, power and fan failures, system and disk temperature, disk status and health, degraded or crashed RAID, and `/volume*` usage at 85% and 95%. Each finding fires once, repeats daily while it persists and resolves when it clears; a failed poll raises its own alert and keeps the earlier ones active instead of resolving them. The SNMP user is the new `synology-snmp` secret unit (Bitwarden `chill-penguin/synology`); its passphrases reach net-snmp through a private `snmp.conf`, never the command line. The unit alerts through `ghostship-failure@`. Until SNMPv3 is enabled on DSM with those credentials, the poll alert fires daily.
