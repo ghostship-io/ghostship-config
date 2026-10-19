@@ -49,6 +49,9 @@ let
 in
 {
   ghostship.apps.plex = {
+    public = true;
+    cloudflareBypassApproval = "User explicitly retained public Plex streaming in thread 0eee8303-753b-497a-8609-005605679f17 on 2026-10-18.";
+    apparmorProfile = "ghostship-plex";
     healthPath = "/identity";
     name = "Plex";
     group = "Media";

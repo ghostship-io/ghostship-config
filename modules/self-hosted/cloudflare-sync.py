@@ -1,4 +1,4 @@
-"""Reconcile registry-owned routes/DNS and ntfy's narrow native-auth exception."""
+"""Reconcile registry-owned routes/DNS after verifying tunnel Access protection."""
 
 import argparse
 import copy
@@ -12,7 +12,6 @@ from pathlib import Path
 
 ZONE = "ghostship.io"
 MARKER = "Managed by nixos-config ghostship.apps"
-NATIVE_APP = "Ghostship managed native auth: ntfy"
 GOOGLE_IDP = "c694da42-b799-4706-983b-35fa9eb91236"
 
 
@@ -61,51 +60,129 @@ class Cloudflare:
 
 
 def matches(domain, hostname):
-    domain = domain.split("/")[0]
     return domain == hostname or (
         domain.startswith("*.") and hostname.endswith(domain[1:])
+        and hostname.count(".") == domain.count(".")
+    )
+
+
+def access_domains(application):
+    # Destinations take precedence, including an explicitly empty list.
+    if application.get("destinations") is not None:
+        return [
+            item.get("uri", "")
+            for item in application["destinations"]
+            if item.get("type") == "public"
+        ]
+    return application.get("self_hosted_domains") or [
+        application.get("domain", "")
+    ]
+
+
+def relevant_domains(application, hostname):
+    return [
+        domain
+        for domain in access_domains(application)
+        if matches(domain.split("/", 1)[0], hostname)
+        or matches(hostname, domain.split("/", 1)[0])
+    ]
+
+
+def fetch_access_policies(api, prefix, apps, hostnames):
+    result = copy.deepcopy(apps)
+    for application in result:
+        if application.get("type") != "self_hosted" or not any(
+            relevant_domains(application, host) for host in hostnames
+        ):
+            continue
+        if not application.get("id"):
+            raise ValueError("Relevant Access application has no ID")
+        # The apps endpoint can return policy references, not full rules.
+        application["policies"] = api.listing(
+            prefix + f"/access/apps/{application['id']}/policies"
+        )
+    return result
+
+
+def restricted_identity(selector):
+    if not isinstance(selector, dict) or len(selector) != 1:
+        return False
+    kind, value = next(iter(selector.items()))
+    field = {"email": "email", "email_domain": "domain"}.get(kind)
+    return bool(
+        field
+        and isinstance(value, dict)
+        and isinstance(value.get(field), str)
+        and value[field].strip()
+        and "*" not in value[field]
+    )
+
+
+def typed_service_token(selector):
+    return (
+        isinstance(selector, dict)
+        and set(selector) == {"service_token"}
+        and isinstance(selector["service_token"], dict)
+        and isinstance(selector["service_token"].get("token_id"), str)
+        and bool(selector["service_token"]["token_id"].strip())
+        and selector["service_token"]["token_id"] != "*"
     )
 
 
 def validate_access(apps, routes):
-    for hostname, route in routes.items():
-        if route["access"] == "native":
-            if hostname != "ntfy.ghostship.io":
-                raise ValueError(
-                    "Only ntfy has an approved native-auth exception"
-                )
-            continue
-        covering = []
-        for application in apps:
-            if application.get("type") != "self_hosted":
-                continue
-            # The current API gives destinations precedence over legacy domains.
-            if application.get("destinations") is not None:
-                domains = [
-                    item.get("uri", "")
-                    for item in application["destinations"]
-                    if item.get("type") == "public"
-                ]
-            else:
-                domains = application.get("self_hosted_domains") or [
-                    application.get("domain", "")
-                ]
-            covering.extend(
-                (application, domain)
-                for domain in domains
-                if matches(domain, hostname)
-            )
-        if not any("/" not in domain for _, domain in covering):
+    for hostname in routes:
+        # Tunnel wildcards route deeper names than Access wildcards protect.
+        # Require explicit routes so every routed hostname can be verified.
+        if "*" in hostname:
+            raise ValueError(f"Wildcard tunnel ingress is not supported: {hostname}")
+        covering = [
+            (application, domain)
+            for application in apps
+            if application.get("type") == "self_hosted"
+            for domain in relevant_domains(application, hostname)
+        ]
+        if not any(
+            "/" not in domain and matches(domain, hostname)
+            for _, domain in covering
+        ):
             raise ValueError(f"No browser Access protection for {hostname}")
         for app, _ in covering:
-            policies = app.get("policies", [])
-            if (
-                GOOGLE_IDP not in app.get("allowed_idps", [])
-                or not any(p.get("decision") == "allow" for p in policies)
-                or any(p.get("decision") == "bypass" for p in policies)
-            ):
+            if app.get("options_preflight_bypass"):
+                raise ValueError(
+                    f"Unauthenticated OPTIONS bypass for {hostname}; inspect it first"
+                )
+            policies = app.get("policies")
+            if not isinstance(policies, list) or not policies:
+                raise ValueError(
+                    f"Missing Access policy evidence for {hostname}"
+                )
+            browser_allow = False
+            for policy in policies:
+                decision = policy.get("decision")
+                include = policy.get("include")
+                if decision == "deny":
+                    continue
+                if (
+                    decision == "allow"
+                    and isinstance(include, list)
+                    and include
+                    and all(restricted_identity(item) for item in include)
+                ):
+                    browser_allow = True
+                    continue
+                if (
+                    decision == "non_identity"
+                    and isinstance(include, list)
+                    and include
+                    and all(typed_service_token(item) for item in include)
+                ):
+                    continue
                 raise ValueError(
                     f"Unexpected Access policy for {hostname}; inspect it first"
+                )
+            if not browser_allow or set(app.get("allowed_idps", [])) != {GOOGLE_IDP}:
+                raise ValueError(
+                    f"No restricted Google identity Access policy for {hostname}"
                 )
 
 
@@ -227,47 +304,18 @@ def main():
     records = api.listing(f"/zones/{zones[0]['id']}/dns_records")
     apps = api.listing(prefix + "/access/apps")
     current = api.get(tunnel_path)
-    validate_access(apps, routes)
     desired = merge_ingress(current["config"], routes, previous)
+    # Audit existing rules as well as the proposed configuration, including
+    # unrelated legacy exact/wildcard hosts and all path-specific overrides.
+    hostnames = set(routes) | {
+        rule["hostname"]
+        for config in (current["config"], desired)
+        for rule in config.get("ingress", [])
+        if rule.get("hostname")
+    }
+    apps = fetch_access_policies(api, prefix, apps, hostnames)
+    validate_access(apps, hostnames)
     operations = []
-    native = [app for app in apps if app.get("domain") == "ntfy.ghostship.io"]
-    if len(native) > 1 or any(app.get("name") != NATIVE_APP for app in native):
-        raise ValueError("An unmanaged ntfy Access application already exists")
-    if "ntfy.ghostship.io" in routes:
-        if not native:
-            operations.append(
-                (
-                    "POST",
-                    prefix + "/access/apps",
-                    {
-                        "name": NATIVE_APP,
-                        "type": "self_hosted",
-                        "domain": "ntfy.ghostship.io",
-                        "policies": [
-                            {
-                                "name": "Native ntfy authentication",
-                                "decision": "bypass",
-                                "include": [{"everyone": {}}],
-                            }
-                        ],
-                    },
-                    "Create ntfy-only native-auth exception",
-                )
-            )
-        else:
-            policies = api.listing(
-                prefix + f"/access/apps/{native[0]['id']}/policies"
-            )
-            if (
-                len(policies) != 1
-                or policies[0].get("decision") != "bypass"
-                or policies[0].get("include") != [{"everyone": {}}]
-                or policies[0].get("exclude")
-                or policies[0].get("require")
-            ):
-                raise ValueError(
-                    "Managed ntfy exception drifted; inspect before changing it"
-                )
     if desired != current["config"]:
         operations.append(
             (
@@ -286,19 +334,6 @@ def main():
             zones[0]["id"],
         )
     )
-    if (
-        "ntfy.ghostship.io" not in routes
-        and "ntfy.ghostship.io" in previous
-        and native
-    ):
-        operations.append(
-            (
-                "DELETE",
-                prefix + f"/access/apps/{native[0]['id']}",
-                None,
-                "Remove retired ntfy Access exception",
-            )
-        )
     for _, _, _, description in operations:
         print(description)
     if not args.apply:

@@ -143,7 +143,12 @@ class RegistryTests(unittest.TestCase):
             "type": "self_hosted",
             "domain": "*.ghostship.io",
             "allowed_idps": [cloudflare.GOOGLE_IDP],
-            "policies": [{"decision": "allow"}],
+            "policies": [
+                {
+                    "decision": "allow",
+                    "include": [{"email": {"email": "owner@example.org"}}],
+                }
+            ],
         }
         routes = {"sonarr.ghostship.io": app()}
         cloudflare.validate_access([access], routes)
@@ -162,7 +167,12 @@ class RegistryTests(unittest.TestCase):
                 "sonarr.ghostship.io/admin",
             ],
             "allowed_idps": [cloudflare.GOOGLE_IDP],
-            "policies": [{"decision": "allow"}],
+            "policies": [
+                {
+                    "decision": "allow",
+                    "include": [{"email": {"email": "owner@example.org"}}],
+                }
+            ],
         }
         with self.assertRaises(ValueError):
             cloudflare.validate_access(
