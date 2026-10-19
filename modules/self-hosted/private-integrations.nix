@@ -195,7 +195,7 @@ let
       port = 8080;
       username = "publisher";
       env_file = config.ghostship.selfHostedSecrets.projections.monitoring.path;
-      topics = [ "operations" ];
+      topics = [ "security" "operations" "informational" ];
       default_topic = "operations";
     };
   });

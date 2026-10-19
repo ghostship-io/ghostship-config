@@ -105,7 +105,7 @@ app, the configured server is `https://ntfy.ghostship.io`, user `android`, and t
 `operations`. The old browser-login bypass was revoked on 2026-10-18. Native
 Android delivery may be unavailable until an Access-compatible method is approved;
 do not restore a bypass for compatibility. No iOS relay or WARP dependency is configured. A manual
-`ghostship-alert 'Ghostship notification test'` checks delivery after rollout.
+`ghostship-notify --topic informational --source test --title 'Ghostship notification test'` checks delivery after rollout; run as root.
 
 Seerr provisioning authenticates using the existing Plex token, selects the
 existing `Optimal` quality profile (or an unambiguous sole profile), and
