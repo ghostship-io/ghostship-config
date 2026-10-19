@@ -55,7 +55,9 @@ explicit user approval and is not an automatic recovery step.
    Podman's wrapper must include `apparmor_parser`: without it Podman reports
    AppArmor disabled even when the kernel and loaded profiles are healthy.
    Verify `podman info --format '{{.Host.Security.AppArmorEnabled}}'` returns true.
-   Expose `tunables` through `security.apparmor.includes` as well. Podman checks
+   Expose `tunables/global` through `security.apparmor.includes` as well. Its
+   value must be an include directive, since this option writes file contents.
+   Podman checks
    `/etc/apparmor.d/tunables/global` before including variables used by its
    default profile. Without that path, unrelated container starts fail with
    undefined `HOMEDIRS`. Verify a throwaway container from an existing local image
