@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.15.127] - 2026-10-19
+
+- Add observe-only connection inventory for chill-penguin (issue #102). nftables flow sets on the inet forward/input and bridge forward hooks record each new connection's source, destination, protocol and port without returning verdicts, including attempts later dropped by the FlareSolverr egress rules. `ghostship-flow-collect` resolves addresses to container names every five minutes into a root-only edge map; `ghostship-flow-report` prints it. The map is the evidence base for the declarative allow graph.
+- Add `ghostship-security-check`, run every 15 minutes:
+  - Invariants alert immediately: AppArmor enabled, declared profiles loaded and attached to their containers, audit enabled with no lost events, expected firewall tables present. Also unexpected privileged containers, added capabilities, host sockets, host namespaces or undeclared containers.
+  - Root SSH logins from unexpected sources and SSH failure bursts alert as one-off events.
+  - Drift checks baseline first, then report new listeners, SSH key or sshd config changes, non-store unit or cron files, and new SUID/SGID files (scanned daily); `--accept` re-baselines after review.
+  - Containers opening host SSH or another app's database are flagged from the flow map.
+  - Alerts go to the `security` NTFY topic through `ghostship-notify` with dedupe keys and resolved notices, falling back to the existing operations alert until the NTFY topic rollout lands.
+
 ## [3.15.126] - 2026-10-19
 
 - Start T3 Code tool maintenance within ten minutes of a new Codex, Claude, OpenCode or Grok release, using the npm registry check that drives T3's provider update notice. The existing idle and OpenCode process guards still apply.

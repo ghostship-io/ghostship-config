@@ -1,0 +1,51 @@
+# Observe-only flow inventory. These chains never return a verdict: they record
+# each new connection's (source, destination, protocol, port) with a counter so
+# the allow graph can be derived from real traffic. Priority -20 runs before the
+# FlareSolverr egress rules, so attempts those rules later drop are recorded too.
+table inet ghostship_flows
+delete table inet ghostship_flows
+table inet ghostship_flows {
+	set flows4 {
+		type ipv4_addr . ipv4_addr . inet_proto . inet_service
+		flags dynamic,timeout
+		timeout 6h
+		size 65536
+	}
+
+	set flows6 {
+		type ipv6_addr . ipv6_addr . inet_proto . inet_service
+		flags dynamic,timeout
+		timeout 6h
+		size 16384
+	}
+
+	chain forward {
+		type filter hook forward priority filter - 20; policy accept;
+		ct state new meta nfproto ipv4 meta l4proto { tcp, udp } update @flows4 { ip saddr . ip daddr . meta l4proto . th dport counter }
+		ct state new meta nfproto ipv6 meta l4proto { tcp, udp } update @flows6 { ip6 saddr . ip6 daddr . meta l4proto . th dport counter }
+	}
+
+	chain input {
+		type filter hook input priority filter - 20; policy accept;
+		iifname "lo" return
+		ct state new meta nfproto ipv4 meta l4proto { tcp, udp } update @flows4 { ip saddr . ip daddr . meta l4proto . th dport counter }
+		ct state new meta nfproto ipv6 meta l4proto { tcp, udp } update @flows6 { ip6 saddr . ip6 daddr . meta l4proto . th dport counter }
+	}
+}
+
+# Peers on one Podman bridge exchange frames without the inet forward hook.
+table bridge ghostship_flows
+delete table bridge ghostship_flows
+table bridge ghostship_flows {
+	set flows4 {
+		type ipv4_addr . ipv4_addr . inet_proto . inet_service
+		flags dynamic,timeout
+		timeout 6h
+		size 65536
+	}
+
+	chain forward {
+		type filter hook forward priority -20; policy accept;
+		ether type ip ct state new meta l4proto { tcp, udp } update @flows4 { ip saddr . ip daddr . meta l4proto . th dport counter }
+	}
+}
