@@ -68,6 +68,11 @@ in
               default = null;
               description = "Reference to explicit user approval for direct Internet access outside Cloudflare Access. Never inferred from app/client requirements.";
             };
+            cloudflareBypassPaths = mkOption {
+              type = types.listOf (types.strMatching "/[a-z0-9-]+");
+              default = [ ];
+              description = "Exact request paths Cloudflare Access bypasses on this hostname; the origin must authenticate them itself. Requires cloudflareBypassApproval and an AppArmor profile.";
+            };
             public = mkOption {
               type = types.bool;
               default = false;
@@ -161,6 +166,14 @@ in
           builtins.attrValues apps
         );
         message = "Internet access outside Cloudflare Access requires recorded explicit user approval.";
+      }
+      {
+        assertion = lib.all (
+          app:
+          app.cloudflareBypassPaths == [ ]
+          || (app.cloudflareBypassApproval != null && app.apparmorProfile != null && app.hostname != null)
+        ) (builtins.attrValues apps);
+        message = "Cloudflare Access path bypasses require recorded explicit user approval and an AppArmor profile.";
       }
     ];
     systemd.tmpfiles.rules = [ "d /var/lib/ghostship-dashboards 0700 root root -" ];
