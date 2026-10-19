@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.128] - 2026-10-19
+
+- ntfy carries exactly three topics, `security`, `operations` and `informational`; `publisher` writes and `android` reads all three, and the host operations broker may publish to each.
+- `ghostship-notify` replaces `ghostship-alert` as the host publisher: `--topic`, `--priority` (5 act now, 4 actionable, 3 today, 2 informational, 1 digest), `--source` and `--state` as the first two tags, optional `--dedupe` (one publish per key and state per hour, recorded only after a successful publish) and `--click`. Failed-unit notifications use it on `operations` at priority 4.
+
 ## [3.15.127] - 2026-10-19
 
 - Add observe-only connection inventory for chill-penguin (issue #102). nftables flow sets on the inet forward/input and bridge forward hooks record each new connection's source, destination, protocol and port without returning verdicts, including attempts later dropped by the FlareSolverr egress rules. `ghostship-flow-collect` resolves addresses to container names every five minutes into a root-only edge map; `ghostship-flow-report` prints it. The map is the evidence base for the declarative allow graph.
