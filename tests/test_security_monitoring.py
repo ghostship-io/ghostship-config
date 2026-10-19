@@ -136,6 +136,16 @@ class CheckTests(unittest.TestCase):
         keys = sorted(f.key for f in check.check_ssh_logins(CONFIG, {}, lines))
         self.assertEqual(keys, ["ssh.failures", "ssh.login.root.203.0.113.9"])
 
+    def test_ssh_clients_resolved_by_name_and_collapsed(self):
+        t3 = {**container("t3code"), "NetworkSettings": {"Networks": {"a": {"IPAddress": "10.89.7.13"}}}}
+        rogue = {**container("rogue"), "NetworkSettings": {"Networks": {"a": {"IPAddress": "10.89.7.99"}}}}
+        clients = check.container_addresses([t3, rogue], ["t3code"])
+        lines = ["Accepted publickey for root from 10.89.7.13 port 1 ssh2"] * 3
+        lines += ["Accepted publickey for root from 10.89.7.99 port 1 ssh2"] * 2
+        found = check.check_ssh_logins(CONFIG, {}, lines, clients)
+        self.assertEqual([f.key for f in found], ["ssh.login.root.10.89.7.99"])
+        self.assertIn("(2x)", found[0].message)
+
     def test_listeners_ignore_resolvers_and_ephemeral_udp(self):
         text = (
             "tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:*\n"
