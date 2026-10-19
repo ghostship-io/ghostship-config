@@ -12,7 +12,8 @@ let
   cfg = config.ghostship.githubEngineering;
   system = pkgs.stdenv.hostPlatform.system;
   github = (inputs.ghostship-private-agent.lib.mkPrivateIntegrations { inherit system; }).github;
-  root = "/srv/apps/ghostship-github";
+  # Under /var/lib: tmpfiles refuses root-owned children of the apps-owned /srv/apps.
+  root = "/var/lib/ghostship-github";
   network = "ghostship_github_net";
   # T3 projects per repository (ids from the T3 orchestration shell).
   repositories = {
