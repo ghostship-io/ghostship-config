@@ -326,6 +326,16 @@ in
       ];
     };
 
+    # SNMPv3 authPriv user on the NAS (Bitwarden chill-penguin/synology: snmp_user, auth_password, priv_password).
+    synology-snmp = mkUnit {
+      relativeFile = "secrets/files/sources/providers/synology-snmp.env.age";
+      exports = [
+        "USER"
+        "AUTH_PASS"
+        "PRIV_PASS"
+      ];
+    };
+
     # Wyze account login for the scale API (Bitwarden wyze.com: email, account_password, key_id, api_key).
     wyze = mkUnit {
       relativeFile = "secrets/files/sources/providers/wyze.env.age";
@@ -414,6 +424,27 @@ in
             "NTFY_READER_HASH"
             "NTFY_PUBLISH_PASSWORD"
             "NTFY_READER_PASSWORD"
+          ]
+      );
+    };
+    synology-snmp = {
+      fileName = "synology-snmp.env";
+      owner = "root";
+      group = "root";
+      mode = "0400";
+      fields = builtins.listToAttrs (
+        map
+          (key: {
+            name = key;
+            value = {
+              unit = "synology-snmp";
+              inherit key;
+            };
+          })
+          [
+            "USER"
+            "AUTH_PASS"
+            "PRIV_PASS"
           ]
       );
     };
