@@ -36,6 +36,49 @@ let
           ]
           (builtins.readFile ./ghostship-notify.py);
   };
+  # Unit outcomes for ghostship-failure@ and ghostship-success@. A failure goes
+  # to operations; a success summary goes silently to informational and quotes
+  # only restic summary lines, so it never forwards arbitrary journal output.
+  unitNotify = pkgs.writeShellApplication {
+    name = "ghostship-unit-notify";
+    runtimeInputs = [
+      pkgs.systemd
+      pkgs.gnugrep
+      pkgs.coreutils
+      notify
+    ];
+    text = ''
+      outcome=$1
+      unit=$2
+      host=${config.networking.hostName}
+      description=$(systemctl show -P Description "$unit")
+      case $outcome in
+        failure)
+          result=$(systemctl show -P Result "$unit")
+          status=$(systemctl show -P ExecMainStatus "$unit")
+          exec ghostship-notify --topic operations --priority 4 --source systemd \
+            --dedupe "$unit" --title "Service $unit failed on $host" \
+            "$description: $result (exit status $status). Inspect: journalctl -b -u $unit"
+          ;;
+        success)
+          invocation=$(systemctl show -P InvocationID "$unit")
+          if [ -n "$invocation" ]; then
+            log=$(journalctl -o cat --no-pager "_SYSTEMD_INVOCATION_ID=$invocation")
+          else
+            log=$(journalctl -o cat --no-pager -n 200 -u "$unit")
+          fi
+          summary=$(grep -E '^(Added to the repository|processed |snapshot [0-9a-f]+ saved|keep [0-9]+ snapshots|remove [0-9]+ snapshots|no errors were found|this removes|unused size after prune)' <<<"$log" | tail -n 8 || true)
+          exec ghostship-notify --topic informational --priority 2 --source systemd \
+            --state resolved --dedupe "$unit" --title "$description succeeded on $host" \
+            "''${summary:-$unit finished without a summary.}"
+          ;;
+        *)
+          echo "Usage: ghostship-unit-notify failure|success UNIT" >&2
+          exit 2
+          ;;
+      esac
+    '';
+  };
 in
 {
   options.ghostship.notify.package = lib.mkOption {
@@ -176,11 +219,20 @@ in
         UMask = "0077";
       };
     };
+    # Attached centrally by notify-coverage.nix: failures to every covered unit,
+    # summaries to the backup jobs.
     systemd.services."ghostship-failure@" = {
       description = "Notify about failed Ghostship service %i";
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${notify}/bin/ghostship-notify --topic operations --priority 4 --source systemd --dedupe %i --title 'Service %i failed on chill-penguin' 'Service %i failed on chill-penguin'";
+        ExecStart = "${unitNotify}/bin/ghostship-unit-notify failure %i";
+      };
+    };
+    systemd.services."ghostship-success@" = {
+      description = "Publish the routine summary of Ghostship service %i";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${unitNotify}/bin/ghostship-unit-notify success %i";
       };
     };
     systemd.services.ghostship-monitoring-heartbeats = {
@@ -204,14 +256,5 @@ in
       ${pkgs.coreutils}/bin/install -d -m0700 /var/lib/ghostship-monitoring
       ${pkgs.coreutils}/bin/date +%s > /var/lib/ghostship-monitoring/last-update-success
     '';
-    systemd.services.ghostship-backup-backup.onFailure = [ "ghostship-failure@%n.service" ];
-    systemd.services.ghostship-backup-check.onFailure = [ "ghostship-failure@%n.service" ];
-    systemd.services.ghostship-backup-prune.onFailure = [ "ghostship-failure@%n.service" ];
-    systemd.services.ghostship-backup-sample.onFailure = [ "ghostship-failure@%n.service" ];
-    systemd.services.podman-auto-update.onFailure = [ "ghostship-failure@%n.service" ];
-    systemd.services.ghostship-monitoring-provision.onFailure = [ "ghostship-failure@%n.service" ];
-    systemd.services.nixos-upgrade = lib.mkIf config.system.autoUpgrade.enable {
-      onFailure = [ "ghostship-failure@%n.service" ];
-    };
   };
 }

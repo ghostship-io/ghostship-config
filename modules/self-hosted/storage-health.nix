@@ -27,7 +27,6 @@ lib.mkIf ((config.fileSystems."/".fsType or "") == "btrfs") {
       Nice = 10;
       IOSchedulingClass = "idle";
     };
-    onFailure = [ "ghostship-failure@%n.service" ];
   };
   systemd.timers.ghostship-btrfs-balance = {
     wantedBy = [ "timers.target" ];
@@ -35,6 +34,38 @@ lib.mkIf ((config.fileSystems."/".fsType or "") == "btrfs") {
       OnCalendar = "weekly";
       Persistent = true;
       RandomizedDelaySec = "1h";
+    };
+  };
+
+  # Detect storage faults before they surface as unrelated service failures: a
+  # read-only latch on the root filesystem, or nonzero Btrfs device error
+  # counters (read, write, flush, corruption, generation). The failure reaches
+  # operations through notify-coverage.nix. The internal Apple NVMe exposes no
+  # SMART data this host has verified, so the device counters stand in for it.
+  systemd.services.ghostship-storage-check = {
+    description = "Check the Btrfs root for device errors and a read-only latch";
+    path = [
+      pkgs.btrfs-progs
+      pkgs.util-linux
+      pkgs.gnugrep
+      pkgs.coreutils
+    ];
+    script = ''
+      if findmnt -rno OPTIONS --mountpoint / | tr , '\n' | grep -qx ro; then
+        echo "The root filesystem is mounted read-only" >&2
+        exit 1
+      fi
+      btrfs device stats --check /
+    '';
+    serviceConfig.Type = "oneshot";
+  };
+  systemd.timers.ghostship-storage-check = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "15min";
+      OnCalendar = "daily";
+      Persistent = true;
+      RandomizedDelaySec = "30min";
     };
   };
 
@@ -49,7 +80,6 @@ lib.mkIf ((config.fileSystems."/".fsType or "") == "btrfs") {
       Nice = 10;
       IOSchedulingClass = "idle";
     };
-    onFailure = [ "ghostship-failure@%n.service" ];
   };
   systemd.timers.ghostship-image-prune = {
     wantedBy = [ "timers.target" ];

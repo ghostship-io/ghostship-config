@@ -27,7 +27,6 @@ in
     description = "Poll Synology disk, RAID, volume, temperature and system health over SNMPv3";
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
-    onFailure = [ "ghostship-failure@%n.service" ];
     serviceConfig = {
       Type = "oneshot";
       ExecStart = lib.getExe check;
