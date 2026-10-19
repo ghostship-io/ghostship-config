@@ -96,6 +96,9 @@ def classify(address, names, host, extra):
     if address in extra:
         return extra[address]
     parsed = ipaddress.ip_address(address)
+    # Discovery traffic (Plex GDM, SSDP, mDNS, device beacons) is not a peer edge.
+    if parsed.is_multicast or address == "255.255.255.255" or (parsed.version == 4 and address.endswith(".255")):
+        return "broadcast"
     if any(parsed in net for net in PRIVATE):
         return f"lan:{address}"
     return "wan"
@@ -205,13 +208,15 @@ def main(argv=None):
     parser.add_argument("--podman", default="podman")
     parser.add_argument("--ip", default="ip")
     parser.add_argument("--name", action="append", help="ADDRESS=LABEL for known non-container hosts")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
     sub.add_parser("collect")
     rep = sub.add_parser("report")
     rep.add_argument("--json", action="store_true")
     rep.add_argument("--source")
     rep.add_argument("--since-hours", type=float, default=0)
     args = parser.parse_args(argv)
+    if args.command is None:
+        args = parser.parse_args([*(argv if argv is not None else sys.argv[1:]), "report"])
     return collect(args) if args.command == "collect" else report(args)
 
 
