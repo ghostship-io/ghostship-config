@@ -60,11 +60,8 @@ let
   };
   check = pkgs.writeShellApplication {
     name = "ghostship-security-check";
-    runtimeInputs = tools;
-    # The NTFY helper comes from the system profile so this module does not
-    # depend on the separately rolled-out notification module.
+    runtimeInputs = tools ++ [ config.ghostship.notify.package ];
     text = ''
-      export PATH="$PATH:/run/current-system/sw/bin"
       exec ${pkgs.python3}/bin/python3 ${./security-check.py} --config ${checkConfig} "$@"
     '';
   };
@@ -91,7 +88,7 @@ in
     ntfyTopic = lib.mkOption {
       type = lib.types.str;
       default = "security";
-      description = "NTFY topic for host security findings (published through ghostship-notify).";
+      description = "NTFY topic for host security findings, published through ghostship-notify.";
     };
     synologyAddress = lib.mkOption {
       type = lib.types.str;
