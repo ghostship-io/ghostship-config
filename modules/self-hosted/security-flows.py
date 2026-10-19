@@ -22,6 +22,9 @@ SETS = [
     ("bridge", "ghostship_flows", "flows4"),
 ]
 MAX_WAN_SAMPLES = 16
+# Podman reassigns addresses when a container is recreated; elements created
+# before that still name the old address until their 6h set timeout.
+ADDRESS_MEMORY_SECONDS = 24 * 3600
 PRIVATE = [
     ipaddress.ip_network(n)
     for n in (
@@ -104,6 +107,16 @@ def classify(address, names, host, extra):
     return "wan"
 
 
+def remember_addresses(state, names, now):
+    """Return current names plus recently released addresses' last owners."""
+    history = state.setdefault("addresses", {})
+    for address, name in names.items():
+        history[address] = {"name": name, "last_seen": now}
+    for address in [a for a, h in history.items() if now - h["last_seen"] > ADDRESS_MEMORY_SECONDS]:
+        del history[address]
+    return {**{a: h["name"] for a, h in history.items()}, **names}
+
+
 def load_state(path):
     try:
         with open(path) as handle:
@@ -171,7 +184,9 @@ def collect(args):
     host = host_addresses(args.ip)
     extra = dict(item.split("=", 1) for item in args.name or [])
     state = load_state(args.state)
-    new_edges = merge(state, observed, names, host, extra, int(time.time()))
+    now = int(time.time())
+    names = remember_addresses(state, names, now)
+    new_edges = merge(state, observed, names, host, extra, now)
     state["missing_sets"] = missing
     save_state(args.state, state)
     print(json.dumps({"observed": len(observed), "new_edges": new_edges, "missing_sets": missing}))
@@ -201,6 +216,9 @@ def report(args):
     return 0
 
 
+REPORT_OPTIONS = {"--json", "--source", "--since-hours"}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", default="/var/lib/ghostship-security/flows.json")
@@ -214,9 +232,12 @@ def main(argv=None):
     rep.add_argument("--json", action="store_true")
     rep.add_argument("--source")
     rep.add_argument("--since-hours", type=float, default=0)
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not {"collect", "report"} & set(argv):
+        # Default to report; its options must follow the subcommand.
+        first = next((i for i, a in enumerate(argv) if a.split("=")[0] in REPORT_OPTIONS), len(argv))
+        argv.insert(first, "report")
     args = parser.parse_args(argv)
-    if args.command is None:
-        args = parser.parse_args([*(argv if argv is not None else sys.argv[1:]), "report"])
     return collect(args) if args.command == "collect" else report(args)
 
 
