@@ -154,8 +154,21 @@ def check_containers(cfg, rows):
     return found
 
 
-def check_ssh_logins(cfg, state, journal_lines):
-    found = []
+def container_addresses(rows, names):
+    """Current addresses of the named containers; Podman reassigns them on recreation."""
+    found = set()
+    for row in rows:
+        if row["Name"].lstrip("/") not in names:
+            continue
+        for net in (row.get("NetworkSettings", {}).get("Networks") or {}).values():
+            for key in ("IPAddress", "GlobalIPv6Address"):
+                if net.get(key):
+                    found.add(ipaddress.ip_address(net[key]))
+    return found
+
+
+def check_ssh_logins(cfg, state, journal_lines, clients=frozenset()):
+    logins = {}
     allowed = [ipaddress.ip_network(n) for n in cfg["ssh_allowed_sources"]]
     failures = 0
     for line in journal_lines:
@@ -166,10 +179,16 @@ def check_ssh_logins(cfg, state, journal_lines):
                 address = ipaddress.ip_address(source)
             except ValueError:
                 continue
-            if not any(address in net for net in allowed):
-                found.append(Finding(f"ssh.login.{user}.{source}", "critical", "sshd", f"{user} logged in by {method} from unexpected {source}", event=True))
+            if address not in clients and not any(address in net for net in allowed):
+                key = f"ssh.login.{user}.{source}"
+                count = logins.get(key, (0, method))[0] + 1
+                logins[key] = (count, method)
         elif re.search(r"Failed |Invalid user|authentication failure", line):
             failures += 1
+    found = [
+        Finding(key, "critical", "sshd", f"{key.split('.', 3)[2]} logged in by {method} from unexpected {key.split('.', 3)[3]} ({count}x)", event=True)
+        for key, (count, method) in logins.items()
+    ]
     if failures >= cfg["ssh_failure_threshold"]:
         found.append(Finding("ssh.failures", "high", "sshd", f"{failures} failed SSH authentications since last check", event=True))
     return found
@@ -340,7 +359,7 @@ def run(args):
     findings += check_audit(cfg, state, sh(["auditctl", "-s"], check=False))
     findings += check_firewall(cfg, sh(["nft", "list", "tables"]), sh(["nft", "list", "table", "ip", "filter"], check=False))
     findings += check_containers(cfg, rows)
-    findings += check_ssh_logins(cfg, state, journal)
+    findings += check_ssh_logins(cfg, state, journal, container_addresses(rows, cfg["host_ssh_clients"]))
     flows = flow_findings(cfg, load(cfg["flows_state"], {}), set(state.get("accepted_flows", [])))
     if args.accept:
         state.setdefault("baselines", {}).clear()

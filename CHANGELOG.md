@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.130] - 2026-10-19
+
+- `ghostship-security-check` resolves the containers allowed to log in to host SSH (`host_ssh_clients`: T3 and the tunnel connector) to their current addresses on every run. Podman gave T3 new addresses when it was recreated, and the fixed list made every T3 login a critical alert. Repeated logins from one unexpected source collapse into one finding with a count.
+
 ## [3.15.129] - 2026-10-19
 
 - Keep Podman containers confined across AppArmor reloads. Podman loads its own `containers-default-<version>` profile at runtime, and the `aa-remove-unknown` step of every NixOS AppArmor reload unloaded it, so each nightly switch left every container without its own profile unconfined. The same default rules are now declared as `ghostship-container-default` (enforce) and set as Podman's default profile, so reloads replace it instead. Container units without their own profile now also start after `apparmor.service`.
