@@ -2845,8 +2845,8 @@ in
     # Let an in-flight deploy finish during a host switch; the timer runs the
     # new script on its next tick.
     restartIfChanged = false;
-    # Fails only on a failed start attempt, which is bounded per image.
-    onFailure = [ "ghostship-failure@%n.service" ];
+    # Its central failure path (notify-coverage.nix) fires only on a failed
+    # start attempt, which is bounded per image.
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${t3codeDeployWhenIdleScript}/bin/t3code-deploy-when-idle";
@@ -2872,7 +2872,6 @@ in
   systemd.services.t3code-nix-store-gc = {
     description = "Garbage-collect the T3 Code container's isolated Nix store";
     after = [ "podman-t3code.service" ];
-    onFailure = [ "ghostship-failure@%n.service" ];
     serviceConfig = {
       Type = "oneshot";
       ExecStart = lib.getExe t3codeNixStoreGc;

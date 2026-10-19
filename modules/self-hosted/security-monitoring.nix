@@ -67,7 +67,6 @@ let
   };
   oneshot = description: exec: {
     inherit description;
-    onFailure = [ "ghostship-failure@%n.service" ];
     serviceConfig = {
       Type = "oneshot";
       ExecStart = exec;

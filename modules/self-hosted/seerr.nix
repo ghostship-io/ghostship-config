@@ -65,7 +65,6 @@ in
       "podman-radarr.service"
     ];
     wantedBy = [ "multi-user.target" ];
-    onFailure = [ "ghostship-failure@%n.service" ];
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${provision}/bin/ghostship-seerr-provision";
