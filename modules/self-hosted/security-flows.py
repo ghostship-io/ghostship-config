@@ -16,11 +16,17 @@ import sys
 import tempfile
 import time
 
+# (label, family, table, set). The accepted sets sit after every filter, so
+# a connection counted in flows but not in accepted was dropped.
 SETS = [
-    ("inet", "ghostship_flows", "flows4"),
-    ("inet", "ghostship_flows", "flows6"),
-    ("bridge", "ghostship_flows", "flows4"),
+    ("inet", "inet", "ghostship_flows", "flows4"),
+    ("inet", "inet", "ghostship_flows", "flows6"),
+    ("bridge", "bridge", "ghostship_flows", "flows4"),
+    ("inet-accepted", "inet", "ghostship_flows", "accepted4"),
+    ("inet-accepted", "inet", "ghostship_flows", "accepted6"),
+    ("bridge-accepted", "bridge", "ghostship_flows", "accepted4"),
 ]
+ACCEPTED_SUFFIX = "-accepted"
 MAX_WAN_SAMPLES = 16
 # Podman reassigns addresses when a container is recreated; elements created
 # before that still name the old address until their 6h set timeout.
@@ -151,9 +157,12 @@ def merge(state, observed, names, host, extra, now):
         key = f"{source}|{target}|{proto}|{port}"
         edge = state["edges"].get(key)
         if edge is None:
-            edge = {"first_seen": now, "connections": 0, "hooks": []}
+            edge = {"first_seen": now, "last_seen": now, "connections": 0, "accepted": 0, "hooks": []}
             state["edges"][key] = edge
             new_edges.append(key)
+        if family.endswith(ACCEPTED_SUFFIX):
+            edge["accepted"] = edge.get("accepted", 0) + delta
+            continue
         edge["last_seen"] = now
         edge["connections"] += delta
         if family not in edge["hooks"]:
@@ -171,7 +180,7 @@ def merge(state, observed, names, host, extra, now):
 def collect(args):
     observed = {}
     missing = []
-    for family, table, name in SETS:
+    for label, family, table, name in SETS:
         elements = set_elements(args.nft, family, table, name)
         if elements is None:
             missing.append(f"{family} {table} {name}")
@@ -179,7 +188,7 @@ def collect(args):
         for elem in elements:
             parsed = parse_element(elem)
             if parsed:
-                observed[(family, parsed[0])] = parsed[1]
+                observed[(label, parsed[0])] = parsed[1]
     names = address_names(args.podman)
     host = host_addresses(args.ip)
     extra = dict(item.split("=", 1) for item in args.name or [])
@@ -192,6 +201,15 @@ def collect(args):
     print(json.dumps({"observed": len(observed), "new_edges": new_edges, "missing_sets": missing}))
     # Missing kernel sets mean the observer was unloaded; surface it as a failure.
     return 1 if missing else 0
+
+
+def verdict(edge):
+    """accepted, dropped, partial, or unknown for edges recorded before verdicts."""
+    if "accepted" not in edge:
+        return "unknown"
+    if edge["accepted"] <= 0:
+        return "dropped"
+    return "accepted" if edge["accepted"] >= edge["connections"] else "partial"
 
 
 def report(args):
@@ -207,12 +225,12 @@ def report(args):
         rows.append((source, target, proto, int(port), edge))
     rows.sort(key=lambda r: (r[0], r[1], r[3]))
     if args.json:
-        print(json.dumps([{"source": s, "target": t, "proto": p, "port": n, **e} for s, t, p, n, e in rows], indent=1))
+        print(json.dumps([{"source": s, "target": t, "proto": p, "port": n, "verdict": verdict(e), **e} for s, t, p, n, e in rows], indent=1))
         return 0
     for source, target, proto, port, edge in rows:
         first = time.strftime("%Y-%m-%d", time.gmtime(edge["first_seen"]))
         last = time.strftime("%Y-%m-%d %H:%M", time.gmtime(edge["last_seen"]))
-        print(f"{source:32} -> {target:32} {proto}/{port:<6} n={edge['connections']:<8} first={first} last={last}")
+        print(f"{source:32} -> {target:32} {proto}/{port:<6} n={edge['connections']:<8} {verdict(edge):<10} first={first} last={last}")
     return 0
 
 

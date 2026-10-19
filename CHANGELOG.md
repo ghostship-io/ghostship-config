@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.136] - 2026-10-19
+
+- The flow observer records verdicts. Accepted-connection sets at priority +20 on the inet forward/input and bridge forward hooks sit after every host filter, so each edge now carries an `accepted` count beside `connections`. `ghostship-flow-report` labels edges `accepted`, `dropped`, `partial`, or `unknown` for edges recorded before this change. Unsolicited WAN probes and blocked attempts can now be told apart from real paths when the allow graph is derived.
+
 ## [3.15.135] - 2026-10-19
 
 - `ghostship-security-check` keeps the addresses of host SSH clients (T3, the tunnel connector) allowed for a day after they change. Logins read from the journal can predate T3's recreation, and checking them only against its new addresses produced a critical alert after each idle redeploy.

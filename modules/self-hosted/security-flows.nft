@@ -2,6 +2,9 @@
 # each new connection's (source, destination, protocol, port) with a counter so
 # the allow graph can be derived from real traffic. Priority -20 runs before the
 # FlareSolverr egress rules, so attempts those rules later drop are recorded too.
+# The accepted sets are updated at priority +20, after every filter on the
+# host (iptables-nft and the FlareSolverr rules run at 0 and -10), so a tuple
+# missing from them was dropped.
 table inet ghostship_flows
 delete table inet ghostship_flows
 table inet ghostship_flows {
@@ -13,6 +16,20 @@ table inet ghostship_flows {
 	}
 
 	set flows6 {
+		type ipv6_addr . ipv6_addr . inet_proto . inet_service
+		flags dynamic,timeout
+		timeout 6h
+		size 16384
+	}
+
+	set accepted4 {
+		type ipv4_addr . ipv4_addr . inet_proto . inet_service
+		flags dynamic,timeout
+		timeout 6h
+		size 65536
+	}
+
+	set accepted6 {
 		type ipv6_addr . ipv6_addr . inet_proto . inet_service
 		flags dynamic,timeout
 		timeout 6h
@@ -31,6 +48,19 @@ table inet ghostship_flows {
 		ct state new meta nfproto ipv4 meta l4proto { tcp, udp } update @flows4 { ip saddr . ip daddr . meta l4proto . th dport counter }
 		ct state new meta nfproto ipv6 meta l4proto { tcp, udp } update @flows6 { ip6 saddr . ip6 daddr . meta l4proto . th dport counter }
 	}
+
+	chain forward_accepted {
+		type filter hook forward priority filter + 20; policy accept;
+		ct state new meta nfproto ipv4 meta l4proto { tcp, udp } update @accepted4 { ip saddr . ip daddr . meta l4proto . th dport counter }
+		ct state new meta nfproto ipv6 meta l4proto { tcp, udp } update @accepted6 { ip6 saddr . ip6 daddr . meta l4proto . th dport counter }
+	}
+
+	chain input_accepted {
+		type filter hook input priority filter + 20; policy accept;
+		iifname "lo" return
+		ct state new meta nfproto ipv4 meta l4proto { tcp, udp } update @accepted4 { ip saddr . ip daddr . meta l4proto . th dport counter }
+		ct state new meta nfproto ipv6 meta l4proto { tcp, udp } update @accepted6 { ip6 saddr . ip6 daddr . meta l4proto . th dport counter }
+	}
 }
 
 # Peers on one Podman bridge exchange frames without the inet forward hook.
@@ -44,8 +74,20 @@ table bridge ghostship_flows {
 		size 65536
 	}
 
+	set accepted4 {
+		type ipv4_addr . ipv4_addr . inet_proto . inet_service
+		flags dynamic,timeout
+		timeout 6h
+		size 65536
+	}
+
 	chain forward {
 		type filter hook forward priority -20; policy accept;
 		ether type ip ct state new meta l4proto { tcp, udp } update @flows4 { ip saddr . ip daddr . meta l4proto . th dport counter }
+	}
+
+	chain forward_accepted {
+		type filter hook forward priority 20; policy accept;
+		ether type ip ct state new meta l4proto { tcp, udp } update @accepted4 { ip saddr . ip daddr . meta l4proto . th dport counter }
 	}
 }
