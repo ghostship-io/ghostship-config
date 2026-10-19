@@ -21,6 +21,7 @@ apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
 python3 -m unittest discover -s tests -p test_apparmor_review.py
 python3 -m unittest discover -s tests -p test_cloudflare_access.py
 python3 -m unittest discover -s tests -p test_t3_worker_tunnel.py
+python3 -m unittest discover -s tests -p test_security_monitoring.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
 
 printf 'Evaluating development shells for both Linux architectures\n'
