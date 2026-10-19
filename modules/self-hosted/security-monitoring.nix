@@ -109,15 +109,12 @@ in
     };
     ssh_allowed_sources = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [
-        "10.89.7.3/32"
-        "10.89.0.15/32"
-        "10.89.0.150/32"
-      ];
-      description = "Root SSH login sources: T3 on both networks and the Access-gated tunnel connector.";
+      default = [ ];
+      description = "Static root SSH login sources (CIDRs) besides the host_ssh_clients containers.";
     };
     host_ssh_clients = lib.mkOption {
       type = lib.types.listOf lib.types.str;
+      description = "Containers allowed to open and log in to host SSH: T3 and the Access-gated tunnel connector. Their addresses are resolved on every run.";
       default = [
         "t3code"
         "cloudflared"
