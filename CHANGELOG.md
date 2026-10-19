@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.137] - 2026-10-19
+
+- Flow verdicts compare accepted connections against a new per-edge `checked` count: the connections collected while the accepted sets were loaded. Comparing against the full `connections` history left every edge recorded before 3.15.136 stuck at `partial` or `unknown`. Existing edges restart their verdict counts once; a collection missing the accepted sets does not add to `checked`.
+
 ## [3.15.136] - 2026-10-19
 
 - The flow observer records verdicts. Accepted-connection sets at priority +20 on the inet forward/input and bridge forward hooks sit after every host filter, so each edge now carries an `accepted` count beside `connections`. `ghostship-flow-report` labels edges `accepted`, `dropped`, `partial`, or `unknown` for edges recorded before this change. Unsolicited WAN probes and blocked attempts can now be told apart from real paths when the allow graph is derived.

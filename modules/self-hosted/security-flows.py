@@ -139,8 +139,17 @@ def save_state(path, state):
     os.replace(temporary, path)
 
 
-def merge(state, observed, names, host, extra, now):
-    """Fold one collection into the state; returns newly seen edge keys."""
+def merge(state, observed, names, host, extra, now, verdicts=True):
+    """Fold one collection into the state; returns newly seen edge keys.
+
+    `checked` counts only connections collected while the accepted sets were
+    loaded, so verdicts never compare against older history.
+    """
+    for edge in state["edges"].values():
+        # Edges from before `checked` existed restart their verdict counts.
+        if "checked" not in edge:
+            edge["checked"] = 0
+            edge["accepted"] = 0
     previous = state.get("elements", {})
     current = {}
     new_edges = []
@@ -157,7 +166,7 @@ def merge(state, observed, names, host, extra, now):
         key = f"{source}|{target}|{proto}|{port}"
         edge = state["edges"].get(key)
         if edge is None:
-            edge = {"first_seen": now, "last_seen": now, "connections": 0, "accepted": 0, "hooks": []}
+            edge = {"first_seen": now, "last_seen": now, "connections": 0, "checked": 0, "accepted": 0, "hooks": []}
             state["edges"][key] = edge
             new_edges.append(key)
         if family.endswith(ACCEPTED_SUFFIX):
@@ -165,6 +174,8 @@ def merge(state, observed, names, host, extra, now):
             continue
         edge["last_seen"] = now
         edge["connections"] += delta
+        if verdicts:
+            edge["checked"] += delta
         if family not in edge["hooks"]:
             edge["hooks"].append(family)
         if target == "wan":
@@ -195,7 +206,8 @@ def collect(args):
     state = load_state(args.state)
     now = int(time.time())
     names = remember_addresses(state, names, now)
-    new_edges = merge(state, observed, names, host, extra, now)
+    verdicts = not any(m.endswith(("accepted4", "accepted6")) for m in missing)
+    new_edges = merge(state, observed, names, host, extra, now, verdicts)
     state["missing_sets"] = missing
     save_state(args.state, state)
     print(json.dumps({"observed": len(observed), "new_edges": new_edges, "missing_sets": missing}))
@@ -204,12 +216,12 @@ def collect(args):
 
 
 def verdict(edge):
-    """accepted, dropped, partial, or unknown for edges recorded before verdicts."""
-    if "accepted" not in edge:
+    """accepted, dropped, partial, or unknown when nothing was checked yet."""
+    if not edge.get("checked"):
         return "unknown"
     if edge["accepted"] <= 0:
         return "dropped"
-    return "accepted" if edge["accepted"] >= edge["connections"] else "partial"
+    return "accepted" if edge["accepted"] >= edge["checked"] else "partial"
 
 
 def report(args):
