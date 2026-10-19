@@ -89,6 +89,10 @@ in
     includes."tunables/global" = ''
       include "${pkgs.apparmor-profiles}/etc/apparmor.d/tunables/global"
     '';
+    policies.ghostship-container-default = {
+      state = "enforce";
+      profile = builtins.readFile ./container-default-apparmor.profile;
+    };
     policies.ghostship-plex = {
       state = "complain";
       profile = profileText;
@@ -131,6 +135,11 @@ in
     }
   ];
 
+  # Containers without their own profile get the declared default, which
+  # survives AppArmor reloads (see container-default-apparmor.profile).
+  virtualisation.containers.containersConf.settings.containers.apparmor_profile =
+    "ghostship-container-default";
+
   virtualisation.oci-containers.containers = builtins.listToAttrs (
     map (app: {
       name = app.container;
@@ -139,6 +148,13 @@ in
   );
 
   systemd.services = lib.mkMerge [
+    (lib.mapAttrs' (
+      name: _:
+      lib.nameValuePair "podman-${name}" {
+        wants = [ "apparmor.service" ];
+        after = [ "apparmor.service" ];
+      }
+    ) config.virtualisation.oci-containers.containers)
     (builtins.listToAttrs (
       map (app: {
         name = "podman-${app.container}";

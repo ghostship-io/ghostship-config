@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.129] - 2026-10-19
+
+- Keep Podman containers confined across AppArmor reloads. Podman loads its own `containers-default-<version>` profile at runtime, and the `aa-remove-unknown` step of every NixOS AppArmor reload unloaded it, so each nightly switch left every container without its own profile unconfined. The same default rules are now declared as `ghostship-container-default` (enforce) and set as Podman's default profile, so reloads replace it instead. Container units start after `apparmor.service`.
+- `ghostship-security-check` compares every running container's live AppArmor label with its configured profile or the one Podman recorded, and flags containers created without a profile unless they are allowlisted privileged containers.
+- Security alerts publish only through `ghostship-notify` from `config.ghostship.notify.package`; the `ghostship-alert` fallback is gone.
+
 ## [3.15.128] - 2026-10-19
 
 - ntfy carries exactly three topics, `security`, `operations` and `informational`; `publisher` writes and `android` reads all three, and the host operations broker may publish to each.
