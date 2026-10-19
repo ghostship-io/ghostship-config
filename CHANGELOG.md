@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.135] - 2026-10-19
+
+- `ghostship-security-check` keeps the addresses of host SSH clients (T3, the tunnel connector) allowed for a day after they change. Logins read from the journal can predate T3's recreation, and checking them only against its new addresses produced a critical alert after each idle redeploy.
+
 ## [3.15.134] - 2026-10-19
 
 - The GitHub coordinator joins its own `ghostship-github` group as well as the spool group, so it can read its T3 session token. Without it, issue launches retried with "t3 executable not found".
