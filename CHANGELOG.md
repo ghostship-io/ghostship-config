@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.141] - 2026-10-19
+
+- Pin ghostship-agent 0.26.0 (cba1ad46): the GitHub coordinator publishes T3 progress to `informational` (thread launched, PR opened and merged, issue closed) and base-branch regression issues to `operations` at priority 4, each once, without holding GitHub routing on an ntfy outage.
+
 ## [3.15.140] - 2026-10-19
 
 - Notification coverage is declared once in `notify-coverage.nix`: every `ghostship-*` and `podman-*` service and a named list of other custom units report failures to `operations` through `ghostship-failure@`, which now names the unit's description, result and exit status. Previously 17 units had a failure path; the containers, brokers, bridges, network setup units and download helpers failed silently. Exemptions carry a reason, and evaluation fails when a covered unit loses its path or the module names a missing unit.
