@@ -53,5 +53,44 @@ class FileWrites(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
 
 
+class Unregister(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name)
+        self.args = type("Args", (), {"uid": os.getuid(), "gid": os.getgid()})()
+        self.agent = mcp.wrapper_path(self.home, "agent")
+
+    def test_removes_wrapper_entries_and_keeps_other_servers(self):
+        import json, tomllib
+        claude = self.home / ".claude.json"
+        claude.write_text(json.dumps({"mcpServers": {
+            "bladebro": {"command": self.agent}, "ghostship": {"command": "ghostship-mcp-connect"}}}))
+        opencode = self.home / ".config/opencode/opencode.jsonc"
+        opencode.parent.mkdir(parents=True)
+        # Earlier versions wrote host-side wrapper paths.
+        opencode.write_text(json.dumps({"mcp": {
+            "bladebro-personal": {"type": "local", "command": ["/srv/apps/t3code/home/.local/bin/bladebro-mcp-personal"]},
+            "ghostship": {"type": "local", "command": ["ghostship-mcp-connect"]}}}))
+        codex = self.home / ".codex/config.toml"
+        codex.parent.mkdir()
+        codex.write_text(f'[mcp_servers.bladebro]\ncommand = "{self.agent}"\n\n'
+                         '[mcp_servers.ghostship]\ncommand = "ghostship-mcp-connect"\n')
+        mcp.unregister_clients(self.home, self.args)
+        self.assertEqual(list(json.loads(claude.read_text())["mcpServers"]), ["ghostship"])
+        self.assertEqual(list(json.loads(opencode.read_text())["mcp"]), ["ghostship"])
+        self.assertEqual(list(tomllib.loads(codex.read_text())["mcp_servers"]), ["ghostship"])
+
+    def test_leaves_unrelated_entries_and_files_untouched(self):
+        import json
+        cursor = self.home / ".cursor/mcp.json"
+        cursor.parent.mkdir()
+        original = json.dumps({"mcpServers": {"bladebro": {"command": "/opt/other-bladebro"}}})
+        cursor.write_text(original)
+        mcp.unregister_clients(self.home, self.args)
+        self.assertEqual(cursor.read_text(), original)
+        self.assertFalse((self.home / ".cursor/mcp.json.pre-bladebro").exists())
+
+
 if __name__ == "__main__":
     unittest.main()
