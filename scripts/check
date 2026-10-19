@@ -18,6 +18,8 @@ apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
   -I modules/self-hosted modules/self-hosted/plex-apparmor.profile
 apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
   modules/self-hosted/ntfy-apparmor.profile
+apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
+  modules/self-hosted/hooks-apparmor.profile
 python3 -m unittest discover -s tests -p test_apparmor_review.py
 python3 -m unittest discover -s tests -p test_cloudflare_access.py
 python3 -m unittest discover -s tests -p test_t3_worker_tunnel.py

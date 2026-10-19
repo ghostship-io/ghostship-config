@@ -39,7 +39,10 @@ let
               "ghostship-plex//server"
               "ghostship-plex//python"
             ]
-            ++ lib.optional (app.apparmorProfile == "ghostship-ntfy") "ghostship-ntfy//tools";
+            ++ lib.optional (app.apparmorProfile == "ghostship-ntfy") "ghostship-ntfy//tools"
+            ++ lib.optional (
+              app.apparmorProfile == "ghostship-hooks"
+            ) "ghostship-hooks//tools";
             requiredProcessProfiles = [
               app.apparmorProfile
             ]
@@ -96,6 +99,12 @@ in
     policies.ghostship-plex = {
       state = "complain";
       profile = profileText;
+    };
+    policies.ghostship-hooks = lib.mkIf config.ghostship.githubEngineering.enable {
+      state = "complain";
+      profile = builtins.replaceStrings [ "complain," ] [ "" ] (
+        builtins.readFile ./hooks-apparmor.profile
+      );
     };
     policies.ghostship-ntfy = {
       state = "complain";
