@@ -52,6 +52,8 @@ class FlowTests(unittest.TestCase):
         self.assertEqual(flows.classify("192.168.4.241", self.NAMES, self.HOST, extra), "synology")
         self.assertEqual(flows.classify("192.168.4.9", self.NAMES, self.HOST, extra), "lan:192.168.4.9")
         self.assertEqual(flows.classify("1.1.1.1", self.NAMES, self.HOST, extra), "wan")
+        for address in ("255.255.255.255", "10.89.0.255", "239.255.255.250", "ff02::fb"):
+            self.assertEqual(flows.classify(address, self.NAMES, self.HOST, extra), "broadcast")
 
     def test_merge_counts_deltas_and_recreated_elements(self):
         state = {"edges": {}, "elements": {}}
