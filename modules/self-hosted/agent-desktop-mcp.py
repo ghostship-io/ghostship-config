@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Provision Bladebro MCP access from t3code to the agent desktop.
+"""Provision Bladebro SSH access from t3code to the agent desktop.
 
-Writes SSH transport wrappers into the t3code home, pins the desktop host
-key, and merges the Bladebro MCP server entries into every installed coding
-agent's configuration (OpenCode, Codex, Claude Code, Cursor, Antigravity /
-Gemini and Grok) without touching unrelated settings.
+Writes SSH transport wrappers into the t3code home and pins the desktop host
+key (the Ghostship desktop bridge publishes it to the MCP runtime). Coding
+agents use Bladebro through the Ghostship browser tools, so this removes the
+direct Bladebro MCP entries earlier versions merged into OpenCode, Codex,
+Claude Code, Cursor, Antigravity / Gemini and Grok, without touching
+unrelated settings.
 """
 
 import argparse
@@ -124,126 +126,62 @@ def save_json(path, raw, data, args):
         log(f"updated {path}")
 
 
-def merge_opencode(home, args):
-    config_dir = home / ".config" / "opencode"
-    path = config_dir / "opencode.json"
-    if not path.exists():
-        path = config_dir / "opencode.jsonc"
-    if not path.exists():
-        return
-    raw, data = load_json(path, json5.loads)
-    servers = data.setdefault("mcp", {})
-    changed = False
-    for identity, name in IDENTITIES.items():
-        entry = {
-            "type": "local",
-            "command": [wrapper_path(home, identity)],
-            "enabled": True,
-        }
-        if servers.get(name) != entry:
-            servers[name] = entry
-            changed = True
-    if changed:
-        backup(path)
-        write_file(path, json.dumps(data, indent=2) + "\n", args.uid, args.gid)
-        log(f"updated {path}")
+def is_wrapper(home, entry):
+    """Whether an MCP entry is one this helper registered (a Bladebro SSH wrapper)."""
+    if not isinstance(entry, dict):
+        return False
+    command = entry.get("command", "")
+    if isinstance(command, list):
+        command = command[0] if command else ""
+    wrappers = {wrapper_path(home, identity) for identity in IDENTITIES}
+    # Older runs wrote host-side paths; the wrapper names identify those too.
+    names = {pathlib.Path(path).name for path in wrappers}
+    return command in wrappers or pathlib.PurePath(str(command)).name in names
 
 
-def merge_codex(home, args):
-    path = home / ".codex" / "config.toml"
+def drop_entries(home, servers):
+    removed = False
+    for name in IDENTITIES.values():
+        if is_wrapper(home, servers.get(name)):
+            del servers[name]
+            removed = True
+    return removed
+
+
+def unregister_json(home, path, key, args, parser=json.loads):
     if not path.exists():
         return
-    with path.open("rb") as handle:
-        data = tomllib.load(handle)
-    servers = data.setdefault("mcp_servers", {})
-    changed = False
-    for identity, name in IDENTITIES.items():
-        entry = {"command": wrapper_path(home, identity)}
-        if servers.get(name) != entry:
-            servers[name] = entry
-            changed = True
-    if changed:
+    raw, data = load_json(path, parser)
+    servers = data.get(key)
+    if isinstance(servers, dict) and drop_entries(home, servers):
         backup(path)
-        write_file(path, tomli_w.dumps(data), args.uid, args.gid)
-        log(f"updated {path}")
+        write_file(path, json.dumps(data, indent=2) + "\n", args.uid, args.gid, mode=file_mode(path, 0o600))
+        log(f"removed Bladebro MCP entries from {path}")
 
 
-def merge_claude(home, args):
-    path = home / ".claude.json"
-    if not path.exists():
-        return
-    raw, data = load_json(path)
-    servers = data.setdefault("mcpServers", {})
-    changed = False
-    for identity, name in IDENTITIES.items():
-        entry = {
-            "type": "stdio",
-            "command": wrapper_path(home, identity),
-            "args": [],
-            "env": {},
-        }
-        if servers.get(name) != entry:
-            servers[name] = entry
-            changed = True
-    if changed:
-        backup(path)
-        write_file(path, json.dumps(data, indent=2) + "\n", args.uid, args.gid)
-        log(f"updated {path}")
-
-
-def merge_grok(home, args):
-    path = home / ".grok" / "config.toml"
+def unregister_toml(home, path, args):
     if not path.exists():
         return
     with path.open("rb") as handle:
         data = tomllib.load(handle)
-    servers = data.setdefault("mcp_servers", {})
-    changed = False
-    for identity, name in IDENTITIES.items():
-        entry = {"command": wrapper_path(home, identity), "enabled": True}
-        if servers.get(name) != entry:
-            servers[name] = entry
-            changed = True
-    if changed:
+    servers = data.get("mcp_servers")
+    if isinstance(servers, dict) and drop_entries(home, servers):
         backup(path)
         write_file(path, tomli_w.dumps(data), args.uid, args.gid)
-        log(f"updated {path}")
+        log(f"removed Bladebro MCP entries from {path}")
 
 
-def merge_gemini(home, args):
-    path = home / ".gemini" / "config" / "mcp_config.json"
-    if not path.parent.exists():
-        return
-    raw, data = load_json(path)
-    servers = data.setdefault("mcpServers", {})
-    changed = False
-    for identity, name in IDENTITIES.items():
-        entry = {"command": wrapper_path(home, identity), "args": []}
-        if servers.get(name) != entry:
-            servers[name] = entry
-            changed = True
-    if changed:
-        backup(path)
-        write_file(path, json.dumps(data, indent=2) + "\n", args.uid, args.gid, mode=file_mode(path, 0o644))
-        log(f"updated {path}")
-
-
-def merge_cursor(home, args):
-    path = home / ".cursor" / "mcp.json"
-    if not path.parent.exists():
-        return
-    raw, data = load_json(path) if path.exists() else ("", {})
-    servers = data.setdefault("mcpServers", {})
-    changed = False
-    for identity, name in IDENTITIES.items():
-        entry = {"command": wrapper_path(home, identity), "args": []}
-        if servers.get(name) != entry:
-            servers[name] = entry
-            changed = True
-    if changed:
-        backup(path)
-        write_file(path, json.dumps(data, indent=2) + "\n", args.uid, args.gid, mode=file_mode(path, 0o644))
-        log(f"updated {path}")
+def unregister_clients(home, args):
+    """Agents reach Bladebro through the Ghostship browser tools; direct entries only cost context."""
+    opencode = home / ".config" / "opencode" / "opencode.json"
+    if not opencode.exists():
+        opencode = opencode.with_suffix(".jsonc")
+    unregister_json(home, opencode, "mcp", args, json5.loads)
+    unregister_json(home, home / ".claude.json", "mcpServers", args)
+    unregister_json(home, home / ".gemini" / "config" / "mcp_config.json", "mcpServers", args)
+    unregister_json(home, home / ".cursor" / "mcp.json", "mcpServers", args)
+    unregister_toml(home, home / ".codex" / "config.toml", args)
+    unregister_toml(home, home / ".grok" / "config.toml", args)
 
 
 def main():
@@ -276,13 +214,8 @@ def main():
 
     ensure_wrappers(home, args)
     pin_known_host(host_key, home, args)
-    merge_opencode(home, args)
-    merge_codex(home, args)
-    merge_claude(home, args)
-    merge_grok(home, args)
-    merge_gemini(home, args)
-    merge_cursor(home, args)
-    log("Bladebro MCP access provisioned")
+    unregister_clients(home, args)
+    log("Bladebro SSH access provisioned")
     return 0
 
 

@@ -100,6 +100,11 @@ let
     export NPM_CONFIG_PREFIX="$HOME/.local/share/t3code-tools/npm"
     export npm_config_prefix="$NPM_CONFIG_PREFIX"
     export OPENCODE_AUTOMATION_DIR="$HOME/.automation"
+    # Trimmed model catalog (t3code-opencode-model-catalog); OpenCode 2 ignores
+    # provider whitelists, so T3 Code's model list comes from this file.
+    if [ -s "$XDG_STATE_HOME/t3code-opencode/models.json" ]; then
+      export OPENCODE_MODELS_PATH="$XDG_STATE_HOME/t3code-opencode/models.json"
+    fi
     export T3CODE_HOME="$HOME/.t3"
     export T3CODE_HOST=127.0.0.1
     export T3CODE_PORT=3774
@@ -937,6 +942,7 @@ let
     maintenance_status=0
     su-exec t3code:t3code ${t3codeToolMaintenance}/bin/t3code-tool-maintenance || maintenance_status=$?
     su-exec t3code:t3code ${t3codeManagedConfig}/bin/t3code-managed-config
+    su-exec t3code:t3code ${t3codeOpencodeModelCatalog}/bin/t3code-opencode-model-catalog || true
     su-exec t3code:t3code ${t3codeRunHooks}/bin/t3code-run-hooks after-update.d
 
     after_t3="$(user_version t3)"
@@ -1807,6 +1813,12 @@ let
     exec ${pkgs.nodejs_24}/bin/node ${../../packages/t3code}/access-proxy.cjs
   '';
 
+  t3codeOpencodeModelCatalog = pkgs.writeShellScriptBin "t3code-opencode-model-catalog" ''
+    set -eu
+    ${t3codeRuntimeEnv}
+    exec ${pkgs.python3}/bin/python3 ${../../packages/t3code/opencode-model-catalog.py} "$@"
+  '';
+
   t3codeManagedConfig = pkgs.writeShellScriptBin "t3code-managed-config" ''
     set -eu
     ${t3codeRuntimeEnv}
@@ -2283,6 +2295,7 @@ let
       Environment=OPENCODE_AUTOMATION_DIR=/home/t3code/.automation
       Environment=PATH=${t3codePath}:/home/t3code/.local/bin:/home/t3code/.local/share/t3code-tools/npm/bin:/bin:/usr/bin
       ExecStartPre=${t3codeRunHooks}/bin/t3code-run-hooks before-t3code.d
+      ExecStartPre=-${t3codeOpencodeModelCatalog}/bin/t3code-opencode-model-catalog
       ExecStartPre=+${pkgs.coreutils}/bin/rm -f /run/t3code-tool-update/restart.pending /home/t3code/.local/share/t3code-tools/t3/activation.pending
       ExecStart=${t3codeDaemonRun}/bin/t3code-server-run
       ExecStartPost=${t3codeSnapshotConfig}/bin/t3code-snapshot-config
