@@ -154,7 +154,7 @@ in
         wants = [ "apparmor.service" ];
         after = [ "apparmor.service" ];
       }
-    ) config.virtualisation.oci-containers.containers)
+    ) (removeAttrs config.virtualisation.oci-containers.containers (map (app: app.container) profiled)))
     (builtins.listToAttrs (
       map (app: {
         name = "podman-${app.container}";
