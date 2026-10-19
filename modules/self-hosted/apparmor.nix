@@ -182,7 +182,6 @@ in
       ghostship-apparmor-review = {
         description = "Collect verified AppArmor learning evidence for public services";
         after = [ "apparmor.service" ] ++ map (app: "podman-${app.container}.service") profiled;
-        onFailure = [ "ghostship-failure@%n.service" ];
         serviceConfig = {
           Type = "oneshot";
           ExecStart = lib.getExe review;

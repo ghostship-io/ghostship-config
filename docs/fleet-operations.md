@@ -96,9 +96,9 @@ also detected by Kuma. Same-host monitoring cannot deliver an alert during a
 complete host, power, or tunnel outage; an independent external check remains a
 useful later addition.
 
-ntfy denies anonymous access and signup. `publisher` can write only to
-`operations`; `android` can read only that topic; `the owner` administers the
-instance. Open `secret-edit monitoring` privately to retrieve credentials:
+ntfy denies anonymous access and signup. `publisher` can write only to the
+`security`, `operations` and `informational` topics; `android` can read only
+those topics; `the owner` administers the instance. Open `secret-edit monitoring` privately to retrieve credentials:
 `KUMA_PASSWORD` is the initial Kuma and ntfy administrator password;
 `NTFY_READER_PASSWORD` is the Android subscriber password. In the Android ntfy
 app, the configured server is `https://ntfy.ghostship.io`, user `android`, and topic
@@ -106,6 +106,44 @@ app, the configured server is `https://ntfy.ghostship.io`, user `android`, and t
 Android delivery may be unavailable until an Access-compatible method is approved;
 do not restore a bypass for compatibility. No iOS relay or WARP dependency is configured. A manual
 `ghostship-notify --topic informational --source test --title 'Ghostship notification test'` checks delivery after rollout; run as root.
+
+### Notification coverage
+
+`modules/self-hosted/notify-coverage.nix` attaches `ghostship-failure@` to
+every `ghostship-*` and `podman-*` service and to a named list of other custom
+units, so a new unit of either prefix gets a failure path without further
+declaration. A failure publishes to `operations` at priority 4 with the unit's
+description, result and exit status, deduplicated per unit for an hour. Backup
+jobs also publish their restic summary lines to `informational` at priority 2
+through `ghostship-success@`; the summary quotes only restic summary lines, never
+other journal output. Evaluation fails when a covered unit loses its failure path,
+or when the module names a unit that no longer exists or an exemption without
+a reason.
+
+| Units | Notification path |
+| --- | --- |
+| `ghostship-backup-{backup,check,prune,sample}` | Failure to operations; success summary to informational |
+| `ghostship-*` (security, AppArmor, flow, Cloudflare, Seerr, bridges, brokers, skills, inference, provisioning, storage) | Failure to operations |
+| `podman-*` containers, `podman-auto-update`, `podman-prune` | Failure to operations once systemd stops restarting; Uptime Kuma heartbeats also alert operations |
+| `ghostship-storage-check` (daily) | Failure to operations when the root filesystem is read-only or any Btrfs device error counter is nonzero |
+| `nixos-upgrade`, `t3code-deploy-when-idle`, `t3code-nix-store-gc`, `tdarr-staged-guard`, `tdarr-language-policy`, `pyload-restart-failed`, `qbittorrent-auto-resume`, `romm-recovery`, `gluetun-pia-selector`, `gluetun-network-monitor`, `homepage-podman-broker`, `agent-desktop-mcp`, `agent-desktop-ssh`, `flaresolverr-egress`, `init-*-net`, `chill-penguin-retired-artifact-cleanup` | Failure to operations |
+| `ghostship-synology-health` (every 10 minutes) | NAS disk health, RAID, temperature, fan, power and volume-usage findings to operations; a failed poll to operations as well |
+| `ghostship-security-check`, GitHub coordinator, Cloudflare alerts | Publish their own findings to security or operations as well |
+
+Exemptions, with their reasons:
+
+- `ghostship-failure@` and `ghostship-success@` are the notifiers themselves.
+- `ghostship-monitoring-heartbeats` is watched by Uptime Kuma, which alerts
+  operations when its five-minute pushes stop.
+- Upstream NixOS units (`nix-gc`, `logrotate`, `fstrim`, systemd and network
+  daemons) are not custom scripts and stay out of scope.
+- SMART on chill-penguin: the internal Apple NVMe has no SMART source verified
+  on this host; the Btrfs device error counters in `ghostship-storage-check`
+  stand in. NAS disk health comes from `ghostship-synology-health`.
+- armored-armadillo, launch-octopus and boomer-kuwanger have no publisher:
+  ntfy is reachable only on chill-penguin's `ghostship_net`.
+- A `podman-ntfy` failure cannot publish through ntfy itself; it stays in the
+  journal and Uptime Kuma's dashboard.
 
 Seerr provisioning authenticates using the existing Plex token, selects the
 existing `Optimal` quality profile (or an unambiguous sole profile), and
@@ -297,7 +335,8 @@ under `/srv/apps`.
 Timers run nightly at 23:00 UTC for backups, Sunday 21:00 for repository checks,
 monthly on day 1 at 20:00 for a 10% data sample, and Sunday 19:00 for pruning,
 with up to ten minutes of jitter. Retention keeps 7 daily, 5 weekly, and 12
-monthly snapshots. Failed checks alert through ntfy. An update is deferred if
+monthly snapshots. Failed jobs alert on `operations`; each successful job
+posts its restic summary silently to `informational`. An update is deferred if
 no successful backup is newer than 30 hours. This gate protects scheduled
 Podman updates; operator-triggered rebuilds must run the same backup step.
 

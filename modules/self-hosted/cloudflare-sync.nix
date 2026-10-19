@@ -40,7 +40,6 @@ in
     wants = [ "network-online.target" ];
     after = [ "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
-    onFailure = [ "ghostship-failure@%n.service" ];
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${sync}/bin/ghostship-cloudflare-sync --apply";
