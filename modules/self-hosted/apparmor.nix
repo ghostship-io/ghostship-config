@@ -86,7 +86,9 @@ in
     enable = true;
     # Podman tests /etc directly before including global variable definitions.
     # Without this, its default profile imports base with HOMEDIRS undefined.
-    includes.tunables = "${pkgs.apparmor-profiles}/etc/apparmor.d/tunables";
+    includes."tunables/global" = ''
+      include "${pkgs.apparmor-profiles}/etc/apparmor.d/tunables/global"
+    '';
     policies.ghostship-plex = {
       state = "complain";
       profile = profileText;
