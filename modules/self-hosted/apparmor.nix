@@ -72,6 +72,16 @@ in
   security.lsm = [ "ima" ];
   # Podman's AppArmor detection also requires the parser on its wrapper PATH.
   virtualisation.podman.extraPackages = [ pkgs.apparmor-parser ];
+  # Drain audit netlink directly; printk fallback rate-limits learning bursts.
+  security.auditd = {
+    enable = true;
+    settings = {
+      log_group = "root";
+      max_log_file = 64;
+      num_logs = 8;
+      max_log_file_action = "ROTATE";
+    };
+  };
   security.apparmor = {
     enable = true;
     policies.ghostship-plex = {
