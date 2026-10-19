@@ -90,6 +90,21 @@ class FlowTests(unittest.TestCase):
             flows.report = original
         self.assertEqual(seen, [("report", True, 3.0, "/x"), ("report", False, 0, "/var/lib/ghostship-security/flows.json")])
 
+    def test_accepted_sets_record_verdicts(self):
+        state = {"edges": {}, "elements": {}}
+        ssh = ("10.89.0.172", "10.89.0.1", "tcp", 22)
+        kuma = ("10.89.0.172", "10.89.0.154", "tcp", 3306)
+        observed = {("inet-accepted", kuma): 2, ("inet", ssh): 3, ("inet", kuma): 2}
+        new = flows.merge(state, observed, self.NAMES, self.HOST, {}, 100)
+        self.assertEqual(sorted(new), ["romm|host|tcp|22", "romm|romm-db|tcp|3306"])
+        edges = state["edges"]
+        self.assertEqual((edges["romm|host|tcp|22"]["connections"], edges["romm|host|tcp|22"]["accepted"]), (3, 0))
+        self.assertEqual(flows.verdict(edges["romm|host|tcp|22"]), "dropped")
+        self.assertEqual(flows.verdict(edges["romm|romm-db|tcp|3306"]), "accepted")
+        self.assertEqual(flows.verdict({"connections": 4, "accepted": 1}), "partial")
+        self.assertEqual(flows.verdict({"connections": 4}), "unknown")
+        self.assertEqual(edges["romm|romm-db|tcp|3306"]["hooks"], ["inet"])
+
     def test_wan_samples_are_bounded(self):
         state = {"edges": {}, "elements": {}}
         observed = {("inet", ("10.89.0.172", f"8.8.{i}.1", "tcp", 443)): 1 for i in range(40)}
