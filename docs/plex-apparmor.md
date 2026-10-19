@@ -55,6 +55,11 @@ explicit user approval and is not an automatic recovery step.
    Podman's wrapper must include `apparmor_parser`: without it Podman reports
    AppArmor disabled even when the kernel and loaded profiles are healthy.
    Verify `podman info --format '{{.Host.Security.AppArmorEnabled}}'` returns true.
+   Expose `tunables` through `security.apparmor.includes` as well. Podman checks
+   `/etc/apparmor.d/tunables/global` before including variables used by its
+   default profile. Without that path, unrelated container starts fail with
+   undefined `HOMEDIRS`. Verify a throwaway container from an existing local image
+   starts with Podman's default profile, in addition to the two custom profiles.
    Keep auditd active to drain audit netlink directly. Without it, startup
    learning bursts can exceed the kernel printk rate limit and invalidate
    journal coverage. Its root-only logs rotate separately from the journal.
