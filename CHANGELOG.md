@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.125] - 2026-10-19
+
+- Start T3 Code tool maintenance within ten minutes of a new Codex, Claude, OpenCode or Grok release, using the npm registry check that drives T3's provider update notice. The existing idle and OpenCode process guards still apply.
+
 ## [3.15.124] - 2026-10-19
 
 - Add a Plex AppArmor profile in complain mode, separating startup utilities from the server domain and pinning executable/library paths to the inspected container.
