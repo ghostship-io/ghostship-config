@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.123] - 2026-10-19
+
+- Pin Ghostship Agent at `68d0549a` to expose NAS filesystem inspection and no-overwrite moves.
+- Limit the broker to Downloads, TV and Movies on the NFS-mounted NAS; derive Sonarr, Radarr and Plex access-check identities from their container users.
+
 ## [3.15.122] - 2026-10-18
 
 - Pin GhostShip Agent main at `81fb9234` (free inference 0.24.0, PR #28, and 0.24.1, PR #29: OpenRouter pin drift pause, probes prefer strict routes).
