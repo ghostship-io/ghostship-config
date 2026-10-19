@@ -56,7 +56,7 @@ let
     name = "ghostship-apparmor-review";
     runtimeInputs = [
       pkgs.python3
-      pkgs.podman
+      config.virtualisation.podman.package
       pkgs.systemd
       pkgs.coreutils
       pkgs.audit
@@ -70,6 +70,8 @@ in
 {
   # The Asahi host already runs IMA; keep it when Nix emits an explicit lsm= list.
   security.lsm = [ "ima" ];
+  # Podman's AppArmor detection also requires the parser on its wrapper PATH.
+  virtualisation.podman.extraPackages = [ pkgs.apparmor-parser ];
   security.apparmor = {
     enable = true;
     policies.ghostship-plex = {
