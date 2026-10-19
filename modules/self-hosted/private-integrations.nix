@@ -149,6 +149,17 @@ let
       romm-db = { container = "romm-db"; password_env = "MYSQL_ROOT_PASSWORD"; };
       grimmory-db = { container = "grimmory-db"; password_env = "MYSQL_ROOT_PASSWORD"; };
     };
+    filesystem = {
+      nas_mount = "/mnt/share";
+      roots = [
+        "/mnt/share/Downloads"
+        "/mnt/share/Library/TV"
+        "/mnt/share/Library/Movies"
+      ];
+      access_users = lib.genAttrs [ "sonarr" "radarr" "plex" ] (
+        name: config.virtualisation.oci-containers.containers.${name}.user
+      );
+    };
     recyclarr.container = "recyclarr";
     # Config files of services without an API that the MCP may read and replace
     # (atomic, with a timestamped copy). Startup patches only registry-owned
