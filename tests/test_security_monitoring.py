@@ -90,6 +90,19 @@ class CheckTests(unittest.TestCase):
         bad = {"/proc/1/attr/apparmor/current": "unconfined\n"}
         self.assertEqual(len(check.check_container_labels(CONFIG, [container("plex")], read=bad.__getitem__)), 1)
 
+    def test_default_profile_unloaded_by_reload(self):
+        # Podman recorded the default profile, but a reload removed it.
+        radarr = {**container("radarr"), "AppArmorProfile": "ghostship-container-default"}
+        bad = {"/proc/1/attr/apparmor/current": "unconfined\n"}
+        found = check.check_container_labels(CONFIG, [radarr], read=bad.__getitem__)
+        self.assertEqual([(f.key, f.severity) for f in found], [("apparmor.label.radarr", "critical")])
+        good = {"/proc/1/attr/apparmor/current": "ghostship-container-default (enforce)\n"}
+        self.assertEqual(check.check_container_labels(CONFIG, [radarr], read=good.__getitem__), [])
+        # Only allowlisted privileged containers may run without a profile.
+        rows = [container("t3code"), container("rogue")]
+        keys = [f.key for f in check.check_container_labels(CONFIG, rows, read=bad.__getitem__)]
+        self.assertEqual(keys, ["apparmor.label.rogue"])
+
     def test_container_privilege_caps_sockets_and_undeclared(self):
         rows = [
             container("t3code", Privileged=True),

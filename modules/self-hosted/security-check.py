@@ -74,13 +74,25 @@ def check_apparmor(cfg, read=lambda p: open(p).read()):
 
 
 def check_container_labels(cfg, rows, read=lambda p: open(p).read()):
+    """Every running container must carry its configured AppArmor label.
+
+    Declared app profiles come from the config; the rest must match the
+    profile Podman recorded at creation. A reload that unloads a profile
+    silently leaves its containers unconfined, so the live label is compared.
+    """
     found = []
-    by_name = {r["Name"].lstrip("/"): r for r in rows}
-    for container, profile in cfg["container_profiles"].items():
-        row = by_name.get(container)
-        if row is None:
-            continue  # Container health is Uptime Kuma's job; confinement is ours.
+    for row in rows:
+        container = row["Name"].lstrip("/")
+        profile = cfg["container_profiles"].get(container) or row.get("AppArmorProfile") or ""
+        if profile in ("", "unconfined"):
+            if container not in cfg["privileged_allow"]:
+                found.append(
+                    Finding(f"apparmor.label.{container}", "high", "apparmor", f"{container} was created without an AppArmor profile")
+                )
+            continue
         pid = row.get("State", {}).get("Pid") or 0
+        if not pid:
+            continue
         label = ""
         for path in (f"/proc/{pid}/attr/apparmor/current", f"/proc/{pid}/attr/current"):
             try:
@@ -88,7 +100,7 @@ def check_container_labels(cfg, rows, read=lambda p: open(p).read()):
                 break
             except OSError:
                 continue
-        if not label.startswith(profile):
+        if label != profile and not label.startswith((profile + " ", profile + "//")):
             found.append(
                 Finding(f"apparmor.label.{container}", "critical", "apparmor", f"{container} runs as '{label or 'unknown'}', expected {profile}")
             )
@@ -256,21 +268,15 @@ def drift(state, name, current, severity, source, describe):
 
 def publish(cfg, finding, state_name):
     helper = shutil.which("ghostship-notify")
-    title = f"[security] {finding.source}: {finding.severity}"
-    if helper:
-        priority = PRIORITY.get(finding.severity, 3) if state_name == "firing" else 2
-        argv = [
-            helper, "--topic", cfg["ntfy_topic"], "--priority", str(priority), "--title", title,
-            "--source", finding.source, "--dedupe", finding.key, "--state", state_name,
-            "--tags", f"chill-penguin,{finding.severity}", finding.message,
-        ]
-    elif state_name == "firing":
-        fallback = shutil.which("ghostship-alert")
-        if not fallback:
-            return False
-        argv = [fallback, f"{title} on chill-penguin: {finding.message}"]
-    else:
-        return True
+    if not helper:
+        return False
+    priority = PRIORITY.get(finding.severity, 3) if state_name == "firing" else 2
+    argv = [
+        helper, "--topic", cfg["ntfy_topic"], "--priority", str(priority),
+        "--title", f"[security] {finding.source}: {finding.severity}",
+        "--source", finding.source, "--dedupe", finding.key, "--state", state_name,
+        "--tags", f"chill-penguin,{finding.severity}", finding.message,
+    ]
     return subprocess.run(argv, capture_output=True).returncode == 0
 
 
