@@ -52,6 +52,9 @@ explicit user approval and is not an automatic recovery step.
    helpers transition to `ghostship-ntfy//tools`, which has no ntfy data/config
    permissions. The tools domain is transient and need not be running at sampling
    time, but it must be loaded.
+   Podman's wrapper must include `apparmor_parser`: without it Podman reports
+   AppArmor disabled even when the kernel and loaded profiles are healthy.
+   Verify `podman info --format '{{.Host.Security.AppArmorEnabled}}'` returns true.
 4. Run `ghostship-apparmor-review` as root over SSH, and inspect its evidence and
    status. Verify the daily collector timer and the T3 daily review task. A disabled
    LSM, unattached process, missing audit heartbeat, or failed collection does not
