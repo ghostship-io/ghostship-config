@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.133] - 2026-10-19
+
+- Keep the webhook spool and coordinator state under `/var/lib/ghostship-github`. systemd-tmpfiles refused to create root-owned directories under the `apps`-owned `/srv/apps`, so the receiver and coordinator could not start on 3.15.132.
+
 ## [3.15.132] - 2026-10-19
 
 - Add `hooks.ghostship.io`, the webhook receiver for GitHub-driven T3 engineering and Cloudflare alerts (ghostship-agent 0.25.0, pinned at `d61a5415`):
