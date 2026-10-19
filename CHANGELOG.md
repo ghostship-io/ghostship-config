@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.134] - 2026-10-19
+
+- The GitHub coordinator joins its own `ghostship-github` group as well as the spool group, so it can read its T3 session token. Without it, issue launches retried with "t3 executable not found".
+
 ## [3.15.133] - 2026-10-19
 
 - Keep the webhook spool and coordinator state under `/var/lib/ghostship-github`. systemd-tmpfiles refused to create root-owned directories under the `apps`-owned `/srv/apps`, so the receiver and coordinator could not start on 3.15.132.
