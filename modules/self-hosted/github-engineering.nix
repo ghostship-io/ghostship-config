@@ -194,7 +194,9 @@ in
         "/run/ghostship-github:/run/ghostship-integrations:ro"
         "${config.ghostship.selfHostedSecrets.projections.ghostship-github-coordinator.path}:/run/secrets/github.env:ro"
       ];
-      extraOptions = hardening ++ [ "--network=ghostship_net" "--pids-limit=64" "--memory=256m" "--cpus=0.5" ];
+      # Primary group is the spool's; the T3 token directory needs ghostship-github.
+      extraOptions = hardening ++ [ "--group-add=62031" "--network=ghostship_net" "--pids-limit=64"
+                                    "--memory=256m" "--cpus=0.5" ];
     };
     systemd.services.podman-ghostship-github-coordinator = {
       after = [ "init-ghostship-net.service" "ghostship-github-t3-token.service" ];
