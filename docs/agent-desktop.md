@@ -133,14 +133,15 @@ Two server identities match the browser profiles:
 | `bladebro` | `bladebro-mcp-agent` | agent, port 9222 |
 | `bladebro-personal` | `bladebro-mcp-personal` | personal, port 9223 |
 
-Bladebro's five tools (`act`, `see`, `state`, `run`, `vision`) are exposed
-to agents over stdio JSON-RPC. MCP clients in t3code are provisioned
-automatically by `agent-desktop-mcp.service`: it writes SSH wrappers into
-`~/.local/bin`, pins the desktop host key in
-`~/.ssh/known_hosts_agent_desktop`, and merges the server entries into
-OpenCode and Codex configuration (backing up the previous file as
-`*.pre-bladebro`). A new provider session picks them up; no manual SSH or
-connection management is needed.
+Bladebro's five tools (`act`, `see`, `state`, `run`, `vision`) speak stdio
+JSON-RPC. Coding agents in t3code reach them through the Ghostship MCP
+browser tools (`browser_window`, `browser_op`, `browser_raw`), not as
+separate MCP servers: a second copy of the browser tools only costs context.
+`agent-desktop-mcp.service` writes the SSH wrappers above into `~/.local/bin`,
+pins the desktop host key in `~/.ssh/known_hosts_agent_desktop` (published
+to the Ghostship MCP by `ghostship-desktop-bridge`), and removes the direct
+`bladebro`/`bladebro-personal` entries earlier versions merged into provider
+configuration (backing up the previous file as `*.pre-bladebro`).
 
 CLI usage over SSH (also useful for debugging):
 

@@ -176,7 +176,7 @@ in
   };
 
   systemd.services.agent-desktop-mcp = {
-    description = "Provision Bladebro MCP access from t3code to the agent desktop";
+    description = "Provision Bladebro SSH access from t3code to the agent desktop";
     after = [
       "agent-desktop-ssh.service"
       "podman-agent-desktop.service"
@@ -204,7 +204,7 @@ in
   };
 
   systemd.timers.agent-desktop-mcp = {
-    description = "Refresh Bladebro MCP access for all t3code agents";
+    description = "Refresh Bladebro SSH access for t3code";
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnBootSec = "10min";
