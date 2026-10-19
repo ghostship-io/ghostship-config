@@ -129,7 +129,25 @@ def typed_service_token(selector):
     )
 
 
-def validate_access(apps, routes):
+BYPASS_POLICY = {"decision": "bypass", "include": [{"everyone": {}}]}
+
+
+def approved_bypass(application, approved):
+    """A path-scoped app whose every domain is a registry-approved exact path.
+
+    Access path apps also match deeper paths; the origin serves only the exact
+    path, so deeper requests reach nothing behind the bypass.
+    """
+    domains = access_domains(application)
+    return bool(domains) and all(
+        "/" in domain
+        and "/" + domain.split("/", 1)[1] in approved.get(domain.split("/", 1)[0], ())
+        for domain in domains
+    )
+
+
+def validate_access(apps, routes, approved=None):
+    approved = approved or {}
     for hostname in routes:
         # Tunnel wildcards route deeper names than Access wildcards protect.
         # Require explicit routes so every routed hostname can be verified.
@@ -156,6 +174,16 @@ def validate_access(apps, routes):
                 raise ValueError(
                     f"Missing Access policy evidence for {hostname}"
                 )
+            if approved_bypass(app, approved):
+                if any(
+                    {k: policy.get(k) for k in ("decision", "include")} != BYPASS_POLICY
+                    or policy.get("exclude") or policy.get("require")
+                    for policy in policies
+                ):
+                    raise ValueError(
+                        f"Unexpected Access policy on approved bypass for {hostname}"
+                    )
+                continue
             browser_allow = False
             for policy in policies:
                 decision = policy.get("decision")
@@ -313,8 +341,14 @@ def main():
         for rule in config.get("ingress", [])
         if rule.get("hostname")
     }
+    # User-approved exact-path bypasses (registry cloudflareBypassPaths).
+    approved = {
+        app["hostname"]: set(app.get("cloudflareBypassPaths") or [])
+        for app in registry.values()
+        if app["hostname"] and app.get("cloudflareBypassApproval")
+    }
     apps = fetch_access_policies(api, prefix, apps, hostnames)
-    validate_access(apps, hostnames)
+    validate_access(apps, hostnames, approved)
     operations = []
     if desired != current["config"]:
         operations.append(

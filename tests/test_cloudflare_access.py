@@ -261,6 +261,32 @@ class AccessTests(unittest.TestCase):
                     raise
         return api
 
+    def test_path_bypass_needs_approval_for_that_exact_host_and_path(self):
+        """Defect: a bypass app opens a path, host or policy the user never approved."""
+        bypass = {"decision": "bypass", "include": [{"everyone": {}}]}
+        approved = {"hooks.ghostship.io": {"/github", "/cloudflare"}}
+        cases = [  # bypass app domains, its policies, approvals, accepted
+            (["hooks.ghostship.io/github", "hooks.ghostship.io/cloudflare"], [bypass], approved, True),
+            (["hooks.ghostship.io/github"], [bypass], {}, False),
+            (["hooks.ghostship.io/admin"], [bypass], approved, False),
+            (["hooks.ghostship.io"], [bypass], approved, False),
+            (["hooks.ghostship.io/github", "ntfy.ghostship.io/github"], [bypass], approved, False),
+            (["hooks.ghostship.io/github"], [{**bypass, "include": [{"ip": {"ip": "1.2.3.4/32"}}]}],
+             approved, False),
+            (["hooks.ghostship.io/github"], [bypass, identity_policy()], approved, False),
+        ]
+        for domains, policies, approvals, accepted in cases:
+            path_app = {"id": "hooks", "type": "self_hosted", "self_hosted_domains": domains,
+                        "policies": policies}
+            with self.subTest(domains=domains, policies=policies, approvals=approvals):
+                run = lambda: cloudflare.validate_access(  # noqa: E731
+                    [application(), path_app], {"hooks.ghostship.io": {}, "ntfy.ghostship.io": {}},
+                    approvals)
+                if accepted:
+                    run()
+                else:
+                    self.assertRaises(ValueError, run)
+
     def test_unrelated_legacy_rules_are_checked_before_any_writes(self):
         for host in (
             "legacy.ghostship.io",

@@ -217,6 +217,11 @@ The reconciler validates that coverage and refuses unexpected bypass policies;
 it does not rewrite shared wildcard or identity rules. ntfy's former native-auth
 bypass was revoked on 2026-10-18 and its specific Access application now requires
 the approved Google identity. The reconciler never creates bypass applications.
+The one approved exception is `hooks.ghostship.io` (the owner 2026-10-19): a
+path-scoped Access application for exactly `/github` and `/cloudflare` whose only
+policy is bypass-everyone, recorded in the registry as `cloudflareBypassPaths`
+with `cloudflareBypassApproval`. The receiver authenticates those requests itself
+(GitHub HMAC, Cloudflare webhook secret); any other bypass still fails validation.
 All existing and proposed tunnel hostnames, including unmanaged rules and
 path-specific overrides, require complete policy evidence and restrictive identity
 or explicitly scoped service-token selectors. Unauthenticated OPTIONS bypasses
