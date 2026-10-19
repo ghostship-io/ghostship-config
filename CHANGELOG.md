@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.131] - 2026-10-19
+
+- The flow collector remembers each container's addresses for a day, so connections recorded before Podman recreated a container (and gave it a new address) keep the container's name instead of `lan:<address>`. A reused address always belongs to its current owner.
+- `ghostship-flow-report` accepts report options without the `report` subcommand, e.g. `ghostship-flow-report --json --since-hours 6`.
+
 ## [3.15.130] - 2026-10-19
 
 - `ghostship-security-check` resolves the containers allowed to log in to host SSH (`host_ssh_clients`: T3 and the tunnel connector) to their current addresses on every run. Podman gave T3 new addresses when it was recreated, and the fixed list made every T3 login a critical alert. Repeated logins from one unexpected source collapse into one finding with a count.

@@ -67,6 +67,29 @@ class FlowTests(unittest.TestCase):
         self.assertEqual((edge["connections"], edge["first_seen"], edge["last_seen"]), (6, 100, 300))
         self.assertEqual(edge["hooks"], ["bridge"])
 
+    def test_recreated_container_keeps_its_name(self):
+        state = {"edges": {}, "elements": {}}
+        self.assertEqual(flows.remember_addresses(state, {"10.89.0.151": "uptime-kuma"}, 0), {"10.89.0.151": "uptime-kuma"})
+        # Recreated with a new address; the old one keeps its owner for a day.
+        names = flows.remember_addresses(state, {"10.89.0.190": "uptime-kuma"}, 3600)
+        self.assertEqual(names["10.89.0.151"], "uptime-kuma")
+        # A reused address belongs to its current owner.
+        names = flows.remember_addresses(state, {"10.89.0.151": "romm"}, 7200)
+        self.assertEqual(names["10.89.0.151"], "romm")
+        names = flows.remember_addresses(state, {}, 7200 + flows.ADDRESS_MEMORY_SECONDS + 1)
+        self.assertEqual(names, {})
+
+    def test_report_is_the_default_command(self):
+        seen = []
+        original = flows.report
+        flows.report = lambda args: seen.append((args.command, args.json, args.since_hours, args.state)) or 0
+        try:
+            flows.main(["--state", "/x", "--json", "--since-hours", "3"])
+            flows.main([])
+        finally:
+            flows.report = original
+        self.assertEqual(seen, [("report", True, 3.0, "/x"), ("report", False, 0, "/var/lib/ghostship-security/flows.json")])
+
     def test_wan_samples_are_bounded(self):
         state = {"edges": {}, "elements": {}}
         observed = {("inet", ("10.89.0.172", f"8.8.{i}.1", "tcp", 443)): 1 for i in range(40)}
