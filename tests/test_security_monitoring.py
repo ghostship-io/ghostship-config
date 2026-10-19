@@ -101,9 +101,19 @@ class FlowTests(unittest.TestCase):
         self.assertEqual((edges["romm|host|tcp|22"]["connections"], edges["romm|host|tcp|22"]["accepted"]), (3, 0))
         self.assertEqual(flows.verdict(edges["romm|host|tcp|22"]), "dropped")
         self.assertEqual(flows.verdict(edges["romm|romm-db|tcp|3306"]), "accepted")
-        self.assertEqual(flows.verdict({"connections": 4, "accepted": 1}), "partial")
+        self.assertEqual(flows.verdict({"connections": 9, "checked": 4, "accepted": 1}), "partial")
         self.assertEqual(flows.verdict({"connections": 4}), "unknown")
         self.assertEqual(edges["romm|romm-db|tcp|3306"]["hooks"], ["inet"])
+
+    def test_verdicts_ignore_connections_before_accepted_sets(self):
+        kuma = ("10.89.0.172", "10.89.0.154", "tcp", 3306)
+        old = {"first_seen": 1, "last_seen": 1, "connections": 500, "accepted": 7, "hooks": ["inet"]}
+        state = {"edges": {"romm|romm-db|tcp|3306": old}, "elements": {}}
+        flows.merge(state, {("inet", kuma): 3, ("inet-accepted", kuma): 3}, self.NAMES, self.HOST, {}, 100)
+        self.assertEqual((old["connections"], old["checked"], old["accepted"]), (503, 3, 3))
+        self.assertEqual(flows.verdict(old), "accepted")
+        flows.merge(state, {("inet", kuma): 5, ("inet-accepted", kuma): 3}, self.NAMES, self.HOST, {}, 200, verdicts=False)
+        self.assertEqual((old["connections"], old["checked"]), (505, 3))
 
     def test_wan_samples_are_bounded(self):
         state = {"edges": {}, "elements": {}}
