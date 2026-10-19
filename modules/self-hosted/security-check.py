@@ -167,6 +167,23 @@ def container_addresses(rows, names):
     return found
 
 
+CLIENT_MEMORY_SECONDS = 24 * 3600
+
+
+def remember_clients(state, current, now):
+    """Current client addresses plus those held within the last day.
+
+    Logins read from the journal can predate a client's recreation, which
+    gives it new addresses; its previous addresses stay allowed for a day.
+    """
+    history = state.setdefault("ssh_clients", {})
+    for address in current:
+        history[str(address)] = now
+    for address in [a for a, seen in history.items() if now - seen > CLIENT_MEMORY_SECONDS]:
+        del history[address]
+    return {ipaddress.ip_address(a) for a in history}
+
+
 def check_ssh_logins(cfg, state, journal_lines, clients=frozenset()):
     logins = {}
     allowed = [ipaddress.ip_network(n) for n in cfg["ssh_allowed_sources"]]
@@ -359,7 +376,7 @@ def run(args):
     findings += check_audit(cfg, state, sh(["auditctl", "-s"], check=False))
     findings += check_firewall(cfg, sh(["nft", "list", "tables"]), sh(["nft", "list", "table", "ip", "filter"], check=False))
     findings += check_containers(cfg, rows)
-    findings += check_ssh_logins(cfg, state, journal, container_addresses(rows, cfg["host_ssh_clients"]))
+    findings += check_ssh_logins(cfg, state, journal, remember_clients(state, container_addresses(rows, cfg["host_ssh_clients"]), now))
     flows = flow_findings(cfg, load(cfg["flows_state"], {}), set(state.get("accepted_flows", [])))
     if args.accept:
         state.setdefault("baselines", {}).clear()

@@ -169,6 +169,17 @@ class CheckTests(unittest.TestCase):
         self.assertEqual([f.key for f in found], ["ssh.login.root.10.89.7.99"])
         self.assertIn("(2x)", found[0].message)
 
+    def test_recreated_client_keeps_its_previous_address(self):
+        state = {}
+        old = check.remember_clients(state, check.container_addresses(
+            [{**container("t3code"), "NetworkSettings": {"Networks": {"a": {"IPAddress": "10.89.7.13"}}}}], ["t3code"]), 0)
+        new = check.remember_clients(state, {check.ipaddress.ip_address("10.89.7.16")}, 600)
+        line = ["Accepted publickey for root from 10.89.7.13 port 1 ssh2"]
+        self.assertEqual(check.check_ssh_logins(CONFIG, state, line, new), [])
+        expired = check.remember_clients(state, set(), 600 + check.CLIENT_MEMORY_SECONDS + 1)
+        self.assertEqual(len(check.check_ssh_logins(CONFIG, state, line, expired)), 1)
+        self.assertTrue(old)
+
     def test_listeners_ignore_resolvers_and_ephemeral_udp(self):
         text = (
             "tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:*\n"
