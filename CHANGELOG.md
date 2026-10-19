@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.138] - 2026-10-19
+
+- Recorded the user's decision that Plex's router forward is manual, with UPnP and NAT-PMP declined. The public-service policy notes that Plex stays on manual port mapping, and that its NAT-PMP requests to the bridge gateway stay dropped. Verified: the host firewall already drops UDP 5351 from the container bridge, and SSDP does not leave the bridge.
+
 ## [3.15.137] - 2026-10-19
 
 - Flow verdicts compare accepted connections against a new per-edge `checked` count: the connections collected while the accepted sets were loaded. Comparing against the full `connections` history left every edge recorded before 3.15.136 stuck at `partial` or `unknown`. Existing edges restart their verdict counts once; a collection missing the accepted sets does not add to `checked`.
