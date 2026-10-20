@@ -159,7 +159,7 @@ in
   };
 
   security.apparmor.policies.ghostship-agent-desktop = {
-    state = "enforce";
+    state = "complain";
     profile = builtins.readFile ./agent-desktop-apparmor.profile;
   };
 
