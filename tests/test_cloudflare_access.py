@@ -33,6 +33,42 @@ def application(domain="*.ghostship.io", policies=None):
     }
 
 
+class RetryTests(unittest.TestCase):
+    def outcomes(self, method, *results):
+        client = cloudflare.Cloudflare("token")
+        calls = []
+
+        def attempt(*args):
+            calls.append(args[0])
+            result = results[len(calls) - 1]
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        client.attempt = attempt
+        with patch.object(cloudflare.time, "sleep") as sleep:
+            try:
+                return client.request(method, "/zones"), calls, sleep.call_count
+            except RuntimeError as error:
+                return error, calls, sleep.call_count
+
+    def test_reads_retry_transient_failures(self):
+        busy = cloudflare.TransientError("Cloudflare GET failed: HTTP 504")
+        result, calls, sleeps = self.outcomes("GET", busy, {"success": True})
+        self.assertEqual((result, len(calls), sleeps), ({"success": True}, 2, 1))
+        result, calls, _ = self.outcomes("GET", busy, busy, busy)
+        self.assertIsInstance(result, cloudflare.TransientError)
+        self.assertEqual(len(calls), len(cloudflare.READ_RETRY_DELAYS) + 1)
+
+    def test_writes_and_client_errors_never_retry(self):
+        busy = cloudflare.TransientError("Cloudflare POST failed: HTTP 504")
+        result, calls, sleeps = self.outcomes("POST", busy)
+        self.assertEqual((type(result), len(calls), sleeps), (cloudflare.TransientError, 1, 0))
+        denied = RuntimeError("Cloudflare GET failed: HTTP 403")
+        result, calls, _ = self.outcomes("GET", denied)
+        self.assertEqual((result, len(calls)), (denied, 1))
+
+
 class AccessTests(unittest.TestCase):
     def test_access_wildcard_covers_only_one_subdomain_level(self):
         with self.assertRaisesRegex(ValueError, "No browser Access"):
