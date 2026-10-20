@@ -45,12 +45,14 @@ profile ghostship-agent-desktop flags=(attach_disconnected,mediate_deleted) {
 # The desktop viewer (/agents/ behind Cloudflare Access): a Python server that
 # relays agent browser windows over loopback DevTools. It may read its own
 # code and the run registry, write pause and activity markers there, and use
-# TCP. Browser profiles, SSH keys, secrets and every executable are denied.
+# the network (loopback DevTools; Cloudflare Access signing keys over HTTPS). Browser profiles, SSH keys, secrets and every executable are denied.
 profile ghostship-desktop-viewer flags=(attach_disconnected,mediate_deleted) {
   include <abstractions/base>
 
   network inet stream,
   network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
   network unix stream,
 
   /usr/bin/python3* mrix,
@@ -62,6 +64,13 @@ profile ghostship-desktop-viewer flags=(attach_disconnected,mediate_deleted) {
   /etc/mime.types r,
   /etc/nsswitch.conf r,
   /etc/hosts r,
+  /etc/resolv.conf r,
+  /etc/host.conf r,
+  /etc/gai.conf r,
+  /etc/ssl/certs/ r,
+  /etc/ssl/certs/** r,
+  /usr/share/ca-certificates/** r,
+  /usr/lib/ssl/** r,
   /etc/passwd r,
   /etc/group r,
   @{PROC}/@{pid}/fd/ r,
