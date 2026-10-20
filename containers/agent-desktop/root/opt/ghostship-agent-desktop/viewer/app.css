@@ -38,7 +38,7 @@ button { font: inherit; color: inherit; }
 #grid-view > .bar { position: sticky; top: 0; z-index: 2; padding-top: calc(8px + var(--sat)); }
 .banner { margin: 8px 10px 0; padding: 8px 10px; border-radius: 8px; background: #3b2e14; color: #ffe2a8; }
 
-#grid { display: grid; gap: 10px; padding: 10px; padding-left: calc(10px + var(--sal));
+.cards { display: grid; gap: 10px; padding: 10px; padding-left: calc(10px + var(--sal));
   padding-right: calc(10px + var(--sar)); padding-bottom: calc(10px + var(--sab));
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
@@ -148,3 +148,29 @@ dialog input { width: 100%; background: var(--bg); color: var(--text); border: 1
 #desktop-view { position: fixed; inset: 0; display: flex; flex-direction: column; }
 #desktop-head { padding-top: calc(6px + var(--sat)); padding-bottom: 6px; }
 #desktop-frame { flex: 1; min-height: 0; width: 100%; border: 0; background: #000; display: block; }
+
+/* Native app sessions (app-session): their own colour; no browser controls */
+.badge.app { background: #d97b2b; color: #1d0e00; }
+.dot.app { background: #d97b2b; }
+.new-menu-apps { display: contents; }
+#agent-view.app-mode .urlbar, #agent-view.app-mode .tabrow { display: none !important; }
+
+/* Grid sections: Apps (launcher + running app cards) and Browser sessions */
+.group { padding-top: 4px; }
+.group-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 0;
+  padding-left: calc(10px + var(--sal)); padding-right: calc(10px + var(--sar)); }
+.group-head h2 { font-size: 15px; margin: 0; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.cards:empty { display: none; }
+.empty { margin: 4px 10px 8px; padding-left: var(--sal); }
+.launcher { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; padding-left: calc(10px + var(--sal)); }
+.tile { display: grid; grid-template-columns: 48px auto; grid-template-rows: auto auto; column-gap: 12px;
+  align-items: center; text-align: left; min-width: 200px; padding: 12px 16px 12px 12px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--line); cursor: pointer; touch-action: manipulation; }
+.tile:active { filter: brightness(1.25); }
+.tile.running { border-color: #d97b2b; }
+.tile-icon { grid-row: 1 / span 2; width: 48px; height: 48px; border-radius: 10px; object-fit: contain; }
+.tile-icon.letter { display: flex; align-items: center; justify-content: center; background: #d97b2b; color: #1d0e00;
+  font-weight: 700; font-size: 22px; }
+.tile-name { font-weight: 600; font-size: 16px; }
+.tile-state { font-size: 13px; color: var(--muted); }
+.tile.running .tile-state { color: #f0a868; }

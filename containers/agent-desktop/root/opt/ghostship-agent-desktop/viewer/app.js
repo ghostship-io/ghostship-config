@@ -33,14 +33,16 @@ function ago(ts) {
 }
 function runTitle(run) {
   const o = run.owner || {};
-  return run.label || o.t3_thread_title || `Run ${run.run_id.slice(0, 8)}`;
+  return run.label || run.app_name || o.t3_thread_title || `Run ${run.run_id.slice(0, 8)}`;
 }
+function isApp(run) { return run && run.kind === "app"; }
 function ownerLine(run) {
   const o = run.owner || {};
   return [o.harness, o.model].filter(Boolean).join(" · ");
 }
 function stateLine(run) {
   const st = run.state;
+  if (!st && isApp(run)) return (run.tabs[0] && run.tabs[0].title) || run.app_name || "App";
   if (!st) return run.registered ? "No activity recorded yet" : "Untracked window";
   const what = [st.tool, st.action].filter(Boolean).join(": ");
   const mark = st.ok === false ? "✗ " : "";
@@ -66,7 +68,11 @@ async function api(path, opts = {}) {
   const res = await fetch(path, { cache: "no-store", ...opts, headers: { ...(opts.headers || {}), ...HDR } });
   let body = null;
   try { body = await res.json(); } catch (_) { /* empty */ }
-  if (!res.ok) throw new Error((body && body.error) || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const err = new Error((body && body.error) || `HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
   return body;
 }
 function toast(msg) {
@@ -90,6 +96,7 @@ async function loadRuns() {
     const data = await api("api/runs");
     S.runs = data.runs || [];
     S.browsers = data.browsers || {};
+    renderAppButtons(data.apps || []);
     S.clockSkew = Date.now() / 1000 - (data.now || Date.now() / 1000);
     renderGrid();
     if (S.current) renderHeader();
@@ -107,22 +114,26 @@ function renderBanner() {
 }
 
 function renderGrid() {
-  const grid = $("grid");
+  const browserRuns = S.runs.filter((r) => !isApp(r));
+  const appRuns = S.runs.filter(isApp);
   $("browsers").textContent = `${S.runs.length} open`;
   renderBanner();
-  $("empty").hidden = S.runs.length > 0;
+  renderLauncher();
+  $("empty").hidden = browserRuns.length > 0;
   const keep = new Set();
-  S.runs.forEach((run, i) => {
-    keep.add(run.run_id);
-    let card = cards.get(run.run_id);
-    if (!card) {
-      card = buildCard(run.run_id);
-      cards.set(run.run_id, card);
-      if (observer) observer.observe(card.root); else visible.add(run.run_id);
-    }
-    fillCard(card, run);
-    if (grid.children[i] !== card.root) grid.insertBefore(card.root, grid.children[i] || null);
-  });
+  for (const [grid, runs] of [[$("app-grid"), appRuns], [$("grid"), browserRuns]]) {
+    runs.forEach((run, i) => {
+      keep.add(run.run_id);
+      let card = cards.get(run.run_id);
+      if (!card) {
+        card = buildCard(run.run_id);
+        cards.set(run.run_id, card);
+        if (observer) observer.observe(card.root); else visible.add(run.run_id);
+      }
+      fillCard(card, run);
+      if (grid.children[i] !== card.root) grid.insertBefore(card.root, grid.children[i] || null);
+    });
+  }
   for (const [id, card] of cards) {
     if (!keep.has(id)) { if (observer) observer.unobserve(card.root); card.root.remove(); cards.delete(id); visible.delete(id); }
   }
@@ -172,7 +183,7 @@ function fillCard(card, run) {
   card.age.textContent = [ago(run.opened_at || run.seen_at), `${run.tabs.length} tab${run.tabs.length === 1 ? "" : "s"}`, first].filter(Boolean).join(" · ");
   card.pause.textContent = run.paused ? "Resume" : "Pause";
   card.pause.classList.toggle("paused", run.paused);
-  card.badges.replaceChildren(el("span", `badge ${run.identity}`, run.identity));
+  card.badges.replaceChildren(el("span", `badge ${run.identity}`, isApp(run) ? run.app_name || "app" : run.identity));
   if (run.paused) card.badges.append(el("span", "badge paused", "paused"));
   if (isHuman(run)) card.badges.append(el("span", "badge human", "human"));
   card.run = run;
@@ -202,6 +213,55 @@ async function togglePause(id) {
   } catch (err) { toast(`Could not ${run.paused ? "resume" : "pause"}: ${err.message}`); }
 }
 
+// One "+ <App>" button per app in the desktop's app catalog (grid header and + menu).
+function renderAppButtons(apps) {
+  S.apps = apps;
+  const key = JSON.stringify(apps);
+  if (key === renderAppButtons.key) return;
+  renderAppButtons.key = key;
+  $("new-menu-apps").replaceChildren(...apps.map((app) => {
+    const b = el("button", "btn", `+ ${app.name}`);
+    b.type = "button";
+    b.addEventListener("click", () => { $("new-menu").hidden = true; launch(app); });
+    return b;
+  }));
+}
+
+// Launcher: one tile per app. A running app opens its session; otherwise it starts.
+function renderLauncher() {
+  const tiles = (S.apps || []).map((app) => {
+    const running = S.runs.find((r) => isApp(r) && r.app === app.app);
+    const tile = el("button", "tile" + (running ? " running" : ""));
+    tile.type = "button";
+    tile.title = running ? `Show ${app.name}` : `Open ${app.name}`;
+    const icon = app.icon ? el("img", "tile-icon") : el("span", "tile-icon letter", app.name.slice(0, 1));
+    if (app.icon) { icon.src = app.icon; icon.alt = ""; }
+    tile.append(icon, el("span", "tile-name", app.name),
+      el("span", "tile-state", running ? (running.paused ? "Running · paused" : "Running") : (S.launching === app.app ? "Opening…" : "Tap to open")));
+    tile.addEventListener("click", () => launch(app));
+    return tile;
+  });
+  $("launcher").replaceChildren(...tiles);
+  if (!tiles.length) $("launcher").append(el("p", "muted empty", "No desktop apps are configured."));
+}
+
+function launch(app) {
+  const running = S.runs.find((r) => isApp(r) && r.app === app.app);
+  if (running) openRun(running.run_id); else newApp(app);
+}
+
+async function newApp(app) {
+  if (S.launching) return;
+  S.launching = app.app;
+  renderLauncher();
+  try {
+    const r = await api(`api/runs/new?app=${encodeURIComponent(app.app)}`, { method: "POST" });
+    await loadRuns();
+    if (r.run_id) openRun(r.run_id);
+  } catch (err) { toast(`Could not open ${app.name}: ${err.message}`); }
+  finally { S.launching = null; renderLauncher(); }
+}
+
 async function newRun(identity) {
   try {
     const r = await api(`api/runs/new?identity=${identity}`, { method: "POST" });
@@ -219,7 +279,7 @@ function route() {
 // Desktop mode embeds Selkies from the site root. nginx serves Selkies there
 // to frames and sends top-level visits here, so this page is the one entry.
 // Leaving the mode unloads the frame, which ends the Selkies stream.
-const DESKTOP_URL = "../";
+const DESKTOP_URL = "desktop/";
 function showDesktop() {
   S.current = null; S.detail = null;
   closeStream();
@@ -267,7 +327,7 @@ function step(dir) {
 // One tab per open session (all identities); x closes it.
 function renderSessions() {
   const nav = $("sessions");
-  const runs = S.runs.slice();
+  const runs = [...S.runs.filter(isApp), ...S.runs.filter((r) => !isApp(r))];
   if (S.current && !runs.some((r) => r.run_id === S.current) && S.detail) runs.push(S.detail);
   nav.replaceChildren(...runs.map((run) => {
     const chip = el("div", `session ${run.identity}` + (run.run_id === S.current ? " active" : "") + (run.paused ? " paused" : ""));
@@ -292,10 +352,19 @@ function renderSessions() {
 async function closeRun(id) {
   const run = S.runs.find((r) => r.run_id === id) || (S.detail && S.detail.run_id === id ? S.detail : null);
   if (!run) return;
-  if (!isHuman(run) && !confirm(`Close "${runTitle(run)}"? The agent loses this window and its tabs.`)) return;
+  const what = isApp(run) ? "this app" : "this window and its tabs";
+  if (!isHuman(run) && !confirm(`Close "${runTitle(run)}"? The agent loses ${what}.`)) return;
   try {
     await api(`api/runs/${encodeURIComponent(id)}/close`, { method: "POST" });
-  } catch (err) { toast(`Could not close: ${err.message}`); return; }
+  } catch (err) {
+    if (!(isApp(run) && err.status === 409 && !/paused/i.test(err.message))) { toast(`Could not close: ${err.message}`); return; }
+    if (!confirm(`${runTitle(run)} did not close; it is probably asking whether to save. Force it closed and discard unsaved changes?\n\n(Cancel to answer it yourself.)`)) {
+      if (S.current !== id) openRun(id);
+      return;
+    }
+    try { await api(`api/runs/${encodeURIComponent(id)}/close?force=1`, { method: "POST" }); }
+    catch (err2) { toast(`Could not close: ${err2.message}`); return; }
+  }
   const i = S.runs.findIndex((r) => r.run_id === id);
   S.runs = S.runs.filter((r) => r.run_id !== id);
   if (S.current === id) {
@@ -310,8 +379,9 @@ function renderHeader() {
   const run = S.detail || S.runs.find((r) => r.run_id === S.current);
   const line = $("run-state");
   if (!run) { line.textContent = "Window closed"; return; }
+  $("agent-view").classList.toggle("app-mode", isApp(run));
   const thread = threadNode(run.owner);
-  line.replaceChildren(el("span", null, [run.identity, ownerLine(run)].filter(Boolean).join(" · ")));
+  line.replaceChildren(el("span", null, [isApp(run) ? run.app_name || "app" : run.identity, ownerLine(run)].filter(Boolean).join(" · ")));
   if (thread) line.append(" · ", thread);
   line.append(` · ${stateLine(run)}`);
   const btn = $("pause-btn");

@@ -130,7 +130,8 @@ in
       "ghostship-agent-desktop//api"
       "ghostship-agent-desktop//chrome-control"
     ];
-    healthPath = "/";
+    # The root is the Access-protected viewer; Selkies' static page is public to the origin.
+    healthPath = "/desktop/";
     muximux = {
       icon = "muximux-desktop";
       color = "#0ea5e9";
@@ -151,6 +152,9 @@ in
       TITLE = "Ghostship Desktop";
       START_DOCKER = "false";
       PELORUS = "true";
+      # Selkies serves under /desktop/; the agent viewer owns the site root
+      # (nginx-agents-patch.py writes the same prefix into nginx).
+      SUBFOLDER = "/desktop/";
       # Agents work in their browser stages, not on this desktop, so the
       # desktop follows the client's screen (phones included).
       SELKIES_ENABLE_RESIZE = "true";
@@ -184,7 +188,7 @@ in
       "--shm-size=1g"
       "--memory=16g"
       "--pids-limit=4096"
-      "--health-cmd=/usr/bin/curl -fsS --max-time 5 http://127.0.0.1:3000/ >/dev/null"
+      "--health-cmd=/usr/bin/curl -fsS --max-time 5 http://127.0.0.1:3000/desktop/ >/dev/null"
       "--health-interval=30s"
       "--health-timeout=10s"
       "--health-retries=5"
@@ -225,9 +229,11 @@ in
     preStart = lib.mkBefore ''
       ${agent-desktop-image-build}/bin/ghostship-build-agent-desktop-image
     '';
-    # Save browser sessions before the container stops: Chrome loses cookies
-    # written in its last ~30 s unless it shuts down normally.
+    # Close app sessions (apps get to save) and save browser sessions before
+    # the container stops: Chrome loses cookies written in its last ~30 s
+    # unless it shuts down normally.
     preStop = lib.mkBefore ''
+      ${pkgs.podman}/bin/podman exec -u abc agent-desktop /opt/ghostship-agent-desktop/app-session close-all || true
       ${pkgs.podman}/bin/podman exec agent-desktop /opt/ghostship-agent-desktop/chrome-stop-all || true
     '';
   };
