@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.153] - 2026-10-20
+
+- Stop the inference scheduler by signalling its container process and waiting for the scheduler and its Podman attachment to exit. Orderly configuration switches no longer kill the attachment and report a false service failure; genuine nonzero scheduler exits still fail. Shutdown uses pinned process identities and leaves unrelated container processes alone.
+
 ## [3.15.152] - 2026-10-20
 
 - Allow the private integrations container 110 seconds to stop, covering its supervisor's 100-second worker drain and descendant reaping. Allow systemd 130 seconds for the stop and cleanup. Podman's default 10-second timeout could kill the supervisor during a deployment and report exit 137.

@@ -162,6 +162,10 @@ in
         Restart = "on-failure";
         RestartSec = 10;
         TimeoutStopSec = 900;
+        # Killing the host Podman attachment reports exit 1 even for an orderly
+        # stop. Signal the container scheduler and await both processes instead;
+        # genuine scheduler exit 1 must still fail and trigger monitoring.
+        ExecStop = "${pkgs.python3}/bin/python ${./inference-scheduler-stop.py} ${pkgs.podman}/bin/podman $MAINPID";
         NoNewPrivileges = true;
         PrivateTmp = true;
         UMask = "0077";
