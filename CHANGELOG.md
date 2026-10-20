@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.160] - 2026-10-20
+
+- Agent viewer: the address bar accepts a bare host such as `amazon.com` (it was a `type=url` field, so the browser demanded a scheme before the viewer could add `https://`).
+
 ## [3.15.159] - 2026-10-20
 
 - Agent desktop: one web UI. `desktop.ghostship.io` opens the viewer with a **Browsers | Desktop** switch; Desktop mode embeds Selkies, which nginx still serves at `/` to frames and health checks, and leaving it ends the stream. nginx redirects are now relative: `/agents` no longer redirects to `http://desktop.ghostship.io:3000/agents/`.
