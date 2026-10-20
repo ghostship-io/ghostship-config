@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.146] - 2026-10-20
+
+- `ghostship-apparmor-review` reads only AppArmor audit records (type 1400 and 1501–1507), kernel messages and journald rate-limit notices. Its daily read had covered every audit record, 1.28M lines (1.5 GB) taking 39s, past a 20s timeout. That marked every profile `audit-collection-failed` and reset each learning window daily. The read now takes about 10s, with a 120s limit, and the unit gets 15 minutes. Audit loss now matches only `audit`/`apparmor` rate-limit lines, not unrelated kernel ones such as NFS `rpc_check_timeout: N callbacks suppressed`.
+- Plex profile (complain): Podman's `curl` healthcheck gets a `healthcheck` child profile with its exact libraries, resolver/TLS files and TCP. Under enforcement it would otherwise be denied, and `--health-on-failure=kill` would kill Plex. Before this, each run logged about 100 records under a null profile, about 12k an hour. The `PMS GTP` thread may `ptrace` read its own `//server` peer, to read its processes' /proc entries (no tracing).
+
 ## [3.15.145] - 2026-10-20
 
 - Pin ghostship-agent 0.27.1 (`e0213afd`): fixes the `printing-press.sh` quoting regression from 0.27.0 that left `ghostship-inference-scheduler` crash-looping after 3.15.144.

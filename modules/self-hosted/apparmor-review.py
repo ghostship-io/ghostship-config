@@ -25,18 +25,24 @@ FIELDS = re.compile(r'(\w+)=(?:"([^"\n]*)"|(\S+))')
 AUDIT_LOSS = re.compile(
     r"audit_lost=[1-9][0-9]*|audit.*(?:backlog limit exceeded|rate limit exceeded)|"
     r"kauditd.*(?:suppressed|overflow)|(?:Suppressed|Dropped) [1-9][0-9]* messages|"
-    r"[1-9][0-9]* (?:callbacks|messages) suppressed", re.I)
+    r"(?:audit|apparmor)\S*: [1-9][0-9]* (?:callbacks|messages) suppressed", re.I)
+# AppArmor records only (AVC, or the 1501-1507 AppArmor types), every kernel
+# message for loss notices, and journald's own rate-limit reports. Exec and
+# service audit records from other rules are hundreds of MB a day.
+APPARMOR_TYPES = ["_AUDIT_TYPE=1400", *(f"_AUDIT_TYPE={n}" for n in range(1501, 1508))]
+JOURNAL_MATCHES = ["_TRANSPORT=audit", *APPARMOR_TYPES, "+", "_TRANSPORT=kernel"]
+JOURNAL_TIMEOUT = 120
 
 
-def run(args):
+def run(args, timeout=20):
     return subprocess.run(args, check=True, text=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.DEVNULL, timeout=20).stdout
+                          stderr=subprocess.DEVNULL, timeout=timeout).stdout
 
 
 def journal(start, end):
     output = run(["journalctl", "--no-pager", "--output=json", "--since", f"@{start:.6f}",
-                  "--until", f"@{end:.6f}", "_TRANSPORT=kernel", "_TRANSPORT=audit",
-                  "+", "SYSLOG_IDENTIFIER=systemd-journald"])
+                  "--until", f"@{end:.6f}", *JOURNAL_MATCHES,
+                  "+", "SYSLOG_IDENTIFIER=systemd-journald"], timeout=JOURNAL_TIMEOUT)
     rows = []
     for line in output.splitlines():
         row = json.loads(line)
@@ -131,7 +137,7 @@ def probe(name, profile):
                 return None
             output = subprocess.run([
                 "journalctl", "--no-pager", "--output=json", "--since", f"@{start:.6f}",
-                "_TRANSPORT=kernel", "_TRANSPORT=audit"], check=True, text=True,
+                *JOURNAL_MATCHES], check=True, text=True,
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=min(remaining, 1))
             end = time.time()
             for line in output.stdout.splitlines():
