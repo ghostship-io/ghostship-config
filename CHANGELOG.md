@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.151] - 2026-10-20
+
+- Pin ghostship-agent 0.28.0 at `ea17d445` (MCP connector review). `t3_task` op `submit` now accepts the model options that `t3` op `capabilities` lists, for example `{"effort": "high"}`, plus a `runtime_mode`. It checks both against the live catalog and reports the selection it used and the thread `url`, falling back to a deep link if the link lookup fails. Capabilities lists options compactly and can be filtered by `instance_id`. Errors for invalid arguments now name the argument and the limit it broke. Filesystem denials list the allowed roots and the container paths that map into them. `browser_op` `extract` accepts a `selector` and fails when given neither `js` nor `selector`, instead of returning null. Only the `ghostship-private-integrations` MCP runtime changes behavior.
+
 ## [3.15.150] - 2026-10-20
 
 - `ghostship-apparmor-review` can review the learning ledger by group. `--summary` lists unreviewed events grouped by their kept fields, with digits normalized and hex `comm` decoded. `--container NAME --match FIELD=GLOB` classifies every matching event in one locked write; profile and operation matches are required. The new `resolved-by-policy` classification, whose note must cite a PR, clears legitimate events a deployed policy now covers. Before this, only `expected-denial` cleared an event, so fixed events blocked enforcement forever, and reviewing 126k Plex events one ID at a time rewrote a 48 MB ledger on every call. Events now keep the AppArmor `peer`, so ptrace and signal records are distinguishable.
