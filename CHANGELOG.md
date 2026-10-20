@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.147] - 2026-10-20
+
+- Enable source-preserving EPUB imports through Ghostship's filesystem service: allow the existing Books library root and check Grimmory access with its configured application uid/gid. Pin the agent release with bounded EPUB inspection, collision-safe copy and the Grimmory scan/read-back workflow.
+- Run the unprivileged Books EPUB converter every five minutes, with network isolation and memory/CPU limits. It retains originals and publishes validated EPUBs beside stable imported files; MCP can queue the same fixed job and inspect its report. Chaptarr's completed-download path does not implement its conversion toggle.
+- The pinned MCP also discovers active T3 threads and live model/harness availability, accepts canonical thread IDs, and sends updates to existing running threads.
+
 ## [3.15.146] - 2026-10-20
 
 - `ghostship-apparmor-review` reads only AppArmor audit records (type 1400 and 1501–1507), kernel messages and journald rate-limit notices. Its daily read had covered every audit record, 1.28M lines (1.5 GB) taking 39s, past a 20s timeout. That marked every profile `audit-collection-failed` and reset each learning window daily. The read now takes about 10s, with a 120s limit, and the unit gets 15 minutes. Audit loss now matches only `audit`/`apparmor` rate-limit lines, not unrelated kernel ones such as NFS `rpc_check_timeout: N callbacks suppressed`.

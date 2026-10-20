@@ -155,11 +155,16 @@ let
         "/mnt/share/Downloads"
         "/mnt/share/Library/TV"
         "/mnt/share/Library/Movies"
+        "/mnt/share/Library/Books"
       ];
       access_users = lib.genAttrs [ "sonarr" "radarr" "plex" ] (
         name: config.virtualisation.oci-containers.containers.${name}.user
-      );
+      ) // {
+        grimmory = with config.virtualisation.oci-containers.containers.grimmory.environment;
+          "${USER_ID}:${GROUP_ID}";
+      };
     };
+    ebook_conversion.report = "/var/lib/ghostship-ebook-convert/report.json";
     recyclarr.container = "recyclarr";
     # Config files of services without an API that the MCP may read and replace
     # (atomic, with a timestamped copy). Startup patches only registry-owned
