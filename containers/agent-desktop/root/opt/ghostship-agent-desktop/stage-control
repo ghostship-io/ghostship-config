@@ -142,18 +142,26 @@ class Stage:
         self.ipc.command(f"workspace stage-new output {self.base_output}")
         self.ipc.command("workspace idle")
         for con in self.tree_windows():
-            self.place(con["id"], con.get("name") or "")
+            # After a restart, adopt windows that already have their own output.
+            if con["output"] != self.base_output and con.get("workspace") == f"w-{con['output']}":
+                self.windows[con["id"]] = {"output": con["output"]}
+                if con["output"] not in self.outputs:
+                    self.outputs.append(con["output"])
+            else:
+                self.place(con["id"], con.get("name") or "")
 
     def tree_windows(self) -> list[dict]:
         found = []
 
-        def walk(node, output=None):
+        def walk(node, output=None, workspace=None):
             if node.get("type") == "output":
                 output = node["name"]
+            if node.get("type") == "workspace":
+                workspace = node["name"]
             if node.get("pid"):
-                found.append(dict(node, output=output))
+                found.append(dict(node, output=output, workspace=workspace))
             for child in node.get("nodes", []) + node.get("floating_nodes", []):
-                walk(child, output)
+                walk(child, output, workspace)
 
         walk(self.ipc.request(GET_TREE))
         return found
@@ -528,6 +536,9 @@ def call(identity: str) -> int:
     sock.settimeout(120)
     try:
         request = json.loads(sys.stdin.read())
+        if not isinstance(request, dict):
+            raise ValueError("request must be an object")
+        request["actor"] = "agent"  # only the viewer speaks for a person
         sock.connect(os.path.join(RUNS, f"stage-{identity}.sock"))
         sock.sendall(json.dumps(request).encode() + b"\n")
         data = b""
