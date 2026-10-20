@@ -1,0 +1,15 @@
+#!/usr/bin/with-contenv bash
+# Ghostship agent viewer: mobile operator UI for agent browser windows on
+# 127.0.0.1:7090, proxied by nginx at /agents/. Reads Chrome over loopback
+# DevTools and the run registry in /config/agent-desktop/runs.
+# It runs confined by the ghostship-desktop-viewer AppArmor profile and does
+# not start without it (GHOSTSHIP_VIEWER_UNCONFINED=1 only for local tests).
+exec s6-setuidgid abc sh -c '
+  if ! printf "exec ghostship-desktop-viewer" > /proc/self/attr/apparmor/exec 2>/dev/null; then
+    if [ "${GHOSTSHIP_VIEWER_UNCONFINED:-0}" != 1 ]; then
+      echo "[viewer] AppArmor profile ghostship-desktop-viewer unavailable; not starting" >&2
+      sleep 30
+      exit 1
+    fi
+  fi
+  exec /usr/bin/python3 -I /opt/ghostship-agent-desktop/viewer/server.py'

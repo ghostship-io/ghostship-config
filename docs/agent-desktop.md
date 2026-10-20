@@ -4,7 +4,8 @@
 container on `chill-penguin`, built for agent automation and live human
 intervention. It runs LXQt on a labwc Wayland session with Selkies 2
 streaming, Pelorus desktop control (AT-SPI + Pixelflux), pinned Google Chrome
-browsers, and Bladebro as the MCP browser driver.
+browsers in per-identity browser stages, Bladebro as the MCP browser driver,
+and the agent viewer at `/agents/`.
 
 Everything is defined in `modules/self-hosted/agent-desktop.nix` and
 `containers/agent-desktop/`. The desktop lifecycle is independent of t3code:
@@ -47,6 +48,29 @@ lives in the profile directories and survives client disconnects, agent
 restarts, image updates and container replacement. A human logs into a
 service in the `personal` window through Selkies and agents keep using the
 same instance. Neither port is published outside the container.
+
+### Browser stages
+
+Each identity's Chrome runs in its own **browser stage**: a Sway compositor
+with a virtual 1920x1080 output (`/etc/ghostship/browser-sway.conf`), started
+by `run-chrome` together with a virtual mouse and keyboard (`stage-input`).
+Chrome is the ordinary headed browser with GPU rendering; only the monitor is
+virtual, as the labwc desktop's already is. The stage never moves focus: no
+window is focused on map or activation, and windows float at a fixed
+1600x900, so page coordinates never change.
+
+Every agent drives its own window with target-scoped DevTools input, which
+needs no focus and no global lock. Measured on Chrome 155 (2026-10-20): 8 and
+16 agents, barrier-synchronised click/type/wheel/dialog/popup, 30,000 ops with
+zero cross-talk and zero focus changes. On labwc, by contrast, every new
+window takes focus and blurs the field another agent is typing into, so agent
+windows never live on the human desktop. Wait for a new page's first frame
+before sending input (Chrome drops input that precedes it).
+
+Stage windows are not visible in Selkies; people use them through the agent
+viewer. Debug a stage by nesting it on the desktop with
+`GHOSTSHIP_STAGE_BACKEND=wayland` (never in production: a minimized nested
+stage stops rendering and stalls every agent).
 
 Chrome does not start at boot. Both services
 (`svc-agent-desktop-chrome-agent`, `svc-agent-desktop-chrome-personal`) are
@@ -106,11 +130,10 @@ ssh -i ~/.ssh/id_agent_desktop -p 2222 abc@10.89.7.2 \
 ```
 
 Chrome is launched with a deliberately minimal command line: a custom
-profile, a loopback DevTools port, native Wayland so compositor input
-injection reaches the browser, first-run/crash UX suppression, the basic
-password store, the US locale and a 1600x900 window. Because many agent tabs
-share one window, background-timer throttling, renderer backgrounding and
-occluded-window backgrounding are disabled (`--disable-background-timer-throttling`,
+profile, a loopback DevTools port, native Wayland, first-run/crash UX
+suppression, the basic password store, the US locale and a 1600x900 window.
+Because agent windows stack in the stage, background-timer throttling,
+renderer backgrounding and occluded-window backgrounding are disabled (`--disable-background-timer-throttling`,
 `--disable-renderer-backgrounding`, `--disable-backgrounding-occluded-windows`)
 so background tabs keep rendering and running timers. No sandbox, GPU or
 fingerprint flags.
@@ -125,6 +148,12 @@ real-browser mode against the desktop Chrome instances: its wrappers run
 launches or owns a browser, and applies no page
 patches (`BLADE_LANE=real`). Self-updates are disabled; the binary is
 updated through the desktop image.
+
+MCP sessions run through `bladebro-gate`, which records each call's tool and
+outcome (never arguments or page content) for the viewer in
+`/config/agent-desktop/runs/state/` and refuses page-changing calls on a tab
+whose run a person paused in the viewer (`runs/paused/<targetId>`): the
+agent gets an error starting `paused:` and should wait. Reads still work.
 
 Two server identities match the browser profiles:
 
@@ -179,10 +208,10 @@ ghostship-gui screenshot --pid 1234
 ghostship-gui batch --pid 1234 --actions '[{"action":"type","text":"hello"}]'
 ```
 
-Batches acquire both browser-profile locks in a fixed order, confirm the target
-PID's focus before each input, and stop on uncertain responses without replay.
-Browser workers use the same locks across both identities for foreground input;
-DOM reads and navigation remain parallel. Screenshots are private local PNGs,
+Batches hold the desktop input lock, confirm the target PID's focus before
+each input, and stop on uncertain responses without replay. Only native
+applications on this desktop share that lock; browser windows live in the
+browser stages and never need it. Screenshots are private local PNGs,
 and accessibility text is bounded. Ambiguous window targets fail before input.
 Use Bladebro for browser workflows and this wrapper for native applications.
 
@@ -212,7 +241,28 @@ Additional operator keys can be appended to
 `desktop.ghostship.io` is a normal `ghostship.apps` entry: the tunnel route
 and proxied CNAME are reconciled by `ghostship-cloudflare-sync`, and Access
 uses the shared Google identity policy. Mouse, keyboard, clipboard and file
-transfers are enabled; audio, webcam, gamepads and printing are off.
+transfers are enabled; audio, webcam, gamepads and printing are off. The
+desktop resizes to the client's screen, phones included; agent coordinates are
+unaffected because agents work in the browser stages.
+
+### Agent viewer
+
+`https://desktop.ghostship.io/agents/` (same Access policy) shows every agent
+browser window as a card: label, identity, harness and model, T3 thread,
+current action and a live preview. Tap a card for that agent's live view;
+swipe or use the arrows to switch agents. Tap clicks, drag scrolls, the
+keyboard button types, and the URL bar, tabs and back/reload work on that
+window only. **Any touch pauses that agent** until you tap Resume; other
+agents keep running. **New window** opens a person-owned window in either
+identity, for example to sign in to a site from a phone.
+
+The viewer (`viewer/server.py`, s6 `svc-agent-desktop-viewer`, 127.0.0.1:7090
+behind the Selkies nginx) streams pages with DevTools screencasts and never
+enables the Runtime domain. It runs confined by the `ghostship-desktop-viewer`
+AppArmor profile (`modules/self-hosted/agent-desktop-apparmor.profile`): it
+can read its code and the run registry and write pause/state markers, nothing
+else, and refuses to start unconfined. Browser UI outside the page (native
+`<select>` popups, permission bubbles, password manager) is not in the stream.
 
 ### Touch input
 
@@ -279,9 +329,26 @@ down after an idle stop, or never started.
   identity**: actions are attributable to that account. Use `bladebro` for
   routine work and `bladebro-personal` only for personal sessions.
 - The desktop container restarts when its image changes. In-flight tabs are
-  lost; profile authentication survives. Avoid updates during long runs.
+  lost; profile authentication survives. The update service drains active
+  agent runs first (bounded wait).
 
-## Retailer compatibility
+## Browser realness checks
+
+Every desktop change and update is checked without touching shops (retailers
+can flag the shared egress address and accounts; Amazon has shown the agent
+profile an "unauthorized AI agent" notice, so it is never automated):
+
+- `tools/bench_fingerprint.py`: 40 browser signals (webdriver, client hints,
+  screen/window, focus/visibility, WebGL/canvas/audio, media devices,
+  permissions, fonts, media queries) must equal a known-good baseline.
+- `tools/check_cdp_regression.py`: the local detector still sees
+  `Runtime.enable`; Bladebro and minimal CDP stay clean.
+- `tools/bench_botcheck.py`: deviceandbrowserinfo, bot.sannysoft and CreepJS,
+  one load each through Bladebro, must report a human, non-headless browser.
+- `tools/bench_input.py` and `tools/bench_bladebro.py`: concurrent agents with
+  zero cross-talk and zero focus changes.
+
+## Retailer compatibility (2026-10-08 baseline)
 
 The desktop keeps the browser environment coherent so mainstream sites do
 not flag it unnecessarily: the container timezone matches the egress
@@ -304,9 +371,9 @@ Measured on 2026-10-08:
   "You are human", Fingerprint reports no bot/VM/proxy, and rebrowser shows
   no leaks; with CDP, the same browser is flagged.
 
-For bot-managed sites, drive Chrome through Selkies (manual) or Pelorus
-compositor input (agents) instead of Bladebro's CDP session. Never assume
-automated bypass works; record challenge behaviour honestly.
+For a site that challenges even clean CDP, a person takes over the agent's
+window in the viewer. Never assume automated bypass works; record challenge
+behaviour honestly.
 
 ## Driver policy
 
@@ -317,8 +384,8 @@ automated bypass works; record challenge behaviour honestly.
 - **Playwright stays optional** for compatible workflows; connect it over an
   SSH tunnel to the loopback DevTools port and avoid `Runtime.enable` on
   sites that detect it.
-- **Pelorus and Selkies remain** for native GUI automation and for sites
-  where even clean CDP is challenged.
+- **Pelorus and Selkies remain** for native GUI automation; the viewer is the
+  manual path for browser windows.
 - No fingerprint spoofing, extra browser framework, or custom orchestration
   layer is used; Chrome stays an ordinary desktop installation.
 

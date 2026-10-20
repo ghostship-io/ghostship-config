@@ -1,0 +1,11 @@
+#!/bin/sh
+# Stop both identities' Chrome through s6 and wait until each has finished.
+# run-chrome then closes Chrome via DevTools, so pending cookies and site
+# storage are saved. Container shutdown does not do this on its own (Chrome
+# would be killed), so the host runs this before stopping the container.
+for identity in agent personal; do
+  service=/run/service/svc-agent-desktop-chrome-$identity
+  [ -d "$service" ] || continue
+  s6-svc -wD -T 30000 -d "$service" &
+done
+wait
