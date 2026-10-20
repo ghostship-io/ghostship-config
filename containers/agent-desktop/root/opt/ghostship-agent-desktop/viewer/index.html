@@ -5,14 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#0f1115">
 <meta name="referrer" content="no-referrer">
-<title>Agents · Ghostship</title>
+<title>Desktop · Ghostship</title>
 <link rel="stylesheet" href="app.css">
 <script src="app.js" defer></script>
 </head>
 <body>
 <section id="grid-view">
   <header class="bar">
-    <h1>Agents</h1>
+    <nav class="modes" aria-label="Mode">
+      <a class="mode on" href="#" aria-current="page">Browsers</a>
+      <a class="mode" href="#desktop">Desktop</a>
+    </nav>
     <span id="browsers" class="muted"></span>
     <span class="grow"></span>
     <button type="button" class="btn" id="new-personal" title="Open a window in the Personal browser">+ Personal</button>
@@ -21,6 +24,16 @@
   <div id="banner" class="banner" hidden></div>
   <main id="grid"></main>
   <p id="empty" class="muted center" hidden>No agent windows are open.</p>
+</section>
+
+<section id="desktop-view" hidden>
+  <header class="bar" id="desktop-head">
+    <nav class="modes" aria-label="Mode">
+      <a class="mode" href="#">Browsers</a>
+      <a class="mode on" href="#desktop" aria-current="page">Desktop</a>
+    </nav>
+  </header>
+  <iframe id="desktop-frame" title="Desktop (Selkies)" allow="fullscreen; clipboard-read; clipboard-write; autoplay; keyboard-map"></iframe>
 </section>
 
 <section id="agent-view" hidden>
