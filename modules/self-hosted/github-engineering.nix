@@ -54,6 +54,11 @@ in
       # heartbeat covers it instead of an HTTP monitor.
       healthPath = null;
       apparmorProfile = "ghostship-hooks";
+      apparmorProcessProfiles = [
+        "ghostship-hooks"
+        "ghostship-hooks//tools"
+      ];
+      apparmorRequiredProcessProfiles = [ "ghostship-hooks" ];
       cloudflareBypassPaths = [ "/github" "/cloudflare" ];
       cloudflareBypassApproval = "the owner 2026-10-19: approved Access bypass for exact POST paths /cloudflare and /github on hooks.ghostship.io only; GitHub HMAC and the Cloudflare webhook secret authenticate them";
       muximux.enable = false;
