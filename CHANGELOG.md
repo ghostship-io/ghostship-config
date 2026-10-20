@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.144] - 2026-10-20
+
+- Pin ghostship-agent 0.27.0 (`2b64a6d8`): skill families collapse into routers with linked guides, so 44 installed skills become 12 and the ChatGPT GhostShip Skills plugin goes from 26 skills to 5. `ghostship-skills-reconcile` installs the T3 set (pruning the retired links) and republishes the plugin. The MCP instructions now point shopping at the `shopping` skill, so the ChatGPT connector is refreshed after the switch.
+
 ## [3.15.143] - 2026-10-20
 
 - `ghostship-cloudflare-sync` retries Cloudflare reads twice (after 5s and 20s) on HTTP 429, 5xx and network errors. A single HTTP 504 at 04:25 UTC failed the sync during the nightly `nixos-upgrade` activation, which marked the whole upgrade failed (status 4) and sent a failure notification. Writes and other client errors still fail immediately, so a write is never sent twice.
