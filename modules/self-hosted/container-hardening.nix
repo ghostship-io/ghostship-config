@@ -48,7 +48,7 @@ let
   # strict AppArmor profile (apparmor/<container>.profile). Plex, the agent
   # desktop and T3 are out of scope here; the in-house images already drop ALL.
   keepCaps = {
-    bazarr = [ ];
+    bazarr = rootLsio;
     chaptarr = [ ];
     cloudflared = [ ];
     flaresolverr = [ ];
@@ -75,22 +75,24 @@ let
       "SETUID"
     ];
     ntfy = [ ];
-    nzbget = [ ];
+    nzbget = rootLsio;
     plex-auto-languages = [ ];
-    prowlarr = [ ];
+    prowlarr = rootLsio;
     pyload = rootLsio;
     qbittorrent = rootLsio;
-    radarr = [ ];
+    radarr = rootLsio;
     recyclarr = [ ];
     romm = [ ];
-    romm-db = [ ];
+    romm-db = rootLsio;
     seerr = [ ];
-    sonarr = [ ];
-    tautulli = [ ];
+    sonarr = rootLsio;
+    tautulli = rootLsio;
     tdarr = rootLsio ++ [ "FSETID" ];
     uptime-kuma = [ ];
   };
-  # LinuxServer images started as root: s6 chowns, then drops to the app user.
+  # LinuxServer images: s6 preinit runs as root (directly, or through the
+  # setuid-root s6-overlay-suexec when started as the app user), chowns, then
+  # drops to the app user. Without these it fails "unable to setgid to root".
   rootLsio = [
     "CHOWN"
     "DAC_OVERRIDE"
