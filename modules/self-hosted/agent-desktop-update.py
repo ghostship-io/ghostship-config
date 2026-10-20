@@ -1124,7 +1124,10 @@ def rollback(state: dict, notifier: Notifier, reason: str) -> None:
         run(["systemctl", "stop", PRODUCTION_UNIT], timeout=600)
         for identity in PORTS:
             source = snapshot / f"apps/agent-desktop/config/agent-desktop/chrome/{identity}/"
-            run(["rsync", "-a", "--delete", str(source), str(PRODUCTION_DATA / "chrome" / identity) + "/"], timeout=3600)
+            # Trailing slashes on both sides: copy the profile's contents, not a
+            # nested chrome/<identity>/<identity> directory (Path drops them).
+            run(["rsync", "-a", "--delete", str(source) + "/", str(PRODUCTION_DATA / "chrome" / identity) + "/"],
+                timeout=3600)
         run(["systemctl", "start", PRODUCTION_UNIT], timeout=1200)
     wait_healthy()
     running = run(["podman", "inspect", PRODUCTION, "--format", "{{.Image}}"]).stdout.strip()
@@ -1178,12 +1181,15 @@ def promote(state: dict, notifier: Notifier, repo: Repo, simulate: str | None) -
 def deploy_and_verify(state: dict, notifier: Notifier, simulate: str | None) -> None:
     candidate = state["candidate"]
     try:
-        drain(notifier)
-        candidate["pre_cookies"] = production_cookie_counts()
-        candidate["snapshot"] = str(take_snapshot())
-        save_state(state)
+        # A resumed run keeps the first snapshot and cookie baseline: by then the
+        # candidate may already have opened (and migrated) the profiles.
+        if not candidate.get("snapshot"):
+            drain(notifier)
+            candidate["pre_cookies"] = production_cookie_counts()
+            candidate["snapshot"] = str(take_snapshot())
+            save_state(state)
         candidate["profiles_opened"] = True  # the new Chrome opens them as soon as it starts
-        deploy()
+        deploy()  # idempotent: a resumed run re-applies the same main
         advance(state, "deployed", candidate=candidate)
         verify_production(candidate, simulate)
     except (GateFailure, RuntimeError, subprocess.TimeoutExpired) as exc:

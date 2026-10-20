@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+import unittest.mock
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location(
@@ -165,6 +166,22 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual([update.resume_action(p) for p in ("canary", "deploying", "verifying", "rolling-back",
                                                              "rollback-failed")],
                          ["start", "deploy", "deploy", "rollback", "halt"])
+
+
+    def test_resumed_deploy_keeps_the_pre_update_snapshot_and_cookie_baseline(self):
+        """Catches a resumed promotion replacing the rollback snapshot with already-migrated profiles."""
+        candidate = {"snapshot": "/srv/.ghostship-snapshots/agent-desktop-first", "pre_cookies": {"a.com": 3},
+                     "summary": "chrome", "tag": "t", "updates": ["chrome"]}
+        state = {"phase": "deploying", "candidate": candidate, "rejected": {}, "history": []}
+        with patch.object(update, "take_snapshot", side_effect=AssertionError("snapshot retaken")), \
+                patch.object(update, "production_cookie_counts", side_effect=AssertionError("baseline retaken")), \
+                patch.object(update, "drain"), patch.object(update, "deploy"), \
+                patch.object(update, "verify_production"), patch.object(update, "write_baseline"), \
+                patch.object(update, "save_state"), patch.object(update, "record"):
+            update.deploy_and_verify(state, unittest.mock.Mock(), None)
+        self.assertEqual(candidate["snapshot"], "/srv/.ghostship-snapshots/agent-desktop-first")
+        self.assertEqual(candidate["pre_cookies"], {"a.com": 3})
+        self.assertEqual(state["phase"], "idle")
 
 
 class CommitTests(unittest.TestCase):
