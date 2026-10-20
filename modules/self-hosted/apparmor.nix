@@ -188,7 +188,8 @@ in
           StateDirectory = "ghostship-apparmor-review";
           StateDirectoryMode = "0700";
           UMask = "0077";
-          TimeoutStartSec = "5min";
+          # One bounded journal read per profiled container.
+          TimeoutStartSec = "15min";
         };
       };
     }

@@ -212,6 +212,23 @@ class Collection(unittest.TestCase):
         self.assertFalse(review.status(entry, 8 * DAY)["ready"])
         self.assertIn("audit-collection-failed", entry["reasons"])
 
+    def test_only_audit_ratelimits_count_as_loss(self):
+        for message in ("audit: 12 callbacks suppressed", "kauditd_printk_skb: 3 callbacks suppressed",
+                        "Suppressed 40 messages from plex.service"):
+            self.assertTrue(review.AUDIT_LOSS.search(message), message)
+        for message in ("rpc_check_timeout: 8 callbacks suppressed", "call_decode: 7 callbacks suppressed"):
+            self.assertFalse(review.AUDIT_LOSS.search(message), message)
+
+    def test_journal_reads_only_apparmor_audit_records(self):
+        with patch.object(review, "run", return_value="") as run:
+            review.journal(1, 2)
+        args, timeout = run.call_args[0][0], run.call_args[1]["timeout"]
+        audit = args[args.index("_TRANSPORT=audit"):args.index("+")]
+        self.assertEqual(audit, ["_TRANSPORT=audit", *review.APPARMOR_TYPES])
+        self.assertIn("_AUDIT_TYPE=1400", audit)
+        self.assertIn("_TRANSPORT=kernel", args)
+        self.assertGreater(timeout, 20)
+
     def test_kernel_lost_counter_resets_even_without_loss_log(self):
         state = review.advance(week(), {**GOOD, "audit_lost": 2}, [], 9 * DAY, True)
         self.assertIsNone(state["coverage_start"])
