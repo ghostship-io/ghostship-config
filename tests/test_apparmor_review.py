@@ -73,6 +73,13 @@ class Coverage(unittest.TestCase):
             self.assertEqual(state["coverage_start"], 9 * DAY)
             self.assertFalse(review.status(state, 9 * DAY)["ready"])
 
+    def test_unrelated_profile_changes_keep_coverage(self):
+        # Another profile changing renames the shared apparmor.d tree, not this policy.
+        state = review.advance(week(), {**GOOD, "source": "/nix/store/other-apparmor.d/ghostship-plex"},
+                               [], 9 * DAY, True)
+        self.assertEqual(state["coverage_start"], DAY)
+        self.assertTrue(review.status(state, 9 * DAY)["ready"])
+
     def test_clock_regression_resets(self):
         state = review.advance(week(), GOOD, [], 7 * DAY, True)
         self.assertIsNone(state["coverage_start"])
@@ -276,8 +283,9 @@ class FilesAndCLI(unittest.TestCase):
 
 
     def run_cli(self, directory, *extra):
-        config = directory / "config.json"
-        config.write_text(json.dumps(CONFIG))
+        config = directory / "c.json"
+        if not config.exists():
+            config.write_text(json.dumps(CONFIG))
         original_stat = Path.stat
         def root_stat(path, **kwargs):
             parts = list(original_stat(path, **kwargs))
@@ -287,6 +295,22 @@ class FilesAndCLI(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()) as output, contextlib.redirect_stderr(io.StringIO()):
             code = review.main(["--config", str(config), "--state-dir", str(directory), *extra])
         return code, output.getvalue()
+
+    def test_report_flags_policy_content_not_tree_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            policy = directory / "ghostship-plex"
+            policy.write_text("profile ghostship-plex {}")
+            state = review.advance(week(), {**GOOD, "policy_hash": review.policy_hash(policy)}, [], 9 * DAY, True)
+            review.write_state(directory, {"schema_version": 1, "containers": {"plex": state}})
+            config = {"containers": {"plex": {**CONFIG["containers"]["plex"], "source": str(policy)}}}
+            (directory / "c.json").write_text(json.dumps(config))
+            def report():
+                _, output = self.run_cli(directory, "--report-only")
+                return json.loads(output)["containers"]["plex"]["reasons"]
+            self.assertNotIn("configuration-mismatch", report())
+            policy.write_text("profile ghostship-plex { capability, }")
+            self.assertIn("configuration-mismatch", report())
 
     def test_group_review_clears_only_matching_events(self):
         curl = ('apparmor="ALLOWED" operation="open" profile="ghostship-plex//null-/usr/bin/curl" '
