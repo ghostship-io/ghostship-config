@@ -129,6 +129,9 @@ in
       AUTO_GPU = "false";
       # Let run-chrome stop Chrome cleanly (cookie and storage flush) when
       # the container stops; s6 kills services after 3 s by default.
+      # The agent viewer verifies the Cloudflare Access token on every request.
+      VIEWER_ACCESS_TEAM = "ghostshipio.cloudflareaccess.com";
+      VIEWER_ACCESS_AUD = "b90856384c6d4120cf5e5905b41cf2aa0655b675f48524237be1068f8fffb276";
       S6_SERVICES_GRACETIME = "30000";
       S6_KILL_GRACETIME = "5000";
     };

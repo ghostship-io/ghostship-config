@@ -258,7 +258,11 @@ identity, for example to sign in to a site from a phone.
 
 The viewer (`viewer/server.py`, s6 `svc-agent-desktop-viewer`, 127.0.0.1:7090
 behind the Selkies nginx) streams pages with DevTools screencasts and never
-enables the Runtime domain. It runs confined by the `ghostship-desktop-viewer`
+enables the Runtime domain. Every request must carry a valid Cloudflare Access
+token (`Cf-Access-Jwt-Assertion`, verified against the team's signing keys and
+the applications' AUD), so peers on the container network cannot use it. Before
+a person's first input, the viewer waits for the agent's in-flight action to
+finish (`runs/busy/<targetId>`, kept by the gate). It runs confined by the `ghostship-desktop-viewer`
 AppArmor profile (`modules/self-hosted/agent-desktop-apparmor.profile`): it
 can read its code and the run registry and write pause/state markers, nothing
 else, and refuses to start unconfined. Browser UI outside the page (native
