@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.152] - 2026-10-20
+
+- Concurrent agents on one signed-in Chrome. Each identity's Chrome now runs in its own browser stage: a Sway compositor with a virtual 1920x1080 output, virtual mouse and keyboard, and no automatic focus changes. Agents drive their own windows with target-scoped input, never stealing focus from each other or from a person on the desktop. Measured: 30,000+ barrier-synchronised ops at 8 and 16 agents, and a 2 h soak, with zero cross-talk. Browser fingerprint, CDP detection and bot-check results match the previous desktop. Logins stay in one authoritative profile per identity, with no replication.
+- Agent viewer at `https://desktop.ghostship.io/agents/`: mobile-first cards per agent window (label, identity, harness/model, T3 thread, current action, live preview). Tapping a card opens that agent's live view; any touch pauses only that agent (`bladebro-gate` refuses its page-changing calls) until Resume. It verifies the Cloudflare Access token on every request and runs under a new enforce-mode AppArmor profile (`ghostship-desktop-viewer`). The desktop now resizes to the client's screen.
+- Browser sessions survive restarts: Chrome is closed through DevTools before the container stops (it previously lost cookies written in its last ~30 s).
+- Automatic desktop updates: `ghostship-agent-desktop-update` gates signed Chrome stable, checksummed Bladebro and the webtop digest in lab canaries (concurrency, CDP detection, bot checks, fingerprint parity, profile compatibility on network-less snapshot copies). It then commits `containers/agent-desktop/versions.json`, drains, snapshots, deploys and verifies, rolling back with profile restore on failure, and reports to NTFY. Retailer sites are never part of automated tests.
+
 ## [3.15.153] - 2026-10-20
 
 - Stop the inference scheduler by signalling its container process and waiting for the scheduler and its Podman attachment to exit. Orderly configuration switches no longer kill the attachment and report a false service failure; genuine nonzero scheduler exits still fail. Shutdown uses pinned process identities and leaves unrelated container processes alone.
