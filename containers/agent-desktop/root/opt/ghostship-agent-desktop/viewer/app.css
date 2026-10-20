@@ -122,3 +122,12 @@ dialog input { width: 100%; background: var(--bg); color: var(--text); border: 1
 @media (min-width: 900px) {
   .btn.icon { min-width: 32px; }
 }
+
+/* Browsers | Desktop mode switch and the embedded Selkies desktop */
+.modes { display: flex; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 2px; }
+.mode { padding: 6px 12px; border-radius: 7px; color: var(--muted); text-decoration: none; font-weight: 600;
+  min-height: 32px; display: flex; align-items: center; touch-action: manipulation; }
+.mode.on { background: var(--panel-2); color: var(--text); }
+#desktop-view { position: fixed; inset: 0; display: flex; flex-direction: column; }
+#desktop-head { padding-top: calc(6px + var(--sat)); padding-bottom: 6px; }
+#desktop-frame { flex: 1; min-height: 0; width: 100%; border: 0; background: #000; display: block; }

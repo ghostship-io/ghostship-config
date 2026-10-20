@@ -210,7 +210,26 @@ async function newRun(identity) {
 // ---------------------------------------------------------------- routing
 function route() {
   const m = /^#run=([A-Za-z0-9_-]{1,64})$/.exec(location.hash);
-  if (m) showRun(m[1]); else showGrid();
+  if (location.hash !== "#desktop") hideDesktop();
+  if (m) showRun(m[1]); else if (location.hash === "#desktop") showDesktop(); else showGrid();
+}
+// Desktop mode embeds Selkies from the site root. nginx serves Selkies there
+// to frames and sends top-level visits here, so this page is the one entry.
+// Leaving the mode unloads the frame, which ends the Selkies stream.
+const DESKTOP_URL = "../";
+function showDesktop() {
+  S.current = null; S.detail = null;
+  closeStream();
+  setKeyboard(false);
+  $("grid-view").hidden = true; $("agent-view").hidden = true; $("desktop-view").hidden = false;
+  const frame = $("desktop-frame");
+  if (!frame.getAttribute("src")) frame.src = DESKTOP_URL;
+  frame.focus();
+}
+function hideDesktop() {
+  if ($("desktop-view").hidden) return;
+  $("desktop-view").hidden = true;
+  $("desktop-frame").removeAttribute("src");
 }
 function openRun(id) { location.hash = `run=${id}`; }
 function showGrid() {

@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.159] - 2026-10-20
+
+- Agent desktop: one web UI. `desktop.ghostship.io` opens the viewer with a **Browsers | Desktop** switch; Desktop mode embeds Selkies, which nginx still serves at `/` to frames and health checks, and leaving it ends the stream. nginx redirects are now relative: `/agents` no longer redirects to `http://desktop.ghostship.io:3000/agents/`.
+
 ## [3.15.158] - 2026-10-20
 
 - Every AppArmor profile now runs in complain (learning) mode: `ghostship-container-default` (the 25 containers without their own profile), `ghostship-agent-desktop` and `ghostship-desktop-viewer` move from enforce. Explicit `deny` rules still apply in complain mode, so Podman's baseline denials (mount, `/proc` and `/sys` writes, kernel security files) and the viewer's denials of Chrome profiles, SSH keys and container secrets stay in force. Per-service strict profiles replace the shared default next (#102).
