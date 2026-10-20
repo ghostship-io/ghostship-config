@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.164] - 2026-10-20
+
+- AppArmor fixes from the first deploy of the strict profiles (#140). In complain mode an exec with no matching rule enters an empty `null-<path>` learning profile, and its whole subtree then runs ruleless.
+  - Inside a child profile, `cx -> name` names a child of that child, not a sibling. So FlareSolverr's and Tdarr's sibling transitions now use `px -> ghostship-<container>//<name>`.
+  - Tdarr's startup gets `s6-envuidgid`.
+  - Grimmory's JVM may re-exec `java`.
+
 ## [3.15.163] - 2026-10-20
 
 - Every container except T3 now has its own strict AppArmor profile in complain mode (user direction: no broad policy).

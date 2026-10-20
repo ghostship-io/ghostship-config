@@ -59,7 +59,8 @@ profile ghostship-grimmory flags=(complain,attach_disconnected,mediate_deleted) 
   profile server flags=(complain,attach_disconnected,mediate_deleted) {
     # JVM: image runtime and jar read-only; app data, libraries and bookdrop
     # are managed by the app (imports, moves, metadata writes, covers).
-    @{grim_jdk}/bin/java mr,
+    # The launcher re-executes java once (observed 2026-10-20: server//null-java).
+    @{grim_jdk}/bin/java rmix,
     /lib/ld-musl-aarch64.so.1 mr,
     @{grim_jdk}/lib/server/libjvm.so mr,
     # Observed mappings plus the AWT font/imaging and FFM lookup libraries
