@@ -14,7 +14,7 @@ Usage:
   app-session close <session-id> [--force] | close-all
   app-session info <session-id>
   app-session frame <session-id> [--max-edge N] [--quality Q] [--out FILE]
-  app-session input <session-id> --actions JSON
+  app-session input <session-id> --actions JSON|-     (- reads the actions from stdin)
 
 Every command prints one JSON object. Agent input waits for nothing: when a
 person has paused the session (touch in the viewer), it fails with "paused".
@@ -335,8 +335,9 @@ class Session:
             self.input.button(button, False)
             time.sleep(0.06)
 
-    def _wtype(self, args: list[str]) -> None:
-        proc = subprocess.run(["wtype", *args], capture_output=True, timeout=30, env=self.env)
+    def _wtype(self, args: list[str], text: str | None = None) -> None:
+        proc = subprocess.run(["wtype", *args], input=text.encode() if text is not None else None,
+                              capture_output=True, timeout=30, env=self.env)
         if proc.returncode:
             raise AppError("unavailable", "keyboard input failed")
 
@@ -407,7 +408,7 @@ class Session:
             text = action.get("text")
             if not isinstance(text, str) or not text or len(text) > 4000:
                 raise ValueError("type needs text (1-4000 characters)")
-            self._wtype(["-d", "8", "--", text])
+            self._wtype(["-d", "8", "-"], text)  # stdin: typed text may be private, never argv
         elif kind == "wait":
             time.sleep(min(max(float(action.get("duration", 1)), 0), 10))
         elif kind == "cursor_position":
@@ -686,7 +687,7 @@ def main(argv=None) -> int:
     frame_cmd.add_argument("--out")
     input_cmd = sub.add_parser("input")
     input_cmd.add_argument("session_id")
-    input_cmd.add_argument("--actions", required=True)
+    input_cmd.add_argument("--actions", required=True, help="JSON array, or - to read it from stdin (keeps typed text out of argv)")
     args = parser.parse_args(argv)
     if args.op == "supervise":
         return asyncio.run(supervise())
@@ -720,7 +721,7 @@ def main(argv=None) -> int:
                         handle.write(base64.b64decode(result.pop("jpeg")))
                     result["file"] = args.out
             else:
-                actions = json.loads(args.actions)
+                actions = json.loads(sys.stdin.read() if args.actions == "-" else args.actions)
                 result = call(sock, {"op": "input", "actor": "agent", "actions": actions}, timeout=600)
         result.pop("ok", None)
         print(json.dumps({"ok": True, "result": result}, separators=(",", ":")))
