@@ -1,7 +1,8 @@
-"""Load-bearing checks for the agent viewer: input mapping, pause/busy protocol, Access JWT auth."""
+"""Load-bearing checks for the agent viewer: input mapping, pause/busy protocol, Chrome start, Access JWT auth."""
 import base64
 import hashlib
 import json
+import asyncio
 import secrets
 import os
 import sys
@@ -117,6 +118,45 @@ class TakeoverBusyTest(unittest.TestCase):
             self.assertEqual(server.takeover_decision(runs, members, None, now), "go")
             with self.assertRaises(ValueError):
                 server.takeover_decision(runs, ["../paused"], None, now)
+
+
+class EnsureBrowserTest(unittest.TestCase):
+    class FakeBrowser:
+        identity = "personal"
+
+        def __init__(self):
+            self.wake = asyncio.Event()
+            self.starting = asyncio.Lock()
+
+        def alive(self):
+            return self.wake.is_set()  # connects once the reconnect loop is woken
+
+    def _ensure(self, script: str):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "chrome-ensure")
+            with open(path, "w") as handle:
+                handle.write(f"#!/bin/sh\necho \"$1\" >> {tmp}/calls\n{script}\n")
+            os.chmod(path, 0o755)
+            server.CHROME_ENSURE = path
+            browser = self.FakeBrowser()
+
+            async def twice():
+                return await asyncio.gather(server.App.ensure_browser(None, browser),
+                                            server.App.ensure_browser(None, browser), return_exceptions=True)
+            results = asyncio.run(twice())
+            calls = open(os.path.join(tmp, "calls")).read().split() if os.path.exists(os.path.join(tmp, "calls")) else []
+            return results, calls
+
+    def test_new_window_starts_a_stopped_browser_once(self):
+        """Catches '+ Personal' failing with 'browser stopped' after the idle stop, or racing two starts."""
+        results, calls = self._ensure("exit 0")
+        self.assertEqual(results, [None, None])
+        self.assertEqual(calls, ["personal"])
+
+    def test_failed_start_is_reported(self):
+        """Catches a failed chrome-ensure being treated as a started browser."""
+        results, _ = self._ensure("echo no >&2; exit 1")
+        self.assertTrue(all(isinstance(r, server.HttpError) and r.status == 503 for r in results))
 
 
 def _b64(data: bytes) -> str:

@@ -103,7 +103,7 @@ function renderBanner() {
   const b = $("banner");
   if (!b.hidden && toast.t) return;
   b.hidden = stopped.length === 0;
-  b.textContent = stopped.length ? `Browser stopped: ${stopped.join(", ")} (it starts on demand when an agent needs it)` : "";
+  b.textContent = stopped.length ? `Browser stopped: ${stopped.join(", ")} (it starts when an agent or + opens a window)` : "";
 }
 
 function renderGrid() {

@@ -14,6 +14,7 @@ profile ghostship-agent-desktop flags=(attach_disconnected,mediate_deleted) {
   signal (receive) peer=unconfined,
   signal (send,receive) peer=ghostship-agent-desktop,
   signal (send) peer=ghostship-desktop-viewer,
+  signal (receive) peer=ghostship-desktop-viewer,
   signal (receive) peer={/usr/bin/,/usr/sbin/,}runc,
   signal (receive) peer={/usr/bin/,/usr/sbin/,}crun*,
   signal (receive) peer={/usr/bin/,/usr/sbin/,}podman,
@@ -45,7 +46,10 @@ profile ghostship-agent-desktop flags=(attach_disconnected,mediate_deleted) {
 # The desktop viewer (/agents/ behind Cloudflare Access): a Python server that
 # relays agent browser windows over loopback DevTools. It may read its own
 # code and the run registry, write pause and activity markers there, and use
-# the network (loopback DevTools; Cloudflare Access signing keys over HTTPS). Browser profiles, SSH keys, secrets and every executable are denied.
+# the network (loopback DevTools; Cloudflare Access signing keys over HTTPS),
+# and start an idle-stopped Chrome through chrome-ensure, which runs under the
+# container profile with a scrubbed environment. Browser profiles, SSH keys,
+# secrets and every other executable are denied.
 profile ghostship-desktop-viewer flags=(attach_disconnected,mediate_deleted) {
   include <abstractions/base>
 
@@ -82,6 +86,8 @@ profile ghostship-desktop-viewer flags=(attach_disconnected,mediate_deleted) {
   /opt/ghostship-agent-desktop/tools/cdp_ws.py r,
   /opt/ghostship-agent-desktop/tools/__pycache__/** r,
 
+  /opt/ghostship-agent-desktop/chrome-ensure Px -> ghostship-agent-desktop,
+
   /config/agent-desktop/runs/ rw,
   /config/agent-desktop/runs/** rwk,
 
@@ -94,5 +100,6 @@ profile ghostship-desktop-viewer flags=(attach_disconnected,mediate_deleted) {
   deny ptrace,
 
   signal (receive) peer=ghostship-agent-desktop,
+  signal (send) peer=ghostship-agent-desktop,
   signal (receive) peer=unconfined,
 }
