@@ -51,9 +51,9 @@
       NZBGET_PASS = "";
     };
     volumes = [
-      "/srv/apps/nzbget:/config"
-      "/srv/apps/nzbget/scripts:/scripts"
-      "/mnt/share/Downloads:/downloads"
+      "/srv/apps/nzbget:/config:rw,noexec,nosuid,nodev"
+      "/srv/apps/nzbget/scripts:/scripts:rw,noexec,nosuid,nodev"
+      "/mnt/share/Downloads:/downloads:rw,noexec,nosuid,nodev"
     ];
   };
 

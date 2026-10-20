@@ -376,7 +376,7 @@ in
           S6_BEHAVIOUR_IF_STAGE2_FAILS = "2";
         };
         volumes = [
-          "/srv/apps/muximux:/config:rw"
+          "/srv/apps/muximux:/config:rw,noexec,nosuid,nodev"
           "${muximuxWriterInit}:/etc/cont-init.d/50-ghostship-writer:ro"
           "${./muximux-patch-writer.php}:/run/ghostship/muximux-patch-writer.php:ro"
           "${./muximux-save-config.php}:/run/ghostship/muximux-save-config.php:ro"

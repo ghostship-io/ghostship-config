@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.15.166] - 2026-10-20
+
+- Kernel-enforced execution limits for containers (`container-hardening.nix`), so a compromised app can't run code it writes. AppArmor is still learning in complain mode and blocks nothing.
+  - **Data volumes:** every writable data volume is mounted `noexec,nosuid,nodev`. That covers configs, media, downloads, databases and state for all containers except Plex, the agent desktop and T3.
+  - **Temporary storage:** `/tmp` and `/var/tmp` are size-capped `noexec,nosuid,nodev` tmpfs. RomM gets a disk-backed noexec `/tmp` for multi-GB uploads. Grimmory keeps an executable `/tmp` because pdfium4j maps `libpdfium.so` from there.
+  - **Capabilities:** every container drops ALL and adds back only what its strict profile lists. Most get none; root-started LinuxServer images keep chown, dac_override, fowner, kill, setgid and setuid; Gluetun keeps net_admin and net_bind_service. So a setuid binary in an image can't regain capabilities.
+  - **Why the exceptions:** a live scan found code executing from writable paths only in Plex's downloaded codecs, Grimmory's `/tmp` pdfium and the agent desktop's OrcaSlicer. Plex and the agent desktop follow separately.
+  - **Impact:** NZBGet's `/scripts` is now noexec. No extension is configured; enabling one later needs an explicit exception.
+
 ## [3.15.165] - 2026-10-20
 
 - Agent desktop AppArmor: the Chrome launchers may execute `with-contenv`, `s6-envuidgid`, `s6-applyuidgid`, and the root-owned `run-chrome`, `chrome-close` and `ghostship-chrome-instance` scripts. Before, these were read-only, so agent Chrome and its subtree ran in ruleless `null-*` learning profiles (about 100k events a minute).

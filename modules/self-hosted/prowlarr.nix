@@ -45,7 +45,7 @@ in
       TZ = "UTC";
     };
     volumes = [
-      "/srv/apps/prowlarr:/config:rw"
+      "/srv/apps/prowlarr:/config:rw,noexec,nosuid,nodev"
     ];
   };
 

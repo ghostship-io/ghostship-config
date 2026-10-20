@@ -292,15 +292,15 @@ in
       cronPluginUpdate = "";
     };
     volumes = [
-      "/srv/apps/tdarr/server:/app/server"
-      "/srv/apps/tdarr/configs:/app/configs"
-      "/srv/apps/tdarr/logs:/app/logs"
-      "/srv/apps/tdarr/cache:/temp"
-      "/srv/apps/tdarr/pilot:/media"
+      "/srv/apps/tdarr/server:/app/server:rw,noexec,nosuid,nodev"
+      "/srv/apps/tdarr/configs:/app/configs:rw,noexec,nosuid,nodev"
+      "/srv/apps/tdarr/logs:/app/logs:rw,noexec,nosuid,nodev"
+      "/srv/apps/tdarr/cache:/temp:rw,noexec,nosuid,nodev"
+      "/srv/apps/tdarr/pilot:/media:rw,noexec,nosuid,nodev"
       "/srv/apps/tdarr/policy:/policy:ro"
       "/nix/store:/nix/store:ro"
-      "/mnt/share/Library/Movies:/source/Movies"
-      "/mnt/share/Library/TV:/source/TV"
+      "/mnt/share/Library/Movies:/source/Movies:rw,noexec,nosuid,nodev"
+      "/mnt/share/Library/TV:/source/TV:rw,noexec,nosuid,nodev"
       "${./tdarr-plugins}:/app/server/Tdarr/Plugins/FlowPlugins/LocalFlowPlugins:ro"
       "${flowGet}:/bootstrap/flow-get.json:ro"
       "${flowInsert}:/bootstrap/flow-insert.json:ro"

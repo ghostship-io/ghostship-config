@@ -52,7 +52,7 @@ in
       PGID = "3000";
     };
     volumes = [
-      "/srv/apps/tautulli:/config"
+      "/srv/apps/tautulli:/config:rw,noexec,nosuid,nodev"
       "/srv/apps/plex/Library/Application Support/Plex Media Server/Logs:/logs:ro"
     ];
   };

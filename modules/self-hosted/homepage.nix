@@ -53,7 +53,7 @@ in
       HOMEPAGE_SKIP_METADATA = "true";
     };
     volumes = [
-      "/srv/apps/homepage:/app/config:rw"
+      "/srv/apps/homepage:/app/config:rw,noexec,nosuid,nodev"
       "/run/homepage-podman-broker:/run/homepage-podman-broker:ro"
       "/sys/class/net:/sys/class/net:ro"
       "/sys/devices/platform:/sys/devices/platform:ro"

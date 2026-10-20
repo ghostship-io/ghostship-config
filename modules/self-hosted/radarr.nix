@@ -45,9 +45,9 @@ in
       TZ = "UTC";
     };
     volumes = [
-      "/srv/apps/radarr:/config:rw"
-      "/mnt/share/Downloads:/downloads:rw"
-      "/mnt/share/Library/Movies:/movies:rw"
+      "/srv/apps/radarr:/config:rw,noexec,nosuid,nodev"
+      "/mnt/share/Downloads:/downloads:rw,noexec,nosuid,nodev"
+      "/mnt/share/Library/Movies:/movies:rw,noexec,nosuid,nodev"
     ];
   };
 
