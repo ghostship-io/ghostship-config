@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.152] - 2026-10-20
+
+- Allow the private integrations container 110 seconds to stop, covering its supervisor's 100-second worker drain and descendant reaping. Allow systemd 130 seconds for the stop and cleanup. Podman's default 10-second timeout could kill the supervisor during a deployment and report exit 137.
+
 ## [3.15.151] - 2026-10-20
 
 - Pin ghostship-agent 0.28.0 at `ea17d445` (MCP connector review). `t3_task` op `submit` now accepts the model options that `t3` op `capabilities` lists, for example `{"effort": "high"}`, plus a `runtime_mode`. It checks both against the live catalog and reports the selection it used and the thread `url`, falling back to a deep link if the link lookup fails. Capabilities lists options compactly and can be filtered by `instance_id`. Errors for invalid arguments now name the argument and the limit it broke. Filesystem denials list the allowed roots and the container paths that map into them. `browser_op` `extract` accepts a `selector` and fails when given neither `js` nor `selector`, instead of returning null. Only the `ghostship-private-integrations` MCP runtime changes behavior.
