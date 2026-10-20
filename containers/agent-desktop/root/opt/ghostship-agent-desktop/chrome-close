@@ -1,0 +1,30 @@
+#!/usr/bin/python3 -I
+"""Close the Chrome listening on DevTools port <port> the way a person would.
+
+Usage: chrome-close <port>
+
+Browser.close runs Chrome's normal shutdown, which writes pending cookies and
+site storage to the profile. SIGTERM does not: a sign-in from the last ~30 s
+is lost. Exits 0 once the close was accepted (or Chrome was already gone).
+"""
+import asyncio
+import sys
+
+sys.path.insert(0, "/opt/ghostship-agent-desktop/tools")
+from cdp_ws import Cdp, CdpError  # noqa: E402
+
+
+async def close(port: int) -> int:
+    try:
+        cdp = await asyncio.wait_for(Cdp.connect(port), 5)
+    except (OSError, asyncio.TimeoutError, CdpError):
+        return 0
+    try:
+        await cdp.send("Browser.close", {}, timeout=5)
+    except (CdpError, asyncio.TimeoutError):
+        pass  # the connection drops as Chrome exits
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(asyncio.run(close(int(sys.argv[1]))))

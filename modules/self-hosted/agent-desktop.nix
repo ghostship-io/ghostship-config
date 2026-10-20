@@ -12,8 +12,17 @@ let
     path = ../../containers/agent-desktop;
     name = "ghostship-agent-desktop-context";
   };
-  containers-hash = builtins.substring 11 12 containers-root;
-  agent-desktop-image = "localhost/ghostship-agent-desktop:${containers-hash}";
+  agent-desktop-image = import ./agent-desktop-image-tag.nix { path = ../../containers/agent-desktop; };
+  versions = builtins.fromJSON (builtins.readFile ../../containers/agent-desktop/versions.json);
+  build-args = lib.escapeShellArgs [
+    "--build-arg=BASE_IMAGE=${versions.base.image}@${versions.base.digest}"
+    "--build-arg=CHROME_VERSION=${versions.chrome.version}"
+    "--build-arg=CHROME_SHA256_ARM64=${versions.chrome.sha256.arm64}"
+    "--build-arg=CHROME_SHA256_AMD64=${versions.chrome.sha256.amd64}"
+    "--build-arg=BLADEBRO_VERSION=${versions.bladebro.version}"
+    "--build-arg=BLADEBRO_SHA256_ARM64=${versions.bladebro.sha256.arm64}"
+    "--build-arg=BLADEBRO_SHA256_AMD64=${versions.bladebro.sha256.amd64}"
+  ];
   agent-desktop-image-build = pkgs.writeShellScriptBin "ghostship-build-agent-desktop-image" ''
     set -eu
 
@@ -24,6 +33,7 @@ let
 
     ${pkgs.podman}/bin/podman build \
       --pull=always \
+      ${build-args} \
       --tag "$image" \
       --file ${containers-root}/Containerfile \
       ${containers-root}
@@ -80,6 +90,8 @@ in
     order = 111;
     hostname = "desktop.ghostship.io";
     origin = "http://agent-desktop:3000";
+    # The desktop serves the agent viewer (/agents/); see the profile file.
+    apparmorProfile = "ghostship-agent-desktop";
     healthPath = "/";
     muximux = {
       icon = "muximux-desktop";
@@ -101,10 +113,9 @@ in
       TITLE = "Ghostship Desktop";
       START_DOCKER = "false";
       PELORUS = "true";
-      SELKIES_MANUAL_WIDTH = "1600";
-      SELKIES_MANUAL_HEIGHT = "900";
-      SELKIES_MANUAL_RESOLUTION = "true";
-      SELKIES_ENABLE_RESIZE = "false";
+      # Agents work in their browser stages, not on this desktop, so the
+      # desktop follows the client's screen (phones included).
+      SELKIES_ENABLE_RESIZE = "true";
       SELKIES_FRAMERATE = "30-30";
       SELKIES_AUDIO_ENABLED = "true";
       SELKIES_AUDIO_ON_START = "false";
@@ -116,6 +127,13 @@ in
       SELKIES_VIDEO_STREAMING_MODE = "false";
       SELKIES_USE_CPU = "true";
       AUTO_GPU = "false";
+      # Let run-chrome stop Chrome cleanly (cookie and storage flush) when
+      # the container stops; s6 kills services after 3 s by default.
+      # The agent viewer verifies the Cloudflare Access token on every request.
+      VIEWER_ACCESS_TEAM = "ghostshipio.cloudflareaccess.com";
+      VIEWER_ACCESS_AUD = "b90856384c6d4120cf5e5905b41cf2aa0655b675f48524237be1068f8fffb276"; # gitleaks:allow -- public Access audience tag, carried in every Access JWT
+      S6_SERVICES_GRACETIME = "30000";
+      S6_KILL_GRACETIME = "5000";
     };
     environmentFiles = [ agent-desktop-env ];
     volumes = [
@@ -134,7 +152,15 @@ in
       "--health-retries=5"
       "--health-start-period=3m"
       "--health-on-failure=kill"
+      # Chrome flushes cookies and site storage on a clean exit; give s6
+      # and run-chrome time to stop it before Podman kills the container.
+      "--stop-timeout=60"
     ];
+  };
+
+  security.apparmor.policies.ghostship-agent-desktop = {
+    state = "enforce";
+    profile = builtins.readFile ./agent-desktop-apparmor.profile;
   };
 
   systemd.services.init-agent-desktop-net = {
@@ -160,6 +186,11 @@ in
     requires = [ "init-agent-desktop-net.service" ];
     preStart = lib.mkBefore ''
       ${agent-desktop-image-build}/bin/ghostship-build-agent-desktop-image
+    '';
+    # Save browser sessions before the container stops: Chrome loses cookies
+    # written in its last ~30 s unless it shuts down normally.
+    preStop = lib.mkBefore ''
+      ${pkgs.podman}/bin/podman exec agent-desktop /opt/ghostship-agent-desktop/chrome-stop-all || true
     '';
   };
 

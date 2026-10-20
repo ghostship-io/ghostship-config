@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#0f1115">
+<meta name="referrer" content="no-referrer">
+<title>Agents · Ghostship</title>
+<link rel="stylesheet" href="app.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<section id="grid-view">
+  <header class="bar">
+    <h1>Agents</h1>
+    <span id="browsers" class="muted"></span>
+    <span class="grow"></span>
+    <button type="button" class="btn" id="new-personal" title="Open a window in the Personal browser">+ Personal</button>
+    <button type="button" class="btn" id="new-agent" title="Open a window in the Agent browser">+ Agent</button>
+  </header>
+  <div id="banner" class="banner" hidden></div>
+  <main id="grid"></main>
+  <p id="empty" class="muted center" hidden>No agent windows are open.</p>
+</section>
+
+<section id="agent-view" hidden>
+  <header class="bar" id="agent-head">
+    <button type="button" class="btn icon" id="to-grid" aria-label="All agents">&#9776;</button>
+    <button type="button" class="btn icon" id="prev-run" aria-label="Previous agent">&#8249;</button>
+    <div class="title-block">
+      <div id="run-title" class="run-title"></div>
+      <div id="run-sub" class="run-sub muted"></div>
+    </div>
+    <button type="button" class="btn icon" id="next-run" aria-label="Next agent">&#8250;</button>
+    <button type="button" class="btn pause" id="pause-btn">Pause</button>
+  </header>
+  <div id="run-state" class="state-line muted"></div>
+  <div class="tabrow">
+    <button type="button" class="btn icon compact-only" id="nav-back-compact" aria-label="Back">&#8592;</button>
+    <nav id="tabs" class="tabs" aria-label="Tabs"></nav>
+    <button type="button" class="btn compact-only" id="url-toggle" aria-label="Show address bar">URL</button>
+  </div>
+  <form id="urlbar" class="urlbar" autocomplete="off">
+    <button type="button" class="btn icon" id="nav-back" aria-label="Back">&#8592;</button>
+    <button type="button" class="btn icon" id="nav-forward" aria-label="Forward">&#8594;</button>
+    <button type="button" class="btn icon" id="nav-reload" aria-label="Reload">&#8635;</button>
+    <input id="url" type="url" inputmode="url" spellcheck="false" autocapitalize="off" placeholder="Enter a URL">
+    <button type="submit" class="btn">Go</button>
+  </form>
+  <div id="stage" tabindex="0" aria-label="Agent browser screen">
+    <div id="layer"><img id="screen" alt=""></div>
+    <div id="stage-msg" class="stage-msg">Connecting…</div>
+    <div id="notice" class="notice" hidden></div>
+  </div>
+  <div id="kbd-bar" class="kbd-bar" hidden>
+    <textarea id="kbd-input" rows="1" autocapitalize="off" autocomplete="off" spellcheck="false" aria-label="Type into the page"></textarea>
+    <div class="keys">
+      <button type="button" class="btn key" data-key="Escape">Esc</button>
+      <button type="button" class="btn key" data-key="Tab">Tab</button>
+      <button type="button" class="btn key" data-key="ArrowLeft">&#8592;</button>
+      <button type="button" class="btn key" data-key="ArrowUp">&#8593;</button>
+      <button type="button" class="btn key" data-key="ArrowDown">&#8595;</button>
+      <button type="button" class="btn key" data-key="ArrowRight">&#8594;</button>
+      <button type="button" class="btn key" data-key="Backspace">&#9003;</button>
+      <button type="button" class="btn key" data-key="Enter">&#9166;</button>
+    </div>
+  </div>
+  <footer class="bar tools">
+    <button type="button" class="btn" id="kbd-btn">&#9000; Keyboard</button>
+    <button type="button" class="btn" id="mode-btn" title="Fit: whole page. Fill: page fills the height; pan with two fingers">Fill</button>
+    <button type="button" class="btn" id="zoom-reset" hidden>Reset zoom</button>
+    <span class="grow"></span>
+    <span id="conn" class="muted"></span>
+  </footer>
+</section>
+
+<dialog id="page-dialog">
+  <form method="dialog">
+    <p class="muted" id="dialog-origin"></p>
+    <p id="dialog-message" class="dialog-message"></p>
+    <input id="dialog-input" type="text" hidden>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="dialog-cancel">Cancel</button>
+      <button type="button" class="btn primary" id="dialog-ok">OK</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

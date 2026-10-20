@@ -1,0 +1,224 @@
+#!/usr/bin/python3 -I
+"""Stdio gate between an MCP client and ``bladebro mcp``.
+
+Usage: bladebro-gate <bladebro argv...>
+
+Bladebro binds each MCP process to one tab (``state``/``act`` switch-tab).
+While the desktop viewer has paused that tab's run (a file
+``/config/agent-desktop/runs/paused/<targetId>``), the gate answers every
+call that could change the page with a tool error instead of forwarding it,
+so a person using the viewer never fights the agent. Reads still pass.
+While a page-changing call is in flight it keeps ``runs/busy/<targetId>``
+fresh, so the viewer waits for the agent's current action to finish before a
+person's input goes in. After each forwarded call it records the tool, action
+and outcome (never arguments or page content) in ``runs/state/<targetId>.json``
+for the viewer.
+"""
+from __future__ import annotations
+
+import atexit
+import json
+import os
+import re
+import subprocess
+import sys
+import threading
+import time
+
+RUNS = os.environ.get("GHOSTSHIP_RUNS_DIR", "/config/agent-desktop/runs")
+TARGET = re.compile(r"[A-Za-z0-9]{1,64}")
+OPENED = re.compile(r"tab ([0-9A-Fa-f]{8,64})")
+BUSY_REFRESH = 10.0
+READ_ACTIONS = {"read", "wait"}
+READ_STATE_OPS = {"tabs", "cookies", "ls", "ss"}
+PAUSED = ("paused: the person is using this browser window in the desktop viewer; "
+          "wait for them to resume it, then retry")
+
+out_lock = threading.Lock()
+pending: dict[object, tuple[str, str | None, str | None, str | None, bool, bool]] = {}
+bound: list[str | None] = [None]
+busy: dict[str, int] = {}
+busy_lock = threading.Lock()
+
+
+def emit(line: str) -> None:
+    with out_lock:
+        sys.stdout.write(line if line.endswith("\n") else line + "\n")
+        sys.stdout.flush()
+
+
+def changes_page(name: str, arguments: dict) -> bool:
+    if name in ("see", "vision"):
+        return False
+    if name == "state":
+        return arguments.get("op") not in READ_STATE_OPS
+    if name == "act":
+        return arguments.get("action") not in READ_ACTIONS
+    return True
+
+
+def switch_target(name: str, arguments: dict) -> str | None:
+    if (name == "state" and arguments.get("op") == "switch-tab") or (
+            name == "act" and arguments.get("action") == "switch-tab"):
+        target = arguments.get("target_id")
+        if isinstance(target, str) and TARGET.fullmatch(target):
+            return target
+    return None
+
+
+def opens_tab(name: str, arguments: dict) -> bool:
+    return (name == "state" and arguments.get("op") == "open-tab") or (
+        name == "act" and arguments.get("action") == "open-tab")
+
+
+def paused(target: str | None) -> bool:
+    if not target:
+        return False
+    if os.path.exists(os.path.join(RUNS, "paused", target)):
+        return True
+    # open-tab may report a shortened id: match it as a prefix.
+    if len(target) < 32:
+        try:
+            return any(name.startswith(target) for name in os.listdir(os.path.join(RUNS, "paused")))
+        except OSError:
+            return False
+    return False
+
+
+def busy_path(target: str) -> str:
+    return os.path.join(RUNS, "busy", target)
+
+
+def mark_busy(target: str | None, delta: int) -> None:
+    if not target:
+        return
+    with busy_lock:
+        count = busy.get(target, 0) + delta
+        try:
+            if count > 0:
+                os.makedirs(os.path.join(RUNS, "busy"), mode=0o700, exist_ok=True)
+                with open(busy_path(target), "w", encoding="utf-8") as handle:
+                    handle.write(str(os.getpid()))
+                busy[target] = count
+            else:
+                busy.pop(target, None)
+                os.unlink(busy_path(target))
+        except OSError:
+            pass
+
+
+def refresh_busy() -> None:
+    while True:
+        time.sleep(BUSY_REFRESH)
+        with busy_lock:
+            for target in busy:
+                try:
+                    os.utime(busy_path(target))
+                except OSError:
+                    pass
+
+
+def clear_busy() -> None:
+    with busy_lock:
+        for target in list(busy):
+            try:
+                os.unlink(busy_path(target))
+            except OSError:
+                pass
+        busy.clear()
+
+
+def record(target: str | None, name: str, action: str | None, ok: bool) -> None:
+    if not target:
+        return
+    directory = os.path.join(RUNS, "state")
+    try:
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+        path = os.path.join(directory, f"{target}.json")
+        temporary = f"{path}.{os.getpid()}.tmp"
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump({"tool": name, "action": action, "at": int(time.time()), "ok": ok}, handle)
+        os.replace(temporary, path)
+    except OSError:
+        pass
+
+
+def client_to_child(child: subprocess.Popen) -> None:
+    for line in sys.stdin:
+        try:
+            message = json.loads(line)
+        except ValueError:
+            message = None
+        if isinstance(message, dict) and message.get("method") == "tools/call":
+            params = message.get("params") or {}
+            name = params.get("name") or ""
+            arguments = params.get("arguments") or {}
+            switch = switch_target(name, arguments)
+            target = switch or bound[0]
+            mutating = changes_page(name, arguments) and not switch
+            # Mark busy before checking the pause: the viewer writes the pause
+            # before checking busy, so one of the two always sees the other.
+            if mutating:
+                mark_busy(target, 1)
+            if mutating and paused(target):
+                mark_busy(target, -1)
+                emit(json.dumps({"jsonrpc": "2.0", "id": message.get("id"),
+                                 "result": {"isError": True, "content": [{"type": "text", "text": PAUSED}]}}))
+                continue
+            if "id" in message:
+                action = arguments.get("action") or arguments.get("op")
+                pending[message["id"]] = (name, action if isinstance(action, str) else None, switch, target,
+                                          mutating, opens_tab(name, arguments))
+            elif mutating:
+                mark_busy(target, -1)  # a notification gets no response to clear it
+        try:
+            child.stdin.write(line)
+            child.stdin.flush()
+        except (BrokenPipeError, ValueError):
+            break
+    try:
+        child.stdin.close()
+    except OSError:
+        pass
+
+
+def child_to_client(child: subprocess.Popen) -> None:
+    for line in child.stdout:
+        try:
+            message = json.loads(line)
+        except ValueError:
+            message = None
+        if isinstance(message, dict) and message.get("id") in pending:
+            name, action, switch, target, mutating, opened = pending.pop(message["id"])
+            ok = "error" not in message and not (message.get("result") or {}).get("isError")
+            if switch and ok:
+                bound[0] = switch
+            if opened and ok:
+                # open-tab binds Bladebro to the new tab without a switch-tab.
+                text = "".join(part.get("text", "") for part in (message.get("result") or {}).get("content", [])
+                               if isinstance(part, dict))
+                found = OPENED.search(text)
+                bound[0] = found.group(1) if found else None
+            if mutating:
+                mark_busy(target, -1)
+            record(bound[0], name, action, ok)
+        emit(line)
+
+
+def main() -> int:
+    if len(sys.argv) < 2:
+        print("usage: bladebro-gate <bladebro argv...>", file=sys.stderr)
+        return 2
+    atexit.register(clear_busy)
+    threading.Thread(target=refresh_busy, daemon=True).start()
+    child = subprocess.Popen(sys.argv[1:], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+    reader = threading.Thread(target=child_to_client, args=(child,), daemon=True)
+    reader.start()
+    client_to_child(child)
+    code = child.wait()
+    reader.join(5)
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
