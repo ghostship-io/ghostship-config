@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.155] - 2026-10-20
+
+- Agent desktop: BladeBro 4.2.2 -> 4.6.4 (canary-tested by ghostship-agent-desktop-update).
+
 ## [3.15.154] - 2026-10-20
 
 - Fixed `ghostship-agent-desktop-update` canaries: the update service now uses the host's configured podman. The plain package refused the canary's AppArmor profile ("AppArmor is not enabled"), so every candidate failed before testing.
