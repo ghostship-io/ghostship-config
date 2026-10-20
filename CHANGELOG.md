@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.161] - 2026-10-20
+
+- Agent viewer: every open session is a tab along the top (identity dot, label, × to close) instead of ‹ › stepping, and **+** opens a Personal or Agent window from there. Closing pauses the session, waits for an in-flight agent call, then closes its tabs (home last) and removes its registry entry; closing an agent's session asks first. Cards in the grid have a Close button too.
+
 ## [3.15.160] - 2026-10-20
 
 - Agent viewer: the address bar accepts a bare host such as `amazon.com` (it was a `type=url` field, so the browser demanded a scheme before the viewer could add `https://`).

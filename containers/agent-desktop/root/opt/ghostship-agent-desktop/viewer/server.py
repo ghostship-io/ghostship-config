@@ -1119,6 +1119,32 @@ class App:
                     raise HttpError(503, "browser started but is not reachable")
                 await asyncio.sleep(0.2)
 
+    async def close_run(self, browser: Browser, run: dict) -> dict:
+        """Close a session's window: pause it, let an in-flight agent call finish, close its tabs (home last).
+
+        An agent whose window is closed gets "window closed" on its next call.
+        """
+        self.pause(run)
+        since = time.time()
+        while takeover_decision(self.runs_dir, run["members"], since) == "wait":
+            await asyncio.sleep(0.1)
+        anchor = run["anchor"]
+        for tid in [t for t in run["members"] if t != anchor] + [anchor]:
+            try:
+                await browser.cdp.send("Target.closeTarget", {"targetId": tid}, timeout=10)
+            except CdpError:
+                pass  # already gone
+        for suffix in (".json", ".pause"):
+            try:
+                _unlink(_run_path(self.runs_dir, run["run_id"], suffix))
+            except ValueError:
+                pass
+        self.waiting.pop(run["run_id"], None)
+        await browser.resync()
+        self.sweep_orphans()
+        self.changed()
+        return {"run_id": run["run_id"], "closed": True}
+
     async def new_run(self, identity: str) -> dict:
         browser = self.browsers.get(identity)
         if browser is None:
@@ -1223,6 +1249,8 @@ class App:
             raise HttpError(404, "not found")
         browser, run = self.find(rest[0])
         action = rest[1]
+        if req.method == "POST" and action == "close":
+            return json_response(200, await self.close_run(browser, run))
         if req.method == "POST" and action in ("pause", "resume"):
             self.pause(run) if action == "pause" else self.resume(run)
             return json_response(200, {"run_id": run["run_id"], "paused": action == "pause"})
