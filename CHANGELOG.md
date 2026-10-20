@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.15.168] - 2026-10-20
+
+- 17 containers run with a read-only image filesystem (`--read-only`), so a compromise cannot replace image binaries or plant code in the image: Bazarr, Chaptarr, cloudflared, Gluetun, the Grimmory database, Homepage, ntfy, NZBGet, Plex Auto Languages, Prowlarr, Radarr, Recyclarr, the RomM database, Seerr, Sonarr, Tautulli and Uptime Kuma.
+  - **Selection:** each container's overlay upper layer showed it writes only Podman's passwd/group entries and its mount points.
+  - **Testing:** throwaway read-only copies of eight images started cleanly.
+  - **Still writable, with the reason** (recorded in `container-hardening.nix`):
+    - FlareSolverr patches `/app/chromedriver`.
+    - Muximux, pyLoad and qBittorrent run root init.
+    - Tdarr writes `/app` assets.
+    - Grimmory's root entrypoint rewrites `/etc/passwd`.
+    - RomM templates `/etc/nginx/conf.d`.
+
 ## [3.15.167] - 2026-10-20
 
 - Fixed the outage from #143. LinuxServer images started as the app user (Sonarr, Radarr, Prowlarr, Bazarr, NZBGet, Tautulli and the RomM database) run s6 preinit through the setuid-root `s6-overlay-suexec`. With every capability dropped it failed with "unable to setgid to root", and those containers (and RomM, which depends on its database) crash-looped. They now keep the LinuxServer startup set: chown, dac_override, fowner, kill, setgid, setuid.
