@@ -112,6 +112,11 @@ in
     };
     ghostship.apps.ntfy = {
       apparmorProfile = "ghostship-ntfy";
+      apparmorProcessProfiles = [
+        "ghostship-ntfy"
+        "ghostship-ntfy//tools"
+      ];
+      apparmorRequiredProcessProfiles = [ "ghostship-ntfy" ];
       healthPath = "/v1/health";
       name = "ntfy";
       group = "Infrastructure";

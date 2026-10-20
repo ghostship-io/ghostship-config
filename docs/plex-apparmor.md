@@ -140,6 +140,11 @@ workflow for policy changes. Leave merging to the user.
    missing confinement, or unresolved legitimate violation restarts the verified
    observation window. Keep daily review notes so known attack attempts are not
    silently converted into permissions or mistaken for successful tests.
+   A reloaded policy reaches a task only when that task next makes a mediated
+   call. An idle task keeps the previous revision. For example, Plex's main
+   thread, read through `/proc` by its `PMS GTP` thread, kept logging `ptrace
+   readby` after #123 added the rule. Before calling a deployed rule
+   ineffective, check events from processes started after the reload.
 6. After seven full days of verified daily coverage with no policy changes and
    representative workloads exercised, prepare the final PR changing the policy
    state from `complain` to `enforce`. Preserve the same reviewed profile content.

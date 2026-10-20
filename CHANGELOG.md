@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.15.163] - 2026-10-20
+
+- Every container except T3 now has its own strict AppArmor profile in complain mode (user direction: no broad policy).
+  - Covered: the arrs, downloaders, Gluetun, cloudflared, the web apps, the databases, Tdarr, FlareSolverr, the internal services and the agent desktop.
+  - Each profile lists exact executables, libraries, data paths, network families and capabilities, with child profiles for daemons, interpreters, helpers and healthchecks. Policies live in `modules/self-hosted/apparmor/<container>.profile`.
+  - The agent desktop is split into per-process children (Chrome per identity, Sway, sshd, Selkies, Pelorus, API, agent shells). The viewer profile is unchanged.
+- `ghostship-container-default` now grants nothing and logs everything. Only ad-hoc job containers use it. An assertion requires every declared container except T3 to have its own profile.
+- `ghostship-apparmor-review` tracks every container. Each app declares the labels it expects (`apparmorProcessProfiles`, `apparmorRequiredProcessProfiles`). Images without `cat` give the audit heartbeat their own reader (`apparmorHeartbeat`).
+- `ghostship-apparmor-review` reads the journal once per collection, not once per container, with a 10-minute bound.
+- The kernel audit backlog is raised to 8192 records (`ghostship-audit-backlog`), so complain-mode bursts at container start aren't dropped. Dropped records would reset every learning window.
+- Containers running with no_new_privs (GitHub coordinator, private integrations) get flat profiles. Under no_new_privs AppArmor never enters child profiles; complain mode logs "no new privs", and enforce mode would refuse the exec.
+- Documented that a reloaded policy reaches an idle task only at its next mediated call. This is why Plex's `ptrace readby` events continue until Plex restarts.
+
 ## [3.15.162] - 2026-10-20
 
 - Agent viewer: closing a session also closes tabs and popups the agent opened while the close waited for its in-flight call, and a manual scroll of the session strip no longer snaps back on each refresh (Codex review of #138).
