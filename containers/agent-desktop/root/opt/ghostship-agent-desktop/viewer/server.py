@@ -822,7 +822,7 @@ class AppHost:
     async def refresh(self) -> None:
         try:
             if not self.catalog:
-                self.catalog = (await app_call(self.control, {"op": "catalog"}, 5)).get("apps") or []
+                self.catalog = (await app_call(self.control, {"op": "catalog", "browsers": True}, 5)).get("apps") or []
             self.sessions = (await app_call(self.control, {"op": "list"}, 10)).get("sessions") or []
         except HttpError:
             self.sessions = []
