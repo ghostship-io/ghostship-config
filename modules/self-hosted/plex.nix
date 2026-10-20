@@ -52,6 +52,18 @@ in
     public = true;
     cloudflareBypassApproval = "User explicitly retained public Plex streaming in thread 0eee8303-753b-497a-8609-005605679f17 on 2026-10-18.";
     apparmorProfile = "ghostship-plex";
+    apparmorProcessProfiles = [
+      "ghostship-plex"
+      "ghostship-plex//server"
+      "ghostship-plex//python"
+      # Podman's curl healthcheck; present only while a check runs.
+      "ghostship-plex//healthcheck"
+    ];
+    apparmorRequiredProcessProfiles = [
+      "ghostship-plex"
+      "ghostship-plex//server"
+      "ghostship-plex//python"
+    ];
     healthPath = "/identity";
     name = "Plex";
     group = "Media";

@@ -32,26 +32,9 @@ let
             profile = app.apparmorProfile;
             source = config.environment.etc."apparmor.d".source + "/${app.apparmorProfile}";
             mode = config.security.apparmor.policies.${app.apparmorProfile}.state;
-            processProfiles = [
-              app.apparmorProfile
-            ]
-            ++ lib.optionals (app.apparmorProfile == "ghostship-plex") [
-              "ghostship-plex//server"
-              "ghostship-plex//python"
-              # Podman's curl healthcheck; present only while a check runs.
-              "ghostship-plex//healthcheck"
-            ]
-            ++ lib.optional (app.apparmorProfile == "ghostship-ntfy") "ghostship-ntfy//tools"
-            ++ lib.optional (
-              app.apparmorProfile == "ghostship-hooks"
-            ) "ghostship-hooks//tools";
-            requiredProcessProfiles = [
-              app.apparmorProfile
-            ]
-            ++ lib.optionals (app.apparmorProfile == "ghostship-plex") [
-              "ghostship-plex//server"
-              "ghostship-plex//python"
-            ];
+            processProfiles = app.apparmorProcessProfiles;
+            requiredProcessProfiles = app.apparmorRequiredProcessProfiles;
+            heartbeat = app.apparmorHeartbeat;
           };
         }) profiled
       );
@@ -119,6 +102,11 @@ in
 
   assertions = [
     {
+      # T3 runs privileged and unconfined until its de-privileging lands (#102).
+      assertion = lib.all (app: app.apparmorProfile != null || app.container == "t3code") apps;
+      message = "Every Ghostship container must declare its own strict AppArmor profile.";
+    }
+    {
       assertion = profiled == [ ] || config.security.apparmor.enable;
       message = "Profiled public services require AppArmor to be enabled on the host.";
     }
@@ -182,6 +170,19 @@ in
       }) profiled
     ))
     {
+      # Complain-mode learning bursts (every strict profile at container start)
+      # overflow the kernel's 1024-record backlog; lost records reset every window.
+      ghostship-audit-backlog = {
+        description = "Raise the kernel audit backlog for AppArmor learning";
+        after = [ "auditd.service" ];
+        wantedBy = [ "multi-user.target" ];
+        before = [ "apparmor.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = "${pkgs.audit}/bin/auditctl -b 8192";
+        };
+      };
       ghostship-apparmor-review = {
         description = "Collect verified AppArmor learning evidence for public services";
         after = [ "apparmor.service" ] ++ map (app: "podman-${app.container}.service") profiled;

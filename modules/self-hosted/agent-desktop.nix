@@ -92,6 +92,44 @@ in
     origin = "http://agent-desktop:3000";
     # The desktop serves the agent viewer (/agents/); see the profile file.
     apparmorProfile = "ghostship-agent-desktop";
+    apparmorProcessProfiles = [
+      "ghostship-agent-desktop"
+      "ghostship-desktop-viewer"
+      "ghostship-agent-desktop//nginx"
+      "ghostship-agent-desktop//sshd"
+      "ghostship-agent-desktop//dbus-system"
+      "ghostship-agent-desktop//pulseaudio"
+      "ghostship-agent-desktop//selkies"
+      "ghostship-agent-desktop//pelorus"
+      "ghostship-agent-desktop//desktop"
+      "ghostship-agent-desktop//api"
+      "ghostship-agent-desktop//chrome-control"
+      "ghostship-agent-desktop//chrome-agent-launcher"
+      "ghostship-agent-desktop//chrome-personal-launcher"
+      "ghostship-agent-desktop//chrome-agent"
+      "ghostship-agent-desktop//chrome-personal"
+      "ghostship-agent-desktop//sway"
+      "ghostship-agent-desktop//stage-input"
+      "ghostship-agent-desktop//agent-shell"
+      "ghostship-agent-desktop//bladebro"
+      "ghostship-agent-desktop//sudo"
+      "ghostship-agent-desktop//chrome-instance-launcher"
+      "ghostship-agent-desktop//chrome-other"
+      "ghostship-agent-desktop//healthcheck"
+    ];
+    apparmorRequiredProcessProfiles = [
+      "ghostship-agent-desktop"
+      "ghostship-desktop-viewer"
+      "ghostship-agent-desktop//nginx"
+      "ghostship-agent-desktop//sshd"
+      "ghostship-agent-desktop//dbus-system"
+      "ghostship-agent-desktop//pulseaudio"
+      "ghostship-agent-desktop//selkies"
+      "ghostship-agent-desktop//pelorus"
+      "ghostship-agent-desktop//desktop"
+      "ghostship-agent-desktop//api"
+      "ghostship-agent-desktop//chrome-control"
+    ];
     healthPath = "/";
     muximux = {
       icon = "muximux-desktop";
