@@ -703,7 +703,7 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
 
     @{gs_svcdirs}/svc-agent-desktop-chrome-agent/run r,
     /usr/bin/with-contenv r,
-    /usr/bin/{bash,pwdx,pgrep,gnurm,setsid} mrix,
+    /usr/bin/{bash,dash,pwdx,pgrep,gnurm,setsid} mrix,
     @{gs_cu}/{cat,mkdir,seq,sleep} mrix,
     @{gs_s6o}/command/with-contenv rix,
     /package/admin/execline-2.9.7.0/command/execline mrix,
@@ -758,7 +758,7 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
 
     @{gs_svcdirs}/svc-agent-desktop-chrome-personal/run r,
     /usr/bin/with-contenv r,
-    /usr/bin/{bash,pwdx,pgrep,gnurm,setsid} mrix,
+    /usr/bin/{bash,dash,pwdx,pgrep,gnurm,setsid} mrix,
     @{gs_cu}/{cat,mkdir,seq,sleep} mrix,
     @{gs_s6o}/command/with-contenv rix,
     /package/admin/execline-2.9.7.0/command/execline mrix,
