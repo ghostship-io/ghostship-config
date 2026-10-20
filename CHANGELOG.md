@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.154] - 2026-10-20
+
+- Fixed `ghostship-agent-desktop-update` canaries: the update service now uses the host's configured podman. The plain package refused the canary's AppArmor profile ("AppArmor is not enabled"), so every candidate failed before testing.
+
 ## [3.15.153] - 2026-10-20
 
 - Pin ghostship-agent 0.29.0: browser agents drive their own windows in the browser stages without the desktop input lock or tab activation, publish run records (label, harness, model, T3 thread) for the agent viewer, and stop on `paused` when a person takes over a window.
