@@ -130,6 +130,42 @@ class AddressBarTest(unittest.TestCase):
         self.assertTrue(server.normalize_url("example.com/a").startswith("https://example.com/a"))
 
 
+class CloseRunTest(unittest.TestCase):
+    def test_close_waits_for_agent_call_then_closes_home_tab_last(self):
+        """Catches closing a window under an in-flight agent call, closing the home tab first
+        (Chrome would regroup the leftover tabs), or leaving the registry and pause marker behind."""
+        with tempfile.TemporaryDirectory() as runs:
+            run_id = "a" * 32
+            for name in (f"{run_id}.json", f"{run_id}.pause"):
+                open(os.path.join(runs, name), "w").close()
+            os.mkdir(os.path.join(runs, "busy"))
+            busy = os.path.join(runs, "busy", "TAB1")
+            open(busy, "w").close()
+            closed = []
+
+            class Cdp:
+                async def send(self, method, params, timeout=None):
+                    self.method = method
+                    closed.append((params["targetId"], os.path.exists(busy)))
+
+            class Browser:
+                cdp = Cdp()
+
+                async def resync(self):
+                    pass
+
+            async def go():
+                app = server.App(runs, {})
+                asyncio.get_running_loop().call_later(0.3, os.unlink, busy)  # the agent call finishes
+                run = {"run_id": run_id, "identity": "agent", "anchor": "HOME", "members": ["HOME", "TAB1", "TAB2"]}
+                return await app.close_run(Browser(), run)
+
+            self.assertEqual(asyncio.run(go()), {"run_id": run_id, "closed": True})
+            self.assertEqual([tid for tid, _ in closed], ["TAB1", "TAB2", "HOME"])
+            self.assertFalse(any(was_busy for _, was_busy in closed))
+            self.assertEqual(sorted(os.listdir(runs)), ["busy", "paused"])
+
+
 class EnsureBrowserTest(unittest.TestCase):
     class FakeBrowser:
         identity = "personal"
