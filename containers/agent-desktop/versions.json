@@ -11,10 +11,10 @@
     }
   },
   "bladebro": {
-    "version": "4.2.2",
+    "version": "4.6.4",
     "sha256": {
-      "arm64": "35d1ae1e0870bb73c18d96fc4f59d6ab6982c167dc6657072be35897b5be4484",
-      "amd64": "ffcdd3c203b0d070e8787e14687942ebc0924ba21c04d39a7bcdf70b328f0779"
+      "arm64": "b16f433b80e539d21978476c643716a7156d05b8d0095fe59bf5700e537863ff",
+      "amd64": "a650adceb0e1c19ebfaef086234ec601d82cdc2558c12f948d0298d070a9cccb"
     }
   }
 }
