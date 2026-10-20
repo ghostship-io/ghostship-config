@@ -53,9 +53,9 @@ in
       PGID = "3000";
     };
     volumes = [
-      "/srv/apps/bazarr:/config"
-      "/mnt/share/Library/Movies:/movies"
-      "/mnt/share/Library/TV:/tv"
+      "/srv/apps/bazarr:/config:rw,noexec,nosuid,nodev"
+      "/mnt/share/Library/Movies:/movies:rw,noexec,nosuid,nodev"
+      "/mnt/share/Library/TV:/tv:rw,noexec,nosuid,nodev"
     ];
   };
 

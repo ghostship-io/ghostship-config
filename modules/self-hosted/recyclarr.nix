@@ -33,7 +33,7 @@ in
       CRON_SCHEDULE = "@daily";
     };
     volumes = [
-      "/srv/apps/recyclarr:/config:rw"
+      "/srv/apps/recyclarr:/config:rw,noexec,nosuid,nodev"
     ];
   };
 

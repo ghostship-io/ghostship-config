@@ -54,7 +54,7 @@ in
       "/srv/apps/romm-db/romm-db.env"
     ];
     volumes = [
-      "/srv/apps/romm-db:/config:rw"
+      "/srv/apps/romm-db:/config:rw,noexec,nosuid,nodev"
     ];
   };
 
