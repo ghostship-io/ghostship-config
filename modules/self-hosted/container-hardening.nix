@@ -109,12 +109,12 @@ let
   # flaresolverr (patches /app/chromedriver, caches in /app), muximux, pyload and
   # qbittorrent (root LinuxServer init edits /etc, /app, /defaults), tdarr (writes
   # /app/Tdarr_Node assets), grimmory (root entrypoint rewrites /etc/passwd),
-  # romm (templates /etc/nginx/conf.d).
+  # romm (templates /etc/nginx/conf.d), gluetun (creates its user in /etc/passwd
+  # at every start; read-only failed with EROFS on 2026-10-20).
   readOnlyRoot = [
     "bazarr"
     "chaptarr"
     "cloudflared"
-    "gluetun"
     "grimmory-db"
     "homepage"
     "ntfy"

@@ -1,10 +1,14 @@
 # Changelog
 
-## [3.15.169] - 2026-10-20
+## [3.15.170] - 2026-10-20
 
 - Agent desktop: desktop app sessions. OrcaSlicer (and later other catalog apps, `apps.json`) runs on its own headless Sway screen with its own pointer and keyboard, opened from the viewer's new **Apps** launcher or by agents through `ghostship-gui app` (ghostship-agent 0.30.0). Each session is a viewer tab with a live view; touch pauses agent input, and closing never discards unsaved work without force. A 10,000+-keystroke concurrency gate across two sessions had zero cross-talk. Orca works again: the image now has WebKitGTK 4.1, and GTK image loading no longer aborts in the container (bwrap stand-in).
 - Pin ghostship-agent 0.30.0: `ghostship-gui app` drives app sessions.
 - `desktop.ghostship.io` serves the viewer at the root (no redirect); Selkies moved to `/desktop/` and the old `/agents/` address redirects to `/`. The main page groups **Apps** and **Browser sessions**; the health check and the update service's viewer gate follow the new paths.
+
+## [3.15.169] - 2026-10-20
+
+- Gluetun keeps a writable image filesystem. It creates its user in `/etc/passwd` at every start, so with `--read-only` (#145) it failed with "read-only file system", and qBittorrent, which shares its network, went down with it.
 
 ## [3.15.168] - 2026-10-20
 
