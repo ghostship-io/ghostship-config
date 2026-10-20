@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.142] - 2026-10-20
+
+- The host firewall accepts DNS from the internal `ghostship_github_net` (10.89.9.0/24) to its own aardvark-dns at 10.89.9.1, and nothing else. Netavark adds no DNS input rule for internal networks, so `ghostship-hooks` had no working resolver and cloudflared's second nameserver timed out on about a fifth of its queries; the flow observer recorded these as dropped. Aardvark never forwards an internal network's queries upstream, so the network still has no egress.
+
 ## [3.15.141] - 2026-10-19
 
 - Pin ghostship-agent 0.26.0 (cba1ad46): the GitHub coordinator publishes T3 progress to `informational` (thread launched, PR opened and merged, issue closed) and base-branch regression issues to `operations` at priority 4, each once, without holding GitHub routing on an ntfy outage.
