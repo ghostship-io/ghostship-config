@@ -248,12 +248,16 @@ unaffected because agents work in the browser stages.
 
 ### Agent viewer
 
-`https://desktop.ghostship.io/` opens one UI (served at `/agents/`) with a
-**Browsers | Desktop** switch at the top. Desktop mode embeds Selkies, which
-nginx still serves at `/` to frames and health checks; a top-level visit to
-`/` redirects to the UI, and leaving Desktop mode ends the Selkies stream.
-Redirects are relative, so they never expose nginx's internal port 3000.
-**+ Personal** and **+ Agent** start an idle-stopped Chrome first.
+`https://desktop.ghostship.io/` is the viewer (nginx serves it at the root;
+the old `/agents/` address redirects there) with a **Browsers | Desktop**
+switch at the top. Desktop mode embeds Selkies, which lives at `/desktop/`
+(`SUBFOLDER`), and leaving it ends the Selkies stream. Redirects are relative,
+so they never expose nginx's internal port 3000. **+ Personal** and **+ Agent**
+start an idle-stopped Chrome first.
+
+The main page has two sections. **Apps** is a launcher with one tile per
+desktop app; a tile opens the app, or its running session, and running apps
+also get a live card. **Browser sessions** lists the browser windows.
 
 Browsers mode shows every agent
 browser window as a card: label, identity, harness and model, T3 thread,
@@ -263,6 +267,28 @@ keyboard button types, and the URL bar, tabs and back/reload work on that
 window only. **Any touch pauses that agent** until you tap Resume; other
 agents keep running. **New window** opens a person-owned window in either
 identity, for example to sign in to a site from a phone.
+
+### Desktop app sessions
+
+Native apps in `apps.json` (OrcaSlicer first) run in app sessions: each app on
+its own headless Sway screen with its own pointer and keyboard, so input never
+collides with the shared desktop, the browser stages or other sessions. The
+`app-session` supervisor (s6 `svc-agent-desktop-apps`, as abc) opens, lists and
+closes sessions through `/config/agent-desktop/runs/apps/control.sock`; each
+session serves frames (grim, JPEG) and input (a virtual pointer, wtype for
+keys) on its own socket and writes a run record (`kind: app`) the viewer shows
+as a session tab. Agents use `ghostship-gui app` over SSH. A person's input
+pauses agent input (`paused/<session>`; agent input marks
+`busy/<session>` first), and closing asks the app to quit, so unsaved work is
+never discarded without force. Catalog apps are single-instance by default:
+OrcaSlicer keeps one settings folder and cloud login, so `open` returns the
+running session and refuses while Orca is open on the shared desktop.
+
+GTK apps decode images through glycin, which sandboxes each loader with
+bubblewrap; bwrap cannot mount inside this container, so sessions put
+`nobwrap/bwrap` first on `PATH`, which reports unavailable namespaces and makes
+glycin run its loaders unsandboxed. OrcaSlicer needs WebKitGTK 4.1, now part of
+the image. App sessions run in the `desktop` AppArmor class.
 
 The viewer (`viewer/server.py`, s6 `svc-agent-desktop-viewer`, 127.0.0.1:7090
 behind the Selkies nginx) streams pages with DevTools screencasts and never

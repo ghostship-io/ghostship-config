@@ -142,7 +142,7 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
   /run/s6/basedir/scripts/{rc.init,rc.shutdown,rc.shutdown.final} rix,
   /run/{service,s6/basedir/run-image/service}/.s6-svscan/{SIGINT,SIGPWR,SIGQUIT,SIGTERM,SIGUSR1,SIGUSR2,SIGWINCH,crash,finish} rix,
   /run/{service,s6/basedir/run-image/service}/s6-linux-init-shutdownd/run rix,
-  @{gs_svcdirs}/{s6rc-fdholder,s6rc-oneshot-runner,svc-agent-desktop-api,svc-agent-desktop-chrome-idle,svc-agent-desktop-sshd,svc-agent-desktop-viewer,svc-cron,svc-dbus,svc-de,svc-docker,svc-nginx,svc-pulseaudio,svc-selkies,svc-watchdog,svc-xorg,svc-xsettingsd}/run rix,
+  @{gs_svcdirs}/{s6rc-fdholder,s6rc-oneshot-runner,svc-agent-desktop-api,svc-agent-desktop-apps,svc-agent-desktop-chrome-idle,svc-agent-desktop-sshd,svc-agent-desktop-viewer,svc-cron,svc-dbus,svc-de,svc-docker,svc-nginx,svc-pulseaudio,svc-selkies,svc-watchdog,svc-xorg,svc-xsettingsd}/run rix,
   # Each identity's Chrome service enters its own launcher, so the agent
   # and personal browsers never share a profile domain.
   @{gs_svcdirs}/svc-agent-desktop-chrome-agent/run cx -> chrome-agent-launcher,
@@ -178,6 +178,9 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
   # interpreter). The viewer's python is entered through change_profile.
   /usr/bin/python3.14 cx -> api,
   @{gs_tools}/chrome-idle cx -> chrome-control,
+  # App sessions (svc-agent-desktop-apps, cont-finish, the host's pre-stop)
+  # run desktop apps, so they share the desktop class.
+  @{gs_tools}/app-session cx -> desktop,
   # cont-init seeds attach mode for both identities.
   /usr/local/bin/bladebro cx -> bladebro,
   # Podman's healthcheck (`sh -c "curl ... :3000/"`) and chrome-ensure here.
@@ -444,6 +447,7 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     @{gs_tools}/{ghostship-chrome-instance,run-chrome} px -> ghostship-agent-desktop//chrome-instance-launcher,
     /opt/google/chrome/google-chrome px -> ghostship-agent-desktop//chrome-other,
     /usr/bin/sudo.ws px -> ghostship-agent-desktop//sudo,
+    @{gs_tools}/app-session px -> ghostship-agent-desktop//desktop,
 
     # System files (read and map only).
     / r,
@@ -1480,7 +1484,9 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     @{gs_lib}/libexec/** mrix,
     /usr/games/* mrix,
     /usr/local/bin/* mrix,
-    @{gs_tools}/{write-session-env,desktop-exec} rix,
+    @{gs_tools}/{write-session-env,desktop-exec,app-session} rix,
+    # App sessions: GTK's image loaders find this bwrap stand-in first (see the file).
+    @{gs_tools}/nobwrap/bwrap rix,
     # The person-installed OrcaSlicer AppImage tree (writable path; review on change).
     /config/Applications/orcaslicer/** mrix,
     /lsiopy/bin/pelorus px -> ghostship-agent-desktop//pelorus,
@@ -1542,6 +1548,9 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     @{gs_xdg}/** rwkl,
     @{gs_data}/ r,
     @{gs_data}/session-env{,.tmp} rw,
+    # App sessions: run records, pause/busy markers and control sockets.
+    @{gs_data}/runs/ rw,
+    @{gs_data}/runs/** rwk,
     /config/.ssh/ r,
     /config/.ssh/environment rw,
     /tmp/ r,
