@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.143] - 2026-10-20
+
+- `ghostship-cloudflare-sync` retries Cloudflare reads twice (after 5s and 20s) on HTTP 429, 5xx and network errors. A single HTTP 504 at 04:25 UTC failed the sync during the nightly `nixos-upgrade` activation, which marked the whole upgrade failed (status 4) and sent a failure notification. Writes and other client errors still fail immediately, so a write is never sent twice.
+
 ## [3.15.142] - 2026-10-20
 
 - The host firewall accepts DNS from the internal `ghostship_github_net` (10.89.9.0/24) to its own aardvark-dns at 10.89.9.1, and nothing else. Netavark adds no DNS input rule for internal networks, so `ghostship-hooks` had no working resolver and cloudflared's second nameserver timed out on about a fifth of its queries; the flow observer recorded these as dropped. Aardvark never forwards an internal network's queries upstream, so the network still has no egress.
