@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.153] - 2026-10-20
+
+- Pin ghostship-agent 0.29.0: browser agents drive their own windows in the browser stages without the desktop input lock or tab activation, publish run records (label, harness, model, T3 thread) for the agent viewer, and stop on `paused` when a person takes over a window.
+
 ## [3.15.152] - 2026-10-20
 
 - Concurrent agents on one signed-in Chrome. Each identity's Chrome now runs in its own browser stage: a Sway compositor with a virtual 1920x1080 output, virtual mouse and keyboard, and no automatic focus changes. Agents drive their own windows with target-scoped input, never stealing focus from each other or from a person on the desktop. Measured: 30,000+ barrier-synchronised ops at 8 and 16 agents, and a 2 h soak, with zero cross-talk. Browser fingerprint, CDP detection and bot-check results match the previous desktop. Logins stay in one authoritative profile per identity, with no replication.
