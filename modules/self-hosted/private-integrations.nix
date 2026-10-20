@@ -435,6 +435,9 @@ in {
         # Bladebro workers per identity (an SSH client plus reader threads
         # each); the pids limit counts threads.
         "--pids-limit=512" "--memory=4g" "--cpus=2"
+        # The shared supervisor drains workers for up to 100s, then reaps
+        # descendants for 2s. Podman's default 10s kills it during shutdown.
+        "--stop-timeout=110"
         "--health-cmd=test -f /tmp/supervisor-live && test $(( $(date +%s) - $(stat -c %Y /tmp/supervisor-live) )) -lt 10"
         "--health-interval=30s" "--health-timeout=5s" "--health-retries=3"
       ];
@@ -448,6 +451,8 @@ in {
       wants = [ "ghostship-hostops-broker.service" ];
       # One stdio relay per ID: systemd/Podman stop the old instance first.
       restartIfChanged = true;
+      # Include Podman's drain window plus container cleanup overhead.
+      serviceConfig.TimeoutStopSec = lib.mkForce 130;
     };
   }
   (lib.mkIf cfg.skillsReconcile.enable {
