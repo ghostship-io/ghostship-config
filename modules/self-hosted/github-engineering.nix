@@ -113,6 +113,13 @@ in
       '';
     };
 
+    # Netavark adds no DNS input rule for internal networks, so the host firewall
+    # dropped queries to this network's aardvark-dns. It answers container names
+    # only: aardvark never forwards an internal network's queries upstream.
+    networking.firewall.extraCommands = lib.concatMapStrings (proto: ''
+      iptables -w -A nixos-fw -s 10.89.9.0/24 -d 10.89.9.1 -p ${proto} --dport 53 -j nixos-fw-accept
+    '') [ "udp" "tcp" ];
+
     # cloudflared reaches the receiver over the internal network.
     virtualisation.oci-containers.containers.cloudflared.extraOptions = [ "--network=${network}" ];
     systemd.services.podman-cloudflared = {
