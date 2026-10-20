@@ -38,14 +38,14 @@
 
 <section id="agent-view" hidden>
   <header class="bar" id="agent-head">
-    <button type="button" class="btn icon" id="to-grid" aria-label="All agents">&#9776;</button>
-    <button type="button" class="btn icon" id="prev-run" aria-label="Previous agent">&#8249;</button>
-    <div class="title-block">
-      <div id="run-title" class="run-title"></div>
-      <div id="run-sub" class="run-sub muted"></div>
-    </div>
-    <button type="button" class="btn icon" id="next-run" aria-label="Next agent">&#8250;</button>
+    <button type="button" class="btn icon" id="to-grid" aria-label="All sessions">&#9776;</button>
+    <nav id="sessions" class="sessions" aria-label="Sessions"></nav>
+    <button type="button" class="btn icon" id="new-session" aria-label="New window" aria-expanded="false">+</button>
     <button type="button" class="btn pause" id="pause-btn">Pause</button>
+    <div id="new-menu" class="new-menu" hidden>
+      <button type="button" class="btn" data-identity="personal">+ Personal</button>
+      <button type="button" class="btn" data-identity="agent">+ Agent</button>
+    </div>
   </header>
   <div id="run-state" class="state-line muted"></div>
   <div class="tabrow">

@@ -146,10 +146,13 @@ function buildCard(id) {
   const grow = el("span", "grow");
   const pause = el("button", "btn pause");
   pause.type = "button";
-  foot.append(age, grow, pause);
+  const close = el("button", "btn", "Close");
+  close.type = "button";
+  foot.append(age, grow, close, pause);
   body.append(title, owner, thread, state, foot);
   root.append(thumb, body);
-  root.addEventListener("click", (e) => { if (e.target !== pause) openRun(id); });
+  root.addEventListener("click", (e) => { if (e.target !== pause && e.target !== close) openRun(id); });
+  close.addEventListener("click", (e) => { e.stopPropagation(); closeRun(id); });
   root.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === root) openRun(id); });
   pause.addEventListener("click", (e) => { e.stopPropagation(); togglePause(id); });
   return { root, img, badges, title, owner, thread, state, age, pause };
@@ -261,15 +264,55 @@ function step(dir) {
 }
 
 // ---------------------------------------------------------------- agent view
+// One tab per open session (all identities); x closes it.
+function renderSessions() {
+  const nav = $("sessions");
+  const runs = S.runs.slice();
+  if (S.current && !runs.some((r) => r.run_id === S.current) && S.detail) runs.push(S.detail);
+  nav.replaceChildren(...runs.map((run) => {
+    const chip = el("div", `session ${run.identity}` + (run.run_id === S.current ? " active" : "") + (run.paused ? " paused" : ""));
+    const open = el("button", "session-open");
+    open.type = "button";
+    open.title = [runTitle(run), run.identity, ownerLine(run)].filter(Boolean).join(" · ");
+    open.append(el("span", `dot ${run.identity}`), el("span", "session-label", runTitle(run)));
+    open.addEventListener("click", () => { if (run.run_id !== S.current) location.replace(`#run=${run.run_id}`); });
+    const x = el("button", "session-x", "×");
+    x.type = "button";
+    x.setAttribute("aria-label", `Close ${runTitle(run)}`);
+    x.addEventListener("click", (e) => { e.stopPropagation(); closeRun(run.run_id); });
+    chip.append(open, x);
+    return chip;
+  }));
+  const active = nav.querySelector(".session.active");
+  if (active && active !== renderSessions.last) { active.scrollIntoView({ block: "nearest", inline: "nearest" }); }
+  renderSessions.last = active;
+}
+
+async function closeRun(id) {
+  const run = S.runs.find((r) => r.run_id === id) || (S.detail && S.detail.run_id === id ? S.detail : null);
+  if (!run) return;
+  if (!isHuman(run) && !confirm(`Close "${runTitle(run)}"? The agent loses this window and its tabs.`)) return;
+  try {
+    await api(`api/runs/${encodeURIComponent(id)}/close`, { method: "POST" });
+  } catch (err) { toast(`Could not close: ${err.message}`); return; }
+  const i = S.runs.findIndex((r) => r.run_id === id);
+  S.runs = S.runs.filter((r) => r.run_id !== id);
+  if (S.current === id) {
+    const next = S.runs[Math.min(Math.max(i, 0), S.runs.length - 1)];
+    if (next) location.replace(`#run=${next.run_id}`); else location.hash = "";
+  }
+  loadRuns();
+}
+
 function renderHeader() {
+  renderSessions();
   const run = S.detail || S.runs.find((r) => r.run_id === S.current);
-  if (!run) { $("run-title").textContent = "Window closed"; return; }
-  $("run-title").textContent = runTitle(run);
-  const sub = $("run-sub");
+  const line = $("run-state");
+  if (!run) { line.textContent = "Window closed"; return; }
   const thread = threadNode(run.owner);
-  sub.replaceChildren(el("span", null, [run.identity, ownerLine(run)].filter(Boolean).join(" · ")));
-  if (thread) sub.append(" · ", thread);
-  $("run-state").textContent = stateLine(run);
+  line.replaceChildren(el("span", null, [run.identity, ownerLine(run)].filter(Boolean).join(" · ")));
+  if (thread) line.append(" · ", thread);
+  line.append(` · ${stateLine(run)}`);
   const btn = $("pause-btn");
   btn.textContent = run.paused ? "Resume agent" : "Pause";
   btn.classList.toggle("paused", run.paused);
@@ -711,8 +754,17 @@ function init() {
   $("new-personal").addEventListener("click", () => newRun("personal"));
   $("new-agent").addEventListener("click", () => newRun("agent"));
   $("to-grid").addEventListener("click", () => { location.hash = ""; });
-  $("prev-run").addEventListener("click", () => step(-1));
-  $("next-run").addEventListener("click", () => step(1));
+  $("new-session").addEventListener("click", () => {
+    const menu = $("new-menu");
+    menu.hidden = !menu.hidden;
+    $("new-session").setAttribute("aria-expanded", String(!menu.hidden));
+  });
+  for (const b of document.querySelectorAll("#new-menu [data-identity]")) {
+    b.addEventListener("click", () => { $("new-menu").hidden = true; newRun(b.dataset.identity); });
+  }
+  document.addEventListener("click", (e) => {
+    if (!$("new-menu").hidden && !e.target.closest("#new-menu, #new-session")) $("new-menu").hidden = true;
+  });
   $("pause-btn").addEventListener("click", () => S.current && togglePause(S.current));
   $("nav-back").addEventListener("click", () => send({ t: "back" }));
   $("nav-forward").addEventListener("click", () => send({ t: "forward" }));

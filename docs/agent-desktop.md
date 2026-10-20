@@ -258,7 +258,7 @@ Redirects are relative, so they never expose nginx's internal port 3000.
 Browsers mode shows every agent
 browser window as a card: label, identity, harness and model, T3 thread,
 current action and a live preview. Tap a card for that agent's live view;
-swipe or use the arrows to switch agents. Tap clicks, drag scrolls, the
+every open session is a tab along the top (× closes it, + opens a new window). Tap clicks, drag scrolls, the
 keyboard button types, and the URL bar, tabs and back/reload work on that
 window only. **Any touch pauses that agent** until you tap Resume; other
 agents keep running. **New window** opens a person-owned window in either
