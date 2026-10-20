@@ -29,10 +29,11 @@ let
       "#!${pkgs.python3}/bin/python3\n"
       +
         builtins.replaceStrings
-          [ "@secrets@" "@podman@" ]
+          [ "@secrets@" "@podman@" "@incidents@" ]
           [
             secrets
             "${pkgs.podman}/bin/podman"
+            (if config.ghostship.notify.incidentSpool == null then "" else config.ghostship.notify.incidentSpool)
           ]
           (builtins.readFile ./ghostship-notify.py);
   };
@@ -56,7 +57,7 @@ let
         failure)
           result=$(systemctl show -P Result "$unit")
           status=$(systemctl show -P ExecMainStatus "$unit")
-          exec ghostship-notify --topic operations --priority 4 --source systemd \
+          exec ghostship-notify --topic operations --priority 4 --source systemd --incident \
             --dedupe "$unit" --title "Service $unit failed on $host" \
             "$description: $result (exit status $status). Inspect: journalctl -b -u $unit"
           ;;
@@ -86,6 +87,11 @@ in
     readOnly = true;
     default = notify;
     description = "ghostship-notify, the host's ntfy publisher; run it as root.";
+  };
+  options.ghostship.notify.incidentSpool = lib.mkOption {
+    type = lib.types.nullOr lib.types.str;
+    default = null;
+    description = "Root-owned directory where --incident alerts are queued for the GitHub coordinator's repair threads.";
   };
   config = {
     environment.systemPackages = [
@@ -251,6 +257,22 @@ in
         OnBootSec = "5min";
         OnUnitActiveSec = "5min";
       };
+    };
+    # The release this system was built from, for update notices.
+    environment.etc."ghostship-version".text = lib.fileContents ../../VERSION;
+    # A nightly upgrade that changed the running system posts the new release;
+    # a failed one reaches operations and an incident through ghostship-failure@.
+    systemd.services.nixos-upgrade = lib.mkIf config.system.autoUpgrade.enable {
+      preStart = "${pkgs.coreutils}/bin/readlink -f /run/current-system > /run/ghostship-upgrade-before";
+      postStart = ''
+        before=$(${pkgs.coreutils}/bin/cat /run/ghostship-upgrade-before 2>/dev/null || true)
+        after=$(${pkgs.coreutils}/bin/readlink -f /run/current-system)
+        if [ "$before" != "$after" ]; then
+          ${notify}/bin/ghostship-notify --topic informational --priority 2 --source updates \
+            --state resolved --title "${config.networking.hostName} upgraded to $(${pkgs.coreutils}/bin/cat /etc/ghostship-version)" \
+            "Nightly upgrade from main activated ''${after#/nix/store/}." || true
+        fi
+      '';
     };
     systemd.services.podman-auto-update.postStart = ''
       ${pkgs.coreutils}/bin/install -d -m0700 /var/lib/ghostship-monitoring

@@ -6,6 +6,32 @@
 }:
 
 let
+  # Run the update, list what changed on informational, and fail (so
+  # ghostship-failure@ raises an incident) when any container failed or rolled back.
+  podman-auto-update = pkgs.writeShellApplication {
+    name = "ghostship-podman-auto-update";
+    runtimeInputs = [ pkgs.podman pkgs.gawk pkgs.util-linux config.ghostship.notify.package ];
+    text = ''
+      # Updates never overlap a backup or other maintenance.
+      exec 9>/run/ghostship-maintenance.lock
+      flock -w 300 9
+      status=0
+      report=$(podman auto-update --format '{{.Unit}} {{.Image}} {{.Updated}}') || status=$?
+      printf '%s\n' "$report"
+      updated=$(awk '$NF == "true" { print $1 " (" $2 ")" }' <<<"$report")
+      failed=$(awk 'NF && $NF != "true" && $NF != "false"' <<<"$report")
+      if [ -n "$updated" ]; then
+        ghostship-notify --topic informational --priority 2 --source updates --state resolved \
+          --title "Containers updated on ${config.networking.hostName}" "$updated" || true
+      fi
+      if [ -n "$failed" ]; then
+        echo "Container updates failed or rolled back:" >&2
+        printf '%s\n' "$failed" >&2
+        exit 1
+      fi
+      exit "$status"
+    '';
+  };
   dockerhub-secrets = config.ghostship.selfHostedSecrets.projections.dockerhub.path;
   dockerhub-auth-script = pkgs.writeShellScriptBin "podman-dockerhub-auth" ''
         set -eu
@@ -103,7 +129,7 @@ in
           environment.REGISTRY_AUTH_FILE = dockerhub-auth-file;
           serviceConfig = {
             Type = "oneshot";
-            ExecStart = "${pkgs.podman}/bin/podman auto-update";
+            ExecStart = "${podman-auto-update}/bin/ghostship-podman-auto-update";
           };
         };
       }

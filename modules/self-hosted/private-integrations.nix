@@ -360,7 +360,7 @@ in {
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnBootSec = "20min";
-        OnUnitActiveSec = "daily";
+        OnUnitActiveSec = "1d";
         Persistent = true;
         RandomizedDelaySec = 300;
       };
