@@ -275,5 +275,53 @@ class FilesAndCLI(unittest.TestCase):
             self.assertEqual(list(directory.glob(".evidence-*")), [])
 
 
+    def run_cli(self, directory, *extra):
+        config = directory / "config.json"
+        config.write_text(json.dumps(CONFIG))
+        original_stat = Path.stat
+        def root_stat(path, **kwargs):
+            parts = list(original_stat(path, **kwargs))
+            parts[4] = 0
+            return review.os.stat_result(parts)
+        with patch.object(review.os, "geteuid", return_value=0), patch.object(Path, "stat", root_stat), \
+                contextlib.redirect_stdout(io.StringIO()) as output, contextlib.redirect_stderr(io.StringIO()):
+            code = review.main(["--config", str(config), "--state-dir", str(directory), *extra])
+        return code, output.getvalue()
+
+    def test_group_review_clears_only_matching_events(self):
+        curl = ('apparmor="ALLOWED" operation="open" profile="ghostship-plex//null-/usr/bin/curl" '
+                'name="/etc/nsswitch.conf" requested_mask="r" comm="curl"')
+        trace = ('apparmor="ALLOWED" operation="ptrace" profile="ghostship-plex//server" '
+                 'peer="ghostship-plex//server" requested_mask="read" comm="504D5320475450"')
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            events = [review.parse_event(8 * DAY + i, message, "ghostship-plex")
+                      for i, message in enumerate((curl, curl.replace("nsswitch", "passwd"), trace, MESSAGE))]
+            self.assertEqual(events[2]["peer"], "ghostship-plex//server")
+            state = review.advance(week(), GOOD, events, 9 * DAY, True)
+            review.write_state(directory, {"schema_version": 1, "containers": {"plex": state}})
+            code, output = self.run_cli(directory, "--summary")
+            groups = json.loads(output)["groups"]["plex"]
+            self.assertEqual((code, len(groups)), (0, 4))
+            self.assertIn("PMS GTP", {g.get("comm") for g in groups})
+            base = ["--container", "plex", "--classification", "resolved-by-policy"]
+            with self.assertRaises(SystemExit):
+                self.run_cli(directory, *base, "--note", "no reference",
+                             "--match", "profile=*curl", "--match", "operation=open")
+            with self.assertRaises(SystemExit):
+                self.run_cli(directory, *base, "--note", "#123", "--match", "profile=*curl")
+            code, _ = self.run_cli(directory, *base, "--note", "Healthcheck profile, #123",
+                                   "--match", "profile=ghostship-plex//null-/usr/bin/curl",
+                                   "--match", "operation=open", "--match", "name=/etc/*")
+            self.assertEqual(code, 0)
+            code, _ = self.run_cli(directory, *base, "--note", "Self /proc reads, #123",
+                                   "--match", "profile=ghostship-plex//server", "--match", "operation=ptrace",
+                                   "--match", "comm=PMS GTP", "--match", "peer=ghostship-plex//server")
+            saved = json.loads((directory / "evidence.json").read_text())["containers"]["plex"]
+            report = review.status(saved, 9 * DAY)
+            self.assertEqual(report["blocking_event_ids"], [events[3]["id"]])
+            self.assertEqual(saved["reviews"][events[0]["id"]]["match"]["name"], "/etc/*")
+
+
 if __name__ == "__main__":
     unittest.main()
