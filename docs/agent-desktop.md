@@ -5,7 +5,8 @@ container on `chill-penguin`, built for agent automation and live human
 intervention. It runs LXQt on a labwc Wayland session with Selkies 2
 streaming, Pelorus desktop control (AT-SPI + Pixelflux), pinned Google Chrome
 browsers in per-identity browser stages, Bladebro as the MCP browser driver,
-and the agent viewer at `/agents/`.
+and one web UI with two modes: **Browsers** (the agent viewer) and
+**Desktop** (Selkies).
 
 Everything is defined in `modules/self-hosted/agent-desktop.nix` and
 `containers/agent-desktop/`. The desktop lifecycle is independent of t3code:
@@ -247,7 +248,14 @@ unaffected because agents work in the browser stages.
 
 ### Agent viewer
 
-`https://desktop.ghostship.io/agents/` (same Access policy) shows every agent
+`https://desktop.ghostship.io/` opens one UI (served at `/agents/`) with a
+**Browsers | Desktop** switch at the top. Desktop mode embeds Selkies, which
+nginx still serves at `/` to frames and health checks; a top-level visit to
+`/` redirects to the UI, and leaving Desktop mode ends the Selkies stream.
+Redirects are relative, so they never expose nginx's internal port 3000.
+**+ Personal** and **+ Agent** start an idle-stopped Chrome first.
+
+Browsers mode shows every agent
 browser window as a card: label, identity, harness and model, T3 thread,
 current action and a live preview. Tap a card for that agent's live view;
 swipe or use the arrows to switch agents. Tap clicks, drag scrolls, the
