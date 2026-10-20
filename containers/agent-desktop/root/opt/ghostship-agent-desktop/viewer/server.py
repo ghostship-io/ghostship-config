@@ -69,6 +69,8 @@ THUMB_IDLE = 20.0
 MAX_THUMB_CASTERS = 12
 MAX_WS_CLIENTS = 32
 HUMAN_RUN_SECONDS = 2 * 3600
+CHROME_ENSURE = os.environ.get("VIEWER_CHROME_ENSURE", "/opt/ghostship-agent-desktop/chrome-ensure")
+ENSURE_SECONDS = 60      # chrome-ensure's own default timeout
 BUSY_STALE = 30.0        # agent-side busy files older than this are abandoned
 TAKEOVER_WAIT = 20.0     # how long a takeover waits for in-flight agent calls
 INPUT_KINDS = frozenset({"tap", "pointer", "wheel", "key", "text", "navigate", "reload", "back", "forward",
@@ -481,7 +483,10 @@ def parse_ports(spec: str) -> dict[str, int]:
 # --------------------------------------------------------------------------
 
 class Browser:
-    """One persistent browser-level CDP connection per identity; never starts Chrome."""
+    """One persistent browser-level CDP connection per identity.
+
+    It never starts Chrome itself; App.ensure_browser does, for a human's
+    new window, and wakes the reconnect loop through `wake`."""
 
     def __init__(self, app: "App", identity: str, port: int):
         self.app, self.identity, self.port = app, identity, port
@@ -493,6 +498,8 @@ class Browser:
         self.first_seen: dict[str, float] = {}
         self.sticky: dict[str, str] = {}
         self._seq = 0
+        self.wake = asyncio.Event()
+        self.starting = asyncio.Lock()
 
     def alive(self) -> bool:
         return self.up and self.cdp is not None and not self.cdp._task.done()
@@ -550,8 +557,12 @@ class Browser:
                 if was_up:
                     log(f"{self.identity} browser stopped")
                     await self.app.browser_down(self)
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 10.0)
+            self.wake.clear()
+            try:
+                await asyncio.wait_for(self.wake.wait(), backoff)
+                backoff = 1.0
+            except asyncio.TimeoutError:
+                backoff = min(backoff * 2, 10.0)
 
     def _event(self, event: str, params: dict) -> None:
         if event == "Target.targetDestroyed":
@@ -1085,12 +1096,34 @@ class App:
         self.waiting.pop(run["run_id"], None)
         self.sweep_orphans()  # tabs that closed while paused are no longer members
 
+    async def ensure_browser(self, browser: Browser) -> None:
+        """Start an idle-stopped Chrome (chrome-ensure) and wait for the connection."""
+        async with browser.starting:
+            if browser.alive():
+                return
+            proc = await asyncio.create_subprocess_exec(
+                CHROME_ENSURE, browser.identity, stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+            try:
+                _, err = await asyncio.wait_for(proc.communicate(), ENSURE_SECONDS + 10)
+            except asyncio.TimeoutError:
+                proc.kill()
+                raise HttpError(503, "browser did not start")
+            if proc.returncode != 0:
+                log(f"chrome-ensure {browser.identity} failed: {err.decode(errors='replace').strip()[:300]}")
+                raise HttpError(503, "browser did not start")
+            browser.wake.set()
+            deadline = time.monotonic() + 15
+            while not browser.alive():
+                if time.monotonic() > deadline:
+                    raise HttpError(503, "browser started but is not reachable")
+                await asyncio.sleep(0.2)
+
     async def new_run(self, identity: str) -> dict:
         browser = self.browsers.get(identity)
         if browser is None:
             raise HttpError(400, "unknown identity")
-        if not browser.alive():
-            raise HttpError(503, "browser stopped")
+        await self.ensure_browser(browser)
         cdp = browser.cdp
         run_id = secrets.token_hex(16)
         now = int(time.time())

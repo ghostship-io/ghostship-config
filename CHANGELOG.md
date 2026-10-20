@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.157] - 2026-10-20
+
+- Agent viewer: **+ Personal** / **+ Agent** start an idle-stopped Chrome (through `chrome-ensure`) instead of failing with "browser stopped". The viewer's AppArmor profile may run only `chrome-ensure`, under the container profile with a scrubbed environment.
+
 ## [3.15.156] - 2026-10-20
 
 - `ghostship-apparmor-review` identifies a policy by its own file's content hash, not by its path in the combined `apparmor.d` tree. Adding the agent-desktop profile (#130) renamed that tree, so every other profile reported `configuration-mismatch`, and the next collection would have reset their learning windows despite byte-identical policies. Includes are embedded by content-addressed store path, so real include changes still count. Plex's process labels now allow `ghostship-plex//healthcheck`, so a scan that coincides with a healthcheck no longer fails `process-profile-mismatch`.
