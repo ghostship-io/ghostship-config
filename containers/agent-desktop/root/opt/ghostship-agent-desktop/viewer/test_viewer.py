@@ -5,6 +5,7 @@ import json
 import asyncio
 import secrets
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -118,6 +119,15 @@ class TakeoverBusyTest(unittest.TestCase):
             self.assertEqual(server.takeover_decision(runs, members, None, now), "go")
             with self.assertRaises(ValueError):
                 server.takeover_decision(runs, ["../paused"], None, now)
+
+
+class AddressBarTest(unittest.TestCase):
+    def test_bare_host_reaches_the_server(self):
+        """Catches the address bar rejecting 'amazon.com' (type=url form validation) before normalize_url adds https."""
+        html = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")).read()
+        tag = re.search(r'<input id="url"[^>]*>', html).group(0)
+        self.assertNotIn('type="url"', tag)
+        self.assertTrue(server.normalize_url("example.com/a").startswith("https://example.com/a"))
 
 
 class EnsureBrowserTest(unittest.TestCase):
