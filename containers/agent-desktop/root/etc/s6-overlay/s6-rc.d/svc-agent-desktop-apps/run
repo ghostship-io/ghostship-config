@@ -1,0 +1,11 @@
+#!/usr/bin/with-contenv bash
+# Ghostship app sessions: native desktop apps (apps.json), each on its own
+# headless Sway screen, opened and closed through the control socket in
+# /config/agent-desktop/runs/apps. Sessions are separate processes and
+# outlive a restart of this supervisor.
+for _ in $(seq 1 600); do
+  [ -r /config/agent-desktop/session-env ] && break
+  sleep 1
+done
+cd /config
+exec s6-setuidgid abc /opt/ghostship-agent-desktop/app-session supervise

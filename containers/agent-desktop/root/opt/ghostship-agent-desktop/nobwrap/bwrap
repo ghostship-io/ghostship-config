@@ -1,0 +1,8 @@
+#!/bin/sh
+# Stand-in for bubblewrap inside app sessions. GTK's image loaders (glycin)
+# sandbox each decoder with bwrap, which cannot mount inside this container
+# ("Failed to make / slave"), so every icon load fails and GTK apps abort.
+# Glycin runs its loaders unsandboxed when bwrap reports that namespaces are
+# unavailable; this reports exactly that. The container is the sandbox.
+echo "bwrap: Creating new namespace failed: Operation not permitted" >&2
+exit 1

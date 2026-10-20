@@ -1,3 +1,4 @@
 #!/bin/sh
 # Best effort when the container is stopped without the host's pre-stop step.
+s6-setuidgid abc /opt/ghostship-agent-desktop/app-session close-all >/dev/null 2>&1
 exec /opt/ghostship-agent-desktop/chrome-stop-all

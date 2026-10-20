@@ -1,0 +1,737 @@
+#!/usr/bin/python3 -I
+"""Native desktop apps in app sessions: each app on its own headless Sway screen.
+
+On the shared labwc desktop every window competes for one focus, so an agent
+typing into one app and a person using another collide. An app session gives
+one app its own compositor (its own focus, pointer and keyboard), which the
+agent viewer shows as a session tab and agents drive through this command.
+
+Usage:
+  app-session supervise                      s6 service: the control socket
+  app-session serve <session-id> <app>       one session (started by supervise)
+  app-session catalog | list
+  app-session open <app> [--label TEXT] [--owner-json JSON]
+  app-session close <session-id> [--force] | close-all
+  app-session info <session-id>
+  app-session frame <session-id> [--max-edge N] [--quality Q] [--out FILE]
+  app-session input <session-id> --actions JSON
+
+Every command prints one JSON object. Agent input waits for nothing: when a
+person has paused the session (touch in the viewer), it fails with "paused".
+
+Files (under /config/agent-desktop/runs, the viewer's run registry):
+  <session-id>.json      run record (kind "app": app, label, owner, opened_at)
+  apps/control.sock      supervisor; apps/<session-id>.sock one session
+  paused/<session-id>    a person has taken over; busy/<session-id> agent input in flight
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import base64
+import io
+import json
+import os
+import re
+import secrets
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.join(HERE, "lib"))
+from ghostship_wl import VirtualInput  # noqa: E402
+
+HOME = "/config"
+RUNS = os.environ.get("APP_SESSION_RUNS", "/config/agent-desktop/runs")
+APPS = os.path.join(RUNS, "apps")
+CONTROL = os.path.join(APPS, "control.sock")
+CATALOG = os.environ.get("APP_SESSION_CATALOG", os.path.join(HERE, "apps.json"))
+SESSION_ENV = "/config/agent-desktop/session-env"
+NOBWRAP = os.path.join(HERE, "nobwrap")
+SID_RE = re.compile(r"[0-9a-f]{32}")
+START_SECONDS = 90
+CLOSE_SECONDS = 10
+MAX_REPLY = 32 * 1024 * 1024
+KEY_ALIASES = {"enter": "Return", "return": "Return", "esc": "Escape", "escape": "Escape", "tab": "Tab",
+               "backspace": "BackSpace", "delete": "Delete", "del": "Delete", "space": "space",
+               "home": "Home", "end": "End", "pageup": "Page_Up", "page_up": "Page_Up",
+               "pagedown": "Page_Down", "page_down": "Page_Down", "insert": "Insert",
+               "up": "Up", "down": "Down", "left": "Left", "right": "Right",
+               "arrowup": "Up", "arrowdown": "Down", "arrowleft": "Left", "arrowright": "Right"}
+MODIFIERS = {"ctrl": "ctrl", "control": "ctrl", "shift": "shift", "alt": "alt", "option": "alt",
+             "super": "logo", "meta": "logo", "cmd": "logo", "win": "logo", "logo": "logo"}
+
+
+class AppError(Exception):
+    def __init__(self, kind: str, message: str):
+        super().__init__(message)
+        self.kind = kind
+
+
+def log(message: str) -> None:
+    print(f"[app-session] {message}", file=sys.stderr, flush=True)
+
+
+def check_sid(value: str) -> str:
+    if not isinstance(value, str) or not SID_RE.fullmatch(value):
+        raise AppError("invalid_request", "session id must be 32 lowercase hex characters")
+    return value
+
+
+def load_catalog() -> dict:
+    with open(CATALOG, encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def session_env() -> dict:
+    env = {key: value for key, value in os.environ.items() if not key.startswith(("WAYLAND_", "SWAYSOCK"))}
+    try:
+        with open(SESSION_ENV, encoding="utf-8") as handle:
+            for line in handle:
+                key, sep, value = line.rstrip("\n").partition("=")
+                if sep and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+                    env[key] = value.strip("'\"")
+    except OSError:
+        pass
+    env["HOME"] = HOME
+    env.pop("WAYLAND_DISPLAY", None)
+    env.pop("DISPLAY", None)
+    return env
+
+
+def write_json(path: str, record: dict) -> None:
+    tmp = f"{path}.{secrets.token_hex(4)}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        json.dump(record, handle)
+    os.replace(tmp, path)
+
+
+def unlink(path: str) -> None:
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+
+
+def record_path(sid: str) -> str:
+    return os.path.join(RUNS, f"{check_sid(sid)}.json")
+
+
+def read_record(sid: str) -> dict | None:
+    try:
+        with open(record_path(sid), encoding="utf-8") as handle:
+            record = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    return record if isinstance(record, dict) and record.get("kind") == "app" else None
+
+
+def forget(sid: str) -> None:
+    for path in (record_path(sid), os.path.join(RUNS, f"{sid}.pause"), os.path.join(RUNS, "paused", sid),
+                 os.path.join(RUNS, "busy", sid), os.path.join(APPS, f"{sid}.sock")):
+        unlink(path)
+
+
+# --------------------------------------------------------------------------
+# JSON-line socket transport
+# --------------------------------------------------------------------------
+
+def call(path: str, request: dict, timeout: float = 30.0) -> dict:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+        sock.settimeout(timeout)
+        try:
+            sock.connect(path)
+        except (FileNotFoundError, ConnectionRefusedError):
+            raise AppError("unavailable", "app session is not running") from None
+        sock.sendall(json.dumps(request).encode() + b"\n")
+        data = b""
+        while not data.endswith(b"\n"):
+            chunk = sock.recv(1 << 20)
+            if not chunk:
+                break
+            data += chunk
+            if len(data) > MAX_REPLY:
+                raise AppError("unavailable", "reply too large")
+    try:
+        reply = json.loads(data)
+    except ValueError:
+        raise AppError("unavailable", "app session returned no reply") from None
+    if not reply.get("ok"):
+        error = reply.get("error") or {}
+        raise AppError(error.get("kind", "unavailable"), error.get("message", "request failed"))
+    return reply
+
+
+async def serve_socket(path: str, handler) -> asyncio.AbstractServer:
+    unlink(path)
+
+    async def on_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            line = await asyncio.wait_for(reader.readline(), 30)
+            try:
+                request = json.loads(line)
+                if not isinstance(request, dict):
+                    raise ValueError
+                reply = dict(await handler(request), ok=True)
+            except AppError as exc:
+                reply = {"ok": False, "error": {"kind": exc.kind, "message": str(exc)}}
+            except (ValueError, KeyError, TypeError) as exc:
+                reply = {"ok": False, "error": {"kind": "invalid_request", "message": str(exc)[:300] or "bad request"}}
+            writer.write(json.dumps(reply).encode() + b"\n")
+            await writer.drain()
+        except (asyncio.TimeoutError, ConnectionError):
+            pass
+        finally:
+            writer.close()
+
+    old = os.umask(0o077)
+    try:
+        return await asyncio.start_unix_server(on_client, path, limit=1 << 20)
+    finally:
+        os.umask(old)
+
+
+# --------------------------------------------------------------------------
+# One session: compositor, app, frames, input
+# --------------------------------------------------------------------------
+
+SWAY_CONFIG = """# Generated by app-session: one app on its own headless screen.
+output * resolution {width}x{height} position 0 0
+default_border none
+default_floating_border normal
+focus_follows_mouse no
+exec sh -c 'printf "%s\\n%s\\n" "$WAYLAND_DISPLAY" "$DISPLAY" > "{display_file}"'
+"""
+
+
+class Session:
+    def __init__(self, sid: str, app: str, spec: dict):
+        self.sid, self.app, self.spec = sid, app, spec
+        self.width = int(spec.get("width", 1600))
+        self.height = int(spec.get("height", 1000))
+        self.env = session_env()
+        runtime = self.env.get("XDG_RUNTIME_DIR") or os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+        self.env["XDG_RUNTIME_DIR"] = runtime
+        self.base = os.path.join(runtime, f"ghostship-app-{sid}")
+        self.swaysock = self.base + ".sway.sock"
+        self.sway: subprocess.Popen | None = None
+        self.proc: subprocess.Popen | None = None
+        self.input: VirtualInput | None = None
+        self.pointer = (self.width // 2, self.height // 2)
+        self.done = asyncio.Event()
+        self.lock = asyncio.Lock()
+
+    async def start(self) -> None:
+        display_file = self.base + ".display"
+        unlink(display_file)
+        with open(self.base + ".sway.conf", "w", encoding="utf-8") as handle:
+            handle.write(SWAY_CONFIG.format(width=self.width, height=self.height, display_file=display_file))
+        env = dict(self.env, WLR_BACKENDS="headless", WLR_HEADLESS_OUTPUTS="1", SWAYSOCK=self.swaysock)
+        log_file = open(self.base + ".log", "ab")
+        self.sway = subprocess.Popen(["sway", "-c", self.base + ".sway.conf"], env=env, stdin=subprocess.DEVNULL,
+                                     stdout=log_file, stderr=log_file, start_new_session=True)
+        for _ in range(100):
+            if os.path.exists(display_file) and os.path.getsize(display_file):
+                break
+            if self.sway.poll() is not None:
+                raise AppError("unavailable", "the app screen did not start")
+            await asyncio.sleep(0.1)
+        else:
+            raise AppError("unavailable", "the app screen did not start")
+        with open(display_file, encoding="utf-8") as handle:
+            wayland, _, xdisplay = handle.read().partition("\n")
+        self.env["WAYLAND_DISPLAY"] = wayland.strip()
+        if xdisplay.strip():
+            self.env["DISPLAY"] = xdisplay.strip()
+        self.env["SWAYSOCK"] = self.swaysock
+        self.input = VirtualInput(os.path.join(self.env["XDG_RUNTIME_DIR"], self.env["WAYLAND_DISPLAY"]))
+        app_env = dict(self.env, XDG_SESSION_TYPE="wayland", PATH=f"{NOBWRAP}:{self.env.get('PATH', '/usr/bin:/bin')}")
+        app_env.update({key: str(value) for key, value in (self.spec.get("env") or {}).items()})
+        self.proc = subprocess.Popen(self.spec["command"], env=app_env, cwd=HOME, stdin=subprocess.DEVNULL,
+                                     stdout=log_file, stderr=log_file, start_new_session=True)
+        log_file.close()
+        asyncio.get_running_loop().run_in_executor(None, self.input.hold)
+
+    async def watch(self) -> None:
+        while self.proc.poll() is None and self.sway.poll() is None:
+            await asyncio.sleep(0.5)
+        self.done.set()
+
+    def swaymsg(self, *args: str, timeout: float = 5.0) -> str:
+        proc = subprocess.run(["swaymsg", "-s", self.swaysock, *args], capture_output=True, text=True,
+                              timeout=timeout, env=self.env)
+        if proc.returncode:
+            raise AppError("unavailable", "the app screen did not answer")
+        return proc.stdout
+
+    def windows(self) -> list[dict]:
+        tree = json.loads(self.swaymsg("-t", "get_tree", "-r"))
+        found = []
+
+        def walk(node: dict, floating: bool) -> None:
+            if node.get("pid"):
+                rect = node.get("rect") or {}
+                found.append({"title": (node.get("name") or "")[:200], "app_id": node.get("app_id"),
+                              "pid": node["pid"], "focused": bool(node.get("focused")), "floating": floating,
+                              "rect": [rect.get("x", 0), rect.get("y", 0), rect.get("width", 0), rect.get("height", 0)]})
+            for child in node.get("nodes", []):
+                walk(child, floating)
+            for child in node.get("floating_nodes", []):
+                walk(child, True)
+
+        walk(tree, False)
+        return found
+
+    def info(self) -> dict:
+        try:
+            windows = self.windows()
+        except (AppError, ValueError, OSError, subprocess.TimeoutExpired):
+            windows = []
+        title = next((w["title"] for w in windows if not w["floating"]), None) or (windows[0]["title"] if windows else "")
+        return {"session_id": self.sid, "app": self.app, "name": self.spec.get("name", self.app),
+                "width": self.width, "height": self.height, "alive": not self.done.is_set(),
+                "title": title, "windows": windows}
+
+    def frame(self, max_edge: int, quality: int) -> dict:
+        from PIL import Image  # python3-pil; imported lazily so the CLI never needs it
+        proc = subprocess.run(["grim", "-t", "ppm", "-"], capture_output=True, timeout=10, env=self.env)
+        if proc.returncode:
+            raise AppError("unavailable", "screen capture failed")
+        image = Image.open(io.BytesIO(proc.stdout))
+        scale = min(1.0, max_edge / max(image.size))
+        if scale < 1.0:
+            image = image.resize((max(1, int(image.width * scale)), max(1, int(image.height * scale))), Image.BILINEAR)
+        out = io.BytesIO()
+        image.convert("RGB").save(out, "JPEG", quality=quality)
+        return {"width": self.width, "height": self.height, "image_width": image.width,
+                "image_height": image.height, "jpeg": base64.b64encode(out.getvalue()).decode(), "at": time.time()}
+
+    # ---- input -----------------------------------------------------------
+    def _point(self, value, default=None) -> tuple[int, int]:
+        if value is None:
+            if default is None:
+                raise ValueError("coordinate is required")
+            return default
+        if not (isinstance(value, (list, tuple)) and len(value) == 2):
+            raise ValueError("coordinate must be [x, y]")
+        x, y = float(value[0]), float(value[1])
+        if not (0 <= x < self.width and 0 <= y < self.height):
+            raise ValueError(f"coordinate outside the {self.width}x{self.height} screen")
+        return int(x), int(y)
+
+    def _move(self, point: tuple[int, int]) -> None:
+        self.input.move(point[0], point[1], self.width, self.height)
+        self.pointer = point
+
+    def _click(self, button: str, count: int) -> None:
+        for _ in range(count):
+            self.input.button(button, True)
+            time.sleep(0.02)
+            self.input.button(button, False)
+            time.sleep(0.06)
+
+    def _wtype(self, args: list[str]) -> None:
+        proc = subprocess.run(["wtype", *args], capture_output=True, timeout=30, env=self.env)
+        if proc.returncode:
+            raise AppError("unavailable", "keyboard input failed")
+
+    @staticmethod
+    def key_args(combo: str) -> list[str]:
+        parts = combo.replace(" ", "").split("+")
+        if not all(parts) or len(combo) > 64 or parts[-1].lower() in MODIFIERS:
+            raise ValueError("key needs a name such as Return or ctrl+s")
+        mods, key = parts[:-1], parts[-1]
+        args = []
+        for mod in mods:
+            if mod.lower() not in MODIFIERS:
+                raise ValueError(f"unknown modifier {mod!r}")
+            args += ["-M", MODIFIERS[mod.lower()]]
+        key = KEY_ALIASES.get(key.lower(), key)
+        if not re.fullmatch(r"[A-Za-z0-9_]{1,32}|[!-~]", key):
+            raise ValueError(f"unknown key {key!r}")
+        args += ["-k", key] if len(key) > 1 else [key]
+        for mod in reversed(mods):
+            args += ["-m", MODIFIERS[mod.lower()]]
+        return args
+
+    def act(self, action: dict) -> dict:
+        kind = action.get("action")
+        coordinate = action.get("coordinate")
+        if kind in ("left_click", "right_click", "middle_click", "double_click", "triple_click"):
+            self._move(self._point(coordinate, self.pointer))
+            button = {"right_click": "right", "middle_click": "middle"}.get(kind, "left")
+            self._click(button, {"double_click": 2, "triple_click": 3}.get(kind, 1))
+        elif kind == "mouse_move":
+            self._move(self._point(coordinate))
+        elif kind in ("left_mouse_down", "left_mouse_up"):
+            if coordinate is not None:
+                self._move(self._point(coordinate))
+            self.input.button("left", kind == "left_mouse_down")
+        elif kind == "button":  # viewer pointer events: any button, down or up
+            if coordinate is not None:
+                self._move(self._point(coordinate))
+            button = action.get("button", "left")
+            if button not in ("left", "right", "middle") or action.get("state") not in ("down", "up"):
+                raise ValueError("button needs button left|right|middle and state down|up")
+            self.input.button(button, action["state"] == "down")
+        elif kind == "left_click_drag":
+            start, end = self._point(action.get("start_coordinate")), self._point(action.get("end_coordinate"))
+            self._move(start)
+            self.input.button("left", True)
+            for step in range(1, 11):
+                time.sleep(0.02)
+                self._move((start[0] + (end[0] - start[0]) * step // 10, start[1] + (end[1] - start[1]) * step // 10))
+            self.input.button("left", False)
+        elif kind == "scroll":
+            if coordinate is not None:
+                self._move(self._point(coordinate))
+            if "dx" in action or "dy" in action:  # viewer wheel, in notches
+                dx = max(min(float(action.get("dx", 0)), 50.0), -50.0)
+                dy = max(min(float(action.get("dy", 0)), 50.0), -50.0)
+            else:
+                amount = min(max(int(action.get("scroll_amount", 3)), 1), 50)
+                direction = action.get("scroll_direction", "down")
+                vectors = {"down": (0, amount), "up": (0, -amount), "right": (amount, 0), "left": (-amount, 0)}
+                if direction not in vectors:
+                    raise ValueError("scroll_direction must be up, down, left or right")
+                dx, dy = vectors[direction]
+            self.input.scroll(dx, dy)
+        elif kind == "key":
+            self._wtype(self.key_args(str(action.get("text", ""))))
+        elif kind == "type":
+            text = action.get("text")
+            if not isinstance(text, str) or not text or len(text) > 4000:
+                raise ValueError("type needs text (1-4000 characters)")
+            self._wtype(["-d", "8", "--", text])
+        elif kind == "wait":
+            time.sleep(min(max(float(action.get("duration", 1)), 0), 10))
+        elif kind == "cursor_position":
+            return {"action": kind, "position": list(self.pointer)}
+        else:
+            raise ValueError(f"unknown action {kind!r}")
+        return {"action": kind, "ok": True}
+
+    async def input_actions(self, actions, actor: str) -> dict:
+        if not isinstance(actions, list) or not 1 <= len(actions) <= 50:
+            raise ValueError("actions must be a list of 1-50 actions")
+        busy = os.path.join(RUNS, "busy", self.sid)
+        async with self.lock:
+            if actor == "agent":
+                # Mark busy before checking the pause, as the browser gate does:
+                # a person who pauses then waits for busy to clear never races us.
+                os.makedirs(os.path.dirname(busy), mode=0o700, exist_ok=True)
+                open(busy, "w").close()
+            try:
+                if actor == "agent" and os.path.lexists(os.path.join(RUNS, "paused", self.sid)):
+                    raise AppError("paused", "a person took over this app session; wait until they resume it")
+                results = []
+                for action in actions:
+                    if not isinstance(action, dict):
+                        raise ValueError("each action is an object")
+                    results.append(await asyncio.get_running_loop().run_in_executor(None, self.act, action))
+                return {"results": results}
+            finally:
+                if actor == "agent":
+                    unlink(busy)
+
+    async def handle(self, request: dict) -> dict:
+        op = request.get("op")
+        if op == "info":
+            return self.info()
+        if op == "frame":
+            max_edge = min(max(int(request.get("max_edge", 1600)), 160), 3840)
+            quality = min(max(int(request.get("quality", 70)), 20), 95)
+            return await asyncio.get_running_loop().run_in_executor(None, self.frame, max_edge, quality)
+        if op == "input":
+            actor = request.get("actor", "agent")
+            if actor not in ("agent", "human"):
+                raise ValueError("actor must be agent or human")
+            return await self.input_actions(request.get("actions"), actor)
+        if op == "close":
+            closed = await self.close(force=bool(request.get("force")))
+            return {"closed": closed}
+        raise ValueError("unknown op")
+
+    async def close(self, force: bool = True) -> bool:
+        """Ask the app's windows to close, as a person would; stop it and the screen once it exits.
+
+        Without force, an app that stays open (typically asking to save) keeps
+        running and this returns False, so unsaved work is never discarded.
+        """
+        if self.proc is not None and self.proc.poll() is None:
+            try:
+                self.swaymsg("[all]", "kill")
+            except (AppError, OSError, subprocess.TimeoutExpired):
+                pass
+            for _ in range(CLOSE_SECONDS * 10):
+                if self.proc.poll() is not None:
+                    break
+                await asyncio.sleep(0.1)
+            if self.proc.poll() is None and not force:
+                return False
+        for proc in (self.proc, self.sway):
+            if proc is not None and proc.poll() is None:
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    continue
+                for _ in range(50):
+                    if proc.poll() is not None:
+                        break
+                    await asyncio.sleep(0.1)
+                if proc.poll() is None:
+                    os.killpg(proc.pid, signal.SIGKILL)
+        self.done.set()
+        return True
+
+
+async def serve(sid: str, app: str) -> int:
+    spec = load_catalog()[app]
+    session = Session(check_sid(sid), app, spec)
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, lambda: asyncio.ensure_future(session.close(force=True)))
+    try:
+        await session.start()
+        server = await serve_socket(os.path.join(APPS, f"{sid}.sock"), session.handle)
+        log(f"{sid[:8]} {app} running (screen {session.width}x{session.height})")
+        watcher = asyncio.ensure_future(session.watch())
+        await session.done.wait()
+        watcher.cancel()
+        server.close()
+        await session.close()
+        log(f"{sid[:8]} {app} ended")
+        return 0
+    finally:
+        forget(sid)
+        for suffix in (".display", ".sway.conf", ".sway.sock"):
+            unlink(session.base + suffix)
+
+
+def icon_uri(path: str | None) -> str | None:
+    """The app's icon as a 96 px PNG data URI for the viewer's launcher (None when unreadable)."""
+    if not path:
+        return None
+    try:
+        from PIL import Image
+        with Image.open(path) as image:
+            image.thumbnail((96, 96))
+            out = io.BytesIO()
+            image.save(out, "PNG")
+    except (OSError, ValueError, ImportError):
+        return None
+    return "data:image/png;base64," + base64.b64encode(out.getvalue()).decode()
+
+
+# --------------------------------------------------------------------------
+# Supervisor: open, list and close sessions
+# --------------------------------------------------------------------------
+
+class Supervisor:
+    def __init__(self):
+        self.children: dict[str, subprocess.Popen] = {}
+        self.opening = asyncio.Lock()
+
+    def sessions(self) -> list[dict]:
+        out = []
+        for name in sorted(os.listdir(RUNS)):
+            sid = name[:-5]
+            if not (name.endswith(".json") and SID_RE.fullmatch(sid)):
+                continue
+            record = read_record(sid)
+            if record is None:
+                continue
+            try:
+                info = call(os.path.join(APPS, f"{sid}.sock"), {"op": "info"}, timeout=5)
+            except (AppError, OSError):
+                child = self.children.get(sid)
+                if child is not None and child.poll() is None:
+                    continue  # still starting
+                if time.time() - record.get("opened_at", 0) > START_SECONDS:
+                    forget(sid)  # its process is gone
+                continue
+            info.pop("ok", None)
+            out.append(dict(info, label=record.get("label"), owner=record.get("owner"),
+                            opened_at=record.get("opened_at")))
+        return out
+
+    @staticmethod
+    def running_elsewhere(spec: dict) -> bool:
+        pattern = spec.get("process")
+        if not pattern:
+            return False
+        return subprocess.run(["pgrep", "-f", "--", pattern], capture_output=True).returncode == 0
+
+    async def open(self, request: dict) -> dict:
+        catalog = load_catalog()
+        app = request.get("app")
+        if app not in catalog:
+            raise AppError("invalid_request", f"unknown app; choose one of: {', '.join(sorted(catalog))}")
+        spec = catalog[app]
+        async with self.opening:
+            if spec.get("single_instance", True):
+                for session in self.sessions():
+                    if session["app"] == app:
+                        return {"session": session, "existing": True}
+                if self.running_elsewhere(spec):
+                    raise AppError("conflict", f"{spec.get('name', app)} is already open on the shared desktop; "
+                                               "close it there first")
+            owner = request.get("owner") if isinstance(request.get("owner"), dict) else {}
+            owner = {key: (str(owner[key])[:200] if owner.get(key) is not None else None)
+                     for key in ("harness", "model", "t3_thread_id", "t3_thread_title")}
+            label = str(request.get("label") or spec.get("name", app))[:120]
+            sid = secrets.token_hex(16)
+            write_json(record_path(sid), {"schema": 1, "run_id": sid, "kind": "app", "app": app,
+                                          "identity": "app", "label": label, "owner": owner,
+                                          "opened_at": int(time.time())})
+            child = subprocess.Popen([sys.executable, "-I", os.path.abspath(__file__), "serve", sid, app],
+                                     stdin=subprocess.DEVNULL, start_new_session=True)
+            self.children[sid] = child
+            sock = os.path.join(APPS, f"{sid}.sock")
+            deadline = time.monotonic() + START_SECONDS
+            while time.monotonic() < deadline:
+                if child.poll() is not None:
+                    forget(sid)
+                    raise AppError("unavailable", f"{spec.get('name', app)} did not start")
+                try:
+                    info = await asyncio.get_running_loop().run_in_executor(
+                        None, lambda: call(sock, {"op": "info"}, timeout=5))
+                except AppError:
+                    await asyncio.sleep(0.5)
+                    continue
+                if info.get("windows"):
+                    info.pop("ok", None)
+                    return {"session": dict(info, label=label, owner=owner), "existing": False}
+                await asyncio.sleep(0.5)
+            return {"session": {"session_id": sid, "app": app, "label": label, "starting": True}, "existing": False}
+
+    async def handle(self, request: dict) -> dict:
+        op = request.get("op")
+        loop = asyncio.get_running_loop()
+        if op == "catalog":
+            return {"apps": [{"app": key, "name": spec.get("name", key), "icon": icon_uri(spec.get("icon"))}
+                             for key, spec in sorted(load_catalog().items()) if not spec.get("hidden")]}
+        if op == "list":
+            return {"sessions": await loop.run_in_executor(None, self.sessions)}
+        if op == "open":
+            return await self.open(request)
+        if op == "close":
+            sid = check_sid(request.get("session_id"))
+            if read_record(sid) is None:
+                raise AppError("not_found", "no such app session")
+            reply = await loop.run_in_executor(None, lambda: call(
+                os.path.join(APPS, f"{sid}.sock"), {"op": "close", "force": bool(request.get("force"))},
+                timeout=CLOSE_SECONDS + 15))
+            if not reply.get("closed"):
+                raise AppError("still_open", "the app is still open, probably asking to save; answer it in the "
+                                             "session, or close with force to discard unsaved work")
+            deadline = time.monotonic() + CLOSE_SECONDS + 10
+            while read_record(sid) is not None and time.monotonic() < deadline:
+                await asyncio.sleep(0.2)
+            return {"session_id": sid, "closed": read_record(sid) is None}
+        raise ValueError("unknown op")
+
+    async def reap(self) -> None:
+        while True:
+            await asyncio.sleep(2)
+            for sid, child in list(self.children.items()):
+                if child.poll() is not None:
+                    self.children.pop(sid, None)
+
+
+async def supervise() -> int:
+    os.makedirs(APPS, mode=0o700, exist_ok=True)
+    os.makedirs(os.path.join(RUNS, "busy"), mode=0o700, exist_ok=True)
+    os.makedirs(os.path.join(RUNS, "paused"), mode=0o700, exist_ok=True)
+    supervisor = Supervisor()
+    server = await serve_socket(CONTROL, supervisor.handle)
+    asyncio.ensure_future(supervisor.reap())
+    log("supervisor listening")
+    async with server:
+        await server.serve_forever()
+    return 0
+
+
+# --------------------------------------------------------------------------
+# CLI
+# --------------------------------------------------------------------------
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="Native desktop apps on their own screens.")
+    sub = parser.add_subparsers(dest="op", required=True)
+    sub.add_parser("supervise")
+    serve_cmd = sub.add_parser("serve")
+    serve_cmd.add_argument("session_id")
+    serve_cmd.add_argument("app")
+    sub.add_parser("catalog")
+    sub.add_parser("list")
+    open_cmd = sub.add_parser("open")
+    open_cmd.add_argument("app")
+    open_cmd.add_argument("--label")
+    open_cmd.add_argument("--owner-json")
+    sub.add_parser("info").add_argument("session_id")
+    close_cmd = sub.add_parser("close")
+    close_cmd.add_argument("session_id")
+    close_cmd.add_argument("--force", action="store_true", help="discard unsaved work if the app does not exit")
+    sub.add_parser("close-all")
+    frame_cmd = sub.add_parser("frame")
+    frame_cmd.add_argument("session_id")
+    frame_cmd.add_argument("--max-edge", type=int, default=1600)
+    frame_cmd.add_argument("--quality", type=int, default=70)
+    frame_cmd.add_argument("--out")
+    input_cmd = sub.add_parser("input")
+    input_cmd.add_argument("session_id")
+    input_cmd.add_argument("--actions", required=True)
+    args = parser.parse_args(argv)
+    if args.op == "supervise":
+        return asyncio.run(supervise())
+    if args.op == "serve":
+        return asyncio.run(serve(args.session_id, args.app))
+    try:
+        if args.op in ("catalog", "list"):
+            result = call(CONTROL, {"op": args.op})
+        elif args.op == "open":
+            owner = json.loads(args.owner_json) if args.owner_json else {}
+            result = call(CONTROL, {"op": "open", "app": args.app, "label": args.label, "owner": owner},
+                          timeout=START_SECONDS + 15)
+        elif args.op == "close":
+            result = call(CONTROL, {"op": "close", "session_id": check_sid(args.session_id), "force": args.force},
+                          timeout=CLOSE_SECONDS + 30)
+        elif args.op == "close-all":
+            closed = []
+            for session in call(CONTROL, {"op": "list"})["sessions"]:
+                call(CONTROL, {"op": "close", "session_id": session["session_id"], "force": True},
+                     timeout=CLOSE_SECONDS + 30)
+                closed.append(session["session_id"])
+            result = {"closed": closed}
+        else:
+            sock = os.path.join(APPS, f"{check_sid(args.session_id)}.sock")
+            if args.op == "info":
+                result = call(sock, {"op": "info"})
+            elif args.op == "frame":
+                result = call(sock, {"op": "frame", "max_edge": args.max_edge, "quality": args.quality})
+                if args.out:
+                    with open(args.out, "wb") as handle:
+                        handle.write(base64.b64decode(result.pop("jpeg")))
+                    result["file"] = args.out
+            else:
+                actions = json.loads(args.actions)
+                result = call(sock, {"op": "input", "actor": "agent", "actions": actions}, timeout=600)
+        result.pop("ok", None)
+        print(json.dumps({"ok": True, "result": result}, separators=(",", ":")))
+        return 0
+    except AppError as exc:
+        print(json.dumps({"ok": False, "error": {"kind": exc.kind, "message": str(exc)}}))
+        return 1
+    except (ValueError, OSError) as exc:
+        print(json.dumps({"ok": False, "error": {"kind": "invalid_request", "message": str(exc)[:300]}}))
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

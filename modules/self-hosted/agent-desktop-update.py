@@ -926,9 +926,9 @@ def functional_canary(config: dict, image: str, versions: dict, simulate: str | 
 def viewer_gate(desktop: Desktop) -> None:
     """The viewer is up behind nginx and refuses a request without an Access token."""
     code = desktop.exec("curl", "-sS", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}",
-                        "http://127.0.0.1:3000/agents/api/runs", timeout=60).stdout.strip()
+                        "http://127.0.0.1:3000/api/runs", timeout=60).stdout.strip()
     if code != "401":
-        raise GateFailure("viewer /agents/api/runs", f"HTTP {code} without an Access token (expected 401)")
+        raise GateFailure("viewer /api/runs", f"HTTP {code} without an Access token (expected 401)")
 
 
 def profile_canary(config: dict, snapshot: Path, current_image: str, candidate_image: str) -> dict:

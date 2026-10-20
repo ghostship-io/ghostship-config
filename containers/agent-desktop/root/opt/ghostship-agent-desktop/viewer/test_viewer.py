@@ -130,6 +130,17 @@ class AddressBarTest(unittest.TestCase):
         self.assertTrue(server.normalize_url("example.com/a").startswith("https://example.com/a"))
 
 
+class AppKeyTest(unittest.TestCase):
+    def test_viewer_keys_become_app_actions(self):
+        """Catches typed characters sent as key names (case lost), shortcuts typed as text, or key-up repeats."""
+        self.assertEqual(server.app_key_action({"kind": "down", "key": "A", "mods": 8}), {"action": "type", "text": "A"})
+        self.assertEqual(server.app_key_action({"kind": "down", "key": "s", "mods": 2}), {"action": "key", "text": "ctrl+s"})
+        self.assertEqual(server.app_key_action({"kind": "press", "key": "Enter"}), {"action": "key", "text": "Return"})
+        self.assertEqual(server.app_key_action({"kind": "down", "key": "Tab", "mods": 8}), {"action": "key", "text": "shift+Tab"})
+        self.assertIsNone(server.app_key_action({"kind": "up", "key": "a"}))
+        self.assertIsNone(server.app_key_action({"kind": "down", "key": "Shift", "mods": 8}))
+
+
 class CloseRunTest(unittest.TestCase):
     def test_close_waits_for_agent_call_then_closes_home_tab_last(self):
         """Catches closing a window under an in-flight agent call, closing the home tab first
