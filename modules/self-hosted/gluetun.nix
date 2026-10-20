@@ -617,7 +617,7 @@ in
       gluetun-runtime-env
     ];
     volumes = [
-      "${gluetun-state-dir}:/gluetun"
+      "${gluetun-state-dir}:/gluetun:rw,noexec,nosuid,nodev"
     ];
   };
 

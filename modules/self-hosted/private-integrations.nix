@@ -421,7 +421,7 @@ in {
         "/run/ghostship-hostops:/run/ghostship-hostops:ro"
         # Service executor credentials: the runtime's default directory.
         "${serviceSecretsDir}:/run/ghostship-secrets:ro"
-        "/srv/apps/ghostship-private-integrations:/state:rw"
+        "/srv/apps/ghostship-private-integrations:/state:rw,noexec,nosuid,nodev"
       ];
       extraOptions = [
         "--read-only" "--cap-drop=ALL" "--security-opt=no-new-privileges"

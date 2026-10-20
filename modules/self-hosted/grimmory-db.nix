@@ -43,7 +43,7 @@ in
       "/srv/apps/grimmory-db/grimmory-db.env"
     ];
     volumes = [
-      "/srv/apps/grimmory-db:/var/lib/mysql:rw"
+      "/srv/apps/grimmory-db:/var/lib/mysql:rw,noexec,nosuid,nodev"
     ];
   };
 

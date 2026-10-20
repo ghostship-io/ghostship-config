@@ -38,7 +38,7 @@ in
       TZ = "Pacific/Honolulu";
       LOG_LEVEL = "info";
     };
-    volumes = [ "/srv/apps/seerr:/app/config:rw" ];
+    volumes = [ "/srv/apps/seerr:/app/config:rw,noexec,nosuid,nodev" ];
     extraOptions = [
       "--network=ghostship_net"
       "--health-cmd=wget -q -O /dev/null --timeout=5 http://127.0.0.1:5055/api/v1/status"

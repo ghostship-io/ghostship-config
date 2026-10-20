@@ -250,8 +250,8 @@ in
           WEBUI_PORT = "5000";
         };
         volumes = [
-          "/srv/apps/qbittorrent:/config"
-          "/mnt/share/Downloads:/downloads"
+          "/srv/apps/qbittorrent:/config:rw,noexec,nosuid,nodev"
+          "/mnt/share/Downloads:/downloads:rw,noexec,nosuid,nodev"
           "${vuetorrent-ui}:/vuetorrent:ro"
         ];
       };

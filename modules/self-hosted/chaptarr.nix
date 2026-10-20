@@ -54,10 +54,10 @@ in
       TZ = "UTC";
     };
     volumes = [
-      "/srv/apps/chaptarr:/config:rw"
-      "/mnt/share/Downloads:/downloads:rw"
-      "/mnt/share/Library/Books:/books:rw"
-      "/mnt/share/Library/Audiobooks:/audiobooks:rw"
+      "/srv/apps/chaptarr:/config:rw,noexec,nosuid,nodev"
+      "/mnt/share/Downloads:/downloads:rw,noexec,nosuid,nodev"
+      "/mnt/share/Library/Books:/books:rw,noexec,nosuid,nodev"
+      "/mnt/share/Library/Audiobooks:/audiobooks:rw,noexec,nosuid,nodev"
     ];
   };
 
