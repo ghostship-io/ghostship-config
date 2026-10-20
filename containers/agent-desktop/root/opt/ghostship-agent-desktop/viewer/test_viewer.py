@@ -1,5 +1,8 @@
-"""Load-bearing checks for the agent viewer: input mapping and the pause file protocol."""
+"""Load-bearing checks for the agent viewer: input mapping, pause/busy protocol, Access JWT auth."""
+import base64
+import hashlib
 import json
+import secrets
 import os
 import sys
 import tempfile
@@ -91,6 +94,106 @@ class PauseProtocolTest(unittest.TestCase):
         os.symlink(outside, os.path.join(self.runs, "paused", "AAAA1111"))
         server.pause_run(self.runs, "run_3", ["AAAA1111"])
         self.assertFalse(os.path.exists(outside))
+
+
+class TakeoverBusyTest(unittest.TestCase):
+    def test_human_input_waits_for_in_flight_agent_call(self):
+        """Catches human input overlapping an in-flight agent action (busy file ignored, stale or not)."""
+        with tempfile.TemporaryDirectory() as runs:
+            os.mkdir(os.path.join(runs, "busy"))
+            now = 1_800_000_000.0
+            members = ["AAAA1111", "BBBB2222"]
+            self.assertEqual(server.takeover_decision(runs, members, None, now), "go")
+            busy = os.path.join(runs, "busy", "BBBB2222")
+            open(busy, "w").close()
+            os.utime(busy, (now - 5, now - 5))  # fresh: an agent call is mid-flight
+            self.assertEqual(server.takeover_decision(runs, members, None, now), "wait")
+            self.assertEqual(server.takeover_decision(runs, members, now - 10, now), "wait")
+            self.assertEqual(server.takeover_decision(runs, members, now - 20, now), "stuck")
+            self.assertEqual(server.takeover_decision(runs, ["AAAA1111"], None, now), "go")  # other run's tab
+            os.utime(busy, (now - 31, now - 31))  # abandoned (gate refreshes every 10 s)
+            self.assertEqual(server.takeover_decision(runs, members, now - 20, now), "go")
+            os.unlink(busy)
+            self.assertEqual(server.takeover_decision(runs, members, None, now), "go")
+            with self.assertRaises(ValueError):
+                server.takeover_decision(runs, ["../paused"], None, now)
+
+
+def _b64(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def _prime(bits: int) -> int:
+    while True:
+        n = secrets.randbits(bits) | (1 << (bits - 1)) | 1
+        if all(n % p for p in (3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37)) and all(
+                pow(a, n - 1, n) == 1 for a in (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37)):
+            return n
+
+
+class AccessJwtTest(unittest.TestCase):
+    TEAM, AUD = "example.cloudflareaccess.com", "aud-123"
+
+    @classmethod
+    def setUpClass(cls):
+        e = 65537
+        while True:
+            p, q = _prime(512), _prime(512)
+            phi = (p - 1) * (q - 1)
+            if p != q and phi % e:
+                break
+        cls.n, cls.d = p * q, pow(e, -1, phi)
+        cls.keys = {"k1": (cls.n, e)}
+        cls.jwks = {"keys": [{"kty": "RSA", "kid": "k1", "n": _b64(cls.n.to_bytes(128, "big")),
+                              "e": _b64(e.to_bytes(3, "big"))}]}
+
+    def token(self, claims, alg="RS256", kid="k1", tamper=False):
+        head = _b64(json.dumps({"alg": alg, "kid": kid, "typ": "JWT"}).encode())
+        body = _b64(json.dumps(claims).encode())
+        if alg == "none":
+            return f"{head}.{body}."
+        digest = hashlib.sha256(f"{head}.{body}".encode()).digest()
+        t = server.SHA256_DIGEST_INFO + digest
+        em = b"\x00\x01" + b"\xff" * (128 - len(t) - 3) + b"\x00" + t
+        sig = pow(int.from_bytes(em, "big"), self.d, self.n).to_bytes(128, "big")
+        if tamper:
+            sig = bytes([sig[0] ^ 1]) + sig[1:]
+        return f"{head}.{body}.{_b64(sig)}"
+
+    def test_access_jwt_table(self):
+        """Catches an unauthenticated container-network peer driving agent browsers (forged/expired/foreign JWTs)."""
+        now = 1_800_000_000
+        good = {"aud": [self.AUD], "iss": f"https://{self.TEAM}", "exp": now + 300, "nbf": now - 10,
+                "email": "op@example.com"}
+        keys = server.parse_jwks(self.jwks)
+        self.assertEqual(keys, self.keys)
+        cases = [
+            ("valid", self.token(good), True),
+            ("valid, aud as string", self.token(dict(good, aud=self.AUD)), True),
+            ("exp within leeway", self.token(dict(good, exp=now - 30)), True),
+            ("wrong aud", self.token(dict(good, aud=["other"])), False),
+            ("wrong iss", self.token(dict(good, iss="https://evil.cloudflareaccess.com")), False),
+            ("expired", self.token(dict(good, exp=now - 120)), False),
+            ("not yet valid", self.token(dict(good, nbf=now + 300)), False),
+            ("missing exp", self.token({k: v for k, v in good.items() if k != "exp"}), False),
+            ("bad signature", self.token(good, tamper=True), False),
+            ("alg none", self.token(good, alg="none"), False),
+            ("alg HS256", self.token(good, alg="HS256"), False),
+            ("unknown kid", self.token(good, kid="k2"), False),
+            ("garbage", "not.a.jwt", False),
+            ("claims swapped after signing", self.token(good).rsplit(".", 2)[0] + "."
+             + _b64(json.dumps(dict(good, aud=["x"])).encode()) + "." + self.token(good).rsplit(".", 1)[1], False),
+        ]
+        for name, token, ok in cases:
+            with self.subTest(name):
+                if ok:
+                    self.assertEqual(server.verify_jwt(token, keys, self.TEAM, self.AUD, now)["email"], "op@example.com")
+                else:
+                    with self.assertRaises(server.AuthError):
+                        server.verify_jwt(token, keys, self.TEAM, self.AUD, now)
+        self.assertEqual(server.request_token({"cookie": "a=b; CF_Authorization=tok"}), "tok")
+        self.assertEqual(server.request_token({"cf-access-jwt-assertion": "hdr", "cookie": "CF_Authorization=c"}), "hdr")
+        self.assertIsNone(server.request_token({}))
 
 
 if __name__ == "__main__":

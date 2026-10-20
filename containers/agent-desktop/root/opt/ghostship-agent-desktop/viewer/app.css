@@ -98,6 +98,11 @@ a.thread:hover { text-decoration: underline; }
 .stage-msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 10px 14px;
   border-radius: 10px; background: rgba(15, 17, 21, .85); color: var(--muted); pointer-events: none; text-align: center; }
 
+.notice { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); max-width: 92%; padding: 8px 12px;
+  border-radius: 10px; background: rgba(59, 46, 20, .95); color: #ffe2a8; pointer-events: none; text-align: center;
+  font-size: 14px; }
+.notice.info { background: rgba(23, 56, 44, .95); color: #c9ffe9; }
+.btn:disabled, input:disabled { opacity: .4; cursor: default; }
 .kbd-bar { background: var(--panel); border-top: 1px solid var(--line); padding: 6px 10px;
   padding-left: calc(10px + var(--sal)); padding-right: calc(10px + var(--sar)); display: grid; gap: 6px; }
 .kbd-bar textarea { width: 100%; resize: none; background: var(--bg); color: var(--text); border: 1px solid var(--accent);
