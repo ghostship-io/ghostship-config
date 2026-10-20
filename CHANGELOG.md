@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.150] - 2026-10-20
+
+- `ghostship-apparmor-review` can review the learning ledger by group. `--summary` lists unreviewed events grouped by their kept fields, with digits normalized and hex `comm` decoded. `--container NAME --match FIELD=GLOB` classifies every matching event in one locked write; profile and operation matches are required. The new `resolved-by-policy` classification, whose note must cite a PR, clears legitimate events a deployed policy now covers. Before this, only `expected-denial` cleared an event, so fixed events blocked enforcement forever, and reviewing 126k Plex events one ID at a time rewrote a 48 MB ledger on every call. Events now keep the AppArmor `peer`, so ptrace and signal records are distinguishable.
+
 ## [3.15.149] - 2026-10-20
 
 - Failed services start T3 repairs. `ghostship-failure@` alerts now also go into a root-owned incident spool. The GitHub coordinator (ghostship-agent 0.28.0) turns each one into a T3 thread that diagnoses the failure on the host, fixes the cause through a PR and deploys it, and leaves `t3code` alone. A repeat failure messages the same thread, and at most 3 incident threads start per day; past that, the alert goes to a human on `operations`. Incident details never reach GitHub.
