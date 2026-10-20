@@ -143,24 +143,12 @@ deviceandbrowserinfo under a Bladebro attach reports **"You are human!"**
 
 ## Upgrades and rollback
 
-Known-good pins live in `containers/agent-desktop/Containerfile`: Google
-Chrome `155.0.8059.39-1` (SHA-256 per architecture), Bladebro `4.2.2`
-(SHA-256 per architecture), and the base image digest. The current pins are
-the validated set recorded above.
-
-Upgrade procedure:
-
-1. Bump the pin and checksums in the Containerfile.
-2. Rebuild the image and restart the desktop container.
-3. Run `tools/check_cdp_regression.py` inside the container; it must pass.
-4. Run `tools/run_retailer.py --driver bladebro` on a seasoned profile and
-   confirm `journey_ok: true` for Home Depot, then spot-check Lowe's.
-5. Promote only when both pass.
-
-Rollback: revert the pin commit and rebuild. Image tags are
-content-addressed, so the previous image returns unchanged, and
-`storage-health` keeps recent tags for roughly a week. Profiles and
-authentication are untouched by either direction.
+Pins live in `containers/agent-desktop/versions.json`. The desktop update
+service ([agent desktop](agent-desktop.md#updates-and-rollback)) gates every
+candidate with `tools/check_cdp_regression.py`, the bot-check pages and
+fingerprint parity before promotion; retailer journeys are no longer part of
+automated gates. Rollback restores the previous pins and, when needed, the
+profiles from the pre-update snapshot.
 
 ## Regression
 
