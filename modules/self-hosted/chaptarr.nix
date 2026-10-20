@@ -2,11 +2,13 @@
   config,
   lib,
   pkgs,
+  inputs,
   ...
 }:
 
 let
   chaptarr-secrets = config.ghostship.selfHostedSecrets.projections.chaptarr.path;
+  ebookConverter = inputs.ghostship-private-agent.packages.${pkgs.stdenv.hostPlatform.system}.ebook-converter;
 in
 {
   ghostship.apps.chaptarr = {
@@ -62,6 +64,47 @@ in
   systemd.services.podman-chaptarr = {
     after = [ "mnt-share.mount" ];
     wants = [ "mnt-share.mount" ];
+  };
+
+  systemd.services.ghostship-ebook-convert = {
+    description = "Convert imported books to EPUB while retaining their originals";
+    after = [ "mnt-share.mount" ];
+    requires = [ "mnt-share.mount" ];
+    environment = {
+      HOME = "/var/lib/ghostship-ebook-convert";
+      CALIBRE_CONFIG_DIRECTORY = "/var/lib/ghostship-ebook-convert/calibre";
+    };
+    serviceConfig = {
+      Type = "oneshot";
+      User = "apps";
+      Group = "apps";
+      StateDirectory = "ghostship-ebook-convert";
+      StateDirectoryMode = "0750";
+      UMask = "0022";
+      ExecStart = "${ebookConverter}/bin/ghostship-ebook-convert --library /mnt/share/Library/Books --state /var/lib/ghostship-ebook-convert --minimum-age 120";
+      PrivateNetwork = true;
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      ReadWritePaths = [ "/mnt/share/Library/Books" ];
+      InaccessiblePaths = [ "/srv" "-/run/ghostship-secrets" "-/run/agenix" ];
+      NoNewPrivileges = true;
+      CapabilityBoundingSet = "";
+      RestrictSUIDSGID = true;
+      MemoryMax = "2G";
+      TasksMax = 128;
+      CPUQuota = "100%";
+      TimeoutStartSec = "35min";
+    };
+  };
+
+  systemd.timers.ghostship-ebook-convert = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "3min";
+      OnUnitInactiveSec = "5min";
+      Unit = "ghostship-ebook-convert.service";
+    };
   };
 
   systemd.tmpfiles.rules = [
