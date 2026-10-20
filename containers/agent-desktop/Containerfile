@@ -4,6 +4,7 @@
 #   - Google Chrome stable, version and checksum pinned, as the desktop and
 #     automation browser
 #   - Bladebro, version and checksum pinned, in real-browser attach mode
+#   - Sway as the no-focus browser stage that hosts each identity's Chrome
 #   - a pinned Playwright Python environment for in-session clients
 #   - OpenSSH server for key-based GUI automation and software installation
 #   - s6 services for the automation API proxy, sshd, the on-demand Chrome
@@ -12,19 +13,25 @@
 # The NixOS module builds this image on the target host with a
 # content-addressed tag; the build context is this directory.
 #
-# The base image and both binaries are pinned for reproducible rebuilds.
-# Refresh the digests, versions and checksums together when updating.
+# The base image digest and both binaries' versions and checksums are pinned
+# in versions.json, which the NixOS module passes as build arguments. The
+# desktop update service bumps that file; the build fails without them.
 
-FROM lscr.io/linuxserver/webtop:ubuntu-lxqt@sha256:92db2b409b2d72914d93fec49f0f96d6da9bb9a497d1dd51d1ca9df4cedf94ac
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
 
-ARG CHROME_VERSION=155.0.8059.39-1
-ARG CHROME_SHA256_ARM64=3556494580a71ecee15cbeb3b6ce23bf3af360bc053d90d3105241c2247da52b
-ARG CHROME_SHA256_AMD64=c58aa0f2cd66179c9f050e062c882d27aa9b9f8c2b7c73fee3498560b5ed0b38
-ARG BLADEBRO_VERSION=4.2.2
-ARG BLADEBRO_SHA256_ARM64=35d1ae1e0870bb73c18d96fc4f59d6ab6982c167dc6657072be35897b5be4484
-ARG BLADEBRO_SHA256_AMD64=ffcdd3c203b0d070e8787e14687942ebc0924ba21c04d39a7bcdf70b328f0779
+ARG CHROME_VERSION
+ARG CHROME_SHA256_ARM64
+ARG CHROME_SHA256_AMD64
+ARG BLADEBRO_VERSION
+ARG BLADEBRO_SHA256_ARM64
+ARG BLADEBRO_SHA256_AMD64
 
 RUN set -eux; \
+    for value in "$CHROME_VERSION" "$CHROME_SHA256_ARM64" "$CHROME_SHA256_AMD64" \
+                 "$BLADEBRO_VERSION" "$BLADEBRO_SHA256_ARM64" "$BLADEBRO_SHA256_AMD64"; do \
+      [ -n "$value" ] || { echo "missing pinned build argument (see versions.json)" >&2; exit 1; }; \
+    done; \
     arch=$(dpkg --print-architecture); \
     case "$arch" in \
       arm64) chrome_sha=$CHROME_SHA256_ARM64; blade_sha=$BLADEBRO_SHA256_ARM64; blade_asset=bladebro-linux-arm64 ;; \
@@ -36,7 +43,8 @@ RUN set -eux; \
       ca-certificates \
       fonts-noto-color-emoji \
       openssh-server \
-      python3-venv; \
+      python3-venv \
+      sway; \
     curl -fsSL -o /tmp/google-chrome.deb \
       "https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROME_VERSION}_${arch}.deb"; \
     echo "$chrome_sha  /tmp/google-chrome.deb" | sha256sum -c -; \
@@ -83,7 +91,8 @@ RUN rm -f \
 COPY root/ /
 
 RUN python3 /opt/ghostship-agent-desktop/pelorus-control-patch.py \
-      /lsiopy/lib/python3.14/site-packages/src/rest.py
+      /lsiopy/lib/python3.14/site-packages/src/rest.py \
+ && python3 /opt/ghostship-agent-desktop/nginx-agents-patch.py /defaults/default.conf
 
 RUN chmod 0755 \
       /custom-cont-init.d/* \
@@ -94,6 +103,7 @@ RUN chmod 0755 \
       /etc/s6-overlay/s6-rc.d/svc-agent-desktop-chrome-idle/run \
       /etc/s6-overlay/s6-rc.d/svc-agent-desktop-chrome-personal/run \
       /etc/s6-overlay/s6-rc.d/svc-agent-desktop-sshd/run \
+      /etc/s6-overlay/s6-rc.d/svc-agent-desktop-viewer/run \
  && ln -sf /opt/ghostship-agent-desktop/desktop-exec /usr/local/bin/ghostship-desktop-exec \
  && ln -sf /opt/ghostship-agent-desktop/ghostship-chrome-instance /usr/local/bin/ghostship-chrome-instance \
  && ln -sf /opt/ghostship-agent-desktop/chrome-ensure /usr/local/bin/chrome-ensure \

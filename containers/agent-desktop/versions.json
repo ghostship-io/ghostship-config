@@ -1,0 +1,20 @@
+{
+  "base": {
+    "image": "lscr.io/linuxserver/webtop:ubuntu-lxqt",
+    "digest": "sha256:92db2b409b2d72914d93fec49f0f96d6da9bb9a497d1dd51d1ca9df4cedf94ac"
+  },
+  "chrome": {
+    "version": "155.0.8059.39-1",
+    "sha256": {
+      "arm64": "3556494580a71ecee15cbeb3b6ce23bf3af360bc053d90d3105241c2247da52b",
+      "amd64": "c58aa0f2cd66179c9f050e062c882d27aa9b9f8c2b7c73fee3498560b5ed0b38"
+    }
+  },
+  "bladebro": {
+    "version": "4.2.2",
+    "sha256": {
+      "arm64": "35d1ae1e0870bb73c18d96fc4f59d6ab6982c167dc6657072be35897b5be4484",
+      "amd64": "ffcdd3c203b0d070e8787e14687942ebc0924ba21c04d39a7bcdf70b328f0779"
+    }
+  }
+}

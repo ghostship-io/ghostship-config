@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
-# Launch one Google Chrome instance for the agent desktop.
+# Launch one Google Chrome instance for the agent desktop inside its own
+# browser stage (a no-focus Sway compositor, /etc/ghostship/browser-sway.conf).
 # Usage: run-chrome <identity> <port>
+#
+# Concurrent agents each drive their own window of this one Chrome with
+# target-scoped DevTools input. On the human's labwc desktop every new window
+# takes focus and blurs the field another agent is typing into; the stage
+# never moves focus, so agents and the person never disturb each other.
+# People see and use stage windows through the desktop viewer (/agents/).
+#
+# Environment: GHOSTSHIP_STAGE_BACKEND (headless, default; or wayland to nest
+# the stage as one window on the labwc desktop, for debugging).
 set -eu
 
 identity=$1
@@ -26,7 +36,7 @@ mkdir -p "$data"
 
 # Recover from an unclean shutdown: kill leftovers for this profile and drop
 # Singleton* files so Chrome does not think the profile is locked elsewhere.
-pkill -f -- "--user-data-dir=$data" 2>/dev/null || true
+pkill -f -- "--user-data-dir=$data( |$)" 2>/dev/null || true
 sleep 1
 rm -f "$data/SingletonLock" "$data/SingletonCookie" "$data/SingletonSocket"
 
@@ -37,16 +47,43 @@ rm -f -- "$data/Default/Sessions/"Session_* "$data/Default/Sessions/"Tabs_* \
   "$data/Default/Current Session" "$data/Default/Last Session" \
   "$data/Default/Current Tabs" "$data/Default/Last Tabs"
 
+# Start this identity's stage and learn its Wayland socket. The stage, its
+# input and Chrome run in their own sessions: container shutdown signals every
+# process group, and Chrome crashes (losing unsaved cookies) if its compositor
+# dies first. Only this script gets the signal; stop() closes in order.
+stage_file=$XDG_RUNTIME_DIR/ghostship-stage-$identity
+rm -f "$stage_file"
+GHOSTSHIP_STAGE_DISPLAY_FILE=$stage_file \
+  WLR_BACKENDS=${GHOSTSHIP_STAGE_BACKEND:-headless} WLR_HEADLESS_OUTPUTS=1 WLR_WL_OUTPUTS=1 \
+  SWAYSOCK=$XDG_RUNTIME_DIR/ghostship-stage-$identity.sock \
+  setsid sway -c /etc/ghostship/browser-sway.conf &
+sway_pid=$!
+for _ in $(seq 1 100); do
+  [ -s "$stage_file" ] && break
+  kill -0 "$sway_pid" 2>/dev/null || { echo "[run-chrome:$identity] browser stage exited" >&2; exit 1; }
+  sleep 0.1
+done
+if [ ! -s "$stage_file" ]; then
+  echo "[run-chrome:$identity] browser stage did not start" >&2
+  kill "$sway_pid" 2>/dev/null || true
+  exit 1
+fi
+WAYLAND_DISPLAY=$(cat "$stage_file")
+export WAYLAND_DISPLAY
+
+# A real desktop has a mouse and keyboard: without them pages report no fine
+# pointer and no hover. Attach virtual ones to the stage's seat.
+setsid /opt/ghostship-agent-desktop/stage-input &
+input_pid=$!
+
 # Deliberately minimal, ordinary command line: a custom profile (required,
 # and Chrome 136+ refuses CDP on the default profile dir), a loopback-only
-# DevTools port for Bladebro, native Wayland so compositor input injection
-# (Selkies touch scrolling) reaches the browser, and first-run/crash UX
+# DevTools port for Bladebro, native Wayland, and first-run/crash UX
 # suppression so headed startup is deterministic. --no-startup-window runs the
-# profile in the background with no window until an agent claims one
-# (Target.createTarget with newWindow); agent windows may sit behind others,
-# so background and occluded tabs keep their timers and rendering.
-# No sandbox, GPU or fingerprint flags.
-exec /usr/bin/google-chrome-stable \
+# profile with no window until an agent claims one (Target.createTarget with
+# newWindow); windows stack in the stage, so background and occluded tabs keep
+# their timers and rendering. No sandbox, GPU or fingerprint flags.
+setsid /usr/bin/google-chrome-stable \
   --user-data-dir="$data" \
   --remote-debugging-port="$port" \
   --ozone-platform=wayland \
@@ -59,4 +96,28 @@ exec /usr/bin/google-chrome-stable \
   --password-store=basic \
   --lang=en-US \
   --window-size=1600,900 \
-  --no-startup-window
+  --no-startup-window &
+chrome_pid=$!
+
+# s6 stops the service with TERM. Close Chrome through DevTools first: its
+# normal shutdown writes pending cookies and site storage, which SIGTERM
+# skips. Then stop the compositor. Either side exiting ends both.
+stop() {
+  /opt/ghostship-agent-desktop/chrome-close "$port" >/dev/null 2>&1 || true
+  for _ in $(seq 1 100); do
+    kill -0 "$chrome_pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  kill -TERM "$chrome_pid" 2>/dev/null || true
+  for _ in $(seq 1 50); do
+    kill -0 "$chrome_pid" 2>/dev/null || break
+    sleep 0.1
+  done
+  kill -KILL "$chrome_pid" 2>/dev/null || true
+  kill -TERM "$input_pid" "$sway_pid" 2>/dev/null || true
+  wait 2>/dev/null || true
+}
+trap 'stop; exit 0' TERM INT
+wait -n "$chrome_pid" "$sway_pid" "$input_pid" || true
+stop
+exit 1
