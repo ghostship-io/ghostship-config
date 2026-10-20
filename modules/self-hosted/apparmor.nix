@@ -170,6 +170,19 @@ in
       }) profiled
     ))
     {
+      # Complain-mode learning bursts (every strict profile at container start)
+      # overflow the kernel's 1024-record backlog; lost records reset every window.
+      ghostship-audit-backlog = {
+        description = "Raise the kernel audit backlog for AppArmor learning";
+        after = [ "auditd.service" ];
+        wantedBy = [ "multi-user.target" ];
+        before = [ "apparmor.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = "${pkgs.audit}/bin/auditctl -b 8192";
+        };
+      };
       ghostship-apparmor-review = {
         description = "Collect verified AppArmor learning evidence for public services";
         after = [ "apparmor.service" ] ++ map (app: "podman-${app.container}.service") profiled;

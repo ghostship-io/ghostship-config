@@ -37,7 +37,7 @@ AUDIT_LOSS = re.compile(
 # service audit records from other rules are hundreds of MB a day.
 APPARMOR_TYPES = ["_AUDIT_TYPE=1400", *(f"_AUDIT_TYPE={n}" for n in range(1501, 1508))]
 JOURNAL_MATCHES = ["_TRANSPORT=audit", *APPARMOR_TYPES, "+", "_TRANSPORT=kernel"]
-JOURNAL_TIMEOUT = 120
+JOURNAL_TIMEOUT = 600
 
 
 def run(args, timeout=20):
@@ -233,6 +233,7 @@ def status(state, now):
 def collect(config, previous, now):
     result = {"schema_version": 1, "containers": {}}
     prior = previous.get("containers", {})
+    pending = []
     for name, spec in config["containers"].items():
         old = prior.get(name, {})
         observation = inspect_container(name, spec)
@@ -251,18 +252,27 @@ def collect(config, previous, now):
             # Retain the previous heartbeat as a journal continuity anchor. Rotation
             # past it cannot silently turn a missing interval into a clean day.
             start = min(start, anchor["time"])
-        audit_ok = True
-        try:
-            rows = journal(start, end)
-            loss_seen = any(AUDIT_LOSS.search(message) for _, message in rows)
-            events = [event for stamp, message in rows
-                      if (event := parse_event(stamp, message, spec["profile"]))]
-            observed_ids = {event["id"] for event in events}
-            intentional_ids = {item["id"] for item in (anchor, heartbeat) if item}
-            audit_ok = intentional_ids <= observed_ids and not loss_seen
-            events = [event for event in events if event["id"] not in intentional_ids]
-        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-            audit_ok, events = False, []
+        pending.append((name, spec, old, observation, heartbeat, anchor, start, end))
+    # One journal read covers every container's window; each keeps only its own.
+    try:
+        rows = journal(min(item[6] for item in pending), max(item[7] for item in pending)) if pending else []
+        journal_error = False
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        rows, journal_error = [], True
+    for name, spec, old, observation, heartbeat, anchor, start, end in pending:
+        audit_ok, events = False, []
+        if not journal_error:
+            try:
+                window = [(stamp, message) for stamp, message in rows if start <= stamp <= end]
+                loss_seen = any(AUDIT_LOSS.search(message) for _, message in window)
+                events = [event for stamp, message in window
+                          if (event := parse_event(stamp, message, spec["profile"]))]
+                observed_ids = {event["id"] for event in events}
+                intentional_ids = {item["id"] for item in (anchor, heartbeat) if item}
+                audit_ok = intentional_ids <= observed_ids and not loss_seen
+                events = [event for event in events if event["id"] not in intentional_ids]
+            except (ValueError, KeyError, TypeError):
+                audit_ok, events = False, []
         entry = advance(old, observation, events, end, audit_ok)
         entry["audit_anchor"] = ({"id": heartbeat["id"], "time": heartbeat["time"]}
                                  if heartbeat else None)
