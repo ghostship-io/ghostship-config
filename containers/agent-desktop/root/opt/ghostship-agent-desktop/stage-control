@@ -1,8 +1,9 @@
 #!/usr/bin/python3 -I
 """Full Chrome windows for a browser stage: each window on its own output.
 
-Usage: stage-control <agent|personal>   (WAYLAND_DISPLAY, SWAYSOCK and
-       XDG_RUNTIME_DIR name the stage; run-chrome starts it)
+Usage: stage-control <identity> [devtools-port]   (WAYLAND_DISPLAY, SWAYSOCK
+       and XDG_RUNTIME_DIR name the stage; run-chrome starts it for agent,
+       personal and extra instances)
 
 Agents drive page content with target-scoped DevTools input, which needs no
 compositor focus. The browser's own UI (tab strip, toolbar, extension popups,
@@ -118,8 +119,8 @@ class Ipc:
 
 
 class Stage:
-    def __init__(self, identity: str):
-        self.identity = identity
+    def __init__(self, identity: str, port: int):
+        self.identity, self.port = identity, port
         self.env = dict(os.environ)
         self.ipc = Ipc(os.environ["SWAYSOCK"])
         self.devices = VirtualInput(socket_path())
@@ -237,7 +238,7 @@ class Stage:
     # ---- Chrome window ids (DevTools Target/Browser domains only) ----------
     async def _chrome_windows(self) -> dict[int, list[dict]]:
         if self.cdp is None or self.cdp._task.done():
-            self.cdp = await asyncio.wait_for(Cdp.connect(PORTS[self.identity]), 5)
+            self.cdp = await asyncio.wait_for(Cdp.connect(self.port), 5)
             self.target_windows.clear()
         infos = (await self.cdp.send("Target.getTargets", {}, timeout=10)).get("targetInfos", [])
         pages = [info for info in infos if info.get("type") == "page"]
@@ -557,14 +558,16 @@ def call(identity: str) -> int:
 
 
 def main() -> int:
-    if len(sys.argv) == 3 and sys.argv[1] == "call" and sys.argv[2] in ("agent", "personal"):
+    name = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
+    if len(sys.argv) == 3 and sys.argv[1] == "call" and name.fullmatch(sys.argv[2]):
         return call(sys.argv[2])
     identity = sys.argv[1] if len(sys.argv) > 1 else ""
-    if identity not in ("agent", "personal"):
-        print("usage: stage-control <agent|personal> | stage-control call <agent|personal> < request.json",
+    port = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else PORTS.get(identity)
+    if not name.fullmatch(identity) or port is None:
+        print("usage: stage-control <identity> [devtools-port] | stage-control call <identity> < request.json",
               file=sys.stderr)
         return 2
-    stage = Stage(identity)
+    stage = Stage(identity, port)
     stage.setup()
     threading.Thread(target=stage.watch, daemon=True).start()
     threading.Thread(target=stage.devices.hold, daemon=True).start()

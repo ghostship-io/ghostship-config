@@ -77,7 +77,7 @@ export WAYLAND_DISPLAY
 # pages report no fine pointer and no hover. It is restarted if it exits (it
 # adopts the windows already placed); Chrome never depends on it.
 SWAYSOCK=$XDG_RUNTIME_DIR/ghostship-stage-$identity.sock setsid sh -c '
-  while :; do /opt/ghostship-agent-desktop/stage-control "$1"; sleep 1; done' stage-control "$identity" &
+  while :; do /opt/ghostship-agent-desktop/stage-control "$1" "$2"; sleep 1; done' stage-control "$identity" "$port" &
 input_pid=$!
 
 # Deliberately minimal, ordinary command line: a custom profile (required,
