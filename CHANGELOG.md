@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.148] - 2026-10-20
+
+- Enable source-preserving EPUB imports through Ghostship's filesystem service: allow the existing Books library root and check Grimmory access with its configured application uid/gid. Pin the agent release with bounded EPUB inspection, collision-safe copy and the Grimmory scan/read-back workflow.
+- Run the unprivileged Books EPUB converter every five minutes, with network isolation and memory/CPU limits. It retains originals and publishes validated EPUBs beside stable imported files; MCP can queue the same fixed job and inspect its report. Chaptarr's completed-download path does not implement its conversion toggle.
+- The pinned MCP also discovers active T3 threads and live model/harness availability, accepts canonical thread IDs, and sends updates to existing running threads.
+
 ## [3.15.147] - 2026-10-20
 
 - Pin ghostship-agent 0.27.2 (`de0f9588`): the GitHub coordinator routes a base-branch CI failure to the T3 thread whose merged pull request produced the failing commit (the regression issue is filed owned by that thread and the thread is messaged) instead of launching a new thread; unowned failures launch as before. Only `ghostship-github-coordinator` changes behavior.
