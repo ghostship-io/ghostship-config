@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.165] - 2026-10-20
+
+- Agent desktop AppArmor: the Chrome launchers may execute `with-contenv`, `s6-envuidgid`, `s6-applyuidgid`, and the root-owned `run-chrome`, `chrome-close` and `ghostship-chrome-instance` scripts. Before, these were read-only, so agent Chrome and its subtree ran in ruleless `null-*` learning profiles (about 100k events a minute).
+
 ## [3.15.164] - 2026-10-20
 
 - AppArmor fixes from the first deploy of the strict profiles (#140). In complain mode an exec with no matching rule enters an empty `null-<path>` learning profile, and its whole subtree then runs ruleless.
