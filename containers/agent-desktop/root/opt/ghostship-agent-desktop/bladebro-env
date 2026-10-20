@@ -42,4 +42,10 @@ install -d -m 0700 "$BLADE_HOME"
 # real-browser lane from ever launching or owning a browser.
 /usr/local/bin/bladebro rb mode attach >/dev/null 2>&1 || true
 
+# MCP sessions go through the gate: it holds input on tabs a person paused
+# in the desktop viewer and reports each call's outcome to the viewer.
+if [ "${1:-}" = mcp ]; then
+  install -d -m 0700 /config/agent-desktop/runs
+  exec /opt/ghostship-agent-desktop/bladebro-gate /usr/local/bin/bladebro "$@" --port "$port"
+fi
 exec /usr/local/bin/bladebro "$@" --port "$port"

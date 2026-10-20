@@ -1,0 +1,3 @@
+#!/bin/sh
+# Best effort when the container is stopped without the host's pre-stop step.
+exec /opt/ghostship-agent-desktop/chrome-stop-all
