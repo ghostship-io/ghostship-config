@@ -8,6 +8,8 @@
   - The agent desktop is split into per-process children (Chrome per identity, Sway, sshd, Selkies, Pelorus, API, agent shells). The viewer profile is unchanged.
 - `ghostship-container-default` now grants nothing and logs everything. Only ad-hoc job containers use it. An assertion requires every declared container except T3 to have its own profile.
 - `ghostship-apparmor-review` tracks every container. Each app declares the labels it expects (`apparmorProcessProfiles`, `apparmorRequiredProcessProfiles`). Images without `cat` give the audit heartbeat their own reader (`apparmorHeartbeat`).
+- `ghostship-apparmor-review` reads the journal once per collection, not once per container, with a 10-minute bound.
+- The kernel audit backlog is raised to 8192 records (`ghostship-audit-backlog`), so complain-mode bursts at container start aren't dropped. Dropped records would reset every learning window.
 - Containers running with no_new_privs (GitHub coordinator, private integrations) get flat profiles. Under no_new_privs AppArmor never enters child profiles; complain mode logs "no new privs", and enforce mode would refuse the exec.
 - Documented that a reloaded policy reaches an idle task only at its next mediated call. This is why Plex's `ptrace readby` events continue until Plex restarts.
 

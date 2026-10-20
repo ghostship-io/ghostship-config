@@ -199,6 +199,25 @@ class Collection(unittest.TestCase):
         self.assertIsNone(state["containers"]["plex"]["coverage_start"])
         self.assertIn("audit-collection-failed", state["containers"]["plex"]["reasons"])
 
+    def test_one_journal_read_split_per_container(self):
+        def beat(profile):
+            message = (f'apparmor="ALLOWED" operation="open" profile="{profile}" '
+                       f'name="{review.HEARTBEAT_PATH}" requested_mask="r" denied_mask="r"')
+            return message, review.parse_event(9 * DAY, message, profile)
+        plex_msg, plex_beat = beat("ghostship-plex")
+        ntfy_msg, ntfy_beat = beat("ghostship-ntfy")
+        config = {"containers": {"plex": {"profile": "ghostship-plex"},
+                                 "ntfy": {"profile": "ghostship-ntfy"}}}
+        with patch.object(review, "inspect_container", return_value=GOOD.copy()), \
+                patch.object(review, "probe", side_effect=[plex_beat, ntfy_beat]), \
+                patch.object(review, "journal", return_value=[(9 * DAY, plex_msg), (9 * DAY, ntfy_msg)]) as journal, \
+                patch.object(review.time, "time", return_value=9 * DAY):
+            state = review.collect(config, {"containers": {}}, 9 * DAY)
+        self.assertEqual(journal.call_count, 1)
+        for name in ("plex", "ntfy"):
+            self.assertNotIn("audit-collection-failed", state["containers"][name]["reasons"])
+            self.assertEqual(state["containers"][name]["events"], {})
+
     def test_audit_error_resets(self):
         with patch.object(review, "inspect_container", return_value=GOOD.copy()), \
                 patch.object(review, "probe", return_value={"id": "heartbeat", "time": 9 * DAY}), \
