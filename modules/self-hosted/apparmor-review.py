@@ -8,6 +8,7 @@ Review with --review EVENT_ID --classification expected-denial|legitimate-needs-
 import argparse
 import contextlib
 import fcntl
+import fnmatch
 import hashlib
 import json
 import os
@@ -19,6 +20,11 @@ import tempfile
 import time
 
 DAY = 86400
+# expected-denial: investigated and must stay disallowed. resolved-by-policy:
+# legitimate and covered by a deployed policy change, cited as a PR reference.
+CLEARED = {"expected-denial", "resolved-by-policy"}
+MATCH_FIELDS = ("profile", "apparmor", "operation", "name", "name2", "requested_mask",
+                "denied_mask", "comm", "peer", "family", "sock_type", "capname")
 MAX_GAP = 26 * 3600
 HEARTBEAT_PATH = "/proc/sys/kernel/random/boot_id"
 FIELDS = re.compile(r'(\w+)=(?:"([^"\n]*)"|(\S+))')
@@ -62,7 +68,7 @@ def parse_event(stamp, message, profile):
     detail = {key: fields[key] for key in (
         "profile",
         "apparmor", "operation", "name", "name2", "requested_mask", "denied_mask",
-        "error", "info", "comm", "pid", "family", "sock_type", "protocol", "capname"
+        "error", "info", "comm", "pid", "family", "sock_type", "protocol", "capname", "peer"
     ) if key in fields}
     identity = json.dumps([stamp, detail], sort_keys=True).encode()
     return {"id": hashlib.sha256(identity).hexdigest()[:24], "time": stamp, **detail}
@@ -191,7 +197,7 @@ def status(state, now):
     baseline = state.get("coverage_start")
     reviews = state.get("reviews", {})
     blocking = [eid for eid in state.get("events", {})
-                if reviews.get(eid, {}).get("classification") != "expected-denial"]
+                if reviews.get(eid, {}).get("classification") not in CLEARED]
     samples = state.get("samples", [])
     # UTC-day buckets tolerate timer jitter. Elapsed time is checked separately:
     # eight calendar dates alone never substitute for seven full days.
@@ -242,6 +248,41 @@ def collect(config, previous, now):
     return result
 
 
+def comm_text(value):
+    """The kernel hex-encodes comm values containing spaces."""
+    if value and re.fullmatch(r"(?:[0-9A-F]{2})+", value):
+        try:
+            return bytes.fromhex(value).decode()
+        except UnicodeDecodeError:
+            return value
+    return value
+
+
+def event_matches(event, patterns):
+    for key, pattern in patterns.items():
+        values = {event.get(key, "")}
+        if key == "comm":
+            values.add(comm_text(event.get("comm", "")))
+        if not any(fnmatch.fnmatchcase(value, pattern) for value in values):
+            return False
+    return True
+
+
+def summarize(entry):
+    """Unreviewed events grouped by their kept fields; digits are normalized."""
+    reviews = entry.get("reviews", {})
+    groups = {}
+    for eid, event in entry.get("events", {}).items():
+        if reviews.get(eid, {}).get("classification") in CLEARED:
+            continue
+        key = tuple((field, re.sub(r"[0-9]+", "N", comm_text(event[field]) if field == "comm" else event[field]))
+                    for field in MATCH_FIELDS if field in event)
+        group = groups.setdefault(key, {"count": 0, "first": event["time"], "last": event["time"]})
+        group["count"] += 1
+        group["first"], group["last"] = min(group["first"], event["time"]), max(group["last"], event["time"])
+    return sorted(({**dict(key), **value} for key, value in groups.items()), key=lambda g: -g["count"])
+
+
 def write_state(directory, state):
     fd, temporary = tempfile.mkstemp(prefix=".evidence-", dir=directory)
     try:
@@ -281,14 +322,32 @@ def main(argv=None):
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--report-only", action="store_true")
     parser.add_argument("--review", metavar="EVENT_ID")
-    parser.add_argument("--classification", choices=["expected-denial", "legitimate-needs-policy"])
+    parser.add_argument("--classification",
+                        choices=["expected-denial", "legitimate-needs-policy", "resolved-by-policy"])
     parser.add_argument("--note")
+    parser.add_argument("--container", help="review every event of this container matching --match")
+    parser.add_argument("--match", action="append", default=[], metavar="FIELD=GLOB")
+    parser.add_argument("--summary", action="store_true", help="group unreviewed events; read-only")
     args = parser.parse_args(argv)
-    if any((args.review, args.classification, args.note)) and not (
-            args.review and args.classification and args.note and args.note.strip()):
-        parser.error("review requires --review, --classification and a nonempty --note")
-    if args.report_only and args.review:
-        parser.error("--report-only cannot review")
+    selected = bool(args.review) + bool(args.container)
+    if selected > 1 or (args.match and not args.container):
+        parser.error("use either --review EVENT_ID or --container NAME with --match")
+    if any((args.review, args.container, args.classification, args.note)) and not (
+            selected and args.classification and args.note and args.note.strip()):
+        parser.error("review requires an event selection, --classification and a nonempty --note")
+    patterns = {}
+    for item in args.match:
+        field, separator, pattern = item.partition("=")
+        if not separator or field not in MATCH_FIELDS or field in patterns or not pattern:
+            parser.error("--match takes one FIELD=GLOB per kept field")
+        patterns[field] = pattern
+    if args.container and not {"profile", "operation"} <= patterns.keys():
+        parser.error("group review needs at least profile and operation matches")
+    if args.classification == "resolved-by-policy" and not re.search(r"#[0-9]+", args.note or ""):
+        parser.error("resolved-by-policy notes must cite the policy PR as #N")
+    if (args.report_only or args.summary) and selected:
+        parser.error("--report-only and --summary cannot review")
+    args.report_only = args.report_only or args.summary
     if os.geteuid() != 0:
         parser.error("root required")
     try:
@@ -319,6 +378,20 @@ def main(argv=None):
                     raise ValueError("unknown or ambiguous event")
                 matches[0].setdefault("reviews", {})[args.review] = {
                     "classification": args.classification, "note": args.note, "time": time.time()}
+            elif args.container:
+                entry = state["containers"].get(args.container)
+                if entry is None:
+                    raise ValueError("unknown container")
+                chosen = [eid for eid, event in entry.get("events", {}).items()
+                          if event_matches(event, patterns)]
+                if not chosen:
+                    raise ValueError("no matching events")
+                stamp = time.time()
+                for eid in chosen:
+                    entry.setdefault("reviews", {})[eid] = {
+                        "classification": args.classification, "note": args.note,
+                        "match": patterns, "time": stamp}
+                print(json.dumps({"reviewed": len(chosen)}), file=sys.stderr)
             elif not args.report_only:
                 state = collect(config, state, time.time())
             if not args.report_only:
@@ -332,6 +405,10 @@ def main(argv=None):
                     report["ready"] = False
                     report["reasons"] = report["reasons"] + ["configuration-mismatch"]
                 reports[name] = report
+            if args.summary:
+                print(json.dumps({"schema_version": 1, "groups": {
+                    name: summarize(state["containers"].get(name, {})) for name in config["containers"]}}))
+                return 0
             print(json.dumps({"schema_version": 1, "containers": reports}, sort_keys=True))
         return 0
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):

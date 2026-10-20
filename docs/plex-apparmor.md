@@ -118,10 +118,13 @@ workflow for policy changes. Leave merging to the user.
    Use `--review EVENT_ID --classification expected-denial --note REASON` for
    an investigated operation that should remain disallowed, or
    `--classification legitimate-needs-policy` for a legitimate missing permission.
-   The latter stays blocking across policy revisions; after deploying and testing
-   its fix, explicitly review the historical event again with the resolution and
-   PR reference. Preserve the evidence instead of deleting old events to clear
-   the counter. The collector's `ready` flag covers telemetry only; workload
+   The latter stays blocking across policy revisions. After deploying and testing
+   its fix, review the historical events again as `resolved-by-policy`, with a
+   note citing the PR (`#N`). Preserve the evidence instead of deleting old events
+   to clear the counter. `--summary` groups unreviewed events by their kept fields.
+   `--container NAME --match FIELD=GLOB ...` (profile and operation required)
+   applies one classification to every matching event. Keep matches as narrow as
+   the reviewed operation: one group per decision, never a profile-wide glob. The collector's `ready` flag covers telemetry only; workload
    coverage and policy review are separate mandatory gates.
    Prefer an extremely strict initial allowlist in complain mode. Keep dynamic
    interpreters in separate domains restricted to observed legitimate code,
