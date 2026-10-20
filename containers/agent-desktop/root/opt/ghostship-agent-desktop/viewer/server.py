@@ -1128,6 +1128,14 @@ class App:
         since = time.time()
         while takeover_decision(self.runs_dir, run["members"], since) == "wait":
             await asyncio.sleep(0.1)
+        # The agent call may have opened tabs or popups while we waited: take
+        # fresh membership and block those too before closing.
+        await browser.resync()
+        try:
+            browser, run = self.find(run["run_id"])
+            self.pause(run)
+        except HttpError:
+            pass
         anchor = run["anchor"]
         for tid in [t for t in run["members"] if t != anchor] + [anchor]:
             try:
