@@ -276,13 +276,24 @@ Trackpad Mode in the side menu.
 
 ## Updates and rollback
 
-- The image is built on the host from `containers/agent-desktop/` with a
-  content-addressed tag; changing the sources rebuilds and restarts only
-  `podman-agent-desktop.service`.
-- Google Chrome and Bladebro are pinned by version and SHA-256 in the
-  Containerfile; the base image is pinned by digest. Refresh all three
-  together and update the checksums from the vendors' release metadata.
-  Roll back by rebuilding the previous revision of this directory.
+- Pins live in `containers/agent-desktop/versions.json` (webtop digest,
+  Chrome version and SHA-256s, Bladebro version and SHA-256s); the module
+  passes them as build arguments and tags the image from the build context
+  (`modules/self-hosted/agent-desktop-image-tag.nix`).
+- `ghostship-agent-desktop-update` (daily 13:00) discovers updates: Chrome
+  from Google's signed apt index, Bladebro from its release checksums, webtop
+  by manifest digest, each after a 24 h soak and never downgraded. It builds
+  the exact image a switch would deploy, gates it in lab canaries
+  (concurrency, CDP detection, bot checks, fingerprint parity, profile
+  compatibility on network-less snapshot copies), commits `versions.json` to
+  main, drains active agent runs (30 min at most), snapshots `/srv`, deploys
+  with `nixos-upgrade` and verifies production. A failed verification rolls
+  back with a forward commit and restores the profiles from the snapshot when
+  a newer Chrome opened them. Every outcome goes to NTFY.
+- Manual runs: `ghostship-agent-desktop-update --discover-only`,
+  `--dry-run`, `--components chrome,bladebro`, `--simulate-failure canary`.
+- Stopping the container closes Chrome first (`chrome-stop-all` in the unit's
+  pre-stop): Chrome writes recent cookies only on a normal shutdown.
 - Chrome profiles, Bladebro state, SSH keys and downloads live under
   `/srv/apps/agent-desktop/config` and survive image updates. Chrome cache
   directories and the logs directory are excluded from Restic backups.
