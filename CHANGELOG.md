@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.147] - 2026-10-20
+
+- Pin ghostship-agent 0.27.2 (`de0f9588`): the GitHub coordinator routes a base-branch CI failure to the T3 thread whose merged pull request produced the failing commit (the regression issue is filed owned by that thread and the thread is messaged) instead of launching a new thread; unowned failures launch as before. Only `ghostship-github-coordinator` changes behavior.
+
 ## [3.15.146] - 2026-10-20
 
 - `ghostship-apparmor-review` reads only AppArmor audit records (type 1400 and 1501–1507), kernel messages and journald rate-limit notices. Its daily read had covered every audit record, 1.28M lines (1.5 GB) taking 39s, past a 20s timeout. That marked every profile `audit-collection-failed` and reset each learning window daily. The read now takes about 10s, with a 120s limit, and the unit gets 15 minutes. Audit loss now matches only `audit`/`apparmor` rate-limit lines, not unrelated kernel ones such as NFS `rpc_check_timeout: N callbacks suppressed`.
