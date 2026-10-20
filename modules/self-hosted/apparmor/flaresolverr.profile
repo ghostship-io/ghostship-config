@@ -56,14 +56,14 @@ profile ghostship-flaresolverr flags=(complain,attach_disconnected,mediate_delet
     # undetected_chromedriver patches /app/chromedriver in place (r+b) on
     # each browser start, then executes it: an intentional writable-binary exec.
     /app/chromedriver rw,
-    /app/chromedriver cx -> chromedriver,
+    /app/chromedriver px -> ghostship-flaresolverr//chromedriver,
     /app/.local/ rw,
     /app/.local/share/ rw,
     /app/.local/share/undetected_chromedriver/ rw,
 
     # Browser and display launches. /usr/bin/chromium is a dash script.
-    /usr/bin/chromium cx -> chromium,
-    /usr/bin/Xvfb cx -> xvfb,
+    /usr/bin/chromium px -> ghostship-flaresolverr//chromium,
+    /usr/bin/Xvfb px -> ghostship-flaresolverr//xvfb,
     # shutil.which/os.access probes for Xvfb and the Chrome candidates.
     /usr/{local/,}{bin,sbin}/ r,
 
