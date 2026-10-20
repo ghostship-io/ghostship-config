@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.167] - 2026-10-20
+
+- Fixed the outage from #143. LinuxServer images started as the app user (Sonarr, Radarr, Prowlarr, Bazarr, NZBGet, Tautulli and the RomM database) run s6 preinit through the setuid-root `s6-overlay-suexec`. With every capability dropped it failed with "unable to setgid to root", and those containers (and RomM, which depends on its database) crash-looped. They now keep the LinuxServer startup set: chown, dac_override, fowner, kill, setgid, setuid.
+
 ## [3.15.166] - 2026-10-20
 
 - Kernel-enforced execution limits for containers (`container-hardening.nix`), so a compromised app can't run code it writes. AppArmor is still learning in complain mode and blocks nothing.
