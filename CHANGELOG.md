@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.169] - 2026-10-20
+
+- Gluetun keeps a writable image filesystem. It creates its user in `/etc/passwd` at every start, so with `--read-only` (#145) it failed with "read-only file system", and qBittorrent, which shares its network, went down with it.
+
 ## [3.15.168] - 2026-10-20
 
 - 17 containers run with a read-only image filesystem (`--read-only`), so a compromise cannot replace image binaries or plant code in the image: Bazarr, Chaptarr, cloudflared, Gluetun, the Grimmory database, Homepage, ntfy, NZBGet, Plex Auto Languages, Prowlarr, Radarr, Recyclarr, the RomM database, Seerr, Sonarr, Tautulli and Uptime Kuma.
