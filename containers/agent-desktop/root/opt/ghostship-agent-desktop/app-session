@@ -498,7 +498,11 @@ async def serve(sid: str, app: str) -> int:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, lambda: asyncio.ensure_future(session.close(force=True)))
     try:
-        await session.start()
+        try:
+            await session.start()
+        except BaseException:
+            await session.close(force=True)  # never leave a compositor or app without its session
+            raise
         server = await serve_socket(os.path.join(APPS, f"{sid}.sock"), session.handle)
         log(f"{sid[:8]} {app} running (screen {session.width}x{session.height})")
         watcher = asyncio.ensure_future(session.watch())
@@ -568,23 +572,38 @@ class Supervisor:
             return False
         return subprocess.run(["pgrep", "-f", "--", pattern], capture_output=True).returncode == 0
 
+    @staticmethod
+    def adopt(sid: str, owner: dict) -> None:
+        """An agent joining a person's session becomes its owner, so the person's touch pauses it.
+
+        The viewer applies takeover protection only to agent-owned sessions;
+        left as "human", the agent could keep typing while the person works.
+        """
+        record = read_record(sid)
+        if record is None or owner.get("harness") in (None, "human"):
+            return
+        if (record.get("owner") or {}).get("harness") in (None, "human"):
+            write_json(record_path(sid), dict(record, owner=owner))
+
     async def open(self, request: dict) -> dict:
         catalog = load_catalog()
         app = request.get("app")
         if app not in catalog:
             raise AppError("invalid_request", f"unknown app; choose one of: {', '.join(sorted(catalog))}")
         spec = catalog[app]
+        owner = request.get("owner") if isinstance(request.get("owner"), dict) else {}
+        owner = {key: (str(owner[key])[:200] if owner.get(key) is not None else None)
+                 for key in ("harness", "model", "t3_thread_id", "t3_thread_title")}
         async with self.opening:
             if spec.get("single_instance", True):
                 for session in self.sessions():
                     if session["app"] == app:
-                        return {"session": session, "existing": True}
+                        self.adopt(session["session_id"], owner)
+                        return {"session": dict(session, owner=read_record(session["session_id"]).get("owner")),
+                                "existing": True}
                 if self.running_elsewhere(spec):
                     raise AppError("conflict", f"{spec.get('name', app)} is already open on the shared desktop; "
                                                "close it there first")
-            owner = request.get("owner") if isinstance(request.get("owner"), dict) else {}
-            owner = {key: (str(owner[key])[:200] if owner.get(key) is not None else None)
-                     for key in ("harness", "model", "t3_thread_id", "t3_thread_title")}
             label = str(request.get("label") or spec.get("name", app))[:120]
             sid = secrets.token_hex(16)
             write_json(record_path(sid), {"schema": 1, "run_id": sid, "kind": "app", "app": app,

@@ -54,5 +54,22 @@ class PauseProtocolTest(unittest.TestCase):
             self.assertEqual(len(done), 2)
 
 
+class AdoptTest(unittest.TestCase):
+    def test_agent_joining_a_persons_session_takes_ownership(self):
+        """Catches an agent driving a person-launched app the viewer never pauses (owner left "human")."""
+        with tempfile.TemporaryDirectory() as runs:
+            app_session.RUNS = runs
+            sid = "b" * 32
+            app_session.write_json(app_session.record_path(sid), {"kind": "app", "app": "orca",
+                                                                  "owner": {"harness": "human"}})
+            agent = {"harness": "claude-code", "model": "m", "t3_thread_id": "t", "t3_thread_title": "x"}
+            app_session.Supervisor.adopt(sid, {"harness": "human"})
+            self.assertEqual(app_session.read_record(sid)["owner"]["harness"], "human")
+            app_session.Supervisor.adopt(sid, agent)
+            self.assertEqual(app_session.read_record(sid)["owner"], agent)
+            app_session.Supervisor.adopt(sid, dict(agent, harness="codex"))  # first agent keeps it
+            self.assertEqual(app_session.read_record(sid)["owner"]["harness"], "claude-code")
+
+
 if __name__ == "__main__":
     unittest.main()
