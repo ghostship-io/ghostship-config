@@ -71,6 +71,9 @@ MAX_WS_CLIENTS = 32
 HUMAN_RUN_SECONDS = 2 * 3600
 CHROME_ENSURE = os.environ.get("VIEWER_CHROME_ENSURE", "/opt/ghostship-agent-desktop/chrome-ensure")
 ENSURE_SECONDS = 60      # chrome-ensure's own default timeout
+APPS_CONTROL = os.path.join(RUNS_DIR, "apps", "control.sock")   # app-session supervisor
+APP_LIVE_FPS = 8.0
+APP_ERRORS = {"invalid_request": 400, "not_found": 404, "conflict": 409, "still_open": 409, "paused": 409}
 BUSY_STALE = 30.0        # agent-side busy files older than this are abandoned
 TAKEOVER_WAIT = 20.0     # how long a takeover waits for in-flight agent calls
 INPUT_KINDS = frozenset({"tap", "pointer", "wheel", "key", "text", "navigate", "reload", "back", "forward",
@@ -774,6 +777,193 @@ class Caster:
 
 
 # --------------------------------------------------------------------------
+# Native app sessions (app-session): one app per headless screen
+# --------------------------------------------------------------------------
+
+async def app_call(path: str, request: dict, timeout: float = 30.0) -> dict:
+    """One JSON-line request to the app-session supervisor or a session socket."""
+    try:
+        reader, writer = await asyncio.wait_for(asyncio.open_unix_connection(path, limit=32 * 1024 * 1024), 5)
+    except (OSError, asyncio.TimeoutError):
+        raise HttpError(503, "app sessions are unavailable") from None
+    try:
+        writer.write(json.dumps(request).encode() + b"\n")
+        await writer.drain()
+        line = await asyncio.wait_for(reader.readline(), timeout)
+    except (OSError, asyncio.TimeoutError, ValueError):
+        raise HttpError(503, "app session did not answer") from None
+    finally:
+        writer.close()
+    try:
+        reply = json.loads(line)
+    except ValueError:
+        raise HttpError(503, "app session did not answer") from None
+    if not reply.get("ok"):
+        error = reply.get("error") or {}
+        raise HttpError(APP_ERRORS.get(error.get("kind"), 503), _str(error.get("message"), 300) or "app request failed")
+    return reply
+
+
+class AppHost:
+    """Stands in for a Browser for app-session runs (identity "app")."""
+
+    identity = "app"
+    cdp = None
+
+    def __init__(self, control: str):
+        self.control = control
+        self.sessions: list[dict] = []
+        self.catalog: list[dict] = []
+        self.targets: dict[str, dict] = {}
+
+    def alive(self) -> bool:
+        return True
+
+    async def refresh(self) -> None:
+        try:
+            if not self.catalog:
+                self.catalog = (await app_call(self.control, {"op": "catalog"}, 5)).get("apps") or []
+            self.sessions = (await app_call(self.control, {"op": "list"}, 10)).get("sessions") or []
+        except HttpError:
+            self.sessions = []
+        self.targets = {s["session_id"]: {"url": "", "title": s.get("title") or ""} for s in self.sessions
+                        if isinstance(s.get("session_id"), str) and TARGET_ID_RE.fullmatch(s["session_id"])}
+
+    async def resync(self) -> None:
+        await self.refresh()
+
+    def runs(self) -> list[dict]:
+        return [{"run_id": s["session_id"], "identity": "app", "kind": "app", "anchor": None,
+                 "members": [s["session_id"]], "expires_at": None, "app": s.get("app"), "name": s.get("name"),
+                 "title": s.get("title") or "", "opened_at": s.get("opened_at")}
+                for s in self.sessions if s.get("session_id") in self.targets]
+
+    def socket(self, sid: str) -> str:
+        return os.path.join(os.path.dirname(self.control), _check(TARGET_ID_RE, sid, "session id") + ".sock")
+
+
+# DOM KeyboardEvent.key -> xkb keysym for app-session key actions.
+APP_KEYS = {"Enter": "Return", "Backspace": "BackSpace", "Tab": "Tab", "Escape": "Escape", "Delete": "Delete",
+            "ArrowUp": "Up", "ArrowDown": "Down", "ArrowLeft": "Left", "ArrowRight": "Right", "Home": "Home",
+            "End": "End", "PageUp": "Page_Up", "PageDown": "Page_Down", "Insert": "Insert", " ": "space",
+            **{f"F{n}": f"F{n}" for n in range(1, 13)}}
+
+
+def app_key_action(msg: dict) -> dict | None:
+    """Translate a viewer key message into an app-session action (None: nothing to send)."""
+    if msg.get("kind", "press") == "up":
+        return None
+    key = _str(msg.get("key"), 32) or ""
+    mods = msg.get("mods") if isinstance(msg.get("mods"), int) else 0
+    names = [name for bit, name in ((MOD_CTRL, "ctrl"), (MOD_ALT, "alt"), (MOD_META, "super"), (MOD_SHIFT, "shift"))
+             if mods & bit]
+    if len(key) == 1 and key != " " and not mods & (MOD_CTRL | MOD_ALT | MOD_META):
+        return {"action": "type", "text": key}
+    keysym = APP_KEYS.get(key) or (key if len(key) == 1 and key.isalnum() else None)
+    if keysym is None:
+        return None  # bare modifiers, dead keys and the like
+    return {"action": "key", "text": "+".join(names + [keysym])}
+
+
+class AppCaster:
+    """Live view and input for one app session (frames polled from its socket)."""
+
+    def __init__(self, app: "App", host: AppHost, sid: str, live: bool, size: tuple[int, int]):
+        self.app, self.host, self.tid, self.live, self.size = app, host, sid, live, size
+        self.path = host.socket(sid)
+        self.clients: set[WsClient] = set()
+        self.frame_text: str | None = None
+        self.frame_data: str | None = None
+        self.meta: dict = {}
+        self.frame_at = 0.0
+        self.first = asyncio.Event()
+        self.used = time.monotonic()
+        self.dialog = None
+        self.dead = False
+        self._digest = None
+        self._task: asyncio.Task | None = None
+
+    async def start(self) -> None:
+        await self.grab()
+        self._task = asyncio.ensure_future(self._loop())
+
+    async def resize(self, size: tuple[int, int]) -> None:
+        self.size = (max(size[0], self.size[0]), max(size[1], self.size[1]))
+
+    async def grab(self) -> None:
+        reply = await app_call(self.path, {"op": "frame", "max_edge": max(self.size),
+                                           "quality": LIVE_QUALITY if self.live else THUMB_QUALITY}, 15)
+        self.frame_at = time.time()
+        self.meta = {"deviceWidth": reply.get("width"), "deviceHeight": reply.get("height"), "offsetTop": 0,
+                     "pageScaleFactor": 1, "scrollOffsetX": 0, "scrollOffsetY": 0}
+        digest = hashlib.sha1(reply.get("jpeg", "").encode()).digest()
+        if digest != self._digest or self.frame_text is None:
+            self._digest = digest
+            self.frame_data = reply.get("jpeg")
+            if self.live:
+                self.frame_text = json.dumps({"t": "frame", "target": self.tid, "meta": self.meta,
+                                              "at": self.frame_at, "data": self.frame_data})
+                for client in list(self.clients):
+                    client.push_frame(self.tid, self.frame_text)
+        self.first.set()
+
+    async def _loop(self) -> None:
+        interval = 1.0 / APP_LIVE_FPS if self.live else THUMB_INTERVAL
+        try:
+            while True:
+                started = time.monotonic()
+                await self.grab()
+                await asyncio.sleep(max(0.0, interval - (time.monotonic() - started)))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log(f"app view ended: {err_name(exc)}")
+            self.dead = True
+
+    async def act(self, actions: list[dict]) -> None:
+        await app_call(self.path, {"op": "input", "actor": "human", "actions": actions}, 60)
+
+    async def input(self, kind: str, msg: dict) -> None:
+        def point():
+            if not self.meta.get("deviceWidth"):
+                raise ValueError("no frame yet")
+            x, y = map_point(float(msg.get("x", 0)), float(msg.get("y", 0)), self.meta)
+            return [min(int(x), self.meta["deviceWidth"] - 1), min(int(y), self.meta["deviceHeight"] - 1)]
+
+        if kind == "tap":
+            await self.act([{"action": "double_click" if msg.get("double") else "left_click", "coordinate": point()}])
+        elif kind == "pointer":
+            pointer_kind = msg.get("kind")
+            button = msg.get("button") if msg.get("button") in ("left", "middle", "right") else "left"
+            if pointer_kind == "move":
+                await self.act([{"action": "mouse_move", "coordinate": point()}])
+            elif pointer_kind in ("down", "up"):
+                await self.act([{"action": "button", "button": button, "state": pointer_kind, "coordinate": point()}])
+            else:
+                raise ValueError("bad pointer kind")
+        elif kind == "wheel":
+            dx = max(min(float(msg.get("dx", 0)), 5000.0), -5000.0) / 100.0
+            dy = max(min(float(msg.get("dy", 0)), 5000.0), -5000.0) / 100.0
+            await self.act([{"action": "scroll", "coordinate": point(), "dx": dx, "dy": dy}])
+        elif kind == "key":
+            action = app_key_action(msg)
+            if action:
+                await self.act([action])
+        elif kind == "text":
+            text = msg.get("text")
+            if not isinstance(text, str) or not text or len(text) > 2000:
+                raise ValueError("bad text")
+            await self.act([{"action": "type", "text": text}])
+        else:
+            raise ValueError("not available in app sessions")
+
+    async def close(self) -> None:
+        self.dead = True
+        if self._task is not None:
+            self._task.cancel()
+
+
+# --------------------------------------------------------------------------
 # HTTP / WebSocket plumbing
 # --------------------------------------------------------------------------
 
@@ -926,6 +1116,7 @@ class App:
     def __init__(self, runs_dir: str, ports: dict[str, int]):
         self.runs_dir = runs_dir
         self.browsers = {identity: Browser(self, identity, port) for identity, port in ports.items()}
+        self.apps = AppHost(os.path.join(runs_dir, "apps", "control.sock"))
         self.live: dict[tuple[str, str], Caster] = {}
         self.thumbs: dict[tuple[str, str], Caster] = {}
         self.clients: set[WsClient] = set()
@@ -941,18 +1132,21 @@ class App:
 
     def all_runs(self) -> list[dict]:
         runs, seen = [], set()
-        for browser in self.browsers.values():
-            for run in browser.runs():
+        for host in [*self.browsers.values(), self.apps]:
+            for run in host.runs():
                 if run["run_id"] not in seen:
                     seen.add(run["run_id"])
                     runs.append(run)
         return runs
 
+    def host(self, identity: str):
+        return self.apps if identity == "app" else self.browsers[identity]
+
     def find(self, run_id: str) -> tuple[Browser, dict]:
         _check(RUN_ID_RE, run_id, "run id")
         for run in self.all_runs():
             if run["run_id"] == run_id:
-                return self.browsers[run["identity"]], run
+                return self.host(run["identity"]), run
         raise HttpError(404, "run not found")
 
     def sync_pauses(self) -> None:
@@ -967,7 +1161,7 @@ class App:
         """Drop paused/<target> files for targets no connected browser has (all must be up)."""
         if not self.browsers or not all(browser.alive() for browser in self.browsers.values()):
             return
-        live = {tid for browser in self.browsers.values() for tid in browser.targets}
+        live = {tid for host in [*self.browsers.values(), self.apps] for tid in host.targets}
         paused_dir = os.path.join(self.runs_dir, "paused")
         try:
             names = os.listdir(paused_dir)
@@ -978,6 +1172,8 @@ class App:
                 _unlink(os.path.join(paused_dir, name))
 
     def describe(self, run: dict, detail: bool = False) -> dict:
+        if run.get("kind") == "app":
+            return self.describe_app(run, detail)
         browser = self.browsers[run["identity"]]
         registry = read_registry(self.runs_dir, run["run_id"]) or {}
         tabs, state, last_frame = [], None, 0.0
@@ -1002,6 +1198,20 @@ class App:
                 "registered": bool(registry), "tabs": tabs, "paused": is_paused(self.runs_dir, run["run_id"]),
                 "state": state, "last_frame_at": last_frame or None, "primary_target": primary}
 
+    def describe_app(self, run: dict, detail: bool) -> dict:
+        sid = run["run_id"]
+        registry = read_registry(self.runs_dir, sid) or {}
+        tab = {"target_id": sid, "title": _str(run.get("title"), 200) or run.get("name") or "", "origin": "",
+               "is_anchor": False, "opener": False}
+        if detail:
+            tab["url"] = ""
+        caster = self.live.get(("app", sid)) or self.thumbs.get(("app", sid))
+        return {"run_id": sid, "identity": "app", "kind": "app", "app": run.get("app"), "app_name": run.get("name"),
+                "label": registry.get("label"), "owner": registry.get("owner"), "opened_at": registry.get("opened_at"),
+                "seen_at": None, "expires_at": None, "registered": bool(registry), "tabs": [tab],
+                "paused": is_paused(self.runs_dir, sid), "state": read_state(self.runs_dir, sid),
+                "last_frame_at": (caster.frame_at if caster else None) or None, "primary_target": sid}
+
     # ---- casters ---------------------------------------------------------
     async def browser_down(self, browser: Browser) -> None:
         for table in (self.live, self.thumbs):
@@ -1020,7 +1230,8 @@ class App:
                 await caster.close()
                 caster = None
             if caster is None:
-                caster = Caster(self, browser, tid, True, size)
+                caster = (AppCaster(self, browser, tid, True, size) if browser is self.apps
+                          else Caster(self, browser, tid, True, size))
                 try:
                     await caster.start()
                 except BaseException:
@@ -1050,7 +1261,8 @@ class App:
             if len(self.thumbs) >= MAX_THUMB_CASTERS:
                 oldest = min(self.thumbs, key=lambda k: self.thumbs[k].used)
                 await self.thumbs.pop(oldest).close()
-            caster = Caster(self, browser, tid, False, THUMB_SIZE)
+            caster = (AppCaster(self, browser, tid, False, THUMB_SIZE) if browser is self.apps
+                      else Caster(self, browser, tid, False, THUMB_SIZE))
             self.thumbs[key] = caster
             try:
                 async with self.thumb_gate:
@@ -1072,16 +1284,18 @@ class App:
             await asyncio.sleep(0.5)
             tick += 1
             self.sync_pauses()
+            if tick % 2 == 0:
+                await self.apps.refresh()
             if tick % 10:
                 continue
             now = time.monotonic()
             for key, caster in list(self.thumbs.items()):
-                gone = key[1] not in self.browsers[key[0]].targets
+                gone = key[1] not in self.host(key[0]).targets
                 if caster.dead or gone or now - caster.used > THUMB_IDLE:
                     self.thumbs.pop(key, None)
                     await caster.close()
             for key, caster in list(self.live.items()):
-                if caster.dead or not caster.clients or key[1] not in self.browsers[key[0]].targets:
+                if caster.dead or not caster.clients or key[1] not in self.host(key[0]).targets:
                     self.live.pop(key, None)
                     await caster.close()
             if tick % 60 == 0:
@@ -1118,6 +1332,23 @@ class App:
                 if time.monotonic() > deadline:
                     raise HttpError(503, "browser started but is not reachable")
                 await asyncio.sleep(0.2)
+
+    async def close_app(self, run: dict, force: bool) -> dict:
+        """Close an app session as a person would; it may refuse (409) while asking to save."""
+        self.pause(run)
+        since = time.time()
+        while takeover_decision(self.runs_dir, run["members"], since) == "wait":
+            await asyncio.sleep(0.1)
+        await app_call(self.apps.control, {"op": "close", "session_id": run["run_id"], "force": force}, 60)
+        await self.apps.refresh()
+        self.changed()
+        return {"run_id": run["run_id"], "closed": True}
+
+    async def new_app(self, name: str) -> dict:
+        reply = await app_call(self.apps.control, {"op": "open", "app": name, "owner": {"harness": "human"}}, 120)
+        await self.apps.refresh()
+        session = reply.get("session") or {}
+        return {"run_id": session.get("session_id"), "app": name, "existing": bool(reply.get("existing"))}
 
     async def close_run(self, browser: Browser, run: dict) -> dict:
         """Close a session's window: pause it, let an in-flight agent call finish, close its tabs (home last).
@@ -1250,14 +1481,19 @@ class App:
                 "browsers": {identity: ("up" if browser.alive() else "stopped")
                              for identity, browser in self.browsers.items()},
                 "now": time.time(),
+                "apps": self.apps.catalog,
                 "runs": [self.describe(run) for run in self.all_runs()]})
         if req.method == "POST" and rest == ["new"]:
+            if req.query.get("app"):
+                return json_response(200, await self.new_app(req.query["app"]))
             return json_response(200, await self.new_run(req.query.get("identity", "")))
         if len(rest) != 2:
             raise HttpError(404, "not found")
         browser, run = self.find(rest[0])
         action = rest[1]
         if req.method == "POST" and action == "close":
+            if run.get("kind") == "app":
+                return json_response(200, await self.close_app(run, req.query.get("force") == "1"))
             return json_response(200, await self.close_run(browser, run))
         if req.method == "POST" and action in ("pause", "resume"):
             self.pause(run) if action == "pause" else self.resume(run)
@@ -1368,7 +1604,7 @@ class App:
                     tid = client.target if client.target in run["members"] else run["members"][-1]
                     await self.subscribe(client, browser, tid)
             except HttpError:
-                client.push({"t": "gone", "browser": "up" if self.browsers[client.identity].alive() else "stopped"})
+                client.push({"t": "gone", "browser": "up" if self.host(client.identity).alive() else "stopped"})
             except (CdpError, OSError, ValueError) as exc:
                 log(f"stream update failed: {err_name(exc)}")
             await asyncio.sleep(1)
@@ -1416,6 +1652,9 @@ class App:
                 return
         caster = await self.live_caster(browser, client.target, client.size)
         caster.clients.add(client)
+        if isinstance(caster, AppCaster):
+            await caster.input(kind, msg)
+            return
         await self.input(caster, kind, msg)
 
     def run_clients(self, run_id: str):
