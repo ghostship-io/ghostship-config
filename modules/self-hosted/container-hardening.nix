@@ -101,9 +101,40 @@ let
     "SETGID"
     "SETUID"
   ];
+  # Read-only image filesystem: a compromise cannot replace image binaries or
+  # drop code into the image. Podman adds tmpfs /run (s6 runs generated scripts
+  # there), and the noexec /tmp and /var/tmp above apply. Chosen from each
+  # container's overlay upper layer on 2026-10-20: these write only Podman's
+  # passwd/group entries and their mount points. Still writable, with the reason:
+  # flaresolverr (patches /app/chromedriver, caches in /app), muximux, pyload and
+  # qbittorrent (root LinuxServer init edits /etc, /app, /defaults), tdarr (writes
+  # /app/Tdarr_Node assets), grimmory (root entrypoint rewrites /etc/passwd),
+  # romm (templates /etc/nginx/conf.d).
+  readOnlyRoot = [
+    "bazarr"
+    "chaptarr"
+    "cloudflared"
+    "gluetun"
+    "grimmory-db"
+    "homepage"
+    "ntfy"
+    "nzbget"
+    "plex-auto-languages"
+    "prowlarr"
+    "radarr"
+    "recyclarr"
+    "romm-db"
+    "seerr"
+    "sonarr"
+    "tautulli"
+    "uptime-kuma"
+  ];
 in
 {
   virtualisation.oci-containers.containers = lib.mkMerge [
+    (lib.genAttrs readOnlyRoot (_: {
+      extraOptions = [ "--read-only" ];
+    }))
     (lib.mapAttrs (_: caps: {
       extraOptions = [ "--cap-drop=ALL" ] ++ map (cap: "--cap-add=${cap}") caps;
     }) keepCaps)
