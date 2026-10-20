@@ -225,7 +225,8 @@ function showRun(id) {
   closeStream();
   S.current = id; S.target = null; S.meta = null; S.detail = S.runs.find((r) => r.run_id === id) || null;
   S.view = { z: 1, tx: 0, ty: 0 }; S.layoutMode = null;
-  S.manualAt = 0; S.knownTabs = null; S.lastStateAt = 0;
+  S.manualAt = 0; S.knownTabs = null; S.lastStateAt = 0; S.readOnly = false;
+  notice("");
   $("agent-view").classList.remove("url-open");
   $("grid-view").hidden = true; $("agent-view").hidden = false;
   $("screen").removeAttribute("src");
@@ -264,10 +265,24 @@ function renderHeader() {
   });
   tabs.replaceChildren(...buttons);
   const tab = run.tabs.find((t) => t.target_id === S.target);
+  S.readOnly = !!(tab && tab.is_anchor);
+  for (const id of ["nav-back", "nav-forward", "nav-reload", "nav-back-compact", "url", "url-toggle", "kbd-btn"]) $(id).disabled = S.readOnly;
+  for (const b of document.querySelectorAll("#urlbar button[type=submit]")) b.disabled = S.readOnly;
+  if (S.readOnly) { setKeyboard(false); notice("Home tab — read-only. Pick another tab above.", "info", 0); }
+  else if (S.noticeKind === "anchor") notice("");
+  if (S.readOnly) S.noticeKind = "anchor";
   const url = $("url");
   if (tab && document.activeElement !== url) url.value = tab.is_anchor ? "" : (tab.url || tab.origin || "");
 }
 
+function notice(text, kind, ms) {
+  const n = $("notice");
+  clearTimeout(notice.t);
+  n.textContent = text || ""; n.hidden = !text;
+  n.className = `notice ${kind || ""}`;
+  S.noticeKind = null;
+  if (text && ms) notice.t = setTimeout(() => { n.hidden = true; }, ms);
+}
 function stageMsg(text) {
   const m = $("stage-msg");
   m.textContent = text || ""; m.hidden = !text;
@@ -310,7 +325,9 @@ function closeStream() {
   clearTimeout(S.wsTimer);
   if (S.ws) { const ws = S.ws; S.ws = null; ws.close(); }
 }
+const INPUT_TYPES = new Set(["tap", "pointer", "wheel", "key", "text", "navigate", "reload", "back", "forward", "dialog"]);
 function send(msg) {
+  if (S.readOnly && INPUT_TYPES.has(msg.t)) return false; // the home (anchor) tab is read-only
   if (S.ws && S.ws.readyState === 1) { S.ws.send(JSON.stringify(msg)); return true; }
   return false;
 }
@@ -341,6 +358,14 @@ function onMessage(msg) {
     case "status":
     case "gone":
       stageMsg(msg.browser === "stopped" ? "Browser stopped" : "This window was closed");
+      break;
+    case "busy":
+      notice(msg.stuck ? "Agent is still busy — try again" : "Agent is finishing its current action…", "", msg.stuck ? 6000 : 0);
+      S.noticeKind = "busy";
+      break;
+    case "ready":
+      notice("Agent paused — you have control", "info", 2500);
+      S.noticeKind = "ready";
       break;
     case "error": toast(msg.error); break;
     default: break;

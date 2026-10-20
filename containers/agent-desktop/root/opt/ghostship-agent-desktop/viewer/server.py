@@ -15,6 +15,12 @@ about:blank anchor (a human-owned run) to open that window's first tab.
 
 Pause protocol (shared with the desktop input gate) lives in the runs dir:
 ``<marker>.pause`` plus ``paused/<targetId>`` for every page of the run.
+The agent side marks ``busy/<targetId>`` before it checks ``paused/``; the
+viewer writes the pause files first and only then waits for every member's
+busy file to clear (or go stale) before any human input reaches the page.
+
+Every request must carry a valid Cloudflare Access JWT (verified here with
+the team's published RS256 keys), on top of the same-origin checks.
 """
 from __future__ import annotations
 
@@ -22,6 +28,7 @@ import asyncio
 import base64
 import collections
 import hashlib
+import hmac
 import json
 import math
 import os
@@ -62,6 +69,17 @@ THUMB_IDLE = 20.0
 MAX_THUMB_CASTERS = 12
 MAX_WS_CLIENTS = 32
 HUMAN_RUN_SECONDS = 2 * 3600
+BUSY_STALE = 30.0        # agent-side busy files older than this are abandoned
+TAKEOVER_WAIT = 20.0     # how long a takeover waits for in-flight agent calls
+INPUT_KINDS = frozenset({"tap", "pointer", "wheel", "key", "text", "navigate", "reload", "back", "forward",
+                         "dialog"})
+
+ACCESS_TEAM = os.environ.get("VIEWER_ACCESS_TEAM", "").strip()
+ACCESS_AUD = os.environ.get("VIEWER_ACCESS_AUD", "").strip()
+ACCESS_DISABLED = os.environ.get("VIEWER_ACCESS_DISABLED") == "1"
+ACCESS_LEEWAY = 60
+JWKS_MAX_AGE = 3600
+JWKS_MIN_REFRESH = 30
 WS_MAX_MESSAGE = 64 * 1024
 
 # Windows virtual key codes Chrome needs for editing/navigation keys.
@@ -179,6 +197,177 @@ def resume_run(runs_dir: str, run_id: str, target_ids) -> None:
     _unlink(marker)
     for path in paths:
         _unlink(path)
+
+
+def busy_targets(runs_dir: str, target_ids, now: float | None = None) -> list[str]:
+    """Members with a fresh ``busy/<target>`` file (an agent call in flight)."""
+    now = time.time() if now is None else now
+    busy = []
+    for tid in target_ids:
+        try:
+            mtime = os.stat(os.path.join(runs_dir, "busy", _check(TARGET_ID_RE, tid, "target id")),
+                            follow_symlinks=False).st_mtime
+        except FileNotFoundError:
+            continue
+        if now - mtime < BUSY_STALE:
+            busy.append(tid)
+    return busy
+
+
+def takeover_decision(runs_dir: str, target_ids, waiting_since: float | None, now: float | None = None) -> str:
+    """'go' when no member is busy; else 'wait' (within TAKEOVER_WAIT of the first refusal) or 'stuck'.
+
+    Callers must have written the pause files before asking, so a busy file
+    seen here belongs to a call that started before the pause.
+    """
+    now = time.time() if now is None else now
+    if not busy_targets(runs_dir, target_ids, now):
+        return "go"
+    if waiting_since is not None and now - waiting_since >= TAKEOVER_WAIT:
+        return "stuck"
+    return "wait"
+
+
+# --------------------------------------------------------------------------
+# Cloudflare Access JWT verification (RS256, stdlib only)
+# --------------------------------------------------------------------------
+
+SHA256_DIGEST_INFO = bytes.fromhex("3031300d060960864801650304020105000420")
+
+
+class AuthError(Exception):
+    pass
+
+
+class UnknownKey(AuthError):
+    pass
+
+
+def b64url_decode(value: str) -> bytes:
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]*", value):
+        raise AuthError("bad encoding")
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+def rsa_pkcs1_sha256_verify(n: int, e: int, message: bytes, signature: bytes) -> bool:
+    k = (n.bit_length() + 7) // 8
+    if len(signature) != k or k < 128:
+        return False
+    s = int.from_bytes(signature, "big")
+    if s >= n:
+        return False
+    em = pow(s, e, n).to_bytes(k, "big")
+    t = SHA256_DIGEST_INFO + hashlib.sha256(message).digest()
+    if k < len(t) + 11:
+        return False
+    expected = b"\x00\x01" + b"\xff" * (k - len(t) - 3) + b"\x00" + t
+    return hmac.compare_digest(em, expected)
+
+
+def verify_jwt(token: str, keys: dict[str, tuple[int, int]], team: str, aud: str, now: float | None = None) -> dict:
+    """Verify a Cloudflare Access JWT; return its claims or raise AuthError."""
+    now = time.time() if now is None else now
+    if not isinstance(token, str) or len(token) > 16384 or token.count(".") != 2:
+        raise AuthError("malformed token")
+    head_b64, body_b64, sig_b64 = token.split(".")
+    try:
+        header = json.loads(b64url_decode(head_b64))
+        claims = json.loads(b64url_decode(body_b64))
+    except ValueError:
+        raise AuthError("malformed token") from None
+    if not isinstance(header, dict) or not isinstance(claims, dict):
+        raise AuthError("malformed token")
+    if header.get("alg") != "RS256":
+        raise AuthError("unsupported alg")
+    kid = header.get("kid")
+    if not isinstance(kid, str) or kid not in keys:
+        raise UnknownKey("unknown key")
+    n, e = keys[kid]
+    if not rsa_pkcs1_sha256_verify(n, e, f"{head_b64}.{body_b64}".encode(), b64url_decode(sig_b64)):
+        raise AuthError("bad signature")
+    audiences = claims.get("aud")
+    audiences = [audiences] if isinstance(audiences, str) else audiences
+    if not isinstance(audiences, list) or aud not in audiences:
+        raise AuthError("wrong audience")
+    if claims.get("iss") != f"https://{team}":
+        raise AuthError("wrong issuer")
+    exp, nbf = claims.get("exp"), claims.get("nbf")
+    if not isinstance(exp, (int, float)) or isinstance(exp, bool) or now > exp + ACCESS_LEEWAY:
+        raise AuthError("expired")
+    if nbf is not None and (not isinstance(nbf, (int, float)) or now + ACCESS_LEEWAY < nbf):
+        raise AuthError("not yet valid")
+    return claims
+
+
+def parse_jwks(document: dict) -> dict[str, tuple[int, int]]:
+    keys = {}
+    for key in document.get("keys", []) if isinstance(document, dict) else []:
+        if isinstance(key, dict) and key.get("kty") == "RSA" and isinstance(key.get("kid"), str):
+            try:
+                keys[key["kid"]] = (int.from_bytes(b64url_decode(key["n"]), "big"),
+                                    int.from_bytes(b64url_decode(key["e"]), "big"))
+            except (KeyError, AuthError, ValueError):
+                continue
+    return keys
+
+
+def request_token(headers: dict) -> str | None:
+    token = headers.get("cf-access-jwt-assertion")
+    if token:
+        return token
+    for part in headers.get("cookie", "").split(";"):
+        name, _, value = part.strip().partition("=")
+        if name == "CF_Authorization" and value:
+            return value
+    return None
+
+
+class AccessVerifier:
+    """Cloudflare Access keys cached from the team's certs endpoint."""
+
+    def __init__(self, team: str, aud: str):
+        self.team, self.aud = team, aud
+        self.keys: dict[str, tuple[int, int]] = {}
+        self.fetched = float("-inf")
+        self.tried = float("-inf")
+        self.lock = asyncio.Lock()
+
+    def _fetch(self) -> dict:
+        import urllib.request
+        with urllib.request.urlopen(f"https://{self.team}/cdn-cgi/access/certs", timeout=10) as resp:
+            return json.loads(resp.read(1 << 20))
+
+    async def refresh(self, force: bool = False) -> None:
+        async with self.lock:
+            now = time.monotonic()
+            if now - self.tried < JWKS_MIN_REFRESH and not (not self.keys and now - self.tried > 5):
+                return
+            if not force and self.keys and now - self.fetched < JWKS_MAX_AGE:
+                return
+            self.tried = now
+            try:
+                keys = parse_jwks(await asyncio.to_thread(self._fetch))
+            except Exception as exc:
+                log(f"access keys refresh failed: {type(exc).__name__}")
+                return
+            if keys:
+                self.keys, self.fetched = keys, now
+
+    async def check(self, headers: dict) -> None:
+        token = request_token(headers)
+        if not token:
+            raise HttpError(401, "authentication required")
+        if not self.keys or time.monotonic() - self.fetched > JWKS_MAX_AGE:
+            await self.refresh()
+        try:
+            try:
+                verify_jwt(token, self.keys, self.team, self.aud)
+            except UnknownKey:
+                await self.refresh(force=True)
+                verify_jwt(token, self.keys, self.team, self.aud)
+        except AuthError as exc:
+            log(f"access denied: {exc}")
+            raise HttpError(401, "authentication required") from None
 
 
 def _read_small_json(path: str, limit: int = 16384):
@@ -730,6 +919,9 @@ class App:
         self.thumbs: dict[tuple[str, str], Caster] = {}
         self.clients: set[WsClient] = set()
         self.thumb_gate = asyncio.Semaphore(3)
+        self.access: AccessVerifier | None = None
+        self.waiting: dict[str, float] = {}   # run_id -> first refused takeover input
+        self.watchers: dict[str, asyncio.Task] = {}
         self.cast_lock = asyncio.Lock()
 
     # ---- run model -------------------------------------------------------
@@ -890,6 +1082,7 @@ class App:
 
     def resume(self, run: dict) -> None:
         resume_run(self.runs_dir, run["run_id"], run["members"])
+        self.waiting.pop(run["run_id"], None)
         self.sweep_orphans()  # tabs that closed while paused are no longer members
 
     async def new_run(self, identity: str) -> dict:
@@ -960,6 +1153,8 @@ class App:
                 pass
 
     async def route(self, req: Request, reader, writer) -> bytes | None:
+        if self.access is not None:
+            await self.access.check(req.headers)
         path = req.path
         if path == "/agents":
             return response(301, b"", "text/plain", {"Location": "/agents/"})
@@ -1130,20 +1325,72 @@ class App:
             self.pause(run) if kind == "pause" else self.resume(run)
             client.last_run = None
             return
+        if kind not in INPUT_KINDS:
+            raise ValueError("unknown message")
         if client.target not in run["members"]:
             raise ValueError("tab closed")
-        caster = await self.live_caster(browser, client.target, client.size)
-        caster.clients.add(client)
-        # Any human input pauses the agent first (until an explicit Resume).
+        hover = kind == "pointer" and msg.get("kind") == "move" and not msg.get("buttons")
+        if client.target == run["anchor"]:
+            if hover:
+                return
+            raise ValueError("the home tab is read-only")
         registry = read_registry(self.runs_dir, run["run_id"]) or {}
         human = (registry.get("owner") or {}).get("harness") == "human"
-        paused = is_paused(self.runs_dir, run["run_id"])
-        if kind == "pointer" and msg.get("kind") == "move" and not msg.get("buttons") and not paused and not human:
-            return  # bare hover over a running agent is not a takeover; don't disturb its page
-        if not human and not paused:
-            self.pause(run)
-            client.last_run = None
+        if not human:
+            paused = is_paused(self.runs_dir, run["run_id"])
+            if hover and not paused:
+                return  # bare hover over a running agent is not a takeover; don't disturb its page
+            if not paused:  # any human input pauses the agent first (until an explicit Resume)
+                self.pause(run)
+                client.last_run = None
+            if not self.may_input(run):
+                return
+        caster = await self.live_caster(browser, client.target, client.size)
+        caster.clients.add(client)
         await self.input(caster, kind, msg)
+
+    def run_clients(self, run_id: str):
+        return [client for client in self.clients if client.run_id == run_id]
+
+    def may_input(self, run: dict) -> bool:
+        """After the pause files exist, let input through only once no member is mid-call."""
+        run_id = run["run_id"]
+        decision = takeover_decision(self.runs_dir, run["members"], self.waiting.get(run_id))
+        if decision == "go":
+            self.waiting.pop(run_id, None)
+            return True
+        first = run_id not in self.waiting
+        self.waiting.setdefault(run_id, time.time())
+        if decision == "stuck":
+            for client in self.run_clients(run_id):
+                client.push({"t": "busy", "stuck": True})
+        elif first:
+            for client in self.run_clients(run_id):
+                client.push({"t": "busy"})
+        watcher = self.watchers.get(run_id)
+        if watcher is None or watcher.done():
+            self.watchers[run_id] = asyncio.ensure_future(self.watch_busy(run_id))
+        return False
+
+    async def watch_busy(self, run_id: str) -> None:
+        """Poll busy files every 100 ms; tell the UI when control is free or the wait gave up."""
+        while True:
+            await asyncio.sleep(0.1)
+            try:
+                _, run = self.find(run_id)
+            except HttpError:
+                self.waiting.pop(run_id, None)
+                return
+            decision = takeover_decision(self.runs_dir, run["members"], self.waiting.get(run_id))
+            if decision == "go":
+                self.waiting.pop(run_id, None)
+                for client in self.run_clients(run_id):
+                    client.push({"t": "ready"})
+                return
+            if decision == "stuck":  # keep refusing; the next input re-checks ("try again")
+                for client in self.run_clients(run_id):
+                    client.push({"t": "busy", "stuck": True})
+                return
 
     async def input(self, caster: Caster, kind: str, msg: dict) -> None:
         meta = caster.meta
@@ -1215,6 +1462,16 @@ async def main() -> None:
         log("no CDP ports configured")
         sys.exit(2)
     app = App(RUNS_DIR, ports)
+    if ACCESS_TEAM and ACCESS_AUD:
+        app.access = AccessVerifier(ACCESS_TEAM, ACCESS_AUD)
+        await app.access.refresh(force=True)
+        if not app.access.keys:
+            log("warning: Cloudflare Access keys not loaded yet; requests are refused until they are")
+    elif ACCESS_DISABLED:
+        log("WARNING: Cloudflare Access verification is DISABLED (VIEWER_ACCESS_DISABLED=1); lab use only")
+    else:
+        log("refusing to start: set VIEWER_ACCESS_TEAM and VIEWER_ACCESS_AUD (or VIEWER_ACCESS_DISABLED=1 in a lab)")
+        sys.exit(2)
     for browser in app.browsers.values():
         asyncio.ensure_future(browser.run())
     asyncio.ensure_future(app.housekeeping())
