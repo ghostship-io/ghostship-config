@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.145] - 2026-10-20
+
+- Pin ghostship-agent 0.27.1 (`e0213afd`): fixes the `printing-press.sh` quoting regression from 0.27.0 that left `ghostship-inference-scheduler` crash-looping after 3.15.144.
+
 ## [3.15.144] - 2026-10-20
 
 - Pin ghostship-agent 0.27.0 (`2b64a6d8`): skill families collapse into routers with linked guides, so 44 installed skills become 12 and the ChatGPT GhostShip Skills plugin goes from 26 skills to 5. `ghostship-skills-reconcile` installs the T3 set (pruning the retired links) and republishes the plugin. The MCP instructions now point shopping at the `shopping` skill, so the ChatGPT connector is refreshed after the switch.
