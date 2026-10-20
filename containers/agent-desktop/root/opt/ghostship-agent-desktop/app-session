@@ -463,13 +463,17 @@ class Session:
 
         Without force, an app that stays open (typically asking to save) keeps
         running and this returns False, so unsaved work is never discarded.
+        With force (a person's x in the viewer, container stop), each window
+        is asked again every 2 s, so dialogs on top of the main window do not
+        hold it open, and the app is stopped after CLOSE_SECONDS regardless.
         """
         if self.proc is not None and self.proc.poll() is None:
-            try:
-                self.swaymsg("[all]", "kill")
-            except (AppError, OSError, subprocess.TimeoutExpired):
-                pass
-            for _ in range(CLOSE_SECONDS * 10):
+            for tick in range(CLOSE_SECONDS * 10):
+                if tick == 0 or (force and tick % 20 == 0):
+                    try:
+                        self.swaymsg("[all]", "kill")
+                    except (AppError, OSError, subprocess.TimeoutExpired):
+                        pass
                 if self.proc.poll() is not None:
                     break
                 await asyncio.sleep(0.1)
@@ -519,9 +523,16 @@ async def serve(sid: str, app: str) -> int:
 
 
 def icon_uri(path: str | None) -> str | None:
-    """The app's icon as a 96 px PNG data URI for the viewer's launcher (None when unreadable)."""
+    """The app's icon as a data URI for the viewer's launcher: SVG as is, else a 96 px PNG (None when unreadable)."""
     if not path:
         return None
+    if path.endswith(".svg"):
+        try:
+            with open(path, "rb") as handle:
+                data = handle.read(256 * 1024 + 1)
+        except OSError:
+            return None
+        return None if len(data) > 256 * 1024 else "data:image/svg+xml;base64," + base64.b64encode(data).decode()
     try:
         from PIL import Image
         with Image.open(path) as image:
@@ -591,6 +602,8 @@ class Supervisor:
         if app not in catalog:
             raise AppError("invalid_request", f"unknown app; choose one of: {', '.join(sorted(catalog))}")
         spec = catalog[app]
+        if spec.get("kind", "app") != "app":
+            raise AppError("invalid_request", f"{spec.get('name', app)} is a browser; use the browser tools")
         owner = request.get("owner") if isinstance(request.get("owner"), dict) else {}
         owner = {key: (str(owner[key])[:200] if owner.get(key) is not None else None)
                  for key in ("harness", "model", "t3_thread_id", "t3_thread_title")}
@@ -634,8 +647,12 @@ class Supervisor:
         op = request.get("op")
         loop = asyncio.get_running_loop()
         if op == "catalog":
-            return {"apps": [{"app": key, "name": spec.get("name", key), "icon": icon_uri(spec.get("icon"))}
-                             for key, spec in sorted(load_catalog().items()) if not spec.get("hidden")]}
+            # Browser entries are launcher tiles for the viewer only (it opens a Chrome window).
+            browsers = bool(request.get("browsers"))
+            return {"apps": [{"app": key, "name": spec.get("name", key), "icon": icon_uri(spec.get("icon")),
+                              "kind": spec.get("kind", "app"), "identity": spec.get("identity")}
+                             for key, spec in load_catalog().items()
+                             if browsers or spec.get("kind", "app") == "app"]}
         if op == "list":
             return {"sessions": await loop.run_in_executor(None, self.sessions)}
         if op == "open":

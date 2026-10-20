@@ -40,6 +40,7 @@ RUN set -eux; \
     esac; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      blender \
       ca-certificates \
       fonts-noto-color-emoji \
       grim \

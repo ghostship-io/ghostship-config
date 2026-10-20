@@ -54,6 +54,34 @@ class PauseProtocolTest(unittest.TestCase):
             self.assertEqual(len(done), 2)
 
 
+class CloseTest(unittest.TestCase):
+    def test_forced_close_asks_again_past_a_dialog_and_plain_close_never_forces(self):
+        """Catches a person's x leaving the app open behind a dialog, or an agent's close discarding work."""
+        class Proc:
+            def __init__(self, closes_needed):
+                self.left, self.pid = closes_needed, 0
+            def poll(self):
+                return 0 if self.left <= 0 else None
+
+        def session(closes_needed):
+            s = app_session.Session.__new__(app_session.Session)
+            s.proc, s.sway, s.done = Proc(closes_needed), None, asyncio.Event()
+            s.kills = 0
+            def swaymsg(*args):
+                s.kills += 1
+                s.proc.left -= 1
+            s.swaymsg = swaymsg
+            return s
+
+        app_session.CLOSE_SECONDS = 5
+        forced = session(2)  # the first close only dismisses a dialog
+        self.assertTrue(asyncio.run(forced.close(force=True)))
+        self.assertEqual(forced.kills, 2)
+        plain = session(2)
+        self.assertFalse(asyncio.run(plain.close(force=False)))
+        self.assertEqual(plain.kills, 1)
+
+
 class AdoptTest(unittest.TestCase):
     def test_agent_joining_a_persons_session_takes_ownership(self):
         """Catches an agent driving a person-launched app the viewer never pauses (owner left "human")."""

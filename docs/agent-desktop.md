@@ -255,9 +255,12 @@ switch at the top. Desktop mode embeds Selkies, which lives at `/desktop/`
 so they never expose nginx's internal port 3000. **+ Personal** and **+ Agent**
 start an idle-stopped Chrome first.
 
-The main page has two sections. **Apps** is a launcher with one tile per
-desktop app; a tile opens the app, or its running session, and running apps
-also get a live card. **Browser sessions** lists the browser windows.
+The main page has one launcher, **Apps**, with a tile per `apps.json` entry:
+Chrome · Personal and Chrome · Agent open a new browser window; OrcaSlicer and
+Blender open the app, or show its running session. **Open** lists everything
+running as live cards. **×** on a tab or card closes it at once: browser
+windows close their tabs, and an app is asked to quit (every 2 s, so a dialog
+cannot hold it) and stopped after 10 s, which discards unsaved work.
 
 Browsers mode shows every agent
 browser window as a card: label, identity, harness and model, T3 thread,
@@ -270,7 +273,7 @@ identity, for example to sign in to a site from a phone.
 
 ### Desktop app sessions
 
-Native apps in `apps.json` (OrcaSlicer first) run in app sessions: each app on
+Native apps in `apps.json` (OrcaSlicer and Blender) run in app sessions: each app on
 its own headless Sway screen with its own pointer and keyboard, so input never
 collides with the shared desktop, the browser stages or other sessions. The
 `app-session` supervisor (s6 `svc-agent-desktop-apps`, as abc) opens, lists and
@@ -279,8 +282,8 @@ session serves frames (grim, JPEG) and input (a virtual pointer, wtype for
 keys) on its own socket and writes a run record (`kind: app`) the viewer shows
 as a session tab. Agents use `ghostship-gui app` over SSH. A person's input
 pauses agent input (`paused/<session>`; agent input marks
-`busy/<session>` first), and closing asks the app to quit, so unsaved work is
-never discarded without force. Catalog apps are single-instance by default:
+`busy/<session>` first). An agent's close only asks the app to quit, so it
+never discards unsaved work without `--force`. Catalog apps are single-instance by default:
 OrcaSlicer keeps one settings folder and cloud login, so `open` returns the
 running session and refuses while Orca is open on the shared desktop.
 

@@ -20,6 +20,7 @@ const S = {
   dialog: null,
   modePref: { portrait: null, landscape: null }, layoutMode: null,
   manualAt: 0, knownTabs: null, lastStateAt: 0,
+  apps: [], closing: new Set(), launching: null,
 };
 
 // ---------------------------------------------------------------- helpers
@@ -94,7 +95,7 @@ const observer = "IntersectionObserver" in window ? new IntersectionObserver((en
 async function loadRuns() {
   try {
     const data = await api("api/runs");
-    S.runs = data.runs || [];
+    S.runs = (data.runs || []).filter((r) => !S.closing.has(r.run_id));
     S.browsers = data.browsers || {};
     renderAppButtons(data.apps || []);
     S.clockSkew = Date.now() / 1000 - (data.now || Date.now() / 1000);
@@ -114,14 +115,13 @@ function renderBanner() {
 }
 
 function renderGrid() {
-  const browserRuns = S.runs.filter((r) => !isApp(r));
-  const appRuns = S.runs.filter(isApp);
+  const ordered = [...S.runs.filter(isApp), ...S.runs.filter((r) => !isApp(r))];
   $("browsers").textContent = `${S.runs.length} open`;
   renderBanner();
   renderLauncher();
-  $("empty").hidden = browserRuns.length > 0;
+  $("empty").hidden = S.runs.length > 0;
   const keep = new Set();
-  for (const [grid, runs] of [[$("app-grid"), appRuns], [$("grid"), browserRuns]]) {
+  for (const [grid, runs] of [[$("grid"), ordered]]) {
     runs.forEach((run, i) => {
       keep.add(run.run_id);
       let card = cards.get(run.run_id);
@@ -213,7 +213,7 @@ async function togglePause(id) {
   } catch (err) { toast(`Could not ${run.paused ? "resume" : "pause"}: ${err.message}`); }
 }
 
-// One "+ <App>" button per app in the desktop's app catalog (grid header and + menu).
+// The + menu in a session view: one entry per launcher tile.
 function renderAppButtons(apps) {
   S.apps = apps;
   const key = JSON.stringify(apps);
@@ -227,17 +227,21 @@ function renderAppButtons(apps) {
   }));
 }
 
-// Launcher: one tile per app. A running app opens its session; otherwise it starts.
+// Launcher: one tile per catalog entry (Chrome identities and desktop apps).
+// A browser tile opens a new window; an app tile shows its running session or starts it.
 function renderLauncher() {
   const tiles = (S.apps || []).map((app) => {
-    const running = S.runs.find((r) => isApp(r) && r.app === app.app);
+    const browser = app.kind === "browser";
+    const running = !browser && S.runs.find((r) => isApp(r) && r.app === app.app);
+    const busy = S.launching === app.app;
     const tile = el("button", "tile" + (running ? " running" : ""));
     tile.type = "button";
     tile.title = running ? `Show ${app.name}` : `Open ${app.name}`;
     const icon = app.icon ? el("img", "tile-icon") : el("span", "tile-icon letter", app.name.slice(0, 1));
     if (app.icon) { icon.src = app.icon; icon.alt = ""; }
     tile.append(icon, el("span", "tile-name", app.name),
-      el("span", "tile-state", running ? (running.paused ? "Running · paused" : "Running") : (S.launching === app.app ? "Opening…" : "Tap to open")));
+      el("span", "tile-state", busy ? "Opening…" : running ? (running.paused ? "Running · paused" : "Running")
+        : browser ? "New window" : "Tap to open"));
     tile.addEventListener("click", () => launch(app));
     return tile;
   });
@@ -246,6 +250,7 @@ function renderLauncher() {
 }
 
 function launch(app) {
+  if (app.kind === "browser") return newRun(app.identity, app);
   const running = S.runs.find((r) => isApp(r) && r.app === app.app);
   if (running) openRun(running.run_id); else newApp(app);
 }
@@ -262,12 +267,16 @@ async function newApp(app) {
   finally { S.launching = null; renderLauncher(); }
 }
 
-async function newRun(identity) {
+async function newRun(identity, tile) {
+  if (S.launching) return;
+  S.launching = tile ? tile.app : identity;
+  renderLauncher();
   try {
     const r = await api(`api/runs/new?identity=${identity}`, { method: "POST" });
     await loadRuns();
     openRun(r.run_id);
   } catch (err) { toast(`Could not open a ${identity} window: ${err.message}`); }
+  finally { S.launching = null; renderLauncher(); }
 }
 
 // ---------------------------------------------------------------- routing
@@ -349,29 +358,23 @@ function renderSessions() {
   renderSessions.lastId = S.current;
 }
 
+// x closes at once: the tab disappears now and the desktop finishes in the
+// background (an app is asked to quit, then stopped after a few seconds).
 async function closeRun(id) {
   const run = S.runs.find((r) => r.run_id === id) || (S.detail && S.detail.run_id === id ? S.detail : null);
   if (!run) return;
-  const what = isApp(run) ? "this app" : "this window and its tabs";
-  if (!isHuman(run) && !confirm(`Close "${runTitle(run)}"? The agent loses ${what}.`)) return;
-  try {
-    await api(`api/runs/${encodeURIComponent(id)}/close`, { method: "POST" });
-  } catch (err) {
-    if (!(isApp(run) && err.status === 409 && !/paused/i.test(err.message))) { toast(`Could not close: ${err.message}`); return; }
-    if (!confirm(`${runTitle(run)} did not close; it is probably asking whether to save. Force it closed and discard unsaved changes?\n\n(Cancel to answer it yourself.)`)) {
-      if (S.current !== id) openRun(id);
-      return;
-    }
-    try { await api(`api/runs/${encodeURIComponent(id)}/close?force=1`, { method: "POST" }); }
-    catch (err2) { toast(`Could not close: ${err2.message}`); return; }
-  }
+  S.closing.add(id);
   const i = S.runs.findIndex((r) => r.run_id === id);
   S.runs = S.runs.filter((r) => r.run_id !== id);
   if (S.current === id) {
     const next = S.runs[Math.min(Math.max(i, 0), S.runs.length - 1)];
     if (next) location.replace(`#run=${next.run_id}`); else location.hash = "";
   }
-  loadRuns();
+  renderGrid(); if (S.current) renderHeader();
+  try {
+    await api(`api/runs/${encodeURIComponent(id)}/close${isApp(run) ? "?force=1" : ""}`, { method: "POST" });
+  } catch (err) { toast(`Could not close ${runTitle(run)}: ${err.message}`); }
+  finally { S.closing.delete(id); loadRuns(); }
 }
 
 function renderHeader() {
@@ -822,17 +825,12 @@ function answerDialog(accept) {
 
 // ---------------------------------------------------------------- wiring
 function init() {
-  $("new-personal").addEventListener("click", () => newRun("personal"));
-  $("new-agent").addEventListener("click", () => newRun("agent"));
   $("to-grid").addEventListener("click", () => { location.hash = ""; });
   $("new-session").addEventListener("click", () => {
     const menu = $("new-menu");
     menu.hidden = !menu.hidden;
     $("new-session").setAttribute("aria-expanded", String(!menu.hidden));
   });
-  for (const b of document.querySelectorAll("#new-menu [data-identity]")) {
-    b.addEventListener("click", () => { $("new-menu").hidden = true; newRun(b.dataset.identity); });
-  }
   document.addEventListener("click", (e) => {
     if (!$("new-menu").hidden && !e.target.closest("#new-menu, #new-session")) $("new-menu").hidden = true;
   });
