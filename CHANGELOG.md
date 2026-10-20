@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.162] - 2026-10-20
+
+- Agent viewer: closing a session also closes tabs and popups the agent opened while the close waited for its in-flight call, and a manual scroll of the session strip no longer snaps back on each refresh (Codex review of #138).
+
 ## [3.15.161] - 2026-10-20
 
 - Agent viewer: every open session is a tab along the top (identity dot, label, × to close) instead of ‹ › stepping, and **+** opens a Personal or Agent window from there. Closing pauses the session, waits for an in-flight agent call, then closes its tabs (home last) and removes its registry entry; closing an agent's session asks first. Cards in the grid have a Close button too.
