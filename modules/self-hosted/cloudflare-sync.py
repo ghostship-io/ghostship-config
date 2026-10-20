@@ -5,6 +5,7 @@ import copy
 import datetime
 import json
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -13,6 +14,13 @@ from pathlib import Path
 ZONE = "ghostship.io"
 MARKER = "Managed by nixos-config ghostship.apps"
 GOOGLE_IDP = "c694da42-b799-4706-983b-35fa9eb91236"
+# Reads retry transient Cloudflare failures; writes never retry, so a POST
+# that timed out after Cloudflare applied it is never sent twice.
+READ_RETRY_DELAYS = (5, 20)
+
+
+class TransientError(RuntimeError):
+    """A failure worth retrying for reads: rate limits, 5xx, network errors."""
 
 
 class Cloudflare:
@@ -20,6 +28,15 @@ class Cloudflare:
         self.token = token
 
     def request(self, method, path, data=None):
+        delays = READ_RETRY_DELAYS if method == "GET" else ()
+        for delay in delays:
+            try:
+                return self.attempt(method, path, data)
+            except TransientError:
+                time.sleep(delay)
+        return self.attempt(method, path, data)
+
+    def attempt(self, method, path, data=None):
         request = urllib.request.Request(
             "https://api.cloudflare.com/client/v4" + path,
             data=json.dumps(data).encode() if data is not None else None,
@@ -33,10 +50,11 @@ class Cloudflare:
             with urllib.request.urlopen(request, timeout=30) as response:
                 result = json.load(response)
         except urllib.error.HTTPError as error:
-            raise RuntimeError(
-                f"Cloudflare {method} failed: HTTP {error.code}"
-            ) from None
-        except (OSError, ValueError):
+            failure = TransientError if error.code == 429 or error.code >= 500 else RuntimeError
+            raise failure(f"Cloudflare {method} failed: HTTP {error.code}") from None
+        except OSError:
+            raise TransientError(f"Cloudflare {method} request failed") from None
+        except ValueError:
             raise RuntimeError(f"Cloudflare {method} request failed") from None
         if not result.get("success"):
             raise RuntimeError(f"Cloudflare {method} rejected the operation")
