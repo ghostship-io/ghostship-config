@@ -51,7 +51,8 @@ let
       pkgs.coreutils
       pkgs.git
       pkgs.gnupg
-      pkgs.podman
+      # The host's configured podman: it can apply the AppArmor profiles canaries run under.
+      config.virtualisation.podman.package
       pkgs.rsync
       pkgs.systemd
       config.nix.package
