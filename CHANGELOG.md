@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.158] - 2026-10-20
+
+- Agent desktop: one web UI. `desktop.ghostship.io` opens the viewer with a **Browsers | Desktop** switch; Desktop mode embeds Selkies, which nginx still serves at `/` to frames and health checks, and leaving it ends the stream. nginx redirects are now relative: `/agents` no longer redirects to `http://desktop.ghostship.io:3000/agents/`.
+
 ## [3.15.157] - 2026-10-20
 
 - Agent viewer: **+ Personal** / **+ Agent** start an idle-stopped Chrome (through `chrome-ensure`) instead of failing with "browser stopped". The viewer's AppArmor profile may run only `chrome-ensure`, under the container profile with a scrubbed environment.

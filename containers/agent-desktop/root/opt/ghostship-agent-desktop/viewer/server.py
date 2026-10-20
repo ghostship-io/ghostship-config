@@ -57,7 +57,7 @@ STATIC = {"": ("index.html", "text/html; charset=utf-8"),
           "app.js": ("app.js", "text/javascript; charset=utf-8"),
           "app.css": ("app.css", "text/css; charset=utf-8")}
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; "
-       "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+       "connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 LIVE_FPS = 12.0
 LIVE_QUALITY = 65
