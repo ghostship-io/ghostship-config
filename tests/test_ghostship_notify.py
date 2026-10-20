@@ -50,6 +50,28 @@ class NotifyTests(unittest.TestCase):
             self.assertEqual(Ntfy.received[-1][1]["topic"], "security")
             self.assertTrue(Ntfy.received[-1][0].startswith("Basic "))
 
+    def test_incident_reaches_the_coordinator_spool_even_when_ntfy_is_down(self):
+        """Defect: an ntfy outage drops the repair handoff, or a resolved alert starts a repair thread."""
+        server = HTTPServer(("127.0.0.1", 0), Ntfy)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets, spool = Path(tmp) / "monitoring.env", Path(tmp) / "incidents"
+            secrets.write_text("NTFY_PUBLISH_PASSWORD='pw'\n")
+            spool.mkdir()
+            notify.SECRETS, notify.STATE_DIR, notify.INCIDENTS = str(secrets), Path(tmp) / "state", str(spool)
+            os.environ["GHOSTSHIP_NOTIFY_URL"] = f"http://127.0.0.1:{server.server_port}"
+            self.addCleanup(os.environ.pop, "GHOSTSHIP_NOTIFY_URL")
+            base = ["--topic", "operations", "--source", "systemd", "--incident", "--dedupe", "x.service",
+                    "--title", "Service x.service failed"]
+            Ntfy.status = 500
+            self.assertEqual(notify.main(base + ["exit 1"]), 1)
+            Ntfy.status = 200
+            self.assertEqual(notify.main(base + ["--state", "resolved", "ok"]), 0)
+            (queued,) = [json.loads(path.read_text()) for path in spool.iterdir()]
+            self.assertEqual((queued["key"], queued["title"], queued["message"]),
+                             ("x.service", "Service x.service failed", "exit 1"))
+
 
 if __name__ == "__main__":
     unittest.main()

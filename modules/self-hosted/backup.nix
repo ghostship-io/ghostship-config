@@ -82,8 +82,6 @@ in
           exit 1
         fi
       '';
-      systemd.services.podman-auto-update.serviceConfig.ExecStart =
-        lib.mkForce "${pkgs.util-linux}/bin/flock -w 300 /run/ghostship-maintenance.lock ${pkgs.podman}/bin/podman auto-update";
     }
   ];
 }

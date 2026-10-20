@@ -4,7 +4,9 @@ Topics are security, operations and informational. Priority 5 means act now,
 4 an actionable threat or failure, 3 attention today, 2 informational (the
 default, silent on the phone) and 1 digest. The first two tags are the source
 and the state; --dedupe suppresses a repeat of the same key and state for an
-hour, while a state change always publishes.
+hour, while a state change always publishes. --incident also queues a firing
+alert for the GitHub coordinator, which starts a bounded T3 repair thread; it is
+queued even when ntfy is down.
 """
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ TOPICS = ("security", "operations", "informational")
 DEDUPE_WINDOW = 3600
 STATE_DIR = Path(os.environ.get("GHOSTSHIP_NOTIFY_STATE", "/var/lib/ghostship-notify"))
 SECRETS = os.environ.get("GHOSTSHIP_NOTIFY_SECRETS", "@secrets@")
+INCIDENTS = os.environ.get("GHOSTSHIP_NOTIFY_INCIDENTS", "@incidents@")
 
 
 def password() -> str:
@@ -65,6 +68,19 @@ def record(key: str, state: str) -> None:
     temporary.replace(path)
 
 
+def queue_incident(key: str, title: str, message: str) -> None:
+    """Hand a firing alert to the coordinator's incident spool, if this host has one."""
+    if not INCIDENTS or not Path(INCIDENTS).is_dir():
+        return
+    now = time.time()
+    name = f"{int(now * 1000)}-{hashlib.sha256(key.encode()).hexdigest()[:12]}"
+    temporary = Path(INCIDENTS) / f".{name}.tmp"
+    temporary.write_text(json.dumps({"key": key, "title": title, "message": message,
+                                     "host": os.uname().nodename, "at": now}))
+    temporary.chmod(0o640)
+    temporary.replace(Path(INCIDENTS) / f"{name}.json")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ghostship-notify", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -75,6 +91,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state", choices=("firing", "resolved"), default="firing")
     parser.add_argument("--tags", default="", help="comma-separated extra tags")
     parser.add_argument("--dedupe", help="suppress a repeat of this key and state for an hour")
+    parser.add_argument("--incident", action="store_true",
+                        help="also start a T3 repair thread for a firing alert")
     parser.add_argument("--click", help="https URL opened when the notification is tapped")
     parser.add_argument("message", nargs="*", help="message text; read from stdin when omitted")
     args = parser.parse_args(argv)
@@ -84,6 +102,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.click and not args.click.startswith("https://"):
         parser.error("--click must be an https URL")
+    if args.incident and args.state == "firing":
+        try:
+            queue_incident(args.dedupe or args.title, args.title, message[:4000])
+        except OSError as exc:
+            print(f"ghostship-notify: queueing the incident failed: {exc}", file=sys.stderr)
     tags = [args.source, args.state, *(t.strip() for t in args.tags.split(",") if t.strip())]
     payload = {"topic": args.topic, "title": args.title[:250], "message": message[:4000] or args.title,
                "priority": args.priority, "tags": tags}

@@ -208,7 +208,7 @@ in
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnBootSec = "10min";
-      OnUnitActiveSec = "daily";
+      OnUnitActiveSec = "1d";
       Persistent = true;
     };
   };
