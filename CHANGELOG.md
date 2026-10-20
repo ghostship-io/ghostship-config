@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.15.171] - 2026-10-20
+
+- Agent viewer: one launcher. **Apps** has a tile for Chrome · Personal, Chrome · Agent, OrcaSlicer and Blender (from `apps.json`), and **Open** lists everything running. The mode switch reads **Apps | Desktop**.
+- **×** closes at once without a confirmation: the tab disappears immediately, and an app is asked to quit every 2 s (so a dialog on top cannot hold it open) and stopped after 10 s. Agents' `close` still never discards unsaved work without `--force`.
+- Blender 5.0 is installed and launches in its own app session.
+
 ## [3.15.170] - 2026-10-20
 
 - Agent desktop: desktop app sessions. OrcaSlicer (and later other catalog apps, `apps.json`) runs on its own headless Sway screen with its own pointer and keyboard, opened from the viewer's new **Apps** launcher or by agents through `ghostship-gui app` (ghostship-agent 0.30.0). Each session is a viewer tab with a live view; touch pauses agent input, and closing never discards unsaved work without force. A 10,000+-keystroke concurrency gate across two sessions had zero cross-talk. Orca works again: the image now has WebKitGTK 4.1, and GTK image loading no longer aborts in the container (bwrap stand-in).

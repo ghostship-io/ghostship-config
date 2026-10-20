@@ -1,10 +1,30 @@
 {
+  "chrome-personal": {
+    "name": "Chrome · Personal",
+    "kind": "browser",
+    "identity": "personal",
+    "icon": "/opt/google/chrome/product_logo_128.png"
+  },
+  "chrome-agent": {
+    "name": "Chrome · Agent",
+    "kind": "browser",
+    "identity": "agent",
+    "icon": "/opt/google/chrome/product_logo_128.png"
+  },
   "orca": {
     "name": "OrcaSlicer",
     "command": ["/config/Applications/orcaslicer/orca-slicer"],
     "process": "orcaslicer/squashfs-root/bin/orca-slicer",
     "icon": "/config/Applications/orcaslicer/squashfs-root/OrcaSlicer.png",
     "single_instance": true,
+    "width": 1600,
+    "height": 1000
+  },
+  "blender": {
+    "name": "Blender",
+    "command": ["blender"],
+    "icon": "/usr/share/icons/hicolor/scalable/apps/blender.svg",
+    "single_instance": false,
     "width": 1600,
     "height": 1000
   }
