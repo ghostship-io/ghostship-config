@@ -55,11 +55,11 @@ in
       "/srv/apps/romm/romm.env"
     ];
     volumes = [
-      "/srv/apps/romm/resources:/romm/resources:rw"
-      "/srv/apps/romm/redis-data:/redis-data:rw"
-      "/srv/apps/romm/config:/romm/config:rw"
-      "${romm-library}:/romm/library:rw"
-      "${romm-assets}:/romm/assets:rw"
+      "/srv/apps/romm/resources:/romm/resources:rw,noexec,nosuid,nodev"
+      "/srv/apps/romm/redis-data:/redis-data:rw,noexec,nosuid,nodev"
+      "/srv/apps/romm/config:/romm/config:rw,noexec,nosuid,nodev"
+      "${romm-library}:/romm/library:rw,noexec,nosuid,nodev"
+      "${romm-assets}:/romm/assets:rw,noexec,nosuid,nodev"
     ];
   };
 

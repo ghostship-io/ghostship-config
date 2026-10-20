@@ -141,7 +141,7 @@ in
           UPTIME_KUMA_DB_TYPE = "sqlite";
           TZ = "Pacific/Honolulu";
         };
-        volumes = [ "/srv/apps/uptime-kuma:/app/data:rw" ];
+        volumes = [ "/srv/apps/uptime-kuma:/app/data:rw,noexec,nosuid,nodev" ];
         extraOptions = [
           "--network=ghostship_net"
           "--health-cmd=node extra/healthcheck.js"
@@ -160,7 +160,7 @@ in
         user = "3000:3000";
         cmd = [ "serve" ];
         volumes = [
-          "/srv/apps/ntfy:/var/lib/ntfy:rw"
+          "/srv/apps/ntfy:/var/lib/ntfy:rw,noexec,nosuid,nodev"
           "/run/ghostship-ntfy:/etc/ntfy:ro"
         ];
         extraOptions = [

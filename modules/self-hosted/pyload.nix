@@ -249,8 +249,8 @@ in
       TZ = "UTC";
     };
     volumes = [
-      "/srv/apps/pyload:/config"
-      "/mnt/share/Downloads:/downloads"
+      "/srv/apps/pyload:/config:rw,noexec,nosuid,nodev"
+      "/mnt/share/Downloads:/downloads:rw,noexec,nosuid,nodev"
       "${pyloadInitConfigRun}:/etc/s6-overlay/s6-rc.d/init-pyload-config/run:ro"
       "${pyloadSvcRun}:/etc/s6-overlay/s6-rc.d/svc-pyload/run:ro"
     ];

@@ -58,10 +58,10 @@ in
       "/srv/apps/grimmory/grimmory.env"
     ];
     volumes = [
-      "/srv/apps/grimmory/data:/app/data:rw"
-      "/mnt/share/Library/Books:/books:rw"
-      "/mnt/share/Library/Audiobooks:/audiobooks:rw"
-      "/mnt/share/Library/Books/.bookdrop:/bookdrop:rw"
+      "/srv/apps/grimmory/data:/app/data:rw,noexec,nosuid,nodev"
+      "/mnt/share/Library/Books:/books:rw,noexec,nosuid,nodev"
+      "/mnt/share/Library/Audiobooks:/audiobooks:rw,noexec,nosuid,nodev"
+      "/mnt/share/Library/Books/.bookdrop:/bookdrop:rw,noexec,nosuid,nodev"
     ];
   };
 

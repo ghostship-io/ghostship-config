@@ -38,7 +38,7 @@ in
       TZ = "UTC";
     };
     volumes = [
-      "/srv/apps/plex-auto-languages:/config:rw"
+      "/srv/apps/plex-auto-languages:/config:rw,noexec,nosuid,nodev"
     ];
   };
 

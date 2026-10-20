@@ -147,7 +147,7 @@ in
       cmd = [ "--port" "8080" "--spool" "/spool" "--secrets" "/run/secrets/hooks.env"
               "--repositories" (lib.concatStringsSep "," (builtins.attrNames repositories)) ];
       volumes = [
-        "${root}/spool:/spool:rw"
+        "${root}/spool:/spool:rw,noexec,nosuid,nodev"
         "${config.ghostship.selfHostedSecrets.projections.ghostship-hooks.path}:/run/secrets/hooks.env:ro"
       ];
       extraOptions = hardening ++ [ "--network=${network}" "--pids-limit=64" "--memory=128m" "--cpus=0.5" ];
@@ -206,9 +206,9 @@ in
       cmd = [ "--config" "/etc/ghostship-github/config.json" "--spool" "/spool" "--state" "/state"
               "--incidents" "/incidents" "--secrets" "/run/secrets/github.env" ];
       volumes = [
-        "${root}/spool:/spool:rw"
-        "${root}/state:/state:rw"
-        "${root}/incidents:/incidents:rw"
+        "${root}/spool:/spool:rw,noexec,nosuid,nodev"
+        "${root}/state:/state:rw,noexec,nosuid,nodev"
+        "${root}/incidents:/incidents:rw,noexec,nosuid,nodev"
         "${coordinatorConfig}:/etc/ghostship-github/config.json:ro"
         # The bridge's default credential paths.
         "/run/ghostship-github:/run/ghostship-integrations:ro"

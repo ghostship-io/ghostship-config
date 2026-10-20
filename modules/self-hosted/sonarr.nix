@@ -45,9 +45,9 @@ in
       TZ = "UTC";
     };
     volumes = [
-      "/srv/apps/sonarr:/config:rw"
-      "/mnt/share/Downloads:/downloads:rw"
-      "/mnt/share/Library/TV:/tv:rw"
+      "/srv/apps/sonarr:/config:rw,noexec,nosuid,nodev"
+      "/mnt/share/Downloads:/downloads:rw,noexec,nosuid,nodev"
+      "/mnt/share/Library/TV:/tv:rw,noexec,nosuid,nodev"
     ];
   };
 
