@@ -94,8 +94,9 @@ in
     includes."tunables/global" = ''
       include "${pkgs.apparmor-profiles}/etc/apparmor.d/tunables/global"
     '';
+    # Every profile learns in complain mode; explicit deny rules still apply.
     policies.ghostship-container-default = {
-      state = "enforce";
+      state = "complain";
       profile = builtins.readFile ./container-default-apparmor.profile;
     };
     policies.ghostship-plex = {

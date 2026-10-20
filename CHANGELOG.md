@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.158] - 2026-10-20
+
+- Every AppArmor profile now runs in complain (learning) mode: `ghostship-container-default` (the 25 containers without their own profile), `ghostship-agent-desktop` and `ghostship-desktop-viewer` move from enforce. Explicit `deny` rules still apply in complain mode, so Podman's baseline denials (mount, `/proc` and `/sys` writes, kernel security files) and the viewer's denials of Chrome profiles, SSH keys and container secrets stay in force. Per-service strict profiles replace the shared default next (#102).
+
 ## [3.15.157] - 2026-10-20
 
 - Agent viewer: **+ Personal** / **+ Agent** start an idle-stopped Chrome (through `chrome-ensure`) instead of failing with "browser stopped". The viewer's AppArmor profile may run only `chrome-ensure`, under the container profile with a scrubbed environment.
