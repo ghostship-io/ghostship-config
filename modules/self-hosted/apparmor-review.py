@@ -82,11 +82,16 @@ def heartbeat_event(event):
             and event.get("denied_mask", "") in {"", "r"})
 
 
+def policy_hash(source):
+    """The profile file's own content. Includes are embedded by store path."""
+    return hashlib.sha256(Path(source).read_bytes()).hexdigest()
+
+
 def inspect_container(name, config):
     """Never request Config/Env or command arguments from podman."""
     result = {"healthy": False, "reasons": [], "profile": config["profile"], "mode": config["mode"], "source": config["source"]}
     try:
-        result["policy_hash"] = hashlib.sha256(Path(config["source"]).read_bytes()).hexdigest()
+        result["policy_hash"] = policy_hash(config["source"])
         result["boot_id"] = Path(HEARTBEAT_PATH).read_text().strip()
         enabled = Path("/sys/module/apparmor/parameters/enabled").read_text().strip() == "Y"
         profiles = Path("/sys/kernel/security/apparmor/profiles").read_text().splitlines()
@@ -161,8 +166,10 @@ def advance(previous, observation, events, now, audit_ok):
     """Pure coverage transition, intentionally conservative after interruptions."""
     state = dict(previous or {})
     old_sample = state.get("last_sample")
-    changed = (state.get("policy_hash"), state.get("image"), state.get("profile"), state.get("mode"), state.get("source")) != (
-        observation.get("policy_hash"), observation.get("image"), observation.get("profile"), observation.get("mode"), observation.get("source"))
+    # The source path names the combined apparmor.d tree, which changes whenever
+    # any profile does; identity is this profile's content hash instead.
+    changed = (state.get("policy_hash"), state.get("image"), state.get("profile"), state.get("mode")) != (
+        observation.get("policy_hash"), observation.get("image"), observation.get("profile"), observation.get("mode"))
     if state.get("boot_id") != observation.get("boot_id"):
         changed = True
     reasons = list(observation.get("reasons", []))
@@ -400,8 +407,12 @@ def main(argv=None):
             for name, spec in config["containers"].items():
                 entry = state["containers"].get(name, {})
                 report = status(entry, time.time())
-                if (entry.get("profile"), entry.get("mode"), entry.get("source")) != (
-                        spec["profile"], spec["mode"], spec["source"]):
+                try:
+                    configured_hash = policy_hash(spec["source"])
+                except OSError:
+                    configured_hash = None
+                if (entry.get("profile"), entry.get("mode"), entry.get("policy_hash")) != (
+                        spec["profile"], spec["mode"], configured_hash):
                     report["ready"] = False
                     report["reasons"] = report["reasons"] + ["configuration-mismatch"]
                 reports[name] = report

@@ -38,6 +38,8 @@ let
             ++ lib.optionals (app.apparmorProfile == "ghostship-plex") [
               "ghostship-plex//server"
               "ghostship-plex//python"
+              # Podman's curl healthcheck; present only while a check runs.
+              "ghostship-plex//healthcheck"
             ]
             ++ lib.optional (app.apparmorProfile == "ghostship-ntfy") "ghostship-ntfy//tools"
             ++ lib.optional (
