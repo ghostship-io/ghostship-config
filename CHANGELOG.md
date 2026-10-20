@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.172] - 2026-10-20
+
+- Agent desktop: whole Chrome windows. `stage-control` (replacing `stage-input`) gives every Chrome window in a browser stage a headless output of its own, so the viewer shows the whole window (tab strip, address bar, toolbar, extension buttons, menus and popups) and a person's taps, keys and text reach Chrome's own controls. Agents get the same through `browser_window` `screenshot`/`ui` (ghostship-agent 0.31.0).
+- Browser controls take a focus lease on one window: focus moves only between that window and an empty `idle` workspace, new windows map on a hidden workspace and never take focus, and other windows are never activated or deactivated. Measured: 10,000 concurrent agent input operations (8 agents) with zero cross-talk while a lease loop opened Chrome's menu and typed in another window throughout.
+- Stage windows now tile at the same fixed 1600x900 (workspace gaps) on outputs stacked at 0,0, so every window reports one ordinary screen; the fingerprint matches the baseline except the window-frame inset (`outerMinusInner`, now that of a tiled window). The update service's fingerprint baseline is re-recorded on the next run.
+- Sway windows are paired with Chrome window ids (home-tab title, unique tab titles, elimination; sticky; ambiguous windows stay unpaired), so a run only ever shows its own windows.
+
 ## [3.15.171] - 2026-10-20
 
 - Agent viewer: one launcher. **Apps** has a tile for Chrome · Personal, Chrome · Agent, OrcaSlicer and Blender (from `apps.json`), and **Open** lists everything running. The mode switch reads **Apps | Desktop**.

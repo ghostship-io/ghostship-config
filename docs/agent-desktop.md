@@ -52,24 +52,43 @@ same instance. Neither port is published outside the container.
 
 ### Browser stages
 
-Each identity's Chrome runs in its own **browser stage**: a Sway compositor
-with a virtual 1920x1080 output (`/etc/ghostship/browser-sway.conf`), started
-by `run-chrome` together with a virtual mouse and keyboard (`stage-input`).
-Chrome is the ordinary headed browser with GPU rendering; only the monitor is
-virtual, as the labwc desktop's already is. The stage never moves focus: no
-window is focused on map or activation, and windows float at a fixed
-1600x900, so page coordinates never change.
+Each identity's Chrome runs in its own **browser stage**: a headless Sway
+compositor (`/etc/ghostship/browser-sway.conf`) started by `run-chrome`
+together with `stage-control`. Chrome is the ordinary headed browser with GPU
+rendering; only the monitors are virtual, as the labwc desktop's already are.
+
+`stage-control` gives every Chrome window a 1920x1080 output of its own, with
+the window tiled at a fixed 1600x900 in its top left (workspace gaps), so the
+viewer and agents can see and use the **whole window**: tab strip, address
+bar, toolbar, extension buttons, menus and popups. All outputs sit at 0,0, so
+each window reports one ordinary screen (`screen.availLeft` 0). The stage
+never moves focus on its own: new windows map on a hidden workspace, and
+focus rests on an empty `idle` workspace. Using Chrome's own controls takes a
+**focus lease** on one window (Chrome reads only one Wayland seat): focus
+moves only between that window and `idle`, and its output moves to x=1920
+while the lease lasts so the pointer can reach it; other windows are never
+activated or deactivated. A lease ends when released or after 20 s without
+input, and only one window holds it at a time (others get `busy`).
+`stage-control` pairs sway windows with Chrome's DevTools window ids (home-tab
+title, then unique tab titles, then elimination; ambiguous windows stay
+unpaired), which tells the viewer which run a window belongs to.
 
 Every agent drives its own window with target-scoped DevTools input, which
 needs no focus and no global lock. Measured on Chrome 155 (2026-10-20): 8 and
 16 agents, barrier-synchronised click/type/wheel/dialog/popup, 30,000 ops with
-zero cross-talk and zero focus changes. On labwc, by contrast, every new
+zero cross-talk and zero focus changes; with whole-window outputs and a
+focus-lease loop opening Chrome's menu and typing in another window
+throughout, 10,000 more with the same result. On labwc, by contrast, every new
 window takes focus and blurs the field another agent is typing into, so agent
 windows never live on the human desktop. Wait for a new page's first frame
 before sending input (Chrome drops input that precedes it).
 
 Stage windows are not visible in Selkies; people use them through the agent
-viewer. Debug a stage by nesting it on the desktop with
+viewer, which streams the whole window from its output and sends a person's
+input through the lease. Agents use `browser_window` `screenshot` and `ui`
+(`stage-control call <identity>` over SSH) for Chrome's own controls and
+extensions; their input marks the run busy and fails with `paused` during a
+takeover, as page input does. Debug a stage by nesting it on the desktop with
 `GHOSTSHIP_STAGE_BACKEND=wayland` (never in production: a minimized nested
 stage stops rendering and stalls every agent).
 

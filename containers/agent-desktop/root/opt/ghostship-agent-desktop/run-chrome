@@ -71,9 +71,12 @@ fi
 WAYLAND_DISPLAY=$(cat "$stage_file")
 export WAYLAND_DISPLAY
 
-# A real desktop has a mouse and keyboard: without them pages report no fine
-# pointer and no hover. Attach virtual ones to the stage's seat.
-setsid /opt/ghostship-agent-desktop/stage-input &
+# stage-control gives each Chrome window its own output (so the viewer can
+# show the whole window and people and agents can use its toolbar and
+# extensions) and holds the stage's virtual mouse and keyboard: without them
+# pages report no fine pointer and no hover.
+SWAYSOCK=$XDG_RUNTIME_DIR/ghostship-stage-$identity.sock \
+  setsid /opt/ghostship-agent-desktop/stage-control "$identity" &
 input_pid=$!
 
 # Deliberately minimal, ordinary command line: a custom profile (required,
