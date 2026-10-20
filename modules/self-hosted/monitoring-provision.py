@@ -17,6 +17,7 @@ Payload.max_decode_packets = 256
 RETIRED_APP_MONITORS = {
     "Ghostship OpenChamber": "OpenChamber",
     "Ghostship Synara": "Synara",
+    "Ghostship Webhooks": "Webhooks",
 }
 
 
@@ -122,7 +123,9 @@ def main():
             call, notifications, os.environ["NTFY_PUBLISH_PASSWORD"]
         )
         registry = json.loads(Path(sys.argv[1]).read_text())
-        current_app_names = {app["name"] for app in registry.values()}
+        current_app_names = {
+            app["name"] for app in registry.values() if app["healthPath"] is not None
+        }
         for monitor in monitors.values():
             if is_retired_app_monitor(monitor, current_app_names):
                 call("deleteMonitor", (monitor["id"], False))

@@ -31,6 +31,8 @@ let
     t3_environment_id = "the owner's local area";
     model_selection = { instanceId = "codex"; model = "gpt-6.1-sol"; };
     repositories = lib.mapAttrs (_: r: r // { base = "main"; }) repositories;
+    # Host incidents launch bounded repair threads in the fleet's own project.
+    incidents = { repository = "ghostship-io/ghostship-config"; daily_limit = 3; };
   });
   hardening = [ "--read-only" "--cap-drop=ALL" "--security-opt=no-new-privileges"
                 "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=8m" ];
@@ -40,6 +42,7 @@ in
     lib.mkEnableOption "hooks.ghostship.io webhook receiver and T3 engineering coordinator";
 
   config = lib.mkIf cfg.enable {
+    ghostship.notify.incidentSpool = "${root}/incidents";
     ghostship.apps.hooks = {
       name = "Webhooks";
       container = "ghostship-hooks";
@@ -47,7 +50,9 @@ in
       description = "Signed GitHub and Cloudflare webhooks";
       hostname = "hooks.ghostship.io";
       origin = "http://ghostship-hooks:8080";
-      healthPath = "/healthz";
+      # Uptime Kuma cannot reach the receiver's internal network; its container
+      # heartbeat covers it instead of an HTTP monitor.
+      healthPath = null;
       apparmorProfile = "ghostship-hooks";
       cloudflareBypassPaths = [ "/github" "/cloudflare" ];
       cloudflareBypassApproval = "the owner 2026-10-19: approved Access bypass for exact POST paths /cloudflare and /github on hooks.ghostship.io only; GitHub HMAC and the Cloudflare webhook secret authenticate them";
@@ -98,6 +103,8 @@ in
       # setgid: spooled files stay readable and removable by the coordinator.
       "d ${root}/spool 2770 root ghostship-github-spool -"
       "d ${root}/state 0700 ghostship-github ghostship-github -"
+      # Written by root's ghostship-notify only; the receiver cannot reach it.
+      "d ${root}/incidents 2770 root ghostship-github -"
       "d /run/ghostship-secrets/ghostship-github 0750 root ghostship-github -"
       "d /run/ghostship-github 0750 root ghostship-github -"
     ];
@@ -192,10 +199,11 @@ in
       pull = "never";
       user = "62031:62032";
       cmd = [ "--config" "/etc/ghostship-github/config.json" "--spool" "/spool" "--state" "/state"
-              "--secrets" "/run/secrets/github.env" ];
+              "--incidents" "/incidents" "--secrets" "/run/secrets/github.env" ];
       volumes = [
         "${root}/spool:/spool:rw"
         "${root}/state:/state:rw"
+        "${root}/incidents:/incidents:rw"
         "${coordinatorConfig}:/etc/ghostship-github/config.json:ro"
         # The bridge's default credential paths.
         "/run/ghostship-github:/run/ghostship-integrations:ro"

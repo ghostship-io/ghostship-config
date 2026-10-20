@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.149] - 2026-10-20
+
+- Failed services start T3 repairs. `ghostship-failure@` alerts now also go into a root-owned incident spool. The GitHub coordinator (ghostship-agent 0.28.0) turns each one into a T3 thread that diagnoses the failure on the host, fixes the cause through a PR and deploys it, and leaves `t3code` alone. A repeat failure messages the same thread, and at most 3 incident threads start per day; past that, the alert goes to a human on `operations`. Incident details never reach GitHub.
+- Update notices: a nightly `nixos-upgrade` that changes the running system posts the new release to `informational`. Container auto-updates post the list of updated containers there too, and the run fails, raising an incident, when a container update fails or rolls back. The maintenance lock is now taken inside the update runner.
+- Removed the Uptime Kuma HTTP monitor for the webhook receiver. Kuma can't reach the receiver's internal network, so the monitor failed every minute. The receiver's container heartbeat still covers it.
+- Fixed `ghostship-desktop-bridge.timer` and `agent-desktop-mcp.timer`. Their `OnUnitActiveSec=daily` was invalid and ignored by systemd, so they now use `1d`.
+
 ## [3.15.148] - 2026-10-20
 
 - Enable source-preserving EPUB imports through Ghostship's filesystem service: allow the existing Books library root and check Grimmory access with its configured application uid/gid. Pin the agent release with bounded EPUB inspection, collision-safe copy and the Grimmory scan/read-back workflow.
