@@ -283,9 +283,10 @@ function renderSessions() {
     chip.append(open, x);
     return chip;
   }));
+  // Scroll only when the active session changes, so a manual scroll of the strip sticks across refreshes.
   const active = nav.querySelector(".session.active");
-  if (active && active !== renderSessions.last) { active.scrollIntoView({ block: "nearest", inline: "nearest" }); }
-  renderSessions.last = active;
+  if (active && S.current !== renderSessions.lastId) active.scrollIntoView({ block: "nearest", inline: "nearest" });
+  renderSessions.lastId = S.current;
 }
 
 async function closeRun(id) {
