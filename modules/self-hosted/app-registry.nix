@@ -83,6 +83,21 @@ in
               default = null;
               description = "Declared AppArmor policy attached to this application's container.";
             };
+            apparmorProcessProfiles = mkOption {
+              type = types.listOf types.str;
+              default = lib.optional (config.apparmorProfile != null) config.apparmorProfile;
+              description = "Every AppArmor label a process in this container may run under.";
+            };
+            apparmorHeartbeat = mkOption {
+              type = types.nullOr (types.listOf types.str);
+              default = null;
+              description = "Command reading /proc/sys/kernel/random/boot_id in the container for the AppArmor audit heartbeat; null runs /bin/cat. `@entrypoint` names the image entrypoint.";
+            };
+            apparmorRequiredProcessProfiles = mkOption {
+              type = types.listOf types.str;
+              default = config.apparmorProcessProfiles;
+              description = "Labels that must be present while the container runs.";
+            };
             widget = mkOption {
               type = types.attrs;
               default = { };

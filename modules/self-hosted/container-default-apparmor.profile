@@ -1,21 +1,15 @@
-# Podman's default container profile (containers/common template), declared
-# under a stable name so NixOS replaces it on reload. Podman loads
+# Fallback for containers started without their own policy: ad-hoc and job
+# containers. Every declared container has a strict profile (container-apparmor.nix),
+# so this grants nothing beyond runtime signals. In complain mode every other
+# access is logged; the deny rules are Podman's baseline and apply even then.
+# Declared under a stable name so NixOS replaces it on reload. Podman loads
 # containers-default-<version> itself, and `aa-remove-unknown` on every
 # AppArmor reload unloads it, leaving running containers unconfined.
 include <tunables/global>
 
 profile ghostship-container-default flags=(attach_disconnected,mediate_deleted) {
-  include <abstractions/base>
-
-  network,
-  capability,
-  file,
-  umount,
-
-  # Allow signals from privileged profiles and from within the same profile.
   signal (receive) peer=unconfined,
   signal (send,receive) peer=ghostship-container-default,
-  # Allow certain signals from OCI runtimes (podman, runc and crun).
   signal (receive) peer={/usr/bin/,/usr/sbin/,}runc,
   signal (receive) peer={/usr/bin/,/usr/sbin/,}crun*,
   signal (receive) peer={/usr/bin/,/usr/sbin/,}podman,
@@ -36,7 +30,4 @@ profile ghostship-container-default flags=(attach_disconnected,mediate_deleted) 
   deny /sys/fs/cg[^r]*/** wklx,
   deny /sys/firmware/** rwklx,
   deny /sys/kernel/security/** rwklx,
-
-  # Suppress ptrace denials when using 'ps' inside a container.
-  ptrace (trace,read) peer=ghostship-container-default,
 }

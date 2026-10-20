@@ -6,6 +6,7 @@
     ./common.nix
     ./app-registry.nix
     ./apparmor.nix
+    ./container-apparmor.nix
     ./security-monitoring.nix
     ./cloudflare-sync.nix
     ./reliability.nix

@@ -133,12 +133,22 @@ def inspect_container(name, config):
     return result
 
 
-def probe(name, profile):
+def heartbeat_command(name, spec):
+    """Argv that reads HEARTBEAT_PATH inside the container; images without cat
+    configure their own reader. "@entrypoint" names the image's entrypoint."""
+    command = spec.get("heartbeat") or ["/bin/cat", HEARTBEAT_PATH]
+    if "@entrypoint" in command:
+        entrypoint = run(["podman", "inspect", "--format", "{{index .Config.Entrypoint 0}}", name]).strip()
+        command = [entrypoint if part == "@entrypoint" else part for part in command]
+    return command
+
+
+def probe(name, profile, command):
     start = time.time()
     try:
-        # Discard boot ID; only the exact audit event proves the pipeline works.
-        subprocess.run(["podman", "exec", name, "/bin/cat", HEARTBEAT_PATH],
-                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        # Discard output and status; only the exact audit event proves the pipeline works.
+        subprocess.run(["podman", "exec", name, *command],
+                       check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                        timeout=2)
         deadline = time.monotonic() + 2.5
         while True:
@@ -226,7 +236,12 @@ def collect(config, previous, now):
     for name, spec in config["containers"].items():
         old = prior.get(name, {})
         observation = inspect_container(name, spec)
-        heartbeat = probe(name, spec["profile"]) if observation["healthy"] else None
+        heartbeat = None
+        if observation["healthy"]:
+            try:
+                heartbeat = probe(name, spec["profile"], heartbeat_command(name, spec))
+            except (OSError, subprocess.SubprocessError):
+                heartbeat = None
         observation["heartbeat"] = heartbeat is not None
         end = time.time()
         # Include the probe window; next sample starts at the exact same boundary.

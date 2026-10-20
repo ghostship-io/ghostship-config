@@ -134,16 +134,23 @@ class Collection(unittest.TestCase):
         with patch.object(review.time, "time", side_effect=[100, 102]), \
                 patch.object(review.subprocess, "run", side_effect=[
                     subprocess.CompletedProcess([], 0), subprocess.CompletedProcess([], 0, stdout=row)]):
-            event = review.probe("plex", "ghostship-plex")
+            event = review.probe("plex", "ghostship-plex", ["/bin/cat", review.HEARTBEAT_PATH])
         self.assertTrue(review.heartbeat_event(event))
         self.assertTrue(review.heartbeat_event({**event, "apparmor": "ALLOWED", "denied_mask": "r"}))
         self.assertFalse(review.heartbeat_event({**event, "operation": "exec"}))
         self.assertFalse(review.heartbeat_event({**event, "name": "/somewhere/else"}))
         self.assertFalse(review.heartbeat_event({**event, "apparmor": "DENIED"}))
 
+    def test_heartbeat_command_defaults_to_cat_and_resolves_entrypoint(self):
+        self.assertEqual(review.heartbeat_command("plex", {}), ["/bin/cat", review.HEARTBEAT_PATH])
+        with patch.object(review, "run", return_value="/nix/store/x-python3/bin/python3\n") as run:
+            command = review.heartbeat_command("coordinator", {"heartbeat": ["@entrypoint", "-c", "pass"]})
+        self.assertEqual(command, ["/nix/store/x-python3/bin/python3", "-c", "pass"])
+        self.assertIn("coordinator", run.call_args.args[0])
+
     def test_probe_fails_closed(self):
         with patch.object(review.subprocess, "run", side_effect=subprocess.TimeoutExpired("probe", 2)):
-            self.assertIsNone(review.probe("plex", "ghostship-plex"))
+            self.assertIsNone(review.probe("plex", "ghostship-plex", ["/bin/cat", review.HEARTBEAT_PATH]))
 
     def test_all_host_pids_checked_without_env_inspection(self):
         reads = {"/policy": b"policy", "/sys/module/apparmor/parameters/enabled": "Y",
