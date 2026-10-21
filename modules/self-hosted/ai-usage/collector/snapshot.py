@@ -371,7 +371,22 @@ def _candidate(
         "rank": ranks,
         "score": scores,
         "reasons": reasons,
+        "available": bool(quota_state == QUOTA_AVAILABLE),
+        "availability": {
+            "state": "available" if quota_state == QUOTA_AVAILABLE else "unavailable",
+            "evidence": "measured" if capacity_measured else "unknown",
+            "reason": (
+                "every applicable window has headroom"
+                if quota_state == QUOTA_AVAILABLE
+                else (
+                    "a window is spent"
+                    if quota_state == QUOTA_EXHAUSTED
+                    else "a window is unknown, stale, or missing"
+                )
+            ),
+        },
         "quota_state": quota_state,
+        "account": account,
         "quota_account": account,
         "quality": {
             "value": round(quality, 2),
@@ -409,6 +424,14 @@ def _candidate(
             "surplus_ratio": surplus.get("surplus_ratio"),
             "reserve_ratio": surplus.get("reserve_ratio"),
             "pace_delta": surplus.get("pace_delta"),
+            # The entitlement the surplus comes from: its kind, its length, and
+            # its reset. A weekly or a monthly allowance that resets within a
+            # day is not the same thing as a session window that resets in a
+            # few hours.
+            "entitlement_kind": surplus.get("entitlement_kind"),
+            "entitlement_duration_seconds": surplus.get("entitlement_duration_seconds"),
+            "entitlement_reset_at": surplus.get("entitlement_reset_at"),
+            "entitlement_quota_id": surplus.get("entitlement_quota_id"),
             "basis": "an allowance that resets within a day, and the reserve the review keeps",
         },
         "admission": {
@@ -465,6 +488,14 @@ WORKLOAD_CLASSES = (
 )
 
 
+def _display_tier(tiers: list[str]) -> str:
+    """The tier that describes a recommendation best."""
+    for tier in ("frontier", "bulk", "free", "3d"):
+        if tier in tiers:
+            return tier
+    return (tiers or [""])[0]
+
+
 def _recommendations(
     candidates: list[dict[str, Any]], classes: tuple[dict[str, Any], ...]
 ) -> dict[str, Any]:
@@ -501,8 +532,8 @@ def _recommendations(
         choice_pool = sorted(
             preferred,
             key=lambda row: (
-                max(row["score"].values()) if row["score"] else 0.0,
                 1 if row["native"]["mapped"] else 0,
+                max(row["score"].values()) if row["score"] else 0.0,
             ),
             reverse=True,
         )
@@ -524,6 +555,47 @@ def _recommendations(
                 "private_data": bool(entry["private_data"]),
             }
             continue
+        if name == "review":
+            # The review is the frontier's job. When the frontier is not
+            # available the class waits, visibly, instead of taking another
+            # model.
+            frontier_rows = [
+                row
+                for row in eligible
+                if "frontier" in row["tiers"]
+                and row["native"]["mapped"]
+                and (row.get("eligibility") or {}).get("frontier_prime", {}).get("allowed")
+            ]
+            if not frontier_rows:
+                result[name] = {
+                    "provider": None,
+                    "model": None,
+                    "tier": None,
+                    "native": None,
+                    "role": None,
+                    "reason": (
+                        "no frontier model is available; the review waits for "
+                        "the frontier authority instead of taking another model"
+                    ),
+                    "delegate": False,
+                    "private_data": bool(entry["private_data"]),
+                }
+                continue
+            chosen = max(
+                frontier_rows,
+                key=lambda row: max(row["score"].values()) if row["score"] else 0.0,
+            )
+            result[name] = {
+                "provider": chosen["provider"],
+                "model": chosen["model"],
+                "tier": "frontier",
+                "native": chosen["native"],
+                "role": chosen["role"],
+                "reason": "the frontier authority reviews the change",
+                "delegate": bool(chosen["native"]["mapped"]),
+                "private_data": bool(entry["private_data"]),
+            }
+            continue
         if eligible:
             chosen = max(
                 eligible,
@@ -532,7 +604,7 @@ def _recommendations(
             result[name] = {
                 "provider": chosen["provider"],
                 "model": chosen["model"],
-                "tier": (chosen["tiers"] or [""])[0],
+                "tier": _display_tier(chosen["tiers"]),
                 "native": chosen["native"],
                 "role": chosen["role"],
                 "reason": (
@@ -565,6 +637,7 @@ def build_snapshot(
     native_models: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
     policy: Mapping[str, Any] | None = None,
     aa_cache: Mapping[str, Any] | None = None,
+    measured_windows: Iterable[Mapping[str, Any]] | None = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
 ) -> dict[str, Any]:
     """Build the routing snapshot from the ranked models and the readings."""
@@ -579,6 +652,16 @@ def build_snapshot(
     pending: list[dict[str, Any]] = []
     accounts: dict[str, list[dict[str, Any]]] = {}
     omitted = 0
+    # The account section carries the windows the provider reported, even the
+    # ones that do not gate a model of that account.
+    for measured in measured_windows or ():
+        account = str(measured.get("provider") or "")
+        if not account:
+            continue
+        record = _window_record(measured, now)
+        known = accounts.setdefault(account, [])
+        if record not in known:
+            known.append(record)
     for (provider, model), model_entries in sorted(entries.items()):
         row = _candidate(
             provider,
@@ -591,6 +674,17 @@ def build_snapshot(
         )
         for tier in row["tiers"]:
             tiers.setdefault(tier, []).append(_key(provider, model))
+        account = str(row.get("account") or "")
+        if account:
+            # The measured windows are published once per account, not once
+            # per model of that account.
+            windows = row.get("quotaWindows") or []
+            known = accounts.setdefault(account, [])
+            for window in windows:
+                if window not in known:
+                    known.append(window)
+            row["quotaRef"] = f"accounts/{account}"
+        row.pop("quotaWindows", None)
         if row["admission"]["state"] == "pending":
             pending.append(
                 {

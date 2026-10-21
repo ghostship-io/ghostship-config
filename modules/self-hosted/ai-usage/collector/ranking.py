@@ -491,8 +491,26 @@ def quality_score(
     return _clamp(score)
 
 
+# The accounts the collector knows. A model is served by the account of its
+# provider: a model that the OpenCode instance serves through the Go plan
+# belongs to the Go account, even when its name starts like a model of
+# another account.
+KNOWN_ACCOUNTS = (
+    "claude",
+    "codex",
+    "grok",
+    "antigravity",
+    "opencode-go",
+    "ollama",
+    "openrouter",
+)
+
+
 def account_for(provider: str, model: str) -> str:
     """The account that serves a model."""
+    name = str(provider or "")
+    if name in KNOWN_ACCOUNTS:
+        return name
     model_id = str(model or "")
     if model_id.startswith("claude"):
         return "claude"
@@ -502,13 +520,7 @@ def account_for(provider: str, model: str) -> str:
         return "grok"
     if model_id.startswith("gemini"):
         return "antigravity"
-    if provider == "opencode-go":
-        return "opencode-go"
-    if provider == "ollama":
-        return "ollama"
-    if provider == "openrouter":
-        return "openrouter"
-    return str(provider)
+    return name
 
 
 def _window_used_strict(window: Any) -> float | None:
@@ -973,11 +985,33 @@ def _frontier_surplus(
             "surplus_ratio": 0.0,
             "reserve_ratio": None,
             "pace_delta": None,
+            "entitlement_kind": None,
+            "entitlement_duration_seconds": None,
+            "entitlement_reset_at": None,
+            "entitlement_quota_id": None,
         }
     window, remaining = max(expiring, key=lambda item: item[1])
     reset = _window_reset(window)
     expires_in = None if reset is None else int(round(reset - now))
     reserve = session[1] if session is not None else None
+    duration = getattr(window, "duration_seconds", None)
+    if duration is None and isinstance(window, Mapping):
+        duration = window.get("duration_seconds")
+    quota_id = getattr(window, "quota_id", None)
+    if quota_id is None and isinstance(window, Mapping):
+        quota_id = window.get("quota_id")
+    entitlement = {
+        "entitlement_kind": str(getattr(window, "kind", "") or ""),
+        "entitlement_duration_seconds": (
+            int(duration) if isinstance(duration, (int, float)) and duration else None
+        ),
+        "entitlement_reset_at": (
+            datetime.fromtimestamp(reset, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            if reset is not None
+            else None
+        ),
+        "entitlement_quota_id": str(quota_id or ""),
+    }
     _expected, _actual = _pace(window, now, remaining)
     pace = None
     if session is not None and session[1] is not None:
@@ -994,6 +1028,7 @@ def _frontier_surplus(
             "surplus_ratio": 0.0,
             "reserve_ratio": round(reserve, 4),
             "pace_delta": round(pace, 4),
+            **entitlement,
         }
     if remaining <= 0:
         return {
@@ -1003,6 +1038,7 @@ def _frontier_surplus(
             "surplus_ratio": 0.0,
             "reserve_ratio": None if reserve is None else round(reserve, 4),
             "pace_delta": None if pace is None else round(pace, 4),
+            **entitlement,
         }
     return {
         "available": True,
@@ -1011,6 +1047,7 @@ def _frontier_surplus(
         "surplus_ratio": round(remaining, 4),
         "reserve_ratio": None if reserve is None else round(reserve, 4),
         "pace_delta": None if pace is None else round(pace, 4),
+        **entitlement,
     }
 
 
@@ -1107,6 +1144,7 @@ def rank_models(
     usage_tokens: Mapping[tuple[str, str], float] | None = None,
     three_d_scores: Mapping[tuple[str, str], Any] | None = None,
     exclude_providers: Mapping[str, Iterable[str]] | None = None,
+    free_route_accounts: Iterable[str] | None = None,
     now: float = 0.0,
     state_path: str | os.PathLike[str] | None = None,
 ) -> list[RankedModel]:
@@ -1143,6 +1181,7 @@ def rank_models(
 
     windows_by_account, windows_by_model = _quota_windows(quota_windows)
     excluded = _excluded_providers(exclude_providers)
+    free_route_accounts = {str(account) for account in (free_route_accounts or ())}
     state = _load_state(state_path) if state_path else {}
     usage = {
         pair: float(value)
@@ -1164,10 +1203,14 @@ def rank_models(
                 for window in windows_by_account.get(account, [])
                 if _window_applies(window, model)
             ]
-            # A zero catalog price does not prove that a model does not
-            # consume the allowance of its account. Only a provider that
-            # documents a free route may be exempted, and none does today, so
-            # every applicable window gates every model of the account.
+            if (provider, model) in free_pairs and account in free_route_accounts:
+                # The provider is observed to serve this free route while its
+                # paid allowance is spent, so the paid allowance is not
+                # evidence about this model. The observation is recorded by
+                # the collector; the ranking only reads it.
+                windows = [
+                    window for window in windows if not _is_allowance_window(window)
+                ]
         detail = _capacity_detail(windows, now)
         remaining = detail["remaining"]
         expires_in = detail["expiresIn"]

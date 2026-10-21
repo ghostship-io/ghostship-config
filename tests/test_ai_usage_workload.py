@@ -43,6 +43,12 @@ def Row(provider, model, tier, mapped=True, instance="opencode", score=50.0, ava
         },
         "role": "prime" if tier == "frontier" else "delegate",
         "quota_state": "available",
+        "eligibility": {
+            "frontier_prime": {"allowed": tier == "frontier", "basis": "policy:owner"},
+            "delegate": {"allowed": mapped, "basis": "policy:owner+native+tier"},
+            "background": {"allowed": False, "basis": "policy:owner"},
+            "gpt_model_allowed": {"allowed": True, "basis": "policy:owner"},
+        },
     }
 
 
@@ -76,6 +82,14 @@ class WorkloadTests(unittest.TestCase):
     def test_engineering_never_takes_a_free_route(self):
         result = snapshot._recommendations(rows(), snapshot.WORKLOAD_CLASSES)
         self.assertNotEqual(result["engineering"]["tier"], "free")
+
+    def test_the_review_waits_when_the_frontier_is_not_available(self):
+        without_frontier = [
+            Row("ollama", "deepseek-v4.1-flash", "bulk", mapped=True, instance="opencode")
+        ]
+        result = snapshot._recommendations(without_frontier, snapshot.WORKLOAD_CLASSES)
+        self.assertIsNone(result["review"]["model"])
+        self.assertIn("waits for the frontier", result["review"]["reason"])
 
     def test_a_class_without_a_free_route_says_so(self):
         paid_only = [Row("codex", "gpt-6.1-sol", "frontier", mapped=True, instance="codex")]

@@ -189,7 +189,7 @@ def collect(
         SourceResult(
             source=source,
             status="partial" if ledger.status != "ok" else "ok",
-            reason=ledger.reason,
+            reason=codes.OK if ledger.status == "ok" else ledger.reason,
             metrics=samples,
             observed_at=now,
             duration_s=time.monotonic() - started,
