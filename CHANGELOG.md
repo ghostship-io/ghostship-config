@@ -1,8 +1,16 @@
 # Changelog
 
-## [3.17.10] - 2026-10-21
+## [3.17.11] - 2026-10-21
 
 - Pin ghostship-agent 0.32.0: `browser_window` screenshots also arrive as a text map (visible text and toolbar controls with click coordinates), so ChatGPT, which does not show tool images to its model, can use Chrome's own controls and extensions.
+
+## [3.17.10] - 2026-10-21
+
+- AppArmor learning noise, round 2, from the largest live sources:
+  - Bladebro's root-owned wrapper scripts may execute. Read-only rules had sent `bladebro-env` → `bash` → `bladebro-gate` → `bladebro` into ruleless `null-*` profiles.
+  - The agent desktop's top profile enters `stage-control`'s own child.
+  - Sonarr and Radarr may lock `/proc/<pid>/mounts`.
+  - Their ffprobe children may read zoneinfo.
 
 ## [3.17.9] - 2026-10-21
 
