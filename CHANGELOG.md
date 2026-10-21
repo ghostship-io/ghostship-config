@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.32] - 2026-10-21
+
+- AI usage collection: a read-only host collector (`ghostship-ai-usage.service`, every five minutes) reads T3 Code's own provider limits and usage summary, Grok, OpenCode Go, Antigravity, OpenRouter, Ollama, the free inference pool and the public model catalog, and writes one node_exporter textfile for VictoriaMetrics. A new Grafana dashboard in the "Ghostship" folder shows the quota, usage, free model and model ranking readings, with the age of every reading, so a missing or stale source is never shown as healthy quota. No provider, container or T3 Code session is started, stopped or reconfigured, and no metric carries an email, an account identifier, a path or a key.
+
 ## [3.17.31] - 2026-10-21
 
 - Document native T3 Code quota verification, the temporary sensitive environment override for OpenCode Go Console OAuth, intermittent Antigravity Gemini coverage, and the native panel's OpenRouter/Ollama limitations. Record the standalone 0.1.1 packaging and host activation requirements; the npm-based automatic updater still needs migration. T3 Code source and provider logins remain unchanged.
