@@ -6,7 +6,7 @@
     "ai",
     "usage"
   ],
-  "timezone": "browser",
+  "timezone": "utc",
   "schemaVersion": 41,
   "version": 1,
   "editable": false,
@@ -3263,7 +3263,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "**Observation only. Automatic model switching and research triggers are off.**\n\nArtificial Analysis Free provides benchmark inputs; missing matches remain unknown. Durable facts ingestion is disabled pending validation. One winner per provider and tier is proposed for review. Share feedback before dynamic selection is enabled.\n\nArtificial Analysis data: [artificialanalysis.ai](https://artificialanalysis.ai/)"
+        "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline) \u00b7 [AI usage](/d/ghostship-ai-usage)\n\n**Observation only. Automatic model switching and research triggers are off.**\n\nArtificial Analysis Free provides benchmark inputs; missing matches remain unknown. Durable facts ingestion is disabled pending validation. One winner per provider and tier is proposed for review. Share feedback before dynamic selection is enabled.\n\nArtificial Analysis data: [artificialanalysis.ai](https://artificialanalysis.ai/)"
       }
     }
   ],

@@ -790,9 +790,9 @@ class DashboardContractTests(unittest.TestCase):
                     self.assertEqual(content.count('ghostship-ai-usage'), 1)
                     self.assertLessEqual(content.count('/d/ghostship-'), 5)
 
-    def test_all_four_pages_have_consistent_direct_navigation_and_source_shapes(self):
+    def test_all_five_pages_have_consistent_direct_navigation_and_source_shapes(self):
         dashboards=[json.loads(p.read_text()) for p in (SIEM/'dashboards').glob('*.json')]
-        self.assertEqual(len(dashboards),4)
+        self.assertEqual({d["uid"] for d in dashboards}, {"ghostship-autonomous-work", "ghostship-host", "ghostship-security", "ghostship-siem-pipeline", "ghostship-ai-usage"})
         nav=dashboards[0]['links']
         for d in dashboards:
             self.assertEqual(d['links'],nav)
