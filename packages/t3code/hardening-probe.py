@@ -1,7 +1,8 @@
-"""Boot a disposable, unprivileged T3 platform without touching live state.
+"""Boot a disposable, unprivileged T3 platform preserving the active runtime.
 
 Run as host root. Requires the committed ghostship-t3code learning profile.
-This checks the platform only; it never claims authenticated provider acceptance.
+The default uses fresh data. Optional Docker checks create disposable data in
+the explicitly supplied workspace; neither mode proves authenticated providers.
 """
 
 import argparse
@@ -36,7 +37,9 @@ finally:
 
 
 def run(*args, **kwargs):
-    return subprocess.check_output(args, text=True, timeout=180, **kwargs).strip()
+    return subprocess.check_output(
+        args, text=True, timeout=kwargs.pop("timeout", 180), **kwargs
+    ).strip()
 
 
 def identity():
@@ -63,7 +66,28 @@ def identity():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", default="localhost/ghostship-t3code:t3code-runtime")
+    parser.add_argument(
+        "--docker-workspace",
+        type=Path,
+        help="Opt in to disposable Docker checks using this mapped host workspace",
+    )
+    parser.add_argument("--docker-control-report", type=Path)
+    parser.add_argument("--denied-endpoint", action="append", default=[])
     args = parser.parse_args()
+    if args.docker_workspace:
+        if not args.docker_control_report or not args.denied_endpoint:
+            parser.error("Docker checks require a control report and denied endpoints")
+        if (
+            not args.docker_workspace.is_absolute()
+            or args.docker_workspace.resolve() != args.docker_workspace
+            or not args.docker_workspace.is_dir()
+            or args.docker_workspace.stat().st_uid != 3000
+        ):
+            parser.error(
+                "Docker workspace must be a real absolute directory owned by T3"
+            )
+    elif args.docker_control_report or args.denied_endpoint:
+        parser.error("Docker arguments require --docker-workspace")
     if os.geteuid() != 0:
         parser.error("run on the host as root")
     with open("/run/t3code-hardening-probe.lock", "w") as lock:
@@ -111,6 +135,21 @@ def main():
                 raise RuntimeError(
                     "previous candidate exists; inspect it before retrying"
                 )
+            docker_mounts = []
+            if args.docker_workspace:
+                acceptance = (
+                    Path(__file__).with_name("docker-sandbox") / "acceptance.py"
+                )
+                docker_mounts = [
+                    "-v",
+                    "/run/t3code-docker/docker.sock:/var/run/docker.sock:rw",
+                    "-v",
+                    "/run/t3code-docker/ports.sock:/var/run/t3code-docker-ports.sock:rw",
+                    "-v",
+                    f"{acceptance.resolve()}:/run/t3code-docker-acceptance.py:ro",
+                    "-v",
+                    f"{args.docker_control_report.resolve()}:/run/t3code-canaries.json:ro",
+                ]
             try:
                 run(
                     "podman",
@@ -134,20 +173,29 @@ def main():
                     "-v",
                     f"{root / 'home'}:/home/t3code:rw",
                     "-v",
-                    f"{root / 'workspace'}:/workspace:rw",
+                    f"{args.docker_workspace or root / 'workspace'}:/workspace:rw",
                     "-v",
                     f"{root / 'tmp'}:/tmp:rw",
                     "-v",
                     f"{setup}:/etc/systemd/system/t3code-container-setup.service:ro",
                     "-v",
                     f"{target}:/etc/systemd/system/t3code-probe.target:ro",
+                    *docker_mounts,
                     f"--entrypoint={systemd}",
                     args.image,
                     "--unit=t3code-probe.target",
                 )
 
-                def execute(*command, user="0:0"):
-                    return run("podman", "exec", "--user", user, name, *command)
+                def execute(*command, user="0:0", timeout=180):
+                    return run(
+                        "podman",
+                        "exec",
+                        "--user",
+                        user,
+                        name,
+                        *command,
+                        timeout=timeout,
+                    )
 
                 for _ in range(60):
                     try:
@@ -226,6 +274,22 @@ def main():
                 assert "Seccomp:\t2" in status, "container seccomp is disabled"
                 checks["seccomp"] = "filtering"
                 assert execute("cat", checks["nix_build"]) == "verified"
+                if args.docker_workspace:
+                    checks["docker_workflows"] = json.loads(
+                        execute(
+                            "python3",
+                            "/run/t3code-docker-acceptance.py",
+                            "--control-report",
+                            "/run/t3code-canaries.json",
+                            *(
+                                argument
+                                for endpoint in args.denied_endpoint
+                                for argument in ("--denied-endpoint", endpoint)
+                            ),
+                            user="3000:3000",
+                            timeout=1200,
+                        )
+                    )
                 print(json.dumps(checks, indent=2))
             finally:
                 subprocess.run(["podman", "logs", "--tail=30", name], check=False)

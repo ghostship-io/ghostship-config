@@ -48,6 +48,20 @@ def assemble(root, spec):
         raise ValueError("sandbox already mounted; stop its manager and teardown first")
     run("mount", "-t", "tmpfs", "-o", "mode=0755,size=64M", "tmpfs", str(root))
     try:
+        # ProtectProc implies MountAPIVFS. systemd overlays a non-mounted /run
+        # with a fresh tmpfs, hiding our boot marker and private runtime sockets.
+        # A separate empty tmpfs preserves these scoped mounts without exposing
+        # the host's /run or weakening ProtectProc.
+        (root / "run").mkdir()
+        run(
+            "mount",
+            "-t",
+            "tmpfs",
+            "-o",
+            "mode=0755,size=16M",
+            "tmpfs",
+            str(root / "run"),
+        )
         for entry in spec["mounts"]:
             source = checked_source(entry["source"])
             target = destination(root, entry["target"])
