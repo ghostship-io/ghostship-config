@@ -102,7 +102,10 @@ behind main. Use an isolated branch and the repository's normal checks and PR
 workflow for policy changes. Leave merging to the user.
 
 1. Read `ghostship-apparmor-review --report-only` on `chill-penguin` and the
-   root-only evidence in `/var/lib/ghostship-apparmor-review`. Collect a fresh
+   root-only evidence in `/var/lib/ghostship-apparmor-review`. The collector reads
+   AppArmor records from VictoriaLogs (filtered per profile on the server), not
+   the journal. The journal keeps only hours at audit flood rates. Each heartbeat
+   must reach the store, which proves kernel → journald → Vector → VictoriaLogs. Collect a fresh
    sample if the timer has not run. If the command is absent or AppArmor is still
    disabled, report deployment pending and leave the quiet-week counter stopped.
 2. Check profile attachment/mode, policy revision, running image identity, audit

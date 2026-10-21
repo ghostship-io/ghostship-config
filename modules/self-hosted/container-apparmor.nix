@@ -119,6 +119,7 @@ let
     chaptarr = {
       children = [ "server" "healthcheck" ];
       required = [ "server" ];
+      top = false;
     };
     # SIEM stores (siem/storage.nix). The images have no shell or cat: the
     # binary reads the boot ID as a TLS certificate, fails and exits.
