@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.17.21] - 2026-10-21
+
+- SIEM UI: Grafana 13.2.4 (distroless, pinned) at `grafana.ghostship.io`, behind Cloudflare Access, as the single monitoring UI (#102 decision B).
+  - **Datasources:** VictoriaLogs (vendored signed plugin v0.33.1) and VictoriaMetrics, read only through a new vmauth proxy that routes only query paths.
+  - **Dashboards:** host and containers, SIEM pipeline, and security events, provisioned from the repo and not editable in the UI.
+  - **Disabled:** Grafana alerting, plugin installs, preinstalls, update checks and telemetry.
+  - **Network:** a new internal `ghostship_siemui_net` with no egress and no host access but DNS. cloudflared joins it at a fixed address, the only one Grafana's auth proxy trusts.
+  - **Container hardening:** strict flat AppArmor profiles, read-only images, no capabilities, no-new-privileges, noexec tmp, run and data.
+  - **Heartbeat:** a static read-only helper serves the AppArmor heartbeat for the shell-less Grafana image.
+
 ## [3.17.20] - 2026-10-21
 
 - Give qBittorrent 60 seconds to shut down before Podman forces termination, within systemd's existing two-minute stop limit. Ordinary restarts previously hit Podman's 10-second default and reported exit 137.

@@ -17,6 +17,8 @@ native; alerts go to the campaign thread, which investigates and tunes.
 | Falco 0.45.1 + container plugin | native, modern eBPF | JSON alerts to the journal |
 | vmalert-logs, vmalert-metrics v1.154.1 | Podman, `ghostship_siem_net` | alert APIs on `127.0.0.1:8880` and `:8881`; rules `siem/rules/` |
 | `ghostship-siem-alerts` | native | polls vmalert; ntfy `security` and the campaign thread |
+| Grafana 13.2.4 (distroless) | Podman, `ghostship_siemui_net` | the single UI at `grafana.ghostship.io` behind Cloudflare Access; dashboards in `siem/dashboards/` |
+| vmauth v1.154.1 | Podman, both SIEM networks | read-only query proxy for Grafana |
 
 The SIEM network (`ghostsiem0`, 10.89.21.0/24) drops every connection its
 containers open except DNS to their resolver (`inet ghostship_siem`). Images
@@ -42,6 +44,30 @@ namespace (qBittorrent in Gluetun) is reported once, under the owner, with
 (checked 2026-10-21). VPN tunnels are excluded because their bytes already
 cross `eth0`. Container-to-container traffic is included, so
 `ContainerEgressSpike` measures total transmit, not Internet egress alone.
+
+### UI (Grafana)
+
+Grafana is the only monitoring UI (#102, user decision B). Use Explore for
+logs (the VictoriaLogs datasource, LogsQL) and metrics (VictoriaMetrics), and
+the provisioned dashboards in the Ghostship folder: host and containers,
+SIEM pipeline, security events. Dashboards and datasources come from the repo
+(`siem/dashboards/*.json`, `siem/ui.nix`) and cannot be saved from the UI;
+change them in a PR. Grafana alerting is off: vmalert and the bridge alert.
+
+- Access: Cloudflare Access at `grafana.ghostship.io`. Grafana trusts the
+  `Cf-Access-Authenticated-User-Email` header only from cloudflared's fixed
+  address (10.89.22.10); users sign up as Viewer, with Explore allowed.
+- Reads go through vmauth, which allows VictoriaLogs `/select/logsql/*` and
+  VictoriaMetrics' query, series, label and metadata APIs only. Inserts,
+  writes, imports, deletes and admin calls have no route. The credential is
+  generated on the host (`/var/lib/ghostship-siem-ui`); delete both files to
+  rotate.
+- `ghostship_siemui_net` (10.89.22.0/24) is internal: no route out, and no
+  host service but DNS. Its members are Grafana, vmauth and cloudflared;
+  vmauth alone also joins `ghostship_siem_net`.
+- The image is distroless and pinned by digest. The VictoriaLogs plugin is
+  vendored by hash. Plugin installs, preinstalls, update checks, key
+  retrieval, telemetry, snapshots and public dashboards are off.
 
 ## What is collected
 

@@ -12,6 +12,8 @@ let
   # - t3code: never recreated by this repository.
   # - romm: stages uploads (multi-GB ROMs) in /tmp, so it gets a disk-backed noexec bind.
   noexecTmp = [
+    "grafana"
+    "vmauth"
     "bazarr"
     "chaptarr"
     "cloudflared"
@@ -52,6 +54,8 @@ let
   # strict AppArmor profile (apparmor/<container>.profile). Plex, the agent
   # desktop and T3 are out of scope here; the in-house images already drop ALL.
   keepCaps = {
+    grafana = [ ];
+    vmauth = [ ];
     bazarr = rootLsio;
     chaptarr = [ ];
     cloudflared = [ ];
@@ -120,6 +124,8 @@ let
   # romm (templates /etc/nginx/conf.d), gluetun (creates its user in /etc/passwd
   # at every start; read-only failed with EROFS on 2026-10-20).
   readOnlyRoot = [
+    "grafana"
+    "vmauth"
     "bazarr"
     "chaptarr"
     "cloudflared"
@@ -145,6 +151,8 @@ let
   # get a noexec /run. Throwaway read-only, noexec-/run copies of each image
   # started cleanly on 2026-10-21.
   noexecRun = [
+    "grafana"
+    "vmauth"
     "chaptarr"
     "cloudflared"
     "grimmory-db"
