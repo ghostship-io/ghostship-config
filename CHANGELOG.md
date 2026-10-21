@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.15] - 2026-10-21
+
+- Pin ghostship-agent 0.33.0: `browser_window` screenshots name the toolbar buttons (each pinned extension by name, then the extensions menu and the profile), so ChatGPT can use extensions without relying on tooltips.
+
 ## [3.17.14] - 2026-10-21
 
 - Pin ghostship-agent 0.32.1: `browser_window` screenshots are never scaled (a tooltip past the window's edge had shrunk the frame, so its pixels no longer matched `ui` clicks), and `ui` accepts key names as ChatGPT writes them.
