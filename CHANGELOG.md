@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.172] - 2026-10-21
+
+- AppArmor: the agent desktop's top profile may run `s6-envuidgid`. Every s6 service that drops to `abc` runs `s6-setuidgid`, which calls `s6-envuidgid`. Without the rule, the LXQt desktop, D-Bus, PulseAudio, Selkies, Pelorus and the Chrome idle reaper all ran in ruleless `null-*` learning profiles. That logged about 175k audit records a minute, rotated auditd's logs in minutes and crowded the rest of the journal out. The same rule is added to the other LinuxServer profiles that allow `s6-applyuidgid`.
+
 ## [3.15.171] - 2026-10-20
 
 - Agent viewer: one launcher. **Apps** has a tile for Chrome · Personal, Chrome · Agent, OrcaSlicer and Blender (from `apps.json`), and **Open** lists everything running. The mode switch reads **Apps | Desktop**.
