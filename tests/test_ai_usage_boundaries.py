@@ -287,5 +287,51 @@ class PermissionTests(unittest.TestCase):
         self.assertEqual([winner["model"] for winner in winners["bulk"]], ["gpt-6.1-sol"])
 
 
+class TierContractTests(unittest.TestCase):
+    """The tiers hold the winners; the membership sits beside them."""
+
+    def test_the_tiers_hold_one_winner_per_provider(self):
+        rows = [
+            {
+                "provider": "ollama",
+                "model": "a",
+                "key": "ollama:a",
+                "tiers": ["bulk"],
+                "rank": {"bulk": 1},
+                "score": {"bulk": 10.0},
+                "value": {"value": 10.0, "strength": 80.0},
+                "availability": {"state": "available"},
+                "admission": {"state": "settled"},
+                "eligibility": {
+                    "frontier_prime": {"allowed": False},
+                    "delegate": {"allowed": True},
+                },
+                "quota_state": "available",
+                "native": {"mapped": True},
+            },
+            {
+                "provider": "ollama",
+                "model": "b",
+                "key": "ollama:b",
+                "tiers": ["bulk"],
+                "rank": {"bulk": 2},
+                "score": {"bulk": 5.0},
+                "value": {"value": 5.0, "strength": 70.0},
+                "availability": {"state": "available"},
+                "admission": {"state": "settled"},
+                "eligibility": {
+                    "frontier_prime": {"allowed": False},
+                    "delegate": {"allowed": True},
+                },
+                "quota_state": "available",
+                "native": {"mapped": True},
+            },
+        ]
+        winners, coverage = snapshot._winners(rows, {"bulk": ["ollama:a", "ollama:b"]})
+        self.assertEqual([winner["key"] for winner in winners["bulk"]], ["ollama:a"])
+        self.assertEqual(coverage["bulk"]["members"], 2)
+        self.assertEqual(coverage["bulk"]["winners"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

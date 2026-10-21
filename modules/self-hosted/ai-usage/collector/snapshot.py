@@ -899,6 +899,7 @@ def _winners(
         ]
         coverage[tier] = {
             "candidates_considered": considered,
+            "members": len(members),
             "providers": len(providers),
             "winners": len(ordered),
             "providers_without_a_winner": len(providers) - len(ordered),
@@ -1019,6 +1020,13 @@ def build_snapshot(
         }
         tiers[tier] = sorted(set(members), key=lambda key: (order.get(key, 0), key))
     winners, tier_coverage = _winners(candidates, tiers)
+    # The tiers are the operational list: one current winner per upstream
+    # provider. The whole membership stays beside them for the comparison
+    # view, and the counts say how much was considered.
+    tier_members = {tier: list(members) for tier, members in tiers.items()}
+    tiers = {
+        tier: [winner["key"] for winner in rows] for tier, rows in winners.items()
+    }
 
     source_records = []
     for source in sources:
@@ -1099,6 +1107,7 @@ def build_snapshot(
         },
         "tiers": tiers,
         "tier_winners": winners,
+        "tier_members": tier_members,
         "calculation": CALCULATION,
         "quota": {"accounts": accounts},
         "quality_feed": {
