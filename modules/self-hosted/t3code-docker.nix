@@ -131,6 +131,9 @@ let
   ];
   closure = pkgs.closureInfo { rootPaths = runtimePaths; };
   mount = source: target: readOnly: { inherit source target readOnly; };
+  # Preserve subordinate IDs for explicitly granted project ACLs as well as
+  # mapping container-root writes back to the T3 workspace owner.
+  sharedIdmap = "b:3000:${uid}:1 b:${toString cfg.subIdStart}:${toString cfg.subIdStart}:65536";
   spec = pkgs.writeText "t3code-docker-rootfs.json" (
     builtins.toJSON {
       closure = "${closure}/store-paths";
@@ -140,9 +143,9 @@ let
         # util-linux's map is filesystem ID -> mount-visible ID. On Btrfs,
         # container root (host cfg.uid) writes apps-owned files without chowning
         # or granting the engine membership of the production apps group.
-        ((mount workspace "/workspace" false) // { idmap = "b:3000:${uid}:1"; })
-        ((mount worktrees "/home/t3code/.t3/worktrees" false) // { idmap = "b:3000:${uid}:1"; })
-        ((mount "/srv/apps/t3code/tmp" "/tmp" false) // { idmap = "b:3000:${uid}:1"; })
+        ((mount workspace "/workspace" false) // { idmap = sharedIdmap; })
+        ((mount worktrees "/home/t3code/.t3/worktrees" false) // { idmap = sharedIdmap; })
+        ((mount "/srv/apps/t3code/tmp" "/tmp" false) // { idmap = sharedIdmap; })
         (mount state state false)
         (mount runtime runtime false)
         (mount "/sys/fs/cgroup" "/sys/fs/cgroup" false)
