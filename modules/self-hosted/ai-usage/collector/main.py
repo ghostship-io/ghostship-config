@@ -23,6 +23,7 @@ from typing import Any, Iterable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import aa  # noqa: E402
 import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
 import pool as pool_module  # noqa: E402
@@ -65,6 +66,11 @@ OWNER_POLICY = {
 # The routing snapshot a consumer reads. The producer writes it; a consumer
 # only reads it. It is separate from the internal ranking state.
 SNAPSHOT_PATH = "/var/lib/ghostship-ai-usage/routing.json"
+
+# The cached Artificial Analysis feed. The daily procedure reads the feed and
+# writes the cache; the collector only reads the cache, so the free request
+# budget belongs to one place.
+AA_CACHE_PATH = "/var/lib/ghostship-ai-usage/artificial-analysis.json"
 
 # Every account the dashboard covers, and where its readings come from.
 # A provider without a reader still gets a row, so nothing disappears.
@@ -558,6 +564,7 @@ def build_snapshot(
     ranked: list[Any],
     context: dict[str, Any],
     now: float,
+    aa_cache: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -591,6 +598,7 @@ def build_snapshot(
         ranked=ranked,
         native_models=context.get("native_models") or {},
         policy=OWNER_POLICY,
+        aa_cache=aa_cache,
     )
 
 
@@ -723,6 +731,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Where the model ranking keeps its evaluation state.",
     )
     parser.add_argument(
+        "--aa-cache",
+        default=AA_CACHE_PATH,
+        help="The cached Artificial Analysis feed, written by the daily procedure.",
+    )
+    parser.add_argument(
         "--snapshot",
         default=SNAPSHOT_PATH,
         help="Where the canonical ranking and eligibility snapshot is written.",
@@ -732,9 +745,12 @@ def main(argv: list[str] | None = None) -> int:
     started = time.monotonic()
     now = wall_clock() if args.now is None else args.now
     results, extra, context = collect(now, state_path=args.state)
+    aa_cache = aa.load_cache(args.aa_cache, now)
     duration = time.monotonic() - started
     text = render(results, extra, now, duration)
-    snapshot = build_snapshot(results, context.get("ranked") or [], context, now)
+    snapshot = build_snapshot(
+        results, context.get("ranked") or [], context, now, aa_cache=aa_cache
+    )
     if args.stdout:
         sys.stdout.write(text)
         sys.stdout.write(json.dumps(snapshot, indent=1, default=str) + "\n")
