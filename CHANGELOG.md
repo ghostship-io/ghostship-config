@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.19] - 2026-10-21
+
+- The Gluetun network monitor and qBittorrent's pre-start and auto-resume scripts probe the VPN namespace from the host (`nsenter -n` with host `curl` and `ip`) instead of `podman exec gluetun wget|sh -c ip`.
+  - **Before:** about ten processes a minute were exec'd into the VPN container, landing in its top AppArmor profile.
+  - **API key:** the Gluetun API key moves from wget's argv to a curl header file descriptor.
+  - **Verified live** before merge: VPN status, public IP, forwarded port, tunnel IP and the qBittorrent API answer; requests without the key get 401.
+
 ## [3.17.18] - 2026-10-21
 
 - Falco: narrow exception for T3 Code's in-container systemd reading `/etc/pam.d/systemd-user` when it starts the user manager. It fires on every sanctioned T3 recreate; investigated 2026-10-21 (#102).
