@@ -18,6 +18,26 @@ let
   gluetun-preferred-region-name = "Vancouver";
   gluetun-top-server-count = 10;
   gluetun-switch-improvement-threshold = 0.20;
+  # Probe Gluetun's network namespace from the host: no process is exec'd into
+  # the VPN container (each `podman exec ... wget` ran there, outside its
+  # AppArmor children), and the API key stays out of argv (curl -H @fd).
+  # qBittorrent shares this namespace, so 127.0.0.1 reaches both APIs.
+  gluetunNs = ''
+    gluetun_pid() {
+      pid=$(${pkgs.podman}/bin/podman inspect -f '{{.State.Pid}}' gluetun 2>/dev/null) || return 1
+      [ "''${pid:-0}" -gt 0 ] || return 1
+      printf '%s' "$pid"
+    }
+    gluetun_curl() {
+      pid=$(gluetun_pid) || return 1
+      ${pkgs.util-linux}/bin/nsenter -t "$pid" -n ${pkgs.curl}/bin/curl -fsS --max-time 15 "$@"
+    }
+    gluetun_tun_ip() {
+      pid=$(gluetun_pid) || return 1
+      ${pkgs.util-linux}/bin/nsenter -t "$pid" -n ${pkgs.iproute2}/bin/ip -4 -o addr show dev "$1" 2>/dev/null \
+        | ${pkgs.coreutils}/bin/tr -s ' ' | ${pkgs.coreutils}/bin/cut -d' ' -f4 | ${pkgs.coreutils}/bin/cut -d/ -f1 | ${pkgs.coreutils}/bin/head -n1
+    }
+  '';
   gluetun-selection-script = pkgs.writeShellApplication {
     name = "gluetun-pia-selector";
     runtimeInputs = with pkgs; [
@@ -678,6 +698,7 @@ in
       Type = "simple";
       ExecStart = "${pkgs.writeShellScript "gluetun-monitor" ''
         set -eu
+        ${gluetunNs}
 
         LAST_IP=""
         PF_FAILURES=0
@@ -708,7 +729,7 @@ in
             continue
           fi
 
-          CURRENT_IP=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- --header "X-API-Key: $API_KEY" http://127.0.0.1:8000/v1/publicip/ip 2>/dev/null | ${pkgs.jq}/bin/jq -r .public_ip 2>/dev/null || true)
+          CURRENT_IP=$(gluetun_curl -H @<(printf 'X-API-Key: %s\n' "$API_KEY") http://127.0.0.1:8000/v1/publicip/ip 2>/dev/null | ${pkgs.jq}/bin/jq -r .public_ip 2>/dev/null || true)
 
           if [ -n "$CURRENT_IP" ] && [ "$CURRENT_IP" != "null" ] && [ "$CURRENT_IP" != "" ]; then
             if [ "$CURRENT_IP" != "$LAST_IP" ]; then
@@ -722,12 +743,12 @@ in
               LAST_IP="$CURRENT_IP"
             fi
 
-            VPN_STATUS=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- --header "X-API-Key: $API_KEY" http://127.0.0.1:8000/v1/vpn/status 2>/dev/null | ${pkgs.jq}/bin/jq -r .status 2>/dev/null || true)
-            FORWARDED_PORT=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- --header "X-API-Key: $API_KEY" http://127.0.0.1:8000/v1/portforward 2>/dev/null | ${pkgs.jq}/bin/jq -r .port 2>/dev/null || true)
-            TUN_IP=$(${pkgs.podman}/bin/podman exec gluetun sh -c "ip -4 -o addr show dev $TUN_INTERFACE 2>/dev/null | tr -s ' ' | cut -d' ' -f4 | cut -d/ -f1 | head -n1" 2>/dev/null || true)
+            VPN_STATUS=$(gluetun_curl -H @<(printf 'X-API-Key: %s\n' "$API_KEY") http://127.0.0.1:8000/v1/vpn/status 2>/dev/null | ${pkgs.jq}/bin/jq -r .status 2>/dev/null || true)
+            FORWARDED_PORT=$(gluetun_curl -H @<(printf 'X-API-Key: %s\n' "$API_KEY") http://127.0.0.1:8000/v1/portforward 2>/dev/null | ${pkgs.jq}/bin/jq -r .port 2>/dev/null || true)
+            TUN_IP=$(gluetun_tun_ip "$TUN_INTERFACE" 2>/dev/null || true)
 
-            if ${pkgs.podman}/bin/podman exec gluetun wget -qO- http://127.0.0.1:5000/api/v2/app/version >/dev/null 2>&1; then
-              CURRENT_QBT_PREFS=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- http://127.0.0.1:5000/api/v2/app/preferences 2>/dev/null || true)
+            if gluetun_curl http://127.0.0.1:5000/api/v2/app/version >/dev/null 2>&1; then
+              CURRENT_QBT_PREFS=$(gluetun_curl http://127.0.0.1:5000/api/v2/app/preferences 2>/dev/null || true)
               CURRENT_QBT_PORT=$(printf '%s' "$CURRENT_QBT_PREFS" | ${pkgs.jq}/bin/jq -r '.listen_port // empty' 2>/dev/null || true)
               CURRENT_QBT_INTERFACE=$(printf '%s' "$CURRENT_QBT_PREFS" | ${pkgs.jq}/bin/jq -r '.current_network_interface // empty' 2>/dev/null || true)
               CURRENT_QBT_ADDR=$(printf '%s' "$CURRENT_QBT_PREFS" | ${pkgs.jq}/bin/jq -r '.current_interface_address // empty' 2>/dev/null || true)
@@ -739,7 +760,7 @@ in
                   --arg interface "$TUN_INTERFACE" \
                   --arg address "$TUN_IP" \
                   '{"current_network_interface": $interface, "current_interface_address": $address, "status_bar_external_ip": true}')
-                ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "json=$QBT_BIND_JSON" http://127.0.0.1:5000/api/v2/app/setPreferences >/dev/null 2>&1 || true
+                gluetun_curl --data "json=$QBT_BIND_JSON" http://127.0.0.1:5000/api/v2/app/setPreferences >/dev/null 2>&1 || true
               fi
 
               if [ -n "$FORWARDED_PORT" ] && [ "$FORWARDED_PORT" != "null" ] && [ "$FORWARDED_PORT" != "0" ]; then
@@ -751,7 +772,7 @@ in
                     --arg address "$TUN_IP" \
                     --arg port "$FORWARDED_PORT" \
                     '{"listen_port": ($port | tonumber), "current_network_interface": $interface, "current_interface_address": $address, "random_port": false, "upnp": false, "status_bar_external_ip": true}')
-                  ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "json=$QBT_PORT_JSON" http://127.0.0.1:5000/api/v2/app/setPreferences >/dev/null 2>&1 || true
+                  gluetun_curl --data "json=$QBT_PORT_JSON" http://127.0.0.1:5000/api/v2/app/setPreferences >/dev/null 2>&1 || true
                 fi
               elif [ "$VPN_STATUS" = "running" ]; then
                 PF_FAILURES=$((PF_FAILURES + 1))
