@@ -66,5 +66,24 @@ class EpisodeTests(unittest.TestCase):
         self.assertEqual(state["episodes"], {})
 
 
+class PipelineMetricTests(unittest.TestCase):
+    def test_reports_audit_journal_and_marks_unreachable_store_as_lagging(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        def run(command, **kwargs):
+            if command[-1] == "-s":
+                return SimpleNamespace(stdout="enabled 1\nlost 7\nbacklog 2\nbacklog_limit 8192\n")
+            if command[0] == "sh":
+                return SimpleNamespace(stdout=f"{NOW - 3600} host x\n")
+            return SimpleNamespace(stdout=f"{NOW - 1} host y\n")
+
+        config = {"auditctl": "auditctl", "journalctl": "journalctl", "victorialogs": "http://127.0.0.1:1"}
+        with mock.patch.object(wd.urllib.request, "urlopen", side_effect=OSError("down")):
+            text = wd.pipeline_metrics(config, NOW, run=run)
+        self.assertIn("ghostship_audit_lost_total 7", text)
+        self.assertIn("ghostship_journal_retention_seconds 3600", text)
+        self.assertIn("ghostship_log_ingestion_lag_seconds 1800", text)
+
 if __name__ == "__main__":
     unittest.main()
