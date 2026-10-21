@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.33] - 2026-10-21
+
+- Close observed newsletter failure episodes independently of ntfy resolution delivery. A relapse gets a fresh persisted incident ID and a firing notification after the pending resolution succeeds. A compact sequence retains every unacknowledged handoff across repeated recovery/relapse cycles, retries one per observation even while healthy, and preserves existing episode IDs. Real-notifier and pinned-coordinator fault injection covers the relapse, bounded pending state, and a lost durable acknowledgement.
+
 ## [3.17.32] - 2026-10-21
 
 - Pass the pinned agent source into sandboxed configuration tests. Newsletter incident integration tests no longer need a Nix executable or nested flake evaluation inside the builder; they continue to exercise the real pinned coordinator.

@@ -40,28 +40,48 @@ def observe(command, now=None):
 
 
 def reconcile(state, problem, incident, notify, save):
-    """Acknowledge the incident independently of notification delivery."""
-    if not problem and not state.get("firing"):
+    """Separate observed episodes, durable handoffs and notification delivery."""
+    if not problem and not state:
         return
-    state["firing"] = True
-    state.setdefault("incident_id", uuid.uuid4().hex)
-    # Persist the identity before handing anything off. A lost response retries
-    # the same coordinator event ID, including after its spool file was consumed.
-    save()
-    if not state.get("incident_queued"):
-        state["incident_queued"] = incident(
-            state["incident_id"], problem or "runtime recovered after an observed failure")
-        save()
-    if problem:
+    if "incident_base" not in state:
+        # Adopt existing episode IDs, including a recovered episode whose spool
+        # handoff is still pending. Never replace an ID that may have been sent.
+        state.setdefault("incident_id", uuid.uuid4().hex)
+        state["incident_base"] = state["incident_id"]
+        state["incident_sequence"] = 0
+        state["incident_pending"] = int(bool(state.pop("incident_queued", False)))
         if state.pop("resolved", False):
-            state["notified"] = False
-        if not state.get("notified"):
-            state["notified"] = notify("firing", problem)
-    else:
-        if not state.get("resolved"):
-            state["resolved"] = notify("resolved", "daily runtime and last due delivery are healthy")
-        if state["resolved"] and state["incident_queued"]:
-            state.clear()
+            state["firing"] = False
+    if problem and not state.get("firing"):
+        if "firing" in state:
+            state["incident_sequence"] += 1
+            state["incident_id"] = f'{state["incident_base"]}-{state["incident_sequence"]}'
+        state["notified"] = False
+    elif not problem and state.get("firing"):
+        # One outstanding resolution suffices across flaps. It must be delivered
+        # before a later firing, since the notifier dedupes by key and state.
+        state["pending_resolution"] = True
+    state["firing"] = bool(problem)
+    # A prefix and a sequence range retain every undelivered incident without an
+    # ever-growing episode list. Persist new IDs before any external side effect.
+    save()
+    if state["incident_pending"] <= state["incident_sequence"]:
+        pending = state["incident_pending"]
+        event_id = state["incident_base"] if pending == 0 else f'{state["incident_base"]}-{pending}'
+        # Drain one handoff per observation, even while healthy. A lost response
+        # retries the same ID after the coordinator has consumed its spool file.
+        if incident(event_id, problem or "runtime recovered after an observed failure"):
+            state["incident_pending"] += 1
+        save()
+    if state.get("pending_resolution"):
+        if notify("resolved", "daily runtime and last due delivery recovered at an observed healthy check"):
+            state.pop("pending_resolution")
+            save()
+    if problem and not state.get("pending_resolution") and not state.get("notified"):
+        state["notified"] = notify("firing", problem)
+    if (not problem and not state.get("pending_resolution")
+            and state["incident_pending"] > state["incident_sequence"]):
+        state.clear()
 
 
 def main(argv=None):

@@ -121,7 +121,14 @@ Exit zero from this operation acknowledges a spool file and directory fsync, not
 T3 completion. The same ID produces the same coordinator event key after a lost
 acknowledgement, even if its previous spool file was consumed. Spool and ntfy
 failures retry independently; a pending handoff is retained even if runtime health
-recovers. Recovery sends one resolution. Episode state uses file fsync, atomic
+recovers. Observed recovery closes the episode even while ntfy is unavailable, so
+a relapse gets a fresh persisted incident ID. One pending resolution is retained
+across flaps and delivered before a current firing notification, so ntfy's shared
+dedupe key cannot suppress that firing. Undelivered incidents use a stable ID
+prefix and sequence range instead of a growing episode list; existing episode IDs
+are adopted unchanged. Pending handoffs drain one per observation, including healthy
+observations, without discarding episodes during an extended spool outage.
+Episode state uses file fsync, atomic
 replacement and directory fsync; this is local persistence, not a guarantee
 against disk loss or a claim of exactly-once remote effects. This host job never
 collects, prepares, repairs or sends mail. Its ledger evidence confirms Gmail
