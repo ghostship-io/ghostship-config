@@ -37,8 +37,8 @@ ACTIVE = {'pending', 'queued', 'running', 'starting', 'in_progress', 'waiting', 
 ATTENTION = {'blocked', 'failed', 'error', 'denied', 'timeout', 'uncertain',
              'upstream_blocked', 'unavailable', 'partial', 'held', 'conflict',
              'dispatch_failed', 'rejected_signature', 'rate_limited', 'switch_uncertain', 'message_uncertain'}
-PROVIDERS = {'codex', 'opencode', 'antigravity', 'claude-code', 'claude', 'gemini',
-             'grok', 'openai', 'anthropic', 'google', 'copilot'}
+PROVIDERS = {'codex', 'opencode', 'antigravity', 'claudeAgent', 'claude-code', 'claude',
+             'gemini', 'grok', 'openai', 'anthropic', 'google', 'copilot'}
 # Completion claims are not interchangeable. A model report, a CI receipt and a
 # deployment receipt are different evidence. No source exposes objective proof
 # today, so it stays an explicit gap instead of a reported zero.
@@ -179,10 +179,13 @@ def thread_rows(path, now):
                json_extract(t.payload_json,'$.pullRequests[0].url')) AS github_url
       FROM orchestration_v2_projection_threads t
       LEFT JOIN orchestration_v2_projection_runs r ON r.run_id=(SELECT r2.run_id
-        FROM orchestration_v2_projection_runs r2 WHERE r2.thread_id=t.thread_id
+        FROM orchestration_v2_projection_runs r2
+        WHERE r2.thread_id=t.thread_id
+          AND NOT (r2.status='cancelled' AND CASE WHEN json_valid(r2.payload_json)
+            THEN coalesce(json_type(r2.payload_json,'$.startedAt')='null',0) ELSE 0 END)
         ORDER BY (r2.status IN ('running','pending','starting','waiting','queued','requested',
                                 'native-running','preparing','prepared','executing')) DESC,
-          coalesce(r2.completed_at,r2.requested_at) DESC, r2.run_id LIMIT 1)
+          coalesce(r2.completed_at,r2.requested_at) DESC, r2.ordinal DESC, r2.run_id LIMIT 1)
       WHERE t.deleted_at IS NULL
       ORDER BY (r.status IN ('running','pending','starting','waiting','queued','requested',
                               'native-running','preparing','prepared','executing')) DESC,

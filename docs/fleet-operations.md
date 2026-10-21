@@ -510,6 +510,8 @@ Counts are bounded snapshot gauges, not incremented event counters. Lists select
 the latest observation per durable identity, so polling does not multiply entries.
 Source failures omit counts and success timestamps, and emit `source_up=0`; check
 coverage, last-success age and snapshot age before interpreting empty tables.
+The link bar is built from a fixed page list, so rebuilding a dashboard cannot
+append a second copy of a link; exactly one link per page is verified.
 Current tables expire observations after three minutes. Lists are capped at 200
 rows per source, and no panel claims a complete enumeration: a truncated source
 is a lower bound and is counted as such. The default timeline is
@@ -611,22 +613,22 @@ provisioning output for the native home, four-dashboard and datasource-auth
 regression.
 
 Verified in a disposable Grafana with the provisioned dashboards and fixture
-observations: the home opens the overview, the navigation reaches every page,
-and the summary panels show real values (attention, in-flight, work items today,
-webhook receipts today, unavailable sources, snapshot age, model reports, CI
-receipts, deployment receipts, truncated sources, tracked schedules). The
-VictoriaLogs raw-log frames return the expected rows through the datasource API,
-including row time, message and label fields.
+observations: the home opens the overview, the single link bar reaches every page,
+the summary panels show real values, and the list panels show real rows with their
+label columns (schedules with next/last/result, attention items, in-flight runs,
+queued jobs, webhook receipts, CI proofs). The table recipe is the datasource's
+documented one: extract the log labels, replace the raw log fields, keep the row
+time, then rename the columns. A `fields` pipe must keep `_time` and `_msg`,
+otherwise the datasource cannot give the panel a row time or a line.
 
-Open item for the target host: in the disposable Grafana 13.1.4 with the pinned
-VictoriaLogs datasource v0.33.1, those raw-log frames render as empty rows in
-table and log panels, while the statistics panels of the same datasource render
-correctly. The same empty rendering reproduces with the existing
-`security.json` log panels, so it is a property of that datasource and Grafana
-version rather than of these queries. The deployed image is Grafana 13.2.4, which
-was not exercised locally. Confirm the list panels in the browser after the
-deployment; a Grafana or datasource version that renders log frames is the
-expected fix.
+A headless browser without a font configuration is a trap for this check: Skia
+aborts with `SkFontMgr_FontConfigInterface ... Not implemented` and the renderer
+dies mid-paint, which shows every list panel as headers with empty rows even
+though the data arrived. Set `FONTCONFIG_FILE` to a local fontconfig that points
+at a store font directory before taking the screenshot; no network font is
+involved. This is an environment fault, not a dashboard or datasource defect: the
+same panels render rows once fonts resolve, and the existing `security.json` log
+panels behave identically.
 
 Deployment and browser rendering require separate target-host verification.
 

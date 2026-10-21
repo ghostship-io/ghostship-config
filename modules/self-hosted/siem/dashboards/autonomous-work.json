@@ -9,7 +9,7 @@
  ],
  "timezone": "utc",
  "schemaVersion": 41,
- "version": 14,
+ "version": 17,
  "editable": false,
  "refresh": "1m",
  "time": {
@@ -61,60 +61,6 @@
    "targetBlank": false,
    "includeVars": false,
    "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
   }
  ],
  "panels": [
@@ -130,7 +76,7 @@
    },
    "options": {
     "mode": "markdown",
-    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline)\n\nOne read-only pane for T3 projects, ordinary and child agents, schedules, webhooks, reviews and provider usage. Today in UTC. **Bulk work, model reports, CI proofs, review receipts, closed pull requests and deployment receipts are different evidence: a receipt is never a green outcome. The CI proof is bound to the exact SHA of the configured checks; no owner state records a frontier approval, the merge result or the deployed health, and no source exposes objective completion** (see the coverage table). A count is a lower bound while a source is truncated or unavailable; an empty panel is missing evidence, not a healthy zero. No transcripts, prompts or raw failures are stored. [AI usage and model rankings](/d/ghostship-ai-usage) live in their own dashboard."
+    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline) \u00b7 [AI usage](/d/ghostship-ai-usage)\n\nOne read-only pane for T3 work: projects, ordinary and child agents, schedules, webhooks, review and CI receipts. Today in UTC. A receipt is never a green outcome, and a truncated or unavailable source is a lower bound rather than a zero; the exact evidence rules and the remaining gaps are in the coverage table."
    }
   },
   {
@@ -1192,8 +1138,9 @@
      "id": "extractFields",
      "options": {
       "source": "labels",
-      "format": "json",
-      "replace": false
+      "format": "auto",
+      "replace": true,
+      "keepTime": true
      }
     },
     {
@@ -1600,8 +1547,9 @@
      "id": "extractFields",
      "options": {
       "source": "labels",
-      "format": "json",
-      "replace": false
+      "format": "auto",
+      "replace": true,
+      "keepTime": true
      }
     },
     {
@@ -2008,8 +1956,9 @@
      "id": "extractFields",
      "options": {
       "source": "labels",
-      "format": "json",
-      "replace": false
+      "format": "auto",
+      "replace": true,
+      "keepTime": true
      }
     },
     {
@@ -2416,8 +2365,9 @@
      "id": "extractFields",
      "options": {
       "source": "labels",
-      "format": "json",
-      "replace": false
+      "format": "auto",
+      "replace": true,
+      "keepTime": true
      }
     },
     {
@@ -2824,8 +2774,9 @@
      "id": "extractFields",
      "options": {
       "source": "labels",
-      "format": "json",
-      "replace": false
+      "format": "auto",
+      "replace": true,
+      "keepTime": true
      }
     },
     {
@@ -3232,8 +3183,9 @@
      "id": "extractFields",
      "options": {
       "source": "labels",
-      "format": "json",
-      "replace": false
+      "format": "auto",
+      "replace": true,
+      "keepTime": true
      }
     },
     {
@@ -3641,8 +3593,9 @@
      "id": "extractFields",
      "options": {
       "source": "labels",
-      "format": "json",
-      "replace": false
+      "format": "auto",
+      "replace": true,
+      "keepTime": true
      }
     },
     {
@@ -4054,8 +4007,9 @@
      "id": "extractFields",
      "options": {
       "source": "labels",
-      "format": "json",
-      "replace": false
+      "format": "auto",
+      "replace": true,
+      "keepTime": true
      }
     },
     {
@@ -4604,8 +4558,9 @@
      "id": "extractFields",
      "options": {
       "source": "labels",
-      "format": "json",
-      "replace": false
+      "format": "auto",
+      "replace": true,
+      "keepTime": true
      }
     },
     {
@@ -5012,8 +4967,9 @@
      "id": "extractFields",
      "options": {
       "source": "labels",
-      "format": "json",
-      "replace": false
+      "format": "auto",
+      "replace": true,
+      "keepTime": true
      }
     },
     {
@@ -5420,8 +5376,9 @@
      "id": "extractFields",
      "options": {
       "source": "labels",
-      "format": "json",
-      "replace": false
+      "format": "auto",
+      "replace": true,
+      "keepTime": true
      }
     },
     {
