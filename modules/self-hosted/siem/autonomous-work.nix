@@ -30,6 +30,9 @@ in
     path = [ pkgs.systemd ];
     serviceConfig = {
       Type = "oneshot";
+      # Vector already belongs to this logging-reader group. Operational rows
+      # include private branches and model selections; only metrics are public.
+      Group = "systemd-journal";
       ExecStart = "${pkgs.python3}/bin/python3 ${./autonomous-work.py} ${collectorConfig}";
       # Root may traverse the existing private stores, but cannot modify them.
       # mode=ro + query_only + read-only mounts preserve live WAL semantics.
@@ -44,7 +47,7 @@ in
       ];
       ReadWritePaths = [ output textfile ];
       RuntimeDirectory = "ghostship-autonomous-work";
-      RuntimeDirectoryMode = "0755";
+      RuntimeDirectoryMode = "0750";
       RuntimeDirectoryPreserve = true;
       ProtectHome = true;
       PrivateTmp = true;

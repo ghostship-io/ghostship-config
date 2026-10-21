@@ -737,11 +737,11 @@ def collect(config, now=None, timers=timer_rows):
     return records, '\n'.join(metrics)+'\n'
 
 
-def atomic(path, value):
+def atomic(path, value, *, mode=0o644):
     target = Path(path)
     temp = target.with_suffix(target.suffix+'.tmp')
     temp.write_text(value)
-    temp.chmod(0o644)
+    temp.chmod(mode)
     temp.replace(target)
 
 
@@ -753,7 +753,7 @@ def main():
     records, metrics = collect(config)
     # Replaced atomically, never appended: bounded current snapshots only.
     atomic(config['metrics'], metrics)
-    atomic(config['snapshot'], ''.join(json.dumps(r, sort_keys=True)+'\n' for r in records))
+    atomic(config['snapshot'], ''.join(json.dumps(r, sort_keys=True)+'\n' for r in records), mode=0o640)
 
 
 if __name__ == '__main__':
