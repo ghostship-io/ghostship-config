@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.11] - 2026-10-21
+
+- Fix for #167. The agent desktop's top-level `stage-control` transition went past AppArmor's per-profile limit on named transitions ("too many specified profile transitions"). The AppArmor reload failed and the kernel kept the previous agent-desktop policy. The transition is removed.
+
 ## [3.17.10] - 2026-10-21
 
 - AppArmor learning noise, round 2, from the largest live sources:
