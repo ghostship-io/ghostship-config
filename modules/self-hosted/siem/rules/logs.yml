@@ -1,0 +1,117 @@
+# SIEM detections over VictoriaLogs (LogsQL; docs/siem.md for fields).
+# Labels must come from our own parsed fields, never free text an attacker
+# writes (paths, user agents): the bridge forwards labels to the T3 thread.
+# `evidence` is the query the investigating agent runs; severity selects the
+# ntfy priority and whether the campaign thread is messaged (high and above).
+# Tune by narrowing an expression with evidence in the PR, never by deleting a
+# detection that matches attack indicators.
+groups:
+  - name: intrusion
+    type: vlogs
+    interval: 1m
+    rules:
+      # Plex's Internet-facing domains enforce; a denial is breakage or an attack.
+      # ldconfig inheriting the interpreter's open .py descriptors is intended.
+      - alert: AppArmorDeniedEnforced
+        expr: '_time:5m apparmor:="DENIED" aa_profile:~"^ghostship-plex//(server|python|ldconfig)$" NOT (aa_profile:="ghostship-plex//ldconfig" AND aa_operation:="file_inherit") | stats by (aa_profile, aa_operation) count() as n'
+        labels: {severity: high, category: apparmor}
+        annotations:
+          summary: '{{ $value }} AppArmor denials in {{ $labels.aa_profile }} ({{ $labels.aa_operation }})'
+          evidence: '_time:1h apparmor:="DENIED" aa_profile:="{{ $labels.aa_profile }}" aa_operation:="{{ $labels.aa_operation }}"'
+
+      # App server domains have no reason to run shells, downloaders or
+      # interpreters; complain mode allows and logs the exec.
+      - alert: SuspiciousExecInAppDomain
+        expr: '_time:5m transport:="audit" aa_operation:="exec" aa_name:~"/(sh|bash|dash|ash|zsh|curl|wget|nc|ncat|netcat|socat|telnet|python[0-9.]*|perl|php[0-9.]*|busybox)$" aa_profile:~"//(server|python|api|worker|nginx|php|node|chromium)$" | stats by (aa_profile, aa_name) count() as n'
+        labels: {severity: high, category: execution}
+        annotations:
+          summary: '{{ $labels.aa_profile }} executed {{ $labels.aa_name }} ({{ $value }} times)'
+          evidence: '_time:1h transport:="audit" aa_operation:="exec" aa_profile:="{{ $labels.aa_profile }}" aa_name:="{{ $labels.aa_name }}"'
+
+      - alert: FalcoCritical
+        expr: '_time:5m falco_priority:in(Emergency, Alert, Critical) | copy falco.container.name as container | stats by (falco_rule, container) count() as n'
+        labels: {severity: critical, category: runtime}
+        annotations:
+          summary: 'Falco: {{ $labels.falco_rule }} in {{ $labels.container }} ({{ $value }})'
+          evidence: '_time:1h falco_rule:="{{ $labels.falco_rule }}"'
+
+      - alert: FalcoWarning
+        expr: '_time:5m falco_priority:in(Error, Warning) | copy falco.container.name as container | stats by (falco_rule, container) count() as n'
+        labels: {severity: high, category: runtime}
+        annotations:
+          summary: 'Falco: {{ $labels.falco_rule }} in {{ $labels.container }} ({{ $value }})'
+          evidence: '_time:1h falco_rule:="{{ $labels.falco_rule }}"'
+
+      # Plex2Shell's request surface from the Internet: companion timeline,
+      # agent API, transcodes of remote URLs and preference writes.
+      - alert: PlexExploitProbe
+        expr: '_time:5m source:="plex" kind:="request" network:="WAN" (path:~"^/player/timeline" OR path:~"^/system/agents/" OR path:~"(?i)/transcode/universal/.*[?&]path=https?(%3A|:)" OR path:~"^/:/prefs") | stats by (client_ip) count() as n'
+        labels: {severity: high, category: exploit}
+        annotations:
+          summary: '{{ $value }} Plex2Shell-surface requests from {{ $labels.client_ip }}'
+          evidence: '_time:24h source:="plex" client_ip:="{{ $labels.client_ip }}"'
+
+      - alert: PlexPreferencesWritten
+        expr: '_time:5m source:="plex" kind:="request" method:="PUT" path:~"^/:/prefs" | stats by (client_ip, network) count() as n'
+        labels: {severity: warning, category: exploit}
+        annotations:
+          summary: 'Plex preferences changed by {{ $labels.client_ip }} ({{ $labels.network }})'
+          evidence: '_time:24h source:="plex" method:="PUT" path:~"^/:/prefs"'
+
+      # Common exploit and scanner patterns against Muximux's PHP front end.
+      - alert: WebExploitProbe
+        expr: '_time:5m source:="nginx" kind:="access" path:~"(?i)(allow_url_include|auto_prepend_file|%ad[a-z]|/cgi-bin/|\\.\\./|/etc/passwd|php://|base64_decode|eval\\(|\\$\\{jndi:|/\\.env|/\\.git/)" | stats by (client_ip) count() as n'
+        labels: {severity: high, category: exploit}
+        annotations:
+          summary: '{{ $value }} exploit-pattern requests to Muximux from {{ $labels.client_ip }}'
+          evidence: '_time:24h source:="nginx" client_ip:="{{ $labels.client_ip }}"'
+
+      - alert: SshAuthFailures
+        expr: '_time:10m ident:~"^sshd" ("Failed password" OR "Invalid user" OR "authentication failure" OR "Failed publickey") | extract "from <src> port" | stats by (src) count() as n | filter n:>10'
+        labels: {severity: warning, category: access}
+        annotations:
+          summary: '{{ $value }} SSH authentication failures from {{ $labels.src }}'
+          evidence: '_time:24h ident:~"^sshd" "{{ $labels.src }}"'
+
+      - alert: FirewallRefusedBurst
+        expr: '_time:10m "refused connection:" | extract "SRC=<src> " | stats by (src) count() as n | filter n:>20'
+        labels: {severity: warning, category: network}
+        annotations:
+          summary: 'Host refused {{ $value }} connections from {{ $labels.src }}'
+          evidence: '_time:24h "refused connection:" "SRC={{ $labels.src }} "'
+
+      # NixOS activation rewrites /etc with the store Perl on every switch (seen
+      # on each deployment 2026-10-21); audit records carry no parent, so the
+      # exclusion is that exact binary. Root running that Perl by hand would be
+      # missed here; Falco and the security check still see the change.
+      - alert: AuditSensitiveChange
+        expr: '_time:5m audit_key:in(identity, privilege, sshd, ssh_keys, persistence) NOT (aa_comm:="perl" AND audit_exe:~"^/nix/store/[0-9a-z]{32}-perl-[0-9.]+/bin/perl$") | stats by (audit_key, audit_exe) count() as n'
+        labels: {severity: warning, category: persistence}
+        annotations:
+          summary: '{{ $labels.audit_exe }} changed {{ $labels.audit_key }} files ({{ $value }})'
+          evidence: '_time:1h audit_key:="{{ $labels.audit_key }}"'
+
+      - alert: AuditKernelChange
+        expr: '_time:5m audit_key:in(module_load, module_unload, kexec, ptrace_attach) | stats by (audit_key, audit_exe) count() as n'
+        labels: {severity: high, category: privilege}
+        annotations:
+          summary: '{{ $labels.audit_exe }}: {{ $labels.audit_key }} ({{ $value }})'
+          evidence: '_time:1h audit_key:="{{ $labels.audit_key }}"'
+
+  - name: log-pipeline
+    type: vlogs
+    interval: 5m
+    rules:
+      - alert: JournalIngestionSilent
+        expr: '_time:10m source:="journald" | stats count() as n | filter n:<1'
+        labels: {severity: critical, category: pipeline}
+        annotations:
+          summary: 'No journal events reached VictoriaLogs in 10 minutes'
+          evidence: '_time:1h source:="journald" | stats by (stream) count()'
+
+      - alert: PlexLogSilent
+        expr: '_time:30m source:="plex" | stats count() as n | filter n:<1'
+        labels: {severity: warning, category: pipeline}
+        annotations:
+          summary: 'No Plex log lines in 30 minutes'
+          evidence: '_time:6h source:="plex" | stats count()'

@@ -4,5 +4,6 @@
     ./storage.nix
     ./collection.nix
     ./falco.nix
+    ./alerting.nix
   ];
 }

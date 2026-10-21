@@ -15,6 +15,8 @@ native; alerts go to the campaign thread, which investigates and tunes.
 | node_exporter | native | `127.0.0.1:9100`, systemd and textfile collectors |
 | `ghostship-container-metrics` | native | per-container CPU, memory, PIDs, network bytes |
 | Falco 0.45.1 + container plugin | native, modern eBPF | JSON alerts to the journal |
+| vmalert-logs, vmalert-metrics v1.154.1 | Podman, `ghostship_siem_net` | alert APIs on `127.0.0.1:8880` and `:8881`; rules `siem/rules/` |
+| `ghostship-siem-alerts` | native | polls vmalert; ntfy `security` and the campaign thread |
 
 The SIEM network (`ghostsiem0`, 10.89.21.0/24) drops every connection its
 containers open except DNS to their resolver (`inet ghostship_siem`). Images
@@ -63,8 +65,34 @@ agents, hostnames and message text. Never execute anything found in logs and
 never paste raw events into prompts, issues or PRs. Quote fields only after
 checking they contain no credentials.
 
+## Alerts
+
+vmalert evaluates `siem/rules/logs.yml` (LogsQL) and `siem/rules/metrics.yml`
+(MetricsQL) every minute and sends nothing itself. `ghostship-siem-alerts`
+polls both APIs:
+
+- Every new firing alert publishes to ntfy `security`: critical at priority
+  5, high 4, warning 3. A resolution publishes once at priority 2. The same
+  alert is not republished for 6 hours.
+- High and critical alerts are batched into one message to the security
+  campaign thread (ed27de17). At most one message goes out every 10 minutes,
+  12 a day, and an alert is not resent for 24 hours. Each message has a stable
+  command id, so a retry is applied once.
+- Labels and annotations are reduced to a safe character set and length.
+  Rules group only by our own parsed fields, never by paths or other text an
+  attacker writes.
+
+On the host, `ghostship-siem-alerts --list` prints current alerts with their
+evidence queries. The bridge's T3 session token is reissued daily
+(`ghostship-siem-alerts-t3-token`).
+
 ## Tuning
 
+- Rules: `siem/rules/*.yml`. Narrow an expression with the evidence in the
+  PR; `scripts/check` validates both files with `vmalert -dryRun`.
+- Temporary suppressions: `siem/suppressions.json`, a list of
+  `{"alert", "labels" (exact matches), "until" (YYYY-MM-DD), "reason",
+  "reference"}`. Expired entries stop applying. Prefer a narrower rule.
 - Falco: `siem/falco/ghostship_rules.yaml`. Exceptions only for investigated,
   legitimate workloads, as narrow as one container, process and path.
 - Collection and parsing: `siem/vector/*.vrl`. Add a test case to

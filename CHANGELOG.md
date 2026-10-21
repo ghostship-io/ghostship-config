@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.17.0] - 2026-10-21
+
+- SIEM part 2: detections and alerting (docs/siem.md).
+  - Two vmalert v1.154.1 containers evaluate `siem/rules/logs.yml` (LogsQL) and `siem/rules/metrics.yml` (MetricsQL), with no notifier of their own. They share one strict complain-mode AppArmor profile; the registry gains a `source` option for shared profile files.
+  - Log detections:
+    - AppArmor denials in Plex's enforced domains;
+    - shells, downloaders and interpreters executed by app server domains;
+    - Falco critical and warning alerts;
+    - Plex2Shell-surface requests from the WAN, and Plex preference writes;
+    - exploit patterns against Muximux;
+    - SSH authentication-failure bursts and firewall refusal bursts;
+    - sensitive file changes outside NixOS activation;
+    - kernel module loads, kexec and ptrace attaches;
+    - silent journal or Plex ingestion.
+  - Metric detections: sustained container CPU (miners), container egress spikes (proxies, exfiltration), SIEM components down, stale host or container metrics, Vector errors, low disk.
+  - `ghostship-siem-alerts` polls vmalert on loopback. It publishes new and resolved alerts to ntfy `security`, and batches high and critical alerts into one message to the security campaign thread: at most one every 10 minutes and 12 a day, with a stable command id. Labels are sanitized, and the message frames alert text as untrusted data. `--list` shows current alerts. Its own T3 session token is issued daily.
+  - NixOS activation's store Perl reading `/etc/shadow` and rewriting `/etc` is excluded, narrowly, from the Falco and audit detections. It was seen on every deployment today.
+  - `scripts/check` validates both rule files with `vmalert -dryRun` and runs the bridge's tests (sanitizing, dedupe, resolution, rate limits, suppression expiry).
+  - Falco, Vector, node_exporter and the SIEM network units now report failures through `ghostship-failure@`.
+
 ## [3.16.2] - 2026-10-21
 
 - SIEM container metrics move to `/var/lib/ghostship-container-metrics`. node_exporter could not traverse the root-only `/var/lib/ghostship-siem` (`node_textfile_scrape_error 1`), so the counters written there never reached VictoriaMetrics.
