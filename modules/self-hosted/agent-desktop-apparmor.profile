@@ -178,6 +178,8 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
   # interpreter). The viewer's python is entered through change_profile.
   /usr/bin/python3.14 cx -> api,
   @{gs_tools}/chrome-idle cx -> chrome-control,
+  # stage-control also runs straight from s6 and agent SSH (observed 2026-10-21).
+  @{gs_tools}/stage-control cx -> stage-control,
   # App sessions (svc-agent-desktop-apps, cont-finish, the host's pre-stop)
   # run desktop apps, so they share the desktop class.
   @{gs_tools}/app-session cx -> desktop,
@@ -600,7 +602,9 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     network inet6 stream,
     network unix stream,
 
-    @{gs_tools}/{bladebro-cli-agent,bladebro-cli-personal,bladebro-mcp-agent,bladebro-mcp-personal,bladebro-env,bladebro-gate} r,
+    # Root-owned wrapper scripts that run as programs (bladebro-env -> bash ->
+    # bladebro-gate -> bladebro); read-only rules sent the chain to null profiles.
+    @{gs_tools}/{bladebro-cli-agent,bladebro-cli-personal,bladebro-mcp-agent,bladebro-mcp-personal,bladebro-env,bladebro-gate} rix,
     /usr/bin/{dash,bash} mrix,
     @{gs_cu}/install mrix,
     /usr/local/bin/bladebro mrix,
