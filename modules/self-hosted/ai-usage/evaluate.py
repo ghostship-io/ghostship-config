@@ -34,6 +34,7 @@ from util import read_env_file  # noqa: E402
 STATE_DIR = "/var/lib/ghostship-ai-usage"
 AA_CACHE = f"{STATE_DIR}/artificial-analysis.json"
 ADMISSION_STATE = f"{STATE_DIR}/admission.json"
+FACTS_PATH = f"{STATE_DIR}/facts.json"
 SECRETS_ENV_FILE = "/run/ghostship-secrets/t3code.env"
 POOL_SERVER_FILE = "/run/ghostship-integrations/inference-server.json"
 POOL_TOKEN_FILE = "/run/ghostship-integrations/inference-token"
@@ -149,10 +150,95 @@ def read_admissions(now: float) -> dict[str, Any]:
     }
 
 
+def build_facts(
+    feed: dict[str, Any],
+    admissions: dict[str, Any],
+    existing: dict[str, Any],
+    now: float,
+) -> dict[str, Any]:
+    """Build the durable facts out of the feed and the admission evidence.
+
+    A fact is reused when it is still current: the same identity, the same
+    benchmark version, and not stale. A model that the feed does not list
+    waits, visibly, and is rechecked later instead of being researched again
+    every day.
+    """
+    facts_module = __import__("facts")
+    built: dict[str, Any] = {}
+    records = feed.get("records") if isinstance(feed, dict) else None
+    for record in records or []:
+        if not isinstance(record, dict):
+            continue
+        model = str(record.get("model") or "")
+        provider = str(record.get("provider") or "")
+        if not model:
+            continue
+        identity = facts_module.identity_key(provider, model)
+        current = existing.get(identity)
+        needed, why = facts_module.needs_research(current, identity, now)
+        if not needed and isinstance(current, dict):
+            built[identity] = current
+            continue
+        fact = facts_module.make_fact(
+            provider=provider,
+            model=model,
+            canonical_identity=model,
+            indices=record.get("indices") or {},
+            cost_per_task=record.get("cost_per_task"),
+            token_prices=record.get("prices") or {},
+            throughput=(
+                {"median_performance": record.get("median_performance")}
+                if record.get("median_performance") is not None
+                else {}
+            ),
+            released_at=str(record.get("release_date") or ""),
+            benchmark_id=str(record.get("slug") or model),
+            brief_url="https://artificialanalysis.ai/models",
+            source="measured",
+            confidence=1.0,
+            basis="the Artificial Analysis feed",
+            now=now,
+        )
+        fact["research_reason"] = why
+        built[identity] = fact
+    # The measured admission evidence of the pool travels with the facts.
+    rows = admissions.get("admissions") if isinstance(admissions, dict) else None
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        provider = str(row.get("provider") or "")
+        model = str(row.get("model") or "")
+        if not provider or not model:
+            continue
+        identity = facts_module.identity_key(provider, model)
+        fact = built.get(identity) or existing.get(identity)
+        if not isinstance(fact, dict):
+            fact = facts_module.make_fact(
+                provider=provider,
+                model=model,
+                source="measured",
+                confidence=1.0,
+                basis="the admission bench of the free inference pool",
+                now=now,
+            )
+        admission = {
+            "workload": str(row.get("workload") or ""),
+            "admitted": bool(row.get("admitted")),
+            "score": row.get("score"),
+            "at": row.get("at"),
+        }
+        measured = fact.setdefault("admission_evidence", [])
+        if admission not in measured:
+            measured.append(admission)
+        built[identity] = fact
+    return built
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Publish the daily model evaluation.")
     parser.add_argument("--aa-cache", default=AA_CACHE)
     parser.add_argument("--admission-state", default=ADMISSION_STATE)
+    parser.add_argument("--facts", default=FACTS_PATH)
     parser.add_argument("--secrets-env", default=SECRETS_ENV_FILE)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
@@ -160,9 +246,18 @@ def main(argv: list[str] | None = None) -> int:
     now = time.time()
     feed = read_feed(args.aa_cache, now)
     admissions = read_admissions(now)
+    existing: dict[str, Any] = {}
+    try:
+        document = json.loads(Path(args.facts).read_text(encoding="utf-8"))
+        if isinstance(document, dict) and isinstance(document.get("facts"), dict):
+            existing = document["facts"]
+    except (OSError, ValueError):
+        existing = {}
+    facts = build_facts(feed, admissions, existing, now)
     if not args.dry_run:
         write_json(args.aa_cache, feed)
         write_json(args.admission_state, admissions)
+        write_json(args.facts, {"facts": facts, "updated_at_epoch": now})
     print(
         json.dumps(
             {
@@ -170,6 +265,7 @@ def main(argv: list[str] | None = None) -> int:
                 "feed_records": len(feed.get("records") or []),
                 "admissions": {k: v for k, v in admissions.items() if k != "admissions"},
                 "admission_rows": len(admissions.get("admissions") or []),
+                "facts": len(facts),
             },
             indent=1,
             default=str,

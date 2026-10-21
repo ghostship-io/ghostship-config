@@ -72,6 +72,9 @@ SNAPSHOT_PATH = "/var/lib/ghostship-ai-usage/routing.json"
 # budget belongs to one place.
 AA_CACHE_PATH = "/var/lib/ghostship-ai-usage/artificial-analysis.json"
 
+# The durable facts of the models, written by the daily procedure.
+FACTS_PATH = "/var/lib/ghostship-ai-usage/facts.json"
+
 # Every account the dashboard covers, and where its readings come from.
 # A provider without a reader still gets a row, so nothing disappears.
 COVERAGE = (
@@ -137,6 +140,18 @@ METRIC_HELP = {
     "ghostship_ai_three_d_usage_tokens": "Tokens spent on 3D printing work.",
     "ghostship_ai_three_d_score": "The combined 3D score of a model.",
     "ghostship_ai_three_d_observed_timestamp_seconds": "When the 3D reading was taken.",
+    "ghostship_ai_model_strength": "The strength a model was measured or estimated at.",
+    "ghostship_ai_model_relative_cost": "The blended token price of a model, the provider's own listing.",
+    "ghostship_ai_model_value": "The value of a model: the strength over the relative price.",
+    "ghostship_ai_model_intelligence_index": "A benchmark index of a model.",
+    "ghostship_ai_model_cost_per_task": "What a measured task costs, never a token price.",
+    "ghostship_ai_model_throughput": "The median performance of a model.",
+    "ghostship_ai_model_token_price": "A token price of a model, the provider's own listing.",
+    "ghostship_ai_model_fact": "The state of the durable fact of a model.",
+    "ghostship_ai_model_fact_fetched_timestamp_seconds": "When the fact of a model was read.",
+    "ghostship_ai_model_fact_confidence": "The confidence a fact carries.",
+    "ghostship_ai_model_winner": "One for the winner of a provider and tier.",
+    "ghostship_ai_model_winner_position": "The position of the winner among the providers of a tier.",
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
 }
@@ -621,6 +636,24 @@ def ranking_samples(
     return samples, ranked
 
 
+def read_facts(facts_path: str | None) -> dict[str, Any]:
+    """The durable facts of the models, out of the facts file.
+
+    The facts have their own file, so the ranking state and the facts never
+    write over each other.
+    """
+    if not facts_path:
+        return {}
+    try:
+        document = json.loads(Path(facts_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(document, dict):
+        return {}
+    facts = document.get("facts")
+    return facts if isinstance(facts, dict) else {}
+
+
 def build_snapshot(
     results: list[SourceResult],
     ranked: list[Any],
@@ -629,6 +662,7 @@ def build_snapshot(
     aa_cache: dict[str, Any] | None = None,
     measured_windows: list[dict[str, Any]] | None = None,
     catalog: Any = None,
+    facts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -665,6 +699,7 @@ def build_snapshot(
         aa_cache=aa_cache,
         measured_windows=measured_windows,
         catalog=catalog,
+        facts=facts,
     )
 
 
@@ -719,7 +754,13 @@ def _iter_samples(results: Iterable[SourceResult]):
         yield from result.metrics
 
 
-def render(results: list[SourceResult], extra: list[Sample], now: float, duration: float) -> str:
+def render(
+    results: list[SourceResult],
+    extra: list[Sample],
+    now: float,
+    duration: float,
+    snapshot: dict[str, Any] | None = None,
+) -> str:
     writer = MetricWriter()
     for name, help_text in METRIC_HELP.items():
         writer.declare(name, "gauge", help_text)
@@ -768,6 +809,8 @@ def render(results: list[SourceResult], extra: list[Sample], now: float, duratio
             writer.add(name, labels, value)
     for name, labels, value in extra:
         writer.add(name, labels, value)
+    for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
+        writer.add(name, labels, value)
     writer.add("ghostship_ai_collection_timestamp_seconds", {}, now)
     writer.add("ghostship_ai_collection_duration_seconds", {}, duration)
     return writer.render()
@@ -806,6 +849,11 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--facts",
+        default=FACTS_PATH,
+        help="The durable facts of the models, written by the daily procedure.",
+    )
+    parser.add_argument(
         "--aa-catalog",
         default=CATALOG_FILE,
         help="The public model catalog, for the provider listed prices.",
@@ -827,7 +875,6 @@ def main(argv: list[str] | None = None) -> int:
     results, extra, context = collect(now, state_path=args.state)
     aa_cache = aa.load_cache(args.aa_cache, now)
     duration = time.monotonic() - started
-    text = render(results, extra, now, duration)
     measured: list[dict[str, Any]] = []
     for result in results:
         measured.extend(result.windows)
@@ -840,7 +887,9 @@ def main(argv: list[str] | None = None) -> int:
         aa_cache=aa_cache,
         measured_windows=measured,
         catalog=catalog,
+        facts=read_facts(args.facts),
     )
+    text = render(results, extra, now, duration, snapshot)
     if args.stdout:
         sys.stdout.write(text)
         sys.stdout.write(json.dumps(snapshot, indent=1, default=str) + "\n")

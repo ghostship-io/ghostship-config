@@ -50,6 +50,8 @@ python3 -m unittest discover -s tests -p test_ai_usage_frontier_surplus.py
 python3 -m unittest discover -s tests -p test_ai_usage_t3client.py
 python3 -m unittest discover -s tests -p test_ai_usage_privacy.py
 python3 -m unittest discover -s tests -p test_ai_usage_workload.py
+python3 -m unittest discover -s tests -p test_ai_usage_facts.py
+python3 -m unittest discover -s tests -p test_ai_usage_boundaries.py
 python3 -c 'import json, sys; json.load(open(sys.argv[1]))' modules/self-hosted/siem/dashboards/ai-usage.json
 
 printf 'Evaluating development shells for both Linux architectures\n'

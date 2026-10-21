@@ -53,6 +53,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from aa import lookup as aa_lookup
+import facts as facts_module
 
 SCHEMA = "ghostship.ai-usage.routing"
 SCHEMA_VERSION = 1
@@ -192,10 +193,26 @@ def _native_record(
 
 
 def _quota_state(remaining: float | None, windows: list[dict[str, Any]]) -> str:
-    """The state of the capacity behind a model."""
+    """The state of the capacity behind a model.
+
+    A window that is known to be spent decides the state, whatever else is
+    unknown: an unknown window never hides an exhausted allowance. Only when
+    no window is known to be spent does an unknown window make the state
+    unknown.
+    """
     if not windows:
         return QUOTA_UNKNOWN
-    if any(window["evidence"] == "unknown" for window in windows):
+    spent = [
+        window
+        for window in windows
+        if window.get("evidence") == "provider_reported"
+        and isinstance(window.get("remaining_ratio"), (int, float))
+        and not isinstance(window.get("remaining_ratio"), bool)
+        and float(window["remaining_ratio"]) <= 0.0
+    ]
+    if spent:
+        return QUOTA_EXHAUSTED
+    if any(window.get("evidence") == "unknown" for window in windows):
         return QUOTA_UNKNOWN
     if remaining is None:
         return QUOTA_UNKNOWN
@@ -716,7 +733,7 @@ def _relative_cost(prices: Mapping[str, Any] | None) -> float | None:
     return total if seen else None
 
 
-def _fill_value(row: dict[str, Any], catalog: Any) -> None:
+def _fill_value(row: dict[str, Any], catalog: Any, fact: Mapping[str, Any] | None = None) -> None:
     """The strength, the relative price, and the value of one model."""
     provider = row.get("provider") or ""
     model = row.get("model") or ""
@@ -746,9 +763,33 @@ def _fill_value(row: dict[str, Any], catalog: Any) -> None:
         if isinstance(index, (int, float)) and not isinstance(index, bool):
             strength = 0.5 * quality + 0.5 * float(index)
             source = "measured"
+    if isinstance(fact, Mapping) and fact.get("status") in ("current", "estimated"):
+        # A durable fact of the model: the strength of the fact, with the
+        # confidence it carries. An estimate is bounded and never claims to
+        # be a measurement.
+        fact_indices = fact.get("indices") or {}
+        fact_index = fact_indices.get("intelligence_index")
+        if isinstance(fact_index, (int, float)) and not isinstance(fact_index, bool):
+            if fact.get("status") == "estimated":
+                bounded = min(float(fact_index) * float(fact.get("confidence") or 0.4), 70.0)
+                strength = 0.5 * quality + 0.5 * bounded
+                source = "estimated"
+            else:
+                strength = 0.5 * quality + 0.5 * float(fact_index)
+                source = "measured"
     row["value"] = {
         "strength": round(strength, 2),
         "strength_source": source,
+        "confidence": (
+            float(fact.get("confidence"))
+            if isinstance(fact, Mapping) and isinstance(fact.get("confidence"), (int, float))
+            else None
+        ),
+        "basis": (
+            str(fact.get("basis") or "")
+            if isinstance(fact, Mapping)
+            else "the quality prior and the feed record"
+        ),
         "relative_cost": None if relative is None else round(relative, 4),
         "value": (
             None
@@ -855,15 +896,18 @@ def build_snapshot(
     aa_cache: Mapping[str, Any] | None = None,
     measured_windows: Iterable[Mapping[str, Any]] | None = None,
     catalog: Any = None,
+    facts: Mapping[str, Any] | None = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
 ) -> dict[str, Any]:
     """Build the routing snapshot from the ranked models and the readings."""
+    facts_index = facts_module.index(facts or {})
     native_models = native_models or {}
     policy = dict(policy or {})
     entries: dict[tuple[str, str], list[Any]] = {}
     for entry in ranked:
         entries.setdefault((entry.provider, entry.model), []).append(entry)
 
+    fact_by_model = facts_index
     candidates: list[dict[str, Any]] = []
     tiers: dict[str, list[str]] = {}
     pending: list[dict[str, Any]] = []
@@ -889,7 +933,7 @@ def build_snapshot(
             policy,
             aa_cache,
         )
-        _fill_value(row, catalog)
+        _fill_value(row, catalog, fact_by_model.get(model.lower()))
         for tier in row["tiers"]:
             tiers.setdefault(tier, []).append(_key(provider, model))
         account = str(row.get("account") or "")
@@ -1036,6 +1080,19 @@ def build_snapshot(
         },
         "recommendations": _recommendations(candidates, WORKLOAD_CLASSES),
         "candidates": candidates,
+        "facts": {
+            "count": len(facts_index),
+            "version": facts_module.BENCHMARK_VERSION,
+            "max_age_seconds": facts_module.FACT_MAX_AGE_SECONDS,
+            "records": {
+                key: fact
+                for key, fact in facts_index.items()
+                if any(
+                    row["model"].lower() == fact.get("model", "").lower()
+                    for row in candidates
+                )
+            },
+        },
         "pending": pending,
         "counts": {
             "candidates": len(candidates),
@@ -1044,6 +1101,112 @@ def build_snapshot(
             "omitted": omitted,
         },
     }
+
+
+def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, str], float]]:
+    """The metrics behind a decision, so the dashboard can show the inputs.
+
+    Every value a winner was chosen on is published: the strength and where
+    it came from, the relative price, the value, the benchmark indices, the
+    cost per task, the provider's own token prices, the throughput, the state
+    of the durable fact, and the position of a model among the candidates of
+    its provider.
+    """
+    samples: list[tuple[str, dict[str, str], float]] = []
+    for row in snapshot.get("candidates") or []:
+        if not isinstance(row, Mapping):
+            continue
+        provider = str(row.get("provider") or "")
+        model = str(row.get("model") or "")
+        if not provider or not model:
+            continue
+        labels = {"provider": provider, "model": model}
+        value = row.get("value") or {}
+        for name, field in (
+            ("ghostship_ai_model_strength", "strength"),
+            ("ghostship_ai_model_relative_cost", "relative_cost"),
+            ("ghostship_ai_model_value", "value"),
+        ):
+            number = value.get(field)
+            if isinstance(number, (int, float)) and not isinstance(number, bool):
+                samples.append(
+                    (name, {**labels, "source": str(value.get("strength_source") or "prior")}, float(number))
+                )
+        intelligence = row.get("intelligence") or {}
+        for index, number in (intelligence.get("indices") or {}).items():
+            if isinstance(number, (int, float)) and not isinstance(number, bool):
+                samples.append(
+                    (
+                        "ghostship_ai_model_intelligence_index",
+                        {**labels, "index": str(index)},
+                        float(number),
+                    )
+                )
+        cost_per_task = intelligence.get("cost_per_task")
+        if isinstance(cost_per_task, (int, float)) and not isinstance(cost_per_task, bool):
+            samples.append(("ghostship_ai_model_cost_per_task", labels, float(cost_per_task)))
+        throughput = intelligence.get("median_performance")
+        if isinstance(throughput, (int, float)) and not isinstance(throughput, bool):
+            samples.append(("ghostship_ai_model_throughput", labels, float(throughput)))
+        price = row.get("price") or {}
+        for kind in ("input", "output", "cache_read"):
+            number = price.get(kind)
+            if isinstance(number, (int, float)) and not isinstance(number, bool):
+                samples.append(
+                    ("ghostship_ai_model_token_price", {**labels, "kind": kind}, float(number))
+                )
+        samples.append(
+            (
+                "ghostship_ai_model_available",
+                labels,
+                1.0 if (row.get("availability") or {}).get("state") == "available" else 0.0,
+            )
+        )
+    facts = (snapshot.get("facts") or {}).get("records") or {}
+    for fact in facts.values():
+        if not isinstance(fact, Mapping):
+            continue
+        provider = str(fact.get("provider") or "")
+        model = str(fact.get("model") or "")
+        if not provider or not model:
+            continue
+        labels = {
+            "provider": provider,
+            "model": model,
+            "status": str(fact.get("status") or "current"),
+            "variant": str(fact.get("variant") or ""),
+        }
+        samples.append(("ghostship_ai_model_fact", labels, 1.0))
+        fetched = fact.get("fetched_at_epoch")
+        if isinstance(fetched, (int, float)) and not isinstance(fetched, bool):
+            samples.append(
+                ("ghostship_ai_model_fact_fetched_timestamp_seconds", labels, float(fetched))
+            )
+        samples.append(
+            (
+                "ghostship_ai_model_fact_confidence",
+                labels,
+                float(fact.get("confidence") or 0.0),
+            )
+        )
+    for tier, winners in (snapshot.get("tier_winners") or {}).items():
+        for position, winner in enumerate(winners, start=1):
+            if not isinstance(winner, Mapping):
+                continue
+            labels = {
+                "tier": str(tier),
+                "provider": str(winner.get("provider") or ""),
+                "model": str(winner.get("model") or ""),
+            }
+            samples.append(("ghostship_ai_model_winner", labels, 1.0))
+            samples.append(
+                (
+                    "ghostship_ai_model_winner_position",
+                    {"tier": str(tier), "provider": labels["provider"], "model": labels["model"]},
+                    float(position),
+                )
+            )
+    return samples
 
 
 def write_snapshot(path: str | os.PathLike[str], snapshot: Mapping[str, Any]) -> None:

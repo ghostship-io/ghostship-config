@@ -46,6 +46,9 @@ INTELLIGENCE_INDEX_VERSION = "4.3"
 # a day, so a day and a half is a generous bound.
 MAX_CACHE_AGE_SECONDS = 36 * 3600.0
 
+# A reading from the future is not a fresh reading.
+FUTURE_TOLERANCE_SECONDS = 300.0
+
 # The fields the ranking may use.
 INDEX_FIELDS = (
     "intelligence_index",
@@ -53,6 +56,44 @@ INDEX_FIELDS = (
     "agentic_index",
     "engineering_index",
 )
+
+
+# A cache is an untrusted file: only the known states and reasons of it are
+# kept, and never a field that could carry something private.
+CACHE_STATUSES = (
+    "ok",
+    "missing",
+    "stale",
+    "incompatible",
+    "unknown_evidence_time",
+    "future",
+    "error",
+)
+
+
+def _safe_reason(value: Any) -> str:
+    """A state of a cache, reduced to a known code."""
+    text = str(value or "").strip().lower()
+    if text in CACHE_STATUSES:
+        return text
+    if text in (codes.MISSING_CREDENTIALS, codes.STALE_READING, codes.INVALID_RESPONSE):
+        return text
+    return codes.UNKNOWN
+
+
+def _safe_text(value: Any) -> str | None:
+    """A timestamp of a cache, and nothing else.
+
+    A cache is an untrusted file, so only a value that really is a timestamp
+    is kept. A field that carries an address, a path, or a credential is
+    dropped instead of trimmed.
+    """
+    import re
+
+    text = str(value or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z", text):
+        return None
+    return text
 
 
 def _finite(value: Any) -> float | None:
@@ -83,16 +124,21 @@ def load_cache(path: str | os.PathLike[str], now: float | None = None) -> dict[s
         "records": [],
     }
     try:
-        stat = os.stat(path)
-    except OSError:
-        return missing
-    age = max(0.0, moment - stat.st_mtime)
-    try:
         document = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return missing
     if not isinstance(document, Mapping):
         return missing
+    fetched = document.get("fetched_at_epoch")
+    if not isinstance(fetched, (int, float)) or isinstance(fetched, bool):
+        # A cache without the moment it was read cannot be aged, so it cannot
+        # be fresh.
+        return {**missing, "status": "unknown_evidence_time"}
+    fetched = float(fetched)
+    if fetched > moment + FUTURE_TOLERANCE_SECONDS:
+        # A reading from the future is not a fresh reading.
+        return {**missing, "status": "future", "fetched_at_epoch": fetched}
+    age = moment - fetched
     version = str(document.get("intelligence_index_version") or "")
     if version != INTELLIGENCE_INDEX_VERSION:
         # A different index version is not mixed with the current one.
@@ -110,25 +156,29 @@ def load_cache(path: str | os.PathLike[str], now: float | None = None) -> dict[s
             **missing,
             "status": "stale",
             "reason": codes.STALE_READING,
-            "fetched_at": document.get("fetched_at"),
-            "fetched_at_epoch": document.get("fetched_at_epoch"),
+            "fetched_at": _safe_text(document.get("fetched_at")),
+            "fetched_at_epoch": fetched,
             "age_seconds": int(age),
         }
     return {
         "status": "ok",
         "reason": codes.OK,
         "index_version": version,
-        "fetched_at": document.get("fetched_at"),
-        "fetched_at_epoch": document.get("fetched_at_epoch"),
+        "fetched_at": _safe_text(document.get("fetched_at")),
+        "fetched_at_epoch": fetched,
         "age_seconds": int(age),
         "records": [record for record in records if isinstance(record, Mapping)],
     }
 
 
 def _indices(record: Mapping[str, Any]) -> dict[str, float]:
+    """The indices of a record, nested or flat."""
     values: dict[str, float] = {}
+    nested = record.get("indices")
     for field in INDEX_FIELDS:
         value = _finite(record.get(field))
+        if value is None and isinstance(nested, Mapping):
+            value = _finite(nested.get(field))
         if value is not None:
             values[field] = value
     return values
@@ -172,19 +222,35 @@ def _normalise(name: str) -> str:
 
 
 def lookup(cache: Mapping[str, Any], model: str) -> dict[str, Any] | None:
-    """The feed record of one model, when the cache knows it."""
+    """The feed record of one model, when the cache binds it exactly.
+
+    The binding is exact. A record whose name only contains the name of the
+    model, or only starts with it, is a different model or a different
+    reasoning variant, and an ambiguous match returns nothing: a model never
+    inherits the score of another one.
+    """
     if not cache or cache.get("status") != "ok":
         return None
     text = _normalise(model)
-    for record in cache.get("records") or []:
-        if not isinstance(record, Mapping):
-            continue
+    if not text:
+        return None
+    matches = [
+        record
+        for record in (cache.get("records") or [])
+        if isinstance(record, Mapping)
+        and isinstance(record.get("model"), str)
+        and _normalise(record["model"]) == text
+    ]
+    if len(matches) != 1:
+        # No record, or more than one: the model is unknown, not scored. A
+        # prefix match would let a reasoning variant inherit the score of
+        # another model.
+        return None
+    for record in matches:
         name = record.get("model")
-        if not isinstance(name, str) or not name:
+        if not isinstance(name, str):
             continue
-        lowered = _normalise(name)
-        if lowered and (lowered == text or lowered in text or text.endswith(lowered)):
-            return {
+        return {
                 "model": name,
                 "provider": str(record.get("provider") or ""),
                 "release_date": record.get("release_date"),
