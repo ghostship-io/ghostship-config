@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.15.174] - 2026-10-21
+
+- The read-only images without s6 also get a noexec `/run`: Chaptarr, cloudflared, the Grimmory database, Homepage, ntfy, Plex Auto Languages, Recyclarr, Seerr and Uptime Kuma. Throwaway copies of each image started cleanly with it. Their whole filesystem now has no writable, executable path.
+- Plex Auto Languages' image-declared `/logs` anonymous volume is replaced by a noexec host directory.
+
 ## [3.15.173] - 2026-10-21
 
 - AppArmor learning noise, from the largest live complain-mode sources: Sway's keymap reads of `xkeyboard-config-2` (about 9k a minute), RomM Valkey reading its own `/proc/<pid>/stat`, FlareSolverr's healthcheck curl starting from the top profile, and Gluetun's healthcheck loading the system CA roots. Each rule is limited to the observed path.
