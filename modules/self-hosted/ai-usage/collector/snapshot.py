@@ -1025,10 +1025,12 @@ def _fill_value(
             if isinstance(fact, Mapping) and isinstance(fact.get("confidence"), (int, float))
             else None
         ),
+        # An attestation code, never the free text of a fact: the source of
+        # the strength is a fact about the evidence, not a message.
         "basis": (
-            str(fact.get("basis") or "")
-            if isinstance(fact, Mapping)
-            else "the quality prior and the feed record"
+            "artificialanalysis_free"
+            if source == "measured"
+            else ("estimate" if source == "estimated" else "quality_prior")
         ),
         "relative_cost": None if relative is None else round(relative, 4),
         "components": {
@@ -1379,7 +1381,19 @@ def build_snapshot(
             # The facts are keyed by their identity (provider, model, and
             # reasoning variant), so two providers or two variants never
             # share a record.
-            "records": facts_module.public_facts(facts_source),
+            # Only a fact whose exact identity the live catalog proved is
+            # published: a name from a file is not a model.
+            "records": facts_module.public_facts(
+                facts_source,
+                {
+                    facts_module.identity_key(
+                        str(row.get("provider") or ""),
+                        str(row.get("model") or ""),
+                        _row_variant(row),
+                    )
+                    for row in candidates
+                },
+            ),
             # The identities a consumer may trigger a research for: every
             # model of a tier that has no usable fact yet. The list is
             # bounded to the models the tiers hold.

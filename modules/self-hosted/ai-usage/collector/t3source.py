@@ -263,6 +263,7 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
             )
     samples: list[Sample] = []
     windows: list[dict[str, Any]] = []
+    reason_code = codes.OK
     observed: float | None = None
     offered: list[tuple[str, str]] = []
     native: dict[tuple[str, str], dict[str, Any]] = {}
@@ -288,14 +289,19 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
             }
         state = str(provider.get("status") or "")
         provider_states[name] = state
-        if state == "ready":
-            probe = (provider.get("usageLimits") or {}) if isinstance(provider.get("usageLimits"), dict) else {}
-            provider_reason = str(probe.get("reason") or "")
-            if probe and not probe.get("windows") and provider_reason:
-                # The provider is ready but its limits probe failed: the
-                # source read part of the picture, so it is partial.
-                status = "partial"
         limits = provider.get("usageLimits")
+        if state == "ready" and isinstance(limits, dict):
+            unavailable = limits.get("unavailable")
+            if isinstance(unavailable, dict) and unavailable.get("reason"):
+                # The stock shape: the provider is ready, but its limits probe
+                # reported that it could not read them. The source read part
+                # of the picture, so it is partial, and the reason is a code.
+                status = "partial"
+                reason_code = (
+                    codes.UNSUPPORTED
+                    if str(unavailable.get("reason")) == "unsupported"
+                    else codes.PROBE_FAILED
+                )
         if not isinstance(limits, dict):
             continue
         checked_at = iso_to_epoch(limits.get("checkedAt"))
@@ -356,7 +362,9 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
     return SourceResult(
         source="t3",
         status=status,
-        reason=codes.OK if status == "ok" else codes.RPC_FAILED,
+        reason=reason_code if status == "ok" else (
+            reason_code if reason_code != codes.OK else codes.RPC_FAILED
+        ),
         metrics=samples,
         observed_at=observed,
         duration_s=time.monotonic() - started,

@@ -63,7 +63,7 @@ FACT_FIELDS = (
     "complexity_eligibility",
     "source",
     "confidence",
-    "basis",
+    "attestation",
     "variant_scope",
     "pending_reason",
     "next_check_at",
@@ -340,7 +340,7 @@ PUBLIC_FIELDS = (
     "complexity_eligibility",
     "source",
     "confidence",
-    "basis",
+    "attestation",
     "variant_scope",
     "pending_reason",
     "next_check_at",
@@ -354,6 +354,28 @@ PUBLIC_FIELDS = (
 # sentence or a path into a label or a dashboard.
 MAX_TEXT = 160
 
+# The only attestations a published fact may carry. A free text basis is not
+# an attestation: a fact says where it came from, and nothing else.
+PUBLIC_ATTESTATIONS = ("artificialanalysis_free", "estimate", "pending")
+
+# The only reasons a public fact may carry. The producer maps its own reason
+# to one of these; the text of a cache or of a note never reaches a consumer.
+PUBLIC_REASONS = (
+    "no_fact",
+    "pending_brief",
+    "evaluation_window",
+    "stale",
+    "version_changed",
+    "probe_failed",
+    "unknown",
+)
+
+# The only workload classes an admission row may name.
+PUBLIC_WORKLOADS = ("research", "simple", "metadata", "engineering", "review")
+
+# The only URLs a public fact may carry: the first party evidence of the feed.
+PUBLIC_BRIEF_PREFIX = "https://artificialanalysis.ai/"
+
 INDEX_FIELDS_PUBLIC = (
     "intelligence_index",
     "coding_index",
@@ -361,6 +383,14 @@ INDEX_FIELDS_PUBLIC = (
     "engineering_index",
 )
 PRICE_FIELDS_PUBLIC = ("input", "output", "cache_read", "cache_write")
+
+
+def _public_timestamp(value: Any) -> str | None:
+    """A timestamp, and only a timestamp."""
+    text = _public_text(value, 40)
+    if len(text) < 10 or text[4] != "-" or text[7] != "-":
+        return None
+    return text
 
 
 def _public_text(value: Any, limit: int = MAX_TEXT) -> str:
@@ -371,7 +401,31 @@ def _public_text(value: Any, limit: int = MAX_TEXT) -> str:
     return text[:limit]
 
 
-def public_record(fact: Any) -> dict[str, Any] | None:
+def _public_brief_url(value: Any) -> str | None:
+    """The evidence URL of a fact, and only a first party one."""
+    text = _public_text(value, 160)
+    if not text.startswith(PUBLIC_BRIEF_PREFIX):
+        return None
+    # A query, a fragment or an encoded payload is not a model brief.
+    if any(character in text for character in ("?", "#", "@", "\\")):
+        return None
+    return text
+
+
+def _public_reason(value: Any) -> str:
+    """The reason of a public fact, as one of the known codes."""
+    text = _public_text(value, 64).lower().replace(" ", "_")
+    if text in PUBLIC_REASONS:
+        return text
+    for code in PUBLIC_REASONS:
+        if code in text:
+            return code
+    return "unknown"
+
+
+def public_record(
+    fact: Any, allowed_identities: set[str] | None = None
+) -> dict[str, Any] | None:
     """The allowlisted, validated shape of a fact.
 
     A fact is published only when its identity and its values pass the checks:
@@ -405,6 +459,12 @@ def public_record(fact: Any) -> dict[str, Any] | None:
     confidence = _finite(fact.get("confidence"))
     if confidence is None or not (0.0 <= confidence <= 1.0):
         return None
+    if allowed_identities is not None:
+        identity = identity_key(provider, model, variant)
+        if identity not in allowed_identities:
+            # The identity is not one the live catalog proved, so the fact is
+            # not published: a name from a file is not a model.
+            return None
     record: dict[str, Any] = {
         "provider": provider,
         "model": model,
@@ -414,16 +474,25 @@ def public_record(fact: Any) -> dict[str, Any] | None:
         "source": source,
         "status": status,
         "confidence": round(confidence, 3),
-        "fetched_at": _public_text(fact.get("fetched_at"), 40) or None,
+        # A timestamp, checked as a timestamp, or nothing.
+        "fetched_at": _public_timestamp(fact.get("fetched_at")),
         "fetched_at_epoch": _finite(fact.get("fetched_at_epoch")),
         "evidence_fingerprint": _public_text(fact.get("evidence_fingerprint"), 64),
-        "benchmark_id": _public_text(fact.get("benchmark_id"), 120),
-        "brief_url": _public_text(fact.get("brief_url"), 120),
-        "canonical_identity": _public_text(fact.get("canonical_identity"), 120),
-        "released_at": _public_text(fact.get("released_at"), 40) or None,
-        "complexity_eligibility": _public_text(fact.get("complexity_eligibility"), 24),
-        "basis": _public_text(fact.get("basis"), 200),
-        "pending_reason": _public_text(fact.get("pending_reason"), 200),
+        # The attestation is a code, never the basis text of a fact.
+        "attestation": (
+            "artificialanalysis_free"
+            if source == "measured"
+            else ("estimate" if source == "estimated" else "pending")
+        ),
+        "brief_url": _public_brief_url(fact.get("brief_url")),
+        "released_at": _public_timestamp(fact.get("released_at")),
+        "complexity_eligibility": (
+            _public_text(fact.get("complexity_eligibility"), 24)
+            if _public_text(fact.get("complexity_eligibility"), 24) in PUBLIC_WORKLOADS
+            else None
+        ),
+        # A reason is one of the known codes; the text of a note is dropped.
+        "pending_reason": _public_reason(fact.get("pending_reason")),
         "next_check_at": _finite(fact.get("next_check_at")),
     }
     indices: dict[str, float | None] = {}
@@ -452,6 +521,7 @@ def public_record(fact: Any) -> dict[str, Any] | None:
             }
             for entry in evidence
             if isinstance(entry, Mapping)
+            and _public_text(entry.get("workload"), 40) in PUBLIC_WORKLOADS
         ][:20]
         if isinstance(evidence, list)
         else []
@@ -459,11 +529,13 @@ def public_record(fact: Any) -> dict[str, Any] | None:
     return record
 
 
-def public_facts(facts: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+def public_facts(
+    facts: Mapping[str, Any], allowed_identities: set[str] | None = None
+) -> dict[str, dict[str, Any]]:
     """The published facts, keyed by identity, with only validated records."""
     published: dict[str, dict[str, Any]] = {}
     for key, fact in index(facts).items():
-        record = public_record(fact)
+        record = public_record(fact, allowed_identities)
         if record is None:
             continue
         published[key] = record
