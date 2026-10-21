@@ -174,6 +174,24 @@ attack evidence to investigate, never a reason to relax enforcement unreviewed.
 - To roll back, set the server and python flags back to `complain` in
   `plex-apparmor.profile` and deploy; do not add broad rules to recover.
 
+## Profile authoring pitfalls
+
+Verified on chill-penguin (kernel 6.19, apparmor_parser 5.0.2), 2026-10-21:
+
+- In complain mode, an exec with no matching rule enters a ruleless
+  `null-<path>` profile. Everything below it logs every access. Scripts that
+  run as programs need `ix`/`px`, not just `r`.
+- Inside a child profile, `cx -> name` targets a child of that child. Use
+  `px -> <top>//<sibling>` for siblings.
+- Under `no_new_privs`, transitions into child profiles never happen (complain
+  logs "no new privs", and enforce fails the exec). Profiles for NNP containers
+  must be flat.
+- A profile has a limit on named exec transitions. Going past it fails the
+  whole policy load ("too many specified profile transitions"). The kernel
+  keeps the old policy and `apparmor.service` reload fails. Parse every built
+  policy (`apparmor_parser -Q -K`) and abort the switch on any failure.
+- A reloaded policy reaches an idle task only at its next mediated call.
+
 ## Policy limits
 
 The profile restricts executable paths, files, library mappings and selected
