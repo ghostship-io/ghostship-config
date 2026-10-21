@@ -138,6 +138,21 @@ class CheckTests(unittest.TestCase):
         bad = {"/proc/1/attr/apparmor/current": "unconfined\n"}
         self.assertEqual(len(check.check_container_labels(CONFIG, [container("plex")], read=bad.__getitem__)), 1)
 
+    def test_unconfined_process_beyond_pid_one(self):
+        # PID 1 is confined, but a child left unconfined by a reload must alert.
+        scope = "/sys/fs/cgroup/machine.slice/libpod-x.scope"
+        files = {"/proc/1/attr/apparmor/current": "ghostship-plex (complain)\n",
+                 "/proc/1/cgroup": "0::/machine.slice/libpod-x.scope/container\n",
+                 f"{scope}/cgroup.procs": "", f"{scope}/container/cgroup.procs": "1 7 8\n",
+                 "/proc/7/attr/apparmor/current": "unconfined\n",
+                 "/proc/8/attr/apparmor/current": "ghostship-plex//server (complain)\n"}
+        walk = lambda root: [(scope, ["container"], ["cgroup.procs"]),
+                             (f"{scope}/container", [], ["cgroup.procs"])]
+        found = check.check_container_labels(CONFIG, [container("plex")], read=files.__getitem__, walk=walk)
+        self.assertEqual([(f.key, f.severity) for f in found], [("apparmor.unconfined.plex", "critical")])
+        files["/proc/7/attr/apparmor/current"] = "ghostship-plex (complain)\n"
+        self.assertEqual(check.check_container_labels(CONFIG, [container("plex")], read=files.__getitem__, walk=walk), [])
+
     def test_default_profile_unloaded_by_reload(self):
         # Podman recorded the default profile, but a reload removed it.
         radarr = {**container("radarr"), "AppArmorProfile": "ghostship-container-default"}
