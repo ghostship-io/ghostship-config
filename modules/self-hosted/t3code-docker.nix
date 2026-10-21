@@ -38,6 +38,7 @@ let
   busConfig = pkgs.writeText "t3code-docker-bus.conf" ''
     <busconfig>
       <type>session</type>
+      <listen>unix:path=${runtime}/bus</listen>
       <auth>EXTERNAL</auth>
       <policy context="default">
         <allow user="${user}"/>
