@@ -84,6 +84,8 @@ let
     Environment=PATH=/run/wrappers/bin:${
       lib.makeBinPath [
         pkgs.bash
+        # runc DetectUID shells out to busctl for rootless systemd cgroups.
+        pkgs.systemd
         pkgs.docker
         pkgs.rootlesskit
         pkgs.slirp4netns
