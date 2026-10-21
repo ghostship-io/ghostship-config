@@ -82,7 +82,6 @@ in
       # provider secrets are read, never written.
       ReadOnlyPaths = [
         t3Home
-        "/run/ghostship-integrations"
         "/etc/containers/networks"
         "-/run/ghostship-secrets"
       ];

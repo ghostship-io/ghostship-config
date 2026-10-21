@@ -64,6 +64,7 @@ FACT_FIELDS = (
     "source",
     "confidence",
     "basis",
+    "variant_scope",
     "pending_reason",
     "next_check_at",
     "status",
@@ -138,6 +139,9 @@ def make_fact(
         "complexity_eligibility": complexity_eligibility,
         "source": source,
         "confidence": round(float(confidence), 3),
+        # "model" means the source measured the model itself, whatever option
+        # the caller runs it with; "variant" means it measured one option set.
+        "variant_scope": "variant" if variant else "model",
         "basis": basis,
         "pending_reason": "",
         "next_check_at": None,
@@ -302,15 +306,17 @@ def merge(state: Mapping[str, Any], facts: Iterable[Mapping[str, Any]]) -> dict[
         new_fingerprint = str(fact.get("evidence_fingerprint") or "")
         current_time = _finite(current.get("fetched_at_epoch"))
         new_time = _finite(fact.get("fetched_at_epoch"))
-        newer = (
-            current_time is None
-            or (new_time is not None and new_time >= current_time)
-        )
-        changed = new_fingerprint and new_fingerprint != current_fingerprint
-        # A fresh measurement of the same evidence still refreshes the read
-        # time of a record that went stale.
-        if changed or newer:
-            merged[key] = dict(fact)
+        if current_time is not None:
+            if new_time is None or new_time < current_time:
+                # A reading older than the record never replaces it: the
+                # research does not roll back to older evidence.
+                continue
+            if new_time == current_time and not (
+                new_fingerprint and new_fingerprint != current_fingerprint
+            ):
+                # The same reading of the same evidence: keep the record.
+                continue
+        merged[key] = dict(fact)
     return merged
 
 
@@ -334,18 +340,34 @@ def index(facts: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def lookup_by_model(
-    facts: Mapping[str, Any], provider: str, model: str, variant: str = ""
+    facts: Mapping[str, Any],
+    provider: str,
+    model: str,
+    variant: str = "",
+    now: float | None = None,
 ) -> dict[str, Any] | None:
-    """The fact of one exact model, or None when there is none."""
+    """The fact of one exact model, or None when there is none.
+
+    The binding is exact on the provider and the model. The reasoning variant
+    binds only when the fact was measured for that variant, or when the source
+    measured the model itself (its variant scope is "model"). A fact of a
+    different version, a stale fact, and a pending fact are not usable here.
+    """
     for key, fact in (facts or {}).items():
         if not isinstance(fact, Mapping):
             continue
         if (
-            str(fact.get("provider") or "") == str(provider)
-            and str(fact.get("model") or "") == str(model)
-            and str(fact.get("variant") or "") == str(variant)
+            str(fact.get("provider") or "") != str(provider)
+            or str(fact.get("model") or "") != str(model)
         ):
-            return dict(fact)
-        if str(key) == identity_key(provider, model, variant):
-            return dict(fact)
+            continue
+        fact_variant = str(fact.get("variant") or "")
+        scope = str(fact.get("variant_scope") or ("variant" if fact_variant else "model"))
+        if fact_variant != str(variant) and scope != "model":
+            continue
+        if now is not None and not is_current(fact, now):
+            continue
+        if str(fact.get("benchmark_version") or "") != BENCHMARK_VERSION:
+            continue
+        return dict(fact)
     return None
