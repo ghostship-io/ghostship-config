@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.25] - 2026-10-21
+
+- Pin ghostship-agent 0.34.1: `t3_task` `files` accepts ChatGPT conversation files, whose download URLs are on OpenAI's Azure storage accounts.
+
 ## [3.17.24] - 2026-10-21
 
 - Pin ghostship-agent 0.34.0: `t3_task` `submit` and `send` attach files to T3 threads as native message attachments (ChatGPT conversation files through `files`, inline base64 or chunked `upload`), so a thread's agent sees images as image input and gets every other file saved on the T3 host.
