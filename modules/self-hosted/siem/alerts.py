@@ -19,6 +19,7 @@ import argparse
 import hashlib
 import http.client
 import json
+import os
 import re
 import socket
 import subprocess
@@ -101,12 +102,16 @@ def advance(state, firing, now, config, unavailable=()):
     events, queued = [], []
     for alert in firing:
         record = alerts.get(alert["fingerprint"])
-        if record is None or record.get("resolved_at"):
+        fresh = record is None or bool(record.get("resolved_at"))
+        if fresh:
             record = alerts[alert["fingerprint"]] = {**(record or {}), **alert, "first_seen": now,
                                                      "resolved_at": None}
-            if due(record.get("ntfy_at"), now, config["ntfy_renotify"]):
-                events.append(("firing", alert))
-                record["ntfy_at"] = now
+        # A fresh alert notifies unless it did recently; an undelivered one retries.
+        if (fresh and due(record.get("ntfy_at"), now, config["ntfy_renotify"])) \
+                or ("ntfy_at" in record and record["ntfy_at"] is None):
+            events.append(("firing", alert))
+            record["ntfy_at"] = now
+        if fresh:
             pending = state.setdefault("pending", [])
             if (alert["severity"] in T3_SEVERITIES and alert["fingerprint"] not in pending
                     and due(record.get("t3_at"), now, config["t3_renotify"])):
@@ -199,32 +204,39 @@ class UnixConnection(http.client.HTTPConnection):
         self.sock.connect(PODMAN_SOCKET)
 
 
-def t3_server(container, network, port):
-    """The T3 container's address; it changes when T3 is recreated."""
+def container_address(container, network):
+    """A container's address from the Podman API; it changes on every recreate.
+
+    The Podman CLI cannot run in this sandbox (it needs root capabilities).
+    """
     connection = UnixConnection("podman")
     connection.request("GET", f"/v5.0.0/libpod/containers/{container}/json")
     response = connection.getresponse()
     if response.status != 200:
         raise OSError(f"podman API answered {response.status} for {container}")
-    address = json.loads(response.read())["NetworkSettings"]["Networks"][network]["IPAddress"]
-    return f"http://{address}:{port}"
+    return json.loads(response.read())["NetworkSettings"]["Networks"][network]["IPAddress"]
 
 
 def send_t3(config, batch_id, text):
     from ghostship_t3.bridge import Bridge
     token = Path(config["t3_token_file"]).read_text().strip()
-    server = t3_server(config["t3_container"], config["t3_network"], config["t3_port"])
+    server = f"http://{container_address(config['t3_container'], config['t3_network'])}:{config['t3_port']}"
     Bridge(server=server, bearer=token).send(config["t3_thread_id"], text, command_id=batch_id)
 
 
 def publish(config, state_name, alert):
+    """Publish through ghostship-notify; True when it was delivered."""
     labels = ", ".join(f"{k}={v}" for k, v in sorted(alert["labels"].items()))
     priority = PRIORITY.get(alert["severity"], 2) if state_name == "firing" else 2
     message = f"{alert['summary']}\n{labels}\nevidence: {alert['evidence']}"
-    subprocess.run([config["notify"], "--topic", "security", "--priority", str(priority),
-                    "--source", "siem", "--state", state_name, "--tags", alert["severity"],
-                    "--title", f"SIEM {alert['severity']}: {alert['name']}", message],
-                   check=False, timeout=60)
+    address = container_address(config["ntfy_container"], config["ntfy_network"])
+    result = subprocess.run(
+        [config["notify"], "--topic", "security", "--priority", str(priority),
+         "--source", "siem", "--state", state_name, "--tags", alert["severity"],
+         "--title", f"SIEM {alert['severity']}: {alert['name']}", message],
+        check=False, timeout=60,
+        env={**os.environ, "GHOSTSHIP_NOTIFY_URL": f"http://{address}:{config['ntfy_port']}"})
+    return result.returncode == 0
 
 
 def load(path, default):
@@ -252,7 +264,14 @@ def poll(config, state, now):
     firing = [a for a in firing if not suppressed(a, suppressions, now)]
     events, _ = advance(state, firing, now, config, unavailable)
     for state_name, alert in events:
-        publish(config, state_name, alert)
+        try:
+            delivered = publish(config, state_name, alert)
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+            print(f"siem alerts: ntfy publish failed: {exc}", file=sys.stderr)
+            delivered = False
+        if not delivered and state_name == "firing":
+            # Retry on the next poll instead of waiting out the renotify window.
+            state["alerts"][alert["fingerprint"]]["ntfy_at"] = None
     batch = t3_batch(state, now, config)
     if batch:
         send_t3(config, batch["id"], render_batch(state, batch, config["host"]))

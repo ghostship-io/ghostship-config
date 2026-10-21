@@ -62,6 +62,17 @@ class Delivery(unittest.TestCase):
         _, queued = self.poll(state, [raw()], 3000)
         self.assertEqual(queued, [])
 
+    def test_undelivered_notification_retries_next_poll(self):
+        """Catches a failed ntfy publish being silently dropped for the renotify window."""
+        state = {}
+        self.poll(state, [raw()], 1000)
+        fingerprint = next(iter(state["alerts"]))
+        state["alerts"][fingerprint]["ntfy_at"] = None  # what poll() records after a failed publish
+        events, queued = self.poll(state, [raw()], 1030)
+        self.assertEqual([e[0] for e in events], ["firing"])
+        self.assertEqual(queued, [])
+        self.assertEqual(self.poll(state, [raw()], 1060), ([], []))
+
     def test_warnings_go_to_ntfy_only(self):
         state = {}
         events, queued = self.poll(state, [raw("SshAuthFailures", "warning", src="203.0.113.9")], 1000)
