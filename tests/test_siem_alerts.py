@@ -118,5 +118,30 @@ class Suppression(unittest.TestCase):
         self.assertFalse(alerts.suppressed(alert, [entry], 1793577600))  # 2026-11-02
 
 
+class HealthTests(unittest.TestCase):
+    def test_undelivered_firing_alert_becomes_dead_letter_and_clears(self):
+        state = {"alerts": {"f": {"name": "X", "severity": "high", "undelivered_since": 0}}}
+        alerts.dead_letter(state, alerts.DEAD_LETTER_AFTER - 1)
+        self.assertEqual(state["dead"], {})
+        alerts.dead_letter(state, alerts.DEAD_LETTER_AFTER)
+        self.assertIn("f", state["dead"])
+        del state["alerts"]["f"]["undelivered_since"]
+        alerts.dead_letter(state, alerts.DEAD_LETTER_AFTER + 1)
+        self.assertEqual(state["dead"], {})
+
+    def test_metrics_report_liveness_and_delivery(self):
+        health = {}
+        alerts.record_delivery(health, "ntfy", False, 5)
+        alerts.record_delivery(health, "ntfy", False, 6)
+        state = {"health": {**health, "last_poll": 7, "sources": {"logs": 7}},
+                 "alerts": {"a": {"ntfy_at": None}}, "dead": {"a": {}}}
+        text = alerts.metrics(state, 8)
+        self.assertIn("ghostship_siem_bridge_last_poll_timestamp_seconds 7", text)
+        self.assertIn('ghostship_siem_bridge_delivery_consecutive_failures{channel="ntfy"} 2', text)
+        self.assertIn("ghostship_siem_bridge_retry_queue 1", text)
+        self.assertIn("ghostship_siem_bridge_dead_letters 1", text)
+        alerts.record_delivery(health, "ntfy", True, 9)
+        self.assertEqual(health["delivery"]["ntfy"]["consecutive"], 0)
+
 if __name__ == "__main__":
     unittest.main()
