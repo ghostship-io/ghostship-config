@@ -30,9 +30,9 @@ let
   };
   plugins = pkgs.runCommand "grafana-siem-plugins" { nativeBuildInputs = [ pkgs.unzip ]; } ''
     mkdir -p $out
+    # Unmodified: the signed MANIFEST covers every file, so pruning the other
+    # platforms' backends fails Grafana's signature check.
     unzip -q ${logsPluginZip} -d $out
-    # Keep only this host's backend binary.
-    find $out -name 'victoriametrics_logs_backend_plugin_*' ! -name '*_linux_arm64' -delete
   '';
 
   heartbeat = pkgs.pkgsStatic.runCommandCC "ghostship-heartbeat" { } ''
@@ -70,39 +70,38 @@ let
     secureJsonData.basicAuthPassword = "$__file{/run/secrets/vmauth-password}";
     editable = false;
   } // extra;
-  provisioning = pkgs.linkFarm "grafana-siem-provisioning" [
-    {
-      name = "datasources/siem.yaml";
-      path = pkgs.writeText "datasources.yaml" (builtins.toJSON {
-        apiVersion = 1;
-        prune = true;
-        datasources = [
-          (datasource "VictoriaLogs" "victorialogs" "victoriametrics-logs-datasource" { })
-          (datasource "VictoriaMetrics" "victoriametrics" "prometheus" {
-            isDefault = true;
-            jsonData = { prometheusType = "Prometheus"; timeInterval = "30s"; };
-          })
-        ];
-      });
-    }
-    {
-      name = "dashboards/siem.yaml";
-      path = pkgs.writeText "dashboards.yaml" (builtins.toJSON {
-        apiVersion = 1;
-        providers = [
-          {
-            name = "siem";
-            folder = "Ghostship";
-            type = "file";
-            disableDeletion = true;
-            allowUiUpdates = false;
-            updateIntervalSeconds = 300;
-            options.path = "${./dashboards}";
-          }
-        ];
-      });
-    }
-  ];
+  datasourcesFile = pkgs.writeText "datasources.yaml" (builtins.toJSON {
+    apiVersion = 1;
+    prune = true;
+    datasources = [
+      (datasource "VictoriaLogs" "victorialogs" "victoriametrics-logs-datasource" { })
+      (datasource "VictoriaMetrics" "victoriametrics" "prometheus" {
+        isDefault = true;
+        jsonData = { prometheusType = "Prometheus"; timeInterval = "30s"; };
+      })
+    ];
+  });
+  dashboardsFile = pkgs.writeText "dashboards.yaml" (builtins.toJSON {
+    apiVersion = 1;
+    providers = [
+      {
+        name = "siem";
+        folder = "Ghostship";
+        type = "file";
+        disableDeletion = true;
+        allowUiUpdates = false;
+        updateIntervalSeconds = 300;
+        options.path = "/etc/grafana/provisioning/dashboards-json";
+      }
+    ];
+  });
+  # Real files, not symlinks: only this directory is mounted in the container.
+  provisioning = pkgs.runCommand "grafana-siem-provisioning" { } ''
+    mkdir -p $out/datasources $out/dashboards $out/dashboards-json
+    cp ${datasourcesFile} $out/datasources/siem.yaml
+    cp ${dashboardsFile} $out/dashboards/siem.yaml
+    cp ${./dashboards}/*.json $out/dashboards-json/
+  '';
 
   egressRules = pkgs.writeText "siemui-egress.nft" ''
     destroy table inet ghostship_siemui
