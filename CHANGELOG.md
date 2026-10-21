@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.10] - 2026-10-21
+
+- AppArmor learning noise, round 2, from the largest live sources:
+  - Bladebro's root-owned wrapper scripts may execute. Read-only rules had sent `bladebro-env` → `bash` → `bladebro-gate` → `bladebro` into ruleless `null-*` profiles.
+  - The agent desktop's top profile enters `stage-control`'s own child.
+  - Sonarr and Radarr may lock `/proc/<pid>/mounts`.
+  - Their ffprobe children may read zoneinfo.
+
 ## [3.17.9] - 2026-10-21
 
 - The kernel dropped 185 audit records at 05:37 UTC (`AuditRecordsLost`). OrcaSlicer, started in an agent-desktop app session, spawned WebKitGTK helpers and `ldd` ran the loader, all without AppArmor rules. In ruleless `null-*` profiles they logged about 74k records a minute and overflowed the 8192-record backlog.
