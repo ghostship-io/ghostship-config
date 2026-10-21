@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.15.173] - 2026-10-21
+
+- AppArmor learning noise, from the largest live complain-mode sources: Sway's keymap reads of `xkeyboard-config-2` (about 9k a minute), RomM Valkey reading its own `/proc/<pid>/stat`, FlareSolverr's healthcheck curl starting from the top profile, and Gluetun's healthcheck loading the system CA roots. Each rule is limited to the observed path.
+
 ## [3.15.172] - 2026-10-21
 
 - AppArmor: the agent desktop's top profile may run `s6-envuidgid`. Every s6 service that drops to `abc` runs `s6-setuidgid`, which calls `s6-envuidgid`. Without the rule, the LXQt desktop, D-Bus, PulseAudio, Selkies, Pelorus and the Chrome idle reaper all ran in ruleless `null-*` learning profiles. That logged about 175k audit records a minute, rotated auditd's logs in minutes and crowded the rest of the journal out. The same rule is added to the other LinuxServer profiles that allow `s6-applyuidgid`.

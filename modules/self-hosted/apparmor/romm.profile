@@ -320,6 +320,8 @@ profile ghostship-romm flags=(complain,attach_disconnected,mediate_deleted) {
   profile valkey flags=(complain,attach_disconnected,mediate_deleted) {
     # Internal cache/queue; snapshots to /redis-data (dump.rdb + temp files).
     /usr/bin/valkey-server mr,
+    # Its own process statistics (observed 2026-10-21).
+    owner /proc/[0-9]*/stat r,
     /lib/ld-musl-aarch64.so.1 mr,
     /redis-data/ rw,
     /redis-data/dump.rdb rw,
