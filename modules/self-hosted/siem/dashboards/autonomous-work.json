@@ -135,7 +135,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -193,7 +193,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -205,7 +205,7 @@
   },
   {
    "id": 4,
-   "title": "Work items today",
+   "title": "Work today",
    "description": "Distinct work items with a UTC-day change, deduplicated across the one-minute polls. Sources that are down or truncated lower this count.",
    "type": "stat",
    "gridPos": {
@@ -251,7 +251,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -263,7 +263,7 @@
   },
   {
    "id": 5,
-   "title": "Webhook receipts today",
+   "title": "Webhooks today",
    "description": "Webhooks that fired today, deduplicated across polls. Acceptance per receipt is in the webhook table; a missing receipt is missing evidence.",
    "type": "stat",
    "gridPos": {
@@ -309,7 +309,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -321,7 +321,7 @@
   },
   {
    "id": 6,
-   "title": "Sources unavailable",
+   "title": "Source gaps",
    "description": "Sources that failed to read in the last snapshot. Their counts are absent, not zero.",
    "type": "stat",
    "gridPos": {
@@ -371,7 +371,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -429,7 +429,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -487,7 +487,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -545,7 +545,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -603,7 +603,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -661,7 +661,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -673,7 +673,7 @@
   },
   {
    "id": 12,
-   "title": "Pull requests closed",
+   "title": "PRs closed",
    "description": "Pull request closed receipts. Closed is not merged: the merge result is not recorded. Unknown while the receipt source is unavailable.",
    "type": "stat",
    "gridPos": {
@@ -719,7 +719,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -731,7 +731,7 @@
   },
   {
    "id": 13,
-   "title": "Truncated sources",
+   "title": "Sources capped",
    "type": "stat",
    "gridPos": {
     "x": 20,
@@ -781,7 +781,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"

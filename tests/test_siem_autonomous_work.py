@@ -566,8 +566,8 @@ class DashboardContractTests(unittest.TestCase):
         dashboard = json.loads((SIEM/'dashboards/autonomous-work.json').read_text())
         titles = {panel['title']: panel for panel in dashboard['panels']}
         for title in ('Model reports', 'CI proofs', 'CI failures', 'Review receipts',
-                      'Pull requests closed'):
-            self.assertIn(title, titles)
+                      'PRs closed'):
+            self.assertIn(title, list(titles))
             expr = titles[title]['targets'][0]['expr']
             self.assertTrue('evidence_items' in expr or 'ci_failures' in expr)
             self.assertIn('ghostship_work_source_up == 1', expr)
