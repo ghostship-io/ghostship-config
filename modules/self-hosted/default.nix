@@ -51,6 +51,7 @@
     ./github-engineering.nix
     ./inference-bridge.nix
     ./t3code.nix
+    ./t3code-hardening.nix
     ../agent-host
 
     # Games

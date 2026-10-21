@@ -37,6 +37,9 @@ def main():
     with open("/run/t3code-hardening-probe.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         before = identity()
+        capabilities = json.loads(
+            Path(__file__).with_name("runtime-caps.json").read_text()
+        )
         systemctl = run(
             "podman",
             "run",
@@ -85,7 +88,8 @@ def main():
                     name,
                     "--network=none",
                     "--systemd=always",
-                    "--cap-add=SYS_RESOURCE",
+                    "--cap-drop=ALL",
+                    *(f"--cap-add={cap}" for cap in capabilities),
                     "--memory=4g",
                     "--tty",
                     "--env=SYSTEMD_LOG_TARGET=console",
@@ -159,6 +163,22 @@ def main():
                         "/bin/true",
                         user="3000:3000",
                     ),
+                    "nix_build": execute(
+                        "nix-build",
+                        "--no-out-link",
+                        "--expr",
+                        'builtins.derivation { name = "' + root.name + '"; '
+                        'system = builtins.currentSystem; builder = "/bin/sh"; '
+                        'args = [ "-c" "printf verified > $out" ]; }',
+                        user="3000:3000",
+                    ),
+                    "oom_protection": execute(
+                        "python3",
+                        "-c",
+                        "from pathlib import Path; p=Path('/proc/self/oom_score_adj'); "
+                        "p.write_text('-1000'); assert p.read_text().strip() == '-1000'",
+                    ),
+                    "apparmor": execute("cat", "/proc/self/attr/current"),
                 }
                 inspected = json.loads(run("podman", "inspect", name))[0]
                 assert not inspected["HostConfig"]["Privileged"]
