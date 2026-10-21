@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.18] - 2026-10-21
+
+- Falco: narrow exception for T3 Code's in-container systemd reading `/etc/pam.d/systemd-user` when it starts the user manager. It fires on every sanctioned T3 recreate; investigated 2026-10-21 (#102).
+
 ## [3.17.17] - 2026-10-21
 
 - `ghostship-security-check` flags any unconfined process inside a container (`apparmor.unconfined.<container>`, critical), not only a wrong PID 1 label. It walks the container's cgroup tree. A policy reload that removes a complain-mode `null-*` learning profile leaves its processes unconfined; on 2026-10-21 that left the agent desktop's PulseAudio unconfined, and the old check missed it.
