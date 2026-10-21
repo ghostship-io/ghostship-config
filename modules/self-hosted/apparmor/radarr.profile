@@ -159,6 +159,8 @@ profile ghostship-radarr flags=(complain,attach_disconnected,mediate_deleted) {
 
     # CoreCLR startup, GC sizing and DriveInfo/mount discovery.
     /proc/{self,thread-self,[0-9]*}/{stat,status,statm,maps,smaps,limits,cmdline,comm,cgroup,mounts,mountinfo} r,
+    # .NET locks /proc/<pid>/mounts while reading it (observed 2026-10-21).
+    /proc/{self,thread-self,[0-9]*}/mounts k,
     /proc/{self,thread-self,[0-9]*}/fd/ r,
     /proc/{self,thread-self,[0-9]*}/task/ r,
     /proc/{self,thread-self,[0-9]*}/task/[0-9]*/{stat,status,comm} r,
@@ -187,6 +189,8 @@ profile ghostship-radarr flags=(complain,attach_disconnected,mediate_deleted) {
 
   # Static ffprobe from the app tree: reads media only. No /config, no network.
   profile ffprobe flags=(complain,attach_disconnected,mediate_deleted) {
+    # Timestamps use the container zone (seen in Sonarr's ffprobe 2026-10-21).
+    /usr/share/zoneinfo/** r,
     @{ghostship_radarr_app}/ffprobe rm,
     /movies/ r,
     /movies/** r,
