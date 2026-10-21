@@ -32,7 +32,7 @@ STATES = {'pending', 'queued', 'running', 'starting', 'in_progress', 'waiting',
           'open', 'closed', 'merged', 'idle', 'never', 'unknown', 'retry', 'held', 'expired', 'conflict',
           'requested', 'native-running', 'terminal', 'reported', 'superseded', 'preparing', 'resolved',
           'dispatch_failed', 'duplicate', 'coalesced', 'rejected_signature', 'rate_limited', 'filtered',
-          'unverified', 'checks_passed', 'verified_ci', 'pending_ci'}
+          'unverified', 'checks_passed', 'verified_ci', 'pending_ci', 'archived'}
 ACTIVE = {'pending', 'queued', 'running', 'starting', 'in_progress', 'waiting', 'requested', 'native-running', 'preparing', 'prepared', 'executing'}
 ATTENTION = {'blocked', 'failed', 'error', 'denied', 'timeout', 'uncertain',
              'upstream_blocked', 'unavailable', 'partial', 'held', 'conflict',
@@ -59,13 +59,45 @@ EVENTS = {'issues', 'issue_comment', 'pull_request', 'pull_request_review',
           'pull_request_review_comment', 'workflow_run', 'check_run', 'check_suite',
           'push', 'deployment_status'}
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+# Native thread ids are opaque: ordinary threads are UUIDs and app-owned child
+# threads look like 'thread:delegated-task:command%3Amcp%3A...'. Bound the shape
+# instead of assuming a UUID, or every child link is silently dropped.
+THREAD_ID = re.compile(
+    r'^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+    r'|mcp:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+    r'|thread:[A-Za-z0-9:._%~-]{1,280})$')
+BRANCH = re.compile(r'^[A-Za-z0-9._/-]{1,120}$')
+MODEL = re.compile(r'^[A-Za-z0-9._:/-]{1,80}$')
+WEB_URL = 'https://t3code.ghostship.io'
+# The stock deep link of ghostship_t3.bridge.thread_url: a plain path join of
+# the environment and the raw (already percent-encoded) thread id, and the app
+# deep link when the environment is unknown.
+ACTIVE_PAGE = 500
+ACTIVE_PAGES = 4
+ACTIVE_RUNS = ('running', 'pending', 'starting', 'waiting', 'queued', 'requested',
+               'native-running', 'preparing', 'prepared', 'executing')
+ACTIVE_SQL = '(' + ','.join(f"'{status}'" for status in ACTIVE_RUNS) + ')'
+# The current run of a thread: active or queued first, else the latest executed
+# run by completion time, ties by ordinal. A cancelled run that provably never
+# started is not executed and cannot mask a real outcome.
+CURRENT_RUN = f'''SELECT r2.run_id FROM orchestration_v2_projection_runs r2
+        WHERE r2.thread_id=t.thread_id
+          AND NOT (r2.status='cancelled' AND CASE WHEN json_valid(r2.payload_json)
+            THEN coalesce(json_type(r2.payload_json,'$.startedAt')='null',0) ELSE 0 END)
+        ORDER BY (r2.status IN {ACTIVE_SQL}) DESC,
+          coalesce(r2.completed_at,r2.requested_at) DESC, r2.ordinal DESC, r2.run_id LIMIT 1'''
+AGENT_STATES = {'running': 'running', 'starting': 'running', 'executing': 'running',
+                'preparing': 'running', 'pending': 'queued', 'queued': 'queued',
+                'prepared': 'queued', 'requested': 'queued', 'waiting': 'waiting',
+                'native-running': 'running'}
 # Only fixed machine fields leave this process. Free text (even titles/errors)
 # can contain secrets and is deliberately not exported.
 FIELDS = {'source', 'kind', 'work_id', 'status', 'event_at', 'next_at', 'trigger',
           'thread_url', 'github_url', 'provider',
           'unit', 'coverage', 'reason', 'rows', 'limited', 'duration_seconds', 'fired_at', 'event', 'event_seconds', 'fired_seconds', 'project_id', 'thread_count', 'occupied', 'route_state', 'primary_quota', 'route_reason', 'fallback', 'switch_accepted', 'message_accepted', 'native_run_count', 'executing_count',
           'enabled', 'last_status', 'evidence', 'event_today', 'fired_today', 'action',
-          'outcome', 'merged', 'required_checks', 'failed_checks', 'revision', 'owner_state'}
+          'outcome', 'merged', 'required_checks', 'failed_checks', 'revision', 'owner_state',
+          'model', 'branch', 'parent_url', 'total'}
 
 
 def iso(value):
@@ -113,10 +145,19 @@ def provider(value):
     return value if value in PROVIDERS else 'unknown'
 
 
+def provider_name(value):
+    # Only canonical instance ids leave the collector; a private custom name is
+    # never exported as a provider label or value.
+    return value if value in PROVIDERS else 'unknown'
+
+
 def thread_url(thread, environment):
-    if UUID.fullmatch(str(thread)) and UUID.fullmatch(str(environment)):
-        return f'https://t3code.ghostship.io/{environment}/{thread}'
-    return ''
+    if not THREAD_ID.fullmatch(str(thread)):
+        return ''
+    if UUID.fullmatch(str(environment)):
+        return f'{WEB_URL}/{environment}/{thread}'
+    # Stock fallback: the app deep link when the environment is unknown.
+    return f't3-thread://v1/{thread}'
 
 
 @contextmanager
@@ -203,6 +244,65 @@ def artifact_rows(path, now):
         coalesce(json_extract(j.value,'$.source'),'manual') != 'stack-dismissed'
       ORDER BY (lower(json_extract(j.value,'$.snapshot.state'))='open') DESC,
         t.updated_at DESC, t.thread_id, j.key""")
+
+
+def agent_rows(path, now):
+    # One row per native thread, ordinary or app-owned child, across every
+    # project. Branch and model come from the actual thread and run projections,
+    # never from the title or the thread default. Active work is enumerated in
+    # pages so the most-recent cap can never hide a running agent.
+    rows, total = [], 0
+    with readonly(path) as db:
+        total = db.execute(f'''SELECT count(*) FROM orchestration_v2_projection_threads t
+          WHERE t.deleted_at IS NULL AND (SELECT r2.status FROM
+            orchestration_v2_projection_runs r2 WHERE r2.thread_id=t.thread_id
+            AND NOT (r2.status='cancelled' AND CASE WHEN json_valid(r2.payload_json)
+              THEN coalesce(json_type(r2.payload_json,'$.startedAt')='null',0) ELSE 0 END)
+            ORDER BY (r2.status IN {ACTIVE_SQL}) DESC,
+              coalesce(r2.completed_at,r2.requested_at) DESC, r2.ordinal DESC, r2.run_id
+            LIMIT 1) IN {ACTIVE_SQL}''').fetchone()[0]
+        for page in range(ACTIVE_PAGES):
+            chunk = [dict(row) for row in db.execute(f'''SELECT t.thread_id AS id, t.thread_id,
+              t.project_id, t.updated_at AS event_at, 'agent' AS kind,
+              coalesce(r.status,'idle') AS status,
+              json_extract(t.payload_json,'$.branch') AS branch,
+              json_extract(r.payload_json,'$.modelSelection.model') AS model,
+              json_extract(r.payload_json,'$.modelSelection.instanceId') AS selection_provider,
+              r.provider AS run_provider,
+              (SELECT count(*) FROM orchestration_v2_projection_runtime_requests q
+                WHERE q.thread_id=t.thread_id AND q.status='pending' AND q.resolved_at IS NULL)
+                AS pending_requests,
+              (SELECT s.thread_id FROM orchestration_v2_projection_subagents s
+                WHERE s.child_thread_id=t.thread_id LIMIT 1) AS parent_thread
+              FROM orchestration_v2_projection_threads t
+              LEFT JOIN orchestration_v2_projection_runs r ON r.run_id = ({CURRENT_RUN})
+              WHERE t.deleted_at IS NULL AND (r.status IN {ACTIVE_SQL}
+                OR EXISTS (SELECT 1 FROM orchestration_v2_projection_runtime_requests q
+                  WHERE q.thread_id=t.thread_id AND q.status='pending' AND q.resolved_at IS NULL))
+              ORDER BY (r.status IN {ACTIVE_SQL}) DESC, t.updated_at DESC, t.thread_id
+              LIMIT ? OFFSET ?''', (ACTIVE_PAGE, page*ACTIVE_PAGE))]
+            rows.extend(chunk)
+            if len(chunk) < ACTIVE_PAGE:
+                break
+    return rows, len(rows) < total, total
+
+
+def agent_history_rows(path, now):
+    # Windowed terminal history of the same threads, bounded like every other
+    # source. Active work never appears here.
+    return query(path, f'''SELECT t.thread_id AS id, t.thread_id, t.project_id,
+      t.updated_at AS event_at, 'agent' AS kind, coalesce(r.status,'idle') AS status,
+      json_extract(t.payload_json,'$.branch') AS branch,
+      json_extract(r.payload_json,'$.modelSelection.model') AS model,
+      json_extract(r.payload_json,'$.modelSelection.instanceId') AS selection_provider,
+      r.provider AS run_provider,
+      (SELECT s.thread_id FROM orchestration_v2_projection_subagents s
+        WHERE s.child_thread_id=t.thread_id LIMIT 1) AS parent_thread
+      FROM orchestration_v2_projection_threads t
+      LEFT JOIN orchestration_v2_projection_runs r ON r.run_id = ({CURRENT_RUN})
+      WHERE t.deleted_at IS NULL AND t.updated_at >= ?
+        AND NOT coalesce(r.status IN {ACTIVE_SQL}, 0)
+      ORDER BY t.updated_at DESC, t.thread_id''', (iso(now-HISTORY_SECONDS),))
 
 
 def request_rows(path, now):
@@ -392,6 +492,8 @@ def timer_rows(_path, now):
 
 def project(source, row, environment, now=None):
     kind = row.get('kind', 'workflow')
+    if kind == 'agent':
+        return agent_record(source, row, environment, now)
     result = {'source': source, 'kind': kind, 'work_id': identity(row['id']),
               'status': state(row.get('status')), 'event_at': iso(row.get('event_at'))}
     moment = datetime.fromtimestamp(now if now is not None else time.time(), timezone.utc)
@@ -471,6 +573,36 @@ def project(source, row, environment, now=None):
     return result
 
 
+def agent_record(source, row, environment, now):
+    # A running agent is a recorded native state, never process liveness. The
+    # model and provider are the ones the current run actually selected; the
+    # thread default is deliberately not substituted after a reconfigure.
+    pending = row.get('pending_requests') or 0
+    raw = row.get('status')
+    effective = 'waiting' if pending else AGENT_STATES.get(raw, state(raw))
+    result = {'source': source, 'kind': 'agent', 'work_id': identity(row['id']),
+              'status': effective, 'event_at': iso(row.get('event_at'))}
+    moment = datetime.fromtimestamp(now if now is not None else time.time(), timezone.utc)
+    if result['event_at']:
+        result['event_seconds'] = datetime.fromisoformat(result['event_at']).timestamp()
+        result['event_today'] = 1 if utc_day(result['event_at']) == moment.date().isoformat() else 0
+    if row.get('branch') and BRANCH.fullmatch(str(row['branch'])):
+        result['branch'] = row['branch']
+    if row.get('model') and MODEL.fullmatch(str(row['model'])):
+        result['model'] = row['model']
+    provider = row.get('selection_provider') or row.get('run_provider')
+    if provider:
+        result['provider'] = provider_name(provider)
+    if UUID.fullmatch(str(row.get('project_id'))):
+        result['project_id'] = row['project_id']
+    if link := thread_url(row.get('thread_id'), environment):
+        result['thread_url'] = link
+    parent = thread_url(row.get('parent_thread'), environment)
+    if parent and parent != result.get('thread_url'):
+        result['parent_url'] = parent
+    return result
+
+
 def collect(config, now=None, timers=timer_rows):
     now = now or time.time()
     started = time.monotonic()
@@ -483,6 +615,8 @@ def collect(config, now=None, timers=timer_rows):
 
     sources = [
         ('t3_projects', project_rows, config['t3_db']),
+        ('t3_agents', agent_rows, config['t3_db']),
+        ('t3_agent_history', agent_history_rows, config['t3_db']),
         ('t3_threads', thread_rows, config['t3_db']),
         ('t3_requests', request_rows, config['t3_db']),
         ('t3_artifacts', artifact_rows, config['t3_db']),
@@ -504,8 +638,12 @@ def collect(config, now=None, timers=timer_rows):
     for source, read, path in sources:
         before = time.monotonic()
         reason, rows, limited = 'ok', [], False
+        total = None
         try:
-            raw, limited = read(path, now)
+            result = read(path, now)
+            raw, limited = result[0], result[1]
+            if len(result) > 2:
+                total = result[2]
             rows = [project(source, row, environment, now) for row in raw]
         except (OSError, sqlite3.Error, ValueError, TypeError, LookupError, subprocess.SubprocessError):
             # Do not log exception text: paths, SQL errors, raw data and command
@@ -531,9 +669,12 @@ def collect(config, now=None, timers=timer_rows):
                 metric('ci_failures', failures, source=source)
         coverage = 'bounded' if limited else 'available' if up else 'gap' if source in {'review_metadata', 'routing_metadata', 'model_continuations', 'ci_proof'} else 'unknown'
         records.extend(rows)
-        records.append({'source': source, 'kind': 'coverage', 'work_id': source,
+        coverage_row = {'source': source, 'kind': 'coverage', 'work_id': source,
                         'coverage': coverage, 'reason': reason, 'rows': len(rows),
-                        'limited': limited, 'duration_seconds': round(time.monotonic()-before, 6)})
+                        'limited': limited, 'duration_seconds': round(time.monotonic()-before, 6)}
+        if isinstance(total, int) and 0 <= total <= 1000000:
+            coverage_row['total'] = total
+        records.append(coverage_row)
     records.append({'source': 'chatgpt_tasks', 'kind': 'coverage', 'work_id': 'chatgpt_tasks',
                     'coverage': 'gap', 'reason': 'no_local_inventory_prior_ui_observation_only'})
     metric('source_up', 0, source='chatgpt_tasks')

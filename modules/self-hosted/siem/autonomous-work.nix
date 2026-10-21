@@ -97,6 +97,7 @@ in
         "switch_accepted" "message_accepted" "native_run_count" "executing_count"
         "enabled" "last_status" "evidence" "event_today" "fired_today" "action"
         "outcome" "merged" "required_checks" "failed_checks" "revision" "owner_state"
+        "model" "branch" "parent_url" "total"
       ];
     in ''
       original = .
