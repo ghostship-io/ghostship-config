@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.31] - 2026-10-21
+
+- Document native T3 Code quota verification, the temporary sensitive environment override for OpenCode Go Console OAuth, intermittent Antigravity Gemini coverage, and the native panel's OpenRouter/Ollama limitations. Record the standalone 0.1.1 packaging and host activation requirements; the npm-based automatic updater still needs migration. T3 Code source and provider logins remain unchanged.
+
 ## [3.17.30] - 2026-10-21
 
 - Flow collector: a released container address keeps its previous owner for 15 minutes (one collection plus margin), not 24 hours. Gluetun's short-lived benchmark containers reused bazarr's, cloudflared's and flaresolverr's old addresses, and their udp/1337 probes were recorded as new edges for those services. After the grace period an unowned address reports as `lan:<ip>`.
