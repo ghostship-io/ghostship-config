@@ -86,6 +86,16 @@ def main():
             parser.error(
                 "Docker workspace must be a real absolute directory owned by T3"
             )
+        try:
+            same_workspace = os.path.samefile(
+                args.docker_workspace, "/run/t3code-docker-rootfs/workspace"
+            )
+        except OSError:
+            parser.error("start the isolated engine before testing Docker workflows")
+        if not same_workspace:
+            parser.error(
+                "Docker workspace must match the engine's /workspace bind source"
+            )
     elif args.docker_control_report or args.denied_endpoint:
         parser.error("Docker arguments require --docker-workspace")
     if os.geteuid() != 0:
