@@ -1,0 +1,56 @@
+# Journal events: keep the fields that identify who did what, parse kernel
+# audit records (AppArmor and watch rules) and Falco's JSON alerts.
+container = to_string(.CONTAINER_NAME) ?? ""
+unit = string(._SYSTEMD_UNIT) ?? string(.SYSLOG_IDENTIFIER) ?? string(._TRANSPORT) ?? "unknown"
+# Containers by name: their conmon scope units change on every recreate.
+stream = unit
+if container != "" { stream = "container/" + container }
+msg = to_string(.message) ?? ""
+event = {
+  "timestamp": .timestamp,
+  "host": .host,
+  "message": msg,
+  "source": "journald",
+  "stream": stream,
+  "unit": unit,
+  "container": container,
+  "image": .IMAGE_NAME,
+  "ident": .SYSLOG_IDENTIFIER,
+  "transport": ._TRANSPORT,
+  "priority": .PRIORITY,
+  "pid": ._PID,
+  "uid": ._UID,
+  "comm": ._COMM,
+  "exe": ._EXE,
+  "audit_type": ._AUDIT_TYPE_NAME
+}
+if event.transport == "audit" {
+  kv = parse_key_value(msg, key_value_delimiter: "=", field_delimiter: " ") ?? {}
+  event.apparmor = kv.apparmor
+  event.aa_operation = kv.operation
+  event.aa_profile = kv.profile
+  event.aa_comm = kv.comm
+  event.aa_mask = kv.requested_mask
+  event.aa_peer = kv.peer
+  event.audit_key = kv.key
+  event.audit_exe = kv.exe
+  event.audit_auid = kv.auid
+  event.audit_success = kv.success
+  # Audit hex-encodes names with spaces or special characters.
+  name = to_string(kv.name) ?? ""
+  if match(name, r'^(?:[0-9A-F]{2})+$') {
+    name = decode_base16(name) ?? name
+  }
+  if name != "" { event.aa_name = name }
+}
+if unit == "falco.service" {
+  falco, err = parse_json(msg)
+  if err == null && is_object(falco) {
+    event.message = falco.output
+    event.falco_rule = falco.rule
+    event.falco_priority = falco.priority
+    event.falco_tags = join(array(falco.tags) ?? [], ",") ?? null
+    event.falco = falco.output_fields
+  }
+}
+. = compact(event)

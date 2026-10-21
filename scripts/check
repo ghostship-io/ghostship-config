@@ -20,12 +20,18 @@ apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
   modules/self-hosted/ntfy-apparmor.profile
 apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
   modules/self-hosted/hooks-apparmor.profile
+for profile in modules/self-hosted/apparmor/victoria*.profile; do
+  apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null "$profile"
+done
 python3 -m unittest discover -s tests -p test_apparmor_review.py
 python3 -m unittest discover -s tests -p test_cloudflare_access.py
 python3 -m unittest discover -s tests -p test_t3_worker_tunnel.py
 python3 -m unittest discover -s tests -p test_security_monitoring.py
 python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
+
+printf 'Checking SIEM log parsing and secret redaction\n'
+vector --quiet test tests/siem-vector.toml
 
 printf 'Evaluating development shells for both Linux architectures\n'
 for system in x86_64-linux aarch64-linux; do

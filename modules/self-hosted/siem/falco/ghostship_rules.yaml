@@ -1,0 +1,8 @@
+# Ghostship tuning for the upstream ruleset (falco_rules.yaml loads first).
+# Every exception names the verified legitimate workload it covers. Never add
+# an exception for an event that matches attack indicators; investigate it.
+# Exceptions here must be as narrow as the reviewed operation: one container,
+# one process, one path. Keep upstream rules enabled.
+
+# No exceptions yet: add them here from investigated alerts only.
+[]
