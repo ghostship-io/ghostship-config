@@ -1,12 +1,22 @@
 # Changelog
 
-## [3.17.29] - 2026-10-21
+## [3.17.31] - 2026-10-21
 
 - Separate newsletter incident acknowledgement from ntfy delivery. The notifier's incident-only operation acknowledges an fsynced spool write; the monitor persists one event ID per episode before sending and retries it independently. Notification outages no longer enqueue recurrence messages, and spool failures remain retryable after ntfy succeeds. Regression tests exercise the real notifier and pinned coordinator with local fake edges, including lost acknowledgements and persistence failures.
 
+- Observe Ghostship AM outcomes from a host timer, using the newsletter's runtime-only monitor as its unprivileged user. Missing delivery, stale/invalid daily artifacts, or an unavailable monitor raise an operations alert and the existing bounded coordinator incident; recovery sends one resolution. No new sender, repair loop or T3 restart path is added. Requires newsletter 0.5.18 or later in the canonical checkout.
+
+## [3.17.30] - 2026-10-21
+
+- Flow collector: a released container address keeps its previous owner for 15 minutes (one collection plus margin), not 24 hours. Gluetun's short-lived benchmark containers reused bazarr's, cloudflared's and flaresolverr's old addresses, and their udp/1337 probes were recorded as new edges for those services. After the grace period an unowned address reports as `lan:<ip>`.
+
+## [3.17.29] - 2026-10-21
+
+- AppArmor: agent-desktop SSH shells may run the Rust coreutils multicall that `/usr/bin/timeout`, `date`, `mkdir` and similar resolve to. An agent's `timeout blender` ran in ruleless `null-*` profiles at 13:55: about 246k audit records in 10 minutes, 2 lost.
+
 ## [3.17.28] - 2026-10-21
 
-- Observe Ghostship AM outcomes from a host timer, using the newsletter's runtime-only monitor as its unprivileged user. Missing delivery, stale/invalid daily artifacts, or an unavailable monitor raise an operations alert and the existing bounded coordinator incident; recovery sends one resolution. No new sender, repair loop or T3 restart path is added. Requires newsletter 0.5.18 or later in the canonical checkout.
+- AppArmor: NZBGet's startup system-info probe (popen `uname -o/-r/-m` and `lscpu | grep` through `/bin/sh`) runs in its own `sysinfo` child, which may run only BusyBox sh/grep and coreutils uname, with no network or writes. It had raised `SuspiciousExecInAppDomain` after the Gluetun IP change restarted NZBGet at 17:27; investigated as legitimate (#102). Any other shell from the server still alerts.
 
 ## [3.17.27] - 2026-10-21
 

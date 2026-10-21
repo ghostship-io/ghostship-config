@@ -434,6 +434,10 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     network unix seqpacket,
 
     /usr/bin/* mrix,
+    # /usr/bin/{timeout,date,mkdir,...} resolve to the Rust coreutils multicall
+    # (observed 2026-10-21: an agent's `timeout blender` ran in null profiles,
+    # ~246k audit records in 10 min, 2 lost).
+    @{gs_cu}/* mrix,
     /usr/sbin/* mrix,
     /usr/libexec/** mrix,
     /usr/lib/openssh/sftp-server mrix,
