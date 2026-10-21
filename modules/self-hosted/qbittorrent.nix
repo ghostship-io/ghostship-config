@@ -287,6 +287,11 @@ in
         partOf = [ "podman-gluetun.service" ];
         requires = [ "podman-gluetun.service" ];
         wants = [ "mnt-share.mount" ];
+        # Podman's default 10s grace period can kill qBittorrent during shutdown,
+        # producing exit 137 on an ordinary restart. Stay below systemd's 120s limit.
+        preStop = lib.mkForce ''
+          podman stop --ignore --time 60 --cidfile=/run/qbittorrent/ctr-id
+        '';
         preStart = lib.mkAfter ''
           ${qbittorrent-prestart-script}/bin/qbittorrent-prestart.sh
         '';
