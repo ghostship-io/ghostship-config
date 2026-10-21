@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.17.3] - 2026-10-21
+
+- SIEM pipeline liveness (#102 Gate 1.2).
+  - `ghostship-siem-alerts` now publishes `siem-bridge.prom`: last poll, per-source last success, per-channel last delivery and failure counts, retry queue, T3 pending and dead letters. Firing alerts undelivered for 24 h become dead letters, listed by `--list` and never dropped.
+  - A new independent root timer, `ghostship-siem-watchdog` (every 2 minutes), alerts on any of these:
+    - a stalled bridge;
+    - an unreadable vmalert source;
+    - repeated delivery failures;
+    - dead letters;
+    - a vmalert or store API that stops answering;
+    - a stale container snapshot.
+  - Each watchdog problem opens one episode: ntfy `security` at priority 5 plus a single T3 incident through `ghostship-notify --incident`, which still reaches T3 when ntfy is down. The publish retries until ntfy accepts, and one resolution follows.
+
 ## [3.17.2] - 2026-10-21
 
 - SIEM: no long-lived collector holds the rootful Podman API.
