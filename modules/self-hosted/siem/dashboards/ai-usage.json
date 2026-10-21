@@ -353,7 +353,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "sort_desc(max by (provider, account, model, window, source) (100 * ghostship_ai_quota_used_ratio))",
+          "expr": "sort_desc(max by (provider, account, model, window, quota, source) (100 * ghostship_ai_quota_used_ratio))",
           "instant": true,
           "range": false,
           "format": "table"
@@ -364,7 +364,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (provider, account, model, window, source) (1000 * ghostship_ai_quota_reset_timestamp_seconds)",
+          "expr": "max by (provider, account, model, window, quota, source) (1000 * ghostship_ai_quota_reset_timestamp_seconds)",
           "instant": true,
           "range": false,
           "format": "table"
@@ -375,7 +375,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (provider, account, model, window, source) (ghostship_ai_quota_reset_timestamp_seconds - time())",
+          "expr": "max by (provider, account, model, window, quota, source) (ghostship_ai_quota_reset_timestamp_seconds - time())",
           "instant": true,
           "range": false,
           "format": "table"
@@ -386,7 +386,7 @@
             "type": "prometheus",
             "uid": "victoriametrics"
           },
-          "expr": "max by (provider, account, model, window, source) (time() - ghostship_ai_quota_observed_timestamp_seconds)",
+          "expr": "max by (provider, account, model, window, quota, source) (time() - ghostship_ai_quota_observed_timestamp_seconds)",
           "instant": true,
           "range": false,
           "format": "table"

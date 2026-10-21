@@ -126,7 +126,16 @@ class SourceResult:
 
     @property
     def ok(self) -> bool:
-        return self.status in ("ok", "partial")
+        """True only when the source reported a complete reading.
+
+        A partial source is not a success: it read some of the reading and
+        not the rest, and a panel must not show it green.
+        """
+        return self.status == "ok"
+
+    @property
+    def partial(self) -> bool:
+        return self.status == "partial"
 
 
 def iter_samples(results: Iterable[SourceResult]) -> Iterator[Sample]:

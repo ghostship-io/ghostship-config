@@ -266,6 +266,7 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
     observed: float | None = None
     offered: list[tuple[str, str]] = []
     native: dict[tuple[str, str], dict[str, Any]] = {}
+    provider_states: dict[str, str] = {}
     for provider in providers:
         instance = str(provider.get("instanceId") or "")
         name = INSTANCE_PROVIDERS.get(instance, instance)
@@ -285,6 +286,15 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
                 "modelId": slug,
                 "options": _model_options(model),
             }
+        state = str(provider.get("status") or "")
+        provider_states[name] = state
+        if state == "ready":
+            probe = (provider.get("usageLimits") or {}) if isinstance(provider.get("usageLimits"), dict) else {}
+            provider_reason = str(probe.get("reason") or "")
+            if probe and not probe.get("windows") and provider_reason:
+                # The provider is ready but its limits probe failed: the
+                # source read part of the picture, so it is partial.
+                status = "partial"
         limits = provider.get("usageLimits")
         if not isinstance(limits, dict):
             continue
@@ -327,6 +337,14 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
                     "observedAtEpoch": checked_at,
                 }
             )
+    for provider, state in sorted(provider_states.items()):
+        samples.append(
+            (
+                "ghostship_ai_provider_status",
+                {"provider": provider, "state": state or "unknown"},
+                1.0,
+            )
+        )
     if context is not None:
         context["offered_models"] = offered
         context["native_models"] = native
@@ -334,6 +352,7 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
             str(provider.get("instanceId") or ""): str(provider.get("status") or "")
             for provider in providers
         }
+        context["provider_states"] = provider_states
     return SourceResult(
         source="t3",
         status=status,

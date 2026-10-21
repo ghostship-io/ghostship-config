@@ -91,13 +91,17 @@ in
       MemoryHigh = "384M";
       CPUQuota = "50%";
       TasksMax = 32;
-      # One capability: the provider credentials belong to the accounts the
-      # collector reports on (mode 0600 files of other users, and the
-      # directory of the free inference bridge). Every other capability is
-      # dropped, the service has no listener, and it writes one textfile and
-      # one snapshot. The service runs as root because of this capability, so
-      # it is a root equivalent; it is kept to one read only collector with
-      # no listener and no write outside its two directories.
+      # The blast radius, stated plainly: the collector runs as root and
+      # keeps CAP_DAC_OVERRIDE, because the credentials it must read belong
+      # to other users (the mode 0600 files of the container user, the mode
+      # 0400 token of the free inference bridge). CAP_DAC_OVERRIDE lets root
+      # read any file, and the unit may write the whole of the state
+      # directory and the two runtime integration directories, so this is a
+      # root equivalent, not a confined reader. Every other capability is
+      # dropped, there is no listener, and the collector only ever issues
+      # reads and the three atomic writes. Do not read "it only issues GET"
+      # as confinement: the honest answer is that the hardening here is the
+      # read only code, the fixed paths, and the absence of a listener.
       CapabilityBoundingSet = [ "CAP_DAC_OVERRIDE" ];
       AmbientCapabilities = "";
     };
