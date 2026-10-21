@@ -30,6 +30,9 @@ let
     ];
     # Notice and above: upstream's informational rules are mostly inventory.
     priority = "notice";
+    # Append the container plugin's fields (container id, name, image) to
+    # every alert; without this they are missing from the output.
+    append_output = [ { suggested_output = true; } ];
     json_output = true;
     json_include_output_property = true;
     json_include_output_fields_property = true;

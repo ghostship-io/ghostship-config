@@ -5,15 +5,34 @@ that suddenly burns CPU or sends far more than usual (cryptominer, proxy,
 exfiltration) shows up here before it writes any log line.
 """
 
+import http.client
 import json
 import os
-import subprocess
+import socket
 import sys
 import time
 from pathlib import Path
 
 OUT = Path(sys.argv[1])
 INTERVAL = 30
+# The REST API needs no writable state; `podman ps` takes locks the sandbox forbids.
+PODMAN_SOCKET = "/run/podman/podman.sock"
+
+
+class UnixConnection(http.client.HTTPConnection):
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(30)
+        self.sock.connect(PODMAN_SOCKET)
+
+
+def containers():
+    connection = UnixConnection("podman")
+    connection.request("GET", "/v5.0.0/libpod/containers/json")
+    response = connection.getresponse()
+    if response.status != 200:
+        raise ValueError(f"podman API answered {response.status}")
+    return json.loads(response.read())
 
 
 def read(path):
@@ -24,15 +43,9 @@ def read(path):
 
 
 def sample():
-    ps = subprocess.run(["podman", "ps", "--format", "json"], capture_output=True, check=True, timeout=60)
-    names = [c["Names"][0] for c in json.loads(ps.stdout or b"[]")]
-    if not names:
-        return []
-    inspect = subprocess.run(["podman", "inspect", "--format", "json", *names],
-                             capture_output=True, check=True, timeout=60)
     rows = []
-    for c in json.loads(inspect.stdout):
-        name, pid = c["Name"].lstrip("/"), c["State"]["Pid"]
+    for c in containers():
+        name, pid = c["Names"][0], c.get("Pid")
         cgroup = read(f"/proc/{pid}/cgroup")
         if not pid or not cgroup:
             continue
@@ -71,7 +84,7 @@ def main():
             temporary.write_text(render(sample()))
             os.chmod(temporary, 0o644)
             temporary.replace(OUT)
-        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        except (OSError, ValueError, KeyError, http.client.HTTPException) as exc:
             print(f"container metrics: {exc}", file=sys.stderr)
         time.sleep(INTERVAL)
 

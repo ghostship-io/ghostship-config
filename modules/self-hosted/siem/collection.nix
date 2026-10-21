@@ -120,7 +120,7 @@ in
     description = "Per-container resource counters for the SIEM";
     wantedBy = [ "multi-user.target" ];
     after = [ "podman.socket" ];
-    path = [ config.virtualisation.podman.package ];
+    requires = [ "podman.socket" ];
     serviceConfig = {
       ExecStart = "${pkgs.python3}/bin/python3 ${./container-metrics.py} ${textfile}/containers.prom";
       Restart = "always";
