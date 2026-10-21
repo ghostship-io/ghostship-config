@@ -383,6 +383,9 @@ function renderHeader() {
   const line = $("run-state");
   if (!run) { line.textContent = "Window closed"; return; }
   $("agent-view").classList.toggle("app-mode", isApp(run));
+  // Full Chrome window: its own tab strip and address bar are on screen.
+  $("agent-view").classList.toggle("window-mode", run.view === "window");
+  $("agent-view").classList.toggle("multi-window", run.view === "window" && run.tabs.length > 1);
   const thread = threadNode(run.owner);
   line.replaceChildren(el("span", null, [isApp(run) ? run.app_name || "app" : run.identity, ownerLine(run)].filter(Boolean).join(" · ")));
   if (thread) line.append(" · ", thread);

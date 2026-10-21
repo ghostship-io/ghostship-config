@@ -34,7 +34,7 @@
 # Live children while the desktop runs: nginx, sshd, dbus-system, pulseaudio,
 # selkies, pelorus, desktop, api, chrome-control. On demand: chrome-agent-
 # launcher, chrome-personal-launcher, chrome-agent, chrome-personal, sway,
-# stage-input (while an identity's Chrome is wanted up); agent-shell, bladebro,
+# stage-control (while an identity's Chrome is wanted up); agent-shell, bladebro,
 # sudo, chrome-instance-launcher, chrome-other (SSH sessions, extra instances,
 # a person's Chrome on the desktop); healthcheck (every 30 s).
 include <tunables/global>
@@ -448,6 +448,8 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     /opt/google/chrome/google-chrome px -> ghostship-agent-desktop//chrome-other,
     /usr/bin/sudo.ws px -> ghostship-agent-desktop//sudo,
     @{gs_tools}/app-session px -> ghostship-agent-desktop//desktop,
+    # Agents reach a window's browser controls with `stage-control call`.
+    @{gs_tools}/stage-control px -> ghostship-agent-desktop//stage-control,
 
     # System files (read and map only).
     / r,
@@ -701,7 +703,7 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
 
     @{gs_svcdirs}/svc-agent-desktop-chrome-agent/run r,
     /usr/bin/with-contenv r,
-    /usr/bin/{bash,pwdx,pgrep,gnurm,setsid} mrix,
+    /usr/bin/{bash,dash,pwdx,pgrep,gnurm,setsid} mrix,
     @{gs_cu}/{cat,mkdir,seq,sleep} mrix,
     @{gs_s6o}/command/with-contenv rix,
     /package/admin/execline-2.9.7.0/command/execline mrix,
@@ -713,7 +715,7 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     @{gs_tools}/tools/__pycache__/** r,
     /usr/bin/python3.14 mrix,
     /usr/bin/sway px -> ghostship-agent-desktop//sway,
-    @{gs_tools}/stage-input px -> ghostship-agent-desktop//stage-input,
+    @{gs_tools}/stage-control px -> ghostship-agent-desktop//stage-control,
     /opt/google/chrome/google-chrome px -> ghostship-agent-desktop//chrome-agent,
     @{gs_ld} mr,
     @{gs_libs_shell} mr,
@@ -742,8 +744,8 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     signal (receive) peer=unconfined,
     signal (receive) peer=ghostship-agent-desktop,
     signal (send,receive) peer=ghostship-agent-desktop//chrome-agent-launcher,
-    signal (send) peer=ghostship-agent-desktop//{chrome-agent,sway,stage-input},
-    signal (receive) peer=ghostship-agent-desktop//{chrome-agent,sway,stage-input},
+    signal (send) peer=ghostship-agent-desktop//{chrome-agent,sway,stage-control},
+    signal (receive) peer=ghostship-agent-desktop//{chrome-agent,sway,stage-control},
   }
 
   profile chrome-personal-launcher flags=(complain,attach_disconnected,mediate_deleted) {
@@ -756,7 +758,7 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
 
     @{gs_svcdirs}/svc-agent-desktop-chrome-personal/run r,
     /usr/bin/with-contenv r,
-    /usr/bin/{bash,pwdx,pgrep,gnurm,setsid} mrix,
+    /usr/bin/{bash,dash,pwdx,pgrep,gnurm,setsid} mrix,
     @{gs_cu}/{cat,mkdir,seq,sleep} mrix,
     @{gs_s6o}/command/with-contenv rix,
     /package/admin/execline-2.9.7.0/command/execline mrix,
@@ -768,7 +770,7 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     @{gs_tools}/tools/__pycache__/** r,
     /usr/bin/python3.14 mrix,
     /usr/bin/sway px -> ghostship-agent-desktop//sway,
-    @{gs_tools}/stage-input px -> ghostship-agent-desktop//stage-input,
+    @{gs_tools}/stage-control px -> ghostship-agent-desktop//stage-control,
     /opt/google/chrome/google-chrome px -> ghostship-agent-desktop//chrome-personal,
     @{gs_ld} mr,
     @{gs_libs_shell} mr,
@@ -797,8 +799,8 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     signal (receive) peer=unconfined,
     signal (receive) peer=ghostship-agent-desktop,
     signal (send,receive) peer=ghostship-agent-desktop//chrome-personal-launcher,
-    signal (send) peer=ghostship-agent-desktop//{chrome-personal,sway,stage-input},
-    signal (receive) peer=ghostship-agent-desktop//{chrome-personal,sway,stage-input},
+    signal (send) peer=ghostship-agent-desktop//{chrome-personal,sway,stage-control},
+    signal (receive) peer=ghostship-agent-desktop//{chrome-personal,sway,stage-control},
   }
 
   # Extra Chrome instances (ghostship-chrome-instance start|stop|list over SSH)
@@ -813,11 +815,11 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     @{gs_tools}/tools/ r,
     @{gs_tools}/tools/cdp_ws.py r,
     @{gs_tools}/tools/__pycache__/** r,
-    /usr/bin/{bash,pgrep,gnurm,setsid,grep} mrix,
+    /usr/bin/{bash,dash,pgrep,gnurm,setsid,grep} mrix,
     @{gs_cu}/{basename,cat,cut,head,mkdir,nohup,seq,sleep} mrix,
     /usr/bin/python3.14 mrix,
     /usr/bin/sway px -> ghostship-agent-desktop//sway,
-    @{gs_tools}/stage-input px -> ghostship-agent-desktop//stage-input,
+    @{gs_tools}/stage-control px -> ghostship-agent-desktop//stage-control,
     /opt/google/chrome/google-chrome px -> ghostship-agent-desktop//chrome-other,
     @{gs_ld} mr,
     @{gs_libs_shell} mr,
@@ -848,8 +850,8 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     signal (receive) peer=ghostship-agent-desktop,
     signal (receive) peer=ghostship-agent-desktop//{agent-shell,desktop},
     signal (send,receive) peer=ghostship-agent-desktop//chrome-instance-launcher,
-    signal (send) peer=ghostship-agent-desktop//{chrome-other,sway,stage-input},
-    signal (receive) peer=ghostship-agent-desktop//{chrome-other,sway,stage-input},
+    signal (send) peer=ghostship-agent-desktop//{chrome-other,sway,stage-control},
+    signal (receive) peer=ghostship-agent-desktop//{chrome-other,sway,stage-control},
   }
 
   # A browser stage: headless Sway (wlroots, GLES on the render node) with
@@ -903,25 +905,53 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     signal (send,receive) peer=ghostship-agent-desktop//sway,
   }
 
-  # stage-input: a stdlib Python Wayland client that holds a virtual pointer
-  # and keyboard on a stage's seat.
-  profile stage-input flags=(complain,attach_disconnected,mediate_deleted) {
+  # stage-control: a stdlib Python client of a browser stage. It holds the
+  # stage's virtual pointer and keyboard, gives each Chrome window an output
+  # (sway IPC), captures windows (grim), sends browser-control input (wtype
+  # for keys), reads Chrome window ids over loopback DevTools, and serves
+  # runs/stage-<identity>.sock. Its `call` mode is how SSH agents reach it.
+  profile stage-control flags=(complain,attach_disconnected,mediate_deleted) {
     network unix stream,
+    network inet stream,
+    network inet6 stream,
 
-    @{gs_tools}/stage-input r,
+    @{gs_tools}/stage-control r,
+    @{gs_tools}/lib/ r,
+    @{gs_tools}/lib/*.py r,
+    @{gs_tools}/lib/__pycache__/** rw,
+    @{gs_tools}/tools/ r,
+    @{gs_tools}/tools/cdp_ws.py r,
+    @{gs_tools}/tools/__pycache__/** rw,
     /usr/bin/python3.14 mrix,
     @{gs_ld} mr,
     @{gs_libs_python} mr,
     /usr/lib/python3.14/ r,
     /usr/lib/python3.14/** r,
     /usr/lib/python3.14/lib-dynload/*.so mr,
+    /usr/lib/python3/dist-packages/ r,
+    /usr/lib/python3/dist-packages/PIL/ r,
+    /usr/lib/python3/dist-packages/PIL/** mr,
+    /usr/lib/python3/dist-packages/pillow*/** r,
+    @{gs_lib}/lib{jpeg,png16,tiff,webp,webpdemux,webpmux,sharpyuv,lcms2,openjp2,freetype,imagequant,xcb,Xau,Xdmcp,lzma,zstd,jbig,deflate,LerC,brotlicommon,brotlidec,bz2,z,expat}.so* mr,
+    /usr/bin/{grim,wtype} mrix,
+    @{gs_lib}/lib{wayland-client,xkbcommon,png16,jpeg,pixman-1,ffi,m,c}.so* mr,
     /usr/lib/locale/locale-archive r,
     @{gs_lib}/gconv/gconv-modules.cache r,
-    /etc/{passwd,group,nsswitch.conf,localtime,ld.so.cache} r,
+    /etc/{passwd,group,nsswitch.conf,localtime,ld.so.cache,hosts} r,
+    /usr/share/X11/xkb/** r,
     @{gs_xdg}/ r,
     @{gs_xdg}/wayland-[0-9]* rw,
+    @{gs_xdg}/ghostship-stage-*{,.sock} rw,
+    @{gs_data}/runs/ rw,
+    @{gs_data}/runs/stage-*.sock rw,
+    @{gs_data}/runs/*.pause r,
+    @{gs_data}/runs/{busy,paused}/ rw,
+    @{gs_data}/runs/{busy,paused}/* rw,
     /dev/null rw,
     /dev/urandom r,
+    /dev/shm/ r,
+    owner /dev/shm/** rw,
+    owner /tmp/* rw,
 
     signal (receive) peer=unconfined,
     signal (receive) peer=ghostship-agent-desktop,
