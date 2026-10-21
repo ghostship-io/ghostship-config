@@ -107,6 +107,21 @@ Android delivery may be unavailable until an Access-compatible method is approve
 do not restore a bypass for compatibility. No iOS relay or WARP dependency is configured. A manual
 `ghostship-notify --topic informational --source test --title 'Ghostship notification test'` checks delivery after rollout; run as root.
 
+`ghostship-newsletter-health.timer` checks the canonical newsletter checkout every
+ten minutes as user 3000 inside `t3code`, through its pinned Nix environment.
+Install newsletter 0.5.18 or later first: the command is
+`ghostship-am-monitor-status --runtime-only --json --fail-on-unhealthy`.
+Newsletter code owns due times, artifact validation and the Gmail delivery ledger.
+A failed or unavailable monitor opens one alert episode in `operations` and queues
+the stable `newsletter-runtime` incident through `ghostship-notify`; the coordinator
+reuses that incident's T3 thread with its existing daily launch limit. Failed
+notification delivery retries; recovery sends one resolution. This host job never
+collects, prepares, repairs or sends mail. Its ledger evidence confirms Gmail
+acceptance/reconciliation, not recipient receipt. Inspect with
+`journalctl -u ghostship-newsletter-health`; stop/start the timer to pause/resume,
+or start its service for a manual check. State lives in
+`/var/lib/ghostship-newsletter-health/state.json`.
+
 ### Notification coverage
 
 `modules/self-hosted/notify-coverage.nix` attaches `ghostship-failure@` to
