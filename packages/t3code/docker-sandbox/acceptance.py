@@ -36,6 +36,7 @@ def main():
         required=True,
         help="Known listening HOST/PUBLIC-HOST/LAN IPv4:port canary; repeat for each",
     )
+    parser.add_argument("--subid-start", type=int, default=2000000)
     parser.add_argument("--image", default="python:3.13-alpine")
     args = parser.parse_args()
     control = json.loads(args.control_report.read_text())
@@ -78,6 +79,20 @@ def main():
         prefix=".t3-docker-acceptance-", dir=args.workspace
     ) as directory:
         source = Path(directory)
+        # Project owners opt in to nonroot writes. Never change an existing
+        # project here: this grant is limited to the disposable fixture.
+        owner = os.getuid()
+        if owner != 3000:
+            parser.error("run as the T3 workspace owner (UID 3000)")
+        grants = [
+            f"{prefix}u:{args.subid_start + uid - 1}:rwx"
+            for uid in (3000, 1000)
+            for prefix in ("", "d:")
+        ]
+        subprocess.run(
+            ["setfacl", "-m", ",".join([*grants, f"d:u:{owner}:rwx"]), str(source)],
+            check=True,
+        )
         try:
             (source / "Dockerfile").write_text(
                 f"FROM {args.image}\nRUN python -c 'import socket; assert socket.getaddrinfo(\"example.com\", 443)'\n"
@@ -99,15 +114,26 @@ def main():
                     check=False,
                 )
                 output = source / f"u{container_uid}"
-                # Every accepted producer must leave files cleanable by T3's
-                # UID3000, without host root or recursively changing ownership.
-                writable = (
-                    probe.returncode == 0
-                    and output.stat().st_uid == 3000
-                    and os.access(output, os.W_OK)
+                expected_owner = (
+                    owner
+                    if container_uid == 0
+                    else args.subid_start + container_uid - 1
                 )
+                writable = False
+                if probe.returncode == 0:
+                    correct_owner = (
+                        output.stat().st_uid == expected_owner
+                        and (output / "file").stat().st_uid == expected_owner
+                    )
+                    # Exercise the T3 owner's actual operations, rather than
+                    # inferring them from mode bits or os.access().
+                    (output / "file").write_text("edited by T3")
+                    edited = (output / "file").read_text() == "edited by T3"
+                    (output / "file").unlink()
+                    output.rmdir()
+                    writable = correct_owner and edited and not output.exists()
                 record(
-                    f"bind writes as container UID {container_uid}, host ownership 3000",
+                    f"bind writes as container UID {container_uid}; T3 edit/delete; host UID {expected_owner}",
                     writable,
                     probe.stderr[-600:],
                 )
