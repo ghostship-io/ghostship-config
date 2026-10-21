@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.27] - 2026-10-21
+
+- Pin ghostship-agent 0.36.0: `gws`, the Google Workspace official-API CLI, is retired with its `google-workspace-cli` flake input (the lock drops it and its nixpkgs), so the managed install removes the `gws` command from T3 Code; Google work runs through the browser workflows. Also drops the ignored `shoppingConfig` argument, dead CloakBrowser Keep clients and retired Prefect/CloakBrowser notes.
+- Delete the unreferenced `private-integrations/shopping-overlay.json`.
+
 ## [3.17.26] - 2026-10-21
 
 - Pin ghostship-agent 0.35.1: `t3` `status` takes `wait_s` and answers once the task's active turn ends. `browser_op` `extract` defaults an unnamed step to `step<index>`, and with neither `js` nor `selector` returns the page's visible text.
