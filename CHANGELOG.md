@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.9] - 2026-10-21
+
+- The kernel dropped 185 audit records at 05:37 UTC (`AuditRecordsLost`). OrcaSlicer, started in an agent-desktop app session, spawned WebKitGTK helpers and `ldd` ran the loader, all without AppArmor rules. In ruleless `null-*` profiles they logged about 74k records a minute and overflowed the 8192-record backlog.
+  - The agent desktop's `desktop` child now allows the two WebKit helpers and the loader; it already runs any `/usr/bin` program.
+  - PulseAudio may re-execute itself.
+  - The kernel audit backlog rises to 32768.
+
 ## [3.17.8] - 2026-10-21
 
 - Falco and audit tuning for three agent-desktop image behaviours, each investigated as a legitimate workload (#102). These are narrow exceptions keyed on container name prefix, executable and exact command line; every other sudoers read or ptrace in those containers still alerts.

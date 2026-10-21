@@ -1334,8 +1334,9 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     network unix stream,
     network unix dgram,
     network netlink raw,
+    # PulseAudio re-executes itself at start (observed 2026-10-21).
+    /usr/bin/pulseaudio rmix,
 
-    /usr/bin/pulseaudio mr,
     @{gs_ld} mr,
     @{gs_lib}/{libFLAC.so.14.0.0,libX11-xcb.so.1.0.0,libX11.so.6.4.0,libXau.so.6.0.0,libXdmcp.so.6.0.0,libXext.so.6.4.0,libXtst.so.6.1.0,libapparmor.so.1.30.7,libasyncns.so.0.3.1,libatomic.so.1.2.0,libblkid.so.1.1.0,libbrotlicommon.so.1.2.0,libbrotlidec.so.1.2.0,libc.so.6,libcap.so.2.75,libcom_err.so.2.1,libdbus-1.so.3.38.3,libffi.so.8.2.0,libgio-2.0.so.0.8800.0,libglib-2.0.so.0.8800.0,libgmodule-2.0.so.0.8800.0,libgobject-2.0.so.0.8800.0,libgomp.so.1.0.0,libgssapi_krb5.so.2.2,libidn2.so.0.4.0,libjson-glib-1.0.so.0.1000.8,libk5crypto.so.3.1,libkeyutils.so.1.10,libkrb5.so.3.3,libkrb5support.so.0.1,libltdl.so.7.3.3,libm.so.6,libmount.so.1.1.0,libmp3lame.so.0.0.0,libmpg123.so.0.49.4,libmvec.so.1,libnghttp2.so.14.29.2,libogg.so.0.8.6,libopus.so.0.11.1,liborc-0.4.so.0.42.0,libpcre2-8.so.0.14.0,libpsl.so.5.3.4,libpulse.so.0.24.3,libresolv.so.2,libselinux.so.1,libsnapd-glib-2.so.1.0.0,libsndfile.so.1.0.37,libsoup-3.0.so.0.7.4,libsoxr.so.0.1.2,libspeexdsp.so.1.5.2,libsqlite3.so.0.8.6,libsystemd.so.0.42.0,libtdb.so.1.4.14,libudev.so.1.7.12,libunistring.so.5.2.0,libvorbis.so.0.4.9,libvorbisenc.so.2.0.12,libwrap.so.0.7.6,libxcb.so.1.1.0,libz.so.1.3.1} mr,
     @{gs_lib}/pulseaudio/{libpulsecommon-17.0.so,libpulsecore-17.0.so} mr,
@@ -1523,6 +1524,11 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     @{gs_tools}/nobwrap/bwrap rix,
     # The person-installed OrcaSlicer AppImage tree (writable path; review on change).
     /config/Applications/orcaslicer/** mrix,
+    # OrcaSlicer's embedded WebKitGTK helpers, and `ldd`, which runs the loader
+    # (observed 2026-10-21: ~74k audit records/min in null profiles, 185 lost).
+    # This child already runs any /usr/bin program; the loader adds no reach.
+    @{gs_lib}/webkit2gtk-4.1/WebKit{Network,Web}Process mrix,
+    @{gs_ld} mrix,
     /lsiopy/bin/pelorus px -> ghostship-agent-desktop//pelorus,
     /opt/google/chrome/google-chrome px -> ghostship-agent-desktop//chrome-other,
     /usr/bin/sudo.ws px -> ghostship-agent-desktop//sudo,
