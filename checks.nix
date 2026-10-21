@@ -1,4 +1,4 @@
-{ pkgs, self }:
+{ pkgs, self, agentSource }:
 let
   python = pkgs.python3.withPackages (ps: [
     ps.lxml
@@ -27,6 +27,9 @@ in
   config-tests =
     pkgs.runCommand "ghostship-config-tests"
       {
+        # The integration tests import the exact pinned coordinator without
+        # invoking Nix or fetching inputs inside the build sandbox.
+        GHOSTSHIP_TEST_AGENT_SOURCE = agentSource;
         nativeBuildInputs = [
           python
           pkgs.git

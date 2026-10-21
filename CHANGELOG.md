@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.32] - 2026-10-21
+
+- Pass the pinned agent source into sandboxed configuration tests. Newsletter incident integration tests no longer need a Nix executable or nested flake evaluation inside the builder; they continue to exercise the real pinned coordinator.
+
 ## [3.17.31] - 2026-10-21
 
 - Separate newsletter incident acknowledgement from ntfy delivery. The notifier's incident-only operation acknowledges an fsynced spool write; the monitor persists one event ID per episode before sending and retries it independently. Notification outages no longer enqueue recurrence messages, and spool failures remain retryable after ntfy succeeds. Regression tests exercise the real notifier and pinned coordinator with local fake edges, including lost acknowledgements and persistence failures.
