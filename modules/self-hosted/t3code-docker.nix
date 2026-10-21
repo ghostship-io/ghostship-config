@@ -480,7 +480,11 @@ in
           serviceConfig = {
             RootDirectory = root;
             NetworkNamespacePath = "/run/netns/t3code-docker";
-            ProtectProc = "invisible";
+            # busctl/runc need /proc/1/cgroup to detect the owning user manager.
+            # hidepid makes OwnerUID disappear and selects a rootful cgroup bus.
+            # The dedicated host UID still cannot follow root-owned proc roots
+            # or read other users' environments; process metadata stays visible.
+            ProtectProc = "default";
             Delegate = "cpu cpuset io memory pids";
             MemoryMax = cfg.memoryMax;
             CPUQuota = cfg.cpuQuota;
