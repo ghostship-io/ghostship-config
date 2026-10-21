@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.23] - 2026-10-21
+
+- Fix Grafana startup (#177). The vendored VictoriaLogs plugin is kept unmodified, because pruning the other platforms' backends failed its signature check. Provisioning is now real files, with dashboards inside the mounted directory; the store symlinks pointed outside the container.
+
 ## [3.17.22] - 2026-10-21
 
 - Falco: narrow exceptions for Debian package scripts in image builds (`crun-buildah`). These are `systemd-sysusers` under dpkg reading `/etc/shadow`, and fontconfig's postinst truncating `/var/log/fontconfig.log`. Both were investigated on the scheduled agent-desktop rebuild at 13:02 (#102).
