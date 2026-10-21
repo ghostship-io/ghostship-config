@@ -6,8 +6,11 @@ to the existing host notifier/incident spool. Never forward source text or logs.
 """
 import argparse
 import json
+import os
 import re
 import subprocess
+import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -36,16 +39,28 @@ def observe(command, now=None):
         return "monitor_unavailable"
 
 
-def reconcile(state, problem, notify):
-    """Retry failed delivery; one firing and one resolution per observed episode."""
+def reconcile(state, problem, incident, notify, save):
+    """Acknowledge the incident independently of notification delivery."""
+    if not problem and not state.get("firing"):
+        return
+    state["firing"] = True
+    state.setdefault("incident_id", uuid.uuid4().hex)
+    # Persist the identity before handing anything off. A lost response retries
+    # the same coordinator event ID, including after its spool file was consumed.
+    save()
+    if not state.get("incident_queued"):
+        state["incident_queued"] = incident(
+            state["incident_id"], problem or "runtime recovered after an observed failure")
+        save()
     if problem:
-        # Persist the episode before sending: a crash or ntfy failure may retry
-        # the same stable incident key, which the coordinator already coalesces.
-        state["firing"] = True
+        if state.pop("resolved", False):
+            state["notified"] = False
         if not state.get("notified"):
             state["notified"] = notify("firing", problem)
-    elif state.get("firing"):
-        if notify("resolved", "daily runtime and last due delivery are healthy"):
+    else:
+        if not state.get("resolved"):
+            state["resolved"] = notify("resolved", "daily runtime and last due delivery are healthy")
+        if state["resolved"] and state["incident_queued"]:
             state.clear()
 
 
@@ -59,18 +74,28 @@ def main(argv=None):
     problem = observe(config["command"])
 
     def save():
-        temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(state))
-        temporary.replace(path)
+        fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w") as stream:
+                json.dump(state, stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
 
-    def notify(status, message):
-        save()
+    def send(status, message, incident_id=None):
         command = [config["notify"], "--topic", "operations", "--source", "newsletter",
                    "--state", status, "--dedupe", "newsletter-runtime",
                    "--priority", "4" if status == "firing" else "2",
                    "--title", f"Ghostship AM runtime {status}"]
-        if status == "firing":
-            command.append("--incident")
+        if incident_id:
+            command.extend(["--incident-only", "--incident-id", incident_id])
         command.append(f"{message}. Inspect ghostship-am-monitor-status --runtime-only in "
                        "/workspace/ghostship-newsletter and the newsletter user service logs. "
                        "Delivery ledger records Gmail send/reconciliation, not recipient receipt.")
@@ -79,7 +104,7 @@ def main(argv=None):
         except (OSError, subprocess.SubprocessError):
             return False
 
-    reconcile(state, problem, notify)
+    reconcile(state, problem, lambda event_id, message: send("firing", message, event_id), send, save)
     save()
     print(f"newsletter health: {problem or 'healthy'}")
     return 0

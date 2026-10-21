@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.29] - 2026-10-21
+
+- Separate newsletter incident acknowledgement from ntfy delivery. The notifier's incident-only operation acknowledges an fsynced spool write; the monitor persists one event ID per episode before sending and retries it independently. Notification outages no longer enqueue recurrence messages, and spool failures remain retryable after ntfy succeeds. Regression tests exercise the real notifier and pinned coordinator with local fake edges, including lost acknowledgements and persistence failures.
+
 ## [3.17.28] - 2026-10-21
 
 - Observe Ghostship AM outcomes from a host timer, using the newsletter's runtime-only monitor as its unprivileged user. Missing delivery, stale/invalid daily artifacts, or an unavailable monitor raise an operations alert and the existing bounded coordinator incident; recovery sends one resolution. No new sender, repair loop or T3 restart path is added. Requires newsletter 0.5.18 or later in the canonical checkout.

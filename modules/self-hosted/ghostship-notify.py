@@ -7,6 +7,11 @@ and the state; --dedupe suppresses a repeat of the same key and state for an
 hour, while a state change always publishes. --incident also queues a firing
 alert for the GitHub coordinator, which starts a bounded T3 repair thread; it is
 queued even when ntfy is down.
+
+--incident-only --incident-id ID acknowledges only a durable spool write, without
+publishing to ntfy. Retrying the same ID preserves the coordinator event identity,
+even if the coordinator already consumed the file. Keep the ID across retries;
+use a new one for a later episode.
 """
 from __future__ import annotations
 
@@ -17,6 +22,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -68,17 +74,30 @@ def record(key: str, state: str) -> None:
     temporary.replace(path)
 
 
-def queue_incident(key: str, title: str, message: str) -> None:
+def queue_incident(key: str, title: str, message: str, incident_id: str | None = None) -> bool:
     """Hand a firing alert to the coordinator's incident spool, if this host has one."""
     if not INCIDENTS or not Path(INCIDENTS).is_dir():
-        return
+        return False
     now = time.time()
-    name = f"{int(now * 1000)}-{hashlib.sha256(key.encode()).hexdigest()[:12]}"
-    temporary = Path(INCIDENTS) / f".{name}.tmp"
-    temporary.write_text(json.dumps({"key": key, "title": title, "message": message,
-                                     "host": os.uname().nodename, "at": now}))
-    temporary.chmod(0o640)
-    temporary.replace(Path(INCIDENTS) / f"{name}.json")
+    name = (f"incident-{hashlib.sha256(incident_id.encode()).hexdigest()}" if incident_id
+            else f"{int(now * 1000)}-{hashlib.sha256(key.encode()).hexdigest()[:12]}")
+    fd, temporary = tempfile.mkstemp(prefix=f".{name}.", suffix=".tmp", dir=INCIDENTS)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            os.fchmod(stream.fileno(), 0o640)
+            json.dump({"key": key, "title": title, "message": message,
+                       "host": os.uname().nodename, "at": now}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, Path(INCIDENTS) / f"{name}.json")
+        directory = os.open(INCIDENTS, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    return True
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -91,12 +110,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state", choices=("firing", "resolved"), default="firing")
     parser.add_argument("--tags", default="", help="comma-separated extra tags")
     parser.add_argument("--dedupe", help="suppress a repeat of this key and state for an hour")
-    parser.add_argument("--incident", action="store_true",
+    incident_mode = parser.add_mutually_exclusive_group()
+    incident_mode.add_argument("--incident", action="store_true",
                         help="also start a T3 repair thread for a firing alert")
+    incident_mode.add_argument("--incident-only", action="store_true",
+                              help="queue only; exit zero only after the incident spool write is durable")
+    parser.add_argument("--incident-id", help="stable event ID for retries of --incident-only")
     parser.add_argument("--click", help="https URL opened when the notification is tapped")
     parser.add_argument("message", nargs="*", help="message text; read from stdin when omitted")
     args = parser.parse_args(argv)
     message = " ".join(args.message) if args.message else sys.stdin.read()
+    if args.incident_only:
+        if not args.incident_id or args.state != "firing":
+            parser.error("--incident-only requires --incident-id and a firing state")
+        try:
+            if queue_incident(args.dedupe or args.title, args.title, message[:4000], args.incident_id):
+                return 0
+            print("ghostship-notify: incident spool is unavailable", file=sys.stderr)
+        except OSError as exc:
+            print(f"ghostship-notify: queueing the incident failed: {exc}", file=sys.stderr)
+        return 1
+    if args.incident_id:
+        parser.error("--incident-id requires --incident-only")
     key = f"{args.topic}:{args.dedupe}" if args.dedupe else None
     if key and duplicate(key, args.state):
         return 0

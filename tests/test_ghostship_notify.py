@@ -2,11 +2,13 @@
 import importlib.util
 import json
 import os
+import stat
 import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location(
     "ghostship_notify", Path(__file__).resolve().parents[1] / "modules/self-hosted/ghostship-notify.py")
@@ -28,6 +30,36 @@ class Ntfy(BaseHTTPRequestHandler):
 
 
 class NotifyTests(unittest.TestCase):
+    def test_incident_only_requires_durable_spool_and_retries_with_same_event_identity(self):
+        """An unavailable spool or failed fsync must never acknowledge the handoff."""
+        with tempfile.TemporaryDirectory() as tmp:
+            spool = Path(tmp) / "incidents"
+            base = ["--topic", "operations", "--source", "newsletter", "--title", "failure",
+                    "--dedupe", "newsletter-runtime", "--incident-only", "--incident-id", "episode-1", "m"]
+            with mock.patch.object(notify, "INCIDENTS", str(spool)), \
+                 mock.patch.object(notify, "server", side_effect=AssertionError("ntfy must be independent")):
+                self.assertEqual(notify.main(base), 1)
+                spool.mkdir()
+                real_fsync = os.fsync
+
+                def fail_directory_sync(fd):
+                    if stat.S_ISDIR(os.fstat(fd).st_mode):
+                        raise OSError("injected directory persistence failure")
+                    return real_fsync(fd)
+
+                with mock.patch.object(notify.os, "fsync", side_effect=OSError("injected file persistence failure")):
+                    self.assertEqual(notify.main(base), 1)
+                self.assertEqual(list(spool.iterdir()), [])
+                with mock.patch.object(notify.os, "fsync", side_effect=fail_directory_sync):
+                    self.assertEqual(notify.main(base), 1)
+                (first,) = spool.glob("*.json")
+                first.unlink()  # Consumer can ingest before the lost acknowledgement is retried.
+                self.assertEqual(notify.main(base), 0)
+                (retry,) = spool.glob("*.json")
+                self.assertEqual(first.name, retry.name)
+                self.assertEqual(retry.stat().st_mode & 0o777, 0o640)
+                self.assertEqual(list(spool.glob("*.tmp")), [])
+
     def test_dedupe_publishes_each_state_once_and_retries_after_a_failed_publish(self):
         server = HTTPServer(("127.0.0.1", 0), Ntfy)
         threading.Thread(target=server.serve_forever, daemon=True).start()
