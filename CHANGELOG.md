@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.8] - 2026-10-21
+
+- Falco and audit tuning for three agent-desktop image behaviours, each investigated as a legitimate workload (#102). These are narrow exceptions keyed on container name prefix, executable and exact command line; every other sudoers read or ptrace in those containers still alerts.
+  - `init-selkies-config` restores `NOPASSWD` in `/etc/sudoers` at every start.
+  - `selkies-proot check` runs `proot -0 /bin/true`, which ptraces its child.
+  - Chrome's crashpad handler attaches to Chrome. It is also excluded from `AuditKernelChange` (`ptrace_attach`).
+
 ## [3.17.7] - 2026-10-21
 
 - SIEM redaction covers every string field at any depth, not just the message and request path (#102 Gate 1.5). Falco command lines and output fields, audit names and future sources are included.
