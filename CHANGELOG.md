@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.17.2] - 2026-10-21
+
+- SIEM: no long-lived collector holds the rootful Podman API.
+  - `ghostship-siem-alerts` and `ghostship-container-metrics` read `/run/podman/podman.sock` directly. Root needs no capability to use that socket, which can create and exec containers.
+  - A short-lived root job, `ghostship-podman-snapshot` (every 30 s), now writes a metadata-only snapshot and the container counters, replacing the container-metrics daemon.
+  - The bridge resolves ntfy and T3 from that snapshot, refuses one older than 5 minutes, and runs with `/run/podman` inaccessible.
+  - `ContainerSnapshotStale` alerts if the job stops.
+- Container network bytes are counted once per network namespace. qBittorrent, which shares Gluetun's namespace, was double-counted. Members now get `ghostship_container_netns_shared`.
+
 ## [3.17.1] - 2026-10-21
 
 - SIEM alerts reach ntfy. `ghostship-notify` found ntfy by running `podman inspect`, which fails in the bridge's capability-free sandbox. Since #156 every ntfy publish from the bridge failed; T3 delivery was unaffected. The bridge now resolves ntfy through the Podman API socket and passes `GHOSTSHIP_NOTIFY_URL`.
