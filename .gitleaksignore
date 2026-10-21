@@ -1,0 +1,3 @@
+# Test fixtures that look like secrets but are not (gitleaks fingerprints).
+# The jwt.io example token (sub 1234567890, truncated signature) the SIEM redaction test feeds Vector.
+tests/siem-vector.toml:jwt:170
