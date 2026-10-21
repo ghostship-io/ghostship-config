@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.4] - 2026-10-21
+
+- SIEM loss visibility (#102 Gate 1.4).
+  - The watchdog publishes kernel audit lost and backlog, journal retention and VictoriaLogs ingestion lag (`siem-pipeline.prom`).
+  - New rules: `AuditRecordsLost`, `JournalRetentionShort` (< 6 h), `LogIngestionLag` (> 10 min), `VectorBufferFilling` (> 1 GiB) and `PipelineMetricsStale`.
+- The journal cap rises from 1 GiB to 4 GiB. It is the buffer upstream of Vector, and during the 2026-10-21 AppArmor flood it held only about 3 hours, so a longer collector or store outage would have lost events.
+
 ## [3.17.3] - 2026-10-21
 
 - SIEM pipeline liveness (#102 Gate 1.2).

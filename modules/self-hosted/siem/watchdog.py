@@ -9,6 +9,9 @@ on its own timer and checks, without the bridge:
 - the vmalert, VictoriaLogs and VictoriaMetrics APIs directly,
 - the container snapshot's age.
 
+It also publishes loss and lag metrics (kernel audit lost/backlog, journal
+retention, VictoriaLogs ingestion lag) for the vmalert pipeline rules.
+
 Each problem opens one episode: an ntfy security alert plus, once per episode,
 a T3 incident through ghostship-notify --incident (queued even if ntfy is
 down). Publishing retries until ntfy accepts; clearing sends one resolution.
@@ -16,10 +19,13 @@ A dead host cannot report itself: that is the off-host dead-man's job.
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 
@@ -72,6 +78,36 @@ def problems(config, now, metrics_text, mtime, snapshot_mtime, probe=reachable):
     return found
 
 
+def pipeline_metrics(config, now, run=subprocess.run):
+    """Loss and lag signals the alert rules use: kernel audit, journal, ingestion."""
+    lines = []
+    status = run([config["auditctl"], "-s"], capture_output=True, text=True, timeout=30).stdout
+    fields = dict(line.split(" ", 1) for line in status.splitlines() if " " in line)
+    for name, key in (("ghostship_audit_lost_total", "lost"), ("ghostship_audit_backlog", "backlog"),
+                      ("ghostship_audit_backlog_limit", "backlog_limit")):
+        if fields.get(key, "").strip().isdigit():
+            lines.append(f"{name} {fields[key].strip()}")
+    first = run([config["journalctl"], "--system", "-q", "-o", "short-unix", "-n", "1", "--reverse", "--no-pager"],
+                capture_output=True, text=True, timeout=60).stdout
+    oldest = run(["sh", "-c", f"{config['journalctl']} --system -q -o short-unix --no-pager | head -1"],
+                 capture_output=True, text=True, timeout=120).stdout
+    try:
+        lines.append(f"ghostship_journal_retention_seconds {now - float(oldest.split()[0])}")
+        lines.append(f"ghostship_journal_newest_timestamp_seconds {float(first.split()[0])}")
+    except (IndexError, ValueError):
+        pass
+    query = urllib.parse.urlencode({"query": '_time:30m source:="journald" | stats max(_time) as t'})
+    try:
+        with urllib.request.urlopen(f"{config['victorialogs']}/select/logsql/query?{query}", timeout=30) as r:
+            newest = json.loads(r.read().decode().strip().splitlines()[0])["t"]
+        stamp = datetime.fromisoformat(newest.replace("Z", "+00:00")).timestamp()
+        lines.append(f"ghostship_log_ingestion_lag_seconds {max(0.0, now - stamp)}")
+    except (OSError, ValueError, KeyError, IndexError):
+        lines.append("ghostship_log_ingestion_lag_seconds 1800")
+    lines.append(f"ghostship_siem_watchdog_last_run_timestamp_seconds {now}")
+    return "\n".join(lines) + "\n"
+
+
 def notify(config, state_name, key, message, incident):
     command = [config["notify"], "--topic", "security", "--source", "siem-watchdog",
                "--state", state_name, "--priority", "5" if state_name == "firing" else "2",
@@ -121,6 +157,16 @@ def main(argv=None):
     temporary = state_path.with_suffix(".tmp")
     temporary.write_text(json.dumps(state))
     temporary.replace(state_path)
+    if config.get("pipeline_metrics"):
+        try:
+            text = pipeline_metrics(config, now)
+            out = Path(config["pipeline_metrics"])
+            partial = out.with_suffix(".tmp")
+            partial.write_text(text)
+            os.chmod(partial, 0o644)
+            partial.replace(out)
+        except (OSError, subprocess.SubprocessError) as exc:
+            print(f"siem watchdog: pipeline metrics failed: {exc}", file=sys.stderr)
     for key, message in sorted(found.items()):
         print(f"siem watchdog: {key}: {message}", file=sys.stderr)
     return 0
