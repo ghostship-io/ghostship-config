@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.16.1] - 2026-10-21
+
+- SIEM container metrics read the Podman REST API over its socket. `podman ps` failed under the collector's read-only sandbox (it takes lock files), so no per-container counters reached VictoriaMetrics after #153.
+- Falco alerts carry the container plugin's fields (container id, name, image) again (`append_output`); the minimal configuration had dropped them.
+
 ## [3.16.0] - 2026-10-21
 
 - Security monitoring (SIEM), part 1: collection and storage (docs/siem.md).
