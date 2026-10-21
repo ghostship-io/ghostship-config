@@ -92,7 +92,9 @@ groups:
           evidence: '_time:1h audit_key:="{{ $labels.audit_key }}"'
 
       - alert: AuditKernelChange
-        expr: '_time:5m audit_key:in(module_load, module_unload, kexec, ptrace_attach) | stats by (audit_key, audit_exe) count() as n'
+        # Chrome's crashpad handler attaching to Chrome (agent desktop) is
+        # verified crash reporting (#102, 2026-10-21); every other attach alerts.
+        expr: '_time:5m audit_key:in(module_load, module_unload, kexec, ptrace_attach) -(audit_key:="ptrace_attach" audit_exe:="/opt/google/chrome/chrome_crashpad_handler") | stats by (audit_key, audit_exe) count() as n'
         labels: {severity: high, category: privilege}
         annotations:
           summary: '{{ $labels.audit_exe }}: {{ $labels.audit_key }} ({{ $value }})'
