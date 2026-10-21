@@ -112,5 +112,101 @@ class FactTests(unittest.TestCase):
         )
 
 
+class FactBoundaryTests(unittest.TestCase):
+    """The probes the root frontier ran against the durable facts."""
+
+    def test_a_fact_from_the_future_is_not_current(self):
+        fact = measured_fact()
+        fact["fetched_at_epoch"] = NOW + 86400
+        self.assertFalse(facts.is_current(fact, NOW))
+
+    def test_a_nan_fetched_at_is_not_current(self):
+        fact = measured_fact()
+        fact["fetched_at_epoch"] = float("nan")
+        self.assertFalse(facts.is_current(fact, NOW))
+
+    def test_an_infinite_fetched_at_is_not_current(self):
+        fact = measured_fact()
+        fact["fetched_at_epoch"] = float("inf")
+        self.assertFalse(facts.is_current(fact, NOW))
+
+    def test_a_pending_fact_waits_for_its_next_check(self):
+        fact = facts.pending_fact(
+            provider="minimax",
+            model="MiniMax M3.1 Flash",
+            reason="the brief is expected",
+            next_check_at=NOW + 3600,
+            now=NOW,
+        )
+        needed, why = facts.needs_research(
+            fact, facts.identity_key("minimax", "MiniMax M3.1 Flash"), NOW
+        )
+        self.assertFalse(needed)
+        self.assertIn("later", why)
+
+    def test_a_pending_fact_is_researched_when_the_check_is_due(self):
+        fact = facts.pending_fact(
+            provider="minimax",
+            model="MiniMax M3.1 Flash",
+            reason="the brief is expected",
+            next_check_at=NOW - 60,
+            now=NOW,
+        )
+        needed, _why = facts.needs_research(
+            fact, facts.identity_key("minimax", "MiniMax M3.1 Flash"), NOW
+        )
+        self.assertTrue(needed)
+
+    def test_the_index_keeps_the_provider_and_the_variant(self):
+        one = measured_fact(model="M", provider="a")
+        two = measured_fact(model="M", provider="b")
+        three = measured_fact(model="M", provider="a", variant="high")
+        indexed = facts.index(
+            {
+                facts.identity_key("a", "M"): one,
+                facts.identity_key("b", "M"): two,
+                facts.identity_key("a", "M", "high"): three,
+            }
+        )
+        self.assertEqual(len(indexed), 3)
+        self.assertIn(facts.identity_key("a", "M", "high"), indexed)
+
+    def test_a_fresh_measurement_refreshes_a_stale_record(self):
+        stale = measured_fact(model="M")
+        stale["fetched_at_epoch"] = NOW - 60 * DAY
+        fresh = measured_fact(model="M")
+        state = {"facts": {facts.identity_key("minimax", "M"): stale}}
+        merged = facts.merge(state, [fresh])
+        key = facts.identity_key("minimax", "M")
+        self.assertEqual(merged[key]["fetched_at_epoch"], fresh["fetched_at_epoch"])
+        self.assertTrue(facts.is_current(merged[key], NOW))
+
+    def test_an_estimate_rejects_a_non_finite_or_out_of_range_strength(self):
+        for strength in (float("nan"), float("inf"), -1.0, 101.0):
+            with self.assertRaises(ValueError):
+                facts.estimated_fact(
+                    provider="p", model="m", strength=strength, basis="a prior", now=NOW
+                )
+
+    def test_an_estimate_rejects_a_confidence_above_the_ceiling(self):
+        with self.assertRaises(ValueError):
+            facts.estimated_fact(
+                provider="p",
+                model="m",
+                strength=50.0,
+                basis="a prior",
+                confidence=0.95,
+                now=NOW,
+            )
+
+    def test_an_estimate_keeps_its_confidence_and_strength_apart(self):
+        fact = facts.estimated_fact(
+            provider="p", model="m", strength=90.0, basis="a prior", now=NOW
+        )
+        self.assertEqual(fact["indices"]["intelligence_index"], 90.0)
+        self.assertEqual(fact["confidence"], facts.ESTIMATE_CONFIDENCE)
+        self.assertEqual(fact["strength_scale"], {"min": 0.0, "max": 100.0})
+
+
 if __name__ == "__main__":
     unittest.main()
