@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.17.16] - 2026-10-21
+
+- `ghostship-apparmor-review` reads evidence from VictoriaLogs, filtered per profile on the server, instead of a day of journal JSON.
+  - **Old behaviour:** the journal keeps only hours at audit flood rates, so yesterday's continuity anchor was always rotated away and every profile reported `audit-collection-failed`. The 08:30 run took 7 minutes and peaked at 9.3 GB.
+  - **Live dry run:** under 2 minutes, with heartbeats found in the store for every container.
+  - **Exited processes:** a process that exits between `podman top` and the label read is skipped instead of failing inspection. That caused Muximux, pyLoad, qBittorrent and RomM `inspection-failed`.
+  - **Chaptarr:** its top profile is never live (PID 1 enters `server`).
+
 ## [3.17.15] - 2026-10-21
 
 - Pin ghostship-agent 0.33.0: `browser_window` screenshots name the toolbar buttons (each pinned extension by name, then the extensions menu and the profile), so ChatGPT can use extensions without relying on tooltips.

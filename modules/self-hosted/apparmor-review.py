@@ -18,6 +18,9 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
+import urllib.request
+from datetime import datetime, timezone
 
 DAY = 86400
 # expected-denial: investigated and must stay disallowed. resolved-by-policy:
@@ -32,12 +35,16 @@ AUDIT_LOSS = re.compile(
     r"audit_lost=[1-9][0-9]*|audit.*(?:backlog limit exceeded|rate limit exceeded)|"
     r"kauditd.*(?:suppressed|overflow)|(?:Suppressed|Dropped) [1-9][0-9]* messages|"
     r"(?:audit|apparmor)\S*: [1-9][0-9]* (?:callbacks|messages) suppressed", re.I)
-# AppArmor records only (AVC, or the 1501-1507 AppArmor types), every kernel
-# message for loss notices, and journald's own rate-limit reports. Exec and
-# service audit records from other rules are hundreds of MB a day.
-APPARMOR_TYPES = ["_AUDIT_TYPE=1400", *(f"_AUDIT_TYPE={n}" for n in range(1501, 1508))]
-JOURNAL_MATCHES = ["_TRANSPORT=audit", *APPARMOR_TYPES, "+", "_TRANSPORT=kernel"]
+# Evidence comes from VictoriaLogs (the SIEM store), filtered per profile on the
+# server. The journal keeps only hours at audit flood rates, so a day-old
+# continuity anchor was always rotated away, and reading a day of journal JSON
+# took 9 GB. The heartbeat proves the full kernel -> journald -> Vector ->
+# VictoriaLogs path for each container.
+VICTORIALOGS = "http://127.0.0.1:9428"
 JOURNAL_TIMEOUT = 600
+HEARTBEAT_WAIT = 30
+LOSS_QUERY = ('("audit_lost" OR "backlog limit exceeded" OR "rate limit exceeded" '
+              'OR "suppressed" OR "overflow" OR "Dropped")')
 
 
 def run(args, timeout=20):
@@ -45,17 +52,38 @@ def run(args, timeout=20):
                           stderr=subprocess.DEVNULL, timeout=timeout).stdout
 
 
-def journal(start, end):
-    output = run(["journalctl", "--no-pager", "--output=json", "--since", f"@{start:.6f}",
-                  "--until", f"@{end:.6f}", *JOURNAL_MATCHES,
-                  "+", "SYSLOG_IDENTIFIER=systemd-journald"], timeout=JOURNAL_TIMEOUT)
+def iso(stamp):
+    return datetime.fromtimestamp(stamp, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def vlogs(query, start, end, timeout=JOURNAL_TIMEOUT):
+    """(epoch, message) rows from VictoriaLogs for [start, end]."""
+    body = urllib.parse.urlencode({
+        "query": f"_time:[{iso(start)}, {iso(end)}] {query} | fields _time, _msg"}).encode()
+    request = urllib.request.Request(f"{VICTORIALOGS}/select/logsql/query", data=body, method="POST")
     rows = []
-    for line in output.splitlines():
-        row = json.loads(line)
-        stamp = int(row["__REALTIME_TIMESTAMP"]) / 1_000_000
-        if start <= stamp <= end:
-            rows.append((stamp, row.get("MESSAGE", "")))
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        for line in response:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            stamp = datetime.fromisoformat(row["_time"].replace("Z", "+00:00")).timestamp()
+            if start <= stamp <= end:
+                rows.append((stamp, row.get("_msg", "")))
     return rows
+
+
+def profile_filter(profile):
+    """The profile and its children; profile names are [A-Za-z0-9_-] (app registry)."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", profile):
+        raise ValueError(f"unexpected profile name {profile!r}")
+    return f'transport:="audit" (aa_profile:="{profile}" OR aa_profile:"{profile}//"*)'
+
+
+def journal(start, end, profile=None):
+    """AppArmor records for one profile (and its children), plus loss notices."""
+    query = profile_filter(profile) if profile else 'transport:="audit" apparmor:*'
+    return sorted(vlogs(query, start, end) + vlogs(LOSS_QUERY, start, end))
 
 
 def parse_event(stamp, message, profile):
@@ -117,8 +145,15 @@ def inspect_container(name, config):
         pids = [int(line.strip()) for line in lines[1:] if line.strip()]
         if not pids:
             raise ValueError("no container processes")
-        result["processes"] = [{"pid": pid, "label": Path(f"/proc/{pid}/attr/current").read_text().strip()}
-                               for pid in pids]
+        result["processes"] = []
+        for pid in pids:
+            try:
+                label = Path(f"/proc/{pid}/attr/current").read_text().strip()
+            except (FileNotFoundError, ProcessLookupError):
+                continue  # exited between `podman top` and the read (cron, healthchecks)
+            result["processes"].append({"pid": pid, "label": label})
+        if not result["processes"]:
+            raise ValueError("no container processes")
         observed_labels = {p["label"] for p in result["processes"]}
         lost = re.search(r"^lost\s+(\d+)\s*$", run(["auditctl", "-s"]), re.M)
         if not lost:
@@ -152,24 +187,16 @@ def probe(name, profile, command):
         subprocess.run(["podman", "exec", name, *command],
                        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                        timeout=2)
-        deadline = time.monotonic() + 2.5
-        while True:
-            # Bound each poll too: total probe time is at most five seconds.
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return None
-            output = subprocess.run([
-                "journalctl", "--no-pager", "--output=json", "--since", f"@{start:.6f}",
-                *JOURNAL_MATCHES], check=True, text=True,
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=min(remaining, 1))
-            end = time.time()
-            for line in output.stdout.splitlines():
-                row = json.loads(line)
-                stamp = int(row["__REALTIME_TIMESTAMP"]) / 1_000_000
-                event = parse_event(stamp, row.get("MESSAGE", ""), profile)
-                if start <= stamp <= end and event and heartbeat_event(event):
+        # Ingestion through Vector takes seconds; the event must reach the store.
+        deadline = time.monotonic() + HEARTBEAT_WAIT
+        query = profile_filter(profile) + f' aa_name:="{HEARTBEAT_PATH}"'
+        while time.monotonic() < deadline:
+            for stamp, message in vlogs(query, start, time.time() + 1, timeout=10):
+                event = parse_event(stamp, message, profile)
+                if event and heartbeat_event(event):
                     return event
-            time.sleep(min(0.1, max(0, deadline - time.monotonic())))
+            time.sleep(1)
+        return None
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         return None
 
@@ -255,17 +282,15 @@ def collect(config, previous, now):
             # past it cannot silently turn a missing interval into a clean day.
             start = min(start, anchor["time"])
         pending.append((name, spec, old, observation, heartbeat, anchor, start, end))
-    # One journal read covers every container's window; each keeps only its own.
-    try:
-        rows = journal(min(item[6] for item in pending), max(item[7] for item in pending)) if pending else []
-        journal_error = False
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-        rows, journal_error = [], True
     for name, spec, old, observation, heartbeat, anchor, start, end in pending:
         audit_ok, events = False, []
-        if not journal_error:
+        try:
+            window = journal(start, end, spec["profile"])
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"apparmor review: {name}: evidence query failed: {exc}", file=sys.stderr)
+            window = None
+        if window is not None:
             try:
-                window = [(stamp, message) for stamp, message in rows if start <= stamp <= end]
                 loss_seen = any(AUDIT_LOSS.search(message) for _, message in window)
                 events = [event for stamp, message in window
                           if (event := parse_event(stamp, message, spec["profile"]))]
