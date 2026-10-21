@@ -93,6 +93,7 @@ COVERAGE = (
 METRIC_HELP = {
     "ghostship_ai_source_success": "Whether the last collection of this source succeeded.",
     "ghostship_ai_source_status": "One for the current status of a source.",
+    "ghostship_ai_provider_status": "One for the current state of a provider account.",
     "ghostship_ai_source_last_success_timestamp_seconds": "When a source last produced a reading.",
     "ghostship_ai_source_observed_timestamp_seconds": "When the reported reading was observed.",
     "ghostship_ai_source_duration_seconds": "How long a source took to read.",

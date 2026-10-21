@@ -241,11 +241,15 @@ def _exact_model_match(model: str, allowed: Iterable[str]) -> bool:
 
 
 def _normalise_model(name: str) -> str:
-    """The name without its separators and its provider prefix."""
-    text = str(name or "").lower()
+    """The exact model id, lowercased, without its provider prefix.
+
+    The punctuation is kept: "gpt-6.1-sol" and "gpt-61-sol" are different
+    model ids, and one of them must not inherit the permission of the other.
+    """
+    text = str(name or "").strip().lower()
     if "/" in text:
         text = text.rsplit("/", 1)[1]
-    return "".join(character for character in text if character.isalnum())
+    return text
 
 
 def _eligibility(
@@ -694,6 +698,21 @@ def _recommendations(
     return result
 
 
+# The components of the value of a model, and their weights. A component that
+# is unknown is left out and the weights of the known ones are renormalized:
+# an unknown is never a zero, and it never makes a model look worse than it is
+# measured to be.
+VALUE_WEIGHTS = {
+    "strength": 0.35,
+    "coding": 0.1,
+    "agentic": 0.1,
+    "engineering": 0.1,
+    "cost_per_task": 0.1,
+    "speed": 0.1,
+    "recency": 0.1,
+    "token_price": 0.05,
+}
+
 # The calculation of a winner, published with the snapshot so every number
 # can be checked and a suggestion can be made about it.
 CALCULATION = {
@@ -709,6 +728,31 @@ CALCULATION = {
             "record for the model; the source is published with the score"
         ),
     },
+    "value": {
+        "formula": (
+            "the weighted mean of the known components, with the weights of "
+            "the known ones renormalized; an unknown component is left out, "
+            "never counted as zero"
+        ),
+        "weights": dict(VALUE_WEIGHTS),
+        "components": {
+            "strength": "0.5 * quality prior + 0.5 * the intelligence index",
+            "coding": "the coding index over 100",
+            "agentic": "the agentic index over 100",
+            "engineering": "the engineering index over 100",
+            "cost_per_task": "1 / (1 + the cost per task of the feed)",
+            "speed": "the median output tokens per second over (100 + it)",
+            "recency": "1 - the age of the release over a year",
+            "token_price": (
+                "1 / (1 + the provider's listed blended token price), within "
+                "the provider"
+            ),
+        },
+        "provider_order": (
+            "the tiers are ordered by the pace of the provider's own window; "
+            "the value orders the candidates within one provider only"
+        ),
+    },
     "relative_cost": {
         "formula": "3 * input + output + 0.1 * cache_read, per million tokens",
         "floor": 0.01,
@@ -718,7 +762,6 @@ CALCULATION = {
             "never mixed with a token price"
         ),
     },
-    "value": {"formula": "strength / max(relative_cost, floor)"},
     "provider_order": {
         "formula": (
             "the providers are ordered by the pace of their window: the one "
@@ -751,6 +794,7 @@ CALCULATION = {
 # The blended price of one model, the provider's own listing.
 PRICE_WEIGHTS = {"input": 3.0, "output": 1.0, "cache_read": 0.1}
 PRICE_FLOOR = 0.01
+
 
 
 def _relative_cost(prices: Mapping[str, Any] | None) -> float | None:
@@ -793,6 +837,22 @@ def _pending_identities(
         if identity in seen:
             continue
         seen.add(identity)
+        existing = None
+        for candidate_key, candidate_fact in (facts or {}).items():
+            if not isinstance(candidate_fact, Mapping):
+                continue
+            if facts_module.identity_key(
+                str(candidate_fact.get("provider") or ""),
+                str(candidate_fact.get("model") or ""),
+                str(candidate_fact.get("variant") or ""),
+            ) != identity:
+                continue
+            if str(candidate_fact.get("status") or "") == "pending":
+                existing = candidate_fact
+                break
+            if str(candidate_key) == identity:
+                existing = candidate_fact
+                break
         pending.append(
             {
                 "identity": identity,
@@ -800,8 +860,18 @@ def _pending_identities(
                 "model": model,
                 "variant": variant,
                 "status": "pending",
-                "pending_reason": "no usable fact for this identity",
-                "next_check_at": None,
+                # A pending research keeps the reason and the moment it said it
+                # would be checked: the backoff is preserved, not reset to a
+                # generic value on the next snapshot.
+                "pending_reason": (
+                    str(existing.get("pending_reason") or "")
+                    if existing is not None
+                    else "no usable fact for this identity"
+                )
+                or "no usable fact for this identity",
+                "next_check_at": (
+                    existing.get("next_check_at") if existing is not None else None
+                ),
             }
         )
     return pending
@@ -827,7 +897,27 @@ def _row_variant(row: Mapping[str, Any]) -> str:
     return ",".join(parts)
 
 
-def _fill_value(row: dict[str, Any], catalog: Any, fact: Mapping[str, Any] | None = None) -> None:
+def _component_value(components: dict[str, float | None]) -> tuple[float | None, dict[str, float]]:
+    """The weighted mean of the known components, and the weights used."""
+    known = {
+        name: float(value)
+        for name, value in components.items()
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    }
+    total_weight = sum(VALUE_WEIGHTS[name] for name in known if name in VALUE_WEIGHTS)
+    if total_weight <= 0:
+        return None, {}
+    value = sum(VALUE_WEIGHTS[name] * known[name] for name in known if name in VALUE_WEIGHTS) / total_weight
+    used = {name: VALUE_WEIGHTS[name] for name in known if name in VALUE_WEIGHTS}
+    return value, used
+
+
+def _fill_value(
+    row: dict[str, Any],
+    catalog: Any,
+    fact: Mapping[str, Any] | None = None,
+    now: float | None = None,
+) -> None:
     """The strength, the relative price, and the value of one model."""
     provider = row.get("provider") or ""
     model = row.get("model") or ""
@@ -871,6 +961,62 @@ def _fill_value(row: dict[str, Any], catalog: Any, fact: Mapping[str, Any] | Non
             else:
                 strength = 0.5 * quality + 0.5 * float(fact_index)
                 source = "measured"
+    indices = intelligence.get("indices") or {}
+
+    def index(name: str) -> float | None:
+        value = indices.get(name)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return max(0.0, min(1.0, float(value) / 100.0))
+        return None
+
+    cost_per_task = intelligence.get("cost_per_task")
+    speed = intelligence.get("median_performance")
+    released = None
+    if isinstance(fact, Mapping):
+        released = fact.get("released_at")
+    if not isinstance(released, str):
+        released = row.get("released_at")
+    components: dict[str, float | None] = {
+        "strength": max(0.0, min(1.0, strength / 100.0)),
+        "coding": index("coding_index"),
+        "agentic": index("agentic_index"),
+        "engineering": index("engineering_index"),
+        "cost_per_task": (
+            1.0 / (1.0 + max(0.0, float(cost_per_task)))
+            if isinstance(cost_per_task, (int, float)) and not isinstance(cost_per_task, bool)
+            else None
+        ),
+        "speed": (
+            max(0.0, float(speed)) / (100.0 + max(0.0, float(speed)))
+            if isinstance(speed, (int, float)) and not isinstance(speed, bool)
+            else None
+        ),
+        "recency": None,
+        "token_price": (
+            1.0 / (1.0 + max(relative, PRICE_FLOOR)) if relative is not None else None
+        ),
+    }
+    if not isinstance(released, str) or not released:
+        if catalog is not None:
+            getter = getattr(catalog, "release_date", None)
+            if callable(getter):
+                released = getter(provider, model)
+            else:
+                entry = catalog.model_entry(provider, model) if hasattr(catalog, "model_entry") else None
+                if isinstance(entry, Mapping):
+                    candidate = entry.get("release_date")
+                    if isinstance(candidate, str):
+                        released = candidate
+    if isinstance(released, str) and released and now is not None:
+        from datetime import datetime, timezone
+
+        try:
+            moment = datetime.fromisoformat(released[:10] + "T00:00:00+00:00")
+            age_days = max(0.0, (now - moment.timestamp()) / 86400.0)
+            components["recency"] = max(0.0, min(1.0, 1.0 - age_days / 365.0))
+        except ValueError:
+            components["recency"] = None
+    value, used_weights = _component_value(components)
     row["value"] = {
         "strength": round(strength, 2),
         "strength_source": source,
@@ -885,11 +1031,12 @@ def _fill_value(row: dict[str, Any], catalog: Any, fact: Mapping[str, Any] | Non
             else "the quality prior and the feed record"
         ),
         "relative_cost": None if relative is None else round(relative, 4),
-        "value": (
-            None
-            if relative is None
-            else round(strength / max(relative, PRICE_FLOOR), 3)
-        ),
+        "components": {
+            name: (None if value is None else round(value, 4))
+            for name, value in components.items()
+        },
+        "weights": {name: round(weight, 3) for name, weight in used_weights.items()},
+        "value": None if value is None else round(value, 4),
         "formula": CALCULATION["value"]["formula"],
     }
 
@@ -1060,7 +1207,7 @@ def build_snapshot(
             now=now,
             version=feed_version,
         )
-        _fill_value(row, catalog, fact)
+        _fill_value(row, catalog, fact, now)
         for tier in row["tiers"]:
             tiers.setdefault(tier, []).append(_key(provider, model))
         account = str(row.get("account") or "")
@@ -1111,7 +1258,16 @@ def build_snapshot(
             None if observed is None else int(round(now - float(observed)))
         )
         source_records.append(record)
-    failed = [record for record in source_records if record.get("status") not in ("ok", "partial")]
+    failed = [
+        record
+        for record in source_records
+        if record.get("status") not in ("ok", "partial")
+    ]
+    # A partial source means the snapshot does not hold the whole picture, so
+    # it is partial too: a consumer must not read it as complete.
+    incomplete = failed or [
+        record for record in source_records if record.get("status") == "partial"
+    ]
 
     # Whether a frontier prime is available right now. When it is not, the
     # consumer has to wait visibly: the reason and the reset time are here,
@@ -1145,7 +1301,7 @@ def build_snapshot(
         "schema_version": SCHEMA_VERSION,
         "generated_at": _iso(now),
         "max_age_seconds": max_age_seconds,
-        "partial": bool(failed),
+        "partial": bool(incomplete),
         "coverage": {
             "sources_total": len(source_records),
             "sources_ok": sum(1 for r in source_records if r.get("status") == "ok"),
@@ -1223,7 +1379,7 @@ def build_snapshot(
             # The facts are keyed by their identity (provider, model, and
             # reasoning variant), so two providers or two variants never
             # share a record.
-            "records": facts_index,
+            "records": facts_module.public_facts(facts_source),
             # The identities a consumer may trigger a research for: every
             # model of a tier that has no usable fact yet. The list is
             # bounded to the models the tiers hold.

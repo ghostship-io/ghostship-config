@@ -318,6 +318,158 @@ def merge(state: Mapping[str, Any], facts: Iterable[Mapping[str, Any]]) -> dict[
     return merged
 
 
+# The fields a fact is allowed to publish. Anything else a file happens to
+# carry is dropped, so a free form field of a cache or a research note never
+# reaches the snapshot, a label, or a dashboard.
+PUBLIC_FIELDS = (
+    "provider",
+    "model",
+    "variant",
+    "canonical_identity",
+    "benchmark_id",
+    "brief_url",
+    "benchmark_version",
+    "fetched_at",
+    "fetched_at_epoch",
+    "evidence_fingerprint",
+    "indices",
+    "cost_per_task",
+    "token_prices",
+    "throughput",
+    "released_at",
+    "complexity_eligibility",
+    "source",
+    "confidence",
+    "basis",
+    "variant_scope",
+    "pending_reason",
+    "next_check_at",
+    "status",
+    "strength_scale",
+    "estimate_ceiling",
+    "admission_evidence",
+)
+
+# The longest text a published fact may carry, so a field cannot smuggle a
+# sentence or a path into a label or a dashboard.
+MAX_TEXT = 160
+
+INDEX_FIELDS_PUBLIC = (
+    "intelligence_index",
+    "coding_index",
+    "agentic_index",
+    "engineering_index",
+)
+PRICE_FIELDS_PUBLIC = ("input", "output", "cache_read", "cache_write")
+
+
+def _public_text(value: Any, limit: int = MAX_TEXT) -> str:
+    """A bounded public text, with no control character."""
+    text = "".join(
+        character for character in str(value or "") if character.isprintable()
+    ).strip()
+    return text[:limit]
+
+
+def public_record(fact: Any) -> dict[str, Any] | None:
+    """The allowlisted, validated shape of a fact.
+
+    A fact is published only when its identity and its values pass the checks:
+    a provider and a model that are non-empty bounded text, a scope that says
+    whether it measured the model or one variant, a finite confidence, and a
+    version. Anything else is withheld rather than sanitized into a label.
+    """
+    if not isinstance(fact, Mapping):
+        return None
+    provider = _public_text(fact.get("provider"), 80)
+    model = _public_text(fact.get("model"), 120)
+    if not provider or not model:
+        return None
+    version = _public_text(fact.get("benchmark_version"), 32)
+    if not version:
+        return None
+    source = _public_text(fact.get("source"), 32)
+    if source not in ("measured", "estimated", "pending"):
+        return None
+    status = _public_text(fact.get("status"), 24)
+    if status not in ("current", "estimated", "pending"):
+        return None
+    scope = _public_text(fact.get("variant_scope"), 16)
+    variant = _public_text(fact.get("variant"), 60)
+    if scope not in ("model", "variant"):
+        # A fact that does not say what it measured is not published: a
+        # missing scope never defaults to the whole model.
+        return None
+    if scope == "variant" and not variant:
+        return None
+    confidence = _finite(fact.get("confidence"))
+    if confidence is None or not (0.0 <= confidence <= 1.0):
+        return None
+    record: dict[str, Any] = {
+        "provider": provider,
+        "model": model,
+        "variant": variant,
+        "variant_scope": scope,
+        "benchmark_version": version,
+        "source": source,
+        "status": status,
+        "confidence": round(confidence, 3),
+        "fetched_at": _public_text(fact.get("fetched_at"), 40) or None,
+        "fetched_at_epoch": _finite(fact.get("fetched_at_epoch")),
+        "evidence_fingerprint": _public_text(fact.get("evidence_fingerprint"), 64),
+        "benchmark_id": _public_text(fact.get("benchmark_id"), 120),
+        "brief_url": _public_text(fact.get("brief_url"), 120),
+        "canonical_identity": _public_text(fact.get("canonical_identity"), 120),
+        "released_at": _public_text(fact.get("released_at"), 40) or None,
+        "complexity_eligibility": _public_text(fact.get("complexity_eligibility"), 24),
+        "basis": _public_text(fact.get("basis"), 200),
+        "pending_reason": _public_text(fact.get("pending_reason"), 200),
+        "next_check_at": _finite(fact.get("next_check_at")),
+    }
+    indices: dict[str, float | None] = {}
+    raw_indices = fact.get("indices") if isinstance(fact.get("indices"), Mapping) else {}
+    for name in INDEX_FIELDS_PUBLIC:
+        indices[name] = _finite(raw_indices.get(name))
+    record["indices"] = indices
+    prices: dict[str, float | None] = {}
+    raw_prices = fact.get("token_prices") if isinstance(fact.get("token_prices"), Mapping) else {}
+    for name in PRICE_FIELDS_PUBLIC:
+        prices[name] = _finite(raw_prices.get(name))
+    record["token_prices"] = prices
+    record["cost_per_task"] = _finite(fact.get("cost_per_task"))
+    throughput = fact.get("throughput") if isinstance(fact.get("throughput"), Mapping) else {}
+    record["throughput"] = {
+        "median_performance": _finite(throughput.get("median_performance"))
+    }
+    evidence = fact.get("admission_evidence")
+    record["admission_evidence"] = (
+        [
+            {
+                "workload": _public_text(entry.get("workload"), 40),
+                "admitted": bool(entry.get("admitted")),
+                "score": _finite(entry.get("score")),
+                "at": _finite(entry.get("at")),
+            }
+            for entry in evidence
+            if isinstance(entry, Mapping)
+        ][:20]
+        if isinstance(evidence, list)
+        else []
+    )
+    return record
+
+
+def public_facts(facts: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """The published facts, keyed by identity, with only validated records."""
+    published: dict[str, dict[str, Any]] = {}
+    for key, fact in index(facts).items():
+        record = public_record(fact)
+        if record is None:
+            continue
+        published[key] = record
+    return published
+
+
 def index(facts: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     """The facts by their identity: provider, model, and reasoning variant.
 
@@ -361,7 +513,11 @@ def lookup_by_model(
         ):
             continue
         fact_variant = str(fact.get("variant") or "")
-        scope = str(fact.get("variant_scope") or ("variant" if fact_variant else "model"))
+        scope = str(fact.get("variant_scope") or "")
+        if scope not in ("model", "variant"):
+            # A fact that does not say what it measured is not bound: a
+            # missing scope never defaults to the whole model.
+            continue
         if fact_variant != str(variant) and scope != "model":
             continue
         if now is not None and not is_current(fact, now):

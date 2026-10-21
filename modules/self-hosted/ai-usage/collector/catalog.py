@@ -128,6 +128,22 @@ class Catalog:
         entry = self._merged_models(provider).get(model)
         return entry if isinstance(entry, dict) else None
 
+    def release_date(self, provider: str, model: str) -> str | None:
+        """The release date of a model, from whichever catalog carries it."""
+        for key in PROVIDER_ALIASES.get(provider, (provider,)):
+            entry = self.document.get(key)
+            if not isinstance(entry, dict):
+                continue
+            models = entry.get("models")
+            if not isinstance(models, dict):
+                continue
+            found = models.get(model)
+            if isinstance(found, dict):
+                value = found.get("release_date")
+                if isinstance(value, str) and value:
+                    return value
+        return None
+
     def model_name(self, provider: str, model: str) -> str:
         entry = self.model_entry(provider, model)
         if isinstance(entry, dict):
