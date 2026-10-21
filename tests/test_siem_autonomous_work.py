@@ -30,6 +30,16 @@ SECRET = 'DO_NOT_EXPORT_SECRET_BODY_TOKEN'
 
 
 class CollectorTests(unittest.TestCase):
+    def test_operational_snapshot_is_not_world_readable(self):
+        """Defect: private branch/model rows are published with public metric permissions."""
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / 'snapshot.jsonl'
+            work.atomic(target, '{"branch":"synthetic"}\n', mode=0o640)
+            self.assertEqual(target.stat().st_mode & 0o777, 0o640)
+            public = Path(directory) / 'metrics.prom'
+            work.atomic(public, 'synthetic_metric 1\n')
+            self.assertEqual(public.stat().st_mode & 0o777, 0o644)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
