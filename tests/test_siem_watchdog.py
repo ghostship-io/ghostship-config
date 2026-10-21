@@ -74,7 +74,7 @@ class PipelineMetricTests(unittest.TestCase):
         def run(command, **kwargs):
             if command[-1] == "-s":
                 return SimpleNamespace(stdout="enabled 1\nlost 7\nbacklog 2\nbacklog_limit 8192\n")
-            if command[0] == "sh":
+            if "+1" in command:
                 return SimpleNamespace(stdout=f"{NOW - 3600} host x\n")
             return SimpleNamespace(stdout=f"{NOW - 1} host y\n")
 
