@@ -58,7 +58,7 @@ def main():
             (root / "tmp").chmod(0o1777)
             setup = root / "setup.service"
             setup.write_text(
-                "[Service]\nType=oneshot\nExecStart=/bin/true\nRemainAfterExit=yes\n"
+                "[Unit]\nDefaultDependencies=no\n[Service]\nType=oneshot\nExecStart=/bin/true\nRemainAfterExit=yes\n"
             )
             target = root / "probe.target"
             target.write_text(
@@ -89,7 +89,7 @@ def main():
                     "--memory=4g",
                     "--tty",
                     "--env=SYSTEMD_LOG_TARGET=console",
-                    "--env=SYSTEMD_LOG_LEVEL=debug",
+                    "--env=SYSTEMD_LOG_LEVEL=info",
                     "--pids-limit=2048",
                     "--security-opt=apparmor=ghostship-t3code",
                     "-v",
