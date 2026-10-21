@@ -416,6 +416,20 @@ def _candidate(
             "source": "prior" if three_d_tokens <= 0 else "prior+measured",
         },
         "intelligence": _intelligence_record(aa_cache, model),
+        "price": {
+            "input": None,
+            "output": None,
+            "cache_read": None,
+            "source": "provider listing",
+            "relative_index": None,
+        },
+        "value": {
+            "strength": round(quality, 2),
+            "strength_source": "prior",
+            "relative_cost": None,
+            "value": None,
+            "formula": CALCULATION["value"]["formula"],
+        },
         "eligibility": _eligibility(provider, model, tiers, native_record, policy),
         "frontier_surplus": {
             "available": bool(surplus.get("available")),
@@ -629,6 +643,208 @@ def _recommendations(
     return result
 
 
+# The calculation of a winner, published with the snapshot so every number
+# can be checked and a suggestion can be made about it.
+CALCULATION = {
+    "winner_rule": (
+        "one winner per provider and tier; the tiers do not rank the whole "
+        "catalog"
+    ),
+    "strength": {
+        "formula": "0.5 * quality + 0.5 * aa_intelligence",
+        "weights": {"quality": 0.5, "aa_intelligence": 0.5},
+        "fallback": (
+            "the quality prior alone when the Artificial Analysis feed has no "
+            "record for the model; the source is published with the score"
+        ),
+    },
+    "relative_cost": {
+        "formula": "3 * input + output + 0.1 * cache_read, per million tokens",
+        "floor": 0.01,
+        "scope": "within one provider; the prices are the provider's own listing",
+        "note": (
+            "the cost per task of the feed is published next to it and is "
+            "never mixed with a token price"
+        ),
+    },
+    "value": {"formula": "strength / max(relative_cost, floor)"},
+    "provider_order": {
+        "formula": (
+            "the providers are ordered by the pace of their window: the one "
+            "that is behind the line the window draws by now comes first"
+        ),
+        "source": "pace_delta of the account window",
+    },
+    "gates": {
+        "frontier": "the frontier tier, with the newest model of a lineage",
+        "frontier_surplus": (
+            "a frontier model may carry volume work only when a weekly or "
+            "monthly allowance resets within a day and the session window is "
+            "not ahead of the line"
+        ),
+        "free": (
+            "a free route is the lowest intelligence tier: bounded research, "
+            "cheap and easy tasks, and bulk metadata updates only"
+        ),
+        "review": (
+            "the review class waits for the frontier authority; it never takes "
+            "another model"
+        ),
+        "unavailable": (
+            "a winner that is exhausted or unavailable is replaced by the next "
+            "eligible model of the same provider at the next fresh snapshot"
+        ),
+    },
+}
+
+# The blended price of one model, the provider's own listing.
+PRICE_WEIGHTS = {"input": 3.0, "output": 1.0, "cache_read": 0.1}
+PRICE_FLOOR = 0.01
+
+
+def _relative_cost(prices: Mapping[str, Any] | None) -> float | None:
+    """The blended token price of a model, per million tokens."""
+    if not isinstance(prices, Mapping):
+        return None
+    total = 0.0
+    seen = False
+    for kind, weight in PRICE_WEIGHTS.items():
+        value = prices.get(kind)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            total += float(value) * weight
+            seen = True
+    return total if seen else None
+
+
+def _fill_value(row: dict[str, Any], catalog: Any) -> None:
+    """The strength, the relative price, and the value of one model."""
+    provider = row.get("provider") or ""
+    model = row.get("model") or ""
+    prices = None
+    if catalog is not None:
+        try:
+            prices = catalog.price_for(provider, model)
+        except Exception:  # pragma: no cover - a catalog without the model
+            prices = None
+    relative = _relative_cost(prices)
+    if isinstance(prices, Mapping):
+        row["price"] = {
+            "input": prices.get("input"),
+            "output": prices.get("output"),
+            "cache_read": prices.get("cache_read"),
+            "source": "provider listing",
+            "relative_index": None,
+        }
+    quality = float((row.get("quality") or {}).get("value") or 0.0)
+    intelligence = row.get("intelligence") or {}
+    indices = intelligence.get("indices") or {}
+    measured = intelligence.get("state") == "measured"
+    strength = quality
+    source = "prior"
+    if measured:
+        index = indices.get("intelligence_index")
+        if isinstance(index, (int, float)) and not isinstance(index, bool):
+            strength = 0.5 * quality + 0.5 * float(index)
+            source = "measured"
+    row["value"] = {
+        "strength": round(strength, 2),
+        "strength_source": source,
+        "relative_cost": None if relative is None else round(relative, 4),
+        "value": (
+            None
+            if relative is None
+            else round(strength / max(relative, PRICE_FLOOR), 3)
+        ),
+        "formula": CALCULATION["value"]["formula"],
+    }
+
+
+def _winners(
+    candidates: list[dict[str, Any]], tiers: dict[str, list[str]]
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
+    """One winner per provider and tier, ordered by the provider pacing.
+
+    A model that holds no tier, that is not available, or that waits for its
+    evaluation is never a winner. The next eligible model of the same
+    provider takes its place at the next fresh snapshot.
+    """
+    by_key = {_key(row["provider"], row["model"]): row for row in candidates}
+    winners: dict[str, list[dict[str, Any]]] = {}
+    coverage: dict[str, Any] = {}
+    for tier, members in tiers.items():
+        considered = 0
+        providers: set[str] = set()
+        chosen: dict[str, dict[str, Any]] = {}
+        for key in members:
+            row = by_key.get(key)
+            if row is None:
+                continue
+            considered += 1
+            providers.add(row["provider"])
+            if (row.get("availability") or {}).get("state") != "available":
+                continue
+            if (row.get("admission") or {}).get("state") != "settled":
+                continue
+            current = chosen.get(row["provider"])
+            if current is None or _winner_key(row) > _winner_key(current):
+                chosen[row["provider"]] = row
+        ordered = sorted(
+            chosen.values(),
+            key=lambda row: (
+                -(_pace_of(row) if _pace_of(row) is not None else 0.0),
+                row["provider"],
+                row["model"],
+            ),
+        )
+        winners[tier] = [
+            {
+                "provider": row["provider"],
+                "model": row["model"],
+                "key": _key(row["provider"], row["model"]),
+                "tier": tier,
+                "value": (row.get("value") or {}).get("value"),
+                "strength": (row.get("value") or {}).get("strength"),
+                "strength_source": (row.get("value") or {}).get("strength_source"),
+                "relative_cost": (row.get("value") or {}).get("relative_cost"),
+                "pace_delta": (row.get("capacity") or {}).get("pace_delta"),
+                "quota_state": row.get("quota_state"),
+                "native": row.get("native"),
+                "role": row.get("role"),
+                "reason": (
+                    "the best eligible model of this provider for this tier, "
+                    "ordered by the pace of the account window"
+                ),
+            }
+            for row in ordered
+        ]
+        coverage[tier] = {
+            "candidates_considered": considered,
+            "providers": len(providers),
+            "winners": len(ordered),
+            "providers_without_a_winner": len(providers) - len(ordered),
+        }
+    return winners, coverage
+
+
+def _winner_key(row: dict[str, Any]) -> tuple:
+    """The order of the candidates of one provider: value, then quality."""
+    value = (row.get("value") or {}).get("value")
+    quality = (row.get("quality") or {}).get("value")
+    return (
+        float(value) if isinstance(value, (int, float)) else 0.0,
+        float(quality) if isinstance(quality, (int, float)) else 0.0,
+        str(row.get("model") or ""),
+    )
+
+
+def _pace_of(row: dict[str, Any]) -> float | None:
+    """The pace of the account of a model, when it is known."""
+    delta = (row.get("capacity") or {}).get("pace_delta")
+    if isinstance(delta, (int, float)) and not isinstance(delta, bool):
+        return float(delta)
+    return None
+
+
 def build_snapshot(
     *,
     now: float,
@@ -638,6 +854,7 @@ def build_snapshot(
     policy: Mapping[str, Any] | None = None,
     aa_cache: Mapping[str, Any] | None = None,
     measured_windows: Iterable[Mapping[str, Any]] | None = None,
+    catalog: Any = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
 ) -> dict[str, Any]:
     """Build the routing snapshot from the ranked models and the readings."""
@@ -672,6 +889,7 @@ def build_snapshot(
             policy,
             aa_cache,
         )
+        _fill_value(row, catalog)
         for tier in row["tiers"]:
             tiers.setdefault(tier, []).append(_key(provider, model))
         account = str(row.get("account") or "")
@@ -704,6 +922,7 @@ def build_snapshot(
             if entry.tier == tier
         }
         tiers[tier] = sorted(set(members), key=lambda key: (order.get(key, 0), key))
+    winners, tier_coverage = _winners(candidates, tiers)
 
     source_records = []
     for source in sources:
@@ -756,6 +975,7 @@ def build_snapshot(
             ),
             "sources_failed": len(failed),
             "sources": source_records,
+            "tiers": tier_coverage,
             "frontier": {
                 "available": bool(frontier_rows),
                 "models": frontier_models,
@@ -782,6 +1002,8 @@ def build_snapshot(
             "basis": str(policy.get("basis") or ""),
         },
         "tiers": tiers,
+        "tier_winners": winners,
+        "calculation": CALCULATION,
         "quota": {"accounts": accounts},
         "quality_feed": {
             "source": "artificialanalysis",
@@ -835,6 +1057,33 @@ def write_snapshot(path: str | os.PathLike[str], snapshot: Mapping[str, Any]) ->
     temporary.write_text(payload + "\n", encoding="utf-8")
     os.chmod(temporary, 0o644)
     os.replace(temporary, target)
+
+
+def publish(snapshot: Mapping[str, Any], paths: Iterable[str | os.PathLike[str]]) -> list[str]:
+    """Publish the same bytes to every presentation of the snapshot.
+
+    The canonical file and the runtime projections carry the same bytes: one
+    producer, no second scorer, no history. Every write is atomic, and the
+    projections are credential free.
+    """
+    payload = json.dumps(
+        snapshot, indent=1, sort_keys=False, default=str, allow_nan=False
+    ) + "\n"
+    written: list[str] = []
+    for path in paths:
+        target = Path(path)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temporary = target.with_name(target.name + ".new")
+            temporary.write_text(payload, encoding="utf-8")
+            os.chmod(temporary, 0o644)
+            os.replace(temporary, target)
+            written.append(str(target))
+        except OSError:
+            # A projection that cannot be written is not a reason to fail the
+            # collection: the canonical file is the answer.
+            continue
+    return written
 
 
 def snapshot_age(path: str | os.PathLike[str]) -> float | None:

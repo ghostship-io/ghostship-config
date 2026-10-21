@@ -628,6 +628,7 @@ def build_snapshot(
     now: float,
     aa_cache: dict[str, Any] | None = None,
     measured_windows: list[dict[str, Any]] | None = None,
+    catalog: Any = None,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -663,6 +664,7 @@ def build_snapshot(
         policy=OWNER_POLICY,
         aa_cache=aa_cache,
         measured_windows=measured_windows,
+        catalog=catalog,
     )
 
 
@@ -795,6 +797,20 @@ def main(argv: list[str] | None = None) -> int:
         help="Where the model ranking keeps its evaluation state.",
     )
     parser.add_argument(
+        "--projection",
+        action="append",
+        default=[],
+        help=(
+            "An extra runtime presentation of the same snapshot bytes, for a "
+            "consumer that reads a shared directory. Repeatable."
+        ),
+    )
+    parser.add_argument(
+        "--aa-catalog",
+        default=CATALOG_FILE,
+        help="The public model catalog, for the provider listed prices.",
+    )
+    parser.add_argument(
         "--aa-cache",
         default=AA_CACHE_PATH,
         help="The cached Artificial Analysis feed, written by the daily procedure.",
@@ -815,6 +831,7 @@ def main(argv: list[str] | None = None) -> int:
     measured: list[dict[str, Any]] = []
     for result in results:
         measured.extend(result.windows)
+    catalog = catalog_module.Catalog.load(args.aa_catalog)
     snapshot = build_snapshot(
         results,
         context.get("ranked") or [],
@@ -822,6 +839,7 @@ def main(argv: list[str] | None = None) -> int:
         now,
         aa_cache=aa_cache,
         measured_windows=measured,
+        catalog=catalog,
     )
     if args.stdout:
         sys.stdout.write(text)
@@ -829,8 +847,12 @@ def main(argv: list[str] | None = None) -> int:
     else:
         write_output(args.output, text)
     # The snapshot is the canonical answer for a consumer, so it is always
-    # written, atomically, even in the dry run.
+    # written, atomically, even in the dry run. The runtime projections carry
+    # the same bytes: one producer, no second scorer, no history.
     snapshot_module.write_snapshot(args.snapshot, snapshot)
+    if args.projection:
+        written = snapshot_module.publish(snapshot, args.projection)
+        log(f"published the snapshot to {len(written)} runtime projections")
     for result in results:
         log(f"{result.source}: {result.status} ({codes.reason(result.reason)})")
     log(f"wrote {len(text)} bytes to {'stdout' if args.stdout else args.output}")
