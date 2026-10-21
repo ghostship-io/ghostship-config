@@ -46,10 +46,12 @@ class DeliveryTests(unittest.TestCase):
     def setUpClass(cls):
         # Exercise the deployed consumer contract from this repository's pinned
         # dependency, not a second implementation of incident deduplication.
-        source = subprocess.check_output([
-            "nix", "eval", "--impure", "--raw", "--expr",
-            "(builtins.getFlake (toString ./.)).inputs.ghostship-private-agent.outPath",
-        ], cwd=ROOT, text=True, timeout=60).strip()
+        source = os.environ.get("GHOSTSHIP_TEST_AGENT_SOURCE")
+        if not source:
+            source = subprocess.check_output([
+                "nix", "eval", "--impure", "--raw", "--expr",
+                "(builtins.getFlake (toString ./.)).inputs.ghostship-private-agent.outPath",
+            ], cwd=ROOT, text=True, timeout=60).strip()
         sys.path.insert(0, str(Path(source) / "tools/python"))
         spec = importlib.util.spec_from_file_location(
             "pinned_coordinator", Path(source) / "tools/python/ghostship_github/coordinator.py")

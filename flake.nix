@@ -86,6 +86,7 @@
         import ./checks.nix {
           pkgs = pkgsFor system;
           inherit self;
+          agentSource = inputs.ghostship-private-agent;
         }
       );
 
