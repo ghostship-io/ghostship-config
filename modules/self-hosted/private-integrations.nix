@@ -260,6 +260,10 @@ in {
         ExecStart = "${tools.hostops-broker}/bin/ghostship-hostops-broker --config ${hostopsConfig}";
         RuntimeDirectory = "ghostship-hostops";
         RuntimeDirectoryMode = "0750";
+        # The MCP container bind-mounts this directory. Removing it on stop left
+        # the container on the deleted directory, so host operations failed as
+        # "not reachable" after every broker restart until the container restarted.
+        RuntimeDirectoryPreserve = "yes";
         Group = "ghostship-mcp";
         UMask = "0007";
         Restart = "on-failure";
