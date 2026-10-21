@@ -15,6 +15,7 @@ let
     "agent-desktop-mcp"
     "agent-desktop-ssh"
     "chill-penguin-retired-artifact-cleanup"
+    "falco"
     "flaresolverr-egress"
     "gluetun-network-monitor"
     "gluetun-pia-selector"
@@ -22,14 +23,18 @@ let
     "init-agent-desktop-net"
     "init-ghostship-github-net"
     "init-ghostship-net"
+    "init-ghostship-siem-net"
     "nixos-upgrade"
+    "prometheus-node-exporter"
     "pyload-restart-failed"
     "qbittorrent-auto-resume"
     "romm-recovery"
+    "siem-egress"
     "t3code-deploy-when-idle"
     "t3code-nix-store-gc"
     "tdarr-language-policy"
     "tdarr-staged-guard"
+    "vector"
   ];
 
   exemptions = {
