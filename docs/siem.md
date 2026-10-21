@@ -102,6 +102,21 @@ polls both APIs:
   Rules group only by our own parsed fields, never by paths or other text an
   attacker writes.
 
+Pipeline health is watched independently of the bridge. The bridge writes
+`siem-bridge.prom` (node_exporter textfile): last poll, last success per
+vmalert source, last good delivery and failure counts per channel (ntfy, T3),
+retry queue, T3 pending and dead letters. A firing alert undelivered for a
+day becomes a dead letter, listed by `--list`. `ghostship-siem-watchdog` (root
+timer, every 2 minutes, `security-monitoring.nix`) alerts when the bridge has
+not polled for 3 minutes, a vmalert source fails for 5, delivery fails 3 times
+in a row, a dead letter exists, a vmalert or store API stops answering, or the
+container snapshot is stale. Each problem opens one episode: ntfy `security`
+at priority 5 plus one T3 incident through `ghostship-notify --incident`,
+which is queued even when ntfy is down. The watchdog retries the publish until
+ntfy accepts it and sends one resolution. The bridge never resolves an alert
+while its source is unavailable. A dead host cannot alert by itself: that
+needs the off-host dead-man (#102, Gate 1.2, pending).
+
 On the host, `ghostship-siem-alerts --list` prints current alerts with their
 evidence queries. The bridge's T3 session token is reissued daily
 (`ghostship-siem-alerts-t3-token`).

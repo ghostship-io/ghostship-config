@@ -34,6 +34,7 @@ printf 'Checking SIEM log parsing and secret redaction\n'
 vector --quiet test tests/siem-vector.toml
 python3 -m unittest discover -s tests -p test_siem_alerts.py
 python3 -m unittest discover -s tests -p test_siem_podman_snapshot.py
+python3 -m unittest discover -s tests -p test_siem_watchdog.py
 vmalert -dryRun -loggerLevel=ERROR -rule.defaultRuleType=vlogs \
   -rule=modules/self-hosted/siem/rules/logs.yml
 vmalert -dryRun -loggerLevel=ERROR -rule=modules/self-hosted/siem/rules/metrics.yml
