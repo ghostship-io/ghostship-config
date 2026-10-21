@@ -77,14 +77,22 @@ ACTIVE_PAGES = 4
 ACTIVE_RUNS = ('running', 'pending', 'starting', 'waiting', 'queued', 'requested',
                'native-running', 'preparing', 'prepared', 'executing')
 ACTIVE_SQL = '(' + ','.join(f"'{status}'" for status in ACTIVE_RUNS) + ')'
-# The current run of a thread: active or queued first, else the latest executed
-# run by completion time, ties by ordinal. A cancelled run that provably never
-# started is not executed and cannot mask a real outcome.
+# The current run of a thread: an executing run first, then queued work, then
+# the latest executed run by completion time, ties by ordinal. The projection
+# stores no authoritative active-run binding, so execution authority is the
+# highest ranked evidence: a newer queued model switch must never hide the run
+# that is actually executing. A queued run stays visible as queued work, not as
+# execution. A cancelled run that provably never started is not executed.
+EXECUTING_SQL = ('(' + ','.join(f"'{status}'" for status in
+                                ('running', 'starting', 'executing', 'preparing',
+                                 'native-running', 'waiting')) + ')')
+QUEUED_SQL = "('queued','pending','prepared','requested')"
 CURRENT_RUN = f'''SELECT r2.run_id FROM orchestration_v2_projection_runs r2
         WHERE r2.thread_id=t.thread_id
           AND NOT (r2.status='cancelled' AND CASE WHEN json_valid(r2.payload_json)
             THEN coalesce(json_type(r2.payload_json,'$.startedAt')='null',0) ELSE 0 END)
-        ORDER BY (r2.status IN {ACTIVE_SQL}) DESC,
+        ORDER BY CASE WHEN r2.status IN {EXECUTING_SQL} THEN 0
+                      WHEN r2.status IN {QUEUED_SQL} THEN 1 ELSE 2 END,
           coalesce(r2.completed_at,r2.requested_at) DESC, r2.ordinal DESC, r2.run_id LIMIT 1'''
 AGENT_STATES = {'running': 'running', 'starting': 'running', 'executing': 'running',
                 'preparing': 'running', 'pending': 'queued', 'queued': 'queued',
@@ -149,6 +157,20 @@ def provider_name(value):
     # Only canonical instance ids leave the collector; a private custom name is
     # never exported as a provider label or value.
     return value if value in PROVIDERS else 'unknown'
+
+
+def environment_id(config):
+    # The stock runtime writes stateDir/environment-id. Read that existing file
+    # read-only and accept only a UUID; no hardcoded id, secret service or
+    # network call. A missing or malformed file keeps the app deep link.
+    path = config.get('environment_id_file')
+    if not path:
+        return ''
+    try:
+        raw = Path(path).read_text().strip()
+    except (OSError, UnicodeError):
+        return ''
+    return raw if UUID.fullmatch(raw) else ''
 
 
 def thread_url(thread, environment):
@@ -254,13 +276,16 @@ def agent_rows(path, now):
     rows, total = [], 0
     with readonly(path) as db:
         total = db.execute(f'''SELECT count(*) FROM orchestration_v2_projection_threads t
-          WHERE t.deleted_at IS NULL AND (SELECT r2.status FROM
+          WHERE t.deleted_at IS NULL AND ((SELECT r2.status FROM
             orchestration_v2_projection_runs r2 WHERE r2.thread_id=t.thread_id
             AND NOT (r2.status='cancelled' AND CASE WHEN json_valid(r2.payload_json)
               THEN coalesce(json_type(r2.payload_json,'$.startedAt')='null',0) ELSE 0 END)
-            ORDER BY (r2.status IN {ACTIVE_SQL}) DESC,
+            ORDER BY CASE WHEN r2.status IN {EXECUTING_SQL} THEN 0
+                          WHEN r2.status IN {QUEUED_SQL} THEN 1 ELSE 2 END,
               coalesce(r2.completed_at,r2.requested_at) DESC, r2.ordinal DESC, r2.run_id
-            LIMIT 1) IN {ACTIVE_SQL}''').fetchone()[0]
+            LIMIT 1) IN {ACTIVE_SQL}
+            OR EXISTS (SELECT 1 FROM orchestration_v2_projection_runtime_requests q
+              WHERE q.thread_id=t.thread_id AND q.status='pending' AND q.resolved_at IS NULL))''').fetchone()[0]
         for page in range(ACTIVE_PAGES):
             chunk = [dict(row) for row in db.execute(f'''SELECT t.thread_id AS id, t.thread_id,
               t.project_id, t.updated_at AS event_at, 'agent' AS kind,
@@ -279,7 +304,9 @@ def agent_rows(path, now):
               WHERE t.deleted_at IS NULL AND (r.status IN {ACTIVE_SQL}
                 OR EXISTS (SELECT 1 FROM orchestration_v2_projection_runtime_requests q
                   WHERE q.thread_id=t.thread_id AND q.status='pending' AND q.resolved_at IS NULL))
-              ORDER BY (r.status IN {ACTIVE_SQL}) DESC, t.updated_at DESC, t.thread_id
+              ORDER BY CASE WHEN r.status IN {EXECUTING_SQL} THEN 0
+                            WHEN r.status IN {QUEUED_SQL} THEN 1 ELSE 2 END,
+                t.updated_at DESC, t.thread_id
               LIMIT ? OFFSET ?''', (ACTIVE_PAGE, page*ACTIVE_PAGE))]
             rows.extend(chunk)
             if len(chunk) < ACTIVE_PAGE:
@@ -607,7 +634,7 @@ def collect(config, now=None, timers=timer_rows):
     now = now or time.time()
     started = time.monotonic()
     records, metrics = [], []
-    environment = config.get('environment_id', '')
+    environment = environment_id(config)
 
     def metric(name, value, **labels):
         label_text = ','.join(f'{k}={json.dumps(v)}' for k, v in sorted(labels.items()))

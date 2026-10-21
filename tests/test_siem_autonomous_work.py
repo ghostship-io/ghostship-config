@@ -36,7 +36,9 @@ class CollectorTests(unittest.TestCase):
         self.path = Path(self.tmp.name) / 'stock.sqlite'
         self.config = {key: str(self.path) for key in
                        ['t3_db', 'coordinator_db', 'runtime_db', 'mcp_runtime_db']}
-        self.config.update(environment_id=ENV, host='fixture')
+        env_file = Path(self.tmp.name) / 'environment-id'
+        env_file.write_text(ENV)
+        self.config.update(environment_id_file=str(env_file), host='fixture')
         self.db = sqlite3.connect(self.path)
         self.addCleanup(self.db.close)
         self.db.executescript('''
@@ -584,6 +586,67 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(agent['provider'], 'opencode')
         self.assertEqual(agent['model'], 'synthetic-model-b')
 
+    def test_executing_run_outranks_a_newer_queued_model_switch(self):
+        thread = 'eeee1111-1111-4111-8111-111111111111'
+        self.add_agent(thread, ENV, 'feat/synthetic-exec', 'synthetic-model-running', 'claudeAgent',
+                       status='running')
+        # A newer queued run asks for another provider/model but is not executing.
+        self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                        ('run:queued-switch', thread, 'opencode', 'queued', NOW-2, None,
+                         json.dumps({'startedAt': None, 'ordinal': 2,
+                                     'modelSelection': {'instanceId': 'opencode',
+                                                        'model': 'synthetic-model-queued'}}), 2))
+        self.db.commit()
+        rows, _ = self.collect()
+        agent = next(r for r in rows if r['kind'] == 'agent' and r['work_id'] == work.identity(thread))
+        self.assertEqual(agent['status'], 'running')
+        self.assertEqual(agent['provider'], 'claudeAgent')
+        self.assertEqual(agent['model'], 'synthetic-model-running')
+        # The queued switch is still visible as queued work, not as execution.
+        queued = [r for r in rows if r['kind'] == 'run' and r['status'] == 'queued']
+        self.assertTrue(queued)
+
+    def test_agent_total_matches_the_row_predicate(self):
+        thread = 'eeee2222-2222-4222-8222-222222222222'
+        self.db.execute('INSERT INTO orchestration_v2_projection_threads VALUES(?,?,?,?,NULL,?)',
+                        (thread, ENV, 'codex', work.iso(NOW-10),
+                         json.dumps({'branch': 'feat/synthetic-done-waiting'})))
+        self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                        ('run:terminal', thread, 'codex', 'completed', NOW-40, NOW-30,
+                         json.dumps({'startedAt': NOW-50,
+                                     'modelSelection': {'instanceId': 'codex',
+                                                        'model': 'synthetic-model'}}), 1))
+        self.db.execute('INSERT INTO orchestration_v2_projection_runtime_requests VALUES(?,?,?,NULL,?)',
+                        ('req:waiting', thread, NOW-20, 'pending'))
+        self.db.commit()
+        rows, _ = self.collect()
+        agent = next(r for r in rows if r['kind'] == 'agent' and r['work_id'] == work.identity(thread))
+        self.assertEqual(agent['status'], 'waiting')
+        coverage = next(r for r in rows if r['source'] == 't3_agents' and r['kind'] == 'coverage')
+        active = [r for r in rows if r['source'] == 't3_agents' and r['kind'] == 'agent']
+        self.assertEqual(coverage['rows'], len(active))
+        self.assertEqual(coverage['total'], len(active))
+        self.assertEqual(coverage['limited'], False)
+
+    def test_environment_id_comes_from_the_stock_runtime_file(self):
+        rows, _ = self.collect()
+        link = next(r['thread_url'] for r in rows if r['kind'] == 'agent' and r.get('thread_url'))
+        self.assertTrue(link.startswith(f'https://t3code.ghostship.io/{ENV}/'))
+        # Missing or malformed runtime files fall back to the app deep link.
+        Path(self.config['environment_id_file']).unlink()
+        rows, _ = self.collect()
+        link = next(r['thread_url'] for r in rows if r['kind'] == 'agent' and r.get('thread_url'))
+        self.assertTrue(link.startswith('t3-thread://v1/'))
+        Path(self.config['environment_id_file']).write_text('not-a-uuid')
+        rows, _ = self.collect()
+        link = next(r['thread_url'] for r in rows if r['kind'] == 'agent' and r.get('thread_url'))
+        self.assertTrue(link.startswith('t3-thread://v1/'))
+        # The module never bakes the live id into configuration.
+        module = (SIEM/'autonomous-work.nix').read_text()
+        self.assertNotIn('environment_id =', module)
+        self.assertIn('environment_id_file', module)
+        self.assertNotIn(ENV, module)
+
     def test_agent_missing_fields_stay_unknown(self):
         thread = '77777777-7777-4777-8777-777777777777'
         self.db.execute('INSERT INTO orchestration_v2_projection_threads VALUES(?,?,?,?,NULL,?)',
@@ -761,6 +824,33 @@ class DashboardContractTests(unittest.TestCase):
                 if 'vector(0)' in expr:
                     self.assertIn('ghostship_work_snapshot_timestamp_seconds', expr)
 
+    def test_host_dashboard_shows_cpu_total_per_core_and_memory_split(self):
+        page = json.loads((SIEM/'dashboards/host.json').read_text())
+        self.assertEqual(page['uid'], 'ghostship-host')
+        self.assertFalse(page['editable'])
+        titles = {panel['title']: panel for panel in page['panels']}
+        for title in ('CPU total  (all cores)', 'CPU per core', 'Memory used', 'Memory total',
+                      'Memory available', 'Host writers', 'CPUs reporting'):
+            self.assertIn(title, titles)
+        units = {title: titles[title]['fieldConfig']['defaults'].get('unit')
+                 for title in ('CPU total  (all cores)', 'Memory used', 'Memory total',
+                               'Memory available', 'Memory used %')}
+        self.assertEqual(units['CPU total  (all cores)'], 'percent')
+        self.assertEqual(units['Memory used %'], 'percent')
+        for title in ('Memory used', 'Memory total', 'Memory available'):
+            self.assertEqual(units[title], 'bytes')
+        # Total CPU averages every core once and per-core keeps one series each.
+        self.assertIn('avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))',
+                      titles['CPU total  (all cores)']['targets'][0]['expr'])
+        self.assertIn('avg by (cpu)', titles['CPU per core']['targets'][0]['expr'])
+        self.assertEqual(
+            [t['expr'] for t in titles['Memory  (total, used, available)']['targets']],
+            ['node_memory_MemTotal_bytes', 'node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes',
+             'node_memory_MemAvailable_bytes'])
+        # The link bar stays the five reviewed pages.
+        self.assertEqual(len(page['links']), 5)
+        self.assertEqual(len({link['url'] for link in page['links']}), 5)
+
     def test_agent_table_shows_branch_model_provider_state_and_links(self):
         dashboard = json.loads((SIEM/'dashboards/autonomous-work.json').read_text())
         agents = next(p for p in dashboard['panels'] if p.get('title','').startswith('Agents now'))
@@ -846,6 +936,56 @@ class NativeStoreTests(unittest.TestCase):
             except OSError:
                 time.sleep(0.05)
         self.fail('Disposable test store did not become ready')
+
+    def test_host_cpu_and_memory_panels_report_all_cores_and_the_memory_split(self):
+        # A real VictoriaMetrics fixture with two cores (one idle, one busy) and
+        # a total/available split proves the panel queries, their machine filter
+        # and their non-duplication, not just that the API returned success.
+        now = int(time.time())
+        older = (now - 120) * 1000
+        newer = (now - 60) * 1000
+        fixture = '\n'.join([
+            f'node_cpu_seconds_total{{cpu="0",mode="idle"}} 0 {older}',
+            f'node_cpu_seconds_total{{cpu="0",mode="idle"}} 60 {newer}',
+            f'node_cpu_seconds_total{{cpu="1",mode="idle"}} 0 {older}',
+            f'node_cpu_seconds_total{{cpu="1",mode="idle"}} 0 {newer}',
+            f'node_memory_MemTotal_bytes 1000 {newer}',
+            f'node_memory_MemAvailable_bytes 400 {newer}',
+            f'node_uname_info{{nodename="fixture"}} 1 {newer}',
+        ]).encode()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        vm = self.server(os.environ['GHOSTSHIP_TEST_VMETRICS'], tmp.name + '/metrics')
+        urllib.request.urlopen(urllib.request.Request(vm + '/api/v1/import/prometheus', data=fixture,
+                                                     headers={'Content-Type': 'text/plain'}), timeout=3).close()
+        urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
+
+        def query(expr):
+            url = vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr})
+            with urllib.request.urlopen(url, timeout=5) as response:
+                return json.load(response)['data']['result']
+
+        page = json.loads((SIEM/'dashboards/host.json').read_text())
+        ex = {}
+        for panel in page['panels']:
+            for target in panel.get('targets', []):
+                ex.setdefault(panel['title'], []).append(target['expr'])
+        total = query(ex['CPU total  (all cores)'][0])
+        self.assertEqual(len(total), 1)
+        self.assertAlmostEqual(float(total[0]['value'][1]), 50.0, places=3)
+        cores = query(ex['CPU per core'][0])
+        self.assertEqual(len(cores), 2, 'One series per cpu, no duplicated core')
+        self.assertEqual(sorted(float(c['value'][1]) for c in cores), [0.0, 100.0])
+        self.assertEqual(float(query(ex['Memory used'][0])[0]['value'][1]), 600.0)
+        self.assertEqual(float(query(ex['Memory total'][0])[0]['value'][1]), 1000.0)
+        self.assertEqual(float(query(ex['Memory available'][0])[0]['value'][1]), 400.0)
+        self.assertAlmostEqual(float(query(ex['Memory used %'][0])[0]['value'][1]), 60.0, places=3)
+        self.assertEqual(float(query(ex['Host writers'][0])[0]['value'][1]), 1.0)
+        self.assertEqual(float(query(ex['CPUs reporting'][0])[0]['value'][1]), 2.0)
+        memory = {target_metric['metric'].get('__name__', target_metric['metric'].get('refId'))
+                  for target_metric in query(ex['Memory  (total, used, available)'][0])}
+        self.assertEqual(len(memory), 1, 'A single memory total series from one writer')
+        self.assertAlmostEqual(float(query(ex['Node sample age'][0])[0]['value'][1]), 60.0, delta=70)
 
     def test_actual_dashboard_queries_against_native_stores_and_repoll_dedup(self):
         fixture = CollectorTests()
