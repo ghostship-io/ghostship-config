@@ -512,6 +512,8 @@ Source failures omit counts and success timestamps, and emit `source_up=0`; chec
 coverage, last-success age and snapshot age before interpreting empty tables.
 The link bar is built from a fixed page list, so rebuilding a dashboard cannot
 append a second copy of a link; exactly one link per page is verified.
+The agents table shows `Model`, `Provider`, `Branch`, `State`, `T3 thread` and
+`Parent`; the queues table keeps explicit waiting and background jobs.
 Current tables expire observations after three minutes. Lists are capped at 200
 rows per source, and no panel claims a complete enumeration: a truncated source
 is a lower bound and is counted as such. The default timeline is
@@ -540,6 +542,39 @@ validated T3 UUID links and GitHub issue links permit opening source details.
 Coordinator incident daily-limit holds are classified from the exact known result
 `over daily limit`, without exporting the note. A native active run is recorded
 state, not PID liveness; CI status does not establish objective completion.
+
+### Agents: who is running, on which branch, with which model
+
+The overview answers "what is running now" from the native execution projection, not
+from titles. One row exists per native thread, ordinary or app-owned child, across
+every project:
+
+- state is the current run's recorded state (`running`, `waiting`, `queued`, plus the
+  terminal states), with `waiting` when the thread has a pending native request; it
+  is a recorded state, never process liveness;
+- provider and model come from the current run's `modelSelection` (falling back to the
+  run's own provider), never from the thread's configured default after a switch;
+- branch comes from the thread projection (`payload_json.branch`), not from a title;
+- the parent link comes from the subagent projection (`child_thread_id` → parent
+  thread), and the row is omitted when no parent is recorded;
+- absent fields stay absent, so the table shows them as unknown instead of inventing
+  a value.
+
+Active work is enumerated in bounded pages (four pages of 500) so the two-hundred-row
+history cap can never hide a running agent. The real active total is published on the
+`t3_agents` coverage row, so a collector cap is disclosed instead of silently dropping
+agents. Terminal threads are a separate windowed source (`t3_agent_history`, last 24
+hours, bounded like every other list). Branch and model are private operational values:
+they travel only through the authenticated Grafana and the private VictoriaLogs
+datasource, never as Prometheus labels, and no title, prompt, transcript, raw error or
+personal value is exported.
+
+Thread ids are opaque: ordinary threads are UUIDs, app-owned children look like
+`thread:delegated-task:command%3Amcp%3A...`, and some rows use `mcp:<uuid>`. The link
+uses the coordinator's stock contract (a plain path join of the environment and the
+raw id, or the `t3-thread://v1/...` app link when the environment is unknown) and
+fails closed on any other shape, so a child link is kept instead of being dropped by
+a UUID-only check.
 
 ### What the overview reports, and what it refuses to claim
 

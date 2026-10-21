@@ -24,6 +24,7 @@ work = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(work)
 NOW = 1792584000.0
 THREAD = '11111111-1111-4111-8111-111111111111'
+CHILD = 'thread:delegated-task:command%3Amcp%3Afixture-child'
 ENV = '22222222-2222-4222-8222-222222222222'
 SECRET = 'DO_NOT_EXPORT_SECRET_BODY_TOKEN'
 
@@ -59,6 +60,10 @@ class CollectorTests(unittest.TestCase):
           CREATE TABLE owners(repository,number,thread_id,claimed_at);
           CREATE TABLE pull_progress(repository,number,thread_id,revision,outcome,evidence,updated_at);
           CREATE TABLE jobs(id,status,updated_at,progress,result,error);
+          CREATE INDEX runs_thread_ordinal ON orchestration_v2_projection_runs(thread_id,ordinal);
+          CREATE INDEX runs_thread_status ON orchestration_v2_projection_runs(thread_id,status);
+          CREATE INDEX subagents_child ON orchestration_v2_projection_subagents(child_thread_id);
+          CREATE INDEX threads_project_updated ON orchestration_v2_projection_threads(project_id,updated_at);
         ''')
         at = work.iso(NOW-10)
         self.db.execute('INSERT INTO scheduled_tasks VALUES(?,?,?,?,?,?,?,?,?)',
@@ -73,8 +78,17 @@ class CollectorTests(unittest.TestCase):
                         ('run', THREAD, 'codex', 'running', at, None,
                          json.dumps({'ordinal': 1, 'startedAt': NOW-9, 'transcript': SECRET}), 1))
         self.db.execute('INSERT INTO orchestration_v2_projection_subagents VALUES(?,?,?,?,?,?,?,?)',
-                        ('child', THREAD, THREAD, 'codex', 'running', None, at,
+                        ('child', THREAD, CHILD, 'codex', 'running', None, at,
                          json.dumps({'note': SECRET})))
+        # The child is a real native thread with its own active run, model and
+        # branch, so the agent table can link it to its parent.
+        self.db.execute('INSERT INTO orchestration_v2_projection_threads VALUES(?,?,?,?,NULL,?)',
+                        (CHILD, ENV, 'codex', at, json.dumps({'branch': 'feat/synthetic-child'})))
+        self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                        ('run:child', CHILD, 'opencode', 'running', NOW-8, None,
+                         json.dumps({'startedAt': NOW-7,
+                                     'modelSelection': {'instanceId': 'opencode',
+                                                        'model': 'synthetic-model-child'}}), 1))
         self.db.execute('INSERT INTO scheduled_task_webhook_deliveries VALUES(?,?,?,?,?,?)',
                         ('delivery', at, 'accepted', SECRET, SECRET, SECRET))
         for name, payload in [('turn', {'turnTokenUsage': {'usageStatus':'complete','inputTokens':25,'outputTokens':10}, 'transcript':SECRET}),
@@ -85,6 +99,25 @@ class CollectorTests(unittest.TestCase):
         self.db.execute('INSERT INTO projection_projects VALUES(?,?,NULL)', (ENV,at))
         self.db.execute('INSERT INTO orchestration_v2_projection_threads VALUES(?,?,?,?,NULL,?)', (THREAD,ENV,'codex',at,json.dumps({'linkedPullRequest':{'url':'https://github.com/ghostship-io/ghostship-config/pull/42'},'prompt':SECRET,'pullRequests':[{'url':'https://github.com/ghostship-io/ghostship-config/pull/42','snapshot':{'state':'OPEN'}},{'url':'https://github.com/ghostship-io/ghostship-config/pull/43','snapshot':{'state':'OPEN'}}]})))
         self.db.execute('INSERT INTO orchestration_v2_projection_runtime_requests VALUES(?,?,?,NULL,?)', ('approval',THREAD,at,'pending'))
+        # An active agent with its own branch, model and provider, plus a
+        # terminal one for the windowed history.
+        self.db.execute('INSERT INTO orchestration_v2_projection_threads VALUES(?,?,?,?,NULL,?)',
+                        ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', ENV, 'codex', at,
+                         json.dumps({'branch': 'feat/synthetic-active'})))
+        self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                        ('run:active', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'claudeAgent',
+                         'running', NOW-12, None,
+                         json.dumps({'startedAt': NOW-11,
+                                     'modelSelection': {'instanceId': 'claudeAgent',
+                                                        'model': 'synthetic-model-active'}}), 1))
+        self.db.execute('INSERT INTO orchestration_v2_projection_threads VALUES(?,?,?,?,NULL,?)',
+                        ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', ENV, 'codex', at,
+                         json.dumps({'branch': 'feat/synthetic-done'})))
+        self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                        ('run:done', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'codex', 'completed',
+                         NOW-30, at, json.dumps({'startedAt': NOW-40,
+                                                  'modelSelection': {'instanceId': 'codex',
+                                                                     'model': 'synthetic-model'}}), 1))
         pointer = json.dumps({'repository':'ghostship-io/ghostship-config','number':123,'event':'issues','body':SECRET})
         self.db.execute('INSERT INTO events VALUES(?,?,?,?,?,?)',
                         ('receipt', pointer, 'done', 'over daily limit', NOW-20, NOW-10))
@@ -444,6 +477,171 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(reasons['deployed_health'], 'unsupported_no_source_in_this_collector')
         self.assertNotIn('ci_conclusion', reasons)
 
+    def add_agent(self, thread_id, project, branch, model, provider, status='running',
+                  default_provider='codex', updated=None, requests=0):
+        stamp = updated if updated is not None else NOW-20
+        self.db.execute('INSERT INTO orchestration_v2_projection_threads VALUES(?,?,?,?,NULL,?)',
+                        (thread_id, project, default_provider, work.iso(stamp),
+                         json.dumps({'branch': branch, 'providerInstanceId': default_provider})))
+        self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                        (identity_run := f'run:{thread_id}', thread_id, provider, status,
+                         stamp-5, stamp-1 if status in ('completed','failed','cancelled') else None,
+                         json.dumps({'modelSelection': {'instanceId': provider, 'model': model},
+                                     'startedAt': stamp-5}), 1))
+        if requests:
+            self.db.execute('INSERT INTO orchestration_v2_projection_runtime_requests VALUES(?,?,?,NULL,?)',
+                            (f'req:{thread_id}', thread_id, stamp, 'pending'))
+
+    def test_agents_show_every_active_thread_beyond_the_recent_cap(self):
+        self.db.execute('DELETE FROM orchestration_v2_projection_runs')
+        self.db.execute('DELETE FROM orchestration_v2_projection_threads')
+        projects = [f'3333333{n}-3333-4333-8333-333333333333' for n in range(1, 4)]
+        for n in range(250):
+            thread = (f'44444444-4444-4444-8444-{n:012d}' if n % 2 == 0
+                      else f'thread:delegated-task:command%3Amcp%3A{n:08d}')
+            self.add_agent(thread, projects[n % 3], f'feat/synthetic-{n}', f'synthetic-model-{n % 4}',
+                           'claudeAgent' if n % 2 else 'codex')
+        self.db.commit()
+        rows, metrics = self.collect()
+        agents = [r for r in rows if r['kind'] == 'agent' and r['source'] == 't3_agents']
+        self.assertEqual(len(agents), 250)
+        self.assertEqual(len({r['project_id'] for r in agents}), 3)
+        self.assertTrue(any(str(r['work_id']) for r in agents))
+        coverage = next(r for r in rows if r['source'] == 't3_agents' and r['kind'] == 'coverage')
+        self.assertEqual(coverage['coverage'], 'available')
+        self.assertEqual(coverage['rows'], 250)
+        self.assertEqual(coverage['total'], 250)
+        self.assertEqual(coverage['limited'], False)
+        self.assertIn('ghostship_work_active{source="t3_agents"} 250', metrics)
+        # Branch and model are private values, never metric labels.
+        self.assertNotIn('synthetic-model', metrics)
+        self.assertNotIn('feat/synthetic', metrics)
+
+    def test_active_enumeration_reports_incomplete_when_the_page_cap_is_hit(self):
+        self.db.execute('DELETE FROM orchestration_v2_projection_runs')
+        self.db.execute('DELETE FROM orchestration_v2_projection_threads')
+        cap = work.ACTIVE_PAGE * work.ACTIVE_PAGES
+        self.db.executemany('INSERT INTO orchestration_v2_projection_threads VALUES(?,?,?,?,NULL,?)',
+                            [(f'55555555-5555-4555-8555-{n:012d}', ENV, 'codex', work.iso(NOW-10),
+                              json.dumps({'branch': f'feat/synthetic-{n}'})) for n in range(cap+1)])
+        self.db.executemany('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                            [(f'run:{n}', f'55555555-5555-4555-8555-{n:012d}', 'codex', 'running',
+                              NOW-10, None, json.dumps({'startedAt': NOW-9,
+                                                        'modelSelection': {'instanceId': 'codex',
+                                                                           'model': 'synthetic-model'}}), 1)
+                             for n in range(cap+1)])
+        self.db.commit()
+        rows, _ = self.collect()
+        agents = [r for r in rows if r['kind'] == 'agent' and r['source'] == 't3_agents']
+        self.assertEqual(len(agents), cap)
+        coverage = next(r for r in rows if r['source'] == 't3_agents' and r['kind'] == 'coverage')
+        self.assertEqual(coverage['coverage'], 'bounded')
+        self.assertEqual(coverage['limited'], True)
+        self.assertEqual(coverage['total'], cap+1)
+        self.assertEqual(coverage['rows'], cap)
+
+    def test_agent_rows_carry_branch_model_provider_and_parent(self):
+        child = 'thread:delegated-task:command%3Amcp%3A019f3733%3Adelegate-task%3Asynthetic'
+        self.add_agent(child, ENV, 'feat/synthetic-child-links', 'synthetic-model-links', 'claudeAgent')
+        self.db.execute('INSERT INTO orchestration_v2_projection_subagents VALUES(?,?,?,?,?,?,?,?)',
+                        ('child', THREAD, child, 'claudeAgent', 'running', None, work.iso(NOW-10),
+                         json.dumps({})))
+        self.db.commit()
+        rows, _ = self.collect()
+        agent = next(r for r in rows if r['kind'] == 'agent'
+                     and r.get('branch') == 'feat/synthetic-child-links')
+        self.assertEqual(agent['provider'], 'claudeAgent')
+        self.assertEqual(agent['model'], 'synthetic-model-links')
+        self.assertEqual(agent['status'], 'running')
+        # The stock deep link keeps the opaque id verbatim.
+        self.assertEqual(agent['thread_url'],
+                         f'https://t3code.ghostship.io/{ENV}/{child}')
+        self.assertEqual(agent['parent_url'],
+                         f'https://t3code.ghostship.io/{ENV}/{THREAD}')
+        # An ordinary thread has no parent link.
+        ordinary = next(r for r in rows if r['kind'] == 'agent' and r.get('thread_url')
+                        and r['work_id'] == work.identity(THREAD))
+        self.assertNotIn('parent_url', ordinary)
+
+    def test_agent_model_follows_the_current_run_not_the_thread_default(self):
+        thread = '66666666-6666-4666-8666-666666666666'
+        self.add_agent(thread, ENV, 'feat/synthetic-switch', 'synthetic-model-a', 'claudeAgent',
+                       default_provider='codex')
+        self.db.commit()
+        rows, _ = self.collect()
+        agent = next(r for r in rows if r['kind'] == 'agent' and r['work_id'] == work.identity(thread))
+        self.assertEqual(agent['provider'], 'claudeAgent')
+        self.assertEqual(agent['model'], 'synthetic-model-a')
+        # A newer active run on another provider and model wins after a switch.
+        self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                        ('run:switch', thread, 'opencode', 'running', NOW-5, None,
+                         json.dumps({'startedAt': NOW-4, 'ordinal': 2,
+                                     'modelSelection': {'instanceId': 'opencode',
+                                                        'model': 'synthetic-model-b'}}), 2))
+        self.db.commit()
+        rows, _ = self.collect()
+        agent = next(r for r in rows if r['kind'] == 'agent' and r['work_id'] == work.identity(thread))
+        self.assertEqual(agent['provider'], 'opencode')
+        self.assertEqual(agent['model'], 'synthetic-model-b')
+
+    def test_agent_missing_fields_stay_unknown(self):
+        thread = '77777777-7777-4777-8777-777777777777'
+        self.db.execute('INSERT INTO orchestration_v2_projection_threads VALUES(?,?,?,?,NULL,?)',
+                        (thread, ENV, 'opencode', work.iso(NOW-10), json.dumps({})))
+        self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                        ('run:bare', thread, 'codex', 'running', NOW-10, None,
+                         json.dumps({'startedAt': NOW-9}), 1))
+        self.db.commit()
+        rows, _ = self.collect()
+        agent = next(r for r in rows if r['kind'] == 'agent' and r['work_id'] == work.identity(thread))
+        self.assertNotIn('branch', agent)
+        self.assertNotIn('model', agent)
+        self.assertEqual(agent['status'], 'running')
+        # The provider is the run's own, never the thread default.
+        self.assertEqual(agent['provider'], 'codex')
+
+    def test_agent_waiting_queued_and_held_are_explicit_and_not_pid_proof(self):
+        waiting = '88888888-8888-4888-8888-888888888888'
+        queued = '99999999-9999-4999-8999-999999999999'
+        held = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        self.add_agent(waiting, ENV, 'feat/synthetic-wait', 'synthetic-model', 'codex', status='waiting')
+        self.add_agent(queued, ENV, 'feat/synthetic-queue', 'synthetic-model', 'codex', status='queued')
+        self.add_agent(held, ENV, 'feat/synthetic-held', 'synthetic-model', 'codex', status='waiting',
+                       requests=1)
+        self.db.commit()
+        rows, _ = self.collect()
+        states = {r['work_id']: r['status'] for r in rows if r['kind'] == 'agent'}
+        self.assertEqual(states[work.identity(waiting)], 'waiting')
+        self.assertEqual(states[work.identity(queued)], 'queued')
+        # A pending native request is waiting work, not a running process.
+        self.assertEqual(states[work.identity(held)], 'waiting')
+        self.assertFalse(any('pid' in key for r in rows for key in r))
+
+    def test_agent_links_fail_closed_for_unverified_ids(self):
+        self.assertEqual(work.thread_url('thread:delegated-task:command%3Amcp%3Aabc', ENV),
+                         f'https://t3code.ghostship.io/{ENV}/thread:delegated-task:command%3Amcp%3Aabc')
+        self.assertEqual(work.thread_url(THREAD, ''), f't3-thread://v1/{THREAD}')
+        for value in ('DO_NOT_EXPORT_SECRET_BODY_TOKEN', 'thread:' + 'a'*300, '', None,
+                      'thread:delegated-task:../../etc/passwd', 'http://evil.example/thread'):
+            self.assertEqual(work.thread_url(value, ENV), '', value)
+
+    def test_agent_history_is_windowed_and_excludes_active(self):
+        recent = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+        old = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+        self.add_agent(recent, ENV, 'feat/synthetic-terminal', 'synthetic-model', 'codex',
+                       status='completed', updated=NOW-600)
+        self.add_agent(old, ENV, 'feat/synthetic-old', 'synthetic-model', 'codex',
+                       status='completed', updated=NOW-2*86400)
+        self.db.commit()
+        rows, _ = self.collect()
+        history = [r for r in rows if r['source'] == 't3_agent_history']
+        ids = {r['work_id'] for r in history}
+        self.assertIn(work.identity(recent), ids)
+        self.assertNotIn(work.identity(old), ids)
+        # Active work is enumerated in the active source, never in history.
+        active_ids = {r['work_id'] for r in rows if r['source'] == 't3_agents'}
+        self.assertFalse(ids & active_ids)
+
     def test_timer_metadata_only_and_subprocess_failure(self):
         payload = [{'unit':'newsletter.timer','next':int((NOW+60)*1e6),'last':int((NOW-60)*1e6),'activates':SECRET},
                    {'unit':'unsafe / '+SECRET,'next':int(NOW*1e6)}]
@@ -489,7 +687,8 @@ class DashboardContractTests(unittest.TestCase):
                 if uid == 'victorialogs':
                     self.assertIn('last 1 by (_time) partition by (source,kind,work_id', target['expr'])
                     if target['queryType'] == 'instant':
-                        self.assertIn('limit 200', target['expr'])
+                        limit = int(work.re.search(r'limit (\d+)', target['expr']).group(1))
+                        self.assertIn(limit, (200, 1000))
                     else:
                         self.assertEqual(target['queryType'], 'stats')
         uids = {json.loads(p.read_text())['uid'] for p in (SIEM/'dashboards').glob('*.json')}
@@ -561,6 +760,23 @@ class DashboardContractTests(unittest.TestCase):
                         self.assertIn('ghostship_work_source_up == 1', expr)
                 if 'vector(0)' in expr:
                     self.assertIn('ghostship_work_snapshot_timestamp_seconds', expr)
+
+    def test_agent_table_shows_branch_model_provider_state_and_links(self):
+        dashboard = json.loads((SIEM/'dashboards/autonomous-work.json').read_text())
+        agents = next(p for p in dashboard['panels'] if p.get('title','').startswith('Agents now'))
+        expr = agents['targets'][0]['expr']
+        for field in ('status', 'provider', 'model', 'branch', 'thread_url', 'parent_url'):
+            self.assertIn(field, expr.split('| fields ')[1])
+        self.assertEqual(agents['targets'][0]['datasource']['uid'], 'victorialogs')
+        renamed = agents['transformations'][1]['options']['renameByName']
+        for column in ('State', 'Provider', 'Model', 'Branch', 'T3 thread', 'Parent'):
+            self.assertIn(column, renamed.values())
+        # Branch and model are private values: never a metric label.
+        for panel in dashboard['panels']:
+            for target in panel.get('targets', []):
+                if target['datasource']['uid'] == 'victoriametrics':
+                    self.assertNotIn('model', target['expr'].replace('model_report', ''))
+                    self.assertNotIn('branch', target['expr'])
 
     def test_dashboard_distinguishes_receipts_from_outcomes(self):
         dashboard = json.loads((SIEM/'dashboards/autonomous-work.json').read_text())
