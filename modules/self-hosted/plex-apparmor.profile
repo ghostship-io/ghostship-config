@@ -1,25 +1,29 @@
 # Container policy, inspected on chill-penguin (aarch64), 2026-10-18:
 # LinuxServer Plex 1.43.4.10903; s6-overlay 3.2.1.0; uid/gid 3000.
 # Load by name through the container runtime; there is no host attachment glob.
-# Keep complain until daily review records seven observed days without changes.
-# A policy change restarts that observation window; elapsed time alone is not proof.
-# No explicit deny: those rules would enforce even while in complain mode.
+# The Internet-facing server and interpreter domains enforce (2026-10-21, user
+# decision after Plex2Shell exploitation; Plex was already patched). Startup and
+# the healthcheck keep learning in complain mode until their own review gate.
+# The policy loads in enforce state, so each profile's flags decide its mode.
+# Explicit deny rules always enforce; use them only for deliberate denials.
 # No abstractions: their implicit permissions would obscure this allowlist.
 
 @{ghostship_plex_pms} = /usr/lib/plexmediaserver
 @{ghostship_plex_state} = "/config/Library/Application Support/Plex Media Server"
 @{ghostship_plex_s6} = /package/admin/s6-overlay-3.2.1.0
+@{ghostship_plex_plugins} = /usr/lib/plexmediaserver/Resources/Plug-ins-[0-9a-f]*
+@{ghostship_plex_agents} = com.plexapp.system org.musicbrainz.agents.music com.plexapp.agents.{fanarttv,htbackdrops,imdb,lastfm,localmedia,lyricfind,movieposterdb,none,plexthememusic,themoviedb,thetvdb}
 
 profile ghostship-plex flags=(complain,attach_disconnected,mediate_deleted) {
-  # Startup, server and interpreter stay in complain mode while collecting
-  # missing accesses. Omitted permissions are NOT enforced in this mode.
+  # Startup stays in complain mode while collecting missing accesses. Omitted
+  # permissions are NOT enforced in this domain.
   #include <plex-apparmor-startup.inc>
   "@{ghostship_plex_pms}/Plex Media Server" cx -> server,
   "@{ghostship_plex_pms}/Plex Script Host" px -> ghostship-plex//python,
   # Podman's healthcheck (reliability.nix) runs `sh -c "curl ... /identity"`.
   /usr/bin/curl cx -> healthcheck,
 
-  profile server flags=(complain,attach_disconnected,mediate_deleted) {
+  profile server flags=(attach_disconnected,mediate_deleted) {
     # The server and its helpers get no shell, downloader, or startup-tool execs.
     "@{ghostship_plex_pms}/Plex Media Server" rix,
     # The "PMS GTP" thread reads its own processes' /proc entries; no tracing.
@@ -43,7 +47,14 @@ profile ghostship-plex flags=(complain,attach_disconnected,mediate_deleted) {
     network inet6 stream,
   }
 
-  profile python flags=(complain,attach_disconnected,mediate_deleted) {
+  profile python flags=(attach_disconnected,mediate_deleted) {
     #include <plex-apparmor-python.inc>
+  }
+
+  # ctypes' `ldconfig -p` from the interpreter: read the loader cache, print.
+  profile ldconfig flags=(attach_disconnected,mediate_deleted) {
+    /usr/sbin/ldconfig rm,
+    /etc/ld.so.cache r,
+    /dev/null w,
   }
 }
