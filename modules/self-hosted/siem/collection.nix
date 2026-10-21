@@ -117,21 +117,32 @@ in
     extraFlags = [ "--collector.textfile.directory=${textfile}" ];
   };
 
-  systemd.services.ghostship-container-metrics = {
-    description = "Per-container resource counters for the SIEM";
-    wantedBy = [ "multi-user.target" ];
+  # A short-lived root job holds the Podman API, so no long-lived SIEM service
+  # does (it could create and exec containers). It writes the container
+  # metadata the alert bridge resolves addresses from, and the per-container
+  # counters node_exporter exports (see podman-snapshot.py).
+  systemd.services.ghostship-podman-snapshot = {
+    description = "Container metadata snapshot and resource counters for the SIEM";
     after = [ "podman.socket" ];
-    requires = [ "podman.socket" ];
+    path = [ config.virtualisation.podman.package ];
     serviceConfig = {
-      ExecStart = "${pkgs.python3}/bin/python3 ${./container-metrics.py} ${textfile}/containers.prom";
-      Restart = "always";
-      RestartSec = 30;
+      Type = "oneshot";
+      ExecStart = "${pkgs.python3}/bin/python3 ${./podman-snapshot.py} /run/ghostship-podman/containers.json ${textfile}/containers.prom";
+      RuntimeDirectory = "ghostship-podman";
+      RuntimeDirectoryMode = "0755";
+      RuntimeDirectoryPreserve = true;
       Nice = 10;
-      NoNewPrivileges = true;
-      ProtectSystem = "strict";
       ProtectHome = true;
       PrivateTmp = true;
-      ReadWritePaths = [ textfile ];
+      TimeoutStartSec = "2min";
+    };
+  };
+  systemd.timers.ghostship-podman-snapshot = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "1min";
+      OnUnitActiveSec = "30s";
+      AccuracySec = "1s";
     };
   };
   systemd.tmpfiles.rules = [ "d ${textfile} 0755 root root -" ];
