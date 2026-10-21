@@ -345,7 +345,7 @@ the reasons, the quota state, the components, and the eligibility:
 | `capacity` | the remaining share, when it expires, and the pace against the line the window draws by now |
 | `usage` | the token volume of the last seven days, labelled as a volume and not as a task success |
 | `intelligence` | the Artificial Analysis record of the model: the indices, the cost per task, the median performance, and the token prices of the feed, with the version and the fetch time. A model the feed does not list is unknown, not bad |
-| `frontier_surplus` | whether a frontier model may carry volume work: an allowance that resets within a day, the surplus, the reserve the review keeps, and the pace |
+| `frontier_surplus` | whether a frontier model may carry volume work: the entitlement it comes from (its kind, its length, its reset, its quota id), the surplus, the reserve the review keeps, and the pace. A weekly or monthly allowance that resets within a day is not the same thing as a session window that resets in a few hours, so the window is named |
 | `three_d` | the 3D prior and the 3D usage, each with its source |
 | `eligibility` | the policy flags, kept apart from the readings |
 | `admission` | `settled`, or `pending` with the reason and the end of the evaluation window |
