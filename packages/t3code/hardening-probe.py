@@ -33,6 +33,9 @@ def main():
     with open("/run/t3code-hardening-probe.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         before = identity()
+        systemctl = run("podman", "run", "--rm", "--network=none",
+                        "--entrypoint=/bin/readlink", args.image, "-f", "/bin/systemctl")
+        systemd = str(Path(systemctl).parent.parent / "lib/systemd/systemd")
         with tempfile.TemporaryDirectory(prefix="t3code-probe-", dir="/var/tmp") as temporary:
             root = Path(temporary)
             for name in ("home", "workspace", "tmp"):
@@ -53,7 +56,7 @@ def main():
                     "-v", f"{root / 'workspace'}:/workspace:rw",
                     "-v", f"{root / 'tmp'}:/tmp:rw",
                     "-v", f"{setup}:/etc/systemd/system/t3code-container-setup.service:ro",
-                    "--entrypoint=/bin/systemd", args.image, "--unit=basic.target")
+                    f"--entrypoint={systemd}", args.image, "--unit=basic.target")
                 def execute(*command, user="0:0"):
                     return run("podman", "exec", "--user", user, name, *command)
                 for _ in range(60):
