@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.20] - 2026-10-21
+
+- Give qBittorrent 60 seconds to shut down before Podman forces termination, within systemd's existing two-minute stop limit. Ordinary restarts previously hit Podman's 10-second default and reported exit 137.
+
 ## [3.17.19] - 2026-10-21
 
 - The Gluetun network monitor and qBittorrent's pre-start and auto-resume scripts probe the VPN namespace from the host (`nsenter -n` with host `curl` and `ip`) instead of `podman exec gluetun wget|sh -c ip`.
