@@ -152,6 +152,28 @@ workflow for policy changes. Leave merging to the user.
    is deployed and verified, disable the learning task and retain the host audit
    collector for regression monitoring.
 
+## Plex enforcement (2026-10-21)
+
+After Plex2Shell was exploited in the wild, the user chose to enforce Plex's
+Internet-facing domains ahead of the seven-day gate. `ghostship-plex//server`,
+`//python` and `//ldconfig` enforce; the startup domain and `//healthcheck` keep
+learning in complain mode. The policy loads in `enforce` state, so each
+profile's flags set its mode; `apparmorProcessModes` in `plex.nix` tells the
+collector which labels stay in complain. Daily review continues for the
+complain domains, and `DENIED` records from the enforced ones are breakage or
+attack evidence to investigate, never a reason to relax enforcement unreviewed.
+
+- The interpreter's plugin rules glob the `Plug-ins-<build>` hash, so image
+  updates do not silently break the metadata agents. Agent state is limited
+  to the plugin identifiers present on the host.
+- The server cannot write or link into the allowlisted codec sets (explicit
+  `deny`), which blocks Plex2Shell's final step: replacing a codec `.so` the
+  transcoder then maps. Plex cannot download codecs into those sets or map a
+  new set either. When transcoding fails after a Plex update for missing
+  codecs, review the new set and update the allowlist in a PR.
+- To roll back, set the server and python flags back to `complain` in
+  `plex-apparmor.profile` and deploy; do not add broad rules to recover.
+
 ## Policy limits
 
 The profile restricts executable paths, files, library mappings and selected
