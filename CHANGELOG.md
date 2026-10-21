@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.7] - 2026-10-21
+
+- SIEM redaction covers every string field at any depth, not just the message and request path (#102 Gate 1.5). Falco command lines and output fields, audit names and future sources are included.
+  - New patterns: Authorization, cookie and API-key headers; JWTs; `--password`-style arguments; MySQL/MariaDB `-p<password>` (romm-db's poststart passed one); private-key blocks.
+  - Detection text such as `find -perm` is kept.
+  - Two new Vector tests cover this.
+
 ## [3.17.6] - 2026-10-21
 
 - Agent desktop: whole Chrome windows. `stage-control` (replacing `stage-input`) gives every Chrome window in a browser stage a headless output of its own, so the viewer shows the whole window (tab strip, address bar, toolbar, extension buttons, menus and popups) and a person's taps, keys and text reach Chrome's own controls. Agents get the same through `browser_window` `screenshot`/`ui` (ghostship-agent 0.31.0).

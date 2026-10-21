@@ -53,8 +53,12 @@ cross `eth0`. Container-to-container traffic is included, so
 - Muximux nginx access and error logs.
 - Not collected: qBittorrent's log (0600 to its app user; WebUI behind Access).
 
-Secrets are removed before storage (`vector/redact.vrl`): token, key, password,
-session and signature query parameters, bearer tokens and URL credentials.
+Secrets are removed from every string field, at any depth, before storage
+(`vector/redact.vrl`). That covers token, key, password, session and
+signature query parameters; bearer and basic credentials; Authorization,
+cookie and API-key headers; JWTs; URL credentials; `--password`-style
+arguments; MySQL/MariaDB `-p<password>`; and private-key blocks. New sources
+are covered automatically.
 `tests/siem-vector.toml` fails if redaction or parsing regresses.
 
 ## Fields
