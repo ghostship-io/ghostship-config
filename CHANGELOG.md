@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.29] - 2026-10-21
+
+- AppArmor: agent-desktop SSH shells may run the Rust coreutils multicall that `/usr/bin/timeout`, `date`, `mkdir` and similar resolve to. An agent's `timeout blender` ran in ruleless `null-*` profiles at 13:55: about 246k audit records in 10 minutes, 2 lost.
+
 ## [3.17.28] - 2026-10-21
 
 - AppArmor: NZBGet's startup system-info probe (popen `uname -o/-r/-m` and `lscpu | grep` through `/bin/sh`) runs in its own `sysinfo` child, which may run only BusyBox sh/grep and coreutils uname, with no network or writes. It had raised `SuspiciousExecInAppDomain` after the Gluetun IP change restarted NZBGet at 17:27; investigated as legitimate (#102). Any other shell from the server still alerts.
