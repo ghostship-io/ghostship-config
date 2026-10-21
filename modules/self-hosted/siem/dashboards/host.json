@@ -5,7 +5,7 @@
   "ghostship",
   "host"
  ],
- "timezone": "browser",
+ "timezone": "utc",
  "schemaVersion": 41,
  "version": 1,
  "editable": false,
@@ -15,6 +15,285 @@
   "to": "now"
  },
  "panels": [
+  {
+   "id": 1000,
+   "title": "HOST / Resources & containers",
+   "type": "text",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 4
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline) \u00b7 [AI usage](/d/ghostship-ai-usage)\n\nLive node_exporter and bounded Podman cgroup counters. Unknown means no recent sample; inspect freshness before interpreting a quiet chart."
+   }
+  },
+  {
+   "id": 1001,
+   "title": "CPU used now",
+   "description": "",
+   "type": "stat",
+   "gridPos": {
+    "x": 0,
+    "y": 4,
+    "w": 6,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.75
+       },
+       {
+        "color": "red",
+        "value": 0.9
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1002,
+   "title": "Memory used now",
+   "description": "",
+   "type": "stat",
+   "gridPos": {
+    "x": 6,
+    "y": 4,
+    "w": 6,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.8
+       },
+       {
+        "color": "red",
+        "value": 0.9
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1003,
+   "title": "Root disk free",
+   "description": "",
+   "type": "stat",
+   "gridPos": {
+    "x": 12,
+    "y": 4,
+    "w": 6,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.1
+       },
+       {
+        "color": "green",
+        "value": 0.2
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1004,
+   "title": "Node sample age",
+   "description": "",
+   "type": "stat",
+   "gridPos": {
+    "x": 18,
+    "y": 4,
+    "w": 6,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "time() - timestamp(node_uname_info)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 90
+       },
+       {
+        "color": "red",
+        "value": 180
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
   {
    "id": 1,
    "title": "CPU busy",
@@ -27,7 +306,7 @@
     "w": 12,
     "h": 8,
     "x": 0,
-    "y": 0
+    "y": 8
    },
    "targets": [
     {
@@ -42,11 +321,31 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "percentunit"
+     "unit": "percentunit",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 2,
@@ -60,7 +359,7 @@
     "w": 12,
     "h": 8,
     "x": 12,
-    "y": 0
+    "y": 8
    },
    "targets": [
     {
@@ -84,11 +383,31 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "bytes"
+     "unit": "bytes",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 3,
@@ -102,7 +421,7 @@
     "w": 12,
     "h": 8,
     "x": 0,
-    "y": 8
+    "y": 16
    },
    "targets": [
     {
@@ -117,11 +436,31 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "percentunit"
+     "unit": "percentunit",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 4,
@@ -135,7 +474,7 @@
     "w": 12,
     "h": 8,
     "x": 12,
-    "y": 8
+    "y": 16
    },
    "targets": [
     {
@@ -158,10 +497,31 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 5,
@@ -175,7 +535,7 @@
     "w": 24,
     "h": 8,
     "x": 0,
-    "y": 16
+    "y": 24
    },
    "targets": [
     {
@@ -189,10 +549,31 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 6,
@@ -206,7 +587,7 @@
     "w": 12,
     "h": 8,
     "x": 0,
-    "y": 24
+    "y": 32
    },
    "targets": [
     {
@@ -221,11 +602,31 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "bytes"
+     "unit": "bytes",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 7,
@@ -239,7 +640,7 @@
     "w": 12,
     "h": 8,
     "x": 12,
-    "y": 24
+    "y": 32
    },
    "targets": [
     {
@@ -254,11 +655,133 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "Bps"
+     "unit": "Bps",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   }
- ]
+ ],
+ "links": [
+  {
+   "title": "Work overview",
+   "type": "link",
+   "url": "/d/ghostship-autonomous-work",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Host",
+   "type": "link",
+   "url": "/d/ghostship-host",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Security",
+   "type": "link",
+   "url": "/d/ghostship-security",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Pipeline",
+   "type": "link",
+   "url": "/d/ghostship-siem-pipeline",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  }
+ ],
+ "description": "Provisioned read-only Ghostship monitoring. Direct navigation; data comes from the existing SIEM stores."
 }

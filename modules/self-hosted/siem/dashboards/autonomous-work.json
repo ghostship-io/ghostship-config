@@ -1,0 +1,5485 @@
+{
+ "uid": "ghostship-autonomous-work",
+ "title": "Ghostship \u00b7 Autonomous work",
+ "description": "Provisioned read-only Ghostship monitoring. Direct navigation; data comes from the existing SIEM stores.",
+ "tags": [
+  "ghostship",
+  "operations",
+  "autonomous-work"
+ ],
+ "timezone": "utc",
+ "schemaVersion": 41,
+ "version": 14,
+ "editable": false,
+ "refresh": "1m",
+ "time": {
+  "from": "now/d",
+  "to": "now"
+ },
+ "links": [
+  {
+   "title": "Work overview",
+   "type": "link",
+   "url": "/d/ghostship-autonomous-work",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Host",
+   "type": "link",
+   "url": "/d/ghostship-host",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Security",
+   "type": "link",
+   "url": "/d/ghostship-security",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Pipeline",
+   "type": "link",
+   "url": "/d/ghostship-siem-pipeline",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  }
+ ],
+ "panels": [
+  {
+   "id": 1,
+   "title": "GHOSTSHIP  /  Autonomous work",
+   "type": "text",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 5
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline)\n\nOne read-only pane for T3 projects, ordinary and child agents, schedules, webhooks, reviews and provider usage. Today in UTC. **Bulk work, model reports, CI proofs, review receipts, closed pull requests and deployment receipts are different evidence: a receipt is never a green outcome. The CI proof is bound to the exact SHA of the configured checks; no owner state records a frontier approval, the merge result or the deployed health, and no source exposes objective completion** (see the coverage table). A count is a lower bound while a source is truncated or unavailable; an empty panel is missing evidence, not a healthy zero. No transcripts, prompts or raw failures are stored. [AI usage and model rankings](/d/ghostship-ai-usage) live in their own dashboard."
+   }
+  },
+  {
+   "id": 2,
+   "title": "Needs attention",
+   "description": "Failed, blocked or held work in the last snapshot. A truncated source makes this a lower bound.",
+   "type": "stat",
+   "gridPos": {
+    "x": 0,
+    "y": 5,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sum((ghostship_work_attention and on(source) (ghostship_work_source_up == 1)) and on() (time() - ghostship_work_snapshot_timestamp_seconds < 180))",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       },
+       {
+        "color": "red",
+        "value": 10
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 3,
+   "title": "In flight",
+   "description": "Recorded active states: native runs, child tasks, queued jobs and running threads. A recorded state is not proof of liveness.",
+   "type": "stat",
+   "gridPos": {
+    "x": 4,
+    "y": 5,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sum((ghostship_work_active and on(source) (ghostship_work_source_up == 1)) and on() (time() - ghostship_work_snapshot_timestamp_seconds < 180))",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 4,
+   "title": "Work items today",
+   "description": "Distinct work items with a UTC-day change, deduplicated across the one-minute polls. Sources that are down or truncated lower this count.",
+   "type": "stat",
+   "gridPos": {
+    "x": 8,
+    "y": 5,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work | last 1 by (_time) partition by (source,kind,work_id) | filter kind:!=coverage event_today:1 | stats count() n",
+     "queryType": "stats"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 5,
+   "title": "Webhook receipts today",
+   "description": "Webhooks that fired today, deduplicated across polls. Acceptance per receipt is in the webhook table; a missing receipt is missing evidence.",
+   "type": "stat",
+   "gridPos": {
+    "x": 12,
+    "y": 5,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work | last 1 by (_time) partition by (source,kind,work_id) | filter kind:=webhook fired_today:1 | stats count() n",
+     "queryType": "stats"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 6,
+   "title": "Sources unavailable",
+   "description": "Sources that failed to read in the last snapshot. Their counts are absent, not zero.",
+   "type": "stat",
+   "gridPos": {
+    "x": 16,
+    "y": 5,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(count(ghostship_work_source_up == 0) or vector(0)) and on() (time() - ghostship_work_snapshot_timestamp_seconds < 180)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 7,
+   "title": "Snapshot age",
+   "description": "Seconds since the last collector snapshot. A stale snapshot means unknown, not zero.",
+   "type": "stat",
+   "gridPos": {
+    "x": 20,
+    "y": 5,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "time() - ghostship_work_snapshot_timestamp_seconds",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 8,
+   "title": "Model reports",
+   "description": "States a provider or the runtime reported about work. A report is not CI, deployment or objective proof. Unknown while the reporting source is unavailable.",
+   "type": "stat",
+   "gridPos": {
+    "x": 0,
+    "y": 9,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sum(ghostship_work_evidence_items{evidence=\"model_report\"} and on(source) (ghostship_work_source_up == 1)) and on() (time() - ghostship_work_snapshot_timestamp_seconds < 180)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 9,
+   "title": "CI proofs",
+   "description": "Pull requests with a recorded configured CI proof on the exact head or merge SHA. The proof is not objective completion and not a deployed state. Unknown while the source is unavailable.",
+   "type": "stat",
+   "gridPos": {
+    "x": 4,
+    "y": 9,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sum(ghostship_work_evidence_items{evidence=\"ci_proof\"} and on(source) (ghostship_work_source_up == 1)) and on() (time() - ghostship_work_snapshot_timestamp_seconds < 180)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 10,
+   "title": "CI failures",
+   "description": "Recorded CI proofs whose outcome is failed. No record is not a pass: the proof source fails closed and a stale revision is invalidated. Unknown while the source is unavailable.",
+   "type": "stat",
+   "gridPos": {
+    "x": 8,
+    "y": 9,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sum(ghostship_work_ci_failures and on(source) (ghostship_work_source_up == 1)) and on() (time() - ghostship_work_snapshot_timestamp_seconds < 180)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 11,
+   "title": "Review receipts",
+   "description": "Independent review receipts: a review was submitted. The verdict is not recorded, and no owner state records a frontier approval. Unknown while the source is unavailable.",
+   "type": "stat",
+   "gridPos": {
+    "x": 12,
+    "y": 9,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sum(ghostship_work_evidence_items{evidence=\"review\"} and on(source) (ghostship_work_source_up == 1)) and on() (time() - ghostship_work_snapshot_timestamp_seconds < 180)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 12,
+   "title": "Pull requests closed",
+   "description": "Pull request closed receipts. Closed is not merged: the merge result is not recorded. Unknown while the receipt source is unavailable.",
+   "type": "stat",
+   "gridPos": {
+    "x": 16,
+    "y": 9,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sum(ghostship_work_evidence_items{evidence=\"pr_closed\"} and on(source) (ghostship_work_source_up == 1)) and on() (time() - ghostship_work_snapshot_timestamp_seconds < 180)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 13,
+   "title": "Truncated sources",
+   "type": "stat",
+   "gridPos": {
+    "x": 20,
+    "y": 9,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(count(ghostship_work_source_limited == 1) or vector(0)) and on() (time() - ghostship_work_snapshot_timestamp_seconds < 180)",
+     "instant": true
+    }
+   ],
+   "description": "Sources whose row cap truncated the history. Their counts and lists are lower bounds.",
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 20,
+   "title": "Next up  /  schedules & timer initiators",
+   "description": "Enabled schedules with a next run, plus host systemd timers. The enable flag, the next run, the last run and the last result are separate facts.",
+   "type": "table",
+   "gridPos": {
+    "x": 0,
+    "y": 13,
+    "w": 14,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "align": "auto",
+      "filterable": true,
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "T3 thread"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in T3",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GitHub"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in GitHub",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "State"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "failed": {
+            "color": "red",
+            "text": "failed"
+           },
+           "blocked": {
+            "color": "red",
+            "text": "blocked"
+           },
+           "held": {
+            "color": "orange",
+            "text": "held"
+           },
+           "running": {
+            "color": "blue",
+            "text": "running"
+           },
+           "queued": {
+            "color": "purple",
+            "text": "queued"
+           },
+           "succeeded": {
+            "color": "green",
+            "text": "succeeded"
+           },
+           "done": {
+            "color": "green",
+            "text": "done"
+           },
+           "unknown": {
+            "color": "orange",
+            "text": "unknown"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Enabled"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "1": {
+            "text": "yes",
+            "color": "green"
+           },
+           "0": {
+            "text": "no",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Evidence"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "model_report": {
+            "text": "model report",
+            "color": "blue"
+           },
+           "ci": {
+            "text": "CI receipt",
+            "color": "purple"
+           },
+           "deployment": {
+            "text": "deployment receipt",
+            "color": "green"
+           },
+           "review": {
+            "text": "review receipt",
+            "color": "orange"
+           },
+           "ci_proof": {
+            "text": "CI proof",
+            "color": "green"
+           },
+           "pr_closed": {
+            "text": "pull request closed",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work _time:3m kind:=schedule | last 1 by (_time) partition by (source,kind,work_id) | filter enabled:1 next_at:* | sort by (next_at) limit 200 | fields _msg,_time,source,unit,trigger,enabled,next_at,event_at,status,last_status,thread_url,github_url",
+     "queryType": "instant",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "Line": true,
+       "line": true,
+       "_msg": true,
+       "_stream": true,
+       "id": true,
+       "Time": true,
+       "streams": true,
+       "streamId": true,
+       "detected_level": true
+      },
+      "renameByName": {
+       "work_id": "Work",
+       "source": "Source",
+       "event_at": "Last run (UTC)",
+       "next_at": "Next run (UTC)",
+       "status": "State",
+       "thread_url": "T3 thread",
+       "github_url": "GitHub",
+       "fired_at": "Fired (UTC)",
+       "coverage": "Coverage",
+       "reason": "Details",
+       "unit": "Timer",
+       "input_tokens": "Input tokens",
+       "output_tokens": "Output tokens",
+       "occupied": "Reserved slot",
+       "switch_accepted": "Switch accepted",
+       "message_accepted": "Message accepted",
+       "native_run_count": "Observed runs",
+       "executing_count": "Recorded executing runs",
+       "enabled": "Enabled",
+       "last_status": "Last result",
+       "evidence": "Evidence",
+       "event": "Event",
+       "kind": "Kind",
+       "provider": "Provider",
+       "project_id": "Project",
+       "thread_count": "Threads",
+       "usage_status": "Usage status",
+       "route_state": "Route state",
+       "action": "Action",
+       "owner_state": "Owner state",
+       "primary_quota": "Primary quota",
+       "route_reason": "Route reason",
+       "fallback": "Fallback used",
+       "limited": "Truncated",
+       "rows": "Rows",
+       "duration_seconds": "Read seconds"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "title": "Attention  /  failures & held work",
+   "description": "Latest state per work item in a failure, blocked or held state.",
+   "type": "table",
+   "gridPos": {
+    "x": 14,
+    "y": 13,
+    "w": 10,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "align": "auto",
+      "filterable": true,
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "T3 thread"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in T3",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GitHub"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in GitHub",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "State"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "failed": {
+            "color": "red",
+            "text": "failed"
+           },
+           "blocked": {
+            "color": "red",
+            "text": "blocked"
+           },
+           "held": {
+            "color": "orange",
+            "text": "held"
+           },
+           "running": {
+            "color": "blue",
+            "text": "running"
+           },
+           "queued": {
+            "color": "purple",
+            "text": "queued"
+           },
+           "succeeded": {
+            "color": "green",
+            "text": "succeeded"
+           },
+           "done": {
+            "color": "green",
+            "text": "done"
+           },
+           "unknown": {
+            "color": "orange",
+            "text": "unknown"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Enabled"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "1": {
+            "text": "yes",
+            "color": "green"
+           },
+           "0": {
+            "text": "no",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Evidence"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "model_report": {
+            "text": "model report",
+            "color": "blue"
+           },
+           "ci": {
+            "text": "CI receipt",
+            "color": "purple"
+           },
+           "deployment": {
+            "text": "deployment receipt",
+            "color": "green"
+           },
+           "review": {
+            "text": "review receipt",
+            "color": "orange"
+           },
+           "ci_proof": {
+            "text": "CI proof",
+            "color": "green"
+           },
+           "pr_closed": {
+            "text": "pull request closed",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work _time:3m | last 1 by (_time) partition by (source,kind,work_id) | filter status:in(failed,error,blocked,held,denied,timeout,uncertain,upstream_blocked,unavailable,partial,conflict,dispatch_failed,rejected_signature,rate_limited) | sort by (event_at desc) limit 200 | fields _time,_msg,event_at,source,kind,work_id,status,thread_url,github_url",
+     "queryType": "instant",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "Line": true,
+       "line": true,
+       "_msg": true,
+       "_stream": true,
+       "id": true,
+       "Time": true,
+       "streams": true,
+       "streamId": true,
+       "detected_level": true
+      },
+      "renameByName": {
+       "work_id": "Work",
+       "source": "Source",
+       "event_at": "Last change",
+       "next_at": "Next run (UTC)",
+       "status": "State",
+       "thread_url": "T3 thread",
+       "github_url": "GitHub",
+       "fired_at": "Fired (UTC)",
+       "coverage": "Coverage",
+       "reason": "Details",
+       "unit": "Timer",
+       "input_tokens": "Input tokens",
+       "output_tokens": "Output tokens",
+       "occupied": "Reserved slot",
+       "switch_accepted": "Switch accepted",
+       "message_accepted": "Message accepted",
+       "native_run_count": "Observed runs",
+       "executing_count": "Recorded executing runs",
+       "enabled": "Enabled",
+       "last_status": "Last result",
+       "evidence": "Evidence",
+       "event": "Event",
+       "kind": "Kind",
+       "provider": "Provider",
+       "project_id": "Project",
+       "thread_count": "Threads",
+       "usage_status": "Usage status",
+       "route_state": "Route state",
+       "action": "Action",
+       "owner_state": "Owner state",
+       "primary_quota": "Primary quota",
+       "route_reason": "Route reason",
+       "fallback": "Fallback used",
+       "limited": "Truncated",
+       "rows": "Rows",
+       "duration_seconds": "Read seconds"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "title": "In flight  /  recorded runs, subagents & queues",
+   "description": "Recorded active states across native runs, child agents and runtime queues.",
+   "type": "table",
+   "gridPos": {
+    "x": 0,
+    "y": 22,
+    "w": 24,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "align": "auto",
+      "filterable": true,
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "T3 thread"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in T3",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GitHub"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in GitHub",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "State"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "failed": {
+            "color": "red",
+            "text": "failed"
+           },
+           "blocked": {
+            "color": "red",
+            "text": "blocked"
+           },
+           "held": {
+            "color": "orange",
+            "text": "held"
+           },
+           "running": {
+            "color": "blue",
+            "text": "running"
+           },
+           "queued": {
+            "color": "purple",
+            "text": "queued"
+           },
+           "succeeded": {
+            "color": "green",
+            "text": "succeeded"
+           },
+           "done": {
+            "color": "green",
+            "text": "done"
+           },
+           "unknown": {
+            "color": "orange",
+            "text": "unknown"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Enabled"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "1": {
+            "text": "yes",
+            "color": "green"
+           },
+           "0": {
+            "text": "no",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Evidence"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "model_report": {
+            "text": "model report",
+            "color": "blue"
+           },
+           "ci": {
+            "text": "CI receipt",
+            "color": "purple"
+           },
+           "deployment": {
+            "text": "deployment receipt",
+            "color": "green"
+           },
+           "review": {
+            "text": "review receipt",
+            "color": "orange"
+           },
+           "ci_proof": {
+            "text": "CI proof",
+            "color": "green"
+           },
+           "pr_closed": {
+            "text": "pull request closed",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work _time:3m | last 1 by (_time) partition by (source,kind,work_id) | filter kind:in(run,subagent,job,workflow,review,continuation) status:in(pending,queued,running,starting,in_progress,waiting,requested,native-running,preparing,prepared,executing) | sort by (event_at desc) limit 200 | fields _msg,_time,event_at,source,kind,work_id,status,provider,evidence,thread_url,github_url",
+     "queryType": "instant",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "Line": true,
+       "line": true,
+       "_msg": true,
+       "_stream": true,
+       "id": true,
+       "Time": true,
+       "streams": true,
+       "streamId": true,
+       "detected_level": true
+      },
+      "renameByName": {
+       "work_id": "Work",
+       "source": "Source",
+       "event_at": "Last change",
+       "next_at": "Next run (UTC)",
+       "status": "State",
+       "thread_url": "T3 thread",
+       "github_url": "GitHub",
+       "fired_at": "Fired (UTC)",
+       "coverage": "Coverage",
+       "reason": "Details",
+       "unit": "Timer",
+       "input_tokens": "Input tokens",
+       "output_tokens": "Output tokens",
+       "occupied": "Reserved slot",
+       "switch_accepted": "Switch accepted",
+       "message_accepted": "Message accepted",
+       "native_run_count": "Observed runs",
+       "executing_count": "Recorded executing runs",
+       "enabled": "Enabled",
+       "last_status": "Last result",
+       "evidence": "Evidence",
+       "event": "Event",
+       "kind": "Kind",
+       "provider": "Provider",
+       "project_id": "Project",
+       "thread_count": "Threads",
+       "usage_status": "Usage status",
+       "route_state": "Route state",
+       "action": "Action",
+       "owner_state": "Owner state",
+       "primary_quota": "Primary quota",
+       "route_reason": "Route reason",
+       "fallback": "Fallback used",
+       "limited": "Truncated",
+       "rows": "Rows",
+       "duration_seconds": "Read seconds"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 23,
+   "title": "Today  /  durable state timeline",
+   "description": "State changes recorded today (UTC). Repeated polls do not multiply entries, and a state transition stays visible next to its earlier state.",
+   "type": "table",
+   "gridPos": {
+    "x": 0,
+    "y": 31,
+    "w": 14,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "align": "auto",
+      "filterable": true,
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "T3 thread"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in T3",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GitHub"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in GitHub",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "State"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "failed": {
+            "color": "red",
+            "text": "failed"
+           },
+           "blocked": {
+            "color": "red",
+            "text": "blocked"
+           },
+           "held": {
+            "color": "orange",
+            "text": "held"
+           },
+           "running": {
+            "color": "blue",
+            "text": "running"
+           },
+           "queued": {
+            "color": "purple",
+            "text": "queued"
+           },
+           "succeeded": {
+            "color": "green",
+            "text": "succeeded"
+           },
+           "done": {
+            "color": "green",
+            "text": "done"
+           },
+           "unknown": {
+            "color": "orange",
+            "text": "unknown"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Enabled"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "1": {
+            "text": "yes",
+            "color": "green"
+           },
+           "0": {
+            "text": "no",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Evidence"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "model_report": {
+            "text": "model report",
+            "color": "blue"
+           },
+           "ci": {
+            "text": "CI receipt",
+            "color": "purple"
+           },
+           "deployment": {
+            "text": "deployment receipt",
+            "color": "green"
+           },
+           "review": {
+            "text": "review receipt",
+            "color": "orange"
+           },
+           "ci_proof": {
+            "text": "CI proof",
+            "color": "green"
+           },
+           "pr_closed": {
+            "text": "pull request closed",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work _time:24h kind:in(run,subagent,job,launch,workflow,review,request,continuation) | last 1 by (_time) partition by (source,kind,work_id,event_at,status) | filter event_today:1 | sort by (event_at desc) limit 200 | fields _msg,_time,event_at,source,kind,work_id,status,provider,evidence,thread_url,github_url",
+     "queryType": "instant",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "Line": true,
+       "line": true,
+       "_msg": true,
+       "_stream": true,
+       "id": true,
+       "Time": true,
+       "streams": true,
+       "streamId": true,
+       "detected_level": true
+      },
+      "renameByName": {
+       "work_id": "Work",
+       "source": "Source",
+       "event_at": "Last change",
+       "next_at": "Next run (UTC)",
+       "status": "State",
+       "thread_url": "T3 thread",
+       "github_url": "GitHub",
+       "fired_at": "Fired (UTC)",
+       "coverage": "Coverage",
+       "reason": "Details",
+       "unit": "Timer",
+       "input_tokens": "Input tokens",
+       "output_tokens": "Output tokens",
+       "occupied": "Reserved slot",
+       "switch_accepted": "Switch accepted",
+       "message_accepted": "Message accepted",
+       "native_run_count": "Observed runs",
+       "executing_count": "Recorded executing runs",
+       "enabled": "Enabled",
+       "last_status": "Last result",
+       "evidence": "Evidence",
+       "event": "Event",
+       "kind": "Kind",
+       "provider": "Provider",
+       "project_id": "Project",
+       "thread_count": "Threads",
+       "usage_status": "Usage status",
+       "route_state": "Route state",
+       "action": "Action",
+       "owner_state": "Owner state",
+       "primary_quota": "Primary quota",
+       "route_reason": "Route reason",
+       "fallback": "Fallback used",
+       "limited": "Truncated",
+       "rows": "Rows",
+       "duration_seconds": "Read seconds"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "title": "Webhook fires  /  last 24 h receipt time & outcome",
+   "description": "Fired webhooks with their receipt time and outcome. The evidence class separates CI and deployment receipts from other receipts.",
+   "type": "table",
+   "gridPos": {
+    "x": 14,
+    "y": 31,
+    "w": 10,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "align": "auto",
+      "filterable": true,
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "T3 thread"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in T3",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GitHub"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in GitHub",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "State"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "failed": {
+            "color": "red",
+            "text": "failed"
+           },
+           "blocked": {
+            "color": "red",
+            "text": "blocked"
+           },
+           "held": {
+            "color": "orange",
+            "text": "held"
+           },
+           "running": {
+            "color": "blue",
+            "text": "running"
+           },
+           "queued": {
+            "color": "purple",
+            "text": "queued"
+           },
+           "succeeded": {
+            "color": "green",
+            "text": "succeeded"
+           },
+           "done": {
+            "color": "green",
+            "text": "done"
+           },
+           "unknown": {
+            "color": "orange",
+            "text": "unknown"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Enabled"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "1": {
+            "text": "yes",
+            "color": "green"
+           },
+           "0": {
+            "text": "no",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Evidence"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "model_report": {
+            "text": "model report",
+            "color": "blue"
+           },
+           "ci": {
+            "text": "CI receipt",
+            "color": "purple"
+           },
+           "deployment": {
+            "text": "deployment receipt",
+            "color": "green"
+           },
+           "review": {
+            "text": "review receipt",
+            "color": "orange"
+           },
+           "ci_proof": {
+            "text": "CI proof",
+            "color": "green"
+           },
+           "pr_closed": {
+            "text": "pull request closed",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work _time:24h kind:=webhook | last 1 by (_time) partition by (source,kind,work_id) | sort by (fired_at desc) limit 200 | fields _msg,_time,fired_at,event_at,source,work_id,event,action,evidence,status,github_url",
+     "queryType": "instant",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "Line": true,
+       "line": true,
+       "_msg": true,
+       "_stream": true,
+       "id": true,
+       "Time": true,
+       "streams": true,
+       "streamId": true,
+       "detected_level": true
+      },
+      "renameByName": {
+       "work_id": "Work",
+       "source": "Source",
+       "event_at": "Last change",
+       "next_at": "Next run (UTC)",
+       "status": "State",
+       "thread_url": "T3 thread",
+       "github_url": "GitHub",
+       "fired_at": "Fired (UTC)",
+       "coverage": "Coverage",
+       "reason": "Details",
+       "unit": "Timer",
+       "input_tokens": "Input tokens",
+       "output_tokens": "Output tokens",
+       "occupied": "Reserved slot",
+       "switch_accepted": "Switch accepted",
+       "message_accepted": "Message accepted",
+       "native_run_count": "Observed runs",
+       "executing_count": "Recorded executing runs",
+       "enabled": "Enabled",
+       "last_status": "Last result",
+       "evidence": "Evidence",
+       "event": "Event",
+       "kind": "Kind",
+       "provider": "Provider",
+       "project_id": "Project",
+       "thread_count": "Threads",
+       "usage_status": "Usage status",
+       "route_state": "Route state",
+       "action": "Action",
+       "owner_state": "Owner state",
+       "primary_quota": "Primary quota",
+       "route_reason": "Route reason",
+       "fallback": "Fallback used",
+       "limited": "Truncated",
+       "rows": "Rows",
+       "duration_seconds": "Read seconds"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "title": "Coverage  /  freshness, limits & read cost",
+   "description": "Per-source coverage of the last snapshot. A gap is a missing source, not an empty result; objective completion has no source today.",
+   "type": "table",
+   "gridPos": {
+    "x": 0,
+    "y": 40,
+    "w": 24,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "align": "auto",
+      "filterable": true,
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "T3 thread"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in T3",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GitHub"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in GitHub",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "State"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "failed": {
+            "color": "red",
+            "text": "failed"
+           },
+           "blocked": {
+            "color": "red",
+            "text": "blocked"
+           },
+           "held": {
+            "color": "orange",
+            "text": "held"
+           },
+           "running": {
+            "color": "blue",
+            "text": "running"
+           },
+           "queued": {
+            "color": "purple",
+            "text": "queued"
+           },
+           "succeeded": {
+            "color": "green",
+            "text": "succeeded"
+           },
+           "done": {
+            "color": "green",
+            "text": "done"
+           },
+           "unknown": {
+            "color": "orange",
+            "text": "unknown"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Enabled"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "1": {
+            "text": "yes",
+            "color": "green"
+           },
+           "0": {
+            "text": "no",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Evidence"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "model_report": {
+            "text": "model report",
+            "color": "blue"
+           },
+           "ci": {
+            "text": "CI receipt",
+            "color": "purple"
+           },
+           "deployment": {
+            "text": "deployment receipt",
+            "color": "green"
+           },
+           "review": {
+            "text": "review receipt",
+            "color": "orange"
+           },
+           "ci_proof": {
+            "text": "CI proof",
+            "color": "green"
+           },
+           "pr_closed": {
+            "text": "pull request closed",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work _time:3m kind:=coverage | last 1 by (_time) partition by (source,kind,work_id) | sort by (source) limit 200 | fields _msg,_time,source,coverage,reason,rows,limited,duration_seconds",
+     "queryType": "instant",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "Line": true,
+       "line": true,
+       "_msg": true,
+       "_stream": true,
+       "id": true,
+       "Time": true,
+       "streams": true,
+       "streamId": true,
+       "detected_level": true
+      },
+      "renameByName": {
+       "work_id": "Work",
+       "source": "Source",
+       "event_at": "Last change",
+       "next_at": "Next run (UTC)",
+       "status": "State",
+       "thread_url": "T3 thread",
+       "github_url": "GitHub",
+       "fired_at": "Fired (UTC)",
+       "coverage": "Coverage",
+       "reason": "Details",
+       "unit": "Timer",
+       "input_tokens": "Input tokens",
+       "output_tokens": "Output tokens",
+       "occupied": "Reserved slot",
+       "switch_accepted": "Switch accepted",
+       "message_accepted": "Message accepted",
+       "native_run_count": "Observed runs",
+       "executing_count": "Recorded executing runs",
+       "enabled": "Enabled",
+       "last_status": "Last result",
+       "evidence": "Evidence",
+       "event": "Event",
+       "kind": "Kind",
+       "provider": "Provider",
+       "project_id": "Project",
+       "thread_count": "Threads",
+       "usage_status": "Usage status",
+       "route_state": "Route state",
+       "action": "Action",
+       "owner_state": "Owner state",
+       "primary_quota": "Primary quota",
+       "route_reason": "Route reason",
+       "fallback": "Fallback used",
+       "limited": "Truncated",
+       "rows": "Rows",
+       "duration_seconds": "Read seconds",
+       "_time": "Read at (UTC)"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "title": "CI proof  /  configured checks on the exact SHA",
+   "description": "The coordinator CI proof of each pull request: the outcome, the merge flag, the required check count and the failing check count, bound to the exact revision. It proves configured checks on that revision, nothing else.",
+   "type": "table",
+   "gridPos": {
+    "x": 14,
+    "y": 40,
+    "w": 10,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "align": "auto",
+      "filterable": true,
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "T3 thread"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in T3",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GitHub"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in GitHub",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "State"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "failed": {
+            "color": "red",
+            "text": "failed"
+           },
+           "blocked": {
+            "color": "red",
+            "text": "blocked"
+           },
+           "held": {
+            "color": "orange",
+            "text": "held"
+           },
+           "running": {
+            "color": "blue",
+            "text": "running"
+           },
+           "queued": {
+            "color": "purple",
+            "text": "queued"
+           },
+           "succeeded": {
+            "color": "green",
+            "text": "succeeded"
+           },
+           "done": {
+            "color": "green",
+            "text": "done"
+           },
+           "unknown": {
+            "color": "orange",
+            "text": "unknown"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Enabled"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "1": {
+            "text": "yes",
+            "color": "green"
+           },
+           "0": {
+            "text": "no",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Evidence"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "model_report": {
+            "text": "model report",
+            "color": "blue"
+           },
+           "ci": {
+            "text": "CI receipt",
+            "color": "purple"
+           },
+           "deployment": {
+            "text": "deployment receipt",
+            "color": "green"
+           },
+           "review": {
+            "text": "review receipt",
+            "color": "orange"
+           },
+           "ci_proof": {
+            "text": "CI proof",
+            "color": "green"
+           },
+           "pr_closed": {
+            "text": "pull request closed",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work _time:3m kind:=ci_proof | last 1 by (_time) partition by (source,kind,work_id) | sort by (event_at desc) limit 200 | fields _time,_msg,event_at,outcome,merged,required_checks,failed_checks,revision,github_url,thread_url",
+     "queryType": "instant",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "Line": true,
+       "line": true,
+       "_msg": true,
+       "_stream": true,
+       "id": true,
+       "Time": true,
+       "streams": true,
+       "streamId": true,
+       "detected_level": true
+      },
+      "renameByName": {
+       "work_id": "Work",
+       "source": "Source",
+       "event_at": "Last change",
+       "next_at": "Next run (UTC)",
+       "status": "State",
+       "thread_url": "T3 thread",
+       "github_url": "GitHub",
+       "fired_at": "Fired (UTC)",
+       "coverage": "Coverage",
+       "reason": "Details",
+       "unit": "Timer",
+       "input_tokens": "Input tokens",
+       "output_tokens": "Output tokens",
+       "occupied": "Reserved slot",
+       "switch_accepted": "Switch accepted",
+       "message_accepted": "Message accepted",
+       "native_run_count": "Observed runs",
+       "executing_count": "Recorded executing runs",
+       "enabled": "Enabled",
+       "last_status": "Last result",
+       "evidence": "Evidence",
+       "event": "Event",
+       "kind": "Kind",
+       "provider": "Provider",
+       "project_id": "Project",
+       "thread_count": "Threads",
+       "usage_status": "Usage status",
+       "route_state": "Route state",
+       "action": "Action",
+       "owner_state": "Owner state",
+       "primary_quota": "Primary quota",
+       "route_reason": "Route reason",
+       "fallback": "Fallback used",
+       "limited": "Truncated",
+       "rows": "Rows",
+       "duration_seconds": "Read seconds",
+       "outcome": "CI outcome",
+       "merged": "Merged",
+       "required_checks": "Required checks",
+       "failed_checks": "Failing checks",
+       "revision": "Revision (SHA)"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "title": "Schedule inventory  /  enabled, disabled & timers",
+   "description": "Every known schedule, including disabled ones and host timers, with its next run, last run and last result.",
+   "type": "table",
+   "gridPos": {
+    "x": 0,
+    "y": 49,
+    "w": 14,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "align": "auto",
+      "filterable": true,
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "T3 thread"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in T3",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GitHub"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in GitHub",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "State"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "failed": {
+            "color": "red",
+            "text": "failed"
+           },
+           "blocked": {
+            "color": "red",
+            "text": "blocked"
+           },
+           "held": {
+            "color": "orange",
+            "text": "held"
+           },
+           "running": {
+            "color": "blue",
+            "text": "running"
+           },
+           "queued": {
+            "color": "purple",
+            "text": "queued"
+           },
+           "succeeded": {
+            "color": "green",
+            "text": "succeeded"
+           },
+           "done": {
+            "color": "green",
+            "text": "done"
+           },
+           "unknown": {
+            "color": "orange",
+            "text": "unknown"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Enabled"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "1": {
+            "text": "yes",
+            "color": "green"
+           },
+           "0": {
+            "text": "no",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Evidence"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "model_report": {
+            "text": "model report",
+            "color": "blue"
+           },
+           "ci": {
+            "text": "CI receipt",
+            "color": "purple"
+           },
+           "deployment": {
+            "text": "deployment receipt",
+            "color": "green"
+           },
+           "review": {
+            "text": "review receipt",
+            "color": "orange"
+           },
+           "ci_proof": {
+            "text": "CI proof",
+            "color": "green"
+           },
+           "pr_closed": {
+            "text": "pull request closed",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work _time:3m kind:=schedule | last 1 by (_time) partition by (source,kind,work_id) | sort by (source,unit,work_id) limit 200 | fields _msg,_time,source,unit,trigger,enabled,next_at,event_at,status,last_status,thread_url,github_url",
+     "queryType": "instant",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "Line": true,
+       "line": true,
+       "_msg": true,
+       "_stream": true,
+       "id": true,
+       "Time": true,
+       "streams": true,
+       "streamId": true,
+       "detected_level": true
+      },
+      "renameByName": {
+       "work_id": "Work",
+       "source": "Source",
+       "event_at": "Last run (UTC)",
+       "next_at": "Next run (UTC)",
+       "status": "State",
+       "thread_url": "T3 thread",
+       "github_url": "GitHub",
+       "fired_at": "Fired (UTC)",
+       "coverage": "Coverage",
+       "reason": "Details",
+       "unit": "Timer",
+       "input_tokens": "Input tokens",
+       "output_tokens": "Output tokens",
+       "occupied": "Reserved slot",
+       "switch_accepted": "Switch accepted",
+       "message_accepted": "Message accepted",
+       "native_run_count": "Observed runs",
+       "executing_count": "Recorded executing runs",
+       "enabled": "Enabled",
+       "last_status": "Last result",
+       "evidence": "Evidence",
+       "event": "Event",
+       "kind": "Kind",
+       "provider": "Provider",
+       "project_id": "Project",
+       "thread_count": "Threads",
+       "usage_status": "Usage status",
+       "route_state": "Route state",
+       "action": "Action",
+       "owner_state": "Owner state",
+       "primary_quota": "Primary quota",
+       "route_reason": "Route reason",
+       "fallback": "Fallback used",
+       "limited": "Truncated",
+       "rows": "Rows",
+       "duration_seconds": "Read seconds"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 28,
+   "title": "Source health  /  last successful read age",
+   "description": "Seconds since each source last read successfully. A source that never succeeded has no row here; the snapshot age above catches a collector failure.",
+   "type": "table",
+   "gridPos": {
+    "x": 14,
+    "y": 49,
+    "w": 10,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "unit": "s"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm"
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "time() - last_over_time(ghostship_work_source_last_success_seconds[24h])",
+     "instant": true,
+     "format": "table"
+    }
+   ]
+  },
+  {
+   "id": 29,
+   "title": "Projects  /  native inventory",
+   "description": "Native T3 projects, including projects without agent activity. At most 200 rows per source: a truncated source is a lower bound, not a complete inventory.",
+   "type": "table",
+   "gridPos": {
+    "x": 0,
+    "y": 58,
+    "w": 8,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "align": "auto",
+      "filterable": true,
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "T3 thread"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in T3",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GitHub"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in GitHub",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "State"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "failed": {
+            "color": "red",
+            "text": "failed"
+           },
+           "blocked": {
+            "color": "red",
+            "text": "blocked"
+           },
+           "held": {
+            "color": "orange",
+            "text": "held"
+           },
+           "running": {
+            "color": "blue",
+            "text": "running"
+           },
+           "queued": {
+            "color": "purple",
+            "text": "queued"
+           },
+           "succeeded": {
+            "color": "green",
+            "text": "succeeded"
+           },
+           "done": {
+            "color": "green",
+            "text": "done"
+           },
+           "unknown": {
+            "color": "orange",
+            "text": "unknown"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Enabled"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "1": {
+            "text": "yes",
+            "color": "green"
+           },
+           "0": {
+            "text": "no",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Evidence"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "model_report": {
+            "text": "model report",
+            "color": "blue"
+           },
+           "ci": {
+            "text": "CI receipt",
+            "color": "purple"
+           },
+           "deployment": {
+            "text": "deployment receipt",
+            "color": "green"
+           },
+           "review": {
+            "text": "review receipt",
+            "color": "orange"
+           },
+           "ci_proof": {
+            "text": "CI proof",
+            "color": "green"
+           },
+           "pr_closed": {
+            "text": "pull request closed",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work _time:3m kind:=project | last 1 by (_time) partition by (source,kind,work_id) | sort by (project_id) limit 200 | fields _msg,_time,project_id,thread_count,event_at,coverage",
+     "queryType": "instant",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "Line": true,
+       "line": true,
+       "_msg": true,
+       "_stream": true,
+       "id": true,
+       "Time": true,
+       "streams": true,
+       "streamId": true,
+       "detected_level": true
+      },
+      "renameByName": {
+       "work_id": "Work",
+       "source": "Source",
+       "event_at": "Last change",
+       "next_at": "Next run (UTC)",
+       "status": "State",
+       "thread_url": "T3 thread",
+       "github_url": "GitHub",
+       "fired_at": "Fired (UTC)",
+       "coverage": "Coverage",
+       "reason": "Details",
+       "unit": "Timer",
+       "input_tokens": "Input tokens",
+       "output_tokens": "Output tokens",
+       "occupied": "Reserved slot",
+       "switch_accepted": "Switch accepted",
+       "message_accepted": "Message accepted",
+       "native_run_count": "Observed runs",
+       "executing_count": "Recorded executing runs",
+       "enabled": "Enabled",
+       "last_status": "Last result",
+       "evidence": "Evidence",
+       "event": "Event",
+       "kind": "Kind",
+       "provider": "Provider",
+       "project_id": "Project",
+       "thread_count": "Threads",
+       "usage_status": "Usage status",
+       "route_state": "Route state",
+       "action": "Action",
+       "owner_state": "Owner state",
+       "primary_quota": "Primary quota",
+       "route_reason": "Route reason",
+       "fallback": "Fallback used",
+       "limited": "Truncated",
+       "rows": "Rows",
+       "duration_seconds": "Read seconds"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "title": "Threads  /  manual, ordinary & agent work",
+   "description": "Ordinary and agent threads across every project, with the latest recorded state. At most 200 rows per source: a truncated source is a lower bound, not a complete inventory.",
+   "type": "table",
+   "gridPos": {
+    "x": 8,
+    "y": 58,
+    "w": 16,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "align": "auto",
+      "filterable": true,
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "T3 thread"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in T3",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GitHub"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in GitHub",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "State"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "failed": {
+            "color": "red",
+            "text": "failed"
+           },
+           "blocked": {
+            "color": "red",
+            "text": "blocked"
+           },
+           "held": {
+            "color": "orange",
+            "text": "held"
+           },
+           "running": {
+            "color": "blue",
+            "text": "running"
+           },
+           "queued": {
+            "color": "purple",
+            "text": "queued"
+           },
+           "succeeded": {
+            "color": "green",
+            "text": "succeeded"
+           },
+           "done": {
+            "color": "green",
+            "text": "done"
+           },
+           "unknown": {
+            "color": "orange",
+            "text": "unknown"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Enabled"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "1": {
+            "text": "yes",
+            "color": "green"
+           },
+           "0": {
+            "text": "no",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Evidence"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "model_report": {
+            "text": "model report",
+            "color": "blue"
+           },
+           "ci": {
+            "text": "CI receipt",
+            "color": "purple"
+           },
+           "deployment": {
+            "text": "deployment receipt",
+            "color": "green"
+           },
+           "review": {
+            "text": "review receipt",
+            "color": "orange"
+           },
+           "ci_proof": {
+            "text": "CI proof",
+            "color": "green"
+           },
+           "pr_closed": {
+            "text": "pull request closed",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work _time:3m kind:=thread | last 1 by (_time) partition by (source,kind,work_id) | sort by (event_at desc) limit 200 | fields _msg,_time,event_at,project_id,work_id,status,provider,evidence,thread_url,github_url",
+     "queryType": "instant",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "Line": true,
+       "line": true,
+       "_msg": true,
+       "_stream": true,
+       "id": true,
+       "Time": true,
+       "streams": true,
+       "streamId": true,
+       "detected_level": true
+      },
+      "renameByName": {
+       "work_id": "Work",
+       "source": "Source",
+       "event_at": "Last change",
+       "next_at": "Next run (UTC)",
+       "status": "State",
+       "thread_url": "T3 thread",
+       "github_url": "GitHub",
+       "fired_at": "Fired (UTC)",
+       "coverage": "Coverage",
+       "reason": "Details",
+       "unit": "Timer",
+       "input_tokens": "Input tokens",
+       "output_tokens": "Output tokens",
+       "occupied": "Reserved slot",
+       "switch_accepted": "Switch accepted",
+       "message_accepted": "Message accepted",
+       "native_run_count": "Observed runs",
+       "executing_count": "Recorded executing runs",
+       "enabled": "Enabled",
+       "last_status": "Last result",
+       "evidence": "Evidence",
+       "event": "Event",
+       "kind": "Kind",
+       "provider": "Provider",
+       "project_id": "Project",
+       "thread_count": "Threads",
+       "usage_status": "Usage status",
+       "route_state": "Route state",
+       "action": "Action",
+       "owner_state": "Owner state",
+       "primary_quota": "Primary quota",
+       "route_reason": "Route reason",
+       "fallback": "Fallback used",
+       "limited": "Truncated",
+       "rows": "Rows",
+       "duration_seconds": "Read seconds"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "title": "Handoffs & evidence  /  reviews, artifacts & continuations",
+   "description": "Review reports, provider routing, model continuations and every open pull request artifact. A review report is a model report; a reserved slot or an accepted switch is a receipt, not objective completion.",
+   "type": "table",
+   "gridPos": {
+    "x": 0,
+    "y": 67,
+    "w": 24,
+    "h": 9
+   },
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "align": "auto",
+      "filterable": true,
+      "cellOptions": {
+       "type": "auto"
+      }
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "T3 thread"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in T3",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GitHub"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Open in GitHub",
+          "url": "${__value.raw}",
+          "targetBlank": true
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "State"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "failed": {
+            "color": "red",
+            "text": "failed"
+           },
+           "blocked": {
+            "color": "red",
+            "text": "blocked"
+           },
+           "held": {
+            "color": "orange",
+            "text": "held"
+           },
+           "running": {
+            "color": "blue",
+            "text": "running"
+           },
+           "queued": {
+            "color": "purple",
+            "text": "queued"
+           },
+           "succeeded": {
+            "color": "green",
+            "text": "succeeded"
+           },
+           "done": {
+            "color": "green",
+            "text": "done"
+           },
+           "unknown": {
+            "color": "orange",
+            "text": "unknown"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "t3_projects": {
+            "text": "T3 projects"
+           },
+           "t3_threads": {
+            "text": "T3 threads (all work)"
+           },
+           "t3_requests": {
+            "text": "T3 pending requests"
+           },
+           "t3_artifacts": {
+            "text": "T3 PR links"
+           },
+           "t3_launches": {
+            "text": "T3 launch workflows"
+           },
+           "t3_schedules": {
+            "text": "T3 schedules"
+           },
+           "t3_runs": {
+            "text": "T3 runs"
+           },
+           "t3_subagents": {
+            "text": "T3 child tasks"
+           },
+           "t3_webhooks": {
+            "text": "T3 webhook receipts"
+           },
+           "t3_usage": {
+            "text": "T3 measured usage"
+           },
+           "github_receipts": {
+            "text": "GitHub / webhook receipts"
+           },
+           "github_launches": {
+            "text": "GitHub owner launches"
+           },
+           "runtime_jobs": {
+            "text": "Agent runtime jobs"
+           },
+           "runtime_mcp_jobs": {
+            "text": "MCP runtime jobs"
+           },
+           "systemd_timers": {
+            "text": "Host timers"
+           },
+           "review_metadata": {
+            "text": "Automatic review reports"
+           },
+           "routing_metadata": {
+            "text": "Provider routing"
+           },
+           "chatgpt_tasks": {
+            "text": "ChatGPT Tasks (gap)"
+           },
+           "github_subscriptions": {
+            "text": "GitHub hook inventory (gap)"
+           },
+           "model_continuations": {
+            "text": "Model continuations"
+           },
+           "objective_completion": {
+            "text": "Objective completion (gap)"
+           },
+           "ai_usage": {
+            "text": "AI usage (separate dashboard)"
+           },
+           "ci_conclusion": {
+            "text": "CI conclusion (gap)"
+           },
+           "frontier_approval": {
+            "text": "Frontier approval (gap)"
+           },
+           "deployed_health": {
+            "text": "Deployed health (gap)"
+           },
+           "ci_proof": {
+            "text": "CI proof (coordinator)"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Enabled"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "1": {
+            "text": "yes",
+            "color": "green"
+           },
+           "0": {
+            "text": "no",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Evidence"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "model_report": {
+            "text": "model report",
+            "color": "blue"
+           },
+           "ci": {
+            "text": "CI receipt",
+            "color": "purple"
+           },
+           "deployment": {
+            "text": "deployment receipt",
+            "color": "green"
+           },
+           "review": {
+            "text": "review receipt",
+            "color": "orange"
+           },
+           "ci_proof": {
+            "text": "CI proof",
+            "color": "green"
+           },
+           "pr_closed": {
+            "text": "pull request closed",
+            "color": "text"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "stream:=autonomous-work _time:3m kind:in(review,thread,artifact,request,routing,continuation) | last 1 by (_time) partition by (source,kind,work_id) | filter (kind:in(review,request,routing,continuation) OR github_url:*) | sort by (event_at desc) limit 200 | fields _time,_msg,event_at,source,kind,work_id,status,evidence,action,occupied,next_at,provider,switch_accepted,message_accepted,native_run_count,executing_count,route_state,primary_quota,route_reason,fallback,thread_url,github_url",
+     "queryType": "instant",
+     "maxLines": 200
+    }
+   ],
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "source": "labels",
+      "format": "json",
+      "replace": false
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "labels": true,
+       "Line": true,
+       "line": true,
+       "_msg": true,
+       "_stream": true,
+       "id": true,
+       "Time": true,
+       "streams": true,
+       "streamId": true,
+       "detected_level": true
+      },
+      "renameByName": {
+       "work_id": "Work",
+       "source": "Source",
+       "event_at": "Last change",
+       "next_at": "Next run (UTC)",
+       "status": "State",
+       "thread_url": "T3 thread",
+       "github_url": "GitHub",
+       "fired_at": "Fired (UTC)",
+       "coverage": "Coverage",
+       "reason": "Details",
+       "unit": "Timer",
+       "input_tokens": "Input tokens",
+       "output_tokens": "Output tokens",
+       "occupied": "Reserved slot",
+       "switch_accepted": "Switch accepted",
+       "message_accepted": "Message accepted",
+       "native_run_count": "Observed runs",
+       "executing_count": "Recorded executing runs",
+       "enabled": "Enabled",
+       "last_status": "Last result",
+       "evidence": "Evidence",
+       "event": "Event",
+       "kind": "Kind",
+       "provider": "Provider",
+       "project_id": "Project",
+       "thread_count": "Threads",
+       "usage_status": "Usage status",
+       "route_state": "Route state",
+       "action": "Action",
+       "owner_state": "Owner state",
+       "primary_quota": "Primary quota",
+       "route_reason": "Route reason",
+       "fallback": "Fallback used",
+       "limited": "Truncated",
+       "rows": "Rows",
+       "duration_seconds": "Read seconds"
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

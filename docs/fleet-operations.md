@@ -481,3 +481,163 @@ allowing recovery after the window expires.
 - [Kuma v2 server API](https://github.com/louislam/uptime-kuma/blob/2.0.0/server/server.js)
 - [Seerr settings API](https://github.com/seerr-team/seerr/blob/develop/server/routes/settings/index.ts)
 - [Cloudflare custom tokens](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
+
+## Autonomous work overview (Grafana)
+
+Grafana's provisioned home is `/d/ghostship-autonomous-work`, with direct links to
+host, security and SIEM pipeline dashboards and to the separate AI usage
+dashboard (`/d/ghostship-ai-usage`, owned and provisioned by the ai-usage
+package). All pages share the same link bar and UTC defaults; work/security
+default to today, host/pipeline to six hours. The configured `users.home_page`
+points to the provisioned overview UID and `dashboards.default_home_dashboard_path`
+loads the same JSON as the home fallback. It is an observation surface only;
+Cloudflare Access, Viewer access, vmauth query-only routes and UI network isolation
+remain the existing boundary. Datasource provisioning uses the existing
+restricted `vmauth.env` credential through `$GRAFANA_VMAUTH_PASSWORD`; INI
+`$__file{...}` expansion does not apply to datasource provisioning. No secret
+values enter the Nix store. There are no dashboard management actions or new
+plugins. `ghostship-autonomous-work.timer` runs every minute; its Python collector
+reads existing SQLite projections with `mode=ro`, `query_only`, live-WAL support,
+one-second query deadlines and 200 rows per source. The systemd sandbox makes the
+stores read-only, permits only Unix sockets (the systemd timer inventory), and
+limits memory to 128 MiB, CPU to 10% and execution to 30 seconds.
+
+The current JSONL snapshot in `/run/ghostship-autonomous-work` and node textfile
+`autonomous-work.prom` are replaced atomically, not appended. Vector sends the
+allowlisted snapshot through existing redaction and disk buffering. VictoriaLogs
+and VictoriaMetrics own history and retention; there is no new database or cursor.
+Counts are bounded snapshot gauges, not incremented event counters. Lists select
+the latest observation per durable identity, so polling does not multiply entries.
+Source failures omit counts and success timestamps, and emit `source_up=0`; check
+coverage, last-success age and snapshot age before interpreting empty tables.
+Current tables expire observations after three minutes. Lists are capped at 200
+rows per source, and no panel claims a complete enumeration: a truncated source
+is a lower bound and is counted as such. The default timeline is
+today in UTC; source history is limited to the preceding 24 hours and 200 rows
+per source. Timeline state transitions deduplicate by identity, state and source
+change time; current tables select only the latest state.
+Every native project is queried, including manual threads and projects without
+broker activity; caps are disclosed rather than presented as complete enumeration.
+
+Stock T3 v0.1.0 provides `scheduledTasks.list` and the orchestration shell HTTP
+read. Its installed schema was verified against the stock migrations, and the
+collector reads all native project, ordinary/manual thread, pending runtime
+request, launch workflow, PR artifact, `scheduled_tasks`, run, subagent and
+webhook-delivery projections from
+`/srv/apps/t3code/home/.t3/userdata/statev2.sqlite`. It also reads coordinator
+`events` and `owners` from `/var/lib/ghostship-github/state/github.sqlite`, runtime
+job receipts from the T3 home and MCP persistent state, and host systemd timers.
+The live MCP job store was verified at
+`/srv/apps/ghostship-private-integrations/ghostship/ghostship-agent/runtime/jobs.sqlite`.
+Only that path and the fixed shared-backend / relay `.local/state` alternatives
+are read during layout transitions; duplicate job IDs retain the newest receipt.
+Missing alternatives are never created and homes are not recursively scanned.
+It does not read prompts, titles, error/note bodies, arguments, environment,
+webhook URLs/bodies/headers, messages or transcripts. Work identifiers are hashed;
+validated T3 UUID links and GitHub issue links permit opening source details.
+Coordinator incident daily-limit holds are classified from the exact known result
+`over daily limit`, without exporting the note. A native active run is recorded
+state, not PID liveness; CI status does not establish objective completion.
+
+### What the overview reports, and what it refuses to claim
+
+- Schedules keep four separate facts: the enable flag, the next run, the last run
+  and the last result. A disabled schedule keeps the outcome of its previous run
+  and is listed in the inventory, not in "next up".
+- Completion claims are classified, never merged: `model_report` for a provider or
+  runtime report about work, `ci` for a CI/check/workflow-run receipt, `review`
+  for a submitted review receipt, `pr_closed` for a closed pull request receipt,
+  `deployment` for a deployment status receipt and `ci_proof` for the coordinator
+  CI proof. The dashboard counts the classes separately and links them from one
+  table.
+- The coordinator CI proof (`pull_progress`) is read as scalars on the exact
+  revision: the outcome, the merge flag, the required check count and the
+  failing check count. It proves the configured checks on that revision and
+  nothing else. A failing required check wins, and a stale revision is
+  invalidated before any evidence read, so the proof fails closed. The table is
+  optional: a coordinator without it is an explicit gap, not an empty result.
+- The owner state of the coordinator is read only in its compact safe values
+  (`incomplete`, `uncertain`, `closed_unverified`). The raw note is never read.
+- Objective completion has no source. It is published as an explicit coverage gap,
+  never as a zero count of completed objectives.
+- The frontier approval and the deployed health of a change have no source in
+  this collector. They stay explicit unsupported gaps until such a source
+  exists; they are never rendered green.
+- A thread state is the current one: an active or queued run wins, otherwise the
+  latest executed run by completion time. The highest run ordinal alone can mask
+  a run that started and failed later. A recorded active state is not process
+  liveness.
+- AI provider usage, limits and model rankings belong to the separate ai-usage
+  package and dashboard. This collector does not read provider token usage at all
+  and publishes `ai_usage` as a gap owned elsewhere, not as a claim about its
+  deployment state. The page links to `/d/ghostship-ai-usage` directly.
+- Per-source counts are gated on that source being readable and on a fresh
+  snapshot. A missing source shows as unknown, not as zero, and a truncated source
+  is shown as a lower bound with the truncation count on the same screen.
+- "Today" is the UTC day computed at collection time (`event_today`,
+  `fired_today`), not a dashboard macro: Grafana expands no `$__from`/`$__to`
+  macro for this datasource, and a stale clock would otherwise widen the window.
+- ChatGPT Tasks has no local inventory. Only a prior UI observation exists, and
+  no count from it is published as a current measurement. External GitHub hook
+  subscriptions have an explicit inventory gap and are not inferred from
+  receipts; a push fire appears only after an actual subscribed receipt.
+- The optional coordinator `automatic_reviews` table is nonfatal when absent
+  on older deployments. It preserves queued/requested/native-running/terminal/
+  reported/superseded/blocked states; `reported` is a model report, not objective, CI
+  or deployment proof. Native PR links and review PR/thread links lead to the exact
+  source artifacts; deployment readiness/completion is unknown without source
+  evidence. Optional router provenance in coordinator `meta` is selected only from
+  known scalar fields under `model-route:%` keys: selected provider, first-choice
+  quota/reason, selected/wait state, fallback flag and cooldown expiry. Stale
+  cooldowns expire; absent or different schemas show a gap. Optional
+  `model-continuation:%` meta selects only state, provider, project/thread IDs,
+  update time, acceptance flags and bounded native/executing run counts. Review
+  `occupied` is shown as a reserved slot. Neither a reservation nor accepted
+  switch/message receipt establishes objective completion; frozen command/text,
+  notes and native run payloads are excluded. No raw meta values,
+  review tasks, notes or receipts are exported.
+
+### Verification
+
+Re-run the dedicated suite in the repository Nix environment:
+`python3 -m unittest discover -s tests -p test_siem_autonomous_work.py`.
+Set `GHOSTSHIP_TEST_VLOGS` / `GHOSTSHIP_TEST_VMETRICS` to native store executables
+to include the all-dashboard query check: every panel of every page is executed
+against disposable VictoriaLogs and VictoriaMetrics instances, every list panel
+must return fixture rows, every count panel must count them, and a second poll
+must not multiply either list entries or counts. Set `GHOSTSHIP_TEST_GRAFANA` to
+the Grafana package root and `GHOSTSHIP_TEST_PROVISIONING` to the realised
+provisioning output for the native home, four-dashboard and datasource-auth
+regression.
+
+Verified in a disposable Grafana with the provisioned dashboards and fixture
+observations: the home opens the overview, the navigation reaches every page,
+and the summary panels show real values (attention, in-flight, work items today,
+webhook receipts today, unavailable sources, snapshot age, model reports, CI
+receipts, deployment receipts, truncated sources, tracked schedules). The
+VictoriaLogs raw-log frames return the expected rows through the datasource API,
+including row time, message and label fields.
+
+Open item for the target host: in the disposable Grafana 13.1.4 with the pinned
+VictoriaLogs datasource v0.33.1, those raw-log frames render as empty rows in
+table and log panels, while the statistics panels of the same datasource render
+correctly. The same empty rendering reproduces with the existing
+`security.json` log panels, so it is a property of that datasource and Grafana
+version rather than of these queries. The deployed image is Grafana 13.2.4, which
+was not exercised locally. Confirm the list panels in the browser after the
+deployment; a Grafana or datasource version that renders log frames is the
+expected fix.
+
+Deployment and browser rendering require separate target-host verification.
+
+Existing dashboard checks use read-only VictoriaMetrics/VictoriaLogs queries; no
+log bodies leave the host. AppArmor `ALLOWED` learning events and enforced
+`DENIED` events are separate. Falco log rows retain `_msg` (without it, the
+plugin's log line is empty unless JSON packing is enabled). Firing-alert labels
+use an instant Prometheus table result. Zero alerts is gated on fresh watchdog
+and node samples plus active vmalert units; empty denial/alert tables can be a
+valid zero, while missing collector freshness remains unknown. Grafana 13's
+provisioned dashboards are in its unified `resource` table, so an empty legacy
+`dashboard` table does not prove provisioning failed. A `fields` pipe must keep
+`_time` and `_msg`, otherwise the datasource cannot give the panel a row time or
+a line.

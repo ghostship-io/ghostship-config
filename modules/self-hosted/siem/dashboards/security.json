@@ -5,16 +5,387 @@
   "ghostship",
   "security"
  ],
- "timezone": "browser",
+ "timezone": "utc",
  "schemaVersion": 41,
  "version": 1,
  "editable": false,
  "refresh": "1m",
  "time": {
-  "from": "now-6h",
+  "from": "now/d",
   "to": "now"
  },
  "panels": [
+  {
+   "id": 1000,
+   "title": "SECURITY / Signals & source health",
+   "type": "text",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 4
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline) \u00b7 [AI usage](/d/ghostship-ai-usage)\n\nToday in UTC. Zero event counts mean no matches in the selected window; an empty series is not proof of healthy collection. Check ingestion and watchdog freshness first. AppArmor ALLOWED is complain-mode learning, not enforcement."
+   }
+  },
+  {
+   "id": 1001,
+   "title": "Log ingestion lag",
+   "description": "",
+   "type": "stat",
+   "gridPos": {
+    "x": 0,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "ghostship_log_ingestion_lag_seconds and on() (time() - ghostship_siem_watchdog_last_run_timestamp_seconds < 180)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 90
+       },
+       {
+        "color": "red",
+        "value": 180
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1002,
+   "title": "Enforced denials",
+   "description": "Matches in the selected time window. Freshness is a separate signal.",
+   "type": "stat",
+   "gridPos": {
+    "x": 4,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "apparmor:=DENIED | stats count() n",
+     "queryType": "stats"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1003,
+   "title": "AppArmor learning",
+   "description": "ALLOWED events are generated in complain mode, not blocked operations.",
+   "type": "stat",
+   "gridPos": {
+    "x": 8,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "apparmor:=ALLOWED | stats count() n",
+     "queryType": "stats"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1004,
+   "title": "Falco events",
+   "description": "",
+   "type": "stat",
+   "gridPos": {
+    "x": 12,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "falco_rule:* | stats count() n",
+     "queryType": "stats"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1005,
+   "title": "SSH failures",
+   "description": "",
+   "type": "stat",
+   "gridPos": {
+    "x": 16,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "unit:~\"sshd\" (\"Failed password\" OR \"Invalid user\" OR \"authentication failure\") | stats count() n",
+     "queryType": "stats"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1006,
+   "title": "Firewall refusals",
+   "description": "Matches in the selected window. Zero means no matching refusal event; ingestion freshness is shown separately.",
+   "type": "stat",
+   "gridPos": {
+    "x": 20,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "\"refused connection:\" | stats count() n",
+     "queryType": "stats"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
   {
    "id": 17,
    "title": "AppArmor DENIED by profile",
@@ -27,7 +398,7 @@
     "w": 12,
     "h": 8,
     "x": 0,
-    "y": 0
+    "y": 8
    },
    "targets": [
     {
@@ -41,10 +412,32 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "Enforced DENIED events only. Empty buckets are expected when no denial occurred; learning events appear separately below."
   },
   {
    "id": 18,
@@ -58,7 +451,7 @@
     "w": 12,
     "h": 8,
     "x": 12,
-    "y": 0
+    "y": 8
    },
    "targets": [
     {
@@ -72,10 +465,31 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 19,
@@ -89,7 +503,7 @@
     "w": 12,
     "h": 8,
     "x": 0,
-    "y": 8
+    "y": 16
    },
    "targets": [
     {
@@ -103,10 +517,32 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "No matching failures produces an empty series; the SSH failures count above shows zero while ingestion freshness distinguishes missing collection."
   },
   {
    "id": 20,
@@ -120,7 +556,7 @@
     "w": 12,
     "h": 8,
     "x": 12,
-    "y": 8
+    "y": 16
    },
    "targets": [
     {
@@ -134,10 +570,32 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "description": "No matching firewall refusal produces an empty series; the Firewall refusals count above shows zero. Check ingestion freshness before interpreting an empty chart."
   },
   {
    "id": 21,
@@ -151,7 +609,7 @@
     "w": 12,
     "h": 8,
     "x": 0,
-    "y": 16
+    "y": 24
    },
    "targets": [
     {
@@ -165,10 +623,31 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 22,
@@ -182,7 +661,7 @@
     "w": 12,
     "h": 8,
     "x": 12,
-    "y": 16
+    "y": 24
    },
    "targets": [
     {
@@ -196,10 +675,31 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 23,
@@ -213,7 +713,7 @@
     "w": 24,
     "h": 10,
     "x": 0,
-    "y": 24
+    "y": 32
    },
    "targets": [
     {
@@ -222,16 +722,26 @@
       "type": "victoriametrics-logs-datasource",
       "uid": "victorialogs"
      },
-     "expr": "falco_rule:* | fields _time, falco_rule, falco_priority, falco.container.name, falco.proc.cmdline",
+     "expr": "falco_rule:* | sort by (_time desc) limit 200 | fields _time, _msg, falco_rule, falco_priority, falco.container.name",
      "queryType": "instant",
      "maxLines": 200
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown"
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "showTime": true,
+    "showLabels": false,
+    "wrapLogMessage": true,
+    "sortOrder": "Descending",
+    "enableLogDetails": true,
+    "dedupStrategy": "none"
+   },
+   "description": "Latest 200 redacted Falco observations. Preserve the message so log rows have readable text; full raw command fields are not added to this dashboard."
   },
   {
    "id": 24,
@@ -245,7 +755,7 @@
     "w": 24,
     "h": 10,
     "x": 0,
-    "y": 34
+    "y": 42
    },
    "targets": [
     {
@@ -254,16 +764,176 @@
       "type": "victoriametrics-logs-datasource",
       "uid": "victorialogs"
      },
-     "expr": "(ident:=sudo OR \"Accepted publickey for root\") | fields _time, ident, _msg",
+     "expr": "(ident:=sudo OR \"Accepted publickey for root\") | sort by (_time desc) limit 200 | fields _time, ident, _msg",
      "queryType": "instant",
      "maxLines": 200
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown"
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "showTime": true,
+    "showLabels": false,
+    "wrapLogMessage": true,
+    "sortOrder": "Descending",
+    "enableLogDetails": true,
+    "dedupStrategy": "none"
+   }
+  },
+  {
+   "id": 1007,
+   "title": "AppArmor learning events by profile",
+   "description": "ALLOWED complain-mode observations; these operations were observed, not blocked. Displays the ten largest profile counts per query step.",
+   "type": "timeseries",
+   "gridPos": {
+    "x": 0,
+    "y": 52,
+    "w": 24,
+    "h": 8
+   },
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "expr": "apparmor:=ALLOWED | stats by (aa_profile) count() n | sort by (n desc) limit 10",
+     "queryType": "statsRange",
+     "legendFormat": "{{aa_profile}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "No matching learning events"
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "sum"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   }
- ]
+ ],
+ "links": [
+  {
+   "title": "Work overview",
+   "type": "link",
+   "url": "/d/ghostship-autonomous-work",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Host",
+   "type": "link",
+   "url": "/d/ghostship-host",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Security",
+   "type": "link",
+   "url": "/d/ghostship-security",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Pipeline",
+   "type": "link",
+   "url": "/d/ghostship-siem-pipeline",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  }
+ ],
+ "description": "Provisioned read-only Ghostship monitoring. Direct navigation; data comes from the existing SIEM stores."
 }
