@@ -93,19 +93,22 @@ def _key(provider: str, model: str) -> str:
 
 def _window_record(window: Any, now: float) -> dict[str, Any]:
     """One measured quota window, with its provenance and its check time."""
-    def _get(name: str, default: Any = None) -> Any:
-        value = getattr(window, name, None)
-        if value is None and isinstance(window, Mapping):
-            value = window.get(name)
-        return default if value is None else value
+    def _get(*names: str, default: Any = None) -> Any:
+        for name in names:
+            value = getattr(window, name, None)
+            if value is None and isinstance(window, Mapping):
+                value = window.get(name)
+            if value is not None:
+                return value
+        return default
 
-    kind = str(_get("kind", "other"))
-    quota_id = str(_get("quota_id", ""))
-    used = _get("used_ratio")
-    reset = _get("reset_epoch")
-    duration = _get("duration_seconds")
-    applies = _get("applies_to", ())
-    observed = _get("observed_at")
+    kind = str(_get("kind", default="other"))
+    quota_id = str(_get("quota_id", "quotaId", default=""))
+    used = _get("used_ratio", "usedRatio")
+    reset = _get("reset_epoch", "resetEpoch")
+    duration = _get("duration_seconds", "durationSeconds")
+    applies = _get("applies_to", "appliesTo", default=())
+    observed = _get("observed_at", "observedAtEpoch")
 
     used_value = _finite(used)
     known = used_value is not None and 0.0 <= used_value <= 1.0
@@ -146,14 +149,17 @@ def _pace_record(
     window: Any, now: float, remaining: float | None
 ) -> tuple[float | None, float | None]:
     """The expected usage of a window by now and the measured usage."""
-    def _get(name: str, default: Any = None) -> Any:
-        value = getattr(window, name, None)
-        if value is None and isinstance(window, Mapping):
-            value = window.get(name)
-        return default if value is None else value
+    def _get(*names: str, default: Any = None) -> Any:
+        for name in names:
+            value = getattr(window, name, None)
+            if value is None and isinstance(window, Mapping):
+                value = window.get(name)
+            if value is not None:
+                return value
+        return default
 
-    duration = _get("duration_seconds")
-    reset = _get("reset_epoch")
+    duration = _get("duration_seconds", "durationSeconds")
+    reset = _get("reset_epoch", "resetEpoch")
     if not duration or float(duration) <= 0 or not isinstance(reset, (int, float)):
         return None, None
     start = float(reset) - float(duration)
@@ -388,17 +394,24 @@ def _candidate(
         "rank": ranks,
         "score": scores,
         "reasons": reasons,
-        "available": bool(quota_state == QUOTA_AVAILABLE),
+        # The availability is the ranking's own judgement: a model of an
+        # account that reports no quota at all is usable, with an unknown
+        # headroom. The quota state keeps the three window states.
+        "available": bool(available),
         "availability": {
-            "state": "available" if quota_state == QUOTA_AVAILABLE else "unavailable",
+            "state": "available" if available else "unavailable",
             "evidence": "measured" if capacity_measured else "unknown",
             "reason": (
                 "every applicable window has headroom"
-                if quota_state == QUOTA_AVAILABLE
+                if available and capacity_measured
                 else (
                     "a window is spent"
                     if quota_state == QUOTA_EXHAUSTED
-                    else "a window is unknown, stale, or missing"
+                    else (
+                        "a window is unknown, stale, or missing"
+                        if windows
+                        else "the provider reports no quota for this account"
+                    )
                 )
             ),
         },
