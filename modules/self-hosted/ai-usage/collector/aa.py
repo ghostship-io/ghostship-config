@@ -129,16 +129,19 @@ def load_cache(path: str | os.PathLike[str], now: float | None = None) -> dict[s
         return missing
     if not isinstance(document, Mapping):
         return missing
-    fetched = document.get("fetched_at_epoch")
-    if not isinstance(fetched, (int, float)) or isinstance(fetched, bool):
-        # A cache without the moment it was read cannot be aged, so it cannot
-        # be fresh.
+    fetched = _finite(document.get("fetched_at_epoch"))
+    if fetched is None:
+        # A cache without a finite moment it was read cannot be aged, so it
+        # cannot be fresh. A NaN or an infinity lands here too, so an
+        # untrusted file never raises in the middle of a collection.
         return {**missing, "status": "unknown_evidence_time"}
-    fetched = float(fetched)
-    if fetched > moment + FUTURE_TOLERANCE_SECONDS:
+    moment_value = _finite(moment)
+    if moment_value is None:
+        return {**missing, "status": "unknown_evidence_time"}
+    if fetched > moment_value + FUTURE_TOLERANCE_SECONDS:
         # A reading from the future is not a fresh reading.
         return {**missing, "status": "future", "fetched_at_epoch": fetched}
-    age = moment - fetched
+    age = moment_value - fetched
     version = str(document.get("intelligence_index_version") or "")
     if version != INTELLIGENCE_INDEX_VERSION:
         # A different index version is not mixed with the current one.

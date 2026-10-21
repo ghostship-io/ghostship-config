@@ -767,6 +767,64 @@ def _relative_cost(prices: Mapping[str, Any] | None) -> float | None:
     return total if seen else None
 
 
+def _pending_identities(
+    candidates: list[dict[str, Any]], facts: Mapping[str, Any], now: float
+) -> list[dict[str, Any]]:
+    """The models that have no usable fact yet, bounded to the tiered ones.
+
+    The list is the compact signal a trigger may act on: the exact identity,
+    the reason, and the moment a pending research is checked again. It never
+    carries a score, and the producer does not research anything itself.
+    """
+    pending: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in candidates:
+        if not row.get("tiers"):
+            continue
+        provider = str(row.get("provider") or "")
+        model = str(row.get("model") or "")
+        variant = _row_variant(row)
+        fact = facts_module.lookup_by_model(facts, provider, model, variant, now=now)
+        if fact is not None:
+            continue
+        identity = facts_module.identity_key(provider, model, variant)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        pending.append(
+            {
+                "identity": identity,
+                "provider": provider,
+                "model": model,
+                "variant": variant,
+                "status": "pending",
+                "pending_reason": "no usable fact for this identity",
+                "next_check_at": None,
+            }
+        )
+    return pending
+
+
+def _row_variant(row: Mapping[str, Any]) -> str:
+    """The reasoning variant a model is run with, when it is known.
+
+    The variant is the value of the option that changes the reasoning of a
+    model. A model without such an option has the empty variant.
+    """
+    options = (row.get("native") or {}).get("options") or []
+    parts: list[str] = []
+    for option in options:
+        if not isinstance(option, Mapping):
+            continue
+        name = str(option.get("id") or "").lower()
+        value = option.get("current_value")
+        if name in ("variant", "reasoningeffort", "effort", "thinking") and isinstance(
+            value, (str, int, float, bool)
+        ):
+            parts.append(f"{name}={value}")
+    return ",".join(parts)
+
+
 def _fill_value(row: dict[str, Any], catalog: Any, fact: Mapping[str, Any] | None = None) -> None:
     """The strength, the relative price, and the value of one model."""
     provider = row.get("provider") or ""
@@ -960,7 +1018,7 @@ def build_snapshot(
     for entry in ranked:
         entries.setdefault((entry.provider, entry.model), []).append(entry)
 
-    fact_by_model = facts_index
+    facts_source = facts or {}
     candidates: list[dict[str, Any]] = []
     tiers: dict[str, list[str]] = {}
     pending: list[dict[str, Any]] = []
@@ -986,7 +1044,11 @@ def build_snapshot(
             policy,
             aa_cache,
         )
-        _fill_value(row, catalog, fact_by_model.get(model.lower()))
+        variant = _row_variant(row)
+        fact = facts_module.lookup_by_model(
+            facts_source, provider, model, variant, now=now
+        )
+        _fill_value(row, catalog, fact)
         for tier in row["tiers"]:
             tiers.setdefault(tier, []).append(_key(provider, model))
         account = str(row.get("account") or "")
@@ -1020,6 +1082,7 @@ def build_snapshot(
         }
         tiers[tier] = sorted(set(members), key=lambda key: (order.get(key, 0), key))
     winners, tier_coverage = _winners(candidates, tiers)
+    pending_identities = _pending_identities(candidates, facts_source, now)
     # The tiers are the operational list: one current winner per upstream
     # provider. The whole membership stays beside them for the comparison
     # view, and the counts say how much was considered.
@@ -1145,14 +1208,14 @@ def build_snapshot(
             "count": len(facts_index),
             "version": facts_module.BENCHMARK_VERSION,
             "max_age_seconds": facts_module.FACT_MAX_AGE_SECONDS,
-            "records": {
-                key: fact
-                for key, fact in facts_index.items()
-                if any(
-                    row["model"].lower() == fact.get("model", "").lower()
-                    for row in candidates
-                )
-            },
+            # The facts are keyed by their identity (provider, model, and
+            # reasoning variant), so two providers or two variants never
+            # share a record.
+            "records": facts_index,
+            # The identities a consumer may trigger a research for: every
+            # model of a tier that has no usable fact yet. The list is
+            # bounded to the models the tiers hold.
+            "pending_identities": pending_identities,
         },
         "pending": pending,
         "counts": {
