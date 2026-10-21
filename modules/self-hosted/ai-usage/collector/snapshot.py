@@ -248,6 +248,7 @@ def _candidate(
     expected: float | None = None
     actual: float | None = None
     raw_windows: list[Any] = []
+    surplus: dict[str, Any] = {}
 
     for entry in entries:
         if entry.tier:
@@ -267,6 +268,7 @@ def _candidate(
         three_d_tokens = float(entry.three_d_tokens)
         account = entry.account or account
         pace = getattr(entry, "pace", pace)
+        surplus = getattr(entry, "frontier_surplus", None) or surplus
         for reason in entry.reasons:
             if reason not in reasons:
                 reasons.append(reason)
@@ -332,6 +334,15 @@ def _candidate(
             "source": "prior" if three_d_tokens <= 0 else "prior+measured",
         },
         "eligibility": _eligibility(provider, model, tiers, native_record, policy),
+        "frontier_surplus": {
+            "available": bool(surplus.get("available")),
+            "reason": str(surplus.get("reason") or ""),
+            "expires_in_seconds": surplus.get("expires_in_seconds"),
+            "surplus_ratio": surplus.get("surplus_ratio"),
+            "reserve_ratio": surplus.get("reserve_ratio"),
+            "pace_delta": surplus.get("pace_delta"),
+            "basis": "an allowance that resets within a day, and the reserve the review keeps",
+        },
         "admission": {
             "state": "settled" if settled else "pending",
             "reason": pending_reason,

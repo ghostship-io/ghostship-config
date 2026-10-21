@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+import codes
 from metrics import SourceResult, Sample
 from util import HttpResult, http_request, iso_to_epoch, read_env_file
 
@@ -121,7 +122,7 @@ def read_grok(home: str | os.PathLike[str], now: float, http: HttpCall = http_re
         return SourceResult(
             source=source,
             status="missing_credentials",
-            detail="no Grok CLI credential",
+            reason=codes.MISSING_CREDENTIALS,
             duration_s=time.monotonic() - started,
         )
     response = http(GROK_BILLING_URL, headers={"Authorization": f"Bearer {token}"})
@@ -129,7 +130,7 @@ def read_grok(home: str | os.PathLike[str], now: float, http: HttpCall = http_re
         return SourceResult(
             source=source,
             status="error",
-            detail=f"billing request failed ({response.status or response.error})",
+            reason=codes.http_reason(response.status),
             duration_s=time.monotonic() - started,
         )
     body = response.json() or {}
@@ -149,7 +150,7 @@ def read_grok(home: str | os.PathLike[str], now: float, http: HttpCall = http_re
         return SourceResult(
             source=source,
             status="partial",
-            detail="billing response carried no usage period",
+            reason=codes.INVALID_RESPONSE,
             duration_s=time.monotonic() - started,
         )
     labels = {
@@ -204,7 +205,7 @@ def read_opencode_go(
         return SourceResult(
             source=source,
             status="missing_credentials",
-            detail="no OpenCode Console credential",
+            reason=codes.MISSING_CREDENTIALS,
             duration_s=time.monotonic() - started,
         )
     response = http(
@@ -215,7 +216,7 @@ def read_opencode_go(
         return SourceResult(
             source=source,
             status="error",
-            detail=f"usage request failed ({response.status or response.error})",
+            reason=codes.http_reason(response.status),
             duration_s=time.monotonic() - started,
         )
     body = response.json() or {}
@@ -225,7 +226,7 @@ def read_opencode_go(
         return SourceResult(
             source=source,
             status="partial",
-            detail="usage response carried no windows",
+            reason=codes.INVALID_RESPONSE,
             duration_s=time.monotonic() - started,
         )
     windows_by_key = {"rolling": "session", "weekly": "weekly", "monthly": "monthly"}
@@ -350,7 +351,7 @@ def read_antigravity(
         return SourceResult(
             source=source,
             status="missing_credentials",
-            detail="no Antigravity account token",
+            reason=codes.MISSING_CREDENTIALS,
             duration_s=time.monotonic() - started,
         )
     try:
@@ -361,7 +362,7 @@ def read_antigravity(
         return SourceResult(
             source=source,
             status="missing_credentials",
-            detail="Antigravity account token is unreadable",
+            reason=codes.MISSING_CREDENTIALS,
             duration_s=time.monotonic() - started,
         )
     access = _antigravity_access_token(token, http)
@@ -369,7 +370,7 @@ def read_antigravity(
         return SourceResult(
             source=source,
             status="error",
-            detail="Antigravity token refresh failed",
+            reason=codes.PROBE_FAILED,
             duration_s=time.monotonic() - started,
         )
     payload = json.dumps({"project": token["project_id"]} if token.get("project_id") else {}).encode()
@@ -405,7 +406,7 @@ def read_antigravity(
         return SourceResult(
             source=source,
             status="error",
-            detail="Antigravity returned no quota data",
+            reason=codes.PROBE_FAILED,
             duration_s=time.monotonic() - started,
         )
     samples: list[Sample] = []
@@ -488,7 +489,7 @@ def read_antigravity(
     return SourceResult(
         source=source,
         status=status,
-        detail="" if not failures else f"{failures} Antigravity requests failed",
+        reason=codes.OK if not failures else codes.PROBE_FAILED,
         metrics=samples,
         observed_at=now,
         duration_s=time.monotonic() - started,
@@ -578,7 +579,7 @@ def read_openrouter(
         return SourceResult(
             source=source,
             status="missing_credentials",
-            detail="no OpenRouter API key",
+            reason=codes.MISSING_CREDENTIALS,
             duration_s=time.monotonic() - started,
         )
     headers = {"Authorization": f"Bearer {key}"}
@@ -588,7 +589,7 @@ def read_openrouter(
         return SourceResult(
             source=source,
             status="error",
-            detail=f"OpenRouter request failed ({credits.status or account.status})",
+            reason=codes.http_reason(credits.status or account.status),
             duration_s=time.monotonic() - started,
         )
     samples: list[Sample] = []
@@ -676,7 +677,7 @@ def read_ollama(
         return SourceResult(
             source=source,
             status="missing_credentials",
-            detail="no Ollama API key",
+            reason=codes.MISSING_CREDENTIALS,
             duration_s=time.monotonic() - started,
         )
     headers = {"Authorization": f"Bearer {key}"}
@@ -713,7 +714,7 @@ def read_ollama(
         return SourceResult(
             source=source,
             status="error",
-            detail=f"Ollama usage request failed ({failures} attempts)",
+            reason=codes.HTTP_ERROR if failures else codes.OK,
             duration_s=time.monotonic() - started,
         )
     return SourceResult(

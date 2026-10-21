@@ -28,8 +28,12 @@ NOW = 1_800_000_000.0
 HOUR = 3600.0
 
 
-def window(used, reset_in=None, kind="weekly", used_ratio=True):
-    entry = {"kind": kind, "reset_epoch": None if reset_in is None else NOW + reset_in}
+def window(used, reset_in=None, kind="weekly", used_ratio=True, observed=NOW):
+    entry = {
+        "kind": kind,
+        "reset_epoch": None if reset_in is None else NOW + reset_in,
+        "observed_at": observed,
+    }
     if used_ratio:
         entry["used_ratio"] = used
     return entry
@@ -117,10 +121,45 @@ class AvailabilityBoundaryTests(unittest.TestCase):
         ranked = self._rank([window(None, HOUR)])
         self.assertFalse(ranked[0].available)
 
+    def test_a_spent_window_gates_a_model_with_an_unknown_other_window(self):
+        ranked = self._rank([window(1.0, 24 * HOUR), window(None, HOUR)])
+        self.assertFalse(ranked[0].available)
+        self.assertEqual(ranked[0].remaining, 0.0)
+
+    def test_a_stale_window_gates_a_model(self):
+        ranked = self._rank([window(0.1, HOUR, observed=NOW - 2 * HOUR)])
+        self.assertFalse(ranked[0].available)
+
     def test_known_headroom_keeps_the_model_available(self):
         ranked = self._rank([window(0.2, 24 * HOUR), window(0.1, HOUR)])
         self.assertTrue(ranked[0].available)
         self.assertEqual(ranked[0].rank, 1)
+
+    def test_a_stale_reading_is_not_headroom(self):
+        # The provider last reported the window two hours ago.
+        remaining, _expires_in, urgency = ranking._capacity(
+            [window(0.1, HOUR, observed=NOW - 2 * HOUR)], NOW
+        )
+        self.assertIsNone(remaining)
+        self.assertEqual(urgency, 0.0)
+
+    def test_a_reading_from_the_future_is_not_fresh(self):
+        remaining, _expires_in, _urgency = ranking._capacity(
+            [window(0.1, HOUR, observed=NOW + 2 * HOUR)], NOW
+        )
+        self.assertIsNone(remaining)
+
+    def test_a_missing_check_time_is_not_headroom(self):
+        entry = {"kind": "weekly", "used_ratio": 0.1, "reset_epoch": NOW + HOUR}
+        remaining, _expires_in, _urgency = ranking._capacity([entry], NOW)
+        self.assertIsNone(remaining)
+
+    def test_a_known_spent_window_gates_even_when_another_is_unknown(self):
+        # The weekly window is spent; the session window is malformed. The
+        # model is not usable, and the reason is the spent window.
+        windows = [window(1.0, 24 * HOUR, kind="weekly"), window(None, HOUR, kind="session")]
+        remaining, _expires_in, _urgency = ranking._capacity(windows, NOW)
+        self.assertEqual(remaining, 0.0)
 
     def test_a_model_without_any_window_is_unknown_not_unlimited(self):
         ranked = self._rank([])

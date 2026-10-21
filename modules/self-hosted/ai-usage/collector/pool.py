@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import codes
 from metrics import SourceResult, Sample
 
 MAX_RESPONSE = 8 * 1024 * 1024
@@ -163,7 +164,7 @@ def collect(
             SourceResult(
                 source=source,
                 status="missing_credentials",
-                detail=str(error)[:160],
+                reason=codes.UNAVAILABLE,
                 duration_s=time.monotonic() - started,
             )
         ]
@@ -175,7 +176,7 @@ def collect(
             SourceResult(
                 source=source,
                 status="error",
-                detail=str(error)[:160],
+                reason=codes.UNAVAILABLE,
                 duration_s=time.monotonic() - started,
             )
         ]
@@ -188,7 +189,7 @@ def collect(
         SourceResult(
             source=source,
             status="partial" if ledger.status != "ok" else "ok",
-            detail=ledger.detail,
+            reason=ledger.reason,
             metrics=samples,
             observed_at=now,
             duration_s=time.monotonic() - started,
@@ -434,7 +435,7 @@ class _Ledger:
     def __init__(self) -> None:
         self.samples: list[Sample] = []
         self.status = "ok"
-        self.detail = ""
+        self.reason = codes.OK
 
 
 def _duration_seconds(text: str) -> float | None:
@@ -453,17 +454,17 @@ def _read_ledger(path: str | os.PathLike[str] | None, now: float) -> _Ledger:
     ledger = _Ledger()
     if not path:
         ledger.status = "unsupported"
-        ledger.detail = "no pool ledger path"
+        ledger.reason = codes.UNSUPPORTED
         return ledger
     if not Path(path).exists():
         ledger.status = "missing_credentials"
-        ledger.detail = "pool ledger is not present"
+        ledger.reason = codes.MISSING_CREDENTIALS
         return ledger
     try:
         connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
     except sqlite3.Error as error:
         ledger.status = "error"
-        ledger.detail = f"pool ledger unreadable ({type(error).__name__})"
+        ledger.reason = codes.UNAVAILABLE
         return ledger
     windows = (("24h", 86400), ("7d", 7 * 86400), ("30d", 30 * 86400))
     try:
@@ -517,7 +518,7 @@ def _read_ledger(path: str | os.PathLike[str] | None, now: float) -> _Ledger:
                         ledger.samples.append((name, labels, value))
     except sqlite3.Error as error:
         ledger.status = "partial"
-        ledger.detail = f"pool ledger query failed ({type(error).__name__})"
+        ledger.reason = codes.UNAVAILABLE
     finally:
         connection.close()
     return ledger

@@ -120,6 +120,9 @@
               vector
               victoriametrics
               python3
+              # The AI usage collector talks to T3 Code over a WebSocket. The
+              # tests need the same library the collector uses.
+              python3Packages.websockets
               ripgrep
               jq
               curl

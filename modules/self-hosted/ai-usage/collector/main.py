@@ -15,7 +15,6 @@ import inspect
 import json
 import os
 import socket
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -25,6 +24,7 @@ from typing import Any, Iterable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import catalog as catalog_module  # noqa: E402
+import codes  # noqa: E402
 import pool as pool_module  # noqa: E402
 import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
@@ -43,8 +43,6 @@ POOL_SERVER_FILE = "/run/ghostship-integrations/inference-server.json"
 POOL_TOKEN_FILE = "/run/ghostship-integrations/inference-token"
 POOL_LEDGER_FILE = f"{T3_HOME}/.local/state/ghostship-agent/runtime/jobs.sqlite"
 CATALOG_FILE = f"{T3_HOME}/.cache/opencode/models.json"
-PODMAN = "/run/current-system/sw/bin/podman"
-
 # The smallest 3D prior that earns a place in the 3D tier.
 THREE_D_MIN_PRIOR = 0.7
 
@@ -144,7 +142,7 @@ def log(message: str) -> None:
     print(f"ai-usage: {message}", file=sys.stderr, flush=True)
 
 
-def resolve_t3_base_url(server_file: str, podman: str = PODMAN) -> str:
+def resolve_t3_base_url(server_file: str) -> str:
     """Return a T3 base URL the host can reach."""
     raw = Path(server_file).read_text(encoding="utf-8").strip()
     base = ""
@@ -167,7 +165,7 @@ def resolve_t3_base_url(server_file: str, podman: str = PODMAN) -> str:
     host = parts.hostname or ""
     if host and _resolves(host):
         return base
-    address = _container_address(host, podman)
+    address = _container_address(host)
     if not address:
         raise ValueError(f"cannot resolve the T3 container address for {host}")
     return urlunsplit((parts.scheme, f"{address}:{parts.port or 80}", parts.path, "", ""))
@@ -181,92 +179,83 @@ def _resolves(host: str) -> bool:
     return True
 
 
-def _container_address(container: str, podman: str) -> str:
+# The Podman network the T3 Code container is attached to, and the resolver
+# that serves its names. The address is looked up here instead of through
+# the Podman API: the API is a root equivalent, and the collector has no
+# reason to hold it.
+PODMAN_NETWORK_FILE = "/etc/containers/networks/ghostship_net.json"
+PODMAN_NETWORK = "ghostship_net"
+
+
+def _container_address(container: str) -> str:
     """Return the address of a container on the Ghostship network.
 
-    The Podman API is asked directly, so the collector does not need the
-    Podman CLI or write access to the container storage.
+    The published name of the container is resolved with the resolver of the
+    Podman network it is attached to. The Podman API is not used: it is a
+    root equivalent, and a name lookup does not need it.
     """
-    address = _container_address_from_api(container)
-    if address:
-        return address
-    try:
-        result = subprocess.run(
-            [
-                podman,
-                "inspect",
-                container,
-                "--format",
-                '{{(index .NetworkSettings.Networks "ghostship_net").IPAddress}}',
-            ],
-            capture_output=True,
-            text=True,
-            timeout=20,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
+    resolver = _network_resolver()
+    if not resolver:
         return ""
-    address = result.stdout.strip()
-    return address if address and result.returncode == 0 else ""
+    return _resolve_name(container, resolver)
 
 
-def _container_address_from_api(container: str) -> str:
-    """Ask the Podman API for the container address."""
-    host = os.environ.get("CONTAINER_HOST", "unix:///run/podman/podman.sock")
-    if not host.startswith("unix://"):
-        return ""
-    path = host[len("unix://") :]
-    request = (
-        f"GET /v4.0.0.0/libpod/containers/{container}/json HTTP/1.1\r\n"
-        f"Host: localhost\r\n"
-        "Accept: application/json\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-    )
+def _network_resolver(network_file: str = PODMAN_NETWORK_FILE) -> str:
+    """The address of the resolver that serves the Podman network names."""
     try:
-        connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        connection.settimeout(20)
+        document = json.loads(Path(network_file).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(document, dict):
+        return ""
+    for subnet in document.get("subnets") or []:
+        if not isinstance(subnet, dict):
+            continue
+        gateway = subnet.get("gateway")
+        if isinstance(gateway, str) and gateway:
+            return gateway
+    return ""
+
+
+def _resolve_name(name: str, resolver: str, timeout: float = 5.0) -> str:
+    """Resolve one name with the network resolver."""
+    try:
+        host = socket.gethostbyname_ex(name)
+    except OSError:
+        host = None
+    if host and host[2]:
+        return host[2][0]
+    query = bytearray(b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00")
+    for part in name.split("."):
+        query += bytes([len(part)]) + part.encode("idna") if part.isascii() else bytes([0])
+    query += b"\x00\x00\x01\x00\x01"
+    try:
+        connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        connection.settimeout(timeout)
         try:
-            connection.connect(path)
-            connection.sendall(request.encode())
-            chunks = []
-            while True:
-                chunk = connection.recv(65536)
-                if not chunk:
-                    break
-                chunks.append(chunk)
+            connection.sendto(bytes(query), (resolver, 53))
+            answer, _address = connection.recvfrom(1024)
         finally:
             connection.close()
     except OSError:
         return ""
-    raw = b"".join(chunks)
-    head, _, body = raw.partition(b"\r\n\r\n")
-    if b"transfer-encoding: chunked" in head.lower():
-        body = _decode_chunked(body)
-    try:
-        document = json.loads(body.decode("utf-8", "replace"))
-    except ValueError:
+    if len(answer) < 16 or answer[3] & 0x0F:
         return ""
-    networks = ((document.get("NetworkSettings") or {}).get("Networks") or {})
-    network = networks.get("ghostship_net") or {}
-    address = network.get("IPAddress")
-    return address if isinstance(address, str) and address else ""
-
-
-def _decode_chunked(body: bytes) -> bytes:
-    """Decode a chunked HTTP body."""
-    decoded = bytearray()
-    while body:
-        line, _, body = body.partition(b"\r\n")
-        try:
-            size = int(line.split(b";")[0].strip() or b"0", 16)
-        except ValueError:
-            break
-        if size == 0:
-            break
-        decoded += body[:size]
-        body = body[size + 2 :]
-    return bytes(decoded)
+    count = int.from_bytes(answer[6:8], "big")
+    offset = 12
+    for _ in range(count):
+        while offset < len(answer) and answer[offset]:
+            offset += 1 + answer[offset]
+        offset += 1
+        if offset + 10 > len(answer):
+            return ""
+        record_type = answer[offset]
+        record_length = int.from_bytes(answer[offset + 8 : offset + 10], "big")
+        offset += 10
+        if record_type == 1 and record_length == 4:
+            return ".".join(str(byte) for byte in answer[offset : offset + 4])
+        offset += record_length
+    return ""
 
 
 def read_session_token(path: str) -> str:
@@ -285,7 +274,7 @@ def collect_t3(now: float, catalog, context: dict[str, Any]) -> list[SourceResul
             SourceResult(
                 source="t3",
                 status="missing_credentials",
-                detail=f"T3 Code is not reachable ({type(error).__name__})",
+                reason=codes.UNAVAILABLE,
             )
         ]
     if not token:
@@ -293,7 +282,7 @@ def collect_t3(now: float, catalog, context: dict[str, Any]) -> list[SourceResul
             SourceResult(
                 source="t3",
                 status="missing_credentials",
-                detail="no T3 Code session token",
+                reason=codes.MISSING_CREDENTIALS,
             )
         ]
     try:
@@ -304,7 +293,7 @@ def collect_t3(now: float, catalog, context: dict[str, Any]) -> list[SourceResul
             SourceResult(
                 source="t3",
                 status="error",
-                detail=str(error)[:180],
+                reason=codes.RPC_FAILED,
             )
         ]
 
@@ -578,7 +567,7 @@ def build_snapshot(
             {
                 "id": result.source,
                 "status": result.status,
-                "detail": result.detail[:200],
+                "reason": codes.reason(result.reason),
                 "observed_at": (
                     None
                     if observed is None
@@ -669,7 +658,12 @@ def render(results: list[SourceResult], extra: list[Sample], now: float, duratio
         )
         writer.add(
             "ghostship_ai_source_status",
-            {"source": result.source, "provider": provider, "status": result.status},
+            {
+                "source": result.source,
+                "provider": provider,
+                "status": result.status,
+                "reason": codes.reason(result.reason),
+            },
             1.0,
         )
         if result.observed_at is not None:
@@ -750,7 +744,7 @@ def main(argv: list[str] | None = None) -> int:
     # written, atomically, even in the dry run.
     snapshot_module.write_snapshot(args.snapshot, snapshot)
     for result in results:
-        log(f"{result.source}: {result.status}" + (f" ({result.detail})" if result.detail else ""))
+        log(f"{result.source}: {result.status} ({codes.reason(result.reason)})")
     log(f"wrote {len(text)} bytes to {'stdout' if args.stdout else args.output}")
     return 0
 
