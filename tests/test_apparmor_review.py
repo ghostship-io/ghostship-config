@@ -130,11 +130,11 @@ class Collection(unittest.TestCase):
     def test_successful_probe_requires_exact_event_in_window(self):
         message = ('apparmor="AUDIT" operation="open" profile="ghostship-plex" '
                    f'name="{review.HEARTBEAT_PATH}" requested_mask="r" comm="cat"')
-        row = json.dumps({"__REALTIME_TIMESTAMP": "101000000", "MESSAGE": message})
-        with patch.object(review.time, "time", side_effect=[100, 102]), \
-                patch.object(review.subprocess, "run", side_effect=[
-                    subprocess.CompletedProcess([], 0), subprocess.CompletedProcess([], 0, stdout=row)]):
+        with patch.object(review.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), \
+                patch.object(review, "vlogs", side_effect=[[], [(101, message)]]) as vlogs, \
+                patch.object(review.time, "sleep"):
             event = review.probe("plex", "ghostship-plex", ["/bin/cat", review.HEARTBEAT_PATH])
+        self.assertIn('(aa_profile:="ghostship-plex" OR aa_profile:"ghostship-plex//"*)', vlogs.call_args.args[0])
         self.assertTrue(review.heartbeat_event(event))
         self.assertTrue(review.heartbeat_event({**event, "apparmor": "ALLOWED", "denied_mask": "r"}))
         self.assertFalse(review.heartbeat_event({**event, "operation": "exec"}))
@@ -151,6 +151,27 @@ class Collection(unittest.TestCase):
     def test_probe_fails_closed(self):
         with patch.object(review.subprocess, "run", side_effect=subprocess.TimeoutExpired("probe", 2)):
             self.assertIsNone(review.probe("plex", "ghostship-plex", ["/bin/cat", review.HEARTBEAT_PATH]))
+
+    def test_process_that_exits_mid_inspection_is_skipped_not_fatal(self):
+        reads = {"/policy": b"policy", "/sys/module/apparmor/parameters/enabled": "Y",
+                 review.HEARTBEAT_PATH: "boot1",
+                 "/sys/kernel/security/apparmor/profiles": "ghostship-plex (complain)\n",
+                 "/proc/10/attr/current": "ghostship-plex (complain)"}
+
+        def read_text(path):
+            if str(path) not in reads:
+                raise FileNotFoundError(str(path))
+            return reads[str(path)]
+        with patch.object(review.Path, "read_bytes", lambda p: reads[str(p)]), \
+                patch.object(review.Path, "read_text", read_text), \
+                patch.object(review, "run", side_effect=[json.dumps({"image": "id", "running": True,
+                                                                      "profile": "ghostship-plex"}),
+                                                        "HPID\n10\n12\n", "lost 0\n"]):
+            observation = review.inspect_container("plex", {**CONFIG["containers"]["plex"],
+                                                            "processProfiles": ["ghostship-plex"],
+                                                            "requiredProcessProfiles": ["ghostship-plex"]})
+        self.assertNotIn("inspection-failed", observation["reasons"])
+        self.assertEqual([p["pid"] for p in observation["processes"]], [10])
 
     def test_all_host_pids_checked_without_env_inspection(self):
         reads = {"/policy": b"policy", "/sys/module/apparmor/parameters/enabled": "Y",
@@ -234,7 +255,8 @@ class Collection(unittest.TestCase):
                 patch.object(review, "journal", return_value=[(9 * DAY, plex_msg), (9 * DAY, ntfy_msg)]) as journal, \
                 patch.object(review.time, "time", return_value=9 * DAY):
             state = review.collect(config, {"containers": {}}, 9 * DAY)
-        self.assertEqual(journal.call_count, 1)
+        # One server-filtered query per container profile.
+        self.assertEqual(sorted(c.args[2] for c in journal.call_args_list), ["ghostship-ntfy", "ghostship-plex"])
         for name in ("plex", "ntfy"):
             self.assertNotIn("audit-collection-failed", state["containers"][name]["reasons"])
             self.assertEqual(state["containers"][name]["events"], {})
@@ -273,15 +295,22 @@ class Collection(unittest.TestCase):
         for message in ("rpc_check_timeout: 8 callbacks suppressed", "call_decode: 7 callbacks suppressed"):
             self.assertFalse(review.AUDIT_LOSS.search(message), message)
 
-    def test_journal_reads_only_apparmor_audit_records(self):
-        with patch.object(review, "run", return_value="") as run:
-            review.journal(1, 2)
-        args, timeout = run.call_args[0][0], run.call_args[1]["timeout"]
-        audit = args[args.index("_TRANSPORT=audit"):args.index("+")]
-        self.assertEqual(audit, ["_TRANSPORT=audit", *review.APPARMOR_TYPES])
-        self.assertIn("_AUDIT_TYPE=1400", audit)
-        self.assertIn("_TRANSPORT=kernel", args)
-        self.assertGreater(timeout, 20)
+    def test_journal_reads_one_profile_and_loss_notices_from_victorialogs(self):
+        with patch.object(review, "vlogs", return_value=[(5, "x")]) as vlogs:
+            rows = review.journal(1, 2, "ghostship-plex")
+        queries = [call.args[0] for call in vlogs.call_args_list]
+        self.assertIn('transport:="audit" (aa_profile:="ghostship-plex" OR aa_profile:"ghostship-plex//"*)', queries)
+        self.assertIn(review.LOSS_QUERY, queries)
+        self.assertEqual(rows, [(5, "x"), (5, "x")])
+        self.assertGreater(review.JOURNAL_TIMEOUT, 20)
+
+    def test_vlogs_keeps_only_rows_inside_the_window(self):
+        body = b'{"_time":"1970-01-01T00:00:05Z","_msg":"in"}\n{"_time":"1970-01-01T00:00:09Z","_msg":"out"}\n'
+        class Response(list):
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        with patch.object(review.urllib.request, "urlopen", return_value=Response(body.splitlines(True))):
+            self.assertEqual(review.vlogs("q", 1, 6), [(5.0, "in")])
 
     def test_kernel_lost_counter_resets_even_without_loss_log(self):
         state = review.advance(week(), {**GOOD, "audit_lost": 2}, [], 9 * DAY, True)
