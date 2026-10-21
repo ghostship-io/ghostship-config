@@ -13,6 +13,27 @@ import tempfile
 import time
 from pathlib import Path
 
+OOM_CHECK = """
+import subprocess, time
+from pathlib import Path
+child = subprocess.Popen(['su-exec', '3000:3000', 'sleep', '60'])
+try:
+    proc = Path('/proc') / str(child.pid)
+    for attempt in range(100):
+        if 'Uid:\\t3000\\t3000\\t3000\\t3000' in (proc / 'status').read_text():
+            break
+        time.sleep(0.01)
+    else:
+        raise RuntimeError('sentinel did not become the t3code user')
+    score = proc / 'oom_score_adj'
+    for expected in (-1000, 500):
+        score.write_text(str(expected))
+        assert int(score.read_text()) == expected
+finally:
+    child.terminate()
+    child.wait(timeout=5)
+"""
+
 
 def run(*args, **kwargs):
     return subprocess.check_output(args, text=True, timeout=180, **kwargs).strip()
@@ -189,8 +210,7 @@ def main():
                     "oom_protection": execute(
                         "python3",
                         "-c",
-                        "from pathlib import Path; p=Path('/proc/self/oom_score_adj'); "
-                        "p.write_text('-1000'); assert p.read_text().strip() == '-1000'",
+                        OOM_CHECK,
                     ),
                     "apparmor": execute("cat", "/proc/self/attr/current"),
                 }

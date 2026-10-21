@@ -1992,6 +1992,10 @@ let
         ''
           # Keep the dependency unit alive while the separate engine is reachable.
           # Failure restarts this readiness check; it never starts a rootful daemon.
+            until docker info >/dev/null 2>&1; do
+              sleep 2
+            done
+            systemd-notify --ready
           while docker info >/dev/null 2>&1; do
             sleep 15
           done
@@ -2049,7 +2053,7 @@ let
     pkgs.dockerTools.caCertificates
   ];
 
-  t3codeImage = pkgs.dockerTools.buildLayeredImageWithNixDb {
+  t3codeImageArgs = {
     name = imageName;
     tag = imageTag;
     contents = t3codeImageContents;
@@ -2243,7 +2247,7 @@ let
       EOF
       cat > etc/systemd/system/dockerd.service <<'EOF'
       [Unit]
-      Description=T3 Code Docker daemon
+      Description=T3 Code Docker ${if hardened then "engine readiness" else "daemon"}
       DefaultDependencies=no
       After=t3code-container-setup.service
       Requires=t3code-container-setup.service
@@ -2251,11 +2255,13 @@ let
       Before=shutdown.target
 
       [Service]
-      Type=simple
+      Type=${if hardened then "notify" else "simple"}
+      ${lib.optionalString hardened "NotifyAccess=all"}
       ExecStart=${t3codeDockerdRun}/bin/t3code-dockerd-run
       Restart=always
       RestartSec=5
       TimeoutStopSec=30s
+      TimeoutStartSec=180s
       TasksMax=infinity
 
       [Install]
@@ -2657,6 +2663,7 @@ let
     };
   };
 
+  t3codeImage = pkgs.dockerTools.buildLayeredImageWithNixDb t3codeImageArgs;
   t3codeDeploymentId = builtins.hashString "sha256" (toString t3codeImage);
 
   t3codeDeployWhenIdleScript = pkgs.writeShellScriptBin "t3code-deploy-when-idle" ''
@@ -2706,6 +2713,16 @@ in
   system.build.t3codeProcessMemoryGuard = t3codeProcessMemoryGuard;
   system.build.t3codeServerMonitor = t3codeDaemonMonitor;
   system.build.t3codeToolMaintenance = t3codeToolMaintenance;
+  # Candidate loading must never retag the production image beneath its updater.
+  system.build.t3codeCandidateImage = lib.mkIf hardened (
+    pkgs.dockerTools.buildLayeredImageWithNixDb (
+      t3codeImageArgs
+      // {
+        name = "${imageName}-candidate";
+        tag = "hardening";
+      }
+    )
+  );
 
   # The Antigravity ACP archive is unfree; keep the exception scoped to this app.
   nixpkgs.config.allowUnfreePredicate =
