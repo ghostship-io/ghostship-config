@@ -51,3 +51,17 @@
         - [agent-desktop, /opt/google/chrome/chrome_crashpad_handler]
   override:
     exceptions: append
+
+# T3 Code runs systemd inside its container. On each start (the sanctioned
+# t3code-deploy-when-idle recreate, 2026-10-21 10:30) its executor reads the
+# PAM stack for the user manager. Store systemd-executor under systemd, this
+# file only; every other sensitive read in t3code still alerts (#102).
+- rule: Read sensitive file untrusted
+  exceptions:
+    - name: t3code_systemd_user_pam
+      fields: [container.name, proc.exepath, proc.pname, fd.name]
+      comps: [=, glob, =, =]
+      values:
+        - [t3code, /nix/store/*-systemd-*/lib/systemd/systemd-executor, systemd, /etc/pam.d/systemd-user]
+  override:
+    exceptions: append
