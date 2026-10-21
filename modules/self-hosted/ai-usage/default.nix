@@ -21,6 +21,12 @@ let
   # The routing snapshot is the canonical answer for a consumer. The producer
   # writes it; a consumer only reads it.
   routing = "${stateDir}/routing.json";
+  # The same bytes, published to the two runtime directories the broker and
+  # the MCP read. They are different directories on the host, and both are
+  # bound read only into their container. One producer, no second scorer, no
+  # history, and no credential in the file.
+  brokerProjection = "/run/ghostship-github/model-routing.json";
+  mcpProjection = "/run/ghostship-integrations/model-routing.json";
   # The collector is copied into the store whole, so the unit runs one
   # immutable interpreter over one immutable directory. It talks to T3 Code
   # over a WebSocket with the standard library the platform already uses.
@@ -37,7 +43,7 @@ in
     wants = [ "network-online.target" "podman.socket" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing}";
+      ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing} --projection ${brokerProjection} --projection ${mcpProjection}";
       # The collector finds the T3 Code container's address with the Podman
       # CLI. The CLI must not open the container storage (ProtectSystem makes
       # it read-only), so it asks the Podman API socket instead.
@@ -64,7 +70,13 @@ in
       SystemCallArchitectures = "native";
       RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
       # Only the textfile and the ranking state are writable.
-      ReadWritePaths = [ textfileDir stateDir ];
+      ReadWritePaths = [
+        textfileDir
+        stateDir
+        # The two runtime projections, and nothing else in those directories.
+        "/run/ghostship-github"
+        "/run/ghostship-integrations"
+      ];
       # The container home, the published integration files (the T3 endpoint,
       # the session token, the pool socket and token) and the projected
       # provider secrets are read, never written.
