@@ -60,7 +60,12 @@ def main():
             setup.write_text(
                 "[Service]\nType=oneshot\nExecStart=/bin/true\nRemainAfterExit=yes\n"
             )
-            # basic.target does not start application services or updater timers.
+            target = root / "probe.target"
+            target.write_text(
+                "[Unit]\nDescription=Isolated platform probe\nDefaultDependencies=no\n"
+            )
+            # The image intentionally omits the usual basic/rescue targets.
+            # This target starts no application services or updater timers.
             name = "t3code-hardening-probe"
             if (
                 subprocess.run(
@@ -95,9 +100,11 @@ def main():
                     f"{root / 'tmp'}:/tmp:rw",
                     "-v",
                     f"{setup}:/etc/systemd/system/t3code-container-setup.service:ro",
+                    "-v",
+                    f"{target}:/etc/systemd/system/t3code-probe.target:ro",
                     f"--entrypoint={systemd}",
                     args.image,
-                    "--unit=basic.target",
+                    "--unit=t3code-probe.target",
                 )
 
                 def execute(*command, user="0:0"):
