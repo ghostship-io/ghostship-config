@@ -181,7 +181,7 @@ in
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
-          ExecStart = "${pkgs.audit}/bin/auditctl -b 8192";
+          ExecStart = "${pkgs.audit}/bin/auditctl -b 32768";
         };
       };
       ghostship-apparmor-review = {
