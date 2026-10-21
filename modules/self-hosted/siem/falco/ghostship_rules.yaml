@@ -65,3 +65,28 @@
         - [t3code, /nix/store/*-systemd-*/lib/systemd/systemd-executor, systemd, /etc/pam.d/systemd-user]
   override:
     exceptions: append
+
+# Image builds (buildah RUN steps report container.id crun-buildah), investigated
+# 2026-10-21 13:02 on ghostship-agent-desktop-update's scheduled rebuild (#102):
+# Debian package scripts under dpkg/apt-get read /etc/shadow (systemd-sysusers
+# for openssh-server) and truncate /var/log/fontconfig.log (fontconfig's
+# postinst). Exact executable, package-manager ancestry and file only.
+- rule: Read sensitive file untrusted
+  exceptions:
+    - name: image_build_sysusers
+      fields: [container.id, proc.exepath, "proc.aname[3]", fd.name]
+      comps: [=, =, =, =]
+      values:
+        - [crun-buildah, /usr/bin/systemd-sysusers, dpkg, /etc/shadow]
+  override:
+    exceptions: append
+
+- rule: Clear Log Activities
+  exceptions:
+    - name: image_build_fontconfig_postinst
+      fields: [container.id, proc.exepath, proc.pname, fd.name]
+      comps: [=, =, =, =]
+      values:
+        - [crun-buildah, /usr/bin/dash, dpkg, /var/log/fontconfig.log]
+  override:
+    exceptions: append

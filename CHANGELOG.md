@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.22] - 2026-10-21
+
+- Falco: narrow exceptions for Debian package scripts in image builds (`crun-buildah`). These are `systemd-sysusers` under dpkg reading `/etc/shadow`, and fontconfig's postinst truncating `/var/log/fontconfig.log`. Both were investigated on the scheduled agent-desktop rebuild at 13:02 (#102).
+
 ## [3.17.21] - 2026-10-21
 
 - SIEM UI: Grafana 13.2.4 (distroless, pinned) at `grafana.ghostship.io`, behind Cloudflare Access, as the single monitoring UI (#102 decision B).
