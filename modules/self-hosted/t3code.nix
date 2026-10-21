@@ -2774,15 +2774,23 @@ in
       "${t3codeHome}:/home/t3code:rw"
       "${t3codeNixRoot}/nix:/nix:rw"
       "${t3codeSecrets}:${t3codeSecretsFile}:ro"
-      "${config.ghostship.agentHost.sharedPath}:/mnt/share:rw"
     ]
     ++ (
       if hardened then
         [
           "/run/t3code-docker/docker.sock:/var/run/docker.sock:rw"
         ]
+        ++ lib.mapAttrsToList (
+          path: readOnly:
+          "${config.ghostship.agentHost.sharedPath}/${path}:/mnt/share/${path}:${
+            if readOnly then "ro" else "rw"
+          },nosuid,nodev"
+        ) config.ghostship.t3code.hardening.sharedMounts
       else
-        [ "${t3codeDocker}:/var/lib/docker:rw" ]
+        [
+          "${t3codeDocker}:/var/lib/docker:rw"
+          "${config.ghostship.agentHost.sharedPath}:/mnt/share:rw"
+        ]
     );
     environmentFiles = [ t3codeSecrets ];
   };

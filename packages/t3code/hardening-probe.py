@@ -25,6 +25,17 @@ def identity():
         container["State"]["StartedAt"],
         container["State"]["Pid"],
         run("systemctl", "show", "podman-t3code.service", "-p", "MainPID", "--value"),
+        run(
+            "podman",
+            "exec",
+            "t3code",
+            "systemctl",
+            "show",
+            "t3code-server.service",
+            "-p",
+            "MainPID",
+            "--value",
+        ),
     ]
 
 
@@ -166,6 +177,9 @@ def main():
                     "nix_build": execute(
                         "nix-build",
                         "--no-out-link",
+                        "--option",
+                        "substitute",
+                        "false",
                         "--expr",
                         'builtins.derivation { name = "' + root.name + '"; '
                         'system = builtins.currentSystem; builder = "/bin/sh"; '
@@ -184,6 +198,14 @@ def main():
                 assert not inspected["HostConfig"]["Privileged"]
                 checks["privileged"] = False
                 checks["capabilities"] = inspected["EffectiveCaps"]
+                assert sorted(checks["capabilities"]) == sorted(
+                    f"CAP_{cap}" for cap in capabilities
+                )
+                assert checks["apparmor"] == "ghostship-t3code (complain)"
+                status = execute("cat", "/proc/self/status")
+                assert "Seccomp:\t2" in status, "container seccomp is disabled"
+                checks["seccomp"] = "filtering"
+                assert execute("cat", checks["nix_build"]) == "verified"
                 print(json.dumps(checks, indent=2))
             finally:
                 subprocess.run(["podman", "logs", "--tail=30", name], check=False)
