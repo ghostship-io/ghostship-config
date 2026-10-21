@@ -89,6 +89,9 @@ class QuotaWindow:
     quota_id: str = ""
     # How long the window runs. The pace of the usage is measured against it.
     duration_seconds: float | None = None
+    # When the provider last reported this window. A reading that is older
+    # than the freshness bound is stale, and a stale reading is not headroom.
+    observed_at: float | None = None
 
     def applies(self, model: str) -> bool:
         """True when this window applies to the model."""
@@ -117,6 +120,7 @@ class RankedModel:
     settled: bool = True
     pending_reason: str = ""
     account: str = ""
+    frontier_surplus: dict[str, Any] = dataclasses.field(default_factory=dict)
     used_tokens: float = 0.0
     three_d_prior: float | None = None
     three_d_tokens: float = 0.0
@@ -211,6 +215,21 @@ THREE_D_MAX_MEMBERS = 20
 
 # A model whose account has less than this share left cannot be used.
 MIN_REMAINING = 0.05
+
+# A quota reading older than this is stale. The collector reads the providers
+# every five minutes, so half an hour is a generous bound; a stale reading
+# never counts as headroom.
+STALE_AFTER_SECONDS = 1800.0
+
+# How close the reset of an entitlement window has to be for its surplus to
+# be worth spending on volume work. The short session window is never one of
+# them: it resets every few hours, and using it as an allowance would empty
+# the review capacity days before the week or month does.
+SURPLUS_WINDOW_KINDS = ("weekly", "monthly")
+SURPLUS_EXPIRY_SECONDS = 24.0 * 3600.0
+
+# A reading from the future is a clock problem, not a fresh measurement.
+FUTURE_TOLERANCE_SECONDS = 60.0
 
 # A model that was only just seen is not activated straight away. It needs a
 # day of evaluation, or measured use, before it may hold a tier.
@@ -546,6 +565,21 @@ def _capacity_detail(
     for window in windows:
         state, remaining = _window_state(window, now)
         states.append((window, state, remaining))
+    spent = [item for item in states if item[1] == "known" and item[2] == 0.0]
+    if spent:
+        # A window that is known to be spent gates the model, whatever else
+        # is unknown about the other windows.
+        binding = min(spent, key=lambda item: _reset_sort_key(item[0]))
+        reset = _window_reset(binding[0])
+        return {
+            "remaining": 0.0,
+            "expiresIn": None if reset is None else reset - now,
+            "urgency": 0.0,
+            "pace": None,
+            "expected": None,
+            "actual": None,
+            "binding": binding[0],
+        }
     if any(state == "unknown" for _window, state, _remaining in states):
         return {
             "remaining": None,
@@ -618,7 +652,28 @@ def _window_state(window: Any, now: float) -> tuple[str, float | None]:
         # The window expired before this reading. The provider has to report
         # the new window before the headroom can be claimed again.
         return "unknown", None
+    if not _reading_is_fresh(window, now):
+        # The reading is stale, or its time is not credible. It is not
+        # headroom, and it is not fresh either.
+        return "unknown", None
     return "known", max(0.0, 1.0 - used)
+
+
+def _reading_is_fresh(window: Any, now: float) -> bool:
+    """True when a window was read recently enough to be believed."""
+    observed = getattr(window, "observed_at", None)
+    if observed is None and isinstance(window, Mapping):
+        observed = window.get("observed_at")
+    if observed is None:
+        return False
+    if not isinstance(observed, (int, float)) or isinstance(observed, bool):
+        return False
+    value = float(observed)
+    if not math.isfinite(value):
+        return False
+    if value > now + FUTURE_TOLERANCE_SECONDS:
+        return False
+    return (now - value) <= STALE_AFTER_SECONDS
 
 
 def _capacity(windows: list[Any], now: float) -> tuple[float | None, float | None, float]:
@@ -630,33 +685,8 @@ def _capacity(windows: list[Any], now: float) -> tuple[float | None, float | Non
     urgency decays towards the reset of that window, so capacity that
     expires soon outranks capacity that stays available for days.
     """
-    if not windows:
-        # No measured window: the capacity is unknown, which is not the same
-        # as unlimited and is not zero either.
-        return None, None, 0.0
-    states: list[tuple[Any, str, float | None]] = []
-    for window in windows:
-        state, remaining = _window_state(window, now)
-        states.append((window, state, remaining))
-    if any(state == "unknown" for _window, state, _remaining in states):
-        # One unknown window makes the whole capacity unknown. The ranking
-        # never turns a missing reading into headroom.
-        return None, None, 0.0
-    binding = min(
-        states,
-        key=lambda item: (
-            item[2] if item[2] is not None else 0.0,
-            _reset_sort_key(item[0]),
-        ),
-    )
-    remaining = binding[2] if binding[2] is not None else 0.0
-    reset = _window_reset(binding[0])
-    if reset is None:
-        return remaining, None, 0.5
-    expires_in = reset - now
-    hours = max(0.0, expires_in / 3600.0)
-    urgency = 1.0 / (1.0 + hours / URGENCY_HALF_LIFE_HOURS)
-    return remaining, expires_in, urgency
+    detail = _capacity_detail(windows, now)
+    return detail["remaining"], detail["expiresIn"], detail["urgency"]
 
 
 def _reset_sort_key(window: Any) -> float:
@@ -863,6 +893,7 @@ class _Candidate:
     expected: float | None
     actual: float | None
     account: str
+    frontier_surplus: dict[str, Any]
 
     @property
     def key(self) -> tuple[str, str]:
@@ -904,6 +935,83 @@ def _frontier_winners(candidates: list[_Candidate]) -> set[tuple[str, str]]:
         if current is None or candidate.newness > current.newness:
             best[candidate.lineage] = candidate
     return {candidate.key for candidate in best.values()}
+
+
+def _frontier_surplus(
+    windows: list[Any], now: float
+) -> dict[str, Any]:
+    """The surplus of a frontier model that is about to expire.
+
+    A weekly or monthly allowance that resets within a day will be lost if
+    it is not used, so it may carry volume work. The short session window
+    never counts: it would let the review capacity be spent days early.
+    The session window also holds the reserve: when it is ahead of the line
+    the review capacity is under pressure, and nothing is spared.
+    """
+    expiring: list[tuple[Any, float | None]] = []
+    session: tuple[Any, float | None] | None = None
+    for window in windows:
+        state, remaining = _window_state(window, now)
+        kind = getattr(window, "kind", None)
+        if kind is None and isinstance(window, Mapping):
+            kind = window.get("kind")
+        kind = str(kind or "")
+        reset = _window_reset(window)
+        if state != "known" or remaining is None:
+            continue
+        if kind in SURPLUS_WINDOW_KINDS and reset is not None:
+            expires_in = reset - now
+            if 0 <= expires_in <= SURPLUS_EXPIRY_SECONDS:
+                expiring.append((window, remaining))
+        elif kind == "session":
+            session = (window, remaining)
+    if not expiring:
+        return {
+            "available": False,
+            "reason": "no weekly or monthly allowance resets within a day",
+            "expires_in_seconds": None,
+            "surplus_ratio": 0.0,
+            "reserve_ratio": None,
+            "pace_delta": None,
+        }
+    window, remaining = max(expiring, key=lambda item: item[1])
+    reset = _window_reset(window)
+    expires_in = None if reset is None else int(round(reset - now))
+    reserve = session[1] if session is not None else None
+    _expected, _actual = _pace(window, now, remaining)
+    pace = None
+    if session is not None and session[1] is not None:
+        expected, actual = _pace(session[0], now, session[1])
+        if expected is not None and actual is not None:
+            pace = expected - actual
+    if reserve is not None and pace is not None and pace < 0:
+        # The session window is ahead of the line: the review capacity is
+        # under pressure, so nothing is spared.
+        return {
+            "available": False,
+            "reason": "the session window is ahead of the line; the review capacity is under pressure",
+            "expires_in_seconds": expires_in,
+            "surplus_ratio": 0.0,
+            "reserve_ratio": round(reserve, 4),
+            "pace_delta": round(pace, 4),
+        }
+    if remaining <= 0:
+        return {
+            "available": False,
+            "reason": "the expiring allowance is already spent",
+            "expires_in_seconds": expires_in,
+            "surplus_ratio": 0.0,
+            "reserve_ratio": None if reserve is None else round(reserve, 4),
+            "pace_delta": None if pace is None else round(pace, 4),
+        }
+    return {
+        "available": True,
+        "reason": "an allowance resets within a day and the review capacity is not under pressure",
+        "expires_in_seconds": expires_in,
+        "surplus_ratio": round(remaining, 4),
+        "reserve_ratio": None if reserve is None else round(reserve, 4),
+        "pace_delta": None if pace is None else round(pace, 4),
+    }
 
 
 def _reasons(candidate: "_Candidate", tier: str) -> list[str]:
@@ -1056,14 +1164,10 @@ def rank_models(
                 for window in windows_by_account.get(account, [])
                 if _window_applies(window, model)
             ]
-            if (provider, model) in free_pairs:
-                # A promotional free model does not consume the paid
-                # allowance of the account, so an exhausted allowance is not
-                # evidence about it. Its capacity stays unknown, which is
-                # not headroom and not a block.
-                windows = [
-                    window for window in windows if not _is_allowance_window(window)
-                ]
+            # A zero catalog price does not prove that a model does not
+            # consume the allowance of its account. Only a provider that
+            # documents a free route may be exempted, and none does today, so
+            # every applicable window gates every model of the account.
         detail = _capacity_detail(windows, now)
         remaining = detail["remaining"]
         expires_in = detail["expiresIn"]
@@ -1138,6 +1242,7 @@ def rank_models(
                 expected=detail["expected"],
                 actual=detail["actual"],
                 account=account,
+                frontier_surplus=_frontier_surplus(list(windows), now),
             )
         )
 
@@ -1159,10 +1264,18 @@ def rank_models(
         tiers: list[str] = []
         if candidate.key in frontier_keys:
             tiers.append("frontier")
+        surplus = candidate.frontier_surplus
         if (
             candidate.available
             and quality >= BULK_MIN_QUALITY
-            and "frontier" not in tiers
+            and (
+                "frontier" not in tiers
+                # A frontier model may carry volume work when an allowance
+                # of its own resets within a day and the review capacity is
+                # not under pressure. The surplus never empties the review
+                # capacity early.
+                or bool(surplus.get("available"))
+            )
         ):
             tiers.append("bulk")
         if candidate.available and candidate.free:
@@ -1221,6 +1334,7 @@ def rank_models(
                     windows=tuple(candidate.windows),
                     settled=candidate.settled,
                     account=candidate.account,
+                    frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_prior=candidate.three_d_prior,
@@ -1248,6 +1362,7 @@ def rank_models(
                     windows=tuple(candidate.windows),
                     settled=candidate.settled,
                     account=candidate.account,
+                    frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_prior=candidate.three_d_prior,
@@ -1272,6 +1387,7 @@ def rank_models(
                     windows=tuple(candidate.windows),
                     settled=candidate.settled,
                     account=candidate.account,
+                    frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_prior=candidate.three_d_prior,

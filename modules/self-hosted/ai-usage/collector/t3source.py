@@ -17,6 +17,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
+import codes
 from metrics import SourceResult, Sample
 from t3client import T3Client, T3Error
 from util import iso_to_epoch
@@ -244,21 +245,20 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
     started = time.monotonic()
     providers: list[dict[str, Any]] = []
     status = "ok"
-    detail = ""
     try:
         refreshed = client.call("server.refreshProviders", {})
         providers = list((refreshed or {}).get("providers") or [])
-    except T3Error as error:
-        detail = f"refresh failed ({error}); using the cached provider status"
+    except T3Error:
+        # The cached provider status is still worth reporting.
         status = "partial"
         try:
             config = client.call("server.getConfig", {}) or {}
             providers = list(config.get("providers") or [])
-        except T3Error as config_error:
+        except T3Error:
             return SourceResult(
                 source="t3",
                 status="error",
-                detail=f"{detail}; config failed ({config_error})",
+                reason=codes.RPC_FAILED,
                 duration_s=time.monotonic() - started,
             )
     samples: list[Sample] = []
@@ -333,7 +333,7 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
     return SourceResult(
         source="t3",
         status=status,
-        detail=detail,
+        reason=detail,
         metrics=samples,
         observed_at=observed,
         duration_s=time.monotonic() - started,
@@ -355,7 +355,7 @@ def _collect_usage(
         return SourceResult(
             source="t3_usage",
             status="error",
-            detail=str(error)[:200],
+            reason=codes.RPC_FAILED,
             duration_s=time.monotonic() - started,
         )
     zone = _zone(timezone_name)

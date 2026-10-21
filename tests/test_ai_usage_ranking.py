@@ -134,11 +134,13 @@ class CapacityTests(unittest.TestCase):
                 "claude": [
                     ranking.QuotaWindow(
                         kind="weekly", used_ratio=0.5, reset_epoch=NOW + 3600.0
+                    , observed_at=NOW
                     )
                 ],
                 "codex": [
                     ranking.QuotaWindow(
                         kind="weekly", used_ratio=0.5, reset_epoch=NOW + 5 * DAY
+                    , observed_at=NOW
                     )
                 ],
             },
@@ -162,6 +164,7 @@ class CapacityTests(unittest.TestCase):
                 "claude": [
                     ranking.QuotaWindow(
                         kind="weekly", used_ratio=1.0, reset_epoch=NOW + 3600.0
+                    , observed_at=NOW
                     )
                 ]
             },
@@ -855,11 +858,13 @@ class ModelQuotaWindowTests(unittest.TestCase):
                 "antigravity": [
                     ranking.QuotaWindow(
                         kind="daily", used_ratio=0.9, reset_epoch=NOW + 3600.0
+                    , observed_at=NOW
                     )
                 ],
                 "antigravity/gemini-3.8-pro": [
                     ranking.QuotaWindow(
                         kind="model", used_ratio=0.1, reset_epoch=NOW + 3600.0
+                    , observed_at=NOW
                     )
                 ],
             },
@@ -889,11 +894,13 @@ class ModelQuotaWindowTests(unittest.TestCase):
                 "antigravity": [
                     ranking.QuotaWindow(
                         kind="daily", used_ratio=0.99, reset_epoch=NOW + 3600.0
+                    , observed_at=NOW
                     )
                 ],
                 "antigravity/gemini-3.8-pro": [
                     ranking.QuotaWindow(
                         kind="model", used_ratio=0.99, reset_epoch=NOW + 3600.0
+                    , observed_at=NOW
                     )
                 ],
             },

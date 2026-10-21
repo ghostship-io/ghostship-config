@@ -22,11 +22,13 @@ let
   # writes it; a consumer only reads it.
   routing = "${stateDir}/routing.json";
   # The collector is copied into the store whole, so the unit runs one
-  # immutable interpreter over one immutable directory.
+  # immutable interpreter over one immutable directory. It talks to T3 Code
+  # over a WebSocket with the standard library the platform already uses.
   collector = pkgs.runCommand "ghostship-ai-usage-collector" { } ''
     mkdir -p $out/collector
     cp ${./collector}/*.py $out/collector/
   '';
+  python = pkgs.python3.withPackages (ps: [ ps.websockets ]);
 in
 {
   systemd.services.ghostship-ai-usage = {
@@ -35,7 +37,7 @@ in
     wants = [ "network-online.target" "podman.socket" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${pkgs.python3}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing}";
+      ExecStart = "${python}/bin/python3 ${collector}/collector/main.py --output ${output} --state ${state} --snapshot ${routing}";
       # The collector finds the T3 Code container's address with the Podman
       # CLI. The CLI must not open the container storage (ProtectSystem makes
       # it read-only), so it asks the Podman API socket instead.
@@ -69,13 +71,22 @@ in
       ReadOnlyPaths = [
         t3Home
         "/run/ghostship-integrations"
+        "/etc/containers/networks"
         "-/run/ghostship-secrets"
       ];
-      # The provider credentials belong to the accounts the collector
-      # reports on: the T3 Code container user (mode 0600) and the free
-      # inference bridge user (mode 0400). Reading them needs one capability.
-      # Everything else is dropped, the service has no listener, and it
-      # writes one textfile.
+      # The bounds keep a mistake in the collector from taking the host
+      # with it.
+      MemoryMax = "512M";
+      MemoryHigh = "384M";
+      CPUQuota = "50%";
+      TasksMax = 32;
+      # One capability: the provider credentials belong to the accounts the
+      # collector reports on (mode 0600 files of other users, and the
+      # directory of the free inference bridge). Every other capability is
+      # dropped, the service has no listener, and it writes one textfile and
+      # one snapshot. The service runs as root because of this capability, so
+      # it is a root equivalent; it is kept to one read only collector with
+      # no listener and no write outside its two directories.
       CapabilityBoundingSet = [ "CAP_DAC_OVERRIDE" ];
       AmbientCapabilities = "";
     };

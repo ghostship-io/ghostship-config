@@ -114,7 +114,9 @@ class SourceResult:
 
     source: str
     status: str
-    detail: str = ""
+    # A fixed reason code, never a message: a failure can carry a
+    # credential, an address, a path, or a provider's own diagnostic.
+    reason: str = ""
     metrics: list[Sample] = field(default_factory=list)
     observed_at: float | None = None
     duration_s: float = 0.0
