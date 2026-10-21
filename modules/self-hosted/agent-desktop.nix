@@ -109,7 +109,7 @@ in
       "ghostship-agent-desktop//chrome-agent"
       "ghostship-agent-desktop//chrome-personal"
       "ghostship-agent-desktop//sway"
-      "ghostship-agent-desktop//stage-input"
+      "ghostship-agent-desktop//stage-control"
       "ghostship-agent-desktop//agent-shell"
       "ghostship-agent-desktop//bladebro"
       "ghostship-agent-desktop//sudo"

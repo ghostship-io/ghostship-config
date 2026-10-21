@@ -130,6 +130,19 @@ class AddressBarTest(unittest.TestCase):
         self.assertTrue(server.normalize_url("example.com/a").startswith("https://example.com/a"))
 
 
+class StageViewsTest(unittest.TestCase):
+    def test_run_shows_its_own_windows_home_window_first(self):
+        """Catches a run showing another run's window, or opening on a popup instead of its own window."""
+        stage = server.StageHost("agent", "/nonexistent")
+        stage.targets = {"w6": {"run_id": "r1", "targets": ["A1", "A2"]},
+                         "w9": {"run_id": None, "targets": ["P1"]},       # a popup the run opened
+                         "w7": {"run_id": "r2", "targets": ["B1"]}}
+        run = {"run_id": "r1", "members": ["A1", "A2", "P1"]}
+        self.assertEqual(stage.views_for(run), ["w6", "w9"])
+        self.assertEqual(stage.views_for({"run_id": "r3", "members": ["C1"]}), [])
+        self.assertEqual(stage.request_extra("w9"), {"con": 9})
+
+
 class AppKeyTest(unittest.TestCase):
     def test_viewer_keys_become_app_actions(self):
         """Catches typed characters sent as key names (case lost), shortcuts typed as text, or key-up repeats."""

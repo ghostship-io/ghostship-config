@@ -73,7 +73,8 @@ CHROME_ENSURE = os.environ.get("VIEWER_CHROME_ENSURE", "/opt/ghostship-agent-des
 ENSURE_SECONDS = 60      # chrome-ensure's own default timeout
 APPS_CONTROL = os.path.join(RUNS_DIR, "apps", "control.sock")   # app-session supervisor
 APP_LIVE_FPS = 8.0
-APP_ERRORS = {"invalid_request": 400, "not_found": 404, "conflict": 409, "still_open": 409, "paused": 409}
+APP_ERRORS = {"invalid_request": 400, "not_found": 404, "conflict": 409, "still_open": 409, "paused": 409,
+              "busy": 409}
 BUSY_STALE = 30.0        # agent-side busy files older than this are abandoned
 TAKEOVER_WAIT = 20.0     # how long a takeover waits for in-flight agent calls
 INPUT_KINDS = frozenset({"tap", "pointer", "wheel", "key", "text", "navigate", "reload", "back", "forward",
@@ -841,6 +842,44 @@ class AppHost:
     def socket(self, sid: str) -> str:
         return os.path.join(os.path.dirname(self.control), _check(TARGET_ID_RE, sid, "session id") + ".sock")
 
+    @staticmethod
+    def request_extra(sid: str) -> dict:
+        return {}
+
+
+class StageHost:
+    """An identity's browser stage (stage-control): each Chrome window on its own output.
+
+    Window views are named "w<sway id>"; a run's windows are the ones holding
+    its home tab or any of its tabs.
+    """
+
+    def __init__(self, identity: str, path: str):
+        self.identity, self.path = identity, path
+        self.windows: list[dict] = []
+        self.targets: dict[str, dict] = {}
+
+    async def refresh(self) -> None:
+        try:
+            self.windows = (await app_call(self.path, {"op": "windows"}, 10)).get("windows") or []
+        except HttpError:
+            self.windows = []
+        self.targets = {f"w{w['con']}": w for w in self.windows if isinstance(w.get("con"), int)}
+
+    def views_for(self, run: dict) -> list[str]:
+        members = set(run["members"])
+        mine = [view for view, w in self.targets.items()
+                if w.get("run_id") == run["run_id"] or members & set(w.get("targets") or [])]
+        mine.sort(key=lambda view: (self.targets[view].get("run_id") != run["run_id"], int(view[1:])))
+        return mine
+
+    def socket(self, view: str) -> str:
+        return self.path
+
+    @staticmethod
+    def request_extra(view: str) -> dict:
+        return {"con": int(view[1:])}
+
 
 # DOM KeyboardEvent.key -> xkb keysym for app-session key actions.
 APP_KEYS = {"Enter": "Return", "Backspace": "BackSpace", "Tab": "Tab", "Escape": "Escape", "Delete": "Delete",
@@ -866,11 +905,16 @@ def app_key_action(msg: dict) -> dict | None:
 
 
 class AppCaster:
-    """Live view and input for one app session (frames polled from its socket)."""
+    """Live view and input for one app session or one full Chrome window.
 
-    def __init__(self, app: "App", host: AppHost, sid: str, live: bool, size: tuple[int, int]):
+    Frames are polled from a socket: an app session's own, or the browser
+    stage's (stage-control) with the window's sway id in every request.
+    """
+
+    def __init__(self, app: "App", host, sid: str, live: bool, size: tuple[int, int]):
         self.app, self.host, self.tid, self.live, self.size = app, host, sid, live, size
         self.path = host.socket(sid)
+        self.extra = host.request_extra(sid)
         self.clients: set[WsClient] = set()
         self.frame_text: str | None = None
         self.frame_data: str | None = None
@@ -891,7 +935,7 @@ class AppCaster:
         self.size = (max(size[0], self.size[0]), max(size[1], self.size[1]))
 
     async def grab(self) -> None:
-        reply = await app_call(self.path, {"op": "frame", "max_edge": max(self.size),
+        reply = await app_call(self.path, {"op": "frame", "max_edge": max(self.size), **self.extra,
                                            "quality": LIVE_QUALITY if self.live else THUMB_QUALITY}, 15)
         self.frame_at = time.time()
         self.meta = {"deviceWidth": reply.get("width"), "deviceHeight": reply.get("height"), "offsetTop": 0,
@@ -921,7 +965,15 @@ class AppCaster:
             self.dead = True
 
     async def act(self, actions: list[dict]) -> None:
-        await app_call(self.path, {"op": "input", "actor": "human", "actions": actions}, 60)
+        await app_call(self.path, {"op": "input", "actor": "human", "actions": actions, **self.extra}, 60)
+
+    async def release(self) -> None:
+        """Give up a full window's focus lease (app sessions have none)."""
+        if self.extra:
+            try:
+                await app_call(self.path, {"op": "release", **self.extra}, 10)
+            except HttpError:
+                pass
 
     async def input(self, kind: str, msg: dict) -> None:
         def point():
@@ -955,7 +1007,7 @@ class AppCaster:
                 raise ValueError("bad text")
             await self.act([{"action": "type", "text": text}])
         else:
-            raise ValueError("not available in app sessions")
+            raise ValueError("use the browser's own controls in this view")
 
     async def close(self) -> None:
         self.dead = True
@@ -1117,6 +1169,8 @@ class App:
         self.runs_dir = runs_dir
         self.browsers = {identity: Browser(self, identity, port) for identity, port in ports.items()}
         self.apps = AppHost(os.path.join(runs_dir, "apps", "control.sock"))
+        self.stages = {identity: StageHost(identity, os.path.join(runs_dir, f"stage-{identity}.sock"))
+                       for identity in ports}
         self.live: dict[tuple[str, str], Caster] = {}
         self.thumbs: dict[tuple[str, str], Caster] = {}
         self.clients: set[WsClient] = set()
@@ -1136,11 +1190,27 @@ class App:
             for run in host.runs():
                 if run["run_id"] not in seen:
                     seen.add(run["run_id"])
+                    if run.get("kind") != "app" and run["identity"] in self.stages:
+                        run["windows"] = self.stages[run["identity"]].views_for(run)
                     runs.append(run)
         return runs
 
+    @staticmethod
+    def views(run: dict) -> list[str]:
+        """What a client may watch in a run: its full windows, then its tabs."""
+        return run.get("windows", []) + run["members"]
+
+    def default_view(self, run: dict) -> str:
+        return (run.get("windows") or [None])[0] or self.describe(run)["primary_target"] or run["members"][-1]
+
     def host(self, identity: str):
         return self.apps if identity == "app" else self.browsers[identity]
+
+    def view_host(self, identity: str, tid: str):
+        """The host that serves a view: the stage for "w<sway id>" windows."""
+        if identity != "app" and tid.startswith("w"):
+            return self.stages[identity]
+        return self.host(identity)
 
     def find(self, run_id: str) -> tuple[Browser, dict]:
         _check(RUN_ID_RE, run_id, "run id")
@@ -1192,7 +1262,20 @@ class App:
                 if caster is not None:
                     last_frame = max(last_frame, caster.frame_at)
         primary = state["target_id"] if state else (tabs[-1]["target_id"] if tabs else None)
-        return {"run_id": run["run_id"], "identity": run["identity"], "label": registry.get("label"),
+        view = "page"
+        if run.get("windows"):
+            # Full Chrome windows: the viewer shows the real tab strip, so its
+            # chips list the run's windows instead of its tabs.
+            stage = self.stages[run["identity"]]
+            tabs = [{"target_id": w, "title": _str(stage.targets[w].get("title"), 200) or "", "origin": "",
+                     "is_anchor": False, "opener": False, **({"url": ""} if detail else {})} for w in run["windows"]]
+            primary, view = run["windows"][0], "window"
+            for w in run["windows"]:
+                for table in (self.live, self.thumbs):
+                    caster = table.get((run["identity"], w))
+                    if caster is not None:
+                        last_frame = max(last_frame, caster.frame_at)
+        return {"run_id": run["run_id"], "identity": run["identity"], "label": registry.get("label"), "view": view,
                 "owner": registry.get("owner"), "opened_at": registry.get("opened_at"),
                 "seen_at": browser.first_seen.get(run["anchor"]), "expires_at": run["expires_at"],
                 "registered": bool(registry), "tabs": tabs, "paused": is_paused(self.runs_dir, run["run_id"]),
@@ -1230,7 +1313,8 @@ class App:
                 await caster.close()
                 caster = None
             if caster is None:
-                caster = (AppCaster(self, browser, tid, True, size) if browser is self.apps
+                host = self.view_host(browser.identity, tid)
+                caster = (AppCaster(self, host, tid, True, size) if host is not browser or browser is self.apps
                           else Caster(self, browser, tid, True, size))
                 try:
                     await caster.start()
@@ -1246,6 +1330,8 @@ class App:
         caster = self.live.get((client.identity, client.target))
         if caster is not None:
             caster.clients.discard(client)
+            if not caster.clients and isinstance(caster, AppCaster):
+                await caster.release()
 
     async def thumb(self, browser: Browser, tid: str) -> bytes | None:
         key = (browser.identity, tid)
@@ -1261,7 +1347,8 @@ class App:
             if len(self.thumbs) >= MAX_THUMB_CASTERS:
                 oldest = min(self.thumbs, key=lambda k: self.thumbs[k].used)
                 await self.thumbs.pop(oldest).close()
-            caster = (AppCaster(self, browser, tid, False, THUMB_SIZE) if browser is self.apps
+            host = self.view_host(browser.identity, tid)
+            caster = (AppCaster(self, host, tid, False, THUMB_SIZE) if host is not browser or browser is self.apps
                       else Caster(self, browser, tid, False, THUMB_SIZE))
             self.thumbs[key] = caster
             try:
@@ -1286,16 +1373,18 @@ class App:
             self.sync_pauses()
             if tick % 2 == 0:
                 await self.apps.refresh()
+                for stage in self.stages.values():
+                    await stage.refresh()
             if tick % 10:
                 continue
             now = time.monotonic()
             for key, caster in list(self.thumbs.items()):
-                gone = key[1] not in self.host(key[0]).targets
+                gone = key[1] not in self.view_host(*key).targets
                 if caster.dead or gone or now - caster.used > THUMB_IDLE:
                     self.thumbs.pop(key, None)
                     await caster.close()
             for key, caster in list(self.live.items()):
-                if caster.dead or not caster.clients or key[1] not in self.host(key[0]).targets:
+                if caster.dead or not caster.clients or key[1] not in self.view_host(*key).targets:
                     self.live.pop(key, None)
                     await caster.close()
             if tick % 60 == 0:
@@ -1404,6 +1493,17 @@ class App:
         with os.fdopen(fd, "w") as handle:
             json.dump(record, handle)
         os.replace(tmp, os.path.join(self.runs_dir, f"{run_id}.json"))
+        # The stage pairs a window with its run by the home tab's title, so let
+        # it see the window before the working tab takes the title over (two
+        # runs on the same site would otherwise look alike).
+        stage = self.stages.get(identity)
+        if stage and os.path.exists(stage.path):
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                await stage.refresh()
+                if any(w.get("run_id") == run_id for w in stage.windows):
+                    break
+                await asyncio.sleep(0.1)
         # Open the working tab from the anchor itself so Chrome puts it in this
         # window without focusing anything. The anchor is our own about:blank page.
         session = (await cdp.send("Target.attachToTarget", {"targetId": anchor, "flatten": True}))["sessionId"]
@@ -1500,7 +1600,7 @@ class App:
             return json_response(200, {"run_id": run["run_id"], "paused": action == "pause"})
         if req.method == "GET" and action == "thumb":
             tid = req.query.get("target") or self.describe(run)["primary_target"]
-            if tid not in run["members"]:
+            if tid not in self.views(run):
                 raise HttpError(404, "target not in run")
             data = await self.thumb(browser, tid)
             if not data:
@@ -1520,8 +1620,8 @@ class App:
         if len(self.clients) >= MAX_WS_CLIENTS:
             raise HttpError(429, "too many viewers")
         tid = req.query.get("target") or self.describe(run)["primary_target"]
-        if tid not in run["members"]:
-            tid = run["members"][-1]
+        if tid not in self.views(run):
+            tid = self.default_view(run)
         size = self.client_size(req.query.get("w"), req.query.get("h"))
         accept = base64.b64encode(hashlib.sha1(
             (req.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
@@ -1600,8 +1700,8 @@ class App:
                     client.last_run = described
                     client.push({"t": "run", "run": described})
                 caster = self.live.get((client.identity, client.target))
-                if client.target not in run["members"] or caster is None or caster.dead:
-                    tid = client.target if client.target in run["members"] else run["members"][-1]
+                if client.target not in self.views(run) or caster is None or caster.dead:
+                    tid = client.target if client.target in self.views(run) else self.default_view(run)
                     await self.subscribe(client, browser, tid)
             except HttpError:
                 client.push({"t": "gone", "browser": "up" if self.host(client.identity).alive() else "stopped"})
@@ -1622,7 +1722,7 @@ class App:
             return
         if kind == "select-tab":
             tid = msg.get("target")
-            if tid not in run["members"]:
+            if tid not in self.views(run):
                 raise ValueError("tab not in this run")
             await self.subscribe(client, browser, tid)
             return
@@ -1632,7 +1732,7 @@ class App:
             return
         if kind not in INPUT_KINDS:
             raise ValueError("unknown message")
-        if client.target not in run["members"]:
+        if client.target not in self.views(run):
             raise ValueError("tab closed")
         hover = kind == "pointer" and msg.get("kind") == "move" and not msg.get("buttons")
         if client.target == run["anchor"]:

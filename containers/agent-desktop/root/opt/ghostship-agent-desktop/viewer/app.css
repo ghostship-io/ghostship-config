@@ -174,3 +174,8 @@ dialog input { width: 100%; background: var(--bg); color: var(--text); border: 1
 .tile-name { font-weight: 600; font-size: 16px; }
 .tile-state { font-size: 13px; color: var(--muted); }
 .tile.running .tile-state { color: #f0a868; }
+
+/* Full Chrome windows: the browser's own tab strip and address bar are in the
+   picture; the row lists the session's windows only when it has several. */
+#agent-view.window-mode .urlbar { display: none !important; }
+#agent-view.window-mode:not(.multi-window) .tabrow { display: none !important; }
