@@ -145,6 +145,14 @@ def main():
                     "t3code-docker-rootfs.service",
                     "t3code-docker-network.service",
                 )
+                gcroot = Path(
+                    "/srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-docker-runtime"
+                )
+                if (
+                    gcroot.is_symlink()
+                    and os.readlink(gcroot) == spec["runtimePackage"]
+                ):
+                    gcroot.unlink()
                 for path, text in files.items():
                     if path.exists() and path.read_text() == text:
                         path.unlink()
