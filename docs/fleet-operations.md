@@ -114,8 +114,16 @@ Install newsletter 0.5.18 or later first: the command is
 Newsletter code owns due times, artifact validation and the Gmail delivery ledger.
 A failed or unavailable monitor opens one alert episode in `operations` and queues
 the stable `newsletter-runtime` incident through `ghostship-notify`; the coordinator
-reuses that incident's T3 thread with its existing daily launch limit. Failed
-notification delivery retries; recovery sends one resolution. This host job never
+reuses that incident's T3 thread with its existing daily launch limit. The monitor
+persists a distinct event ID for each episode before handing it off, then calls
+`ghostship-notify --incident-only --incident-id ID` separately from ntfy publishing.
+Exit zero from this operation acknowledges a spool file and directory fsync, not
+T3 completion. The same ID produces the same coordinator event key after a lost
+acknowledgement, even if its previous spool file was consumed. Spool and ntfy
+failures retry independently; a pending handoff is retained even if runtime health
+recovers. Recovery sends one resolution. Episode state uses file fsync, atomic
+replacement and directory fsync; this is local persistence, not a guarantee
+against disk loss or a claim of exactly-once remote effects. This host job never
 collects, prepares, repairs or sends mail. Its ledger evidence confirms Gmail
 acceptance/reconciliation, not recipient receipt. Inspect with
 `journalctl -u ghostship-newsletter-health`; stop/start the timer to pause/resume,
