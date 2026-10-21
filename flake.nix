@@ -117,6 +117,8 @@
               apparmor-parser
               shellcheck
               gitleaks
+              vector
+              victoriametrics
               python3
               ripgrep
               jq

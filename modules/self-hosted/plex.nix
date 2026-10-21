@@ -34,6 +34,8 @@ let
         Preferences.@GenerateBIFBehavior=literal:never
         Preferences.@GenerateVADBehavior=literal:scheduled
         Preferences.@AcceptedEULA=literal:1
+        # Request lines (client, network class, path) for the SIEM; Plex strips tokens.
+        Preferences.@logDebug=literal:1
       )
 
       ${pkgs.ghostship-config}/bin/ghostship-config set "$PREFS_FILE" "''${plex_args[@]}"
@@ -58,7 +60,14 @@ in
       "ghostship-plex//python"
       # Podman's curl healthcheck; present only while a check runs.
       "ghostship-plex//healthcheck"
+      # ctypes' ldconfig probe from the interpreter; transient.
+      "ghostship-plex//ldconfig"
     ];
+    # The policy enforces; startup and the healthcheck still learn.
+    apparmorProcessModes = {
+      "ghostship-plex" = "complain";
+      "ghostship-plex//healthcheck" = "complain";
+    };
     apparmorRequiredProcessProfiles = [
       "ghostship-plex"
       "ghostship-plex//server"

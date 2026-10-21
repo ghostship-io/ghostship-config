@@ -1,0 +1,18 @@
+# Ghostship tuning for the upstream ruleset (falco_rules.yaml loads first).
+# Every exception names the verified legitimate workload it covers. Never add
+# an exception for an event that matches attack indicators; investigate it.
+# Exceptions must be as narrow as the reviewed operation: one container,
+# process and path. Keep upstream rules enabled.
+
+# NixOS activation (switch-to-configuration's `activate` and `dry-activate`)
+# runs the store Perl of update-users-groups, which reads /etc/shadow. Seen on
+# every deployment on 2026-10-21. Host only, store Perl only, this file only.
+- rule: Read sensitive file untrusted
+  exceptions:
+    - name: nixos_activation
+      fields: [container.id, proc.exepath, proc.pname, fd.name]
+      comps: [=, glob, in, =]
+      values:
+        - [host, /nix/store/*-perl-*/bin/perl, [activate, dry-activate], /etc/shadow]
+  override:
+    exceptions: append

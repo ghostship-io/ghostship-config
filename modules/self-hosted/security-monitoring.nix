@@ -23,6 +23,7 @@ let
         "bridge ghostship_flows"
         "inet ghostship_flaresolverr"
         "bridge ghostship_flaresolverr"
+        "inet ghostship_siem"
       ];
       declared_containers = lib.attrNames config.virtualisation.oci-containers.containers;
       ephemeral_prefixes = [

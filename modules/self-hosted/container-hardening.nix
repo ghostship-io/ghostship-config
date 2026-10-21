@@ -34,6 +34,10 @@ let
     "tautulli"
     "tdarr"
     "uptime-kuma"
+    "victorialogs"
+    "victoriametrics"
+    "vmalert-logs"
+    "vmalert-metrics"
   ];
   # In-house read-only containers already mount a noexec /tmp; Podman's
   # read-only tmpfs leaves /var/tmp executable.
@@ -89,6 +93,10 @@ let
     tautulli = rootLsio;
     tdarr = rootLsio ++ [ "FSETID" ];
     uptime-kuma = [ ];
+    victorialogs = [ ];
+    victoriametrics = [ ];
+    vmalert-logs = [ ];
+    vmalert-metrics = [ ];
   };
   # LinuxServer images: s6 preinit runs as root (directly, or through the
   # setuid-root s6-overlay-suexec when started as the app user), chowns, then
@@ -128,10 +136,37 @@ let
     "sonarr"
     "tautulli"
     "uptime-kuma"
+    "victorialogs"
+    "victoriametrics"
+    "vmalert-logs"
+    "vmalert-metrics"
+  ];
+  # Read-only images without s6 (which runs generated scripts from /run) also
+  # get a noexec /run. Throwaway read-only, noexec-/run copies of each image
+  # started cleanly on 2026-10-21.
+  noexecRun = [
+    "chaptarr"
+    "cloudflared"
+    "grimmory-db"
+    "homepage"
+    "ntfy"
+    "plex-auto-languages"
+    "recyclarr"
+    "seerr"
+    "uptime-kuma"
+    "victorialogs"
+    "victoriametrics"
+    "vmalert-logs"
+    "vmalert-metrics"
   ];
 in
 {
   virtualisation.oci-containers.containers = lib.mkMerge [
+    (lib.genAttrs noexecRun (_: {
+      extraOptions = [ "--tmpfs=/run:${tmp "64m"}" ];
+    }))
+    # The image declares /logs as an anonymous (executable) volume.
+    { plex-auto-languages.volumes = [ "/srv/apps/plex-auto-languages/logs:/logs:rw,noexec,nosuid,nodev" ]; }
     (lib.genAttrs readOnlyRoot (_: {
       extraOptions = [ "--read-only" ];
     }))
@@ -155,5 +190,8 @@ in
       };
     }
   ];
-  systemd.tmpfiles.rules = [ "d /srv/apps/romm/tmp 1777 root root - -" ];
+  systemd.tmpfiles.rules = [
+    "d /srv/apps/romm/tmp 1777 root root - -"
+    "d /srv/apps/plex-auto-languages/logs 0750 3000 3000 - -"
+  ];
 }
