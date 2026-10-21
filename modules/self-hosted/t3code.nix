@@ -10,6 +10,7 @@ let
   providerManifest = import ../../packages/t3code/provider-manifest.nix { inherit lib; };
   t3codeActivityProbe = pkgs.callPackage ../../packages/t3code/activity-probe/default.nix { };
   t3codeHome = "/srv/apps/t3code/home";
+  hardened = config.ghostship.t3code.hardening.enable;
   t3codeDeploymentState = "/var/lib/ghostship/t3code-deployment";
   t3codeDocker = "/srv/apps/t3code/docker";
   t3codeTmp = "/srv/apps/t3code/tmp";
@@ -1986,15 +1987,29 @@ let
 
     ${t3codeRuntimeEnv}
 
-    rm -f /var/run/docker.pid
-    exec dockerd \
-      --host=unix:///var/run/docker.sock \
-      --group=t3code \
-      --data-root=/var/lib/docker \
-      --storage-driver=vfs \
-      --iptables=false \
-      --ip-masq=false \
-      --bridge=none
+    ${
+      if hardened then
+        ''
+          # Keep the dependency unit alive while the separate engine is reachable.
+          # Failure restarts this readiness check; it never starts a rootful daemon.
+          while docker info >/dev/null 2>&1; do
+            sleep 15
+          done
+          exit 1
+        ''
+      else
+        ''
+          rm -f /var/run/docker.pid
+          exec dockerd \
+          --host=unix:///var/run/docker.sock \
+          --group=t3code \
+          --data-root=/var/lib/docker \
+          --storage-driver=vfs \
+          --iptables=false \
+          --ip-masq=false \
+          --bridge=none
+        ''
+    }
   '';
 
   t3codeEntrypoint = pkgs.writeShellScriptBin "t3code-systemd-entrypoint" ''
@@ -2725,31 +2740,50 @@ in
       "io.ghostship.t3code.deployment" = t3codeDeploymentId;
     };
     ports = [ ];
-    extraOptions = [
-      "--privileged"
-      "--systemd=always"
-      "--pids-limit=-1"
-      "--stop-timeout=180"
-      "--hostname=t3code.ghostship.io"
-      "--network=ghostship_net"
-      "--network=agent_desktop_net"
-      "--health-cmd=${t3codeContainerHealth}/bin/t3code-container-health"
-      "--health-interval=30s"
-      "--health-timeout=15s"
-      "--health-retries=5"
-      "--health-start-period=5m"
-    ];
+    extraOptions =
+      (
+        if hardened then
+          [
+            "--cap-drop=ALL"
+            "--security-opt=unmask=/proc/*"
+          ]
+          ++ map (cap: "--cap-add=${cap}") (
+            builtins.fromJSON (builtins.readFile ../../packages/t3code/runtime-caps.json)
+          )
+        else
+          [ "--privileged" ]
+      )
+      ++ [
+        "--systemd=always"
+        "--pids-limit=-1"
+        "--stop-timeout=180"
+        "--hostname=t3code.ghostship.io"
+        "--network=ghostship_net"
+        "--network=agent_desktop_net"
+        "--health-cmd=${t3codeContainerHealth}/bin/t3code-container-health"
+        "--health-interval=30s"
+        "--health-timeout=15s"
+        "--health-retries=5"
+        "--health-start-period=5m"
+      ];
     volumes = [
       # Podman's systemd mode otherwise mounts /tmp as tmpfs. Temporary
       # checkouts must not consume the shared server/provider memory budget.
       "${t3codeTmp}:/tmp:rw"
-      "${t3codeDocker}:/var/lib/docker:rw"
       "${t3codeWorkspace}:/workspace:rw"
       "${t3codeHome}:/home/t3code:rw"
       "${t3codeNixRoot}/nix:/nix:rw"
       "${t3codeSecrets}:${t3codeSecretsFile}:ro"
       "${config.ghostship.agentHost.sharedPath}:/mnt/share:rw"
-    ];
+    ]
+    ++ (
+      if hardened then
+        [
+          "/run/t3code-docker/docker.sock:/var/run/docker.sock:rw"
+        ]
+      else
+        [ "${t3codeDocker}:/var/lib/docker:rw" ]
+    );
     environmentFiles = [ t3codeSecrets ];
   };
 
