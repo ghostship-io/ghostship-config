@@ -133,7 +133,7 @@ let
   mount = source: target: readOnly: { inherit source target readOnly; };
   # Preserve subordinate IDs for explicitly granted project ACLs as well as
   # mapping container-root writes back to the T3 workspace owner.
-  sharedIdmap = "b:3000:${uid}:1 b:${toString cfg.subIdStart}:${toString cfg.subIdStart}:65536";
+  sharedIdmap = "b:0:0:1 b:3000:${uid}:1 b:${toString cfg.subIdStart}:${toString cfg.subIdStart}:65536";
   spec = pkgs.writeText "t3code-docker-rootfs.json" (
     builtins.toJSON {
       closure = "${closure}/store-paths";
