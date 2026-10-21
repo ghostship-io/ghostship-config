@@ -92,6 +92,9 @@ def main():
                     "--env=SYSTEMD_LOG_LEVEL=info",
                     "--pids-limit=2048",
                     "--security-opt=apparmor=ghostship-t3code",
+                    # Masked proc mounts prevent a nested user namespace from
+                    # mounting its private procfs (kernel locked-mount rule).
+                    "--security-opt=unmask=/proc/*",
                     "-v",
                     f"{root / 'home'}:/home/t3code:rw",
                     "-v",
