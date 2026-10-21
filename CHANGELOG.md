@@ -1,8 +1,16 @@
 # Changelog
 
-## [3.17.11] - 2026-10-21
+## [3.17.13] - 2026-10-21
 
 - Pin ghostship-agent 0.32.0: `browser_window` screenshots also arrive as a text map (visible text and toolbar controls with click coordinates), so ChatGPT, which does not show tool images to its model, can use Chrome's own controls and extensions.
+
+## [3.17.12] - 2026-10-21
+
+- Docs: AppArmor profile-authoring pitfalls verified during the strict-profile rollout: null learning profiles, child `cx` scoping, no_new_privs, the transition table limit and stale idle tasks.
+
+## [3.17.11] - 2026-10-21
+
+- Fix for #167. The agent desktop's top-level `stage-control` transition went past AppArmor's per-profile limit on named transitions ("too many specified profile transitions"). The AppArmor reload failed and the kernel kept the previous agent-desktop policy. The transition is removed.
 
 ## [3.17.10] - 2026-10-21
 
