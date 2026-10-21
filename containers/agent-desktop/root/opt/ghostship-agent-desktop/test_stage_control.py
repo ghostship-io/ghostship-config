@@ -80,5 +80,62 @@ class AgentInputTest(unittest.TestCase):
             self.assertEqual(len(seen), 2)
 
 
+class FakeIpc:
+    def __init__(self):
+        self.commands = []
+
+    def command(self, text):
+        self.commands.append(text)
+
+    def request(self, kind, payload=""):
+        return [{"name": "HEADLESS-1", "active": True, "rect": {"x": 0, "y": 1080, "width": 1920, "height": 1080}},
+                {"name": "HEADLESS-2", "active": True, "rect": {"x": 1920, "y": 0, "width": 1920, "height": 1080}}]
+
+
+class FakeDevices:
+    def __init__(self, on_button=None):
+        self.moves, self.on_button = [], on_button
+
+    def move(self, x, y, width, height):
+        self.moves.append((x, y))
+
+    def button(self, name, pressed):
+        if self.on_button:
+            self.on_button()
+
+
+def live_stage(devices):
+    import threading
+    s = stage()
+    s.ipc, s.devices, s.env = FakeIpc(), devices, {}
+    s.windows, s.pointers, s.lease = {6: {"output": "HEADLESS-2"}}, {}, None
+    s.lock, s.input_lock = threading.Lock(), threading.Lock()
+    s.window_rect = lambda con: {"width": 1600, "height": 900}
+    return s
+
+
+class LeaseTest(unittest.TestCase):
+    def test_a_long_batch_keeps_its_lease(self):
+        """Catches the idle timer moving focus away while a batch is still typing (keys would go nowhere)."""
+        idle, stage_control.LEASE_IDLE = stage_control.LEASE_IDLE, 0.0
+        try:
+            s = live_stage(None)
+            s.devices = FakeDevices(on_button=lambda: (s.expire(), s.release(6)))
+            s._input(6, [{"action": "left_click", "coordinate": [10, 10]}], "agent")
+            self.assertNotIn("workspace idle", s.ipc.commands)  # neither expiry nor release cut in
+            s.expire()  # once the batch is done, the lease ends as usual
+            self.assertIsNone(s.lease)
+        finally:
+            stage_control.LEASE_IDLE = idle
+
+    def test_coordinate_free_click_acts_where_the_window_pointer_was_left(self):
+        """Catches a click after a separate mouse_move landing at the window centre."""
+        s = live_stage(FakeDevices())
+        s._input(6, [{"action": "mouse_move", "coordinate": [100, 200]}], "agent")
+        s._input(6, [{"action": "left_click"}], "agent")
+        self.assertEqual(s.devices.moves, [(2020, 200), (2020, 200)])
+        self.assertEqual(s._input(6, [{"action": "cursor_position"}], "agent")["results"][0]["position"], [100, 200])
+
+
 if __name__ == "__main__":
     unittest.main()

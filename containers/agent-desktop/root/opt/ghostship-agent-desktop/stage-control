@@ -140,6 +140,7 @@ class Stage:
         self.pairs: dict[int, int] = {}            # sway con id -> Chrome window id (sticky)
         self.anchor_titles: dict[int, str] = {}    # sway con id -> run id seen in its title
         self.refresh_timer: threading.Timer | None = None
+        self.pointers: dict[int, tuple[int, int]] = {}  # sway con id -> pointer, in window pixels
 
     # ---- layout -------------------------------------------------------------
     def setup(self) -> None:
@@ -252,6 +253,7 @@ class Stage:
             info = self.windows.pop(con, None)
             self.pairs.pop(con, None)
             self.anchor_titles.pop(con, None)
+            self.pointers.pop(con, None)
             if self.lease and self.lease["con"] == con:
                 self.lease = None
                 self.ipc.command("workspace idle")
@@ -418,26 +420,29 @@ class Stage:
         now = time.monotonic()
         lease = self.lease
         if lease and lease["con"] != con:
-            if now - lease["last"] < LEASE_IDLE:
+            if lease["batches"] or now - lease["last"] < LEASE_IDLE:
                 who = "an agent" if lease["actor"] == "agent" else "a person"
                 raise StageError("busy", f"{who} is using another window's browser controls; try again shortly")
             self._focus_idle()
             self.lease = None
         if not self.lease:
             self.ipc.command(f"[con_id={con}] focus")
-            self.lease = {"con": con, "actor": actor, "last": now}
+            self.lease = {"con": con, "actor": actor, "last": now, "batches": 0}
         self.lease.update(actor=actor, last=now)
 
     def release(self, con: int | None = None) -> None:
         with self.lock:
             if self.lease and (con is None or self.lease["con"] == con):
+                if self.lease["batches"]:  # a running batch keeps it; it expires right after
+                    self.lease["last"] = 0.0
+                    return
                 self._focus_idle()
                 self.lease = None
 
     def expire(self) -> None:
         with self.lock:
             lease = self.lease
-            if lease and time.monotonic() - lease["last"] >= LEASE_IDLE:
+            if lease and not lease["batches"] and time.monotonic() - lease["last"] >= LEASE_IDLE:
                 self._focus_idle()
                 self.lease = None
 
@@ -476,9 +481,13 @@ class Stage:
         with self.input_lock:
             with self.lock:
                 self._take(con, actor)
+                lease = self.lease
+                lease["batches"] += 1  # a running batch keeps its lease, however long it takes
                 rect = self.window_rect(con)
+            runner = Actions(self.devices, self.env, OUTPUT_W, OUTPUT_H, move=lambda x, y: self._move(con, x, y))
+            if con in self.pointers:  # coordinate-free clicks act where this window's pointer was left
+                runner.pointer = self.pointers[con]
             try:
-                runner = Actions(self.devices, self.env, OUTPUT_W, OUTPUT_H, move=lambda x, y: self._move(con, x, y))
                 results = []
                 for action in actions:
                     if not isinstance(action, dict):
@@ -489,8 +498,10 @@ class Stage:
                 raise StageError("unavailable", str(exc)) from None
             finally:
                 with self.lock:
-                    if self.lease and self.lease["con"] == con:
-                        self.lease["last"] = time.monotonic()
+                    lease["batches"] -= 1
+                    lease["last"] = time.monotonic()
+                    if con in self.windows:
+                        self.pointers[con] = runner.pointer
 
     def _move(self, con: int, x: int, y: int) -> None:
         """Pointer to a point of the window's output, against the layout as it is now."""
