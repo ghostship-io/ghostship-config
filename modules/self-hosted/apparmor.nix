@@ -11,13 +11,11 @@ let
   profileText =
     builtins.replaceStrings
       [
-        "complain,"
         "<plex-apparmor-runtime.inc>"
         "<plex-apparmor-startup.inc>"
         "<plex-apparmor-python.inc>"
       ]
       [
-        ""
         ''"${./plex-apparmor-runtime.inc}"''
         ''"${./plex-apparmor-startup.inc}"''
         ''"${./plex-apparmor-python.inc}"''
@@ -32,6 +30,7 @@ let
             profile = app.apparmorProfile;
             source = config.environment.etc."apparmor.d".source + "/${app.apparmorProfile}";
             mode = config.security.apparmor.policies.${app.apparmorProfile}.state;
+            processModes = app.apparmorProcessModes;
             processProfiles = app.apparmorProcessProfiles;
             requiredProcessProfiles = app.apparmorRequiredProcessProfiles;
             heartbeat = app.apparmorHeartbeat;
@@ -77,13 +76,15 @@ in
     includes."tunables/global" = ''
       include "${pkgs.apparmor-profiles}/etc/apparmor.d/tunables/global"
     '';
-    # Every profile learns in complain mode; explicit deny rules still apply.
+    # Profiles learn in complain mode, except Plex's enforced Internet-facing
+    # domains; explicit deny rules always apply.
     policies.ghostship-container-default = {
       state = "complain";
       profile = builtins.readFile ./container-default-apparmor.profile;
     };
+    # Mixed: the profile's own flags keep startup and healthcheck in complain.
     policies.ghostship-plex = {
-      state = "complain";
+      state = "enforce";
       profile = profileText;
     };
     policies.ghostship-hooks = lib.mkIf config.ghostship.githubEngineering.enable {

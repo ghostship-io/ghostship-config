@@ -10,6 +10,8 @@
   "@{ghostship_plex_pms}/Plex Relay" rix,
   @{ghostship_plex_pms}/CrashUploader rix,
   @{ghostship_plex_pms}/Resources/** r,
+  # The scanner lists the bundled library directory.
+  @{ghostship_plex_pms}/lib/ r,
   @{ghostship_plex_pms}/Resources/Python/lib/python2.7/site-packages/lxml/{etree,objectify}.so mr,
   @{ghostship_plex_pms}/Resources/Python/lib/python2.7/site-packages/simplejson/_speedups.so mr,
 
@@ -35,6 +37,12 @@
   "@{ghostship_plex_state}/Codecs/a336ba9-16a9aaf440ee9a92b75f070b-linux-aarch64/lib{h264,hevc,mpeg4,theora,msmpeg4v3,vc1,mpeg2video,vp9,aac,ac3,dca,mp3,mp2,wmapro}_decoder.so" mr,
   "@{ghostship_plex_state}/Codecs/a336ba9-16a9aaf440ee9a92b75f070b-linux-aarch64/lib{libx264,aac}_encoder.so" mr,
   "@{ghostship_plex_state}/Codecs/EasyAudioEncoder-6a4213e165f8ac3d108a346e-linux-aarch64/EasyAudioEncoder/EasyAudioEncoder" rix,
+  # Plex2Shell (CVE-2026-96652/4/5/6) ended by writing a .so into the codec set
+  # directory for the transcoder to load. The server may not write or link into
+  # the allowlisted sets, so it cannot replace a mapped codec. Plex cannot fetch
+  # codecs into them either; a codec change needs a reviewed policy update.
+  deny "@{ghostship_plex_state}/Codecs/a336ba9-16a9aaf440ee9a92b75f070b-linux-aarch64/**" wl,
+  deny "@{ghostship_plex_state}/Codecs/EasyAudioEncoder-6a4213e165f8ac3d108a346e-linux-aarch64/**" wl,
 
   # Required mutable mounts; no general execution or executable mmap permission.
   /config/ rw,
@@ -48,7 +56,8 @@
   /run/lock/ rw,
   /run/lock/** rwk,
   /dev/shm/ rw,
-  /dev/shm/** rwk,
+  # PMS hard-links its own shared-memory segments.
+  /dev/shm/** rwkl,
 
   # Configuration reads, DNS/TLS, locale and timezone. Secret content is not
   # embedded here; environment projection is consumed by the existing runtime.
@@ -76,13 +85,19 @@
   # Harmless daily probe: prove the container-to-journal audit path is alive.
   audit /proc/sys/kernel/random/boot_id r,
   /proc/sys/vm/overcommit_memory r,
-  /proc/{self,thread-self,[0-9]*}/{stat,status,statm,maps,smaps,limits,comm,cgroup,mounts,mountinfo} r,
+  /proc/{self,thread-self,[0-9]*}/{stat,status,statm,maps,smaps,limits,comm,cgroup,mounts,mountinfo,cmdline} r,
+  # Network interface and route discovery for LAN/remote-access detection.
+  /proc/{self,thread-self,[0-9]*}/net/{if_inet6,route} r,
   /proc/{self,thread-self,[0-9]*}/fd/ r,
   /proc/{self,thread-self}/fd/[0-9]* rw,
   /proc/{self,thread-self,[0-9]*}/task/ r,
   /proc/{self,thread-self,[0-9]*}/task/[0-9]*/{stat,status,comm} r,
   /sys/devices/system/cpu/{online,possible,present} r,
   /sys/devices/system/cpu/cpu[0-9]*/{topology,cpufreq}/** r,
+  /sys/devices/system/cpu/cpufreq/policy[0-9]*/cpuinfo_{min,max}_freq r,
+  /sys/devices/system/cpu/kernel_max r,
+  # Hardware identification in PMS logs and diagnostics; read-only DMI names.
+  /sys/devices/virtual/dmi/id/{board_name,board_vendor} r,
   /sys/class/drm/ r,
   /sys/class/drm/** r,
 

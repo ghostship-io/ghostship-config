@@ -7,6 +7,7 @@
     ./app-registry.nix
     ./apparmor.nix
     ./container-apparmor.nix
+    ./ca-distrust.nix
     ./container-hardening.nix
     ./security-monitoring.nix
     ./cloudflare-sync.nix

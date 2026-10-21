@@ -255,7 +255,7 @@ in {
       after = [ "podman.socket" "network-online.target" ];
       wants = [ "network-online.target" ];
       path = [ pkgs.podman pkgs.systemd pkgs.restic pkgs.coreutils ];
-      environment.SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+      environment.SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
       serviceConfig = {
         ExecStart = "${tools.hostops-broker}/bin/ghostship-hostops-broker --config ${hostopsConfig}";
         RuntimeDirectory = "ghostship-hostops";
@@ -287,7 +287,7 @@ in {
         # mounted desktop SSH key/host contract explicitly. No manager or
         # secondary browser is needed for authenticated Keep operations.
         Environment = [
-          "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+          "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"
           "GHOSTSHIP_BROWSER_DRIVER=desktop"
           "AGENT_DESKTOP_SSH_HOST=10.89.7.2"
           "AGENT_DESKTOP_SSH_PORT=2222"
@@ -485,7 +485,7 @@ in {
         Environment = [
           "HOME=/var/lib/ghostship-skills"
           "XDG_STATE_HOME=/var/lib/ghostship-skills"
-          "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+          "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"
           "GHOSTSHIP_BROWSER_DRIVER=desktop"
           "AGENT_DESKTOP_SSH_HOST=10.89.7.2"
           "AGENT_DESKTOP_SSH_PORT=2222"
