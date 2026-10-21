@@ -205,5 +205,87 @@ class CacheAgeTests(unittest.TestCase):
         self.assertNotIn("sk-live", json.dumps(cache))
 
 
+class PermissionTests(unittest.TestCase):
+    """The permission of a model is bound to its exact identity."""
+
+    POLICY = {
+        "frontierPrimeModels": ("claude-opus-5-5", "gpt-6.1-sol"),
+        "allowedGptModels": ("gpt-6.1-sol",),
+        "backgroundProviderInstances": ("opencode",),
+    }
+
+    def _row(self, provider, model, mapped=True):
+        return {
+            "provider": provider,
+            "model": model,
+            "native": {"mapped": mapped, "provider_instance_id": provider, "model_id": model},
+            "tiers": ["bulk"],
+            "rank": {"bulk": 1},
+            "score": {"bulk": 10.0},
+            "value": {"value": 10.0, "strength": 80.0},
+            "availability": {"state": "available"},
+            "admission": {"state": "settled"},
+            "role": "delegate",
+            "quota_state": "available",
+        }
+
+    def test_only_the_permitted_gpt_model_is_permitted(self):
+        allowed = snapshot._eligibility("codex", "gpt-6.1-sol", ["bulk"], self._row("codex", "gpt-6.1-sol")["native"], self.POLICY)
+        other = snapshot._eligibility("codex", "gpt-6-luna", ["bulk"], self._row("codex", "gpt-6-luna")["native"], self.POLICY)
+        self.assertTrue(allowed["gpt_model_allowed"]["allowed"])
+        self.assertFalse(other["gpt_model_allowed"]["allowed"])
+
+    def test_a_name_that_only_contains_a_permitted_model_is_not_permitted(self):
+        row = self._row("codex", "gpt-6.1-sol-unapproved")
+        flags = snapshot._eligibility("codex", "gpt-6.1-sol-unapproved", ["bulk"], row["native"], self.POLICY)
+        self.assertFalse(flags["gpt_model_allowed"]["allowed"])
+        self.assertFalse(flags["delegate"]["allowed"])
+
+    def test_a_permitted_model_keeps_its_frontier_permission(self):
+        row = self._row("codex", "gpt-6.1-sol")
+        flags = snapshot._eligibility("codex", "gpt-6.1-sol", ["frontier"], row["native"], self.POLICY)
+        self.assertTrue(flags["frontier_prime"]["allowed"])
+
+    def test_a_model_that_is_not_permitted_never_wins_a_tier(self):
+        rows = [
+            {
+                "provider": "codex",
+                "model": "gpt-6-luna",
+                "key": "codex:gpt-6-luna",
+                "tiers": ["bulk"],
+                "rank": {"bulk": 1},
+                "score": {"bulk": 200.0},
+                "value": {"value": 200.0, "strength": 90.0},
+                "availability": {"state": "available"},
+                "admission": {"state": "settled"},
+                "eligibility": {
+                    "frontier_prime": {"allowed": False},
+                    "delegate": {"allowed": False},
+                },
+                "quota_state": "available",
+                "native": {"mapped": True},
+            },
+            {
+                "provider": "codex",
+                "model": "gpt-6.1-sol",
+                "key": "codex:gpt-6.1-sol",
+                "tiers": ["bulk"],
+                "rank": {"bulk": 2},
+                "score": {"bulk": 100.0},
+                "value": {"value": 100.0, "strength": 100.0},
+                "availability": {"state": "available"},
+                "admission": {"state": "settled"},
+                "eligibility": {
+                    "frontier_prime": {"allowed": True},
+                    "delegate": {"allowed": True},
+                },
+                "quota_state": "available",
+                "native": {"mapped": True},
+            },
+        ]
+        winners, _coverage = snapshot._winners(rows, {"bulk": ["codex:gpt-6-luna", "codex:gpt-6.1-sol"]})
+        self.assertEqual([winner["model"] for winner in winners["bulk"]], ["gpt-6.1-sol"])
+
+
 if __name__ == "__main__":
     unittest.main()

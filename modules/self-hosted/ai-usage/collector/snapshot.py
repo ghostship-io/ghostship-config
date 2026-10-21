@@ -227,6 +227,27 @@ def _quota_state(remaining: float | None, windows: list[dict[str, Any]]) -> str:
     return QUOTA_AVAILABLE
 
 
+def _exact_model_match(model: str, allowed: Iterable[str]) -> bool:
+    """True when the model is exactly one of the allowed models.
+
+    The match is exact: a model whose name only contains an allowed name, or
+    only starts with it, is a different model and does not inherit the
+    permission.
+    """
+    text = _normalise_model(model)
+    if not text:
+        return False
+    return any(text == _normalise_model(item) for item in allowed)
+
+
+def _normalise_model(name: str) -> str:
+    """The name without its separators and its provider prefix."""
+    text = str(name or "").lower()
+    if "/" in text:
+        text = text.rsplit("/", 1)[1]
+    return "".join(character for character in text if character.isalnum())
+
+
 def _eligibility(
     provider: str,
     model: str,
@@ -237,17 +258,17 @@ def _eligibility(
     """The policy flags of a model, kept apart from what was measured."""
     tier_list = list(tiers)
     model_text = model.lower()
-    prime_models = [str(item).lower() for item in policy.get("frontierPrimeModels") or ()]
-    allowed_gpt = [str(item).lower() for item in policy.get("allowedGptModels") or ()]
+    prime_models = [str(item) for item in policy.get("frontierPrimeModels") or ()]
+    allowed_gpt = [str(item) for item in policy.get("allowedGptModels") or ()]
     background = [
         str(item).lower() for item in policy.get("backgroundProviderInstances") or ()
     ]
     is_gpt = model_text.startswith("gpt")
-    gpt_allowed = (not is_gpt) or any(item in model_text for item in allowed_gpt)
+    gpt_allowed = (not is_gpt) or _exact_model_match(model, allowed_gpt)
     mapped = bool(native.get("mapped"))
     return {
         "frontier_prime": {
-            "allowed": mapped and any(item in model_text for item in prime_models),
+            "allowed": mapped and _exact_model_match(model, prime_models),
             "basis": "policy:owner",
         },
         "delegate": {
@@ -839,6 +860,11 @@ def _winners(
                 continue
             if (row.get("admission") or {}).get("state") != "settled":
                 continue
+            if not _eligible_for_tier(row, tier):
+                # A model that is not permitted for the tier is never its
+                # winner. The next permitted model of the same provider takes
+                # its place.
+                continue
             current = chosen.get(row["provider"])
             if current is None or _winner_key(row) > _winner_key(current):
                 chosen[row["provider"]] = row
@@ -878,6 +904,19 @@ def _winners(
             "providers_without_a_winner": len(providers) - len(ordered),
         }
     return winners, coverage
+
+
+def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
+    """True when a model may hold a rank in a tier.
+
+    The frontier tier takes the prime models of the owner policy. The other
+    tiers take the delegates, and a delegate may not be a model the owner
+    policy does not permit.
+    """
+    eligibility = row.get("eligibility") or {}
+    if tier == "frontier":
+        return bool((eligibility.get("frontier_prime") or {}).get("allowed"))
+    return bool((eligibility.get("delegate") or {}).get("allowed"))
 
 
 def _winner_key(row: dict[str, Any]) -> tuple:
@@ -1202,6 +1241,42 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
                 float(fact.get("confidence") or 0.0),
             )
         )
+    calculation = snapshot.get("calculation") or {}
+    for component, body in calculation.items():
+        if not isinstance(body, Mapping):
+            continue
+        if isinstance(body.get("formula"), str):
+            samples.append(
+                (
+                    "ghostship_ai_calculation_component",
+                    {
+                        "component": str(component),
+                        "formula": str(body["formula"])[:120],
+                        "scope": str(body.get("scope") or ""),
+                    },
+                    1.0,
+                )
+            )
+        weights = body.get("weights")
+        if isinstance(weights, Mapping):
+            for name, weight in weights.items():
+                if isinstance(weight, (int, float)) and not isinstance(weight, bool):
+                    samples.append(
+                        (
+                            "ghostship_ai_calculation_weight",
+                            {"component": str(component), "weight": str(name)},
+                            float(weight),
+                        )
+                    )
+        rule = body.get("rule")
+        if isinstance(rule, str):
+            samples.append(
+                (
+                    "ghostship_ai_calculation_gate",
+                    {"gate": str(component), "rule": rule[:120]},
+                    1.0,
+                )
+            )
     for tier, winners in (snapshot.get("tier_winners") or {}).items():
         for position, winner in enumerate(winners, start=1):
             if not isinstance(winner, Mapping):

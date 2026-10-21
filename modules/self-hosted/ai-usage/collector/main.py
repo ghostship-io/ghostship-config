@@ -152,6 +152,9 @@ METRIC_HELP = {
     "ghostship_ai_model_fact_confidence": "The confidence a fact carries.",
     "ghostship_ai_model_winner": "One for the winner of a provider and tier.",
     "ghostship_ai_model_winner_position": "The position of the winner among the providers of a tier.",
+    "ghostship_ai_calculation_component": "One for each part of the calculation of a winner.",
+    "ghostship_ai_calculation_weight": "The weight of a part of the calculation.",
+    "ghostship_ai_calculation_gate": "One for each gate of the tiers.",
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
 }
