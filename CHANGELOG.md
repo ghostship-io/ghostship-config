@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.5] - 2026-10-21
+
+- The SIEM watchdog reads the oldest journal entry with `journalctl -n +1`. Its unit has no shell on PATH, so the `sh -c ... | head -1` pipeline from #161 failed and `siem-pipeline.prom` was never written.
+
 ## [3.17.4] - 2026-10-21
 
 - SIEM loss visibility (#102 Gate 1.4).
