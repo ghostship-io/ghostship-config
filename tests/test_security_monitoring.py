@@ -70,14 +70,23 @@ class FlowTests(unittest.TestCase):
     def test_recreated_container_keeps_its_name(self):
         state = {"edges": {}, "elements": {}}
         self.assertEqual(flows.remember_addresses(state, {"10.89.0.151": "uptime-kuma"}, 0), {"10.89.0.151": "uptime-kuma"})
-        # Recreated with a new address; the old one keeps its owner for a day.
-        names = flows.remember_addresses(state, {"10.89.0.190": "uptime-kuma"}, 3600)
+        # Recreated with a new address; the old one keeps its owner for one run.
+        names = flows.remember_addresses(state, {"10.89.0.190": "uptime-kuma"}, 300)
         self.assertEqual(names["10.89.0.151"], "uptime-kuma")
         # A reused address belongs to its current owner.
-        names = flows.remember_addresses(state, {"10.89.0.151": "romm"}, 7200)
+        names = flows.remember_addresses(state, {"10.89.0.151": "romm"}, 600)
         self.assertEqual(names["10.89.0.151"], "romm")
-        names = flows.remember_addresses(state, {}, 7200 + flows.ADDRESS_MEMORY_SECONDS + 1)
+        names = flows.remember_addresses(state, {}, 600 + flows.ADDRESS_MEMORY_SECONDS + 1)
         self.assertEqual(names, {})
+
+    def test_short_lived_container_is_not_named_after_an_old_owner(self):
+        # bazarr held 10.89.0.220 before its restart; hours later a benchmark
+        # container used that address between collections. Its traffic must
+        # not be attributed to bazarr.
+        state = {"edges": {}, "elements": {}}
+        flows.remember_addresses(state, {"10.89.0.220": "bazarr"}, 0)
+        names = flows.remember_addresses(state, {"10.89.0.180": "bazarr"}, 3 * 3600)
+        self.assertNotIn("10.89.0.220", names)
 
     def test_report_is_the_default_command(self):
         seen = []
