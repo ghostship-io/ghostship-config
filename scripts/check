@@ -29,6 +29,9 @@ python3 -m unittest discover -s tests -p test_t3_worker_tunnel.py
 python3 -m unittest discover -s tests -p test_security_monitoring.py
 python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
+nix eval --impure --json --file tests/t3code-hardening.nix >/dev/null
+apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
+  modules/self-hosted/apparmor/t3code.profile
 
 printf 'Checking SIEM log parsing and secret redaction\n'
 vector --quiet test tests/siem-vector.toml
