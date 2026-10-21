@@ -11,7 +11,8 @@
 { config, lib, pkgs, ... }:
 let
   plexLogs = "/srv/apps/plex/Library/Application Support/Plex Media Server/Logs";
-  textfile = "/var/lib/ghostship-siem/textfile";
+  # Outside the root-only store directory: node_exporter must traverse it.
+  textfile = "/var/lib/ghostship-container-metrics";
 in
 {
   services.vector = {
