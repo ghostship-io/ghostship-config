@@ -1,0 +1,20 @@
+# Muximux nginx access and error logs: the PHP front end's request surface.
+line = to_string(.message) ?? ""
+event = { "host": .host, "message": line, "source": "nginx", "stream": "muximux/nginx", "container": "muximux", "timestamp": now() }
+access, err = parse_nginx_log(line, "combined")
+if err == null {
+  event = merge(event, access)
+  event.kind = "access"
+  # Same names as Plex requests, so one rule covers both.
+  event.client_ip = access.client
+  parts = split(to_string(access.request), " ")
+  event.method = parts[0]
+  event.path = parts[1]
+} else {
+  entry, err = parse_nginx_log(line, "error")
+  if err == null {
+    event = merge(event, entry)
+    event.kind = "error"
+  }
+}
+. = compact(event)

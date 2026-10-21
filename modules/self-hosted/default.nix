@@ -8,6 +8,7 @@
     ./apparmor.nix
     ./container-apparmor.nix
     ./ca-distrust.nix
+    ./siem
     ./container-hardening.nix
     ./security-monitoring.nix
     ./cloudflare-sync.nix
