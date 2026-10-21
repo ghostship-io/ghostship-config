@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.15.175] - 2026-10-21
+
+- Plex2Shell (CVE-2026-96652/4/5/6, exploited since 2026-10-17): Plex already ran 1.43.5.11029, past the 1.43.3.10861 fix, with no indicators of compromise. Its Internet-facing AppArmor domains (server, interpreter, ldconfig) now **enforce**; startup and the healthcheck keep learning.
+  - The interpreter rules were pinned to the 1.43.4 `Plug-ins-e5521bd8c` directory and would have blocked every metadata agent on 1.43.5. The build hash is now a glob, and the shipped agents' code and per-identifier state are allowed.
+  - The server may not write or link into the allowlisted codec sets, the step Plex2Shell used to load its payload.
+  - Observed benign server reads are allowed: DMI board names, `/proc/*/cmdline`, interface and route tables, CPU frequency limits, the bundled library directory and `/dev/shm` links.
+  - The AppArmor collector checks each label's own mode (`apparmorProcessModes`), so a domain loaded in the wrong mode is reported.
+- eMudhra intermediate key compromise: the host distrusts emSign ECC Root CA - G3 and Comodo AAA Services root (`security.pki.caCertificateBlacklist`). Every third-party container gets the host bundle and blanked copies of both roots, `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE`; the Node images use OpenSSL's store, and Plex's bundled `cacert.pem` is replaced. Throwaway copies of the Plex, Sonarr, Bazarr and Uptime Kuma images rejected the compromised test chains with these mounts and still reached plex.tv. Host services in the private integrations use the host bundle.
+
 ## [3.15.174] - 2026-10-21
 
 - The read-only images without s6 also get a noexec `/run`: Chaptarr, cloudflared, the Grimmory database, Homepage, ntfy, Plex Auto Languages, Recyclarr, Seerr and Uptime Kuma. Throwaway copies of each image started cleanly with it. Their whole filesystem now has no writable, executable path.

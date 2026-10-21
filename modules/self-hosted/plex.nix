@@ -58,7 +58,14 @@ in
       "ghostship-plex//python"
       # Podman's curl healthcheck; present only while a check runs.
       "ghostship-plex//healthcheck"
+      # ctypes' ldconfig probe from the interpreter; transient.
+      "ghostship-plex//ldconfig"
     ];
+    # The policy enforces; startup and the healthcheck still learn.
+    apparmorProcessModes = {
+      "ghostship-plex" = "complain";
+      "ghostship-plex//healthcheck" = "complain";
+    };
     apparmorRequiredProcessProfiles = [
       "ghostship-plex"
       "ghostship-plex//server"

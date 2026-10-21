@@ -96,9 +96,11 @@ def inspect_container(name, config):
         enabled = Path("/sys/module/apparmor/parameters/enabled").read_text().strip() == "Y"
         profiles = Path("/sys/kernel/security/apparmor/profiles").read_text().splitlines()
         result["enabled"] = enabled
-        expected = {f'{label} ({config["mode"]})'
+        # A mixed policy enforces some domains; the rest keep the policy mode.
+        modes = config.get("processModes", {})
+        expected = {f'{label} ({modes.get(label, config["mode"])})'
                     for label in config.get("processProfiles", [config["profile"]])}
-        required = {f'{label} ({config["mode"]})'
+        required = {f'{label} ({modes.get(label, config["mode"])})'
                     for label in config.get("requiredProcessProfiles",
                                             config.get("processProfiles", [config["profile"]]))}
         result["loaded"] = expected <= set(profiles)
