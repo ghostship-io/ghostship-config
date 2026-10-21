@@ -52,6 +52,39 @@ in
         "NTFY_READER_PASSWORD"
       ];
     };
+    # Operator account names for the monitoring services. The values are
+    # deployment-owned identifiers, not credentials, but they name a person and
+    # therefore stay out of the public tree; the live accounts keep working
+    # because the encrypted value is the one already in use.
+    service-accounts = mkUnit {
+      relativeFile = "secrets/files/sources/services/service-accounts.env.age";
+      exports = [
+        "KUMA_USERNAME"
+        "NTFY_ADMIN_USER"
+      ];
+    };
+    # The signed-in Google identities the Keep broker accepts, and the Drive
+    # folders it may read. Both are personal identifiers.
+    personal-identity = mkUnit {
+      relativeFile = "secrets/files/sources/services/personal-identity.env.age";
+      exports = [
+        "PERSONAL_ACCOUNT_EMAIL"
+        "AGENT_ACCOUNT_EMAIL"
+        "HEALTH_DOCUMENT_FOLDERS"
+      ];
+    };
+    # GitHub account and T3 coordination identifiers for the private
+    # engineering coordinator. The repository list names private repositories,
+    # so the whole mapping stays encrypted.
+    github-engineering = mkUnit {
+      relativeFile = "secrets/files/sources/services/github-engineering.env.age";
+      exports = [
+        "GITHUB_ALLOWED_USER_IDS"
+        "GITHUB_INCIDENT_REPOSITORY"
+        "T3_ENVIRONMENT_ID"
+        "T3_REPOSITORIES"
+      ];
+    };
     bazarr = mkUnit {
       relativeFile = "secrets/files/sources/services/bazarr.env.age";
       exports = [
@@ -424,6 +457,63 @@ in
             "NTFY_READER_HASH"
             "NTFY_PUBLISH_PASSWORD"
             "NTFY_READER_PASSWORD"
+          ]
+      )
+      // builtins.listToAttrs (
+        map
+          (key: {
+            name = key;
+            value = {
+              unit = "service-accounts";
+              inherit key;
+            };
+          })
+          [
+            "KUMA_USERNAME"
+            "NTFY_ADMIN_USER"
+          ]
+      );
+    };
+    personal-identity = {
+      fileName = "personal-identity.env";
+      owner = "root";
+      group = "root";
+      mode = "0400";
+      fields = builtins.listToAttrs (
+        map
+          (key: {
+            name = key;
+            value = {
+              unit = "personal-identity";
+              inherit key;
+            };
+          })
+          [
+            "PERSONAL_ACCOUNT_EMAIL"
+            "AGENT_ACCOUNT_EMAIL"
+            "HEALTH_DOCUMENT_FOLDERS"
+          ]
+      );
+    };
+    github-engineering = {
+      fileName = "github-engineering.env";
+      owner = "root";
+      group = "root";
+      mode = "0400";
+      fields = builtins.listToAttrs (
+        map
+          (key: {
+            name = key;
+            value = {
+              unit = "github-engineering";
+              inherit key;
+            };
+          })
+          [
+            "GITHUB_ALLOWED_USER_IDS"
+            "GITHUB_INCIDENT_REPOSITORY"
+            "T3_ENVIRONMENT_ID"
+            "T3_REPOSITORIES"
           ]
       );
     };
