@@ -87,7 +87,28 @@ let
     fi
   '';
 
+  # Probe Gluetun's network namespace from the host: no process is exec'd into
+  # the VPN container (each `podman exec ... wget` ran there, outside its
+  # AppArmor children), and the API key stays out of argv (curl -H @fd).
+  # qBittorrent shares this namespace, so 127.0.0.1 reaches both APIs.
+  gluetunNs = ''
+    gluetun_pid() {
+      pid=$(${pkgs.podman}/bin/podman inspect -f '{{.State.Pid}}' gluetun 2>/dev/null) || return 1
+      [ "''${pid:-0}" -gt 0 ] || return 1
+      printf '%s' "$pid"
+    }
+    gluetun_curl() {
+      pid=$(gluetun_pid) || return 1
+      ${pkgs.util-linux}/bin/nsenter -t "$pid" -n ${pkgs.curl}/bin/curl -fsS --max-time 15 "$@"
+    }
+    gluetun_tun_ip() {
+      pid=$(gluetun_pid) || return 1
+      ${pkgs.util-linux}/bin/nsenter -t "$pid" -n ${pkgs.iproute2}/bin/ip -4 -o addr show dev "$1" 2>/dev/null \
+        | ${pkgs.coreutils}/bin/tr -s ' ' | ${pkgs.coreutils}/bin/cut -d' ' -f4 | ${pkgs.coreutils}/bin/cut -d/ -f1 | ${pkgs.coreutils}/bin/head -n1
+    }
+  '';
   qbittorrent-prestart-script = pkgs.writeShellScriptBin "qbittorrent-prestart.sh" ''
+    ${gluetunNs}
     #!/bin/sh
     set -eu
 
@@ -105,7 +126,7 @@ let
     fi
 
     for _ in $(seq 1 30); do
-      TUN_IP=$(${pkgs.podman}/bin/podman exec gluetun sh -c "ip -4 -o addr show dev $TUN_INTERFACE 2>/dev/null | tr -s ' ' | cut -d' ' -f4 | cut -d/ -f1 | head -n1" 2>/dev/null || true)
+      TUN_IP=$(gluetun_tun_ip "$TUN_INTERFACE" 2>/dev/null || true)
       if [ -n "$TUN_IP" ]; then
         break
       fi
@@ -131,6 +152,7 @@ let
     echo "Primed qBittorrent binding for $TUN_INTERFACE/$TUN_IP before startup."
   '';
   qbittorrent-auto-resume-script = pkgs.writeShellScriptBin "qbittorrent-auto-resume" ''
+    ${gluetunNs}
     #!/bin/sh
     set -eu
 
@@ -155,18 +177,18 @@ let
       exit 0
     fi
 
-    if ! ${pkgs.podman}/bin/podman exec gluetun wget -qO- "$QBT_API/app/version" >/dev/null 2>&1; then
+    if ! gluetun_curl "$QBT_API/app/version" >/dev/null 2>&1; then
       echo "qBittorrent API is not reachable; skipping qBittorrent auto-resume."
       exit 0
     fi
 
-    all_torrents=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- "$QBT_API/torrents/info" 2>/dev/null || true)
+    all_torrents=$(gluetun_curl "$QBT_API/torrents/info" 2>/dev/null || true)
     if ! printf '%s' "$all_torrents" | ${pkgs.jq}/bin/jq -e 'type == "array"' >/dev/null 2>&1; then
       echo "qBittorrent all-torrents response was not valid JSON; skipping qBittorrent auto-resume."
       exit 0
     fi
 
-    errored_torrents=$(${pkgs.podman}/bin/podman exec gluetun wget -qO- "$QBT_API/torrents/info?filter=errored" 2>/dev/null || true)
+    errored_torrents=$(gluetun_curl "$QBT_API/torrents/info?filter=errored" 2>/dev/null || true)
     if ! printf '%s' "$errored_torrents" | ${pkgs.jq}/bin/jq -e 'type == "array"' >/dev/null 2>&1; then
       echo "qBittorrent errored-torrents response was not valid JSON; skipping qBittorrent auto-resume."
       exit 0
@@ -189,7 +211,7 @@ let
       [ -n "$hash" ] || continue
       attempts=$(${pkgs.jq}/bin/jq -r --arg hash "$hash" '.[$hash] // 0' "$work_state")
 
-      if ${pkgs.podman}/bin/podman exec gluetun wget -qO- --post-data "hashes=$hash" "$QBT_API/torrents/start" >/dev/null 2>&1; then
+      if gluetun_curl --data "hashes=$hash" "$QBT_API/torrents/start" >/dev/null 2>&1; then
         next_attempts=$((attempts + 1))
         ${pkgs.jq}/bin/jq --arg hash "$hash" --argjson attempts "$next_attempts" '.[$hash] = $attempts' "$work_state" > "$next_state"
         mv "$next_state" "$work_state"
