@@ -543,6 +543,20 @@ Coordinator incident daily-limit holds are classified from the exact known resul
 `over daily limit`, without exporting the note. A native active run is recorded
 state, not PID liveness; CI status does not establish objective completion.
 
+### Host resources: CPU over all cores and the real memory split
+
+The host page is the primary resource view for the agents and the server:
+total CPU utilisation over every core (`100 × (1 − avg(rate(node_cpu_seconds_total{mode="idle"}))`),
+per-core utilisation (`100 × (1 − avg by (cpu)(rate(...)))`), and memory as
+`total`, `used = total − available` and `available`, all in bytes from the same
+exporter. Percent is 0–100 and memory uses IEC bytes, so the panels read the same
+way as the host's own tools. `Host writers` counts the exporters reporting
+`MemTotal` and `CPUs reporting` counts the distinct idle counter series: on the
+live host there is no `instance` or `job` label, one series per cpu and exactly one
+`MemTotal` series, so nothing is double counted and a second writer would be
+visible instead of silently blended. A stale or empty sample stays unknown; the
+sample age is next to the values for exactly that reason.
+
 ### Agents: who is running, on which branch, with which model
 
 The overview answers "what is running now" from the native execution projection, not
@@ -551,7 +565,10 @@ every project:
 
 - state is the current run's recorded state (`running`, `waiting`, `queued`, plus the
   terminal states), with `waiting` when the thread has a pending native request; it
-  is a recorded state, never process liveness;
+  is a recorded state, never process liveness. The projection stores no
+  authoritative active-run binding, so execution authority decides: an executing run
+  outranks queued work, queued work outranks terminal history, and a newer queued
+  model switch can never hide the run that is actually executing;
 - provider and model come from the current run's `modelSelection` (falling back to the
   run's own provider), never from the thread's configured default after a switch;
 - branch comes from the thread projection (`payload_json.branch`), not from a title;
@@ -568,6 +585,11 @@ hours, bounded like every other list). Branch and model are private operational 
 they travel only through the authenticated Grafana and the private VictoriaLogs
 datasource, never as Prometheus labels, and no title, prompt, transcript, raw error or
 personal value is exported.
+
+The environment id is read from the stock runtime file the server already writes
+(`stateDir/environment-id`, under the read-only T3 userdata mount) and accepted only
+as a UUID; a missing or malformed file keeps the app deep link. No id is baked into
+configuration, and no secret service or network call is involved.
 
 Thread ids are opaque: ordinary threads are UUIDs, app-owned children look like
 `thread:delegated-task:command%3Amcp%3A...`, and some rows use `mcp:<uuid>`. The link

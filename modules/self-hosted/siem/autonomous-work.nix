@@ -7,7 +7,10 @@ let
   t3Home = "/srv/apps/t3code/home";
   collectorConfig = pkgs.writeText "autonomous-work.json" (builtins.toJSON {
     host = config.networking.hostName;
-    environment_id = "the owner's local area";
+    # The stock runtime's state directory holds the environment id; the
+    # collector reads that existing file read-only (UUID only), so the id is
+    # never baked into configuration or the store.
+    environment_id_file = "${t3Home}/.t3/userdata/environment-id";
     t3_db = "${t3Home}/.t3/userdata/statev2.sqlite";
     coordinator_db = "/var/lib/ghostship-github/state/github.sqlite";
     runtime_db = "${t3Home}/.local/state/ghostship-agent/runtime/jobs.sqlite";
