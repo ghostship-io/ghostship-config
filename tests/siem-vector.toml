@@ -141,3 +141,46 @@ assert_eq!(.client_ip, "203.0.113.7")
 assert_eq!(.path, "/index.php?%ADd+allow_url_include%3d1")
 assert_eq!(.status, 404)
 '''
+
+[[tests]]
+name = "every structured field is redacted, including Falco command lines"
+[[tests.inputs]]
+insert_at = "journal_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = '{"output":"Warning shell","priority":"Warning","rule":"Terminal shell in container","output_fields":{"proc.cmdline":"mariadb-upgrade -uroot -phunter2pass --check","proc.exepath":"/usr/bin/mariadb-upgrade","fd.name":"/x"},"tags":["shell"]}'
+SYSLOG_IDENTIFIER = "falco"
+_SYSTEMD_UNIT = "falco.service"
+_TRANSPORT = "stdout"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+encoded = encode_json(.)
+assert!(!contains(encoded, "hunter2pass"), "password reached the store: " + encoded)
+'''
+
+[[tests]]
+name = "headers, cookies, JWTs, password flags and private keys are redacted; detection text stays"
+[[tests.inputs]]
+insert_at = "journal_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = "authorization: tokenvalue123 Cookie: sid=abc123; theme=dark x=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJlaGVyZQ tool --password=s3cret find / -perm -4000 -----BEGIN OPENSSH PRIVATE KEY-----\nAAAAB3NzaC1\n-----END OPENSSH PRIVATE KEY-----"
+CONTAINER_NAME = "sonarr"
+_SYSTEMD_UNIT = "libpod-conmon-0123.scope"
+_TRANSPORT = "journal"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+m = string!(.message)
+assert!(!contains(m, "tokenvalue123"), m)
+assert!(!contains(m, "abc123"), m)
+assert!(!contains(m, "eyJzdWIi"), m)
+assert!(!contains(m, "s3cret"), m)
+assert!(!contains(m, "AAAAB3NzaC1"), m)
+assert!(contains(m, "find / -perm -4000"), m)
+'''
