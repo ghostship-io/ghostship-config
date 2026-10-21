@@ -37,6 +37,11 @@ let
     notify = "${config.ghostship.notify.package}/bin/ghostship-notify";
     host = config.networking.hostName;
     ntfy_renotify = 6 * 3600;
+    # Resolved through the Podman API: ghostship-notify's own lookup runs the
+    # Podman CLI, which needs root capabilities this sandbox does not have.
+    ntfy_container = "ntfy";
+    ntfy_network = "ghostship_net";
+    ntfy_port = 8080;
     t3_thread_id = campaignThread;
     t3_token_file = "${tokenDir}/t3-token";
     t3_container = "t3code";
