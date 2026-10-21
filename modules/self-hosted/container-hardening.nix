@@ -36,6 +36,8 @@ let
     "uptime-kuma"
     "victorialogs"
     "victoriametrics"
+    "vmalert-logs"
+    "vmalert-metrics"
   ];
   # In-house read-only containers already mount a noexec /tmp; Podman's
   # read-only tmpfs leaves /var/tmp executable.
@@ -93,6 +95,8 @@ let
     uptime-kuma = [ ];
     victorialogs = [ ];
     victoriametrics = [ ];
+    vmalert-logs = [ ];
+    vmalert-metrics = [ ];
   };
   # LinuxServer images: s6 preinit runs as root (directly, or through the
   # setuid-root s6-overlay-suexec when started as the app user), chowns, then
@@ -134,6 +138,8 @@ let
     "uptime-kuma"
     "victorialogs"
     "victoriametrics"
+    "vmalert-logs"
+    "vmalert-metrics"
   ];
   # Read-only images without s6 (which runs generated scripts from /run) also
   # get a noexec /run. Throwaway read-only, noexec-/run copies of each image
@@ -150,6 +156,8 @@ let
     "uptime-kuma"
     "victorialogs"
     "victoriametrics"
+    "vmalert-logs"
+    "vmalert-metrics"
   ];
 in
 {

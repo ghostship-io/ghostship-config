@@ -20,7 +20,7 @@ apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
   modules/self-hosted/ntfy-apparmor.profile
 apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
   modules/self-hosted/hooks-apparmor.profile
-for profile in modules/self-hosted/apparmor/victoria*.profile; do
+for profile in modules/self-hosted/apparmor/{victoria*,vmalert}.profile; do
   apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null "$profile"
 done
 python3 -m unittest discover -s tests -p test_apparmor_review.py
@@ -32,6 +32,11 @@ nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
 
 printf 'Checking SIEM log parsing and secret redaction\n'
 vector --quiet test tests/siem-vector.toml
+python3 -m unittest discover -s tests -p test_siem_alerts.py
+vmalert -dryRun -loggerLevel=ERROR -rule.defaultRuleType=vlogs \
+  -rule=modules/self-hosted/siem/rules/logs.yml
+vmalert -dryRun -loggerLevel=ERROR -rule=modules/self-hosted/siem/rules/metrics.yml
+python3 -c 'import json, sys; json.load(open(sys.argv[1]))' modules/self-hosted/siem/suppressions.json
 
 printf 'Evaluating development shells for both Linux architectures\n'
 for system in x86_64-linux aarch64-linux; do

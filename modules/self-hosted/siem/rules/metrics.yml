@@ -1,0 +1,71 @@
+# SIEM detections over VictoriaMetrics (MetricsQL). Same conventions as logs.yml.
+groups:
+  - name: resource-abuse
+    interval: 1m
+    rules:
+      # Cryptominers and proxies show up as sustained CPU or egress. Excluded
+      # are containers whose normal work is exactly that (transcoders, the
+      # agent workspace and desktop, seeding and streaming).
+      - alert: ContainerCpuSustained
+        expr: 'rate(ghostship_container_cpu_seconds_total{container!~"tdarr|plex|t3code|agent-desktop.*|gluetun-bench-.*"}[10m]) > 2'
+        for: 20m
+        labels: {severity: high, category: resource-abuse}
+        annotations:
+          summary: '{{ $labels.container }} used {{ $value | printf "%.1f" }} CPU cores for 20 minutes'
+          evidence: 'rate(ghostship_container_cpu_seconds_total{container="{{ $labels.container }}"}[10m])'
+
+      - alert: PlexCpuSustained
+        expr: 'rate(ghostship_container_cpu_seconds_total{container="plex"}[10m]) > 8'
+        for: 60m
+        labels: {severity: warning, category: resource-abuse}
+        annotations:
+          summary: 'Plex used {{ $value | printf "%.1f" }} CPU cores for an hour'
+          evidence: 'rate(ghostship_container_cpu_seconds_total{container="plex"}[10m])'
+
+      - alert: ContainerEgressSpike
+        expr: 'rate(ghostship_container_network_transmit_bytes_total{container!~"plex|qbittorrent|gluetun|t3code|agent-desktop.*|tdarr|gluetun-bench-.*"}[10m]) > 5e6'
+        for: 15m
+        labels: {severity: high, category: exfiltration}
+        annotations:
+          summary: '{{ $labels.container }} sent {{ $value | humanize }}B/s for 15 minutes'
+          evidence: 'rate(ghostship_container_network_transmit_bytes_total{container="{{ $labels.container }}"}[10m])'
+
+  - name: siem-health
+    interval: 1m
+    rules:
+      - alert: SiemComponentDown
+        expr: 'node_systemd_unit_state{name=~"(vector|falco|ghostship-container-metrics|ghostship-siem-alerts|auditd|podman-victorialogs|podman-victoriametrics|podman-vmalert-logs|podman-vmalert-metrics)\\.service",state="active"} == 0'
+        for: 5m
+        labels: {severity: critical, category: pipeline}
+        annotations:
+          summary: '{{ $labels.name }} is not active'
+          evidence: 'node_systemd_unit_state{name="{{ $labels.name }}"}'
+
+      - alert: HostMetricsStale
+        expr: 'absent_over_time(node_load1[10m])'
+        labels: {severity: critical, category: pipeline}
+        annotations:
+          summary: 'No host metrics in 10 minutes (node_exporter or Vector)'
+          evidence: 'node_load1'
+
+      - alert: ContainerMetricsStale
+        expr: 'absent_over_time(ghostship_container_cpu_seconds_total[10m])'
+        labels: {severity: warning, category: pipeline}
+        annotations:
+          summary: 'No per-container metrics in 10 minutes'
+          evidence: 'node_textfile_scrape_error'
+
+      - alert: VectorErrors
+        expr: 'increase(vector_component_errors_total[10m]) > 10'
+        labels: {severity: warning, category: pipeline}
+        annotations:
+          summary: 'Vector component {{ $labels.component_id }} logged {{ $value }} errors'
+          evidence: 'vector_component_errors_total'
+
+      - alert: DiskSpaceLow
+        expr: 'node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.1'
+        for: 15m
+        labels: {severity: warning, category: capacity}
+        annotations:
+          summary: 'Root filesystem has {{ $value | humanizePercentage }} free'
+          evidence: 'node_filesystem_avail_bytes{mountpoint="/"}'
