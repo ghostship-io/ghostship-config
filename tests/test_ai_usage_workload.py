@@ -140,9 +140,17 @@ class QualityFeedTests(unittest.TestCase):
         self.assertEqual(cache["status"], "missing")
         self.assertEqual(cache["records"], [])
 
-    def test_a_cache_of_another_index_version_is_not_mixed(self):
+    def test_a_cache_publishes_the_version_the_feed_reported(self):
+        # The version is the upstream's, not a constant of the producer.
         with tempfile.TemporaryDirectory() as directory:
-            path = self._cache(directory, intelligence_index_version="3.9")
+            path = self._cache(directory, intelligence_index_version="4.4")
+            cache = aa.load_cache(path, NOW)
+        self.assertEqual(cache["status"], "ok")
+        self.assertEqual(cache["index_version"], "4.4")
+
+    def test_a_cache_without_a_version_is_not_usable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._cache(directory, intelligence_index_version="")
             cache = aa.load_cache(path, NOW)
         self.assertEqual(cache["status"], "incompatible")
         self.assertEqual(cache["records"], [])
