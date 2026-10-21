@@ -89,7 +89,8 @@ def pipeline_metrics(config, now, run=subprocess.run):
             lines.append(f"{name} {fields[key].strip()}")
     first = run([config["journalctl"], "--system", "-q", "-o", "short-unix", "-n", "1", "--reverse", "--no-pager"],
                 capture_output=True, text=True, timeout=60).stdout
-    oldest = run(["sh", "-c", f"{config['journalctl']} --system -q -o short-unix --no-pager | head -1"],
+    # `-n +1` is the oldest entry (systemd >= 256); the unit has no shell on PATH.
+    oldest = run([config["journalctl"], "--system", "-q", "-o", "short-unix", "-n", "+1", "--no-pager"],
                  capture_output=True, text=True, timeout=120).stdout
     try:
         lines.append(f"ghostship_journal_retention_seconds {now - float(oldest.split()[0])}")
