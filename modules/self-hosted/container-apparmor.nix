@@ -82,7 +82,7 @@ let
       required = [ "tautulli" ];
     };
     nzbget = {
-      children = [ "server" "extract" "readiness" "tools" ];
+      children = [ "server" "extract" "readiness" "tools" "sysinfo" ];
       required = [ "server" ];
     };
     pyload = {
