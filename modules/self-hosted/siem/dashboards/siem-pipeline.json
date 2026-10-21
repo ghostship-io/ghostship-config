@@ -5,7 +5,7 @@
   "ghostship",
   "siem"
  ],
- "timezone": "browser",
+ "timezone": "utc",
  "schemaVersion": 41,
  "version": 1,
  "editable": false,
@@ -15,6 +15,21 @@
   "to": "now"
  },
  "panels": [
+  {
+   "id": 1000,
+   "title": "PIPELINE / Evidence delivery",
+   "type": "text",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 4
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline) \u00b7 [AI usage](/d/ghostship-ai-usage)\n\nNow and the last six hours. Store ingestion, audit loss, alert delivery and collector freshness. Unknown values mean missing/stale evidence; they are not converted to healthy zeros."
+   }
+  },
   {
    "id": 8,
    "title": "Firing alerts",
@@ -27,7 +42,7 @@
     "w": 6,
     "h": 4,
     "x": 0,
-    "y": 0
+    "y": 4
    },
    "targets": [
     {
@@ -36,15 +51,30 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
-     "legendFormat": "firing"
+     "expr": "(count(ALERTS{alertstate=\"firing\"}) or vector(0)) and on() (time() - ghostship_siem_watchdog_last_run_timestamp_seconds < 180) and on() (time() - timestamp(node_uname_info) < 180) and on() (count(node_systemd_unit_state{name=~\"podman-vmalert-(logs|metrics)\\\\.service\",state=\"active\"} == 1) == 2)",
+     "legendFormat": "firing",
+     "instant": true
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown"
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   },
+   "description": "Zero is shown only while watchdog and node samples are fresh and both vmalert systemd units are active. Unknown otherwise; unit state is not proof that every rule is correct."
   },
   {
    "id": 9,
@@ -58,7 +88,7 @@
     "w": 6,
     "h": 4,
     "x": 6,
-    "y": 0
+    "y": 4
    },
    "targets": [
     {
@@ -68,16 +98,29 @@
       "uid": "victoriametrics"
      },
      "expr": "ghostship_log_ingestion_lag_seconds",
-     "legendFormat": "lag"
+     "legendFormat": "lag",
+     "instant": true
     }
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "s"
+     "unit": "s",
+     "noValue": "Unknown"
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
   },
   {
    "id": 10,
@@ -91,7 +134,7 @@
     "w": 6,
     "h": 4,
     "x": 12,
-    "y": 0
+    "y": 4
    },
    "targets": [
     {
@@ -101,16 +144,29 @@
       "uid": "victoriametrics"
      },
      "expr": "ghostship_journal_retention_seconds",
-     "legendFormat": "retention"
+     "legendFormat": "retention",
+     "instant": true
     }
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "s"
+     "unit": "s",
+     "noValue": "Unknown"
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
   },
   {
    "id": 11,
@@ -124,7 +180,7 @@
     "w": 6,
     "h": 4,
     "x": 18,
-    "y": 0
+    "y": 4
    },
    "targets": [
     {
@@ -134,14 +190,28 @@
       "uid": "victoriametrics"
      },
      "expr": "increase(ghostship_audit_lost_total[10m])",
-     "legendFormat": "lost"
+     "legendFormat": "lost",
+     "instant": true
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown"
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
   },
   {
    "id": 12,
@@ -155,7 +225,7 @@
     "w": 12,
     "h": 8,
     "x": 0,
-    "y": 4
+    "y": 12
    },
    "targets": [
     {
@@ -170,11 +240,31 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "s"
+     "unit": "s",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 13,
@@ -188,7 +278,7 @@
     "w": 12,
     "h": 8,
     "x": 12,
-    "y": 4
+    "y": 12
    },
    "targets": [
     {
@@ -202,10 +292,31 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 14,
@@ -219,7 +330,7 @@
     "w": 12,
     "h": 8,
     "x": 0,
-    "y": 12
+    "y": 20
    },
    "targets": [
     {
@@ -234,11 +345,31 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "bytes"
+     "unit": "bytes",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 15,
@@ -252,7 +383,7 @@
     "w": 12,
     "h": 8,
     "x": 12,
-    "y": 12
+    "y": 20
    },
    "targets": [
     {
@@ -275,10 +406,31 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 16,
@@ -292,7 +444,7 @@
     "w": 24,
     "h": 8,
     "x": 0,
-    "y": 20
+    "y": 28
    },
    "targets": [
     {
@@ -302,14 +454,340 @@
       "uid": "victoriametrics"
      },
      "expr": "ALERTS{alertstate=\"firing\"}",
-     "legendFormat": "{{alertname}}"
+     "legendFormat": "{{alertname}}",
+     "instant": true,
+     "format": "table"
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "noValue": "Unknown"
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm"
+   },
+   "transformations": [
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true,
+       "Value": true,
+       "__name__": true,
+       "alertstate": true
+      },
+      "renameByName": {
+       "alertname": "Alert",
+       "severity": "Severity",
+       "container": "Container"
+      }
+     }
+    }
+   ],
+   "description": "Currently firing native vmalert series. Empty is expected when the fresh firing count above is zero. This table uses an instant table result so alert labels remain columns."
+  },
+  {
+   "id": 1001,
+   "title": "Watchdog age",
+   "description": "",
+   "type": "stat",
+   "gridPos": {
+    "x": 0,
+    "y": 8,
+    "w": 8,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "time() - ghostship_siem_watchdog_last_run_timestamp_seconds",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 90
+       },
+       {
+        "color": "red",
+        "value": 180
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1002,
+   "title": "Node sample age",
+   "description": "",
+   "type": "stat",
+   "gridPos": {
+    "x": 8,
+    "y": 8,
+    "w": 8,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "time() - timestamp(node_uname_info)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 90
+       },
+       {
+        "color": "red",
+        "value": 180
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1003,
+   "title": "Work snapshot age",
+   "description": "Unknown until the autonomous-work collector is deployed; stale after 180s.",
+   "type": "stat",
+   "gridPos": {
+    "x": 16,
+    "y": 8,
+    "w": 8,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "time() - ghostship_work_snapshot_timestamp_seconds",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 90
+       },
+       {
+        "color": "red",
+        "value": 180
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
   }
- ]
+ ],
+ "links": [
+  {
+   "title": "Work overview",
+   "type": "link",
+   "url": "/d/ghostship-autonomous-work",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Host",
+   "type": "link",
+   "url": "/d/ghostship-host",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Security",
+   "type": "link",
+   "url": "/d/ghostship-security",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "Pipeline",
+   "type": "link",
+   "url": "/d/ghostship-siem-pipeline",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": false,
+   "keepTime": false
+  }
+ ],
+ "description": "Provisioned read-only Ghostship monitoring. Direct navigation; data comes from the existing SIEM stores."
 }
