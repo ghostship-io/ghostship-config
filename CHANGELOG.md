@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.17] - 2026-10-21
+
+- `ghostship-security-check` flags any unconfined process inside a container (`apparmor.unconfined.<container>`, critical), not only a wrong PID 1 label. It walks the container's cgroup tree. A policy reload that removes a complain-mode `null-*` learning profile leaves its processes unconfined; on 2026-10-21 that left the agent desktop's PulseAudio unconfined, and the old check missed it.
+
 ## [3.17.16] - 2026-10-21
 
 - `ghostship-apparmor-review` reads evidence from VictoriaLogs, filtered per profile on the server, instead of a day of journal JSON.

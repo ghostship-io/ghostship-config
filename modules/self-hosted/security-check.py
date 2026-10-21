@@ -73,7 +73,7 @@ def check_apparmor(cfg, read=lambda p: open(p).read()):
     return found
 
 
-def check_container_labels(cfg, rows, read=lambda p: open(p).read()):
+def check_container_labels(cfg, rows, read=lambda p: open(p).read(), walk=os.walk):
     """Every running container must carry its configured AppArmor label.
 
     Declared app profiles come from the config; the rest must match the
@@ -104,7 +104,45 @@ def check_container_labels(cfg, rows, read=lambda p: open(p).read()):
             found.append(
                 Finding(f"apparmor.label.{container}", "critical", "apparmor", f"{container} runs as '{label or 'unknown'}', expected {profile}")
             )
+        # Any process, not only PID 1: a policy reload that removes a complain-mode
+        # null-* learning profile leaves the processes in it unconfined (agent-desktop
+        # PulseAudio, 2026-10-21).
+        unconfined = [p for p in container_pids(pid, read, walk) if label_of(p, read) == "unconfined"]
+        if unconfined:
+            found.append(
+                Finding(f"apparmor.unconfined.{container}", "critical", "apparmor",
+                        f"{len(unconfined)} process(es) in {container} run unconfined")
+            )
     return found
+
+
+def label_of(pid, read):
+    for path in (f"/proc/{pid}/attr/apparmor/current", f"/proc/{pid}/attr/current"):
+        try:
+            return read(path).strip()
+        except (OSError, KeyError):
+            continue
+    return ""  # exited
+
+
+def container_pids(pid, read, walk=os.walk):
+    """Every process in the container's cgroup tree (Podman nests a subgroup)."""
+    try:
+        relative = read(f"/proc/{pid}/cgroup").strip().split("::", 1)[-1]
+    except (OSError, KeyError):
+        return []
+    root = "/sys/fs/cgroup" + relative
+    # The scope's parent holds conmon and the container subgroup.
+    if root.endswith("/container"):
+        root = root[: -len("/container")]
+    pids = []
+    for directory, _, files in walk(root):
+        if "cgroup.procs" in files:
+            try:
+                pids += [int(x) for x in read(f"{directory}/cgroup.procs").split()]
+            except (OSError, KeyError, ValueError):
+                continue
+    return pids
 
 
 def check_audit(cfg, state, status_text):
