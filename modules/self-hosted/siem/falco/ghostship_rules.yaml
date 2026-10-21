@@ -16,3 +16,38 @@
         - [host, /nix/store/*-perl-*/bin/perl, [activate, dry-activate], /etc/shadow]
   override:
     exceptions: append
+
+# Agent desktop image startup (LinuxServer/Selkies), investigated 2026-10-21 on
+# the #158 recreate at 05:06:45 (#102). init-selkies-config, a root s6 oneshot,
+# rewrites /etc/sudoers with exactly this sed when DISABLE_SUDO is unset (the
+# image's known passwordless sudo, tracked on #102). Exact command and file only.
+- rule: Read sensitive file untrusted
+  exceptions:
+    - name: agent_desktop_sudo_init
+      fields: [container.name, proc.exepath, proc.cmdline, fd.name]
+      comps: [startswith, =, =, =]
+      values:
+        - [agent-desktop, /usr/bin/sed, "sed -i s/CORRUPT_FILE/NOPASSWD/g /etc/sudoers", /etc/sudoers]
+  override:
+    exceptions: append
+
+# ptrace inside the agent desktop image, investigated 2026-10-21 (#102):
+# - selkies-proot's startup check runs `proot -0 /bin/true`; proot works by
+#   ptracing its child. Exact command and parent script only.
+# - Chrome's crashpad handler attaches to Chrome processes to record crashes
+#   (43 attaches in the agent-desktop-stagelab lab container, 05:12).
+# Other ptrace in these containers still alerts.
+- rule: PTRACE attached to process
+  exceptions:
+    - name: agent_desktop_proot_check
+      fields: [container.name, proc.exepath, proc.cmdline, proc.pcmdline]
+      comps: [startswith, =, =, =]
+      values:
+        - [agent-desktop, /config/.local/bin/proot, "proot -0 /bin/true", "bash /usr/local/bin/selkies-proot check"]
+    - name: agent_desktop_chrome_crashpad
+      fields: [container.name, proc.exepath]
+      comps: [startswith, =]
+      values:
+        - [agent-desktop, /opt/google/chrome/chrome_crashpad_handler]
+  override:
+    exceptions: append
