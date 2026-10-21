@@ -88,6 +88,11 @@ in
               default = lib.optional (config.apparmorProfile != null) config.apparmorProfile;
               description = "Every AppArmor label a process in this container may run under.";
             };
+            apparmorProcessModes = mkOption {
+              type = types.attrsOf (types.enum [ "complain" "enforce" ]);
+              default = { };
+              description = "Labels whose loaded mode differs from the policy state, for policies that set each profile's mode in its flags.";
+            };
             apparmorHeartbeat = mkOption {
               type = types.nullOr (types.listOf types.str);
               default = null;

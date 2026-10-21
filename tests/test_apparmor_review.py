@@ -169,6 +169,27 @@ class Collection(unittest.TestCase):
         self.assertEqual(len(observation["processes"]), 2)
         self.assertNotIn(".Config", str(run.call_args_list))
 
+    def test_mixed_policy_requires_each_domain_mode(self):
+        """Catches an enforced domain silently loaded in complain mode."""
+        config = {"profile": "ghostship-plex", "mode": "complain", "source": "/policy",
+                  "processProfiles": ["ghostship-plex", "ghostship-plex//server"],
+                  "processModes": {"ghostship-plex//server": "enforce"}}
+        def observe(server_mode):
+            reads = {"/policy": b"policy", "/sys/module/apparmor/parameters/enabled": "Y",
+                     review.HEARTBEAT_PATH: "boot1",
+                     "/sys/kernel/security/apparmor/profiles":
+                         f"ghostship-plex (complain)\nghostship-plex//server ({server_mode})\n",
+                     "/proc/10/attr/current": "ghostship-plex (complain)",
+                     "/proc/11/attr/current": f"ghostship-plex//server ({server_mode})"}
+            with patch.object(review.Path, "read_bytes", lambda p: reads[str(p)]), \
+                    patch.object(review.Path, "read_text", lambda p: reads[str(p)]), \
+                    patch.object(review, "run", side_effect=[json.dumps({"image": "id", "running": True,
+                                                                          "profile": "ghostship-plex"}),
+                                                            "HPID\n10\n11\n", "lost 0\n"]):
+                return review.inspect_container("plex", config)
+        self.assertTrue(observe("enforce")["healthy"])
+        self.assertIn("loaded-mode-mismatch", observe("complain")["reasons"])
+
     def test_transient_tools_profile_is_allowed_but_not_required_running(self):
         config = {"profile": "ghostship-ntfy", "mode": "complain", "source": "/policy",
                   "processProfiles": ["ghostship-ntfy", "ghostship-ntfy//tools"],

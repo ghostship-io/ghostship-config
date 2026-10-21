@@ -1,0 +1,19 @@
+# Plex Media Server.log: request lines carry the client, its network class
+# (WAN, LAN, Allowed Network) and the path; Plex strips tokens itself.
+line = to_string(.message) ?? ""
+event = { "host": .host, "message": line, "source": "plex", "stream": "plex", "container": "plex" }
+head = parse_regex(line, r'^(?P<ts>\w{3} \d{1,2}, \d{4} [\d:.]+) \[\d+\] (?P<level>\w+) - (?P<msg>.*)$') ?? {}
+event.timestamp = parse_timestamp(head.ts, "%b %d, %Y %H:%M:%S%.3f") ?? now()
+event.level = head.level
+body = to_string(head.msg)
+request, err = parse_regex(body, r'^Request: \[(?P<client_ip>.+?):(?P<client_port>\d+) \((?P<network>.+?)\)\] (?P<method>[A-Z]+) (?P<path>\S+)(?:.*#\w+ (?P<auth>.+))?$')
+if err == null {
+  event = merge(event, request)
+  event.kind = "request"
+}
+completed, err = parse_regex(body, r'^Completed: \[(?P<client_ip>.+?):(?P<client_port>\d+)\] (?P<status>\d{3}) (?P<method>[A-Z]+) (?P<path>\S+)')
+if err == null {
+  event = merge(event, completed)
+  event.kind = "completed"
+}
+. = compact(event)

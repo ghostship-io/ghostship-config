@@ -1,0 +1,143 @@
+# Vector unit tests for the SIEM pipeline (modules/self-hosted/siem/vector).
+# Catches secrets reaching the store unredacted and parsers silently losing
+# the fields detection rules match on. Run by scripts/check from the repo root.
+
+[sources.input]
+type = "demo_logs"
+format = "shuffle"
+lines = ["unused"]
+
+[transforms.journal_shape]
+type = "remap"
+inputs = ["input"]
+file = "modules/self-hosted/siem/vector/journal.vrl"
+
+[transforms.plex_shape]
+type = "remap"
+inputs = ["input"]
+file = "modules/self-hosted/siem/vector/plex.vrl"
+
+[transforms.nginx_shape]
+type = "remap"
+inputs = ["input"]
+file = "modules/self-hosted/siem/vector/nginx.vrl"
+
+[transforms.redacted]
+type = "remap"
+inputs = ["journal_shape", "plex_shape", "nginx_shape"]
+file = "modules/self-hosted/siem/vector/redact.vrl"
+
+[sinks.out]
+type = "blackhole"
+inputs = ["redacted"]
+
+[[tests]]
+name = "secrets in container output are redacted"
+[[tests.inputs]]
+insert_at = "journal_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = "GET /api/v3/queue?apikey=abc123def&page=1 Authorization: Bearer eyJhbGciOi.payload.sig https://user:hunter2@example.com/x"
+CONTAINER_NAME = "sonarr"
+_SYSTEMD_UNIT = "libpod-conmon-0123.scope"
+_TRANSPORT = "journal"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.message, "GET /api/v3/queue?apikey=[REDACTED]&page=1 Authorization: Bearer [REDACTED] https://user:[REDACTED]@example.com/x")
+assert_eq!(.stream, "container/sonarr")
+'''
+
+[[tests]]
+name = "AppArmor audit records keep their fields and decoded names"
+[[tests.inputs]]
+insert_at = "journal_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = 'apparmor="DENIED" operation="open" class="file" profile="ghostship-plex//server" name="2F636F6E666967204C6962" pid=12 comm="Plex Media Serv" requested_mask="r" denied_mask="r"'
+_TRANSPORT = "audit"
+_AUDIT_TYPE_NAME = "AVC"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.apparmor, "DENIED")
+assert_eq!(.aa_profile, "ghostship-plex//server")
+assert_eq!(.aa_name, "/config Lib")
+assert_eq!(.stream, "audit")
+'''
+
+[[tests]]
+name = "audit watch hits keep their rule key"
+[[tests.inputs]]
+insert_at = "journal_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = 'arch=c00000b7 syscall=56 success=yes exe="/run/current-system/sw/bin/vim" key="identity" auid=0'
+_TRANSPORT = "audit"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.audit_key, "identity")
+assert_eq!(.audit_exe, "/run/current-system/sw/bin/vim")
+'''
+
+[[tests]]
+name = "Falco JSON alerts are unpacked"
+[[tests.inputs]]
+insert_at = "journal_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = '{"output":"Warning Read sensitive file untrusted","priority":"Warning","rule":"Read sensitive file untrusted","tags":["T1555","container"],"output_fields":{"container.name":"sonarr","proc.cmdline":"cat /etc/shadow"}}'
+_SYSTEMD_UNIT = "falco.service"
+_TRANSPORT = "stdout"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.falco_rule, "Read sensitive file untrusted")
+assert_eq!(.falco_priority, "Warning")
+assert_eq!(.falco."container.name", "sonarr")
+'''
+
+[[tests]]
+name = "Plex requests keep the client and network class, without tokens"
+[[tests.inputs]]
+insert_at = "plex_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = "Oct 21, 2026 02:12:57.564 [130269293146336] DEBUG - Request: [203.0.113.9:34652 (WAN)] GET /player/timeline?X-Plex-Token=SECRET123&state=playing (14 live) #4c13 Signed-in Token (owner)"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.kind, "request")
+assert_eq!(.client_ip, "203.0.113.9")
+assert_eq!(.network, "WAN")
+assert_eq!(.path, "/player/timeline?X-Plex-Token=[REDACTED]&state=playing")
+assert!(!contains(string!(.message), "SECRET123"))
+'''
+
+[[tests]]
+name = "nginx access lines expose the request for exploit rules"
+[[tests.inputs]]
+insert_at = "nginx_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = '203.0.113.7 - - [21/Oct/2026:01:00:00 +0000] "GET /index.php?%ADd+allow_url_include%3d1 HTTP/1.1" 404 153 "-" "curl/8"'
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.client_ip, "203.0.113.7")
+assert_eq!(.path, "/index.php?%ADd+allow_url_include%3d1")
+assert_eq!(.status, 404)
+'''

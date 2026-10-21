@@ -120,7 +120,39 @@ let
       children = [ "server" "healthcheck" ];
       required = [ "server" ];
     };
+    # SIEM stores (siem/storage.nix). The images have no shell or cat: the
+    # binary reads the boot ID as a TLS certificate, fails and exits.
+    victorialogs.heartbeat = victoriaHeartbeat 19428;
+    victoriametrics.heartbeat = victoriaHeartbeat 18428;
+    # Both vmalert instances share apparmor/vmalert.profile (siem/alerting.nix).
+    vmalert-logs = {
+      source = "vmalert";
+      heartbeat = vmalertHeartbeat 18880;
+    };
+    vmalert-metrics = {
+      source = "vmalert";
+      heartbeat = vmalertHeartbeat 18881;
+    };
   };
+  # vmalert has no store but refuses to start without rules and a datasource.
+  vmalertHeartbeat = port: [
+    "@entrypoint"
+    "-tls"
+    "-tlsCertFile=/proc/sys/kernel/random/boot_id"
+    "-tlsKeyFile=/proc/sys/kernel/random/boot_id"
+    "-rule=/rules/metrics.yml"
+    "-datasource.url=http://127.0.0.1:1"
+    "-notifier.blackhole"
+    "-httpListenAddr=127.0.0.1:${toString port}"
+  ];
+  victoriaHeartbeat = port: [
+    "@entrypoint"
+    "-tls"
+    "-tlsCertFile=/proc/sys/kernel/random/boot_id"
+    "-tlsKeyFile=/proc/sys/kernel/random/boot_id"
+    "-storageDataPath=/tmp/heartbeat"
+    "-httpListenAddr=127.0.0.1:${toString port}"
+  ];
   enabled =
     name:
     if name == "github-coordinator" then
@@ -139,6 +171,7 @@ let
       required = spec.required or children;
       top = spec.top or true;
       heartbeat = spec.heartbeat or null;
+      source = spec.source or container;
     }
   ) strict;
 in
@@ -164,8 +197,9 @@ in
       lib.nameValuePair e.profile (
         lib.mkIf (enabled e.name) {
           state = "complain";
-          profile = builtins.replaceStrings [ "complain," ] [ "" ] (
-            builtins.readFile (./apparmor + "/${e.container}.profile")
+          # A shared source names its profile ghostship-<source>; rename it per container.
+          profile = builtins.replaceStrings [ "complain," "ghostship-${e.source}" ] [ "" e.profile ] (
+            builtins.readFile (./apparmor + "/${e.source}.profile")
           );
         }
       )

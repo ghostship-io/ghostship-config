@@ -1,11 +1,79 @@
 # Changelog
 
-## [3.15.172] - 2026-10-21
+## [3.17.2] - 2026-10-21
 
 - Agent desktop: whole Chrome windows. `stage-control` (replacing `stage-input`) gives every Chrome window in a browser stage a headless output of its own, so the viewer shows the whole window (tab strip, address bar, toolbar, extension buttons, menus and popups) and a person's taps, keys and text reach Chrome's own controls. Agents get the same through `browser_window` `screenshot`/`ui` (ghostship-agent 0.31.0).
 - Browser controls take a focus lease on one window: focus moves only between that window and an empty `idle` workspace, new windows map on a hidden workspace and never take focus, and other windows are never activated or deactivated. Measured: 4,000 concurrent agent input operations (8 agents) with zero cross-talk, and 4,000 more while a lease loop opened Chrome's menu and typed in another window throughout, as on the previous stage.
 - Stage windows now tile at the same fixed 1600x900 (workspace gaps) on outputs side by side in the lowest free slot, like a person's monitors; Chrome sees one screen per open window, and every window gets frames (overlapping outputs would starve all but one). The fingerprint matches the baseline except the window-frame inset (`outerMinusInner`, now that of a tiled window). The update service's fingerprint baseline is re-recorded on the next run.
 - Sway windows are paired with Chrome window ids (home-tab title, unique tab titles, elimination; sticky; ambiguous windows stay unpaired), so a run only ever shows its own windows. The viewer's new sessions wait for that pairing before opening their working tab, so two runs on the same site are told apart.
+## [3.17.1] - 2026-10-21
+
+- SIEM alerts reach ntfy. `ghostship-notify` found ntfy by running `podman inspect`, which fails in the bridge's capability-free sandbox. Since #156 every ntfy publish from the bridge failed; T3 delivery was unaffected. The bridge now resolves ntfy through the Podman API socket and passes `GHOSTSHIP_NOTIFY_URL`.
+- A failed ntfy publish is retried on the next poll. Previously it was recorded as sent and stayed quiet for the 6-hour renotify window.
+
+## [3.17.0] - 2026-10-21
+
+- SIEM part 2: detections and alerting (docs/siem.md).
+  - Two vmalert v1.154.1 containers evaluate `siem/rules/logs.yml` (LogsQL) and `siem/rules/metrics.yml` (MetricsQL), with no notifier of their own. They share one strict complain-mode AppArmor profile; the registry gains a `source` option for shared profile files.
+  - Log detections:
+    - AppArmor denials in Plex's enforced domains;
+    - shells, downloaders and interpreters executed by app server domains;
+    - Falco critical and warning alerts;
+    - Plex2Shell-surface requests from the WAN, and Plex preference writes;
+    - exploit patterns against Muximux;
+    - SSH authentication-failure bursts and firewall refusal bursts;
+    - sensitive file changes outside NixOS activation;
+    - kernel module loads, kexec and ptrace attaches;
+    - silent journal or Plex ingestion.
+  - Metric detections: sustained container CPU (miners), container egress spikes (proxies, exfiltration), SIEM components down, stale host or container metrics, Vector errors, low disk.
+  - `ghostship-siem-alerts` polls vmalert on loopback. It publishes new and resolved alerts to ntfy `security`, and batches high and critical alerts into one message to the security campaign thread: at most one every 10 minutes and 12 a day, with a stable command id. Labels are sanitized, and the message frames alert text as untrusted data. `--list` shows current alerts. Its own T3 session token is issued daily.
+  - NixOS activation's store Perl reading `/etc/shadow` and rewriting `/etc` is excluded, narrowly, from the Falco and audit detections. It was seen on every deployment today.
+  - `scripts/check` validates both rule files with `vmalert -dryRun` and runs the bridge's tests (sanitizing, dedupe, resolution, rate limits, suppression expiry).
+  - Falco, Vector, node_exporter and the SIEM network units now report failures through `ghostship-failure@`.
+
+## [3.16.2] - 2026-10-21
+
+- SIEM container metrics move to `/var/lib/ghostship-container-metrics`. node_exporter could not traverse the root-only `/var/lib/ghostship-siem` (`node_textfile_scrape_error 1`), so the counters written there never reached VictoriaMetrics.
+
+## [3.16.1] - 2026-10-21
+
+- SIEM container metrics read the Podman REST API over its socket. `podman ps` failed under the collector's read-only sandbox (it takes lock files), so no per-container counters reached VictoriaMetrics after #153.
+- Falco alerts carry the container plugin's fields (container id, name, image) again (`append_output`); the minimal configuration had dropped them.
+
+## [3.16.0] - 2026-10-21
+
+- Security monitoring (SIEM), part 1: collection and storage (docs/siem.md).
+  - VictoriaLogs v1.53.0 and VictoriaMetrics v1.154.1 run in Podman, pinned by digest, on their own network (`ghostship_siem_net`). Every connection they open is dropped except DNS, and their ports are published on 127.0.0.1 only. Each has a strict complain-mode AppArmor profile, a read-only image, no capabilities and noexec storage. nixpkgs' VictoriaLogs 1.52.0 can panic or drop logs, so it is not used.
+  - Vector (native, no root) ships the whole journal, Plex's log and Muximux's nginx logs. It parses AppArmor and audit fields, Falco alerts and Plex and nginx requests, and redacts tokens, keys, passwords and URL credentials before storage. `tests/siem-vector.toml` runs in `scripts/check` and fails if redaction or parsing regresses.
+  - node_exporter and a per-container counter service (CPU, memory, processes, network bytes) feed VictoriaMetrics, so a cryptominer or proxy shows up in the numbers.
+  - Falco 0.45.1 runs natively on the modern eBPF probe, with the container plugin, packaged from the upstream release with pinned hashes. A trial on the host flagged a planted `/etc/shadow` read in a container.
+- New intrusion-relevant log sources:
+  - Audit rules watch identity files, sudoers, SSH configuration and keys, runtime systemd units, the system profile, kernel module loads, kexec and ptrace attaches.
+  - The firewall logs refused connections.
+  - Plex logs every request with the client and its network class (`logDebug`; Plex strips tokens).
+  - The audit backlog rises from 1024 to 8192, matching auditd.
+
+## [3.15.175] - 2026-10-21
+
+- Plex2Shell (CVE-2026-96652/4/5/6, exploited since 2026-10-17): Plex already ran 1.43.5.11029, past the 1.43.3.10861 fix, with no indicators of compromise. Its Internet-facing AppArmor domains (server, interpreter, ldconfig) now **enforce**; startup and the healthcheck keep learning.
+  - The interpreter rules were pinned to the 1.43.4 `Plug-ins-e5521bd8c` directory and would have blocked every metadata agent on 1.43.5. The build hash is now a glob, and the shipped agents' code and per-identifier state are allowed.
+  - The server may not write or link into the allowlisted codec sets, the step Plex2Shell used to load its payload.
+  - Observed benign server reads are allowed: DMI board names, `/proc/*/cmdline`, interface and route tables, CPU frequency limits, the bundled library directory and `/dev/shm` links.
+  - The AppArmor collector checks each label's own mode (`apparmorProcessModes`), so a domain loaded in the wrong mode is reported.
+- eMudhra intermediate key compromise: the host distrusts emSign ECC Root CA - G3 and Comodo AAA Services root (`security.pki.caCertificateBlacklist`). Every third-party container gets the host bundle and blanked copies of both roots, `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE`; the Node images use OpenSSL's store, and Plex's bundled `cacert.pem` is replaced. Throwaway copies of the Plex, Sonarr, Bazarr and Uptime Kuma images rejected the compromised test chains with these mounts and still reached plex.tv. Host services in the private integrations use the host bundle.
+
+## [3.15.174] - 2026-10-21
+
+- The read-only images without s6 also get a noexec `/run`: Chaptarr, cloudflared, the Grimmory database, Homepage, ntfy, Plex Auto Languages, Recyclarr, Seerr and Uptime Kuma. Throwaway copies of each image started cleanly with it. Their whole filesystem now has no writable, executable path.
+- Plex Auto Languages' image-declared `/logs` anonymous volume is replaced by a noexec host directory.
+
+## [3.15.173] - 2026-10-21
+
+- AppArmor learning noise, from the largest live complain-mode sources: Sway's keymap reads of `xkeyboard-config-2` (about 9k a minute), RomM Valkey reading its own `/proc/<pid>/stat`, FlareSolverr's healthcheck curl starting from the top profile, and Gluetun's healthcheck loading the system CA roots. Each rule is limited to the observed path.
+
+## [3.15.172] - 2026-10-21
+
+- AppArmor: the agent desktop's top profile may run `s6-envuidgid`. Every s6 service that drops to `abc` runs `s6-setuidgid`, which calls `s6-envuidgid`. Without the rule, the LXQt desktop, D-Bus, PulseAudio, Selkies, Pelorus and the Chrome idle reaper all ran in ruleless `null-*` learning profiles. That logged about 175k audit records a minute, rotated auditd's logs in minutes and crowded the rest of the journal out. The same rule is added to the other LinuxServer profiles that allow `s6-applyuidgid`.
 
 ## [3.15.171] - 2026-10-20
 

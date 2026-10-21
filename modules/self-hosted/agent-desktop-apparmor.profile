@@ -125,7 +125,7 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
   /package/admin/s6-portable-utils-2.3.1.0/command/s6-portable-utils rix,
   /package/admin/s6-linux-utils-2.6.3.0/command/s6-linux-utils rix,
   /package/admin/s6-overlay-helpers-0.1.2.0/command/{s6-overlay-stat,s6-overlay-suexec} rix,
-  @{gs_s6}/{s6-svscan,s6-supervise,s6-svscanctl,s6-svc,s6-svperms,s6-svstat,s6-svok,s6-svwait,s6-svlisten1,s6-ftrigrd,s6-ftrig-notify,s6-envdir,s6-setuidgid,s6-applyuidgid,s6-notifyoncheck,s6-ipcserver-socketbinder,s6-ipcserverd,s6-ipcserver-access,s6-ipcclient,s6-sudoc,s6-sudod,s6-fdholderd,s6-fdholder-daemon,s6-fdholder-store,s6-fdholder-retrieve,s6-fdholder-delete,s6-setsid,s6-log,s6-tai64n} rix,
+  @{gs_s6}/{s6-svscan,s6-supervise,s6-svscanctl,s6-svc,s6-svperms,s6-svstat,s6-svok,s6-svwait,s6-svlisten1,s6-ftrigrd,s6-ftrig-notify,s6-envdir,s6-setuidgid,s6-envuidgid,s6-applyuidgid,s6-notifyoncheck,s6-ipcserver-socketbinder,s6-ipcserverd,s6-ipcserver-access,s6-ipcclient,s6-sudoc,s6-sudod,s6-fdholderd,s6-fdholder-daemon,s6-fdholder-store,s6-fdholder-retrieve,s6-fdholder-delete,s6-setsid,s6-log,s6-tai64n} rix,
   /package/admin/s6-rc-0.5.6.0/command/{s6-rc,s6-rc-init,s6-rc-compile,s6-rc-db,s6-rc-oneshot-run,s6-rc-fdholder-filler} rix,
   /package/admin/s6-linux-init-1.1.3.0/command/{s6-linux-init,s6-linux-init-maker,s6-linux-init-shutdownd,s6-linux-init-hpr,s6-linux-init-nuke,s6-linux-init-umountall} rix,
   @{gs_s6o}/command/{with-contenv,printcontenv,logutil-service,logutil-newfifo} rix,
@@ -861,6 +861,10 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     network netlink raw,
 
     /usr/bin/sway mr,
+    # Keymap compilation (observed 2026-10-21: ~9k reads a minute).
+    /usr/share/xkeyboard-config-2/ r,
+    /usr/share/xkeyboard-config-2/** r,
+    /usr/share/X11/xkb r,
     /usr/bin/swaybg mrix,
     /usr/bin/dash mrix,
     @{gs_cu}/printf mrix,
