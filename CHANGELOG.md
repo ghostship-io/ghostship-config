@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.26] - 2026-10-21
+
+- Pin ghostship-agent 0.35.1: `t3` `status` takes `wait_s` and answers once the task's active turn ends. `browser_op` `extract` defaults an unnamed step to `step<index>`, and with neither `js` nor `selector` returns the page's visible text.
+- The host operations broker keeps `/run/ghostship-hostops` across restarts (`RuntimeDirectoryPreserve`). The MCP container bind-mounts that directory, so after each broker restart it was left holding the deleted directory, and `services_call` host operations failed as "not reachable" until the container restarted.
+
 ## [3.17.25] - 2026-10-21
 
 - Pin ghostship-agent 0.34.1: `t3_task` `files` accepts ChatGPT conversation files, whose download URLs are on OpenAI's Azure storage accounts.
