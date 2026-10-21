@@ -52,6 +52,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from aa import lookup as aa_lookup
+
 SCHEMA = "ghostship.ai-usage.routing"
 SCHEMA_VERSION = 1
 
@@ -66,6 +68,16 @@ QUOTA_UNKNOWN = "unknown"
 # The roles the owner gave the tiers.
 ROLE_PRIME = "prime"
 ROLE_DELEGATE = "delegate"
+
+
+def _finite(value: Any) -> float | None:
+    """A finite float, or None. A NaN or an infinity is never published."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if number != number or number in (float("inf"), float("-inf")):
+        return None
+    return number
 
 
 def _iso(epoch: float | None) -> str | None:
@@ -94,26 +106,34 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
     applies = _get("applies_to", ())
     observed = _get("observed_at")
 
-    known = isinstance(used, (int, float)) and not isinstance(used, bool)
-    if known and (float(used) < 0.0 or float(used) > 1.0):
-        known = False
-    expired = isinstance(reset, (int, float)) and float(reset) <= now
+    used_value = _finite(used)
+    known = used_value is not None and 0.0 <= used_value <= 1.0
+    if used_value is not None and not known:
+        used_value = None
+    reset_value = _finite(reset)
+    duration_value = _finite(duration)
+    observed_value = _finite(observed)
+    expired = reset_value is not None and reset_value <= now
     evidence = "provider_reported" if known and not expired else "unknown"
 
     record: dict[str, Any] = {
         "quota_id": quota_id,
         "kind": kind,
         "evidence": evidence,
-        "used_ratio": round(float(used), 4) if known and not expired else None,
+        "used_ratio": round(used_value, 4) if known and not expired else None,
         "remaining_ratio": (
-            round(max(0.0, 1.0 - float(used)), 4) if known and not expired else None
+            round(max(0.0, 1.0 - used_value), 4) if known and not expired else None
         ),
-        "reset_at": _iso(float(reset)) if isinstance(reset, (int, float)) else None,
+        "reset_at": _iso(reset_value) if reset_value is not None else None,
         "seconds_to_reset": (
-            int(round(float(reset) - now)) if isinstance(reset, (int, float)) else None
+            int(round(reset_value - now)) if reset_value is not None else None
         ),
-        "duration_seconds": int(duration) if isinstance(duration, (int, float)) and duration else None,
-        "check_at": _iso(float(observed)) if isinstance(observed, (int, float)) else _iso(now),
+        "duration_seconds": (
+            int(duration_value) if duration_value is not None and duration_value > 0 else None
+        ),
+        # The check time is the moment the provider reported the window. It
+        # is never the moment the snapshot was written.
+        "check_at": _iso(observed_value) if observed_value is not None else None,
         "provenance": "collector",
     }
     if applies:
@@ -220,6 +240,52 @@ def _eligibility(
     }
 
 
+def _intelligence_record(
+    cache: Mapping[str, Any] | None, model: str
+) -> dict[str, Any]:
+    """The Artificial Analysis record of one model, or the coverage gap.
+
+    The feed is an external quality input. A model the feed does not list is
+    unknown, not bad, and the version and the age of the feed are published
+    with the record.
+    """
+    if not cache:
+        return {"state": "no_cache", "source": "artificialanalysis"}
+    if cache.get("status") != "ok":
+        return {
+            "state": str(cache.get("status") or "missing"),
+            "reason": str(cache.get("reason") or ""),
+            "source": "artificialanalysis",
+            "index_version": cache.get("index_version"),
+            "fetched_at": cache.get("fetched_at"),
+            "age_seconds": cache.get("age_seconds"),
+        }
+    record = aa_lookup(cache, model)
+    if record is None:
+        return {
+            "state": "not_listed",
+            "source": "artificialanalysis",
+            "index_version": cache.get("index_version"),
+            "fetched_at": cache.get("fetched_at"),
+            "age_seconds": cache.get("age_seconds"),
+        }
+    return {
+        "state": "measured",
+        "source": "artificialanalysis",
+        "index_version": record.get("index_version"),
+        "fetched_at": record.get("fetched_at"),
+        "indices": record.get("indices") or {},
+        "cost_per_task": record.get("cost_per_task"),
+        "median_performance": record.get("median_performance"),
+        "token_prices": record.get("prices") or {},
+        "note": (
+            "the token prices and the cost per task are different things: "
+            "the price is per million tokens, the cost per task is what a "
+            "measured task costs"
+        ),
+    }
+
+
 def _candidate(
     provider: str,
     model: str,
@@ -227,6 +293,7 @@ def _candidate(
     now: float,
     native: Mapping[str, Any] | None,
     policy: Mapping[str, Any],
+    aa_cache: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One candidate row."""
     tiers: list[str] = []
@@ -333,6 +400,7 @@ def _candidate(
             "usage_tokens": round(three_d_tokens, 1),
             "source": "prior" if three_d_tokens <= 0 else "prior+measured",
         },
+        "intelligence": _intelligence_record(aa_cache, model),
         "eligibility": _eligibility(provider, model, tiers, native_record, policy),
         "frontier_surplus": {
             "available": bool(surplus.get("available")),
@@ -354,6 +422,141 @@ def _candidate(
     }
 
 
+# The workload classes. A free route may carry the work it can do well, and
+# nothing else: a research or metadata task does not need the frontier, and
+# the frontier review of a complex change must not be downgraded to a free
+# route because it is cheap.
+WORKLOAD_CLASSES = (
+    {
+        "id": "research",
+        "free_eligible": True,
+        "private_data": False,
+        "complexity": "low",
+        "description": "reading, searching, and open research",
+    },
+    {
+        "id": "simple",
+        "free_eligible": True,
+        "private_data": False,
+        "complexity": "low",
+        "description": "small, cheap, and easy changes",
+    },
+    {
+        "id": "metadata",
+        "free_eligible": True,
+        "private_data": False,
+        "complexity": "low",
+        "description": "bulk metadata and bookkeeping updates",
+    },
+    {
+        "id": "engineering",
+        "free_eligible": False,
+        "private_data": True,
+        "complexity": "high",
+        "description": "engineering work on private code",
+    },
+    {
+        "id": "review",
+        "free_eligible": False,
+        "private_data": True,
+        "complexity": "high",
+        "description": "the frontier review of a change, and its security and integration checks",
+    },
+)
+
+
+def _recommendations(
+    candidates: list[dict[str, Any]], classes: tuple[dict[str, Any], ...]
+) -> dict[str, Any]:
+    """The recommended model for every workload class.
+
+    A class that a free route may serve prefers a free model, but the
+    preference is a preference and not an infinite bonus: when no free route
+    is available, the best paid route is recommended and the reason says so.
+    A class that handles private data never takes a route that is not
+    mapped to a native instance, and the review class never takes a free
+    route at all.
+    """
+    result: dict[str, Any] = {}
+    for entry in classes:
+        name = entry["id"]
+        eligible = [
+            row
+            for row in candidates
+            if (row.get("availability") or {}).get("state") == "available"
+            and row.get("rank")
+            and (row.get("admission") or {}).get("state") == "settled"
+        ]
+        if not entry["free_eligible"] or entry.get("complexity") == "high":
+            # The role cap does not depend on the measured quality: a free
+            # route never carries high complexity work.
+            eligible = [
+                row for row in eligible if not row["tiers"] or "free" not in row["tiers"]
+            ]
+        if entry["private_data"]:
+            eligible = [row for row in eligible if row["native"]["mapped"]]
+        preferred = [row for row in eligible if "free" in row["tiers"]]
+        # A mapped free route is preferred over a read only pool route: it can
+        # also carry a delegate, and a pool route never can.
+        choice_pool = sorted(
+            preferred,
+            key=lambda row: (
+                max(row["score"].values()) if row["score"] else 0.0,
+                1 if row["native"]["mapped"] else 0,
+            ),
+            reverse=True,
+        )
+        if entry["free_eligible"] and choice_pool:
+            chosen = choice_pool[0]
+            result[name] = {
+                "provider": chosen["provider"],
+                "model": chosen["model"],
+                "tier": "free",
+                "native": chosen["native"],
+                "role": chosen["role"],
+                "reason": (
+                    "a free route is preferred for this class; it is a read only "
+                    "research route and may not carry private work"
+                    if not chosen["native"]["mapped"]
+                    else "a free route is preferred for this class"
+                ),
+                "delegate": bool(chosen["native"]["mapped"]),
+                "private_data": bool(entry["private_data"]),
+            }
+            continue
+        if eligible:
+            chosen = max(
+                eligible,
+                key=lambda row: max(row["score"].values()) if row["score"] else 0.0,
+            )
+            result[name] = {
+                "provider": chosen["provider"],
+                "model": chosen["model"],
+                "tier": (chosen["tiers"] or [""])[0],
+                "native": chosen["native"],
+                "role": chosen["role"],
+                "reason": (
+                    "no free route is available for this class"
+                    if entry["free_eligible"]
+                    else "this class needs a mapped instance and never takes a free route"
+                ),
+                "delegate": bool(chosen["native"]["mapped"]),
+                "private_data": bool(entry["private_data"]),
+            }
+            continue
+        result[name] = {
+            "provider": None,
+            "model": None,
+            "tier": None,
+            "native": None,
+            "role": None,
+            "reason": "no model is available for this class right now",
+            "delegate": False,
+            "private_data": bool(entry["private_data"]),
+        }
+    return result
+
+
 def build_snapshot(
     *,
     now: float,
@@ -361,6 +564,7 @@ def build_snapshot(
     ranked: Iterable[Any],
     native_models: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
     policy: Mapping[str, Any] | None = None,
+    aa_cache: Mapping[str, Any] | None = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
 ) -> dict[str, Any]:
     """Build the routing snapshot from the ranked models and the readings."""
@@ -383,6 +587,7 @@ def build_snapshot(
             now,
             native_models.get((provider, model)),
             policy,
+            aa_cache,
         )
         for tier in row["tiers"]:
             tiers.setdefault(tier, []).append(_key(provider, model))
@@ -484,6 +689,36 @@ def build_snapshot(
         },
         "tiers": tiers,
         "quota": {"accounts": accounts},
+        "quality_feed": {
+            "source": "artificialanalysis",
+            "status": str((aa_cache or {}).get("status") or "no_cache"),
+            "reason": str((aa_cache or {}).get("reason") or ""),
+            "intelligence_index_version": (aa_cache or {}).get("index_version"),
+            "fetched_at": (aa_cache or {}).get("fetched_at"),
+            "age_seconds": (aa_cache or {}).get("age_seconds"),
+            "records": len((aa_cache or {}).get("records") or []),
+            "attribution": (
+                "Quality indices, cost per task, and median performance come "
+                "from Artificial Analysis. The token prices are the prices of "
+                "the feed and are not a subscription bill."
+            ),
+        },
+        "workload_policy": {
+            "classes": [dict(entry) for entry in WORKLOAD_CLASSES],
+            "free_rule": (
+                "a free route is the lowest intelligence tier and carries only "
+                "low complexity work: bounded research, cheap and easy tasks, "
+                "and bulk metadata updates with checks. It never holds the "
+                "frontier, never carries private work, and never decides a "
+                "complex engineering, security, or integration question, "
+                "whatever its measured quality is"
+            ),
+            "complexity_ceiling": (
+                "a free route is capped at the low complexity classes "
+                "independently of any quality score"
+            ),
+        },
+        "recommendations": _recommendations(candidates, WORKLOAD_CLASSES),
         "candidates": candidates,
         "pending": pending,
         "counts": {
@@ -500,7 +735,9 @@ def write_snapshot(path: str | os.PathLike[str], snapshot: Mapping[str, Any]) ->
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + ".new")
-    payload = json.dumps(snapshot, indent=1, sort_keys=False, default=str)
+    payload = json.dumps(
+        snapshot, indent=1, sort_keys=False, default=str, allow_nan=False
+    )
     temporary.write_text(payload + "\n", encoding="utf-8")
     os.chmod(temporary, 0o644)
     os.replace(temporary, target)

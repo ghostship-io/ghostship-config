@@ -324,6 +324,9 @@ The contract, version 1:
 | `policy` | the owner's direction: the prime frontier models, the GPT models that may run, the instance the background agents use, and the frontier review rule with its authority and its fail closed rule |
 | `tiers` | the ordered members of `frontier`, `bulk`, `free`, and `3d` |
 | `quota.accounts` | the measured windows, once per account |
+| `quality_feed` | the Artificial Analysis feed: its status, the intelligence index version, the fetch time, the age, and the attribution. A missing feed is a coverage gap, never an empty quality |
+| `workload_policy` | the workload classes, their complexity ceiling, and the free route rule |
+| `recommendations` | the recommended model per workload class, with its native identity, its role, and the reason |
 | `candidates` | one row per model a consumer may act on |
 | `pending` | the models that wait for their evaluation window |
 | `counts` | how many rows were written and how many were left out |
@@ -341,6 +344,8 @@ the reasons, the quota state, the components, and the eligibility:
 | `quality` | the quality with its source: `prior` or `measured`. There is no numerical quality claim without a source |
 | `capacity` | the remaining share, when it expires, and the pace against the line the window draws by now |
 | `usage` | the token volume of the last seven days, labelled as a volume and not as a task success |
+| `intelligence` | the Artificial Analysis record of the model: the indices, the cost per task, the median performance, and the token prices of the feed, with the version and the fetch time. A model the feed does not list is unknown, not bad |
+| `frontier_surplus` | whether a frontier model may carry volume work: an allowance that resets within a day, the surplus, the reserve the review keeps, and the pace |
 | `three_d` | the 3D prior and the 3D usage, each with its source |
 | `eligibility` | the policy flags, kept apart from the readings |
 | `admission` | `settled`, or `pending` with the reason and the end of the evaluation window |
@@ -356,12 +361,41 @@ past is a stale reading, not a refill.
 The model that is behind the line a window draws by now is preferred, so the
 usage spreads across the reset limits instead of piling onto one account.
 
+The workload classes bound what a route may take. A free route is the lowest
+intelligence tier: it carries bounded research, cheap and easy tasks, and bulk
+metadata updates with checks, and nothing else. It never holds the frontier,
+never carries private work, and never decides a complex engineering,
+security, or integration question, whatever its measured quality says. The
+ceiling does not depend on the quality score.
+
+The Artificial Analysis feed is the external quality input: the intelligence,
+coding, agentic, and engineering indices, the cost per task, and the median
+performance. The feed is read once a day by the daily procedure and cached;
+the collector only reads the cache, so the free request budget belongs to one
+place. The cost per task and the token price are different things and are
+never used for each other. The endpoint is the free one; there is no paid
+plan and no account.
+
 The role and the tier are explicit, and the rule fails closed: an
 implementation by a bulk model needs a review by the frontier authority
 before it is integrated, a bulk review is never a final approval, and a
 required frontier that is unavailable is waited for instead of being
 quietly replaced by a delegate. The snapshot says so in `policy` and in
 `coverage.frontier`.
+
+## The daily evaluation
+
+The quota and the eligibility are read every five minutes. The quality of a
+model, and whether it may take a piece of work, is a separate question, and
+the daily procedure answers it. It is described in
+[EVALUATION.md](./EVALUATION.md): it researches the current line of models,
+reads the free Artificial Analysis feed into the cache the collector reads,
+reads the measured admission results of the free inference pool through its
+own read surface, and runs bounded representative work on held out tasks.
+
+A new model is provisional. It is never promoted for being new, for a high
+token count, or for a good name, and a lineage prior stays the labelled
+fallback for every model without a measurement.
 
 ## How to verify
 
