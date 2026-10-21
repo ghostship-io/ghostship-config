@@ -178,8 +178,8 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
   # interpreter). The viewer's python is entered through change_profile.
   /usr/bin/python3.14 cx -> api,
   @{gs_tools}/chrome-idle cx -> chrome-control,
-  # stage-control also runs straight from s6 and agent SSH (observed 2026-10-21).
-  @{gs_tools}/stage-control cx -> stage-control,
+  # stage-control from the top profile stays in learning: a named transition
+  # here exceeds the kernel's per-profile transition table (2026-10-21, #168).
   # App sessions (svc-agent-desktop-apps, cont-finish, the host's pre-stop)
   # run desktop apps, so they share the desktop class.
   @{gs_tools}/app-session cx -> desktop,
