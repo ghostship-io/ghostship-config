@@ -97,14 +97,13 @@ a cgroup, and that lookup needs `/proc/1/cgroup`. `ProtectProc=invisible` hides
 that file, systemd cannot augment `OwnerUID`, and runc falls back to the rootful
 system bus instead of the engine's private session bus. A transient probe that
 bound `/proc/1/cgroup` read-only while `ProtectProc=invisible` was still active
-could not read it either, so hiding the file is the only thing that made the
-lookup fail.
+could not read it either, so that single-file bind did not resolve the incompatibility.
 
 Two supporting changes follow from that failure. The engine's private D-Bus
 configuration now carries an explicit listen address, because a session bus
 without one does not answer a `--user` status request. And systemd's tools are
-on the engine's `PATH`, because runc shells out to `busctl` and the engine
-closure did not provide it.
+on the engine's `PATH`, because runc shells out to `busctl`; the closure contained it, but the
+daemon service path omitted it.
 
 What `ProtectProc=default` gives up is process metadata. The dedicated UID 62040
 manager can read host process metadata and command lines, so this document does
@@ -141,7 +140,7 @@ daemon socket inside it is masked, so a read-only bind does not become a path to
 the inner daemon. The engine receives no T3 home contents beyond that worktrees
 subtree, no home credentials, no provider secrets and no secret projections. The
 remaining mounts are the engine's own state and runtime directories, cgroup and
-proc, the character devices it needs, and the capability-limited `newuidmap` and
+proc, the character devices it needs, and the subordinate-ID mapping `newuidmap` and
 `newgidmap` helpers.
 
 ## Bind ownership mapping
@@ -175,7 +174,7 @@ this. The host UID is the subordinate ID that the container UID maps to:
 ```sh
 # 2000999 = subIdStart 2000000 + container UID 1000 - 1
 setfacl -m u:2000999:rwx,d:u:3000:rwx,d:u:2000999:rwx \
-  /srv/ghostship/workspace/<project>/output
+  /workspace/my-project/output
 ```
 
 The access entry gives that one container UID write access to the directory
@@ -204,22 +203,18 @@ cross-user OOM protection all worked. The active T3 container, its start time
 and its service PIDs were unchanged afterwards. The probe never claims
 authenticated provider acceptance.
 
-The rootless engine's user manager failed on first start. The dedicated empty
-`/run` mount in commit 5296b4bd fixed that boot while preserving `ProtectProc`.
-The daemon then failed on `/tmp` permissions. The Btrfs ID-map probe was
-extended with a root-owned mode 1777 case, which failed, and commit 447e4f67
-turned it green by mapping filesystem UID 0 to itself.
+The rootless engine now starts with the dedicated user manager, private session
+bus and `OwnerUID=62040`. A real container ran successfully. From the engine's
+user/mount/network namespaces, following `/proc/1/root/etc/os-release` was denied
+and the host root process's environment was not readable.
 
-The engine's bus and cgroup lookup failed next. Commit de08169c put systemd's
-tools on the engine `PATH`, and commit 9660ad25 gave the private session bus an
-explicit listen address. The `ProtectProc=invisible` setting was then found to
-hide `/proc/1/cgroup` and make runc fall back to the rootful system bus, so the
-dedicated UID 62040 manager now runs with `ProtectProc=default`. That
-relaxation is under test on the dedicated account only.
-
-Live Docker workflows have not passed. The candidate engine has not completed
-the acceptance run below, so no live Docker acceptance is claimed and the
-hardening options stay disabled.
+The full Docker run passed image build/public DNS, container-root bind writes,
+nonroot UID 1000/3000 bind writes with explicit ACLs and T3 edit/delete,
+per-container memory/PID limits, outbound HTTPS, TTY allocation, both live
+host/private-network canaries, Compose service DNS and network separation, and
+named-volume persistence across container recreation. Published-port forwarding
+failed at the systemd-owned Unix gateway socket; that remains an acceptance gate.
+The hardening options stay disabled pending the remaining checks.
 
 ## Candidate acceptance
 
@@ -274,14 +269,16 @@ python3 packages/t3code/docker-sandbox/canary-probe.py \
 ```
 
 Run the Docker workflows through the platform probe. The workspace must be an
-absolute, real directory owned by T3 UID 3000. The probe mounts the private API
+absolute, real directory owned by T3 UID 3000, matching the engine’s
+`/workspace` bind source exactly. A project subdirectory cannot replace that
+source because Docker resolves bind paths in the engine’s filesystem. The probe mounts the private API
 and ports sockets into the fresh-home candidate and runs the acceptance script
 as UID 3000:
 
 ```sh
 python3 packages/t3code/hardening-probe.py \
   --image localhost/ghostship-t3code-candidate:hardening \
-  --docker-workspace /srv/ghostship/workspace/<project> \
+  --docker-workspace /srv/ghostship/workspace \
   --docker-control-report /tmp/t3code-canaries.json \
   --denied-endpoint 192.168.0.10:22 --denied-endpoint 10.89.7.2:8080
 ```
