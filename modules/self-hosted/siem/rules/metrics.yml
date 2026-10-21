@@ -34,12 +34,22 @@ groups:
     interval: 1m
     rules:
       - alert: SiemComponentDown
-        expr: 'node_systemd_unit_state{name=~"(vector|falco|ghostship-container-metrics|ghostship-siem-alerts|auditd|podman-victorialogs|podman-victoriametrics|podman-vmalert-logs|podman-vmalert-metrics)\\.service",state="active"} == 0'
+        expr: 'node_systemd_unit_state{name=~"(vector|falco|ghostship-siem-alerts|auditd|podman-victorialogs|podman-victoriametrics|podman-vmalert-logs|podman-vmalert-metrics)\\.service",state="active"} == 0'
         for: 5m
         labels: {severity: critical, category: pipeline}
         annotations:
           summary: '{{ $labels.name }} is not active'
           evidence: 'node_systemd_unit_state{name="{{ $labels.name }}"}'
+
+      # ghostship-podman-snapshot writes container counters and the metadata
+      # the bridge resolves ntfy and T3 from, every 30 seconds.
+      - alert: ContainerSnapshotStale
+        expr: 'time() - node_textfile_mtime_seconds{file=~".*containers.prom"} > 300 or absent(node_textfile_mtime_seconds{file=~".*containers.prom"})'
+        for: 2m
+        labels: {severity: critical, category: pipeline}
+        annotations:
+          summary: 'Container snapshot is stale'
+          evidence: 'time() - node_textfile_mtime_seconds{file=~".*containers.prom"}'
 
       - alert: HostMetricsStale
         expr: 'absent_over_time(node_load1[10m])'

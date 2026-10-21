@@ -13,7 +13,7 @@ native; alerts go to the campaign thread, which investigates and tunes.
 | VictoriaMetrics v1.154.1 | Podman, `ghostship_siem_net` | `127.0.0.1:8428`, `/var/lib/ghostship-siem/metrics`, 400 days |
 | Vector | native, no root | journal, Plex and Muximux nginx files, node metrics |
 | node_exporter | native | `127.0.0.1:9100`, systemd and textfile collectors |
-| `ghostship-container-metrics` | native | per-container CPU, memory, PIDs, network bytes |
+| `ghostship-podman-snapshot` | root oneshot every 30 s | container metadata for the bridge; per-container CPU, memory, PIDs and per-netns network bytes |
 | Falco 0.45.1 + container plugin | native, modern eBPF | JSON alerts to the journal |
 | vmalert-logs, vmalert-metrics v1.154.1 | Podman, `ghostship_siem_net` | alert APIs on `127.0.0.1:8880` and `:8881`; rules `siem/rules/` |
 | `ghostship-siem-alerts` | native | polls vmalert; ntfy `security` and the campaign thread |
@@ -22,6 +22,26 @@ The SIEM network (`ghostsiem0`, 10.89.21.0/24) drops every connection its
 containers open except DNS to their resolver (`inet ghostship_siem`). Images
 are pinned by digest; update them in a PR. VictoriaLogs never deletes ingested
 logs on request: its delete API is off.
+
+### Podman API boundary
+
+No long-lived SIEM service can reach the rootful Podman API. Root needs no
+capability to use that socket, and anything that can use it can create and
+exec containers. `ghostship-podman-snapshot`, a short-lived root job, writes
+`/run/ghostship-podman/containers.json` (names, PIDs, state, addresses and
+netns owner: no environment, labels, mounts or commands) and the
+`containers.prom` textfile. The alert bridge reads only that file, refuses a
+snapshot older than 5 minutes, and runs with `/run/podman` inaccessible.
+`ContainerSnapshotStale` fires if the job stops. Falco keeps its own runtime
+access for container enrichment.
+
+Network bytes are per network namespace. A container joined to another's
+namespace (qBittorrent in Gluetun) is reported once, under the owner, with
+`ghostship_container_netns_shared{container,netns_owner}`. Only Podman's
+`eth*` interfaces count; they match the host-side veth counters exactly
+(checked 2026-10-21). VPN tunnels are excluded because their bytes already
+cross `eth0`. Container-to-container traffic is included, so
+`ContainerEgressSpike` measures total transmit, not Internet egress alone.
 
 ## What is collected
 

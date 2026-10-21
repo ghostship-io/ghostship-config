@@ -17,11 +17,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import http.client
 import json
 import os
 import re
-import socket
 import subprocess
 import sys
 import time
@@ -34,7 +32,10 @@ POLL_SECONDS = 30
 RESOLVE_AFTER = 180
 PRIORITY = {"critical": 5, "high": 4, "warning": 3}
 T3_SEVERITIES = ("critical", "high")
-PODMAN_SOCKET = "/run/podman/podman.sock"
+# Root-owned metadata written by ghostship-podman-snapshot; the bridge has no
+# access to the Podman API (InaccessiblePaths), which could create containers.
+SNAPSHOT = Path("/run/ghostship-podman/containers.json")
+SNAPSHOT_MAX_AGE = 300
 INTERNAL_LABELS = {"alertname", "alertgroup", "severity", "category"}
 SAFE_LABEL = re.compile(r"[^A-Za-z0-9 ._:/@+=,()#%-]")
 UNSAFE_QUERY = re.compile(r"[^\x20-\x7e]|`")
@@ -197,24 +198,17 @@ def fetch(url):
     return [a for a in alerts if a.get("state") == "firing"]
 
 
-class UnixConnection(http.client.HTTPConnection):
-    def connect(self):
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.settimeout(15)
-        self.sock.connect(PODMAN_SOCKET)
-
-
-def container_address(container, network):
-    """A container's address from the Podman API; it changes on every recreate.
-
-    The Podman CLI cannot run in this sandbox (it needs root capabilities).
-    """
-    connection = UnixConnection("podman")
-    connection.request("GET", f"/v5.0.0/libpod/containers/{container}/json")
-    response = connection.getresponse()
-    if response.status != 200:
-        raise OSError(f"podman API answered {response.status} for {container}")
-    return json.loads(response.read())["NetworkSettings"]["Networks"][network]["IPAddress"]
+def container_address(container, network, snapshot=None, now=None):
+    """A container's address from the metadata snapshot; it changes on every recreate."""
+    path = snapshot or SNAPSHOT
+    age = (now or time.time()) - path.stat().st_mtime
+    if age > SNAPSHOT_MAX_AGE:
+        raise OSError(f"container snapshot is {int(age)}s old")
+    entry = json.loads(path.read_text()).get(container)
+    address = (entry or {}).get("networks", {}).get(network)
+    if not address:
+        raise OSError(f"{container} has no address on {network} in the snapshot")
+    return address
 
 
 def send_t3(config, batch_id, text):

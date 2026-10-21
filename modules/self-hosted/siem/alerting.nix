@@ -37,8 +37,8 @@ let
     notify = "${config.ghostship.notify.package}/bin/ghostship-notify";
     host = config.networking.hostName;
     ntfy_renotify = 6 * 3600;
-    # Resolved through the Podman API: ghostship-notify's own lookup runs the
-    # Podman CLI, which needs root capabilities this sandbox does not have.
+    # Resolved from ghostship-podman-snapshot's metadata: ghostship-notify's own
+    # lookup runs the Podman CLI, and this sandbox has no Podman API access.
     ntfy_container = "ntfy";
     ntfy_network = "ghostship_net";
     ntfy_port = 8080;
@@ -130,7 +130,7 @@ in
       description = "Deliver SIEM alerts to ntfy and the security campaign thread";
       wantedBy = [ "multi-user.target" ];
       after = [ "podman-vmalert-logs.service" "podman-vmalert-metrics.service"
-                "ghostship-siem-alerts-t3-token.service" "podman.socket" ];
+                "ghostship-siem-alerts-t3-token.service" "ghostship-podman-snapshot.service" ];
       wants = [ "ghostship-siem-alerts-t3-token.service" ];
       serviceConfig = {
         ExecStart = "${bridge}/bin/ghostship-siem-alerts";
@@ -147,6 +147,8 @@ in
         ReadWritePaths = [ "/var/lib/ghostship-notify" ];
         RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
         CapabilityBoundingSet = "";
+        # Root needs no capability to drive the rootful Podman API; hide it.
+        InaccessiblePaths = [ "-/run/podman" "-/run/docker.sock" ];
       };
     };
   };
