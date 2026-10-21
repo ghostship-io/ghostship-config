@@ -127,6 +127,9 @@ profile ghostship-nzbget flags=(complain,attach_disconnected,mediate_deleted) {
     @{ghostship_nzbget_app}/nzbget rm,
     /usr/bin/unrar px -> ghostship-nzbget//extract,
     /usr/bin/7zz px -> ghostship-nzbget//extract,
+    # Startup system info: popen("uname -o|-r|-m") and `lscpu | grep` through
+    # /bin/sh (investigated 2026-10-21, #102). The shell gets its own domain.
+    /bin/busybox px -> ghostship-nzbget//sysinfo,
     /lib/ld-musl-aarch64.so.1 mr,
     /usr/lib/lib{boost_json.so.1.84.0,crypto.so.3,ssl.so.3,gcc_s.so.1,lzma.so.5.8.4,ncursesw.so.6.6,stdc++.so.6.0.34,xml2.so.2.13.9,z.so.1.3.2} mr,
     # WebDir, ConfigTemplate and CertStore live in the app tree.
@@ -204,6 +207,20 @@ profile ghostship-nzbget flags=(complain,attach_disconnected,mediate_deleted) {
   # svc-cron's `crontab -l` probes and applet listing, and the podman
   # healthcheck's wget to loopback. No /config, no app tree, no writes.
   # AppArmor cannot select applets by argv, so this domain also covers sh.
+  # NZBGet's startup system-info probe only: BusyBox sh and grep, coreutils
+  # uname. No network, no writes, nothing else may run (lscpu is absent).
+  profile sysinfo flags=(complain,attach_disconnected,mediate_deleted) {
+    /bin/busybox rmix,
+    /bin/coreutils rmix,
+    /lib/ld-musl-aarch64.so.1 mr,
+    /usr/lib/lib{acl.so.1.1.2302,attr.so.1.1.2502,crypto.so.3,skarnet.so.2.15.0.0,utmps.so.0.1.3.3} mr,
+    /etc/os-release r,
+    /usr/lib/os-release r,
+    /proc/sys/kernel/{ostype,osrelease} r,
+    /dev/null rw,
+    signal (receive) peer=ghostship-nzbget//server,
+  }
+
   profile tools flags=(complain,attach_disconnected,mediate_deleted) {
     /bin/busybox rix,
     /lib/ld-musl-aarch64.so.1 mr,

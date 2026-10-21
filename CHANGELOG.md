@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.28] - 2026-10-21
+
+- AppArmor: NZBGet's startup system-info probe (popen `uname -o/-r/-m` and `lscpu | grep` through `/bin/sh`) runs in its own `sysinfo` child, which may run only BusyBox sh/grep and coreutils uname, with no network or writes. It had raised `SuspiciousExecInAppDomain` after the Gluetun IP change restarted NZBGet at 17:27; investigated as legitimate (#102). Any other shell from the server still alerts.
+
 ## [3.17.27] - 2026-10-21
 
 - Pin ghostship-agent 0.36.0: `gws`, the Google Workspace official-API CLI, is retired with its `google-workspace-cli` flake input (the lock drops it and its nixpkgs), so the managed install removes the `gws` command from T3 Code; Google work runs through the browser workflows. Also drops the ignored `shoppingConfig` argument, dead CloakBrowser Keep clients and retired Prefect/CloakBrowser notes.
