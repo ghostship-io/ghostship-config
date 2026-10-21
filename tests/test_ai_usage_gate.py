@@ -208,3 +208,184 @@ class PendingBackoffTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StockUnavailableShapeTests(unittest.TestCase):
+    """The stock T3 shape of a provider whose limits probe failed.
+
+    The contract reports `usageLimits.unavailable.reason`; the source read the
+    flat shape only, so the provider looked healthy.
+    """
+
+    def test_a_nested_unavailable_makes_the_source_partial(self):
+        class Client:
+            def __init__(self):
+                self.calls = 0
+
+            def call(self, tag, payload=None):
+                if tag == "server.refreshProviders":
+                    return {
+                        "providers": [
+                            {
+                                "instanceId": "claudeAgent",
+                                "status": "ready",
+                                "models": [{"slug": "claude-opus-5-5"}],
+                                "usageLimits": {
+                                    "checkedAt": "2026-10-21T23:00:00Z",
+                                    "windows": [],
+                                    "unavailable": {
+                                        "reason": "probeFailed",
+                                        "message": "Could not read the limits.",
+                                    },
+                                },
+                            }
+                        ]
+                    }
+                return {"providers": []}
+
+        source = main.t3source.collect(Client(), NOW)
+        limits = source[0]
+        self.assertEqual(limits.source, "t3")
+        self.assertEqual(
+            limits.status,
+            "partial",
+            "a ready provider whose limits probe failed is not a complete reading",
+        )
+        self.assertIn(limits.reason, ("probe_failed", "unsupported"))
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[
+                {
+                    "id": limits.source,
+                    "status": limits.status,
+                    "reason": limits.reason,
+                    "observed_at_epoch": NOW,
+                }
+            ],
+            ranked=[],
+        )
+        self.assertTrue(data["partial"])
+
+
+class FactsAttestationTests(unittest.TestCase):
+    """Every text field a published fact carries, probed with sentinels."""
+
+    SENTINELS = (
+        "<owner-email>",
+        "/srv/apps/t3code/home/.grok/auth.json",
+        "sk-live-AAAABBBBCCCC",
+        "acct-1234567890",
+    )
+
+    def _fact(self, **overrides):
+        fact = facts.make_fact(
+            provider="minimax",
+            model="MiniMax M3.1 Flash",
+            indices={"intelligence_index": 42.0},
+            brief_url="https://artificialanalysis.ai/models/minimax",
+            now=NOW,
+        )
+        fact.update(overrides)
+        return fact
+
+    def _assert_clean(self, text):
+        for sentinel in self.SENTINELS:
+            self.assertNotIn(sentinel, text)
+
+    def test_the_provider_and_the_model_must_be_proven(self):
+        fact = self._fact(provider="<owner-email>", model="/srv/x")
+        self.assertIsNone(facts.public_record(fact, {"minimax:MiniMax M3.1 Flash"}))
+
+    def test_the_basis_is_not_published(self):
+        fact = self._fact(basis="account <owner-email> owes /srv/apps/x")
+        record = facts.public_record(fact)
+        self.assertNotIn("basis", record)
+        self.assertEqual(record["attestation"], "artificialanalysis_free")
+        self._assert_clean(json.dumps(record))
+
+    def test_the_brief_url_is_a_first_party_evidence_url(self):
+        allowed = facts.public_record(self._fact())
+        self.assertEqual(allowed["brief_url"], "https://artificialanalysis.ai/models/minimax")
+        for url in (
+            "https://example.com/<owner-email>",
+            "https://artificialanalysis.ai.evil.example/x",
+            "file:///srv/apps/secret",
+            "https://artificialanalysis.ai/models?token=sk-live-AAAABBBBCCCC",
+        ):
+            self.assertIsNone(facts.public_record(self._fact(brief_url=url))["brief_url"])
+
+    def test_the_pending_reason_is_a_code(self):
+        fact = self._fact(status="pending", pending_reason="the brief for <owner-email>")
+        record = facts.public_record(fact)
+        self.assertEqual(record["pending_reason"], "unknown")
+        self._assert_clean(json.dumps(record))
+
+    def test_the_canonical_identity_and_the_benchmark_id_are_not_published(self):
+        fact = self._fact(
+            canonical_identity="acct-1234567890 /srv/apps/x",
+            benchmark_id="<owner-email>",
+        )
+        record = facts.public_record(fact)
+        self.assertNotIn("canonical_identity", record)
+        self.assertNotIn("benchmark_id", record)
+        self._assert_clean(json.dumps(record))
+
+    def test_an_admission_workload_must_be_a_known_class(self):
+        fact = self._fact(
+            admission_evidence=[
+                {"workload": "<owner-email>", "admitted": True, "score": 1.0, "at": NOW},
+                {"workload": "research", "admitted": True, "score": 1.0, "at": NOW},
+            ]
+        )
+        record = facts.public_record(fact)
+        self.assertEqual([entry["workload"] for entry in record["admission_evidence"]], ["research"])
+
+    def test_nothing_reaches_the_snapshot_or_the_metrics(self):
+        fact = self._fact(
+            basis="acct-1234567890",
+            canonical_identity="acct-1234567890",
+            benchmark_id="acct-1234567890",
+            brief_url="https://example.com/acct-1234567890",
+            pending_reason="acct-1234567890",
+            admission_evidence=[
+                {"workload": "acct-1234567890", "admitted": True, "score": 1.0, "at": NOW}
+            ],
+        )
+        # The exact identity is proven by the live catalog, so the fact is
+        # published, and only through the allowlist.
+        ranked = ranking.rank_models(
+            models=[ranking.ModelRecord("minimax", "MiniMax M3.1 Flash")],
+            catalog=None,
+            quota_windows={},
+            free_models=set(),
+            usage_tokens={},
+            now=NOW,
+        )
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[],
+            ranked=ranked,
+            facts={facts.identity_key("minimax", "MiniMax M3.1 Flash"): fact},
+            native_models={
+                ("minimax", "MiniMax M3.1 Flash"): {
+                    "providerInstance": "opencode",
+                    "modelId": "minimax-m3.1-flash-free",
+                    "options": [],
+                }
+            },
+        )
+        self.assertIn(
+            facts.identity_key("minimax", "MiniMax M3.1 Flash"),
+            data["facts"]["records"],
+            "the fact of a proven identity is published",
+        )
+        text = json.dumps(data)
+        self._assert_clean(text)
+        writer = metrics.MetricWriter()
+        for name, labels, value in snapshot.decision_samples(data):
+            writer.add(name, labels, value)
+        self._assert_clean(writer.render())
+
+    def test_a_fact_of_an_unproven_identity_is_withheld(self):
+        fact = self._fact()
+        self.assertIsNone(facts.public_record(fact, {"other:model"}))

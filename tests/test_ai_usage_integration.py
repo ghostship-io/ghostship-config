@@ -218,9 +218,29 @@ class FactBindingTests(unittest.TestCase):
     def test_the_published_facts_keep_the_identity(self):
         one = measured_fact(provider="a", model="M")
         two = measured_fact(provider="b", model="M")
-        data = build(
-            ranked_model(),
-            {
+        ranked = ranking.rank_models(
+            models=[ranking.ModelRecord("a", "M"), ranking.ModelRecord("b", "M")],
+            catalog=Catalog(),
+            quota_windows={},
+            free_models=set(),
+            usage_tokens={},
+            now=NOW,
+        )
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[],
+            ranked=ranked,
+            native_models={
+                ("a", "M"): {"providerInstance": "x", "modelId": "M", "options": []},
+                ("b", "M"): {"providerInstance": "y", "modelId": "M", "options": []},
+            },
+            policy={
+                "frontierPrimeModels": (),
+                "allowedGptModels": (),
+                "backgroundProviderInstances": (),
+            },
+            catalog=Catalog(),
+            facts={
                 facts.identity_key("a", "M"): one,
                 facts.identity_key("b", "M"): two,
             },
