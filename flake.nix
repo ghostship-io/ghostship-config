@@ -117,6 +117,7 @@
               apparmor-parser
               shellcheck
               gitleaks
+              vector
               python3
               ripgrep
               jq

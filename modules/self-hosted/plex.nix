@@ -34,6 +34,8 @@ let
         Preferences.@GenerateBIFBehavior=literal:never
         Preferences.@GenerateVADBehavior=literal:scheduled
         Preferences.@AcceptedEULA=literal:1
+        # Request lines (client, network class, path) for the SIEM; Plex strips tokens.
+        Preferences.@logDebug=literal:1
       )
 
       ${pkgs.ghostship-config}/bin/ghostship-config set "$PREFS_FILE" "''${plex_args[@]}"

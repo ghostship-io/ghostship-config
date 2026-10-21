@@ -1,0 +1,11 @@
+# Last step before storage: remove secrets from messages and request paths.
+# Query parameters, bearer tokens and credentials embedded in URLs.
+secret_params = r'(?i)(?P<k>(?:x-plex-token|token|api[_-]?key|apikey|access[_-]?token|auth|password|passwd|pwd|secret|session|signature|sig)=)[^&\s"]+'
+bearer = r'(?i)(?P<k>bearer\s+)[A-Za-z0-9._~+/=-]+'
+url_credentials = r'(?P<k>://[^/\s:@]+:)[^@\s/]+@'
+message = to_string(.message) ?? ""
+message = replace(message, secret_params, "$k[REDACTED]")
+message = replace(message, bearer, "$k[REDACTED]")
+.message = replace(message, url_credentials, "$k[REDACTED]@")
+path = to_string(.path) ?? ""
+if path != "" { .path = replace(path, secret_params, "$k[REDACTED]") }
