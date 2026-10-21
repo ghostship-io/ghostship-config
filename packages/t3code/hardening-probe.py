@@ -8,10 +8,10 @@ import argparse
 import fcntl
 import json
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 
 
 def run(*args, **kwargs):
@@ -62,7 +62,12 @@ def main():
             )
             # basic.target does not start application services or updater timers.
             name = "t3code-hardening-probe"
-            if subprocess.run(["podman", "container", "exists", name]).returncode == 0:
+            if (
+                subprocess.run(
+                    ["podman", "container", "exists", name], check=False
+                ).returncode
+                == 0
+            ):
                 raise RuntimeError(
                     "previous candidate exists; inspect it before retrying"
                 )
@@ -77,6 +82,9 @@ def main():
                     "--systemd=always",
                     "--cap-add=SYS_RESOURCE",
                     "--memory=4g",
+                    "--tty",
+                    "--env=SYSTEMD_LOG_TARGET=console",
+                    "--env=SYSTEMD_LOG_LEVEL=debug",
                     "--pids-limit=2048",
                     "--security-opt=apparmor=ghostship-t3code",
                     "-v",
