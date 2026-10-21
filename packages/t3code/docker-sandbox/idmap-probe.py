@@ -22,6 +22,9 @@ def main():
         source.mkdir()
         target.mkdir()
         os.chown(source, 3000, 3000)
+        shared_tmp = source / "shared-tmp"
+        shared_tmp.mkdir()
+        shared_tmp.chmod(0o1777)
         subprocess.run(
             [
                 "mount",
@@ -58,6 +61,21 @@ def main():
                     if path.exists()
                     else None,
                 }
+            # Root-owned sticky directories such as T3's /tmp still need a
+            # mapped inode owner, even when mode bits allow every user to write.
+            temporary_write = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    code,
+                    "62040",
+                    str(target / "shared-tmp" / "file"),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            results["root_owned_tmp_write"] = temporary_write.returncode == 0
             # Explicit, project-local permissions support nonroot images. No
             # ownership changes or broad permissions are applied to real data.
             subprocess.run(
@@ -101,6 +119,7 @@ def main():
                 if results["mapped_uid"] == 62040
                 and results["writes"]["0"]["success"]
                 and results["writes"]["0"]["source_uid"] == 3000
+                and results["root_owned_tmp_write"]
                 and all(results["explicit_acl"].values())
                 else 1
             )
