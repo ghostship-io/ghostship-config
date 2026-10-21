@@ -1,6 +1,7 @@
 """Newsletter monitor -> real notifier -> isolated incident spool and fake ntfy."""
 import importlib.util
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -141,7 +142,9 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(self.consume(), 0)
         self.available = False
         self.run_monitor(True)
-        self.assertTrue(json.loads(self.state.read_text())["firing"])
+        recovered = json.loads(self.state.read_text())
+        self.assertFalse(recovered["firing"])
+        self.assertTrue(recovered["pending_resolution"])
         self.available = True
         self.run_monitor(True)
         self.run_monitor(True)
@@ -168,16 +171,91 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(self.bridge.launch.call_count, 1)
         self.bridge.send.assert_not_called()
 
-    def test_lost_handoff_acknowledgement_replays_the_same_coordinator_event(self):
+    def test_relapse_during_resolution_outage_gets_a_new_incident_and_firing(self):
         self.run_monitor(False)
-        (queued,) = self.spool.glob("*.json")
-        self.assertEqual(self.consume(), 1)  # Consumer ran before monitor saved its acknowledgement.
-        state = json.loads(self.state.read_text())
-        state["incident_queued"] = False
-        self.state.write_text(json.dumps(state))
+        (first,) = self.spool.glob("*.json")
+        first_id = json.loads(self.state.read_text())["incident_id"]
+        self.assertEqual(self.consume(), 1)
+        # An existing on-disk episode must keep its ID across the upgrade.
+        self.state.write_text(json.dumps({"firing": True, "incident_id": first_id,
+                                          "incident_queued": True, "notified": True}))
+        self.available = False
+        self.run_monitor(False)
+        self.assertEqual(json.loads(self.state.read_text())["incident_id"], first_id)
+        self.run_monitor(True)
+        self.run_monitor(False)
+        (second,) = self.spool.glob("*.json")
+        second_id = json.loads(self.state.read_text())["incident_id"]
+        self.assertNotEqual(second_id, first_id)
+        self.assertNotEqual(second.name, first.name)
+        self.assertEqual(self.consume(), 1)
+        self.assertEqual(self.bridge.send.call_count, 1)
+        self.run_monitor(False)
+        self.assertEqual(json.loads(self.state.read_text())["incident_id"], second_id)
+        self.assertEqual(self.consume(), 0)
+        self.available = True
+        self.run_monitor(False)
+        self.run_monitor(False)
+        self.assertEqual([m["tags"][1] for m in self.messages],
+                         ["firing", "resolved", "firing"])
+        self.assertEqual(self.bridge.launch.call_count, 1)
+        self.assertEqual(self.bridge.send.call_count, 1)
+        self.run_monitor(True)
+        self.assertEqual([m["tags"][1] for m in self.messages],
+                         ["firing", "resolved", "firing", "resolved"])
+        self.assertEqual(json.loads(self.state.read_text()), {})
+
+    def test_flapping_with_spool_outage_retains_bounded_durable_handoffs(self):
+        self.spool.rmdir()
+        self.available = False
+        identities = []
+        sizes = []
+        for _ in range(8):
+            self.run_monitor(False)
+            identities.append(json.loads(self.state.read_text())["incident_id"])
+            self.run_monitor(True)
+            sizes.append(self.state.stat().st_size)
+        self.assertEqual(len(set(identities)), len(identities))
+        # Pending episodes must not grow an unbounded list during an outage.
+        self.assertLess(max(sizes) - min(sizes), 64)
+        self.spool.mkdir()
+        queued = []
+        for _ in identities:
+            self.run_monitor(True)
+            (event,) = self.spool.glob("*.json")
+            queued.append(event.name)
+            self.assertEqual(self.consume(), 1)
+        self.assertEqual(queued, [f"incident-{hashlib.sha256(event_id.encode()).hexdigest()}.json"
+                                  for event_id in identities])
+        self.assertEqual(self.bridge.launch.call_count, 1)
+        self.assertEqual(self.bridge.send.call_count, len(identities) - 1)
+        self.available = True
+        self.run_monitor(True)
+        self.run_monitor(True)
+        self.assertEqual([m["tags"][1] for m in self.messages], ["resolved"])
+        self.assertEqual(list(self.spool.iterdir()), [])
+        self.assertEqual(json.loads(self.state.read_text()), {})
+
+    def test_lost_handoff_acknowledgement_replays_the_same_coordinator_event(self):
+        replace = os.replace
+        queued = []
+
+        def lose_acknowledgement(source, destination):
+            events = list(self.spool.glob("*.json"))
+            if events:
+                queued.extend(events)
+                self.assertEqual(self.consume(), 1)
+                raise OSError("injected failure persisting handoff acknowledgement")
+            return replace(source, destination)
+
+        with mock.patch.dict(os.environ, self.env), \
+             mock.patch.object(health, "observe", return_value="delivery_missing"), \
+             mock.patch.object(health.os, "replace", side_effect=lose_acknowledgement):
+            with self.assertRaisesRegex(OSError, "persisting handoff acknowledgement"):
+                health.main(["--config", str(self.config)])
         self.run_monitor(False)
         (retried,) = self.spool.glob("*.json")
-        self.assertEqual(retried.name, queued.name)
+        self.assertEqual(retried.name, queued[0].name)
         self.assertEqual(len(self.messages), 1)
         self.assertEqual(self.consume(), 0)  # Stable filename is the coordinator's deduplication key.
         self.assertEqual(self.bridge.launch.call_count, 1)
@@ -189,21 +267,38 @@ class DeliveryTests(unittest.TestCase):
         self.spool.rmdir()
         self.run_monitor(False)
         self.run_monitor(True)
-        self.assertTrue(json.loads(self.state.read_text())["resolved"])
+        recovered = json.loads(self.state.read_text())
+        self.assertFalse(recovered["firing"])
+        self.assertFalse(recovered.get("pending_resolution"))
+        # Adopt a pre-upgrade recovery whose resolution succeeded before its
+        # incident could be queued; that pending event must keep its original ID.
+        self.state.write_text(json.dumps({"firing": True, "incident_id": recovered["incident_id"],
+            "incident_queued": False, "notified": True, "resolved": True}))
         self.spool.mkdir()
         self.run_monitor(True)
-        self.assertEqual(len(list(self.spool.glob("*.json"))), 1)
+        (event,) = self.spool.glob("*.json")
+        self.assertEqual(event.name,
+                         f'incident-{hashlib.sha256(recovered["incident_id"].encode()).hexdigest()}.json')
+        self.assertEqual(self.consume(), 1)
         self.assertEqual(json.loads(self.state.read_text()), {})
         self.assertEqual([m["tags"][1] for m in self.messages], ["firing", "resolved"])
 
     def test_identity_must_be_persisted_before_handoff(self):
-        with mock.patch.object(health, "observe", return_value="delivery_missing"), \
-             mock.patch.object(health.os, "fsync", side_effect=OSError("injected persistence failure")):
-            with self.assertRaises(OSError):
-                health.main(["--config", str(self.config)])
-        self.assertEqual(list(self.spool.iterdir()), [])
-        self.assertEqual(self.messages, [])
-        self.assertFalse(self.state.exists())
+        for previous in (None, {"firing": True, "incident_id": "existing-episode",
+                               "incident_queued": True, "notified": True, "resolved": True}):
+            with self.subTest(previous=previous):
+                if previous is not None:
+                    self.state.write_text(json.dumps(previous))
+                with mock.patch.object(health, "observe", return_value="delivery_missing"), \
+                     mock.patch.object(health.os, "fsync", side_effect=OSError("injected persistence failure")):
+                    with self.assertRaises(OSError):
+                        health.main(["--config", str(self.config)])
+                self.assertEqual(list(self.spool.iterdir()), [])
+                self.assertEqual(self.messages, [])
+                if previous is None:
+                    self.assertFalse(self.state.exists())
+                else:
+                    self.assertEqual(json.loads(self.state.read_text()), previous)
 
 
 if __name__ == "__main__":
