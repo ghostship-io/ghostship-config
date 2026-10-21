@@ -249,13 +249,21 @@ def _resolve_name(name: str, resolver: str, timeout: float = 5.0) -> str:
         return ""
     count = int.from_bytes(answer[6:8], "big")
     offset = 12
+    # The question: the name, then the type and the class.
+    while offset < len(answer) and answer[offset]:
+        offset += 1 + answer[offset]
+    offset += 1 + 4
     for _ in range(count):
-        while offset < len(answer) and answer[offset]:
-            offset += 1 + answer[offset]
-        offset += 1
-        if offset + 10 > len(answer):
+        if offset + 12 > len(answer):
             return ""
-        record_type = answer[offset]
+        if answer[offset] & 0xC0 == 0xC0:
+            # A compressed name: the type and the class follow it.
+            offset += 2
+        else:
+            while offset < len(answer) and answer[offset]:
+                offset += 1 + answer[offset]
+            offset += 1
+        record_type = int.from_bytes(answer[offset : offset + 2], "big")
         record_length = int.from_bytes(answer[offset + 8 : offset + 10], "big")
         offset += 10
         if record_type == 1 and record_length == 4:
@@ -391,6 +399,49 @@ def _window_scope(quota_id: str) -> tuple[str, ...]:
     return ()
 
 
+def free_route_accounts(
+    results: list[SourceResult],
+    context: dict[str, Any],
+    measured_windows: list[dict[str, Any]],
+) -> set[str]:
+    """The accounts that are observed to serve a free route on their own.
+
+    The observation needs three facts at the same time: the paid allowance of
+    the account is spent, the account is still ready, and it still offers a
+    free model. A provider that is observed in that state is serving the
+    free route independently of the paid allowance, so the paid allowance is
+    not evidence about the free models of that account.
+
+    It is an observation of the provider's behaviour, with a time, not a
+    promise about the provider.
+    """
+    accounts: set[str] = set()
+    ready = {
+        str(instance)
+        for instance, status in (context.get("instance_status") or {}).items()
+        if str(status) == "ready"
+    }
+    # The instance that serves an account. The OpenCode instance serves
+    # several accounts, and only the Go one has the paid allowance.
+    instance_of = {
+        "opencode-go": "opencode",
+        "ollama": "opencode",
+        "openrouter": "opencode",
+    }
+    spent: set[str] = set()
+    for window in measured_windows:
+        used = window.get("usedRatio")
+        if not isinstance(used, (int, float)) or isinstance(used, bool):
+            continue
+        if float(used) >= 1.0 and str(window.get("kind")) in ("monthly", "weekly", "subscription"):
+            spent.add(str(window.get("provider")))
+    for account in spent:
+        instance = instance_of.get(account, account)
+        if instance in ready:
+            accounts.add(account)
+    return accounts
+
+
 def ranking_inputs(
     results: list[SourceResult],
     catalog: catalog_module.Catalog,
@@ -482,6 +533,13 @@ def ranking_inputs(
             duration_seconds=(
                 float(duration) if isinstance(duration, (int, float)) and duration else None
             ),
+            # When the provider last reported the window. A reading that is
+            # old is not headroom.
+            observed_at=(
+                float(measured.get("observedAtEpoch"))
+                if isinstance(measured.get("observedAtEpoch"), (int, float))
+                else None
+            ),
         )
         if model == "*":
             windows.setdefault(provider, []).append(window)
@@ -554,6 +612,10 @@ def ranking_samples(
         # The free inference pool belongs to the free tier, not to the bulk
         # tier of the paid accounts.
         rank_kwargs["exclude_providers"] = {"bulk": sorted(pool_providers)}
+    if "free_route_accounts" in inspect.signature(ranking_module.rank_models).parameters:
+        rank_kwargs["free_route_accounts"] = sorted(
+            free_route_accounts(results, context, measured_windows)
+        )
     ranked = ranking_module.rank_models(**rank_kwargs)
     samples.extend(ranking_module.rank_samples(ranked, now=now))
     return samples, ranked
@@ -565,6 +627,7 @@ def build_snapshot(
     context: dict[str, Any],
     now: float,
     aa_cache: dict[str, Any] | None = None,
+    measured_windows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -599,6 +662,7 @@ def build_snapshot(
         native_models=context.get("native_models") or {},
         policy=OWNER_POLICY,
         aa_cache=aa_cache,
+        measured_windows=measured_windows,
     )
 
 
@@ -748,8 +812,16 @@ def main(argv: list[str] | None = None) -> int:
     aa_cache = aa.load_cache(args.aa_cache, now)
     duration = time.monotonic() - started
     text = render(results, extra, now, duration)
+    measured: list[dict[str, Any]] = []
+    for result in results:
+        measured.extend(result.windows)
     snapshot = build_snapshot(
-        results, context.get("ranked") or [], context, now, aa_cache=aa_cache
+        results,
+        context.get("ranked") or [],
+        context,
+        now,
+        aa_cache=aa_cache,
+        measured_windows=measured,
     )
     if args.stdout:
         sys.stdout.write(text)

@@ -64,12 +64,17 @@ def read_feed(env_file: str, now: float) -> dict[str, Any]:
     # The client of the feed is owned by the service library. It is reached
     # through the ordinary command path of that library, so the request
     # budget, the key handling, and the rate limits stay in one place.
+    # The canonical client of the feed is a Printing Press backend of the
+    # service library. It reads the free endpoint only, and it pages through
+    # every page of it. The key is injected by the caller through the vault,
+    # so the credential never lands in a file of the collector.
     command = [
         "/home/t3code/.local/bin/agent",
         "pp",
         "artificialanalysis",
         "models",
         "--free",
+        "--all-pages",
         "--json",
     ]
     import subprocess
@@ -111,14 +116,23 @@ def read_feed(env_file: str, now: float) -> dict[str, Any]:
             "fetched_at_epoch": None,
             "records": [],
         }
-    records = document.get("records") if isinstance(document, dict) else None
+    records = document.get("records") if isinstance(document, dict) else document
+    if not isinstance(records, list):
+        records = []
+    version = ""
+    if isinstance(document, dict):
+        version = str(
+            document.get("intelligence_index_version")
+            or document.get("intelligence_index_version_major_minor")
+            or ""
+        )
     return {
         "status": "ok",
         "reason": codes.OK,
-        "intelligence_index_version": aa.INTELLIGENCE_INDEX_VERSION,
+        "intelligence_index_version": version or aa.INTELLIGENCE_INDEX_VERSION,
         "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
         "fetched_at_epoch": now,
-        "records": records if isinstance(records, list) else [],
+        "records": records,
     }
 
 

@@ -187,6 +187,7 @@ def read_grok(home: str | os.PathLike[str], now: float, http: HttpCall = http_re
     return SourceResult(
         source=source,
         status="ok",
+        reason=codes.OK,
         metrics=samples,
         observed_at=now,
         duration_s=time.monotonic() - started,
@@ -294,6 +295,7 @@ def read_opencode_go(
     return SourceResult(
         source=source,
         status="ok",
+        reason=codes.OK,
         metrics=samples,
         observed_at=now,
         duration_s=time.monotonic() - started,
@@ -660,6 +662,7 @@ def read_openrouter(
     return SourceResult(
         source=source,
         status="ok" if credits.ok and account.ok else "partial",
+        reason=codes.OK if credits.ok and account.ok else codes.HTTP_ERROR,
         metrics=samples,
         observed_at=now,
         duration_s=time.monotonic() - started,
@@ -720,6 +723,7 @@ def read_ollama(
     return SourceResult(
         source=source,
         status="ok" if not failures else "partial",
+        reason=codes.OK if not failures else codes.HTTP_ERROR,
         metrics=samples,
         observed_at=now,
         duration_s=time.monotonic() - started,

@@ -330,10 +330,14 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
     if context is not None:
         context["offered_models"] = offered
         context["native_models"] = native
+        context["instance_status"] = {
+            str(provider.get("instanceId") or ""): str(provider.get("status") or "")
+            for provider in providers
+        }
     return SourceResult(
         source="t3",
         status=status,
-        reason=detail,
+        reason=codes.OK if status == "ok" else codes.RPC_FAILED,
         metrics=samples,
         observed_at=observed,
         duration_s=time.monotonic() - started,
@@ -382,6 +386,7 @@ def _collect_usage(
     return SourceResult(
         source="t3_usage",
         status="ok",
+        reason=codes.OK,
         metrics=samples,
         observed_at=observed,
         duration_s=time.monotonic() - started,
