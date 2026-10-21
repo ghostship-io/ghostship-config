@@ -30,7 +30,7 @@ def main():
                 "mount",
                 "--bind",
                 "-o",
-                "X-mount.idmap=b:3000:62040:1 b:2000000:2000000:65536",
+                "X-mount.idmap=b:0:0:1 b:3000:62040:1 b:2000000:2000000:65536",
                 str(source),
                 str(target),
             ],
