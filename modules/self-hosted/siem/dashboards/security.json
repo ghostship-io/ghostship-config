@@ -879,60 +879,6 @@
    "targetBlank": false,
    "includeVars": false,
    "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
   }
  ],
  "description": "Provisioned read-only Ghostship monitoring. Direct navigation; data comes from the existing SIEM stores."

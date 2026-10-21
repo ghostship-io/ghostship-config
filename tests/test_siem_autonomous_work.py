@@ -70,9 +70,11 @@ class CollectorTests(unittest.TestCase):
         self.db.execute('INSERT INTO scheduled_tasks VALUES(?,?,?,?,?,?,?,?,?)',
                         ('task-disabled', SECRET, SECRET, 0, '{"type":"interval"}', NOW+300, NOW-60, 'failed', THREAD))
         self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
-                        ('run', THREAD, 'codex', 'running', at, None, SECRET, 1))
+                        ('run', THREAD, 'codex', 'running', at, None,
+                         json.dumps({'ordinal': 1, 'startedAt': NOW-9, 'transcript': SECRET}), 1))
         self.db.execute('INSERT INTO orchestration_v2_projection_subagents VALUES(?,?,?,?,?,?,?,?)',
-                        ('child', THREAD, THREAD, 'codex', 'running', None, at, SECRET))
+                        ('child', THREAD, THREAD, 'codex', 'running', None, at,
+                         json.dumps({'note': SECRET})))
         self.db.execute('INSERT INTO scheduled_task_webhook_deliveries VALUES(?,?,?,?,?,?)',
                         ('delivery', at, 'accepted', SECRET, SECRET, SECRET))
         for name, payload in [('turn', {'turnTokenUsage': {'usageStatus':'complete','inputTokens':25,'outputTokens':10}, 'transcript':SECRET}),
@@ -312,10 +314,12 @@ class CollectorTests(unittest.TestCase):
         # A later executed run with a lower ordinal must win: the highest
         # ordinal can mask a run that started and failed afterwards.
         self.db.execute('DELETE FROM orchestration_v2_projection_runs')
+        started = json.dumps({'ordinal': 2, 'startedAt': NOW-110, 'transcript': SECRET})
         self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
-                        ('run-old', THREAD, 'codex', 'completed', NOW-100, NOW-90, SECRET, 2))
+                        ('run-old', THREAD, 'codex', 'completed', NOW-100, NOW-90, started, 2))
         self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
-                        ('run-new', THREAD, 'codex', 'failed', NOW-50, NOW-40, SECRET, 1))
+                        ('run-new', THREAD, 'codex', 'failed', NOW-50, NOW-40,
+                         json.dumps({'ordinal': 1, 'startedAt': NOW-60, 'transcript': SECRET}), 1))
         self.db.commit()
         rows, _ = self.collect()
         thread = next(r for r in rows if r['kind'] == 'thread')
@@ -323,12 +327,58 @@ class CollectorTests(unittest.TestCase):
         # A queued run is active work and must be visible as such.
         self.db.execute('DELETE FROM orchestration_v2_projection_runs')
         self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
-                        ('run-queued', THREAD, 'codex', 'queued', NOW-5, None, SECRET, 1))
+                        ('run-queued', THREAD, 'codex', 'queued', NOW-5, None,
+                         json.dumps({'ordinal': 1}), 1))
         self.db.commit()
         rows, metrics = self.collect()
         thread = next(r for r in rows if r['kind'] == 'thread')
         self.assertEqual(thread['status'], 'queued')
         self.assertEqual(thread['status'] in work.ACTIVE, True)
+
+    def test_cancelled_run_that_never_started_does_not_mask_the_completed_run(self):
+        self.db.execute('DELETE FROM orchestration_v2_projection_runs')
+        self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                        ('completed', THREAD, 'codex', 'completed', NOW-600, NOW-550,
+                         json.dumps({'ordinal': 1, 'startedAt': NOW-590}), 1))
+        # Requested later and cancelled before it ever started.
+        self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                        ('cancelled', THREAD, 'codex', 'cancelled', NOW-240, NOW-200,
+                         json.dumps({'ordinal': 2, 'startedAt': None}), 2))
+        self.db.commit()
+        rows, _ = self.collect()
+        thread = next(r for r in rows if r['kind'] == 'thread')
+        self.assertEqual(thread['status'], 'completed')
+        # A cancelled run that did start is still the latest executed state.
+        self.db.execute("UPDATE orchestration_v2_projection_runs SET payload_json=? WHERE run_id='cancelled'",
+                        (json.dumps({'ordinal': 2, 'startedAt': NOW-230}),))
+        self.db.commit()
+        rows, _ = self.collect()
+        self.assertEqual(next(r for r in rows if r['kind'] == 'thread')['status'], 'cancelled')
+        # Malformed or absent payload JSON is not proof that a run never
+        # started, so it still counts as executed.
+        self.db.execute("UPDATE orchestration_v2_projection_runs SET payload_json='not-json' WHERE run_id='cancelled'")
+        self.db.commit()
+        rows, _ = self.collect()
+        self.assertEqual(next(r for r in rows if r['kind'] == 'thread')['status'], 'cancelled')
+        self.assertNotIn('not-json', json.dumps(rows))
+
+    def test_equal_completion_time_breaks_the_tie_by_ordinal(self):
+        self.db.execute('DELETE FROM orchestration_v2_projection_runs')
+        for run_id, ordinal in (('low', 1), ('high', 3)):
+            self.db.execute('INSERT INTO orchestration_v2_projection_runs VALUES(?,?,?,?,?,?,?,?)',
+                            (run_id, THREAD, 'codex', 'completed', NOW-90, NOW-60,
+                             json.dumps({'ordinal': ordinal, 'startedAt': NOW-89}), ordinal))
+        self.db.commit()
+        rows, _ = self.collect()
+        thread = next(r for r in rows if r['kind'] == 'thread')
+        self.assertEqual(thread['status'], 'completed')
+
+    def test_canonical_native_instance_ids_are_known_and_custom_names_are_not(self):
+        self.assertEqual(work.provider('claudeAgent'), 'claudeAgent')
+        for provider in ('codex', 'opencode', 'antigravity', 'grok'):
+            self.assertEqual(work.provider(provider), provider)
+        self.assertEqual(work.provider('my-private-agent'), 'unknown')
+        self.assertEqual(work.provider('/home/t3code/custom'), 'unknown')
 
     def test_coordinator_ci_proof_is_read_as_scalars_on_the_exact_revision(self):
         rows, metrics = self.collect()
@@ -450,6 +500,24 @@ class DashboardContractTests(unittest.TestCase):
             self.assertIn(link['url'].removeprefix('/d/'), uids | external)
         self.assertIn('/d/ghostship-ai-usage', [link['url'] for link in dashboard['links']])
 
+    def test_navigation_has_exactly_one_link_per_page(self):
+        # Rebuilding a dashboard must never append a second copy of a link: the
+        # bar is five pages, each exactly once, with the same order everywhere.
+        expected = ['ghostship-autonomous-work', 'ghostship-host', 'ghostship-security',
+                    'ghostship-siem-pipeline', 'ghostship-ai-usage']
+        for path in (SIEM/'dashboards').glob('*.json'):
+            page = json.loads(path.read_text())
+            urls = [link['url'] for link in page['links']]
+            with self.subTest(dashboard=page['uid']):
+                self.assertEqual([url.removeprefix('/d/') for url in urls], expected)
+                self.assertEqual(len(urls), len(set(urls)))
+                self.assertEqual(len(urls), 5)
+            for panel in page['panels']:
+                if panel.get('type') == 'text':
+                    content = panel['options']['content']
+                    self.assertEqual(content.count('ghostship-ai-usage'), 1)
+                    self.assertLessEqual(content.count('/d/ghostship-'), 5)
+
     def test_all_four_pages_have_consistent_direct_navigation_and_source_shapes(self):
         dashboards=[json.loads(p.read_text()) for p in (SIEM/'dashboards').glob('*.json')]
         self.assertEqual(len(dashboards),4)
@@ -509,7 +577,7 @@ class DashboardContractTests(unittest.TestCase):
                 for forbidden in ('approved', 'conclusion', 'frontier_approved'):
                     self.assertNotIn(forbidden, target['expr'])
         header = next(p for p in dashboard['panels'] if p['type'] == 'text')
-        self.assertIn('a receipt is never a green outcome', header['options']['content'])
+        self.assertIn('receipt is never a green outcome', header['options']['content'].lower())
         # No panel may claim a complete enumeration of a capped source.
         for panel in dashboard['panels']:
             self.assertNotIn('All projects', panel['title'])
