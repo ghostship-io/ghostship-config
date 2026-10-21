@@ -12,8 +12,12 @@
 # sources of churn that grow metadata.
 lib.mkIf ((config.fileSystems."/".fsType or "") == "btrfs") {
   # Bound journal growth: it once reached several GiB and its active file could
-  # not rotate while the filesystem was read-only.
-  services.journald.settings.Journal.SystemMaxUse = "1G";
+  # not rotate while the filesystem was read-only. The journal is also the
+  # SIEM's upstream buffer: at 1G it held only ~3 h during the 2026-10-21
+  # AppArmor flood, so a longer Vector or VictoriaLogs outage would lose events.
+  # 4G (~12 h at that rate) with the metadata timers below; JournalRetentionShort
+  # alerts under 6 h.
+  services.journald.settings.Journal.SystemMaxUse = "4G";
 
   # Reclaim metadata: relocates only chunks below the usage thresholds, so
   # nearly-empty chunks are consolidated and returned to the device. Serialized

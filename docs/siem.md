@@ -117,6 +117,16 @@ ntfy accepts it and sends one resolution. The bridge never resolves an alert
 while its source is unavailable. A dead host cannot alert by itself: that
 needs the off-host dead-man (#102, Gate 1.2, pending).
 
+Loss and lag are measured, not assumed. The watchdog also writes
+`siem-pipeline.prom`: kernel audit lost and backlog, journal retention (age of
+the oldest system-journal entry) and VictoriaLogs ingestion lag. Rules:
+`AuditRecordsLost`, `JournalRetentionShort` (under 6 h), `LogIngestionLag` (over
+10 min), `VectorBufferFilling` (over 1 GiB of the 2 GiB disk buffer) and
+`PipelineMetricsStale`. The journal is the buffer upstream of Vector:
+everything it rotates before Vector reads it is lost. It is capped at 4 GiB
+(`storage-health.nix`, btrfs tradeoff). At the 2026-10-21 AppArmor flood rate
+1 GiB held only about 3 hours.
+
 On the host, `ghostship-siem-alerts --list` prints current alerts with their
 evidence queries. The bridge's T3 session token is reissued daily
 (`ghostship-siem-alerts-t3-token`).
