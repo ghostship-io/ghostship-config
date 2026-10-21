@@ -15,6 +15,7 @@
     ./reliability.nix
     ./backup.nix
     ./monitoring.nix
+    ./newsletter-health.nix
     ./notify-coverage.nix
     ./storage-health.nix
     ./synology-health.nix

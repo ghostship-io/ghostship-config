@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.28] - 2026-10-21
+
+- Observe Ghostship AM outcomes from a host timer, using the newsletter's runtime-only monitor as its unprivileged user. Missing delivery, stale/invalid daily artifacts, or an unavailable monitor raise an operations alert and the existing bounded coordinator incident; recovery sends one resolution. No new sender, repair loop or T3 restart path is added. Requires newsletter 0.5.18 or later in the canonical checkout.
+
 ## [3.17.27] - 2026-10-21
 
 - Pin ghostship-agent 0.36.0: `gws`, the Google Workspace official-API CLI, is retired with its `google-workspace-cli` flake input (the lock drops it and its nixpkgs), so the managed install removes the `gws` command from T3 Code; Google work runs through the browser workflows. Also drops the ignored `shoppingConfig` argument, dead CloakBrowser Keep clients and retired Prefect/CloakBrowser notes.
