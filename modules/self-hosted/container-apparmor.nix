@@ -125,6 +125,14 @@ let
     # binary reads the boot ID as a TLS certificate, fails and exits.
     victorialogs.heartbeat = victoriaHeartbeat 19428;
     victoriametrics.heartbeat = victoriaHeartbeat 18428;
+    # SIEM UI (siem/ui.nix): distroless Grafana cannot safely read the boot ID
+    # itself (any config starts a server), so a static read-only helper does.
+    grafana.heartbeat = [ "/opt/ghostship-heartbeat/read-file" "/proc/sys/kernel/random/boot_id" ];
+    vmauth.heartbeat = [
+      "@entrypoint"
+      "-auth.config=/proc/sys/kernel/random/boot_id"
+      "-httpListenAddr=127.0.0.1:18427"
+    ];
     # Both vmalert instances share apparmor/vmalert.profile (siem/alerting.nix).
     vmalert-logs = {
       source = "vmalert";
