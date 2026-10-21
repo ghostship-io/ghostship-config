@@ -34,9 +34,13 @@ FACT_MAX_AGE_SECONDS = 30 * 24 * 3600.0
 BENCHMARK_VERSION = "4.3"
 
 # The confidence of an estimate, and the ceiling of its use. An estimate is
-# only a tie breaker, never the reason a model wins on its own.
+# only a tie breaker, never the reason a model wins on its own. The confidence
+# is a share (0..1) and the strength is on the same scale as a measured index
+# (0..100): the two are not the same number and are never mixed.
 ESTIMATE_CONFIDENCE = 0.4
 ESTIMATE_CEILING = 0.7
+STRENGTH_MIN = 0.0
+STRENGTH_MAX = 100.0
 
 FACT_FIELDS = (
     "model",
@@ -148,26 +152,39 @@ def estimated_fact(
     variant: str = "",
     strength: float,
     basis: str,
+    confidence: float = ESTIMATE_CONFIDENCE,
     now: float | None = None,
 ) -> dict[str, Any]:
     """A bounded estimate for a model no public feed lists.
 
     A model that is not listed may still be used, but only with a clearly
     estimated strength, and the estimate never claims to be a measurement.
+    The strength is on the 0..100 scale of a measured index, the confidence is
+    a 0..1 share, and a value outside its range is rejected instead of being
+    clamped into a quality claim.
     """
+    number = _finite(strength)
+    if number is None or not (STRENGTH_MIN <= number <= STRENGTH_MAX):
+        raise ValueError("an estimate needs a finite strength between 0 and 100")
+    share = _finite(confidence)
+    if share is None or not (0.0 < share <= ESTIMATE_CEILING):
+        raise ValueError(
+            "an estimate needs a finite confidence above 0 and at most the ceiling"
+        )
     fact = make_fact(
         provider=provider,
         model=model,
         variant=variant,
-        indices={"intelligence_index": float(strength)},
+        indices={"intelligence_index": number},
         source="estimated",
-        confidence=ESTIMATE_CONFIDENCE,
+        confidence=share,
         basis=basis,
         complexity_eligibility="low",
         now=now,
     )
     fact["status"] = "estimated"
     fact["estimate_ceiling"] = ESTIMATE_CEILING
+    fact["strength_scale"] = {"min": STRENGTH_MIN, "max": STRENGTH_MAX}
     return fact
 
 
@@ -196,6 +213,32 @@ def pending_fact(
     return fact
 
 
+def _finite(value: Any) -> float | None:
+    """A finite float, or None. A NaN or an infinity is not a number here."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if number != number or number in (float("inf"), float("-inf")):
+        return None
+    return number
+
+
+def evidence_age(fact: Mapping[str, Any], now: float) -> float | None:
+    """The age of the evidence of a fact, or None when it cannot be aged.
+
+    The age must be finite and not negative: a reading from the future is not
+    an old reading, it is a reading that cannot be believed.
+    """
+    fetched = _finite(fact.get("fetched_at_epoch"))
+    moment = _finite(now)
+    if fetched is None or moment is None:
+        return None
+    age = moment - fetched
+    if age < 0:
+        return None
+    return age
+
+
 def is_current(fact: Mapping[str, Any], now: float) -> bool:
     """True when a fact may be reused without another research."""
     if not isinstance(fact, Mapping):
@@ -204,18 +247,21 @@ def is_current(fact: Mapping[str, Any], now: float) -> bool:
         return False
     if str(fact.get("benchmark_version") or "") != BENCHMARK_VERSION:
         return False
-    fetched = fact.get("fetched_at_epoch")
-    if not isinstance(fetched, (int, float)) or isinstance(fetched, bool):
+    age = evidence_age(fact, now)
+    if age is None:
         return False
-    if (now - float(fetched)) > FACT_MAX_AGE_SECONDS:
-        return False
-    return True
+    return age <= FACT_MAX_AGE_SECONDS
 
 
 def needs_research(
     fact: Mapping[str, Any] | None, identity: str, now: float
 ) -> tuple[bool, str]:
-    """Whether a model has to be researched again, and why."""
+    """Whether a model has to be researched again, and why.
+
+    A pending fact waits for the moment it says it is checked again: the
+    research is not repeated before it, so a model whose brief is expected is
+    not researched again and again.
+    """
     if not isinstance(fact, Mapping) or not fact:
         return True, "no fact yet"
     fact_key = identity_key(
@@ -228,6 +274,9 @@ def needs_research(
     if str(fact.get("benchmark_version") or "") != BENCHMARK_VERSION:
         return True, "the benchmark version changed"
     if fact.get("status") == "pending":
+        next_check = _finite(fact.get("next_check_at"))
+        if next_check is not None and now < next_check:
+            return False, "the pending fact is checked again later"
         return True, str(fact.get("pending_reason") or "the research is pending")
     if not is_current(fact, now):
         return True, "the fact went stale"
@@ -251,18 +300,52 @@ def merge(state: Mapping[str, Any], facts: Iterable[Mapping[str, Any]]) -> dict[
             continue
         current_fingerprint = str(current.get("evidence_fingerprint") or "")
         new_fingerprint = str(fact.get("evidence_fingerprint") or "")
-        if new_fingerprint and new_fingerprint != current_fingerprint:
+        current_time = _finite(current.get("fetched_at_epoch"))
+        new_time = _finite(fact.get("fetched_at_epoch"))
+        newer = (
+            current_time is None
+            or (new_time is not None and new_time >= current_time)
+        )
+        changed = new_fingerprint and new_fingerprint != current_fingerprint
+        # A fresh measurement of the same evidence still refreshes the read
+        # time of a record that went stale.
+        if changed or newer:
             merged[key] = dict(fact)
     return merged
 
 
 def index(facts: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    """The facts by their model name, for a lookup."""
+    """The facts by their identity: provider, model, and reasoning variant.
+
+    The model name alone is not an identity: two providers can serve the same
+    name, and a model and its reasoning variant are different models.
+    """
     result: dict[str, dict[str, Any]] = {}
-    for fact in (facts or {}).values():
+    for key, fact in (facts or {}).items():
         if not isinstance(fact, Mapping):
             continue
-        name = str(fact.get("model") or "").lower()
-        if name and name not in result:
-            result[name] = dict(fact)
+        identity = identity_key(
+            str(fact.get("provider") or ""),
+            str(fact.get("model") or ""),
+            str(fact.get("variant") or ""),
+        )
+        result[identity or str(key)] = dict(fact)
     return result
+
+
+def lookup_by_model(
+    facts: Mapping[str, Any], provider: str, model: str, variant: str = ""
+) -> dict[str, Any] | None:
+    """The fact of one exact model, or None when there is none."""
+    for key, fact in (facts or {}).items():
+        if not isinstance(fact, Mapping):
+            continue
+        if (
+            str(fact.get("provider") or "") == str(provider)
+            and str(fact.get("model") or "") == str(model)
+            and str(fact.get("variant") or "") == str(variant)
+        ):
+            return dict(fact)
+        if str(key) == identity_key(provider, model, variant):
+            return dict(fact)
+    return None
