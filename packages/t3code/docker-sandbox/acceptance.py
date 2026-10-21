@@ -272,71 +272,42 @@ def main():
                     "--volumes",
                     "--remove-orphans",
                 )
-                containers = list_ids(
-                    command,
-                    "ps",
-                    "-aq",
-                    "--filter",
-                    f"label=com.docker.compose.project={tag}",
-                )
-                containers += list_ids(
-                    command, "ps", "-aq", "--filter", f"label=t3code.acceptance={tag}"
-                )
-                containers += list_ids(
-                    command, "ps", "-aq", "--filter", f"ancestor={tag}"
-                )
-                containers += list_ids(command, "ps", "-aq", "--filter", f"name=^{tag}")
-                for identifier in dict.fromkeys(containers):
-                    attempt("rm", "-f", identifier)
-                networks = list_ids(
-                    command,
-                    "network",
-                    "ls",
-                    "-q",
-                    "--filter",
-                    f"label=com.docker.compose.project={tag}",
-                )
-                networks += list_ids(
-                    command,
-                    "network",
-                    "ls",
-                    "-q",
-                    "--filter",
-                    f"label=t3code.acceptance={tag}",
-                )
-                networks += list_ids(
-                    command, "network", "ls", "-q", "--filter", f"name=^{tag}"
-                )
-                for identifier in dict.fromkeys(networks):
-                    attempt("network", "rm", "-f", identifier)
-                volumes = list_ids(
-                    command,
-                    "volume",
-                    "ls",
-                    "-q",
-                    "--filter",
-                    f"label=com.docker.compose.project={tag}",
-                )
-                volumes += list_ids(
-                    command,
-                    "volume",
-                    "ls",
-                    "-q",
-                    "--filter",
-                    f"label=t3code.acceptance={tag}",
-                )
-                volumes += list_ids(
-                    command, "volume", "ls", "-q", "--filter", f"name=^{tag}"
-                )
-                for identifier in dict.fromkeys(volumes):
-                    attempt("volume", "rm", "-f", identifier)
+                # Only two exact keys may match: this run's own label and the
+                # compose project this run created. Nothing else is touched.
+                for kind, listing in (
+                    ("rm", ("ps", "-aq")),
+                    ("network rm", ("network", "ls", "-q")),
+                    ("volume rm", ("volume", "ls", "-q")),
+                ):
+                    identifiers = list_ids(
+                        command,
+                        *listing,
+                        "--filter",
+                        f"label=t3code.acceptance={tag}",
+                    )
+                    identifiers += list_ids(
+                        command,
+                        *listing,
+                        "--filter",
+                        f"label=com.docker.compose.project={tag}",
+                    )
+                    for identifier in dict.fromkeys(identifiers):
+                        attempt(*kind.split(), "-f", identifier)
                 attempt("image", "rm", "-f", tag)
 
             try:
                 (source / "Dockerfile").write_text(
                     f"FROM {args.image}\nRUN python -c 'import socket; assert socket.getaddrinfo(\"example.com\", 443)'\n"
                 )
-                build = command("build", "-t", tag, str(source), check=False)
+                build = command(
+                    "build",
+                    "--label",
+                    f"t3code.acceptance={tag}",
+                    "-t",
+                    tag,
+                    str(source),
+                    check=False,
+                )
                 record(
                     "build + public DNS", build.returncode == 0, build.stderr[-1000:]
                 )
@@ -344,6 +315,8 @@ def main():
                     probe = command(
                         "run",
                         "--rm",
+                        "--label",
+                        f"t3code.acceptance={tag}",
                         "--user",
                         f"{container_uid}:{container_uid}",
                         "--mount",
@@ -381,6 +354,8 @@ def main():
                 limit = command(
                     "run",
                     "--rm",
+                    "--label",
+                    f"t3code.acceptance={tag}",
                     "--memory=64m",
                     "--pids-limit=64",
                     args.image,
@@ -397,6 +372,8 @@ def main():
                 internet = command(
                     "run",
                     "--rm",
+                    "--label",
+                    f"t3code.acceptance={tag}",
                     args.image,
                     "python",
                     "-c",
@@ -409,6 +386,8 @@ def main():
                 tty = command(
                     "run",
                     "--rm",
+                    "--label",
+                    f"t3code.acceptance={tag}",
                     "--tty",
                     args.image,
                     "python",
@@ -421,6 +400,8 @@ def main():
                 plain = command(
                     "run",
                     "--rm",
+                    "--label",
+                    f"t3code.acceptance={tag}",
                     args.image,
                     "python",
                     "-c",
@@ -456,6 +437,8 @@ def main():
                     blocked = command(
                         "run",
                         "--rm",
+                        "--label",
+                        f"t3code.acceptance={tag}",
                         "--privileged",
                         "--network=host",
                         args.image,
@@ -481,6 +464,9 @@ def main():
                                     "image": args.image,
                                     "command": ["python", "-m", "http.server", "8080"],
                                     "ports": ["8080"],
+                                    # Every container of this run carries the
+                                    # run label, so cleanup owns it by label.
+                                    "labels": {"t3code.acceptance": tag},
                                     # A unique alias keeps the project name out of
                                     # any public resolver and out of other projects.
                                     "networks": {
@@ -489,6 +475,7 @@ def main():
                                 },
                                 "client": {
                                     "image": args.image,
+                                    "labels": {"t3code.acceptance": tag},
                                     "command": [
                                         "python",
                                         "-c",
@@ -620,6 +607,8 @@ def main():
                     outside = command(
                         "run",
                         "--rm",
+                        "--label",
+                        f"t3code.acceptance={tag}",
                         "--network",
                         isolation_network,
                         args.image,
