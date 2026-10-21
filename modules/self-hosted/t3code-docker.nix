@@ -147,6 +147,8 @@ let
         (mount runtime runtime false)
         (mount "/sys/fs/cgroup" "/sys/fs/cgroup" false)
         (mount "/proc" "/proc" false)
+        (mount "/dev/pts" "/dev/pts" false)
+        (mount "/dev/pts/ptmx" "/dev/ptmx" false)
         (mount "/run/wrappers/bin/newuidmap" "/run/wrappers/bin/newuidmap" true)
         (mount "/run/wrappers/bin/newgidmap" "/run/wrappers/bin/newgidmap" true)
         (mount "/run/systemd/notify" "/run/systemd/notify" false)
@@ -323,6 +325,23 @@ in
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
       {
+        system.build.t3codeDockerCandidate = pkgs.writeText "t3code-docker-candidate.json" (
+          builtins.toJSON {
+            inherit user state runtime;
+            uid = cfg.uid;
+            subIdStart = cfg.subIdStart;
+            runtimePackage = toString cfg.runtimePackage;
+            units = lib.genAttrs [
+              "t3code-docker-network.service"
+              "t3code-docker-rootfs.service"
+              "t3code-docker.socket"
+              "t3code-docker.service"
+              "t3code-docker-ports.socket"
+              "t3code-docker-ports.service"
+            ] (name: config.systemd.units.${name}.text);
+            manager = config.systemd.units."user@${uid}.service".text;
+          }
+        );
         assertions = [
           {
             assertion = cfg.uid != 3000;

@@ -4,7 +4,7 @@
 let
   flake = builtins.getFlake (toString ../.);
   candidate = flake.nixosConfigurations.chill-penguin.extendModules {
-    modules = [{ ghostship.t3code.hardening.enable = true; }];
+    modules = [ { ghostship.t3code.hardening.enable = true; } ];
   };
 in
 candidate.config.system.build.t3codeCandidateImage
