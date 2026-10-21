@@ -9,6 +9,7 @@ socket permissions and aggregate cgroups in an isolated host/VM acceptance run.
 """
 
 import argparse
+import ipaddress
 import json
 import os
 import subprocess
@@ -24,6 +25,12 @@ def main():
     parser.add_argument("--socket", default="/var/run/docker.sock")
     parser.add_argument("--workspace", default="/workspace", type=Path)
     parser.add_argument(
+        "--control-report",
+        required=True,
+        type=Path,
+        help="Fresh canary-probe.py report from a permitted control namespace",
+    )
+    parser.add_argument(
         "--denied-endpoint",
         action="append",
         required=True,
@@ -31,6 +38,13 @@ def main():
     )
     parser.add_argument("--image", default="python:3.13-alpine")
     args = parser.parse_args()
+    control = json.loads(args.control_report.read_text())
+    if not 0 <= time.time() - control["observed_at"] <= 300:
+        parser.error("control canary report is stale or from the future")
+    for endpoint in args.denied_endpoint:
+        ipaddress.IPv4Address(endpoint.rsplit(":", 1)[0])
+        if control.get("endpoints", {}).get(endpoint) is not True:
+            parser.error(f"control did not prove this endpoint live: {endpoint}")
     docker = ["docker", "--host", f"unix://{args.socket}"]
 
     def command(*arguments, check=True, **kwargs):
@@ -125,9 +139,18 @@ def main():
             record("outbound HTTPS", internet.returncode == 0, internet.stderr[-600:])
             # Host network / privileged intentionally exercise the slirp bypass
             # boundary. In rootless mode these remain within the outer netns.
-            for endpoint in ["192.0.2.1:22", "10.0.2.2:22", *args.denied_endpoint]:
+            for endpoint in args.denied_endpoint:
                 address, port = endpoint.rsplit(":", 1)
-                probe_code = f"import socket,sys\ntry: socket.create_connection(({address!r},{int(port)}),2)\nexcept OSError: sys.exit(0)\nsys.exit(1)"
+                probe_code = (
+                    "import errno,json,socket,sys\n"
+                    f"endpoint={endpoint!r}\n"
+                    f"try: socket.create_connection(({address!r},{int(port)}),2)\n"
+                    "except OSError as e:\n"
+                    " allowed=isinstance(e,TimeoutError) or e.errno in (errno.EACCES,errno.ECONNREFUSED,errno.ETIMEDOUT,errno.EHOSTUNREACH,errno.ENETUNREACH)\n"
+                    " print(json.dumps({'endpoint':endpoint,'blocked':allowed,'errno':e.errno}))\n"
+                    " sys.exit(0 if allowed else 2)\n"
+                    "print(json.dumps({'endpoint':endpoint,'blocked':False})); sys.exit(1)"
+                )
                 blocked = command(
                     "run",
                     "--rm",
@@ -141,7 +164,9 @@ def main():
                 )
                 record(
                     f"host-network private/local canary denied {endpoint}",
-                    blocked.returncode == 0,
+                    blocked.returncode == 0
+                    and json.loads(blocked.stdout or "{}").get("endpoint") == endpoint
+                    and json.loads(blocked.stdout or "{}").get("blocked") is True,
                     blocked.stderr[-600:],
                 )
             compose = source / "compose.json"

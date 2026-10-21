@@ -15,6 +15,35 @@ import subprocess
 from pathlib import Path
 
 
+def owned_directory(path, uid, gid, *, parent_fd=None, mode=0o700):
+    """Open a real directory without following a daemon-controlled symlink."""
+    created = False
+    try:
+        os.mkdir(path, mode, dir_fd=parent_fd)
+        created = True
+    except FileExistsError:
+        pass
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    try:
+        info = os.fstat(fd)
+        if not created and (info.st_uid, info.st_gid) != (uid, gid):
+            raise RuntimeError(f"unexpected existing directory ownership: {path}")
+        if created:
+            os.fchown(fd, uid, gid)
+        os.fchmod(fd, mode)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def manager_active(manager):
+    return run("systemctl", "show", manager, "-p", "ActiveState", "--value") not in (
+        "inactive",
+        "failed",
+    )
+
+
 def run(*args):
     return subprocess.check_output(args, text=True, timeout=240).strip()
 
@@ -48,7 +77,11 @@ def main():
     if os.geteuid() != 0:
         parser.error("run as host root")
     spec = json.loads(args.spec.read_text())
-    if spec["user"] != "t3code-docker" or spec["uid"] != 62040:
+    if (
+        spec["user"] != "t3code-docker"
+        or spec["uid"] != 62040
+        or spec["state"] != "/var/lib/t3code-docker"
+    ):
         parser.error(
             "this candidate driver is restricted to the dedicated UID62040 account"
         )
@@ -74,6 +107,33 @@ def main():
                     raise RuntimeError(
                         "candidate ownership marker does not match; leaving units intact"
                     )
+                for path, text in files.items():
+                    if path.is_symlink() or (
+                        path.exists() and path.read_text() != text
+                    ):
+                        raise RuntimeError(f"candidate unit ownership changed: {path}")
+                if manager_active(manager):
+                    dropins = run(
+                        "systemctl", "show", manager, "-p", "DropInPaths", "--value"
+                    ).split()
+                    expected = (
+                        "/run/systemd/system/user@62040.service.d/50-t3-candidate.conf"
+                    )
+                    if (
+                        expected not in dropins
+                        or run(
+                            "systemctl",
+                            "show",
+                            manager,
+                            "-p",
+                            "RootDirectory",
+                            "--value",
+                        )
+                        != "/run/t3code-docker-rootfs"
+                    ):
+                        raise RuntimeError(
+                            "active manager is not the installed candidate; leaving it intact"
+                        )
                 run(
                     "systemctl",
                     "stop",
@@ -95,8 +155,24 @@ def main():
                 raise RuntimeError(
                     "candidate already staged; inspect it or stop with its original spec before retrying"
                 )
+            if manager_active(manager):
+                raise RuntimeError(
+                    "an existing user manager is running; leaving it intact"
+                )
+            for directory in (
+                "/etc/systemd/system/user@62040.service.d",
+                "/run/systemd/system/user@62040.service.d",
+            ):
+                if Path(directory).exists() and any(Path(directory).iterdir()):
+                    raise RuntimeError(
+                        f"existing manager drop-ins require review: {directory}"
+                    )
             for path in files:
-                if path.exists() or (Path("/etc/systemd/system") / path.name).exists():
+                if (
+                    path.exists()
+                    or path.is_symlink()
+                    or (Path("/etc/systemd/system") / path.name).exists()
+                ):
                     raise RuntimeError(f"existing unit must be reviewed first: {path}")
             try:
                 group = grp.getgrnam(spec["user"])
@@ -121,13 +197,18 @@ def main():
                     "/run/current-system/sw/bin/nologin",
                     spec["user"],
                 )
-            for name in (spec["state"], spec["state"] + "/home"):
-                path = Path(name)
-                path.mkdir(mode=0o700, parents=True, exist_ok=True)
-                os.chown(path, spec["uid"], spec["uid"])
-            socket_dir = Path("/run/t3code-docker")
-            socket_dir.mkdir(mode=0o750, exist_ok=True)
-            os.chown(socket_dir, 0, grp.getgrnam("apps").gr_gid)
+            state_fd = owned_directory(spec["state"], spec["uid"], spec["uid"])
+            try:
+                home_fd = owned_directory(
+                    "home", spec["uid"], spec["uid"], parent_fd=state_fd
+                )
+                os.close(home_fd)
+            finally:
+                os.close(state_fd)
+            socket_fd = owned_directory(
+                "/run/t3code-docker", 0, grp.getgrnam("apps").gr_gid, mode=0o750
+            )
+            os.close(socket_fd)
             # The engine receives only this closure in the isolated T3 store.
             gcroot = Path(
                 "/srv/apps/t3code/nix-root/nix/var/nix/gcroots/t3code-docker-runtime"
