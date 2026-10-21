@@ -275,8 +275,8 @@ def main():
                 checks["seccomp"] = "filtering"
                 assert execute("cat", checks["nix_build"]) == "verified"
                 if args.docker_workspace:
-                    checks["docker_workflows"] = json.loads(
-                        execute(
+                    try:
+                        docker_report = execute(
                             "python3",
                             "/run/t3code-docker-acceptance.py",
                             "--control-report",
@@ -289,7 +289,11 @@ def main():
                             user="3000:3000",
                             timeout=1200,
                         )
-                    )
+                    except subprocess.CalledProcessError as error:
+                        # The child prints partial results even when a probe fails.
+                        print(error.output, flush=True)
+                        raise
+                    checks["docker_workflows"] = json.loads(docker_report)
                 print(json.dumps(checks, indent=2))
             finally:
                 subprocess.run(["podman", "logs", "--tail=30", name], check=False)
