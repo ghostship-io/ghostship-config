@@ -50,6 +50,9 @@ let
     t3_renotify = 86400;
     t3_min_interval = 600;
     t3_daily_limit = 12;
+    # Liveness and delivery metrics, read by node_exporter and the watchdog
+    # (security-monitoring.nix). Same textfile directory as collection.nix.
+    metrics = "/var/lib/ghostship-container-metrics/siem-bridge.prom";
   });
   python = pkgs.python3.withPackages (ps: [ ps.websockets ]);
   bridge = pkgs.writeShellApplication {
@@ -144,7 +147,7 @@ in
         ProtectHome = true;
         PrivateTmp = true;
         # ghostship-notify keeps its dedupe state here.
-        ReadWritePaths = [ "/var/lib/ghostship-notify" ];
+        ReadWritePaths = [ "/var/lib/ghostship-notify" "/var/lib/ghostship-container-metrics" ];
         RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
         CapabilityBoundingSet = "";
         # Root needs no capability to drive the rootful Podman API; hide it.
