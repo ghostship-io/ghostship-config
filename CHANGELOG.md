@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.16.2] - 2026-10-21
+
+- SIEM container metrics move to `/var/lib/ghostship-container-metrics`. node_exporter could not traverse the root-only `/var/lib/ghostship-siem` (`node_textfile_scrape_error 1`), so the counters written there never reached VictoriaMetrics.
+
 ## [3.16.1] - 2026-10-21
 
 - SIEM container metrics read the Podman REST API over its socket. `podman ps` failed under the collector's read-only sandbox (it takes lock files), so no per-container counters reached VictoriaMetrics after #153.
