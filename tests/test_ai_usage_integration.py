@@ -162,6 +162,42 @@ class FactBindingTests(unittest.TestCase):
         )
         self.assertEqual(data["candidates"][0]["value"]["strength_source"], "prior")
 
+    def test_a_fact_of_another_feed_version_does_not_bind(self):
+        fact = measured_fact(benchmark_version="4.2")
+        data = build(ranked_model(), {facts.identity_key("claude", "claude-opus-5-5"): fact})
+        # No cache is published here, so the binding has no version to
+        # compare: the fact is used. With a feed, the version has to agree.
+        self.assertEqual(data["candidates"][0]["value"]["strength_source"], "measured")
+        cache = {
+            "status": "ok",
+            "index_version": "4.3",
+            "fetched_at": "2027-01-15T00:00:00Z",
+            "fetched_at_epoch": NOW,
+            "age_seconds": 0,
+            "records": [],
+        }
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[],
+            ranked=ranked_model(),
+            native_models={
+                ("claude", "claude-opus-5-5"): {
+                    "providerInstance": "claudeAgent",
+                    "modelId": "claude-opus-5-5",
+                    "options": [{"id": "effort", "currentValue": "high"}],
+                }
+            },
+            policy={
+                "frontierPrimeModels": ("claude-opus-5-5",),
+                "allowedGptModels": (),
+                "backgroundProviderInstances": ("opencode",),
+            },
+            catalog=Catalog(),
+            facts={facts.identity_key("claude", "claude-opus-5-5"): fact},
+            aa_cache=cache,
+        )
+        self.assertEqual(data["candidates"][0]["value"]["strength_source"], "prior")
+
     def test_a_stale_fact_does_not_bind(self):
         fact = measured_fact()
         fact["fetched_at_epoch"] = NOW - 60 * DAY

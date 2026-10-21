@@ -249,8 +249,6 @@ def is_current(fact: Mapping[str, Any], now: float) -> bool:
         return False
     if fact.get("status") not in ("current", "estimated"):
         return False
-    if str(fact.get("benchmark_version") or "") != BENCHMARK_VERSION:
-        return False
     age = evidence_age(fact, now)
     if age is None:
         return False
@@ -345,6 +343,7 @@ def lookup_by_model(
     model: str,
     variant: str = "",
     now: float | None = None,
+    version: str | None = None,
 ) -> dict[str, Any] | None:
     """The fact of one exact model, or None when there is none.
 
@@ -367,7 +366,9 @@ def lookup_by_model(
             continue
         if now is not None and not is_current(fact, now):
             continue
-        if str(fact.get("benchmark_version") or "") != BENCHMARK_VERSION:
+        if version is not None and str(fact.get("benchmark_version") or "") != str(version):
+            # A fact of another version is not mixed with the feed that is
+            # read now.
             continue
         return dict(fact)
     return None

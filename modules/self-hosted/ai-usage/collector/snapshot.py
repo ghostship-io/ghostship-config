@@ -784,7 +784,9 @@ def _pending_identities(
         provider = str(row.get("provider") or "")
         model = str(row.get("model") or "")
         variant = _row_variant(row)
-        fact = facts_module.lookup_by_model(facts, provider, model, variant, now=now)
+        fact = facts_module.lookup_by_model(
+            facts, provider, model, variant, now=now
+        )
         if fact is not None:
             continue
         identity = facts_module.identity_key(provider, model, variant)
@@ -1019,6 +1021,11 @@ def build_snapshot(
         entries.setdefault((entry.provider, entry.model), []).append(entry)
 
     facts_source = facts or {}
+    # The version the feed published for the records it produced. A fact of
+    # another version does not bind to it.
+    feed_version = None
+    if isinstance(aa_cache, Mapping) and aa_cache.get("status") == "ok":
+        feed_version = str(aa_cache.get("index_version") or "") or None
     candidates: list[dict[str, Any]] = []
     tiers: dict[str, list[str]] = {}
     pending: list[dict[str, Any]] = []
@@ -1046,7 +1053,12 @@ def build_snapshot(
         )
         variant = _row_variant(row)
         fact = facts_module.lookup_by_model(
-            facts_source, provider, model, variant, now=now
+            facts_source,
+            provider,
+            model,
+            variant,
+            now=now,
+            version=feed_version,
         )
         _fill_value(row, catalog, fact)
         for tier in row["tiers"]:
