@@ -125,6 +125,10 @@ profile ghostship-gluetun flags=(complain,attach_disconnected,mediate_deleted) {
   profile healthcheck flags=(complain,attach_disconnected,mediate_deleted) {
     /gluetun-entrypoint rm,
     owner /proc/{self,thread-self,[0-9]*}/{cgroup,mountinfo} r,
+    # Go loads the system roots for its HTTPS check (observed 2026-10-21).
+    /etc/ssl/certs/ r,
+    /etc/ssl/certs/** r,
+    /usr/share/ca-certificates/** r,
     /sys/fs/cgroup/cpu.max r,
     /sys/kernel/mm/transparent_hugepage/hpage_pmd_size r,
     /usr/share/zoneinfo/** r,

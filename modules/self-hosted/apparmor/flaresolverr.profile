@@ -21,7 +21,9 @@ profile ghostship-flaresolverr flags=(complain,attach_disconnected,mediate_delet
   /dev/null rw,
 
   /usr/local/bin/python3.11 cx -> python,
-  # Podman's healthcheck runs `/bin/sh -c "curl ..."`.
+  # Podman's healthcheck runs `/bin/sh -c "curl ..."`; curl was observed
+  # starting from the top profile too (2026-10-21).
+  /usr/bin/curl cx -> healthcheck,
   /usr/bin/dash cx -> healthcheck,
   # The AppArmor review's heartbeat `podman exec flaresolverr /bin/cat`.
   /usr/bin/cat cx -> tools,
