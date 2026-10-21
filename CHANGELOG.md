@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.10] - 2026-10-21
+
+- Pin ghostship-agent 0.32.0: `browser_window` screenshots also arrive as a text map (visible text and toolbar controls with click coordinates), so ChatGPT, which does not show tool images to its model, can use Chrome's own controls and extensions.
+
 ## [3.17.9] - 2026-10-21
 
 - The kernel dropped 185 audit records at 05:37 UTC (`AuditRecordsLost`). OrcaSlicer, started in an agent-desktop app session, spawned WebKitGTK helpers and `ldd` ran the loader, all without AppArmor rules. In ruleless `null-*` profiles they logged about 74k records a minute and overflowed the 8192-record backlog.
