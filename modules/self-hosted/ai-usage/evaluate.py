@@ -44,95 +44,70 @@ T3_HOME = "/srv/apps/t3code/home"
 AA_KEY_NAME = "ARTIFICIAL_ANALYSIS_API_KEY"
 
 
-def read_feed(env_file: str, now: float) -> dict[str, Any]:
-    """Read the free Artificial Analysis feed into the cache.
+# The contract the registered client of the feed has to satisfy. The client
+# itself belongs to the service library of this fleet, and its registration is
+# owned by the root of that library: this procedure never invents a command
+# and never registers a second client.
+FEED_CONTRACT = {
+    "endpoint": "GET https://artificialanalysis.ai/api/v2/language/models/free",
+    "plan": "free",
+    "pages": "every page, with has_more and total_pages",
+    "output": {
+        "intelligence_index_version": "the major.minor of the intelligence index",
+        "fetched_at": "UTC ISO-8601 of the read",
+        "fetched_at_epoch": "the same moment as a number",
+        "records": [
+            {
+                "model": "the exact model name of the feed",
+                "provider": "the model creator of the feed",
+                "release_date": "the release date of the feed",
+                "indices": {
+                    "intelligence_index": "number",
+                    "coding_index": "number",
+                    "agentic_index": "number",
+                    "engineering_index": "number",
+                },
+                "prices": {"input": "number", "output": "number", "cache_read": "number"},
+                "cost_per_task": "number",
+                "median_performance": "number",
+            }
+        ],
+    },
+    "rules": [
+        "only the free endpoint is read",
+        "the cost per task is never used as a token price",
+        "a model the feed does not list is unknown, not bad",
+        "a record of another index version is not merged with the current one",
+    ],
+}
 
-    The fetch is done by the service library of this fleet when it has a
-    client for the feed. Without that client, or without a key, the cache
-    records the gap: no score is invented and nothing is faked.
+
+def read_feed(cache_path: str, now: float) -> dict[str, Any]:
+    """Read the cached feed, and report the gap when there is none.
+
+    The fetch belongs to the registered client of the feed, which the root of
+    the service library owns. This procedure never calls an invented command
+    and never registers a second client: it reads the cache the client writes
+    and reports what is missing.
     """
-    key = read_env_file(env_file).get(AA_KEY_NAME, "")
-    if not key:
+    cache = aa.load_cache(cache_path, now)
+    if cache.get("status") == "ok":
         return {
-            "status": "missing",
-            "reason": codes.MISSING_CREDENTIALS,
-            "intelligence_index_version": aa.INTELLIGENCE_INDEX_VERSION,
-            "fetched_at": None,
-            "fetched_at_epoch": None,
-            "records": [],
+            "status": "ok",
+            "reason": codes.OK,
+            "intelligence_index_version": cache.get("index_version"),
+            "fetched_at": cache.get("fetched_at"),
+            "fetched_at_epoch": cache.get("fetched_at_epoch"),
+            "records": cache.get("records") or [],
         }
-    # The client of the feed is owned by the service library. It is reached
-    # through the ordinary command path of that library, so the request
-    # budget, the key handling, and the rate limits stay in one place.
-    # The canonical client of the feed is a Printing Press backend of the
-    # service library. It reads the free endpoint only, and it pages through
-    # every page of it. The key is injected by the caller through the vault,
-    # so the credential never lands in a file of the collector.
-    command = [
-        "/home/t3code/.local/bin/agent",
-        "pp",
-        "artificialanalysis",
-        "models",
-        "--free",
-        "--all-pages",
-        "--json",
-    ]
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return {
-            "status": "error",
-            "reason": codes.UNAVAILABLE,
-            "intelligence_index_version": aa.INTELLIGENCE_INDEX_VERSION,
-            "fetched_at": None,
-            "fetched_at_epoch": None,
-            "records": [],
-        }
-    if result.returncode != 0:
-        return {
-            "status": "error",
-            "reason": codes.UNAVAILABLE,
-            "intelligence_index_version": aa.INTELLIGENCE_INDEX_VERSION,
-            "fetched_at": None,
-            "fetched_at_epoch": None,
-            "records": [],
-        }
-    try:
-        document = json.loads(result.stdout)
-    except ValueError:
-        return {
-            "status": "error",
-            "reason": codes.INVALID_RESPONSE,
-            "intelligence_index_version": aa.INTELLIGENCE_INDEX_VERSION,
-            "fetched_at": None,
-            "fetched_at_epoch": None,
-            "records": [],
-        }
-    records = document.get("records") if isinstance(document, dict) else document
-    if not isinstance(records, list):
-        records = []
-    version = ""
-    if isinstance(document, dict):
-        version = str(
-            document.get("intelligence_index_version")
-            or document.get("intelligence_index_version_major_minor")
-            or ""
-        )
     return {
-        "status": "ok",
-        "reason": codes.OK,
-        "intelligence_index_version": version or aa.INTELLIGENCE_INDEX_VERSION,
-        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
-        "fetched_at_epoch": now,
-        "records": records,
+        "status": str(cache.get("status") or "missing"),
+        "reason": str(cache.get("reason") or codes.MISSING_CREDENTIALS),
+        "intelligence_index_version": aa.INTELLIGENCE_INDEX_VERSION,
+        "fetched_at": None,
+        "fetched_at_epoch": None,
+        "records": [],
+        "contract": FEED_CONTRACT,
     }
 
 
@@ -183,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     now = time.time()
-    feed = read_feed(args.secrets_env, now)
+    feed = read_feed(args.aa_cache, now)
     admissions = read_admissions(now)
     if not args.dry_run:
         write_json(args.aa_cache, feed)
