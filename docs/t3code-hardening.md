@@ -208,6 +208,10 @@ bus and `OwnerUID=62040`. A real container ran successfully. From the engine's
 user/mount/network namespaces, following `/proc/1/root/etc/os-release` was denied
 and the host root process's environment was not readable.
 
+A separately labelled named-volume canary also survived the candidate engine’s
+complete stop/start cycle with the same daemon ID. Both lifecycle guards
+preserved the active T3 identities; the test volume and control record were removed.
+
 The full Docker run passed image build/public DNS, container-root bind writes,
 nonroot UID 1000/3000 bind writes with explicit ACLs and T3 edit/delete,
 per-container memory/PID limits, outbound HTTPS, TTY allocation, both live
