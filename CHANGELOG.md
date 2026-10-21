@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.30] - 2026-10-21
+
+- Flow collector: a released container address keeps its previous owner for 15 minutes (one collection plus margin), not 24 hours. Gluetun's short-lived benchmark containers reused bazarr's, cloudflared's and flaresolverr's old addresses, and their udp/1337 probes were recorded as new edges for those services. After the grace period an unowned address reports as `lan:<ip>`.
+
 ## [3.17.29] - 2026-10-21
 
 - AppArmor: agent-desktop SSH shells may run the Rust coreutils multicall that `/usr/bin/timeout`, `date`, `mkdir` and similar resolve to. An agent's `timeout blender` ran in ruleless `null-*` profiles at 13:55: about 246k audit records in 10 minutes, 2 lost.

@@ -28,9 +28,13 @@ SETS = [
 ]
 ACCEPTED_SUFFIX = "-accepted"
 MAX_WAN_SAMPLES = 16
-# Podman reassigns addresses when a container is recreated; elements created
-# before that still name the old address until their 6h set timeout.
-ADDRESS_MEMORY_SECONDS = 24 * 3600
+# Podman reassigns addresses when a container is recreated. Counters on the old
+# address that grew before the recreate are collected within one run (5 min),
+# so the old owner keeps the address only briefly. A longer memory attributed
+# short-lived containers' traffic to an address's previous owner: Gluetun's
+# benchmark containers' udp/1337 probes appeared as bazarr, cloudflared and
+# flaresolverr (2026-10-21). Afterwards an unassigned address is lan:<ip>.
+ADDRESS_MEMORY_SECONDS = 15 * 60
 PRIVATE = [
     ipaddress.ip_network(n)
     for n in (
