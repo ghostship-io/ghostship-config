@@ -120,7 +120,19 @@ let
       children = [ "server" "healthcheck" ];
       required = [ "server" ];
     };
+    # SIEM stores (siem/storage.nix). The images have no shell or cat: the
+    # binary reads the boot ID as a TLS certificate, fails and exits.
+    victorialogs.heartbeat = victoriaHeartbeat 19428;
+    victoriametrics.heartbeat = victoriaHeartbeat 18428;
   };
+  victoriaHeartbeat = port: [
+    "@entrypoint"
+    "-tls"
+    "-tlsCertFile=/proc/sys/kernel/random/boot_id"
+    "-tlsKeyFile=/proc/sys/kernel/random/boot_id"
+    "-storageDataPath=/tmp/heartbeat"
+    "-httpListenAddr=127.0.0.1:${toString port}"
+  ];
   enabled =
     name:
     if name == "github-coordinator" then

@@ -34,6 +34,8 @@ let
     "tautulli"
     "tdarr"
     "uptime-kuma"
+    "victorialogs"
+    "victoriametrics"
   ];
   # In-house read-only containers already mount a noexec /tmp; Podman's
   # read-only tmpfs leaves /var/tmp executable.
@@ -89,6 +91,8 @@ let
     tautulli = rootLsio;
     tdarr = rootLsio ++ [ "FSETID" ];
     uptime-kuma = [ ];
+    victorialogs = [ ];
+    victoriametrics = [ ];
   };
   # LinuxServer images: s6 preinit runs as root (directly, or through the
   # setuid-root s6-overlay-suexec when started as the app user), chowns, then
@@ -128,6 +132,8 @@ let
     "sonarr"
     "tautulli"
     "uptime-kuma"
+    "victorialogs"
+    "victoriametrics"
   ];
   # Read-only images without s6 (which runs generated scripts from /run) also
   # get a noexec /run. Throwaway read-only, noexec-/run copies of each image
@@ -142,6 +148,8 @@ let
     "recyclarr"
     "seerr"
     "uptime-kuma"
+    "victorialogs"
+    "victoriametrics"
   ];
 in
 {

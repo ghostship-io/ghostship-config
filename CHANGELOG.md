@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.16.0] - 2026-10-21
+
+- Security monitoring (SIEM), part 1: collection and storage (docs/siem.md).
+  - VictoriaLogs v1.53.0 and VictoriaMetrics v1.154.1 run in Podman, pinned by digest, on their own network (`ghostship_siem_net`). Every connection they open is dropped except DNS, and their ports are published on 127.0.0.1 only. Each has a strict complain-mode AppArmor profile, a read-only image, no capabilities and noexec storage. nixpkgs' VictoriaLogs 1.52.0 can panic or drop logs, so it is not used.
+  - Vector (native, no root) ships the whole journal, Plex's log and Muximux's nginx logs. It parses AppArmor and audit fields, Falco alerts and Plex and nginx requests, and redacts tokens, keys, passwords and URL credentials before storage. `tests/siem-vector.toml` runs in `scripts/check` and fails if redaction or parsing regresses.
+  - node_exporter and a per-container counter service (CPU, memory, processes, network bytes) feed VictoriaMetrics, so a cryptominer or proxy shows up in the numbers.
+  - Falco 0.45.1 runs natively on the modern eBPF probe, with the container plugin, packaged from the upstream release with pinned hashes. A trial on the host flagged a planted `/etc/shadow` read in a container.
+- New intrusion-relevant log sources:
+  - Audit rules watch identity files, sudoers, SSH configuration and keys, runtime systemd units, the system profile, kernel module loads, kexec and ptrace attaches.
+  - The firewall logs refused connections.
+  - Plex logs every request with the client and its network class (`logDebug`; Plex strips tokens).
+  - The audit backlog rises from 1024 to 8192, matching auditd.
+
 ## [3.15.175] - 2026-10-21
 
 - Plex2Shell (CVE-2026-96652/4/5/6, exploited since 2026-10-17): Plex already ran 1.43.5.11029, past the 1.43.3.10861 fix, with no indicators of compromise. Its Internet-facing AppArmor domains (server, interpreter, ldconfig) now **enforce**; startup and the healthcheck keep learning.
