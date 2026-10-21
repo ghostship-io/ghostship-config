@@ -82,7 +82,10 @@ let
       cacert
       openssl
     ])
-    ++ lib.optional hardened config.ghostship.t3codeDocker.bridgePackage;
+    ++ lib.optionals hardened [
+      pkgs.acl
+      config.ghostship.t3codeDocker.bridgePackage
+    ];
 
   antigravityAcp = pkgs.callPackage ../../packages/t3code/antigravity-acp.nix { };
 
