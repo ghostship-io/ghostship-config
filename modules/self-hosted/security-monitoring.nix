@@ -51,6 +51,34 @@ let
     pkgs.coreutils
     pkgs.findutils
   ];
+  watchdogConfig = pkgs.writeText "ghostship-siem-watchdog.json" (
+    builtins.toJSON {
+      state = "${stateDir}/siem-watchdog.json";
+      notify = "${config.ghostship.notify.package}/bin/ghostship-notify";
+      bridge_metrics = "/var/lib/ghostship-container-metrics/siem-bridge.prom";
+      snapshot = "/run/ghostship-podman/containers.json";
+      sources = [
+        "logs"
+        "metrics"
+      ];
+      probes = {
+        vmalert-logs = "http://127.0.0.1:8880/health";
+        vmalert-metrics = "http://127.0.0.1:8881/health";
+        victorialogs = "http://127.0.0.1:9428/health";
+        victoriametrics = "http://127.0.0.1:8428/health";
+      };
+      bridge_stale = 180;
+      source_stale = 300;
+      delivery_failures = 3;
+      snapshot_stale = 300;
+    }
+  );
+  watchdog = pkgs.writeShellApplication {
+    name = "ghostship-siem-watchdog";
+    text = ''
+      exec ${pkgs.python3}/bin/python3 ${./siem/watchdog.py} --config ${watchdogConfig} "$@"
+    '';
+  };
   flows = pkgs.writeShellApplication {
     name = "ghostship-flow-report";
     runtimeInputs = tools;
@@ -180,6 +208,18 @@ in
             "apparmor.service"
           ];
         };
+    # Independent of the SIEM bridge it watches: a hung bridge must not look green.
+    systemd.services.ghostship-siem-watchdog =
+      lib.recursiveUpdate (oneshot "Watch the SIEM alert path independently of its bridge" "${watchdog}/bin/ghostship-siem-watchdog")
+        { serviceConfig.TimeoutStartSec = "5min"; };
+    systemd.timers.ghostship-siem-watchdog = {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "10min";
+        OnUnitActiveSec = "2min";
+      };
+    };
+
     systemd.timers.ghostship-security-check = {
       wantedBy = [ "timers.target" ];
       timerConfig = {

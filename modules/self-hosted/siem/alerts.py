@@ -30,6 +30,9 @@ from pathlib import Path
 POLL_SECONDS = 30
 # An alert absent this long has resolved (vmalert evaluates every minute).
 RESOLVE_AFTER = 180
+# A firing alert still undelivered after this long moves to the dead-letter
+# list: reported by --list, the metrics and the watchdog, never dropped silently.
+DEAD_LETTER_AFTER = 86400
 PRIORITY = {"critical": 5, "high": 4, "warning": 3}
 T3_SEVERITIES = ("critical", "high")
 # Root-owned metadata written by ghostship-podman-snapshot; the bridge has no
@@ -247,10 +250,13 @@ def save(path, data):
 
 
 def poll(config, state, now):
+    health = state.setdefault("health", {})
+    health["last_poll"] = now
     firing, unavailable = [], set()
     for source, url in config["sources"].items():
         try:
             firing += [normalize(raw, source) for raw in fetch(url)]
+            health.setdefault("sources", {})[source] = now
         except (OSError, ValueError, KeyError) as exc:
             unavailable.add(source)
             print(f"siem alerts: {source} vmalert unavailable: {exc}", file=sys.stderr)
@@ -263,13 +269,89 @@ def poll(config, state, now):
         except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
             print(f"siem alerts: ntfy publish failed: {exc}", file=sys.stderr)
             delivered = False
+        record_delivery(health, "ntfy", delivered, now)
         if not delivered and state_name == "firing":
             # Retry on the next poll instead of waiting out the renotify window.
-            state["alerts"][alert["fingerprint"]]["ntfy_at"] = None
+            record = state["alerts"][alert["fingerprint"]]
+            record["ntfy_at"] = None
+            record.setdefault("undelivered_since", now)
+        elif state_name == "firing":
+            state["alerts"][alert["fingerprint"]].pop("undelivered_since", None)
+    dead_letter(state, now)
     batch = t3_batch(state, now, config)
     if batch:
-        send_t3(config, batch["id"], render_batch(state, batch, config["host"]))
+        try:
+            send_t3(config, batch["id"], render_batch(state, batch, config["host"]))
+        except Exception:
+            record_delivery(health, "t3", False, now)
+            raise
+        record_delivery(health, "t3", True, now)
         mark_sent(state, batch, now)
+
+
+def record_delivery(health, channel, delivered, now):
+    entry = health.setdefault("delivery", {}).setdefault(channel, {"failures": 0, "consecutive": 0})
+    if delivered:
+        entry["ok_at"], entry["consecutive"] = now, 0
+    else:
+        entry["failed_at"] = now
+        entry["failures"] += 1
+        entry["consecutive"] += 1
+
+
+def dead_letter(state, now):
+    """Move firing alerts undelivered for a day to state["dead"]; keep them listed."""
+    dead = state.setdefault("dead", {})
+    for key in [k for k in dead if k not in state.get("alerts", {})]:
+        del dead[key]
+    for key, record in state.get("alerts", {}).items():
+        since = record.get("undelivered_since")
+        if since is not None and not record.get("resolved_at") and now - since >= DEAD_LETTER_AFTER \
+                and key not in dead:
+            dead[key] = {"name": record.get("name"), "severity": record.get("severity"), "since": since}
+        if key in dead and (record.get("resolved_at") or since is None):
+            del dead[key]
+
+
+def metrics(state, now):
+    """node_exporter textfile: liveness and delivery state of this bridge."""
+    health = state.get("health", {})
+    alerts = state.get("alerts", {})
+    lines = [
+        "# TYPE ghostship_siem_bridge_last_poll_timestamp_seconds gauge",
+        f"ghostship_siem_bridge_last_poll_timestamp_seconds {health.get('last_poll', 0)}",
+        "# TYPE ghostship_siem_bridge_source_last_success_timestamp_seconds gauge",
+    ]
+    lines += [f'ghostship_siem_bridge_source_last_success_timestamp_seconds{{source="{name}"}} {at}'
+              for name, at in sorted(health.get("sources", {}).items())]
+    lines += ["# TYPE ghostship_siem_bridge_delivery_last_success_timestamp_seconds gauge",
+              "# TYPE ghostship_siem_bridge_delivery_failures_total counter",
+              "# TYPE ghostship_siem_bridge_delivery_consecutive_failures gauge"]
+    for channel, entry in sorted(health.get("delivery", {}).items()):
+        lines += [
+            f'ghostship_siem_bridge_delivery_last_success_timestamp_seconds{{channel="{channel}"}} {entry.get("ok_at", 0)}',
+            f'ghostship_siem_bridge_delivery_failures_total{{channel="{channel}"}} {entry["failures"]}',
+            f'ghostship_siem_bridge_delivery_consecutive_failures{{channel="{channel}"}} {entry["consecutive"]}',
+        ]
+    firing = [r for r in alerts.values() if not r.get("resolved_at")]
+    lines += [
+        "# TYPE ghostship_siem_bridge_firing_alerts gauge",
+        f"ghostship_siem_bridge_firing_alerts {len(firing)}",
+        "# TYPE ghostship_siem_bridge_retry_queue gauge",
+        f"ghostship_siem_bridge_retry_queue {sum(1 for r in firing if r.get('ntfy_at', 0) is None)}",
+        "# TYPE ghostship_siem_bridge_t3_pending gauge",
+        f"ghostship_siem_bridge_t3_pending {len(state.get('pending', []))}",
+        "# TYPE ghostship_siem_bridge_dead_letters gauge",
+        f"ghostship_siem_bridge_dead_letters {len(state.get('dead', {}))}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def write_metrics(path, text):
+    temporary = Path(path).with_suffix(".tmp")
+    temporary.write_text(text)
+    os.chmod(temporary, 0o644)
+    temporary.replace(path)
 
 
 def main(argv=None):
@@ -285,6 +367,11 @@ def main(argv=None):
             print(f"{record['fingerprint']} [{record['severity']}] {record['name']} {status}: "
                   f"{record['summary']}\n    evidence: {record['evidence']}")
         print(f"pending for T3: {len(state.get('pending', []))}; sent today: {state.get('t3_count', 0)}")
+        for key, entry in state.get("dead", {}).items():
+            print(f"DEAD LETTER {key} [{entry['severity']}] {entry['name']}: undelivered since {stamp(entry['since'])}")
+        health = state.get("health", {})
+        print(f"last poll: {stamp(health['last_poll']) if health.get('last_poll') else 'never'}; "
+              f"delivery: {json.dumps(health.get('delivery', {}), sort_keys=True)}")
         return 0
     while True:
         state = load(config["state"], {})
@@ -293,6 +380,11 @@ def main(argv=None):
         except Exception as exc:  # keep polling; the next pass retries
             print(f"siem alerts: {type(exc).__name__}: {exc}", file=sys.stderr)
         save(config["state"], state)
+        if config.get("metrics"):
+            try:
+                write_metrics(config["metrics"], metrics(state, time.time()))
+            except OSError as exc:
+                print(f"siem alerts: metrics write failed: {exc}", file=sys.stderr)
         time.sleep(POLL_SECONDS)
 
 
