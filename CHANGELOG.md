@@ -1,11 +1,18 @@
 # Changelog
 
-## [3.17.4] - 2026-10-21
+## [3.17.5] - 2026-10-21
 
 - Agent desktop: whole Chrome windows. `stage-control` (replacing `stage-input`) gives every Chrome window in a browser stage a headless output of its own, so the viewer shows the whole window (tab strip, address bar, toolbar, extension buttons, menus and popups) and a person's taps, keys and text reach Chrome's own controls. Agents get the same through `browser_window` `screenshot`/`ui` (ghostship-agent 0.31.0).
 - Browser controls take a focus lease on one window: focus moves only between that window and an empty `idle` workspace, new windows map on a hidden workspace and never take focus, and other windows are never activated or deactivated. Measured: 4,000 concurrent agent input operations (8 agents) with zero cross-talk, and 4,000 more while a lease loop opened Chrome's menu and typed in another window throughout, as on the previous stage.
 - Stage windows now tile at the same fixed 1600x900 (workspace gaps) on outputs side by side in the lowest free slot, like a person's monitors; Chrome sees one screen per open window, and every window gets frames (overlapping outputs would starve all but one). The fingerprint matches the baseline except the window-frame inset (`outerMinusInner`, now that of a tiled window). The update service's fingerprint baseline is re-recorded on the next run.
 - Sway windows are paired with Chrome window ids (home-tab title, unique tab titles, elimination; sticky; ambiguous windows stay unpaired), so a run only ever shows its own windows. The viewer's new sessions wait for that pairing before opening their working tab, so two runs on the same site are told apart.
+
+## [3.17.4] - 2026-10-21
+
+- SIEM loss visibility (#102 Gate 1.4).
+  - The watchdog publishes kernel audit lost and backlog, journal retention and VictoriaLogs ingestion lag (`siem-pipeline.prom`).
+  - New rules: `AuditRecordsLost`, `JournalRetentionShort` (< 6 h), `LogIngestionLag` (> 10 min), `VectorBufferFilling` (> 1 GiB) and `PipelineMetricsStale`.
+- The journal cap rises from 1 GiB to 4 GiB. It is the buffer upstream of Vector, and during the 2026-10-21 AppArmor flood it held only about 3 hours, so a longer collector or store outage would have lost events.
 
 ## [3.17.3] - 2026-10-21
 

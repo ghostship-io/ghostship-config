@@ -71,6 +71,10 @@ let
       source_stale = 300;
       delivery_failures = 3;
       snapshot_stale = 300;
+      pipeline_metrics = "/var/lib/ghostship-container-metrics/siem-pipeline.prom";
+      victorialogs = "http://127.0.0.1:9428";
+      auditctl = "${pkgs.audit}/bin/auditctl";
+      journalctl = "${config.systemd.package}/bin/journalctl";
     }
   );
   watchdog = pkgs.writeShellApplication {
