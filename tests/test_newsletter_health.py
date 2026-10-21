@@ -102,13 +102,17 @@ class DeliveryTests(unittest.TestCase):
                     "GHOSTSHIP_NOTIFY_SECRETS": str(secrets), "GHOSTSHIP_NOTIFY_INCIDENTS": str(self.spool),
                     "GHOSTSHIP_NOTIFY_URL": f"http://127.0.0.1:{server.server_port}"}
         self.bridge = mock.Mock()
-        self.bridge.launch.return_value = {"thread_id": "test-thread"}
+        # The broker reconciles native ownership/capacity before a launch.
+        self.bridge.shell.return_value = {"threads": [], "archivedThreads": []}
+        # Native launch receipts return the reserved caller-provided identity.
+        self.bridge.launch.side_effect = lambda *_args, **kwargs: {"thread_id": kwargs["thread_id"]}
         store = self.coordinator_module.Store(self.root / "coordinator.sqlite")
         self.addCleanup(store.db.close)
         self.coordinator = self.coordinator_module.Coordinator({
             "allowed_user_ids": [], "repositories": {"ghostship-io/ghostship-config": {"project_id": "test-project"}},
             "model_selection": {"instanceId": "codex", "model": "gpt-6.1-sol"},
-            "incidents": {"repository": "ghostship-io/ghostship-config", "daily_limit": 3},
+            "incidents": {"repository": "ghostship-io/ghostship-config", "daily_limit": 3,
+                          "recurrence_cooldown": 0},
         }, store, mock.Mock(), bridge=lambda: self.bridge)
 
     def consume(self):
