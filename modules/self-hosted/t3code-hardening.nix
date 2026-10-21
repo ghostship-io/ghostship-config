@@ -17,7 +17,12 @@ in
   };
 
   config = {
+    ghostship.t3codeDocker.enable = lib.mkDefault cfg.enable;
     assertions = [
+      {
+        assertion = !cfg.enable || config.ghostship.t3codeDocker.enable;
+        message = "Unprivileged T3 requires the separate rootless development engine.";
+      }
       {
         assertion = lib.all (path: builtins.match "[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*" path != null) (
           builtins.attrNames cfg.sharedMounts

@@ -52,6 +52,7 @@
     ./inference-bridge.nix
     ./t3code.nix
     ./t3code-hardening.nix
+    ./t3code-docker.nix
     ../agent-host
 
     # Games

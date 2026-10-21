@@ -24,63 +24,65 @@ let
   # deployment share this lock through the persistent home bind mount.
   t3codeToolLock = "/home/t3code/.local/state/t3code-tool-update/tool-update.lock";
 
-  t3codePackages = with pkgs; [
-    nix
-    systemd
-    dbus
-    pam
-    docker
-    cloudflared
-    sudo
-    git
-    git-lfs
-    gh
-    openssh
-    curl
-    jq
-    ripgrep
-    fd
-    direnv
-    uv
-    python3
-    ruff
-    basedpyright
-    nil
-    nixfmt
-    shellcheck
-    shfmt
-    yq-go
-    buildkit
-    bubblewrap
-    fuse-overlayfs
-    nodejs_24
-    typescript-language-server
-    prettier
-    stdenv.cc
-    gnumake
-    pkg-config
-    cmake
-    binutils
-    coreutils
-    findutils
-    gnugrep
-    gnused
-    gnutar
-    gzip
-    lbzip2
-    unzip
-    p7zip
-    procps
-    iptables
-    iproute2
-    kmod
-    su-exec
-    which
-    file
-    bashInteractive
-    cacert
-    openssl
-  ];
+  t3codePackages =
+    (with pkgs; [
+      nix
+      systemd
+      dbus
+      pam
+      docker
+      cloudflared
+      sudo
+      git
+      git-lfs
+      gh
+      openssh
+      curl
+      jq
+      ripgrep
+      fd
+      direnv
+      uv
+      python3
+      ruff
+      basedpyright
+      nil
+      nixfmt
+      shellcheck
+      shfmt
+      yq-go
+      buildkit
+      bubblewrap
+      fuse-overlayfs
+      nodejs_24
+      typescript-language-server
+      prettier
+      stdenv.cc
+      gnumake
+      pkg-config
+      cmake
+      binutils
+      coreutils
+      findutils
+      gnugrep
+      gnused
+      gnutar
+      gzip
+      lbzip2
+      unzip
+      p7zip
+      procps
+      iptables
+      iproute2
+      kmod
+      su-exec
+      which
+      file
+      bashInteractive
+      cacert
+      openssl
+    ])
+    ++ lib.optional hardened config.ghostship.t3codeDocker.bridgePackage;
 
   antigravityAcp = pkgs.callPackage ../../packages/t3code/antigravity-acp.nix { };
 
@@ -2022,36 +2024,43 @@ let
     exec ${pkgs.systemd}/lib/systemd/systemd
   '';
 
-  t3codeImageContents = t3codePackages ++ [
-    antigravityAcp
-    t3codeEntrypoint
-    t3codeContainerSetup
-    t3codeDockerdRun
-    t3codeDaemonRun
-    t3codeAccessProxy
-    t3codeProjectBootstrap
-    t3codeToolMaintenance
-    t3codeInstallT3Shim
-    t3codeAntigravityUpdate
-    t3codeInstallGhostshipAgent
-    t3codeToolAutoUpdate
-    t3codeToolUpdateRestart
-    t3codeProcessMemoryGuard
-    t3codeDaemonMonitor
-    t3codeRetention
-    t3codeContainerHealth
-    t3codeRunHooks
-    t3codeSharedAgents
-    t3codeDoctor
-    t3codeApplyConfig
-    t3codeUserUnits
-    t3codeBootstrap
-    t3codeSnapshotConfig
-    t3codeTunnel
-    pkgs.dockerTools.binSh
-    pkgs.dockerTools.usrBinEnv
-    pkgs.dockerTools.caCertificates
-  ];
+  t3codeImageContents =
+    t3codePackages
+    ++ lib.optional hardened (
+      pkgs.writeTextDir "share/t3code-docker-runtime" (
+        toString config.ghostship.t3codeDocker.runtimePackage
+      )
+    )
+    ++ [
+      antigravityAcp
+      t3codeEntrypoint
+      t3codeContainerSetup
+      t3codeDockerdRun
+      t3codeDaemonRun
+      t3codeAccessProxy
+      t3codeProjectBootstrap
+      t3codeToolMaintenance
+      t3codeInstallT3Shim
+      t3codeAntigravityUpdate
+      t3codeInstallGhostshipAgent
+      t3codeToolAutoUpdate
+      t3codeToolUpdateRestart
+      t3codeProcessMemoryGuard
+      t3codeDaemonMonitor
+      t3codeRetention
+      t3codeContainerHealth
+      t3codeRunHooks
+      t3codeSharedAgents
+      t3codeDoctor
+      t3codeApplyConfig
+      t3codeUserUnits
+      t3codeBootstrap
+      t3codeSnapshotConfig
+      t3codeTunnel
+      pkgs.dockerTools.binSh
+      pkgs.dockerTools.usrBinEnv
+      pkgs.dockerTools.caCertificates
+    ];
 
   t3codeImageArgs = {
     name = imageName;
@@ -2148,6 +2157,20 @@ let
       ExecReload=${pkgs.dbus}/bin/dbus-send --print-reply --session --type=method_call --dest=org.freedesktop.DBus / org.freedesktop.DBus.ReloadConfig
       Slice=session.slice
       EOF
+      ${lib.optionalString hardened ''
+          mkdir -p etc/systemd/user/default.target.wants
+          cat > etc/systemd/user/t3code-docker-bridge.service <<'BRIDGE'
+        [Unit]
+        Description=Localhost access to isolated development Docker ports
+        [Service]
+        ExecStart=${config.ghostship.t3codeDocker.bridgePackage}/bin/t3code-docker-bridge bridge
+        Restart=always
+        RestartSec=2
+        [Install]
+        WantedBy=default.target
+        BRIDGE
+          ln -s ../t3code-docker-bridge.service etc/systemd/user/default.target.wants/t3code-docker-bridge.service
+      ''}
       ln -s ../dbus.socket etc/systemd/user/sockets.target.wants/dbus.socket
       cat > etc/systemd/system/t3code-container-setup.service <<'EOF'
       [Unit]
@@ -2713,6 +2736,12 @@ in
   system.build.t3codeProcessMemoryGuard = t3codeProcessMemoryGuard;
   system.build.t3codeServerMonitor = t3codeDaemonMonitor;
   system.build.t3codeToolMaintenance = t3codeToolMaintenance;
+  system.build.t3codeRuntimeClosure = pkgs.linkFarm "t3code-runtime-closure" (
+    lib.imap0 (i: path: {
+      name = toString i;
+      inherit path;
+    }) t3codeImageContents
+  );
   # Candidate loading must never retag the production image beneath its updater.
   system.build.t3codeCandidateImage = lib.mkIf hardened (
     pkgs.dockerTools.buildLayeredImageWithNixDb (
@@ -2796,6 +2825,7 @@ in
       if hardened then
         [
           "/run/t3code-docker/docker.sock:/var/run/docker.sock:rw"
+          "/run/t3code-docker/ports.sock:/var/run/t3code-docker-ports.sock:rw"
         ]
         ++ lib.mapAttrsToList (
           path: readOnly:
@@ -2826,9 +2856,17 @@ in
   systemd.services.podman-t3code = {
     restartIfChanged = false;
     stopIfChanged = false;
+    requires = lib.optionals hardened [
+      "t3code-docker.socket"
+      "t3code-docker-ports.socket"
+    ];
     after = [
       "init-ghostship-net.service"
       "mnt-share.mount"
+    ]
+    ++ lib.optionals hardened [
+      "t3code-docker.socket"
+      "t3code-docker-ports.socket"
     ];
     wants = [
       "init-ghostship-net.service"

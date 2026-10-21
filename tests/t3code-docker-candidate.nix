@@ -2,7 +2,7 @@
 let
   flake = builtins.getFlake (toString ../.);
   candidate = flake.nixosConfigurations.chill-penguin.extendModules {
-    modules = [{ ghostship.t3codeDocker.enable = true; }];
+    modules = [ { ghostship.t3codeDocker.enable = true; } ];
   };
 in
 candidate.config.system.build.t3codeDockerCandidate
