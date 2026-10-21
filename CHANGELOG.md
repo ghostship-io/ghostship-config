@@ -1,13 +1,14 @@
 # Changelog
 
-## [3.17.2] - 2026-10-21
+## [3.17.3] - 2026-10-21
 
-<<<<<<< HEAD
 - Agent desktop: whole Chrome windows. `stage-control` (replacing `stage-input`) gives every Chrome window in a browser stage a headless output of its own, so the viewer shows the whole window (tab strip, address bar, toolbar, extension buttons, menus and popups) and a person's taps, keys and text reach Chrome's own controls. Agents get the same through `browser_window` `screenshot`/`ui` (ghostship-agent 0.31.0).
 - Browser controls take a focus lease on one window: focus moves only between that window and an empty `idle` workspace, new windows map on a hidden workspace and never take focus, and other windows are never activated or deactivated. Measured: 4,000 concurrent agent input operations (8 agents) with zero cross-talk, and 4,000 more while a lease loop opened Chrome's menu and typed in another window throughout, as on the previous stage.
 - Stage windows now tile at the same fixed 1600x900 (workspace gaps) on outputs side by side in the lowest free slot, like a person's monitors; Chrome sees one screen per open window, and every window gets frames (overlapping outputs would starve all but one). The fingerprint matches the baseline except the window-frame inset (`outerMinusInner`, now that of a tiled window). The update service's fingerprint baseline is re-recorded on the next run.
 - Sway windows are paired with Chrome window ids (home-tab title, unique tab titles, elimination; sticky; ambiguous windows stay unpaired), so a run only ever shows its own windows. The viewer's new sessions wait for that pairing before opening their working tab, so two runs on the same site are told apart.
-=======
+
+## [3.17.2] - 2026-10-21
+
 - SIEM: no long-lived collector holds the rootful Podman API.
   - `ghostship-siem-alerts` and `ghostship-container-metrics` read `/run/podman/podman.sock` directly. Root needs no capability to use that socket, which can create and exec containers.
   - A short-lived root job, `ghostship-podman-snapshot` (every 30 s), now writes a metadata-only snapshot and the container counters, replacing the container-metrics daemon.
@@ -15,7 +16,6 @@
   - `ContainerSnapshotStale` alerts if the job stops.
 - Container network bytes are counted once per network namespace. qBittorrent, which shares Gluetun's namespace, was double-counted. Members now get `ghostship_container_netns_shared`.
 
->>>>>>> origin/main
 ## [3.17.1] - 2026-10-21
 
 - SIEM alerts reach ntfy. `ghostship-notify` found ntfy by running `podman inspect`, which fails in the bridge's capability-free sandbox. Since #156 every ntfy publish from the bridge failed; T3 delivery was unaffected. The bridge now resolves ntfy through the Podman API socket and passes `GHOSTSHIP_NOTIFY_URL`.
