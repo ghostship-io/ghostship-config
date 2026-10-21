@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.14] - 2026-10-21
+
+- Pin ghostship-agent 0.32.1: `browser_window` screenshots are never scaled (a tooltip past the window's edge had shrunk the frame, so its pixels no longer matched `ui` clicks), and `ui` accepts key names as ChatGPT writes them.
+
 ## [3.17.13] - 2026-10-21
 
 - Pin ghostship-agent 0.32.0: `browser_window` screenshots also arrive as a text map (visible text and toolbar controls with click coordinates), so ChatGPT, which does not show tool images to its model, can use Chrome's own controls and extensions.
