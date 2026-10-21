@@ -859,6 +859,10 @@ profile ghostship-agent-desktop flags=(complain,attach_disconnected,mediate_dele
     network netlink raw,
 
     /usr/bin/sway mr,
+    # Keymap compilation (observed 2026-10-21: ~9k reads a minute).
+    /usr/share/xkeyboard-config-2/ r,
+    /usr/share/xkeyboard-config-2/** r,
+    /usr/share/X11/xkb r,
     /usr/bin/swaybg mrix,
     /usr/bin/dash mrix,
     @{gs_cu}/printf mrix,
