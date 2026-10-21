@@ -5,5 +5,6 @@
     ./collection.nix
     ./falco.nix
     ./alerting.nix
+    ./ui.nix
   ];
 }
