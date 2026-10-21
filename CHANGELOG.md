@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.1] - 2026-10-21
+
+- SIEM alerts reach ntfy. `ghostship-notify` found ntfy by running `podman inspect`, which fails in the bridge's capability-free sandbox. Since #156 every ntfy publish from the bridge failed; T3 delivery was unaffected. The bridge now resolves ntfy through the Podman API socket and passes `GHOSTSHIP_NOTIFY_URL`.
+- A failed ntfy publish is retried on the next poll. Previously it was recorded as sent and stayed quiet for the 6-hour renotify window.
+
 ## [3.17.0] - 2026-10-21
 
 - SIEM part 2: detections and alerting (docs/siem.md).
