@@ -60,25 +60,31 @@ rendering; only the monitors are virtual, as the labwc desktop's already are.
 `stage-control` gives every Chrome window a 1920x1080 output of its own, with
 the window tiled at a fixed 1600x900 in its top left (workspace gaps), so the
 viewer and agents can see and use the **whole window**: tab strip, address
-bar, toolbar, extension buttons, menus and popups. All outputs sit at 0,0, so
-each window reports one ordinary screen (`screen.availLeft` 0). The stage
-never moves focus on its own: new windows map on a hidden workspace, and
-focus rests on an empty `idle` workspace. Using Chrome's own controls takes a
-**focus lease** on one window (Chrome reads only one Wayland seat): focus
-moves only between that window and `idle`, and its output moves to x=1920
-while the lease lasts so the pointer can reach it; other windows are never
-activated or deactivated. A lease ends when released or after 20 s without
+bar, toolbar, extension buttons, menus and popups. The outputs sit side by side
+in the lowest free slot (x = 0, 1920, ...), like a person's monitors, and an
+output is disabled when its window closes, so Chrome sees one screen per open
+window. Outputs must not overlap: the compositor sends frame callbacks for a
+surface on one output only, so a window on an overlapped output gets no
+frames (no paint, no `requestAnimationFrame`, wheel input never
+acknowledged). The stage never moves focus on its own: new windows map on a
+hidden workspace, floating at their tile's size so placing them never resizes
+a loading page (a page being resized loses clicks), and focus rests on an
+empty `idle` workspace. Using Chrome's own controls takes a **focus lease**
+on one window (Chrome reads only one Wayland seat): focus moves only between
+that window and `idle`; other windows are never activated or deactivated. A lease ends when released or after 20 s without
 input, and only one window holds it at a time (others get `busy`).
 `stage-control` pairs sway windows with Chrome's DevTools window ids (home-tab
 title, then unique tab titles, then elimination; ambiguous windows stay
-unpaired), which tells the viewer which run a window belongs to.
+unpaired), which tells the viewer which run a window belongs to. Whoever opens
+a run window waits until the stage has paired it by its home tab before
+opening a working tab, which takes the window title over.
 
 Every agent drives its own window with target-scoped DevTools input, which
 needs no focus and no global lock. Measured on Chrome 155 (2026-10-20): 8 and
 16 agents, barrier-synchronised click/type/wheel/dialog/popup, 30,000 ops with
-zero cross-talk and zero focus changes; with whole-window outputs and a
-focus-lease loop opening Chrome's menu and typing in another window
-throughout, 10,000 more with the same result. On labwc, by contrast, every new
+zero cross-talk and zero focus changes; with whole-window outputs, 4,000 more
+and another 4,000 while a focus-lease loop opened Chrome's menu and typed in
+another window throughout, with the same result (2026-10-21). On labwc, by contrast, every new
 window takes focus and blurs the field another agent is typing into, so agent
 windows never live on the human desktop. Wait for a new page's first frame
 before sending input (Chrome drops input that precedes it).

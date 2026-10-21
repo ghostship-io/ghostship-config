@@ -1493,6 +1493,17 @@ class App:
         with os.fdopen(fd, "w") as handle:
             json.dump(record, handle)
         os.replace(tmp, os.path.join(self.runs_dir, f"{run_id}.json"))
+        # The stage pairs a window with its run by the home tab's title, so let
+        # it see the window before the working tab takes the title over (two
+        # runs on the same site would otherwise look alike).
+        stage = self.stages.get(identity)
+        if stage and os.path.exists(stage.path):
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                await stage.refresh()
+                if any(w.get("run_id") == run_id for w in stage.windows):
+                    break
+                await asyncio.sleep(0.1)
         # Open the working tab from the anchor itself so Chrome puts it in this
         # window without focusing anything. The anchor is our own about:blank page.
         session = (await cdp.send("Target.attachToTarget", {"targetId": anchor, "flatten": True}))["sessionId"]

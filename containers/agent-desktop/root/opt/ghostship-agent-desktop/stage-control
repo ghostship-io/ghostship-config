@@ -11,11 +11,14 @@ menus) needs real pointer and keyboard input, which goes to the focused
 window. Chrome listens to one Wayland seat, so this stage has one focus:
 
 - Each Chrome window gets a headless output of its own (1920x1080, as every
-  stage output), so it can be captured whole, popups included. All outputs
-  sit at 0,0, so every window reports the single-screen geometry a stage
-  window always had (screen.availLeft 0, as the fingerprint baseline). Only
-  the output of the window holding the focus lease moves to x=1920 while the
-  lease lasts, because pointer input finds its target by layout position.
+  stage output), so it can be captured whole, popups included. The outputs
+  sit side by side in the lowest free slot (x = 0, 1920, ...), the way a
+  person's monitors do, and an output is disabled once its window closes,
+  so Chrome sees one screen per open window. Outputs must not overlap: the
+  compositor sends frame callbacks for a surface on one output only, and a
+  window whose output overlaps another's gets no frames (no paint, no
+  requestAnimationFrame, wheel input never acknowledged). The stage's own
+  output, which holds no window, sits below the slots.
 - New windows map on a hidden workspace ("stage-new") and never take focus;
   when nobody uses the UI, focus rests on an empty workspace ("idle").
 - UI input takes a focus lease on one window: focus moves only between that
@@ -66,6 +69,7 @@ RUNS = os.environ.get("STAGE_CONTROL_RUNS", "/config/agent-desktop/runs")
 PORTS = {"agent": 9222, "personal": 9223}
 OUTPUT_W, OUTPUT_H = 1920, 1080
 LEASE_IDLE = 20.0
+SCREEN_SETTLE = 0.5
 ANCHOR = re.compile(r"about:blank#ghostship-window-([A-Za-z0-9_-]{1,64})")
 MAGIC = b"i3-ipc"
 RUN_COMMAND, GET_WORKSPACES, SUBSCRIBE, GET_OUTPUTS, GET_TREE = 0, 1, 2, 3, 4
@@ -127,29 +131,35 @@ class Stage:
         self.windows: dict[int, dict] = {}   # con id -> {output, run_id}
         self.outputs: list[str] = []         # per-window outputs, in layout order
         self.lease: dict | None = None       # {con, actor, last}
-        self.lock = threading.Lock()         # placement and input
+        self.lock = threading.Lock()         # layout, placement and the lease
+        self.input_lock = threading.Lock()   # one input batch at a time
         self.base_output = None
         self.loop: asyncio.AbstractEventLoop | None = None
         self.cdp: Cdp | None = None
         self.target_windows: dict[str, int] = {}  # CDP target id -> Chrome window id
         self.pairs: dict[int, int] = {}            # sway con id -> Chrome window id (sticky)
         self.anchor_titles: dict[int, str] = {}    # sway con id -> run id seen in its title
+        self.refresh_timer: threading.Timer | None = None
 
     # ---- layout -------------------------------------------------------------
     def setup(self) -> None:
         outputs = self.ipc.request(GET_OUTPUTS)
         self.base_output = outputs[0]["name"]
+        self.ipc.command(f"output {self.base_output} position 0 {OUTPUT_H}")
         self.ipc.command(f"workspace idle output {self.base_output}")
         self.ipc.command(f"workspace stage-new output {self.base_output}")
         self.ipc.command("workspace idle")
+        self.outputs = [o["name"] for o in outputs[1:]]
         for con in self.tree_windows():
             # After a restart, adopt windows that already have their own output.
             if con["output"] != self.base_output and con.get("workspace") == f"w-{con['output']}":
                 self.windows[con["id"]] = {"output": con["output"]}
-                if con["output"] not in self.outputs:
-                    self.outputs.append(con["output"])
             else:
                 self.place(con["id"], con.get("name") or "")
+        used = {w["output"] for w in self.windows.values()}
+        for name in self.outputs:
+            if name not in used:
+                self.ipc.command(f"output {name} disable")
 
     def tree_windows(self) -> list[dict]:
         found = []
@@ -167,29 +177,36 @@ class Stage:
         walk(self.ipc.request(GET_TREE))
         return found
 
-    def layout_extent(self) -> tuple[int, int]:
-        outputs = [o for o in self.ipc.request(GET_OUTPUTS) if o.get("active")]
-        return (max(o["rect"]["x"] + o["rect"]["width"] for o in outputs),
-                max(o["rect"]["y"] + o["rect"]["height"] for o in outputs))
+    def free_slot(self) -> int:
+        """The lowest x no window output occupies."""
+        taken = {o["rect"]["x"] for o in self.ipc.request(GET_OUTPUTS)
+                 if o.get("active") and o["name"] != self.base_output}
+        x = 0
+        while x in taken:
+            x += OUTPUT_W
+        return x
 
     def free_output(self) -> str:
         used = {w["output"] for w in self.windows.values()}
-        for name in self.outputs:
-            if name not in used:
-                return name
-        before = {o["name"] for o in self.ipc.request(GET_OUTPUTS)}
-        # A new output opens on a workspace assigned to it, so name its
-        # workspace first: switching workspaces would move focus.
-        numbers = [int(n.rsplit("-", 1)[1]) for n in before if re.fullmatch(r"HEADLESS-\d+", n)]
-        expected = f"HEADLESS-{max(numbers, default=0) + 1}"
-        self.ipc.command(f"workspace w-{expected} output {expected}")
-        self.ipc.command("create_output")
-        name = next(o["name"] for o in self.ipc.request(GET_OUTPUTS) if o["name"] not in before)
-        self.ipc.command(f"output {name} resolution {OUTPUT_W}x{OUTPUT_H} position 0 0")
+        x = self.free_slot()
+        name = next((n for n in self.outputs if n not in used), None)
+        # An output opens on a workspace assigned to it, so name its workspace
+        # first: switching workspaces would move focus.
+        if name:
+            self.ipc.command(f"workspace w-{name} output {name}")
+            self.ipc.command(f"output {name} enable resolution {OUTPUT_W}x{OUTPUT_H} position {x} 0")
+        else:
+            before = {o["name"] for o in self.ipc.request(GET_OUTPUTS)}
+            numbers = [int(n.rsplit("-", 1)[1]) for n in before if re.fullmatch(r"HEADLESS-\d+", n)]
+            expected = f"HEADLESS-{max(numbers, default=0) + 1}"
+            self.ipc.command(f"workspace w-{expected} output {expected}")
+            self.ipc.command("create_output")
+            name = next(o["name"] for o in self.ipc.request(GET_OUTPUTS) if o["name"] not in before)
+            self.ipc.command(f"output {name} resolution {OUTPUT_W}x{OUTPUT_H} position {x} 0")
+            self.outputs.append(name)
         visible = next(w["name"] for w in self.ipc.request(GET_WORKSPACES) if w["output"] == name and w["visible"])
         if visible != f"w-{name}":
             self.ipc.command(f"rename workspace {visible} to w-{name}")
-        self.outputs.append(name)
         return name
 
     def place(self, con: int, title: str) -> None:
@@ -197,12 +214,38 @@ class Stage:
             if con in self.windows:
                 return
             output = self.free_output()
-            self.windows[con] = {"output": output}
             # Tiled on its own workspace: the gaps (browser-sway.conf) keep it
             # at 1600x900 in the top left, and tiled windows stay with their
             # workspace's output wherever the output is placed.
-            self.ipc.command(f"[con_id={con}] floating disable, move container to workspace w-{output}")
+            try:
+                self.ipc.command(f"[con_id={con}] floating disable, move container to workspace w-{output}")
+            except StageError:  # the window closed before it was placed
+                self.ipc.command(f"output {output} disable")
+                raise
+            self.windows[con] = {"output": output}
+            self.refresh_screens()
             log(f"window {con} -> {output}")
+
+    def refresh_screens(self) -> None:
+        """Make Chrome re-read which screen each window is on, once the moves settle.
+
+        Chrome keeps a moved window on the screen it saw last (often another
+        window's) until the screen layout changes, so nudge the empty stage
+        output by a pixel and back after the window has entered its output.
+        """
+        if self.refresh_timer:
+            self.refresh_timer.cancel()
+        self.refresh_timer = threading.Timer(SCREEN_SETTLE, self._nudge)
+        self.refresh_timer.daemon = True
+        self.refresh_timer.start()
+
+    def _nudge(self) -> None:
+        with self.lock:
+            try:
+                self.ipc.command(f"output {self.base_output} position 0 {OUTPUT_H + 1}")
+                self.ipc.command(f"output {self.base_output} position 0 {OUTPUT_H}")
+            except (StageError, OSError) as exc:
+                log(f"screen refresh: {exc}")
 
     def forget(self, con: int) -> None:
         with self.lock:
@@ -212,8 +255,9 @@ class Stage:
             if self.lease and self.lease["con"] == con:
                 self.lease = None
                 self.ipc.command("workspace idle")
-            if info:  # the output waits at 0,0 for the next window
-                self.ipc.command(f"output {info['output']} position 0 0")
+            if info:  # Chrome sees one screen per open window
+                self.ipc.command(f"output {info['output']} disable")
+                self.refresh_screens()
 
     def watch(self) -> None:
         """Place every new window as sway maps it (blocking; runs in a thread)."""
@@ -267,7 +311,8 @@ class Stage:
 
     # ---- reads --------------------------------------------------------------
     def list_windows(self) -> list[dict]:
-        nodes = sorted((n for n in self.tree_windows() if n["id"] in self.windows), key=lambda n: n["id"])
+        placed = dict(self.windows)  # a window may close while this runs
+        nodes = sorted((n for n in self.tree_windows() if n["id"] in placed), key=lambda n: n["id"])
         groups = self.chrome_windows()
         paired = self.pair(nodes, groups)
         out = []
@@ -278,7 +323,7 @@ class Stage:
             run_id = self.run_of(targets)
             out.append({"con": node["id"], "title": (node.get("name") or "")[:300], "chrome_window": window_id,
                         "run_id": run_id, "targets": [t["targetId"] for t in targets],
-                        "output": self.windows[node["id"]]["output"], "width": rect["width"],
+                        "output": placed[node["id"]]["output"], "width": rect["width"],
                         "height": rect["height"], "focused": bool(node.get("focused")),
                         "lease": bool(self.lease and self.lease["con"] == node["id"])})
         return out
@@ -366,12 +411,8 @@ class Stage:
 
     # ---- input and the focus lease -----------------------------------------
     def _focus_idle(self) -> None:
-        """End the lease's focus: idle gets focus, the leased output goes back to 0,0."""
+        """End the lease's focus: the empty idle workspace gets it."""
         self.ipc.command("workspace idle")
-        if self.lease:
-            output = self.windows.get(self.lease["con"], {}).get("output")
-            if output:
-                self.ipc.command(f"output {output} position 0 0")
 
     def _take(self, con: int, actor: str) -> None:
         now = time.monotonic()
@@ -383,7 +424,6 @@ class Stage:
             self._focus_idle()
             self.lease = None
         if not self.lease:
-            self.ipc.command(f"output {self.windows[con]['output']} position {OUTPUT_W} 0")
             self.ipc.command(f"[con_id={con}] focus")
             self.lease = {"con": con, "actor": actor, "last": now}
         self.lease.update(actor=actor, last=now)
@@ -431,13 +471,14 @@ class Stage:
                     pass
 
     def _input(self, con: int, actions: list, actor: str) -> dict:
-        with self.lock:
-            self._take(con, actor)
-            try:
+        # One batch at a time; the layout lock is held per pointer move only,
+        # so new windows are placed (and get frames) while a batch waits or types.
+        with self.input_lock:
+            with self.lock:
+                self._take(con, actor)
                 rect = self.window_rect(con)
-                output = next(o for o in self.ipc.request(GET_OUTPUTS) if o["name"] == self.windows[con]["output"])
-                runner = Actions(self.devices, self.env, OUTPUT_W, OUTPUT_H,
-                                 origin=(output["rect"]["x"], output["rect"]["y"]), extent=self.layout_extent())
+            try:
+                runner = Actions(self.devices, self.env, OUTPUT_W, OUTPUT_H, move=lambda x, y: self._move(con, x, y))
                 results = []
                 for action in actions:
                     if not isinstance(action, dict):
@@ -447,8 +488,21 @@ class Stage:
             except InputError as exc:
                 raise StageError("unavailable", str(exc)) from None
             finally:
-                if self.lease and self.lease["con"] == con:
-                    self.lease["last"] = time.monotonic()
+                with self.lock:
+                    if self.lease and self.lease["con"] == con:
+                        self.lease["last"] = time.monotonic()
+
+    def _move(self, con: int, x: int, y: int) -> None:
+        """Pointer to a point of the window's output, against the layout as it is now."""
+        with self.lock:
+            info = self.windows.get(con)
+            if info is None:
+                raise StageError("not_found", "the window closed")
+            outputs = [o for o in self.ipc.request(GET_OUTPUTS) if o.get("active")]
+            rect = next(o["rect"] for o in outputs if o["name"] == info["output"])
+            extent = (max(o["rect"]["x"] + o["rect"]["width"] for o in outputs),
+                      max(o["rect"]["y"] + o["rect"]["height"] for o in outputs))
+            self.devices.move(rect["x"] + x, rect["y"] + y, *extent)
 
     # ---- socket ---------------------------------------------------------------
     def resolve(self, request: dict) -> tuple[int, dict | None]:

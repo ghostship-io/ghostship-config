@@ -4,7 +4,8 @@ Shared by app-session (one app per headless screen) and stage-control (one
 Chrome window per output of a browser stage). Coordinates are pixels of the
 captured region (its frame); `origin` places that region in the compositor's
 output layout and `extent` is the layout's size, which absolute pointer
-motion is relative to. Keys and text go through wtype; typed text is passed on
+motion is relative to. A caller whose layout changes underneath passes `move`
+instead: it places the pointer at a region point itself, one event at a time. Keys and text go through wtype; typed text is passed on
 stdin, never in process arguments. Stdlib only.
 """
 from __future__ import annotations
@@ -51,8 +52,9 @@ class Actions:
     """Run Pelorus-style actions (left_click, type, key, scroll, ...) on one region."""
 
     def __init__(self, devices, env: dict, width: int, height: int,
-                 origin: tuple[int, int] = (0, 0), extent: tuple[int, int] | None = None):
+                 origin: tuple[int, int] = (0, 0), extent: tuple[int, int] | None = None, move=None):
         self.input, self.env = devices, env
+        self.move = move
         self.width, self.height = width, height
         self.origin = origin
         self.extent = extent or (width, height)
@@ -71,7 +73,10 @@ class Actions:
         return int(x), int(y)
 
     def _move(self, point: tuple[int, int]) -> None:
-        self.input.move(self.origin[0] + point[0], self.origin[1] + point[1], *self.extent)
+        if self.move:
+            self.move(*point)
+        else:
+            self.input.move(self.origin[0] + point[0], self.origin[1] + point[1], *self.extent)
         self.pointer = point
 
     def _click(self, button: str, count: int) -> None:
