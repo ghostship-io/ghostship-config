@@ -5,15 +5,11 @@ let
   candidate =
     extra:
     (base.extendModules {
-      modules = [
-        ../modules/self-hosted/t3code-docker.nix
-        extra
-      ];
+      modules = [ extra ];
     }).config;
   enabled = {
     ghostship.t3codeDocker = {
       enable = true;
-      egressInterface = "eth0";
     };
   };
   failures =
