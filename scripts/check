@@ -30,6 +30,9 @@ python3 -m unittest discover -s tests -p test_security_monitoring.py
 python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
 
+printf 'Checking the agent SSH command guard\n'
+python3 -m unittest discover -s tests -p test_ssh_command_guard.py
+
 printf 'Checking SIEM log parsing and secret redaction\n'
 vector --quiet test tests/siem-vector.toml
 python3 -m unittest discover -s tests -p test_siem_alerts.py
