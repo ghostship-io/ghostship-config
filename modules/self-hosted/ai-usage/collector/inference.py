@@ -40,7 +40,10 @@ The rules, in short:
 * The scope says whether the limit belongs to the model or to the account. A
   scope of `unknown` is computed across the account and labelled unknown.
 * An account-wide budget is shared between the models of the provider, either
-  with equal weights or with weights fitted from the episodes.
+  with equal weights or with weights fitted from the episodes. The fit runs
+  once there are more completed episodes than models with usage in the mix, so
+  an account that serves one model and had more than one episode is fitted as
+  well, and its budget is the normalised one.
 
 The names, the states and the fields follow the owner rule; the tests in
 `tests/test_ai_usage_inference.py` pin every worked value.
