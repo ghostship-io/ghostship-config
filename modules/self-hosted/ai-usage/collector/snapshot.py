@@ -943,6 +943,7 @@ def _free_pool_record(evidence: Mapping[str, Any] | None) -> dict[str, Any]:
         "limits": [],
         "cooldown_until": None,
         "cooldown_basis": None,
+        "last_used": None,
         "issues": [],
     }
     if not isinstance(evidence, Mapping):
@@ -974,6 +975,10 @@ def _free_pool_record(evidence: Mapping[str, Any] | None) -> dict[str, Any]:
     cooldown_value = None
     if isinstance(cooldown, (int, float)) and not isinstance(cooldown, bool):
         cooldown_value = float(cooldown)
+    last_used = evidence.get("last_used")
+    last_used_value = None
+    if isinstance(last_used, (int, float)) and not isinstance(last_used, bool):
+        last_used_value = float(last_used)
     return {
         "state": "pool_route",
         "basis": (
@@ -988,6 +993,9 @@ def _free_pool_record(evidence: Mapping[str, Any] | None) -> dict[str, Any]:
                 "pool" if cooldown_value is not None else None
             )
         ),
+        # When the pool last sent a job to this route. The least recently
+        # used route breaks the tie inside the quality band.
+        "last_used": last_used_value,
         "issues": issues,
     }
 
@@ -2033,6 +2041,11 @@ RESERVE_CAPACITY_FLOOR = 0.50
 # model is reserved for.
 RESERVED_TIERS = ("bulk", "free")
 
+# The width of the quality band of the free tier, in Artificial Analysis
+# intelligence points. The eligible routes within this many points of the
+# best eligible route form the band, and the band is used first.
+FREE_BAND_POINTS = 5.0
+
 
 def _apply_reserve(
     candidates: list[dict[str, Any]], provider_capacity: Mapping[str, Any]
@@ -2125,82 +2138,94 @@ def _winners(
                 continue
             considered += 1
             providers.add(row["provider"])
-            if (row.get("availability") or {}).get("state") != "available":
-                continue
-            if (row.get("admission") or {}).get("state") != "settled":
-                continue
-            if not _eligible_for_tier(row, tier):
-                # A model that is not permitted for the tier is never its
-                # winner. The next permitted model of the same provider takes
-                # its place.
+            if not _holds_the_tier(row, tier):
+                # A model that is not available, that waits for its
+                # evaluation, or that is not permitted for the tier is never
+                # its winner. The next permitted model of the same provider
+                # takes its place.
                 continue
             current = chosen.get(row["provider"])
             if current is None or _winner_key(row, tier) > _winner_key(current, tier):
                 chosen[row["provider"]] = row
-        # The quality band of the free tier: routes within five AA
-        # intelligence points of the best eligible route. Outside the band
-        # the order is by intelligence; inside, headroom then least recently
-        # used.
+        # The quality band of the free tier: the routes within five
+        # Artificial Analysis intelligence points of the best eligible free
+        # route. The band comes first, ordered by the most remaining
+        # headroom, with the least recently used route breaking ties. The
+        # rest of the tier follows by intelligence, and a route without an
+        # intelligence record comes last.
         best_strength = None
         if tier == "free":
             for key in members:
                 row = by_key.get(key)
                 if row is None:
                     continue
-                if (row.get("availability") or {}).get("state") != "available":
+                if not _holds_the_tier(row, tier):
                     continue
-                if (row.get("admission") or {}).get("state") != "settled":
+                strength = _strength_of(row)
+                if strength is None:
                     continue
-                if not _eligible_for_tier(row, tier):
-                    continue
-                strength = (row.get("value") or {}).get("strength")
-                if isinstance(strength, (int, float)) and not isinstance(strength, bool):
-                    if best_strength is None or float(strength) > best_strength:
-                        best_strength = float(strength)
+                if best_strength is None or strength > best_strength:
+                    best_strength = strength
 
         def _free_band(row: dict[str, Any]) -> bool:
+            """True when a route is within the band of the best free route."""
             if tier != "free" or best_strength is None:
                 return False
-            strength = (row.get("value") or {}).get("strength")
-            if not isinstance(strength, (int, float)) or isinstance(strength, bool):
+            strength = _strength_of(row)
+            if strength is None:
+                # A route without an intelligence record is the lower band.
                 return False
-            return (best_strength - float(strength)) <= 5.0
+            return (best_strength - strength) <= FREE_BAND_POINTS
 
-        if tier == "free":
-            ordered = sorted(
-                chosen.values(),
-                key=lambda row: (
-                    0 if _free_band(row) else 1,
-                    # within band: most remaining headroom first
-                    -(
-                        (row.get("capacity") or {}).get("remaining_ratio")
-                        if isinstance((row.get("capacity") or {}).get("remaining_ratio"), (int, float))
-                        and not isinstance((row.get("capacity") or {}).get("remaining_ratio"), bool)
-                        else 0.0
-                    ),
-                    # outside band / tie-break: AA intelligence descending
-                    -(
-                        (row.get("value") or {}).get("strength")
-                        if isinstance((row.get("value") or {}).get("strength"), (int, float))
-                        and not isinstance((row.get("value") or {}).get("strength"), bool)
-                        else 0.0
-                    ),
+        def _free_key(row: dict[str, Any]) -> tuple:
+            """The order of the free tier.
+
+            The band comes first, by the most remaining headroom, with the
+            least recently used route breaking the ties. The routes outside
+            the band follow by intelligence, and a route without an
+            intelligence record comes last.
+            """
+            strength = _strength_of(row)
+            if strength is None:
+                # The lower band: a route with no Artificial Analysis match
+                # is used only when no ranked route has headroom.
+                return (2, 0.0, 0.0, 0.0, row["provider"], row["model"])
+            if _free_band(row):
+                headroom = _headroom_of(row)
+                last_used = _last_used_of(row)
+                return (
+                    0,
+                    # The most remaining headroom first. An unknown headroom
+                    # is no headroom, and it never displaces a route that has
+                    # one.
+                    -(headroom if headroom is not None else 0.0),
+                    # The least recently used route breaks the tie. A route
+                    # the pool has no reading for is unknown, and it waits.
+                    last_used if last_used is not None else float("inf"),
+                    -strength,
                     row["provider"],
                     row["model"],
-                ),
-            )
+                )
+            return (1, 0.0, 0.0, -strength, row["provider"], row["model"])
+
+        if tier == "free":
+            ordered = sorted(chosen.values(), key=_free_key)
         else:
             ordered = sorted(
                 chosen.values(),
                 key=lambda row: (
+                    # A model reserved for the 3D tier comes last in the tiers
+                    # it is reserved away from. The reserve changes the order,
+                    # never the value.
                     1 if (row.get("reserve") or {}).get("3d") else 0,
                     -(_pace_of(row) if _pace_of(row) is not None else 0.0),
                     row["provider"],
                     row["model"],
                 ),
             )
-        winners[tier] = [
-            {
+        winners[tier] = []
+        for row in ordered:
+            winner = {
                 "provider": row["provider"],
                 "model": row["model"],
                 "key": _key(row["provider"], row["model"]),
@@ -2219,7 +2244,6 @@ def _winners(
                 "paced_availability_window": (row.get("capacity") or {}).get(
                     "paced_availability_window"
                 ),
-                "band": "true" if _free_band(row) else "false",
                 "quota_state": row.get("quota_state"),
                 "native": row.get("native"),
                 "role": row.get("role"),
@@ -2228,8 +2252,12 @@ def _winners(
                     "ordered by the pace of the account window"
                 ),
             }
-            for row in ordered
-        ]
+            if tier == "free":
+                # The band of the free tier is published with its winner, so
+                # a reader sees which routes are the band and which are the
+                # rest. The other tiers are not banded.
+                winner["band"] = "true" if _free_band(row) else "false"
+            winners[tier].append(winner)
         coverage[tier] = {
             "candidates_considered": considered,
             "members": len(members),
@@ -2576,6 +2604,51 @@ def _pace_of(row: dict[str, Any]) -> float | None:
     delta = (row.get("capacity") or {}).get("pace_delta")
     if isinstance(delta, (int, float)) and not isinstance(delta, bool):
         return float(delta)
+    return None
+
+
+def _holds_the_tier(row: Mapping[str, Any], tier: str) -> bool:
+    """True when a route may hold a rank in a tier.
+
+    A route that is not available, that waits for its evaluation, or that
+    the tier does not permit never holds a rank.
+    """
+    if (row.get("availability") or {}).get("state") != "available":
+        return False
+    if (row.get("admission") or {}).get("state") != "settled":
+        return False
+    return _eligible_for_tier(row, tier)
+
+
+def _strength_of(row: Mapping[str, Any]) -> float | None:
+    """The Artificial Analysis intelligence index of a route, when it is known."""
+    strength = (row.get("value") or {}).get("strength")
+    if isinstance(strength, (int, float)) and not isinstance(strength, bool):
+        return float(strength)
+    return None
+
+
+def _headroom_of(row: Mapping[str, Any]) -> float | None:
+    """The remaining headroom of a route, when it is known.
+
+    The remaining share of the collector's own capacity reading: the lowest
+    remaining share across the windows that apply to the route.
+    """
+    remaining = (row.get("capacity") or {}).get("remaining_ratio")
+    if isinstance(remaining, (int, float)) and not isinstance(remaining, bool):
+        return float(remaining)
+    return None
+
+
+def _last_used_of(row: Mapping[str, Any]) -> float | None:
+    """When a route was last used, when the pool says so.
+
+    The pool knows when it last sent a job to a route. A route it has no
+    reading for has an unknown use, and it is never read as never used.
+    """
+    last_used = (row.get("free_pool") or {}).get("last_used")
+    if isinstance(last_used, (int, float)) and not isinstance(last_used, bool):
+        return float(last_used)
     return None
 
 
@@ -3318,15 +3391,20 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
                 "model": str(winner.get("model") or ""),
             }
             samples.append(("ghostship_ai_model_winner", labels, 1.0))
+            position_labels = {
+                "tier": str(tier),
+                "provider": labels["provider"],
+                "model": labels["model"],
+            }
+            if str(tier) == "free":
+                # The free tier is ordered by its quality band, and the band
+                # is published with the position, so a reader sees which
+                # routes are the band and which are the rest.
+                position_labels["band"] = str(winner.get("band") or "false")
             samples.append(
                 (
                     "ghostship_ai_model_winner_position",
-                    {
-                        "tier": str(tier),
-                        "provider": labels["provider"],
-                        "model": labels["model"],
-                        "band": str(winner.get("band") or "false"),
-                    },
+                    position_labels,
                     float(position),
                 )
             )
