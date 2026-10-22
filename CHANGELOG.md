@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.50] - 2026-10-22
+
+- Agent desktop browser stage: a stage-control restart re-pairs the windows it finds. Sway does not re-announce the windows it already has, so the anchor titles (the run id in a window's title) were only learned from new window events; after the restart that `run-chrome` loops on, every window stayed unpaired and `browser_window` `screenshot` and `ui` failed with `not_found` until the page titles happened to differ. The stage now reads the sway tree once at setup and seeds the anchor titles from it.
+- Agent desktop browser stage: only the focus lease's holder may release it. The viewer released a window's lease whenever its last client left, so a person closing the viewer closed the Chrome menu an agent was working with, and the agent's next click landed on the page behind it. The release now carries its actor (the viewer speaks for a person, the agent's CLI for an agent), a lease that belongs to someone else is left alone, an idle lease still expires on its own, and an explicit admin request (never from an agent) forces it down.
+
 ## [3.17.49] - 2026-10-22
 
 - GitHub-launched threads lead with the chief reviewer (Claude Opus 5.5), with Codex GPT-6.1-Sol as the backup, per the owner's role policy.
