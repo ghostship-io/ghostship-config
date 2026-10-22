@@ -152,6 +152,9 @@ class RankedModel:
     value: float | None = None
     # The owner's frontier workhorses, as the runtime policy names them.
     workhorses: tuple[str, ...] = FRONTIER_WORKHORSES
+    # The observed failure of the route, when there is one. The reason is a
+    # code and a fixed label, never the provider's own text.
+    observed_failure: dict[str, Any] = dataclasses.field(default_factory=dict)
 
 
 # The tiers, in the order the dashboard reads them.
@@ -1247,6 +1250,45 @@ def _admission(
     )
 
 
+def _observed_failures(
+    failures: Iterable[Mapping[str, Any]] | None,
+) -> dict[str, list[Mapping[str, Any]]]:
+    """The observed failures, grouped by the scope they apply to.
+
+    The three scopes are kept apart: an account failure reaches every
+    model of that account, a route failure every model of that provider
+    instance, and a model failure only that model.
+    """
+    grouped: dict[str, list[Mapping[str, Any]]] = {}
+    for failure in failures or ():
+        if not isinstance(failure, Mapping):
+            continue
+        scope = str(failure.get("scope") or "")
+        target = str(failure.get("target") or "")
+        if not scope or not target:
+            continue
+        grouped.setdefault(f"{scope}:{target}", []).append(dict(failure))
+    return grouped
+
+
+def _failure_for(
+    failures: Mapping[str, list[Mapping[str, Any]]],
+    account: str,
+    provider_instance: str,
+    model: str,
+) -> Mapping[str, Any] | None:
+    """The failure that reaches a model, if there is one."""
+    for key in (
+        f"account:{account}",
+        f"route:{provider_instance}",
+        f"model:{model}",
+    ):
+        found = failures.get(key)
+        if found:
+            return max(found, key=lambda entry: float(entry.get("observed_at") or 0.0))
+    return None
+
+
 def rank_models(
     *,
     models: Iterable[Any],
@@ -1262,6 +1304,7 @@ def rank_models(
     exclude_providers: Mapping[str, Iterable[str]] | None = None,
     free_route_accounts: Iterable[str] | None = None,
     frontier_workhorses: Iterable[str] | None = None,
+    observed_failures: Iterable[Mapping[str, Any]] | None = None,
     now: float = 0.0,
     state_path: str | os.PathLike[str] | None = None,
 ) -> list[RankedModel]:
@@ -1283,10 +1326,17 @@ def rank_models(
     `frontier_workhorses` is the owner's list of the models that may hold
     the frontier. It comes from the runtime policy; the constant is only the
     fallback for a caller that has no policy.
+
+    `observed_failures` are the recent failures of the routes, read from
+    the T3 Code state. A failure is scoped: to an account, to a route or
+    to one model. A model under a failed scope is not available, and it
+    stays visible: it is reported with the reason and the moment it was
+    observed.
     """
     workhorses = tuple(
         str(name) for name in (frontier_workhorses or FRONTIER_WORKHORSES)
     )
+    failures = _observed_failures(observed_failures)
     inventory: set[tuple[str, str]] = set()
     for record in models or ():
         pair = _record_pair(record)
@@ -1364,7 +1414,20 @@ def rank_models(
 
         in_inventory = (provider, model) in inventory
         external_state = external.get((provider, model))
-        if external_state is False:
+        # An observed failure of the T3 Code state: the route is not usable
+        # now. The model stays visible, with the reason and the moment.
+        native_instance = str(
+            ((native_models or {}).get((provider, model)) or {}).get(
+                "providerInstance"
+            )
+            or ""
+        )
+        failure = _failure_for(failures, account, native_instance, model)
+        if failure is not None:
+            # The T3 Code state says this route is broken right now. The
+            # model is not usable, and it stays visible with the reason.
+            available = False
+        elif external_state is False:
             # A source that watches the route says it is not usable now, for
             # example a cooling down pool route.
             available = False
@@ -1551,6 +1614,7 @@ def rank_models(
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
+                    observed_failure=dict(failure or {}),
                 )
             )
             continue
@@ -1583,6 +1647,7 @@ def rank_models(
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
+                    observed_failure=dict(failure or {}),
                 )
             )
         if not tier_entries:
@@ -1612,6 +1677,7 @@ def rank_models(
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
+                    observed_failure=dict(failure or {}),
                 )
             )
         entries.extend(tier_entries)

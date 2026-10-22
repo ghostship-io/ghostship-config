@@ -32,6 +32,7 @@ import pool_published  # noqa: E402
 import quota as quota_module  # noqa: E402
 import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
+import runtime_state as runtime_state_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
 import t3source  # noqa: E402
 import threed as threed_module  # noqa: E402
@@ -46,6 +47,10 @@ SECRETS_ENV_FILE = "/run/ghostship-secrets/t3code.env"
 POOL_SERVER_FILE = "/run/ghostship-integrations/inference-server.json"
 POOL_TOKEN_FILE = "/run/ghostship-integrations/inference-token"
 POOL_LEDGER_FILE = f"{T3_HOME}/.local/state/ghostship-agent/runtime/jobs.sqlite"
+# The T3 Code state, read only. It carries the observed failures of the
+# routes: a child that could not start, a provider that reported its
+# allowance spent, a model that was refused.
+T3_STATE_FILE = f"{T3_HOME}/.t3/userdata/statev2.sqlite"
 CATALOG_FILE = f"{T3_HOME}/.cache/opencode/models.json"
 # The smallest 3D prior that earns a place in the 3D tier.
 
@@ -177,6 +182,13 @@ METRIC_HELP = {
     "ghostship_ai_pool_ledger_requests": "Requests the free pool reserved over a window.",
     "ghostship_ai_pool_catalog_updated_timestamp_seconds": "When the pool catalog was refreshed.",
     "ghostship_ai_provider_coverage": "One for every provider the dashboard covers.",
+    "ghostship_ai_route_unavailable": (
+        "One for a route the T3 Code state says is unavailable, with the "
+        "scope of the failure and the reason code."
+    ),
+    "ghostship_ai_route_unavailable_observed_timestamp_seconds": (
+        "When the T3 Code state observed the failure of a route."
+    ),
     "ghostship_ai_model_rank": "The rank of a model inside a tier, 1 is best.",
     "ghostship_ai_model_score": "The ranking score of a model inside a tier.",
     "ghostship_ai_model_quality": "The quality score of a model.",
@@ -858,6 +870,7 @@ def ranking_samples(
     state_path: str | None = None,
     aa_cache: dict[str, Any] | None = None,
     aa_3d_cache: dict[str, Any] | None = None,
+    t3_state: str = T3_STATE_FILE,
 ) -> tuple[list[Sample], list[Any]]:
     """Rank every model we can use.
 
@@ -956,6 +969,38 @@ def ranking_samples(
         rank_kwargs["frontier_workhorses"] = sorted(
             OWNER_POLICY.get("frontierPrimeModels") or ()
         )
+    # The observed failures of the routes, read from the T3 Code state. A
+    # route that is known to be broken does not win a tier, and it stays
+    # visible with the reason and the moment it was observed.
+    observed_failures = runtime_state_module.read_failures(t3_state, now)
+    if "observed_failures" in inspect.signature(ranking_module.rank_models).parameters:
+        rank_kwargs["observed_failures"] = observed_failures
+    for failure in observed_failures:
+        samples.append(
+            (
+                "ghostship_ai_route_unavailable",
+                {
+                    "scope": str(failure.get("scope") or ""),
+                    "target": str(failure.get("target") or ""),
+                    "reason": str(failure.get("reason") or ""),
+                },
+                1.0,
+            )
+        )
+        observed_at = failure.get("observed_at")
+        if isinstance(observed_at, (int, float)) and not isinstance(observed_at, bool):
+            samples.append(
+                (
+                    "ghostship_ai_route_unavailable_observed_timestamp_seconds",
+                    {
+                        "scope": str(failure.get("scope") or ""),
+                        "target": str(failure.get("target") or ""),
+                        "reason": str(failure.get("reason") or ""),
+                    },
+                    float(observed_at),
+                )
+            )
+    context["observed_failures"] = observed_failures
     context["ranking_inventory"] = sorted(inventory)
     ranked = ranking_module.rank_models(**rank_kwargs)
     samples.extend(ranking_module.rank_samples(ranked, now=now))

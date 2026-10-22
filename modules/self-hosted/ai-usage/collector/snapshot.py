@@ -524,6 +524,7 @@ def _candidate(
     actual: float | None = None
     raw_windows: list[Any] = []
     surplus: dict[str, Any] = {}
+    observed_failure: dict[str, Any] = {}
 
     for entry in entries:
         if entry.tier:
@@ -547,6 +548,9 @@ def _candidate(
             if reason not in reasons:
                 reasons.append(reason)
         raw_windows = list(entry.windows)
+        failure = getattr(entry, "observed_failure", None)
+        if failure:
+            observed_failure = dict(failure)
     for window in raw_windows:
         record = _window_record(window, now)
         if record not in windows:
@@ -611,19 +615,41 @@ def _candidate(
         "available": bool(available),
         "availability": {
             "state": "available" if available else "unavailable",
-            "evidence": "measured" if capacity_measured else "unknown",
+            "evidence": (
+                "observed"
+                if observed_failure
+                else ("measured" if capacity_measured else "unknown")
+            ),
             "reason": (
-                "every applicable window has headroom"
-                if available and capacity_measured
+                str(observed_failure.get("label") or "")
+                if observed_failure
                 else (
-                    "a window is spent"
-                    if quota_state == QUOTA_EXHAUSTED
+                    "every applicable window has headroom"
+                    if available and capacity_measured
                     else (
-                        "a window is unknown, stale, or missing"
-                        if windows
-                        else "the provider reports no quota for this account"
+                        "a window is spent"
+                        if quota_state == QUOTA_EXHAUSTED
+                        else (
+                            "a window is unknown, stale, or missing"
+                            if windows
+                            else "the provider reports no quota for this account"
+                        )
                     )
                 )
+            ),
+            # The observed failure of the route, when there is one. The
+            # reason is a code and a fixed label; the provider's own text
+            # never leaves the collector.
+            "observed_failure": (
+                {
+                    "scope": str(observed_failure.get("scope") or ""),
+                    "target": str(observed_failure.get("target") or ""),
+                    "reason": str(observed_failure.get("reason") or ""),
+                    "label": str(observed_failure.get("label") or ""),
+                    "observed_at": observed_failure.get("observed_at"),
+                }
+                if observed_failure
+                else None
             ),
         },
         "quota_state": quota_state,

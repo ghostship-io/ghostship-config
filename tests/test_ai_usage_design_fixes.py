@@ -596,6 +596,313 @@ class HonestScoreTests(unittest.TestCase):
         self.assertEqual(excluded, {"gpt-6-astra"})
 
 
+class ObservedAvailabilityTests(unittest.TestCase):
+    """The observed availability of a route, out of the T3 Code state."""
+
+    def _reader(self):
+        return _load("ai_usage_design_runtime_state", "runtime_state")
+
+    def _state(self, folder, attempts, sessions=(), runtimes=(), runs=()):
+        """A small T3 Code state database with the given rows."""
+        import sqlite3
+
+        path = Path(folder) / "statev2.sqlite"
+        connection = sqlite3.connect(path)
+        connection.execute(
+            "CREATE TABLE orchestration_v2_projection_run_attempts "
+            "(attempt_id TEXT, thread_id TEXT, run_id TEXT, attempt_ordinal INTEGER, "
+            "root_node_id TEXT, provider TEXT, provider_thread_id TEXT, "
+            "provider_turn_id TEXT, status TEXT, payload_json TEXT, "
+            "provider_instance_id TEXT)"
+        )
+        connection.execute(
+            "CREATE TABLE orchestration_v2_projection_runs "
+            "(run_id TEXT, thread_id TEXT, ordinal INTEGER, provider TEXT, "
+            "provider_thread_id TEXT, status TEXT, requested_at TEXT, "
+            "completed_at TEXT, payload_json TEXT, provider_instance_id TEXT)"
+        )
+        connection.execute(
+            "CREATE TABLE projection_thread_sessions "
+            "(thread_id TEXT, status TEXT, provider_name TEXT, "
+            "provider_session_id TEXT, provider_thread_id TEXT, active_turn_id TEXT, "
+            "last_error TEXT, updated_at TEXT, runtime_mode TEXT, "
+            "provider_instance_id TEXT)"
+        )
+        connection.execute(
+            "CREATE TABLE provider_session_runtime "
+            "(thread_id TEXT, provider_name TEXT, adapter_key TEXT, "
+            "runtime_mode TEXT, status TEXT, last_seen_at TEXT, "
+            "resume_cursor_json TEXT, runtime_payload_json TEXT, "
+            "provider_instance_id TEXT)"
+        )
+        for index, attempt in enumerate(attempts):
+            connection.execute(
+                "INSERT INTO orchestration_v2_projection_run_attempts VALUES "
+                "(?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    f"attempt-{index}",
+                    attempt.get("thread_id", "thread-1"),
+                    attempt.get("run_id", "run-1"),
+                    1,
+                    "root",
+                    attempt.get("provider", "opencode"),
+                    "provider-thread",
+                    None,
+                    attempt.get("status", "failed"),
+                    json.dumps(
+                        {
+                            "startedAt": attempt.get("started_at"),
+                            "completedAt": attempt.get("completed_at"),
+                            "model": attempt.get("model", ""),
+                        }
+                    ),
+                    attempt.get("provider_instance_id", "opencode"),
+                ),
+            )
+        for index, session in enumerate(sessions):
+            connection.execute(
+                "INSERT INTO projection_thread_sessions VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    session.get("thread_id", "thread-1"),
+                    "stopped",
+                    session.get("provider_name", "opencode"),
+                    "session",
+                    "provider-thread",
+                    None,
+                    session.get("last_error", ""),
+                    session.get("updated_at"),
+                    "full-access",
+                    session.get("provider_instance_id", "opencode"),
+                ),
+            )
+        for index, runtime in enumerate(runtimes):
+            connection.execute(
+                "INSERT INTO provider_session_runtime VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    runtime.get("thread_id", "thread-1"),
+                    "opencode",
+                    "opencode",
+                    "full-access",
+                    "stopped",
+                    runtime.get("last_seen_at"),
+                    "{}",
+                    json.dumps(runtime.get("payload") or {}),
+                    runtime.get("provider_instance_id", "opencode"),
+                ),
+            )
+        connection.commit()
+        connection.close()
+        return path
+
+    def _observed(self, folder, attempts, sessions=(), runtimes=()):
+        reader = self._reader()
+        path = self._state(folder, attempts, sessions, runtimes)
+        return reader.read_failures(path, NOW)
+
+    def test_an_account_failure_reaches_every_model_of_the_account(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            failures = self._observed(
+                folder,
+                [
+                    {
+                        "thread_id": "thread-1",
+                        "provider_instance_id": "opencode",
+                        "status": "failed",
+                        "completed_at": "2027-01-15T00:00:00Z",
+                        "model": "ollama-cloud/deepseek-v4.1-flash",
+                    }
+                ],
+                sessions=[
+                    {
+                        "thread_id": "thread-1",
+                        "last_error": (
+                            "you (someone) have reached your session usage "
+                            "limit, upgrade for higher limits"
+                        ),
+                        "updated_at": "2027-01-15T00:00:00Z",
+                    }
+                ],
+            )
+        self.assertEqual(len(failures), 1)
+        failure = failures[0]
+        self.assertEqual(failure["scope"], "account")
+        self.assertEqual(failure["target"], "ollama")
+        self.assertEqual(failure["reason"], "account_usage_limit")
+        # The provider's own text never leaves the collector.
+        self.assertNotIn("someone", json.dumps(failure))
+
+    def test_a_go_usage_limit_is_an_account_failure(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            failures = self._observed(
+                folder,
+                [
+                    {
+                        "thread_id": "thread-1",
+                        "provider_instance_id": "opencode",
+                        "status": "failed",
+                        "completed_at": "2027-01-15T00:00:00Z",
+                        "model": "opencode-go/grok-4.7",
+                    }
+                ],
+                sessions=[
+                    {
+                        "thread_id": "thread-1",
+                        "last_error": "Go usage limit exceeded",
+                        "updated_at": "2027-01-15T00:00:00Z",
+                    }
+                ],
+            )
+        self.assertEqual(failures[0]["scope"], "account")
+        self.assertEqual(failures[0]["target"], "opencode-go")
+
+    def test_a_startup_failure_is_a_route_failure(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            failures = self._observed(
+                folder,
+                [
+                    {
+                        "thread_id": "thread-1",
+                        "provider_instance_id": "antigravity",
+                        "status": "failed",
+                        "completed_at": "2027-01-15T00:00:00Z",
+                        "model": "gemini-3.8-flash",
+                    }
+                ],
+                sessions=[
+                    {
+                        "thread_id": "thread-1",
+                        "provider_instance_id": "antigravity",
+                        "last_error": (
+                            "MCP load failed for t3-code: error while loading "
+                            "shared libraries: libatomic.so.1: cannot open "
+                            "shared object file: No such file or directory"
+                        ),
+                        "updated_at": "2027-01-15T00:00:00Z",
+                    }
+                ],
+            )
+        self.assertEqual(failures[0]["scope"], "route")
+        self.assertEqual(failures[0]["target"], "antigravity")
+        self.assertEqual(failures[0]["reason"], "route_startup_failed")
+
+    def test_a_refused_model_is_a_model_failure(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            failures = self._observed(
+                folder,
+                [
+                    {
+                        "thread_id": "thread-1",
+                        "provider_instance_id": "opencode",
+                        "status": "failed",
+                        "completed_at": "2027-01-15T00:00:00Z",
+                        "model": "deepseek-v4.1-flash",
+                    }
+                ],
+                sessions=[
+                    {
+                        "thread_id": "thread-1",
+                        "last_error": 'Bad Request: {"model":"deepseek-v4.1-flash"}',
+                        "updated_at": "2027-01-15T00:00:00Z",
+                    }
+                ],
+            )
+        self.assertEqual(failures[0]["scope"], "model")
+        self.assertEqual(failures[0]["target"], "deepseek-v4.1-flash")
+
+    def test_a_later_successful_run_clears_the_failure(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            failures = self._observed(
+                folder,
+                [
+                    {
+                        "thread_id": "thread-1",
+                        "provider_instance_id": "antigravity",
+                        "status": "failed",
+                        "completed_at": "2027-01-15T00:00:00Z",
+                        "model": "gemini-3.8-flash",
+                    },
+                    {
+                        "thread_id": "thread-2",
+                        "provider_instance_id": "antigravity",
+                        "status": "completed",
+                        "completed_at": "2027-01-15T01:00:00Z",
+                        "model": "gemini-3.8-flash",
+                    },
+                ],
+                sessions=[
+                    {
+                        "thread_id": "thread-1",
+                        "provider_instance_id": "antigravity",
+                        "last_error": "Could not start Antigravity.",
+                        "updated_at": "2027-01-15T00:00:00Z",
+                    }
+                ],
+            )
+        self.assertEqual(failures, [])
+
+    def test_an_unavailable_route_stays_visible_and_never_wins(self):
+        catalog = catalog_module.Catalog(
+            {
+                "antigravity": {
+                    "models": {"gemini-3.8-flash": catalog_entry("gemini-3.8-flash")}
+                }
+            }
+        )
+        models = [ranking.ModelRecord("antigravity", "gemini-3.8-flash")]
+        ranked = ranking.rank_models(
+            models=models,
+            catalog=catalog,
+            quota_windows={},
+            free_models=set(),
+            usage_tokens={},
+            aa_cache=aa_cache_for(models),
+            observed_failures=[
+                {
+                    "scope": "route",
+                    "target": "antigravity",
+                    "reason": "route_startup_failed",
+                    "label": "the provider's runtime could not start",
+                    "observed_at": NOW,
+                }
+            ],
+            native_models={
+                ("antigravity", "gemini-3.8-flash"): {
+                    "providerInstance": "antigravity",
+                    "modelId": "gemini-3.8-flash",
+                    "options": [],
+                }
+            },
+            now=NOW,
+        )
+        # The route is visible, and it is not available.
+        self.assertTrue(ranked)
+        self.assertFalse(ranked[0].available)
+        self.assertEqual(ranked[0].tier, "")
+        self.assertEqual(
+            ranked[0].observed_failure.get("reason"), "route_startup_failed"
+        )
+
+    def test_the_failure_is_published_in_the_snapshot(self):
+        data = build_free_snapshot(
+            [("antigravity", "gemini-3.8-flash")],
+            [aa_record("gemini-3-8-flash", "Gemini 3.8 Flash")],
+            native=[("antigravity", "gemini-3.8-flash")],
+        )
+        row = data["candidates"][0]
+        self.assertIn("observed_failure", row["availability"])
+        self.assertIsNone(row["availability"]["observed_failure"])
+
+
 class PoolLimitTests(unittest.TestCase):
     """F4: the pool's limits reach the decision and carry their basis."""
 
