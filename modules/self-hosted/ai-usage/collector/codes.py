@@ -31,6 +31,24 @@ PROBE_FAILED = "probe_failed"
 STALE_READING = "stale_reading"
 UNKNOWN = "unknown"
 
+# The reason codes of the two request readers. They are a closed set of
+# fixed words as well, and they name the record that could not be read
+# without naming a path: the OpenCode database and the pool ledger each
+# have their own codes.
+READ_CODES = frozenset(
+    {
+        "database_missing",
+        "database_unreadable",
+        "database_corrupt",
+        "database_schema_missing",
+        "cache_unwritten",
+        "ledger_missing",
+        "ledger_unreadable",
+        "ledger_corrupt",
+        "ledger_schema_missing",
+    }
+)
+
 CODES = frozenset(
     {
         OK,
@@ -50,7 +68,7 @@ CODES = frozenset(
         STALE_READING,
         UNKNOWN,
     }
-)
+) | READ_CODES
 
 
 def reason(code: str) -> str:
