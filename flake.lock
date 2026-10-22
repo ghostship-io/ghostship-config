@@ -139,10 +139,10 @@
       },
       "locked": {
         "lastModified": 1792666606,
-        "narHash": "sha256-5Fn9aDphEWQlTTsJSbJfbhe1scBVtRV92QRHq7z71hM=",
+        "narHash": "sha256-tJCnUgwp5nO3P2jTvcNivIyVlwBf8YKjiYBYkfUonmA=",
         "owner": "ghostship-io",
         "repo": "ghostship-agent",
-        "rev": "2318134ec169c1b8fbaf994b7beec3b3152123c5",
+        "rev": "7f8d9fda1b68fd1852343c72b85253667be0ddd9",
         "type": "github"
       },
       "original": {
