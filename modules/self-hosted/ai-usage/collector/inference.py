@@ -37,8 +37,16 @@ The rules, in short:
 * The share left is `1 - u / B`, where `u` is the usage since the start of
   the current window, and the share a perfectly even spend would have left is
   `1 - (now - start) / W`. Their difference is the Paced Availability.
-* The scope says whether the limit belongs to the model or to the account. A
-  scope of `unknown` is computed across the account and labelled unknown.
+* The scope says whether the limit belongs to the model or to the account. The
+  evidence is the episodes of the account group, the open one included: a
+  route that was refused and never recovered has an episode too, and the use
+  of another model of the provider after that refusal says that the limit was
+  the model's own. A scope of `unknown` is computed across the account and
+  labelled unknown.
+* Only the routes that were refused join an account group. A route that was
+  never refused has no limit of its own: it is measured on its own, with its
+  whole allowance and no pace, and its use never ends the episode of another
+  route.
 * An account-wide budget is shared between the models of the provider, either
   with equal weights or with weights fitted from the episodes. The weights are
   fitted only when the episodes of the account involve at least two models with
@@ -597,25 +605,46 @@ class _Group:
 def _route_scope(group: _Group, provider_events: Sequence[_Event], model: str) -> str:
     """Whether the limit of a route belongs to its model or to its account.
 
-    The scope is read from the last five completed episodes of the route.
-    Another model that succeeds inside the span of an episode means the limit
-    was the model's own. Other models that only fail in that span mean the
-    limit was the account's. No other model in the span means the scope is
-    unknown, which is measured across the account and labelled unknown. A tie
-    reads as account.
+    The evidence is the episodes of the account group the route belongs to,
+    the open one included: a route that was refused and never recovered has
+    an episode too, and the use of the other models after that refusal is the
+    evidence that the refusal was the model's own.
+
+    The span of an episode runs from its refusal to its recovery, and the
+    span of an open episode runs from its refusal to the reading. Another
+    model of the provider that succeeds inside the span means the limit was
+    the model's own. Other models that only fail in that span mean the limit
+    was the account's. No other model in the span means the scope is unknown,
+    which is measured across the account and labelled unknown.
+
+    The span starts at the refusal itself: the refusal of the group is the
+    refusal of another model for the routes that did not produce it, and two
+    models that are refused at the same instant share the allowance.
+
+    The scope of the route is the most common over the last five episodes of
+    the group, the open one included. A tie reads as account.
     """
-    if not group.completed:
+    episodes = list(group.completed)
+    if group.open_episode is not None:
+        episodes.append(group.open_episode)
+    if not episodes:
         return "unknown"
     counts: dict[str, int] = {}
-    for episode in group.completed[-EPISODE_HISTORY:]:
+    for episode in episodes[-EPISODE_HISTORY:]:
         if episode.recovery_at is None:
-            continue
-        span = [
-            event
-            for event in provider_events
-            if episode.limit_at < event.at < episode.recovery_at
-            and event.model != model
-        ]
+            span = [
+                event
+                for event in provider_events
+                if episode.limit_at <= event.at <= group.now
+                and event.model != model
+            ]
+        else:
+            span = [
+                event
+                for event in provider_events
+                if episode.limit_at <= event.at < episode.recovery_at
+                and event.model != model
+            ]
         if any(event.outcome == "success" for event in span):
             scope = "model"
         elif span and all(event.outcome == "limit" for event in span):
@@ -785,23 +814,46 @@ def infer_capacity(events: Iterable[Any], now: float) -> dict[tuple[str, str], R
         provider_events.setdefault(event.provider, []).append(event)
         route_events.setdefault((event.provider, event.model), []).append(event)
 
-    provider_groups: dict[str, _Group] = {}
-    for provider, events_of_provider in provider_events.items():
-        group = _Group(events_of_provider, moment)
+    # Only the routes that were refused join an account group. A route that
+    # was never refused has no limit of its own: it is measured on its own,
+    # and its use never ends the episode of another route.
+    refused = {
+        key
+        for key, events_of_route in route_events.items()
+        if any(event.outcome == "limit" for event in events_of_route)
+    }
+
+    account_groups: dict[str, _Group] = {}
+    for provider in provider_events:
+        merged = [
+            event
+            for key, events_of_route in route_events.items()
+            if key[0] == provider and key in refused
+            for event in events_of_route
+        ]
+        merged.sort(key=lambda event: (event.at, event.order))
+        group = _Group(merged, moment)
         _fit_account_weights(group)
-        provider_groups[provider] = group
+        account_groups[provider] = group
 
     results: dict[tuple[str, str], RouteCapacity] = {}
     for (provider, model), events_of_route in route_events.items():
         route_group = _Group(events_of_route, moment)
-        scope = _route_scope(route_group, provider_events[provider], model)
+        if (provider, model) not in refused:
+            # A route that was never refused is measured on its own: it has
+            # all of its allowance and it never joins an account.
+            results[(provider, model)] = _capacity_of(
+                route_group, provider, model, "unknown", None
+            )
+            continue
+        account_group = account_groups[provider]
+        scope = _route_scope(account_group, provider_events[provider], model)
         if scope == "model":
             results[(provider, model)] = _capacity_of(
                 route_group, provider, model, scope, None
             )
             continue
-        provider_group = provider_groups[provider]
         results[(provider, model)] = _capacity_of(
-            provider_group, provider, model, scope, model
+            account_group, provider, model, scope, model
         )
     return results

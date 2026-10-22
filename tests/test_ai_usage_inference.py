@@ -532,5 +532,126 @@ class Interface(unittest.TestCase):
         self.assertEqual(result.state, "no_failure")
 
 
+class ScopeFromTheOpenEpisode(unittest.TestCase):
+    """The open episode of a route is evidence for its scope.
+
+    A route that was refused and never recovered has an episode too. The
+    use of another model of the provider after that refusal is the evidence
+    that the refusal was the model's own.
+    """
+
+    def setUp(self):
+        self.events = [
+            event("acme", "alpha", at(0, 9), usage=1000.0),
+            event("acme", "alpha", at(0, 10), outcome="limit"),
+            event("acme", "beta", at(0, 10, 1), usage=500.0),
+            event("acme", "beta", at(0, 10, 30), usage=500.0),
+        ]
+        self.now = at(0, 11)
+
+    def test_the_refused_route_is_the_model(self):
+        result = route(self.events, self.now, model="alpha")
+        self.assertEqual(result.scope, "model")
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertIsNone(result.window)
+        self.assertIsNone(result.window_seconds)
+
+    def test_the_route_that_was_never_refused_stays_out_of_the_group(self):
+        result = route(self.events, self.now, model="beta")
+        self.assertEqual(result.state, "no_failure")
+        self.assertEqual(result.left, 1.0)
+        self.assertIsNone(result.window)
+        self.assertIsNone(result.budget)
+        self.assertEqual(result.episodes, 0)
+        self.assertIsNone(result.share)
+        # The weights of a route that is measured on its own are its own.
+        self.assertEqual(dict(result.weights), {"beta": 1.0})
+
+
+class MergedAccountEpisode(unittest.TestCase):
+    """The routes of an account share one episode when they were refused.
+
+    Two models of a provider that were refused one after the other, and that
+    came back one after the other, share the episode of the account: the
+    recovery of the account is the first success after the refusal, on a
+    route of the account.
+    """
+
+    def setUp(self):
+        self.events = [
+            event("acme", "alpha", at(0, 9), usage=1000.0),
+            event("acme", "beta", at(0, 9), usage=500.0),
+            event("acme", "alpha", at(0, 10), outcome="limit"),
+            event("acme", "beta", at(0, 10, 5), outcome="limit"),
+            event("acme", "alpha", at(0, 15), usage=0.0),
+            event("acme", "beta", at(0, 15, 2), usage=0.0),
+        ]
+        self.now = at(0, 16)
+
+    def test_both_routes_are_the_account(self):
+        results = inference.infer_capacity(self.events, self.now)
+        for model in ("alpha", "beta"):
+            result = results[("acme", model)]
+            self.assertEqual(result.scope, "account", model)
+            # One merged episode, and the window of six hours snaps to five.
+            self.assertEqual(result.episodes, 1, model)
+            self.assertEqual(result.window, "5h", model)
+            self.assertEqual(result.window_seconds, 18000, model)
+            self.assertEqual(result.budget, 1500.0, model)
+
+    def test_the_recovery_of_the_account_is_the_first_success(self):
+        # The recovery of the account is the success of alpha at 15:00, so
+        # beta shares that episode: the success of alpha at 15:00 is inside
+        # the span of the episode, which would make beta's limit its own.
+        results = inference.infer_capacity(self.events, self.now)
+        self.assertEqual(results[("acme", "beta")].scope, "account")
+
+
+class LiveGoProvider(unittest.TestCase):
+    """The paid routes of a provider, and the free route that keeps working.
+
+    The paid models of the provider were refused and never came back, and the
+    free model of the same provider kept working every few minutes. The free
+    model was never refused, so it is measured on its own, and its use never
+    ends the episode of the paid models: they stay the models that were
+    refused, and no minute long window is read out of their failures.
+    """
+
+    def setUp(self):
+        self.events = []
+        for model, minute in (("go-paid-a", 0), ("go-paid-b", 1)):
+            self.events.append(event("go", model, at(0, 8, minute), usage=1000.0))
+            self.events.append(event("go", model, at(0, 8, 4), outcome="limit"))
+            self.events.append(event("go", model, at(0, 9, 10), outcome="limit"))
+        for index in range(52):
+            self.events.append(
+                event("go", "go-free", at(0, 8, 5 + index * 2), usage=100.0)
+            )
+        self.now = at(0, 10)
+
+    def test_the_paid_routes_are_their_own_models(self):
+        for model in ("go-paid-a", "go-paid-b"):
+            result = route(self.events, self.now, provider="go", model=model)
+            self.assertEqual(result.scope, "model", model)
+            self.assertEqual(result.state, "exhausted", model)
+            self.assertEqual(result.left, 0.0, model)
+            self.assertIsNone(result.window, model)
+            self.assertEqual(result.episodes, 0, model)
+
+    def test_the_free_route_is_measured_on_its_own(self):
+        result = route(self.events, self.now, provider="go", model="go-free")
+        self.assertEqual(result.state, "no_failure")
+        self.assertEqual(result.left, 1.0)
+        self.assertIsNone(result.window)
+        self.assertEqual(result.episodes, 0)
+
+    def test_no_minute_long_window_is_read(self):
+        results = inference.infer_capacity(self.events, self.now)
+        for (provider, model), result in results.items():
+            self.assertNotEqual(result.window, "1m", f"{provider}/{model}")
+            self.assertIsNone(result.window, f"{provider}/{model}")
+
+
 if __name__ == "__main__":
     unittest.main()
