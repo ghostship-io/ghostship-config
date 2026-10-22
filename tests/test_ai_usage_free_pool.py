@@ -74,6 +74,19 @@ def duplicates_of(text):
     return sorted(key for key, count in counts.items() if count > 1)
 
 
+def duplicate_count_of(text):
+    """The number of repeated series the collection dropped.
+
+    The count is the proof that no emitter repeated a series: the renderer
+    drops a repeat and counts it, so a count of zero means the file holds
+    one series per name and label set because there never was a second one.
+    """
+    for line in text.splitlines():
+        if line.startswith("ghostship_ai_collection_duplicate_series "):
+            return float(line.split(" ")[-1])
+    return None
+
+
 def pool_catalog(routes):
     """The pool's catalog: one provider per route, with its own limits.
 
@@ -323,6 +336,10 @@ class DuplicateSeriesTests(unittest.TestCase):
 
     def test_the_published_file_holds_no_series_twice(self):
         text = render(self.ROUTES)
+        # The emitters published no repeat: the renderer had nothing to drop,
+        # so the count is zero. Without this the test would pass even when an
+        # emitter repeats, because the renderer drops the repeat.
+        self.assertEqual(duplicate_count_of(text), 0.0)
         self.assertEqual(duplicates_of(text), [])
 
     def test_the_model_availability_is_published_once_per_model(self):
@@ -330,8 +347,10 @@ class DuplicateSeriesTests(unittest.TestCase):
         availability = [
             entry for entry in series_of(text) if entry[0] == "ghostship_ai_model_available"
         ]
-        # One series per model, and the file holds no series twice.
+        # One series per model, no repeat reached the renderer, and the file
+        # holds no series twice.
         self.assertEqual(len(availability), len(set(availability)))
+        self.assertEqual(duplicate_count_of(text), 0.0)
         self.assertEqual(duplicates_of(text), [])
         for provider, model, _index, _headroom, _last_used, _reset in self.ROUTES:
             self.assertEqual(
@@ -346,6 +365,50 @@ class DuplicateSeriesTests(unittest.TestCase):
                 1,
                 f"the availability of {provider}/{model} is published once",
             )
+
+
+class WriterGuardTests(unittest.TestCase):
+    """The renderer publishes every series once, and says when it drops one."""
+
+    def _render(self, samples):
+        result = metrics.SourceResult(
+            source="probe", status="ok", reason="ok", metrics=list(samples)
+        )
+        return main.render([result], [], NOW, 0.1, {})
+
+    def test_a_repeated_series_is_published_once_with_the_first_value(self):
+        text = self._render(
+            [
+                ("ghostship_ai_probe_value", {"provider": "groq"}, 1.0),
+                ("ghostship_ai_probe_value", {"provider": "groq"}, 2.0),
+            ]
+        )
+        self.assertIn('ghostship_ai_probe_value{provider="groq"} 1', text)
+        self.assertNotIn("ghostship_ai_probe_value{provider=\"groq\"} 2", text)
+        self.assertEqual(
+            len(
+                [
+                    line
+                    for line in text.splitlines()
+                    if line.startswith("ghostship_ai_probe_value{")
+                ]
+            ),
+            1,
+            "the series is published once",
+        )
+        # The drop is counted, so the repeat is never silent.
+        self.assertEqual(duplicate_count_of(text), 1.0)
+
+    def test_two_series_with_different_labels_are_not_a_repeat(self):
+        text = self._render(
+            [
+                ("ghostship_ai_probe_value", {"provider": "groq"}, 1.0),
+                ("ghostship_ai_probe_value", {"provider": "mistral"}, 2.0),
+            ]
+        )
+        self.assertIn('ghostship_ai_probe_value{provider="groq"} 1', text)
+        self.assertIn('ghostship_ai_probe_value{provider="mistral"} 2', text)
+        self.assertEqual(duplicate_count_of(text), 0.0)
 
 
 class FreeTierOrderTests(unittest.TestCase):
