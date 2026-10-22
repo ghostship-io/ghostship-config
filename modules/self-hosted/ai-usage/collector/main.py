@@ -29,6 +29,7 @@ import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
 import pool as pool_module  # noqa: E402
 import pool_published  # noqa: E402
+import published as published_module  # noqa: E402
 import quota as quota_module  # noqa: E402
 import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
@@ -123,7 +124,9 @@ METRIC_HELP = {
     ),
     "ghostship_ai_entitlement_info": (
         "One for one canonical display reading per entitlement, even when no "
-        "numeric reading is usable."
+        "numeric reading is usable. The labels carry the basis of the "
+        "numbers and the end of the entitlement, which is empty when the "
+        "provider publishes none."
     ),
     "ghostship_ai_entitlement_used_ratio": (
         "The used share of the canonical reading of an entitlement."
@@ -155,6 +158,10 @@ METRIC_HELP = {
     "ghostship_ai_pool_model_available": "Whether a pool model is available now.",
     "ghostship_ai_pool_model_selected": "Whether a pool model is the selected one.",
     "ghostship_ai_pool_model_cooldown_until_seconds": "When a pool model's cooldown ends.",
+    "ghostship_ai_pool_route_last_used_timestamp_seconds": (
+        "When the free pool last sent a job to a route. The least recently "
+        "used route breaks the tie inside the quality band of the free tier."
+    ),
     "ghostship_ai_pool_model_admission": "Whether a pool model is admitted for a workload.",
     "ghostship_ai_pool_limit": "A local admission limit of the free pool.",
     "ghostship_ai_pool_observed_limit": (
@@ -197,8 +204,15 @@ METRIC_HELP = {
     "ghostship_ai_model_rank": "The rank of a model inside a tier, 1 is best.",
     "ghostship_ai_model_score": "The ranking score of a model inside a tier.",
     "ghostship_ai_model_quality": "The quality score of a model.",
-    "ghostship_ai_model_available": "Whether a model can be used right now.",
-    "ghostship_ai_model_capacity_remaining": "The remaining share of a model's account capacity.",
+    "ghostship_ai_model_available": (
+        "Whether a model can be used right now, with the reason it cannot."
+    ),
+    "ghostship_ai_model_capacity_remaining": (
+        "The remaining share of a model's account capacity, zero when it is spent."
+    ),
+    "ghostship_ai_model_quota_unknown": (
+        "One for a model whose headroom is unknown, with the reason it is unknown."
+    ),
     "ghostship_ai_model_capacity_expires_in_seconds": "When the model's account capacity expires.",
     "ghostship_ai_model_tier": "One for every tier a model belongs to.",
     "ghostship_ai_model_evaluated_timestamp_seconds": "When a model was last evaluated.",
@@ -314,6 +328,10 @@ METRIC_HELP = {
     ),
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
+    "ghostship_ai_collection_duplicate_series": (
+        "How many metric series this collection published twice. The repeats "
+        "are dropped, so the file holds one series per name and label set."
+    ),
 }
 
 GAUGE_METRICS = tuple(METRIC_HELP)
@@ -593,6 +611,34 @@ def _window_scope(quota_id: str) -> tuple[str, ...]:
     return ()
 
 
+def _published_unlimited_routes(
+    catalog: catalog_module.Catalog, inventory: Iterable[tuple[str, str]]
+) -> list[tuple[str, str]]:
+    """The routes the provider publishes as unlimited.
+
+    The Go documentation lists its free routes as unlimited, and a live
+    probe confirmed it: a free route answered while the paid monthly
+    window of the plan was spent. The rule is the published one, and the
+    catalog may not contradict it: a route the catalog prices is only
+    unlimited when it prices it free.
+    """
+    free_prices = {
+        str(entry.get("model") or "")
+        for entry in (catalog.free_models(published_module.GO_PROVIDER) or [])
+    }
+    routes: list[tuple[str, str]] = []
+    for provider, model in sorted(inventory or ()):
+        if not published_module.unlimited_route(provider, model):
+            continue
+        entry = catalog.model_entry(provider, model)
+        if entry is not None and model not in free_prices:
+            # The catalog prices the route and it is not free: the published
+            # unlimited listing does not apply to it.
+            continue
+        routes.append((str(provider), str(model)))
+    return routes
+
+
 def provider_limit_samples(
     inputs: Mapping[str, Any],
 ) -> list[Sample]:
@@ -813,6 +859,15 @@ def ranking_inputs(
                 if isinstance(measured.get("observedAtEpoch"), (int, float))
                 else None
             ),
+            basis=str(measured.get("basis") or ""),
+            # When the entitlement of the window ends, when the provider
+            # publishes an end. A promotion without a published end has no
+            # end, and that is unknown rather than zero.
+            ends_at=(
+                float(measured.get("endsAt"))
+                if isinstance(measured.get("endsAt"), (int, float))
+                else None
+            ),
             gating=gating is not False,
         )
         if model == "*":
@@ -820,12 +875,31 @@ def ranking_inputs(
         else:
             # A window the provider reports for one model only.
             windows.setdefault(f"{provider}/{model}", []).append(window)
+    # The routes the provider publishes as unlimited. The route carries a
+    # window of its own, so it has a stated state instead of no state, and
+    # the paid allowance of the account does not gate it. The documentation
+    # lists those routes as unlimited "for a limited time", so the basis of
+    # the window is a promotion and the end of it is unknown.
+    for provider, model in _published_unlimited_routes(catalog, inventory):
+        windows.setdefault(f"{provider}/{model}", []).append(
+            ranking_module.QuotaWindow(
+                kind="unlimited",
+                used_ratio=0.0,
+                reset_epoch=None,
+                quota_id=published_module.UNLIMITED_QUOTA_ID,
+                duration_seconds=None,
+                ends_at=published_module.GO_FREE_ENDS_AT,
+                observed_at=moment,
+                basis=published_module.GO_FREE_BASIS,
+            )
+        )
     # The free pool's own evidence: the admissions of a route, its limits
     # and its cooldown. The admission is what lets a pool route hold the
     # free tier and take a workload.
     pool_admissions: dict[tuple[str, str, str], bool] = {}
     pool_limits: dict[tuple[str, str, str, str], float] = {}
     pool_cooldowns: dict[tuple[str, str], float] = {}
+    pool_last_used: dict[tuple[str, str], float] = {}
     for name, labels, value in _iter_samples(results):
         pool_provider = str(labels.get("provider") or "")
         pool_model = str(labels.get("model") or "")
@@ -852,6 +926,10 @@ def ranking_inputs(
             pool_limits.setdefault(key, (float(value), "observed"))
         elif name == "ghostship_ai_pool_model_cooldown_until_seconds":
             pool_cooldowns[(pool_provider, pool_model)] = float(value)
+        elif name == "ghostship_ai_pool_route_last_used_timestamp_seconds":
+            # When the pool last sent a job to the route. The least recently
+            # used route breaks the tie inside the quality band.
+            pool_last_used[(pool_provider, pool_model)] = float(value)
     # The cooldown is the pool's own evidence that a route is parked. A
     # cooldown that cannot be true is a broken reading, not a park: it is
     # reported as an issue and it never blocks a route.
@@ -913,6 +991,10 @@ def ranking_inputs(
             cooldown = provider_cooldown.get(key[0])
         entry["cooldown_until"] = cooldown
         entry["issues"] = list(pool_issues.get(key, []))
+        # When the pool last used the route. It breaks the tie inside the
+        # quality band of the free tier, and it is absent when the pool has
+        # no reading for the route.
+        entry["last_used"] = pool_last_used.get(key)
     return {
         "inventory": sorted(inventory),
         "free": free,
@@ -1167,6 +1249,8 @@ def collect(
     pool_ledger: str | None = POOL_LEDGER_FILE,
     catalog_path: str = CATALOG_FILE,
     state_path: str | None = None,
+    window_state_path: str | None = providers_module.OLLAMA_WINDOW_STATE_FILE,
+    t3_state: str = T3_STATE_FILE,
     aa_cache: dict[str, Any] | None = None,
     aa_3d_cache: dict[str, Any] | None = None,
 ) -> tuple[list[SourceResult], list[Sample], dict[str, Any]]:
@@ -1179,8 +1263,20 @@ def collect(
     results.append(providers_module.read_grok(f"{t3_home}", moment))
     results.append(providers_module.read_opencode_go(f"{t3_home}", moment))
     results.append(providers_module.read_antigravity(f"{t3_home}", moment))
-    results.append(providers_module.read_openrouter(secrets_env, moment))
-    results.append(providers_module.read_ollama(secrets_env, moment))
+    # Our own requests of the last minute, counted from the T3 Code state.
+    # A provider that publishes a per-minute limit and does not report it is
+    # measured against this count, and the count is marked as such.
+    request_counts = runtime_state_module.read_request_counts(t3_state, moment)
+    results.append(
+        providers_module.read_openrouter(
+            secrets_env,
+            moment,
+            requests_last_minute=request_counts.get("openrouter"),
+        )
+    )
+    results.append(
+        providers_module.read_ollama(secrets_env, moment, state_path=window_state_path)
+    )
     results.extend(pool_module.collect(pool_server, pool_token, pool_ledger, moment, home=t3_home))
 
     extra: list[Sample] = []
@@ -1487,6 +1583,13 @@ def render(
         writer.add(name, labels, value)
     writer.add("ghostship_ai_collection_timestamp_seconds", {}, now)
     writer.add("ghostship_ai_collection_duration_seconds", {}, duration)
+    # A series is published once. A repeat is dropped and counted, and the
+    # count is published, so a duplicate never passes unnoticed.
+    if writer.duplicates:
+        log(f"dropped {writer.duplicates} duplicate metric series")
+    writer.add(
+        "ghostship_ai_collection_duplicate_series", {}, float(writer.duplicates)
+    )
     return writer.render()
 
 
@@ -1512,6 +1615,14 @@ def main(argv: list[str] | None = None) -> int:
         "--state",
         default="/var/lib/ghostship-ai-usage/state.json",
         help="Where the model ranking keeps its evaluation state.",
+    )
+    parser.add_argument(
+        "--window-state",
+        default=providers_module.OLLAMA_WINDOW_STATE_FILE,
+        help=(
+            "Where the collector remembers the reset instants of the windows "
+            "whose length it has to learn from them."
+        ),
     )
     parser.add_argument(
         "--projection",
@@ -1560,6 +1671,7 @@ def main(argv: list[str] | None = None) -> int:
     results, extra, context = collect(
         now,
         state_path=args.state,
+        window_state_path=args.window_state,
         aa_cache=aa_cache,
         aa_3d_cache=aa_3d_cache,
     )

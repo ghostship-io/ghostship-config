@@ -349,14 +349,19 @@ password inside the database container. Restore validation continues to use
 an isolated temporary database; it does not change the live engine or data.
 
 Private-source GitHub Actions jobs on pull requests use the `private-source-ci`
-environment. Its required reviewer is `owner`; approval releases the
-environment-scoped, read-only agent deploy key. Jobs on `main` (pushes, the
-weekly input refresh) use `private-source-main`: no reviewer, but only the
-`main` branch may deploy to it, so a pull request that edits a workflow still
-cannot reach its key. Each environment holds its own read-only agent deploy key.
+environment, which holds the environment-scoped, read-only agent deploy key.
+Neither it nor `private-source-main` asks for a reviewer: the owner removed
+that gate on 2026-10-22, because it should only hold back other people, so
+the key is released without an approval. Only the `main` branch may deploy to
+`private-source-main`, which the jobs on `main` (pushes, the weekly input
+refresh) use, so a pull request that edits a workflow still cannot reach that
+key. Each environment holds its own read-only agent deploy key.
 Repository-level private-source keys must remain absent so another
-pull-request workflow cannot bypass the environment gate. Review changes to the
-import script and workflow before approving a run.
+pull-request workflow cannot bypass the environment gate. A pull request from
+a fork gets no environment secrets at all, because GitHub withholds them
+from a fork, so the private-source job of a fork fails before it can read the
+agent source. Review changes to the import script and workflow before a run
+reaches the key.
 
 SQLite databases and WAL files are captured together. Failure handling resumes
 containers it paused and restores their health-check settings and removes the temporary Btrfs snapshot.

@@ -15,6 +15,9 @@ in
   ghostship.privateIntegrations.enable = true;
   ghostship.privateIntegrations.skillsReconcile.enable = true;
   ghostship.githubEngineering.enable = true;
+  # Held off by the owner until the coordinator replay fix is deployed and
+  # passes a backlog replay.
+  ghostship.githubEngineering.coordinatorAutoStart = false;
   ghostship.newsletterHealth.enable = true;
   ghostship.bootGenerationDrift.enable = true;
 
