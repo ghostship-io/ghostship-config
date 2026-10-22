@@ -478,6 +478,18 @@ class ProvidersPageTests(unittest.TestCase):
             Template(section(self.page, "Bulk")["options"]["content"]).tags()
         )
 
+    def test_the_on_pace_pace_carries_its_number_on_a_narrow_screen(self):
+        """Every pace of a narrow screen carries a number: the on-pace one reads '● 0'."""
+        for title in ("Bulk", "Frontier", "3D"):
+            panel = section(self.page, title)
+            content = panel["options"]["content"]
+            styles = panel["options"].get("styles") or ""
+            self.assertIn('<span class="na">●', content, title)
+            self.assertIn('<span class="narrow"> 0</span>', content, title)
+            # The narrow screen shows the number, the wide one the words.
+            self.assertIn(".narrow { display: inline; }", media_body(styles), title)
+            self.assertIn(".narrow { display: none; }", styles, title)
+
 
 class VictoriaMetricsFixture:
     """A disposable VictoriaMetrics with the review fixture in it."""
