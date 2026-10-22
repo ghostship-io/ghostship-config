@@ -1021,6 +1021,82 @@ def ranking_inputs(
     }
 
 
+def retired_routes(
+    persisted: Mapping[str, Mapping[str, Any]] | None,
+    failures: Iterable[Mapping[str, Any]] | None,
+    successes: Mapping[str, float] | None,
+) -> dict[str, dict[str, Any]]:
+    """The routes that are retired, and the moment each was first seen.
+
+    A provider that retired a model does not serve it again, so the
+    retirement is not a failure of an hour: it is kept in the collector's
+    own state file and outlives the window of the failure that reported it.
+    A later successful run of the route clears it: the provider serves the
+    model again, and the route is usable once more.
+
+    A retirement is scoped to one route. The other models of the same
+    provider are not touched by it.
+    """
+    found: dict[str, dict[str, Any]] = {
+        str(route): dict(record) for route, record in (persisted or {}).items()
+    }
+    for failure in failures or ():
+        if (
+            str(failure.get("reason") or "")
+            != runtime_state_module.REASON_MODEL_RETIRED
+        ):
+            continue
+        route = str(failure.get("route") or failure.get("target") or "")
+        if not route:
+            continue
+        record = {
+            "provider": str(failure.get("provider") or ""),
+            "model": str(failure.get("model") or ""),
+            "route": route,
+            "first_seen": float(failure.get("observed_at") or 0.0),
+            "reason": runtime_state_module.REASON_MODEL_RETIRED,
+        }
+        previous = found.get(route)
+        if previous is not None:
+            # The retirement started when it was first seen, and a later
+            # report of it does not make it younger.
+            first_seen = float(previous.get("first_seen") or 0.0)
+            if first_seen and (
+                not record["first_seen"] or first_seen < record["first_seen"]
+            ):
+                record["first_seen"] = first_seen
+        found[route] = record
+    # A later successful run of the route clears the retirement.
+    for route in list(found):
+        succeeded = (successes or {}).get(route)
+        if succeeded is None:
+            continue
+        if float(succeeded) > float(found[route].get("first_seen") or 0.0):
+            found.pop(route, None)
+    return found
+
+
+def _success_window(
+    now: float, retired: Mapping[str, Mapping[str, Any]] | None
+) -> float:
+    """How far back a successful run is read to clear a retirement.
+
+    A successful run that is older than the window of a failure still
+    clears a retirement when it is newer than the retirement itself, so
+    the window of the successes reaches back to the first retirement the
+    collector remembers.
+    """
+    window = float(runtime_state_module.MAX_AGE_SECONDS)
+    first_seen = [
+        float(record.get("first_seen") or 0.0)
+        for record in (retired or {}).values()
+        if record.get("first_seen")
+    ]
+    if not first_seen:
+        return window
+    return max(window, float(now) - min(first_seen))
+
+
 def ranking_samples(
     results: list[SourceResult],
     catalog: catalog_module.Catalog,
@@ -1133,9 +1209,20 @@ def ranking_samples(
     # The observed failures of the routes, read from the T3 Code state. A
     # route that is known to be broken does not win a tier, and it stays
     # visible with the reason and the moment it was observed.
-    observed_failures = runtime_state_module.read_failures(t3_state, now)
-    if "observed_failures" in inspect.signature(ranking_module.rank_models).parameters:
-        rank_kwargs["observed_failures"] = observed_failures
+    #
+    # The routes whose model a provider retired are kept in the collector's
+    # own state file: the retirement outlives the window of the failure
+    # that reported it.
+    persisted = ranking_module.retired_from_state(
+        ranking_module.load_state(state_path)
+    )
+    observations = runtime_state_module.read_observations(
+        t3_state, now, success_age_seconds=_success_window(now, persisted)
+    )
+    observed_failures = observations["failures"]
+    retired = retired_routes(persisted, observed_failures, observations["successes"])
+    if "retired_routes" in inspect.signature(ranking_module.rank_models).parameters:
+        rank_kwargs["retired_routes"] = retired
     for failure in observed_failures:
         samples.append(
             (
@@ -1310,6 +1397,7 @@ def collect(
         state_path=state_path,
         aa_cache=aa_cache,
         aa_3d_cache=aa_3d_cache,
+        t3_state=t3_state,
     )
     extra.extend(ranking_metrics)
     context["ranked"] = ranked
