@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.68] - 2026-10-22
+
+- The Providers page reads like the page the owner approved. The page is one line of header, then five sections: Bulk, Free, Frontier, 3D and Providers, each with a ranked table of one row per route. The order of a tier is the collector's own winner position, never a ranking made in the dashboard, and the routes that are not winners follow the winners, with the spent and refused ones sunk to the bottom, dimmed, with their reason. The fill of a capacity bar is the share left now and the line in it is the share the window expects to be left now, and the pace reads the difference: ahead of the pace, on it, or behind it. A route whose limits are unknown says so in italics; it never shows a zero and never a red bar. A route the provider publishes as unlimited for a limited time reads as a promotion, a route reserved for 3D work keeps its tag, and a route in the free quality band keeps its own. The four tier gauges, the provider cards and the tall header are gone; the detailed evidence stays, in collapsed rows below. The routing chip of the header reads the routing state of the collector: Routing ON when it publishes the routing as enabled, and Routing OFF · awaiting your approval when it publishes it as off or publishes nothing at all.
+
 ## [3.17.67] - 2026-10-22
 
 - The Grafana Business Text panel is vendored by hash. The panel (`marcusolsson-dynamictext-panel`, 6.3.0) is fetched by `fetchurl` with a fixed sha256, the same pin nixpkgs carries, and unpacked into the read-only plugin bundle next to the VictoriaLogs datasource, so the UI never downloads a plugin at runtime. The artifact is the signed release, so Grafana's signature check still passes.
