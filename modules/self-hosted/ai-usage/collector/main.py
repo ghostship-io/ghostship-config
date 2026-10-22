@@ -1169,6 +1169,7 @@ def collect(
     catalog_path: str = CATALOG_FILE,
     state_path: str | None = None,
     window_state_path: str | None = providers_module.OLLAMA_WINDOW_STATE_FILE,
+    t3_state: str = T3_STATE_FILE,
     aa_cache: dict[str, Any] | None = None,
     aa_3d_cache: dict[str, Any] | None = None,
 ) -> tuple[list[SourceResult], list[Sample], dict[str, Any]]:
@@ -1181,7 +1182,17 @@ def collect(
     results.append(providers_module.read_grok(f"{t3_home}", moment))
     results.append(providers_module.read_opencode_go(f"{t3_home}", moment))
     results.append(providers_module.read_antigravity(f"{t3_home}", moment))
-    results.append(providers_module.read_openrouter(secrets_env, moment))
+    # Our own requests of the last minute, counted from the T3 Code state.
+    # A provider that publishes a per-minute limit and does not report it is
+    # measured against this count, and the count is marked as such.
+    request_counts = runtime_state_module.read_request_counts(t3_state, moment)
+    results.append(
+        providers_module.read_openrouter(
+            secrets_env,
+            moment,
+            requests_last_minute=request_counts.get("openrouter"),
+        )
+    )
     results.append(
         providers_module.read_ollama(secrets_env, moment, state_path=window_state_path)
     )

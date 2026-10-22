@@ -627,9 +627,19 @@ OPENROUTER_DAILY_SECONDS = 86400.0
 
 
 def read_openrouter(
-    env_path: str | os.PathLike[str], now: float, http: HttpCall = http_request
+    env_path: str | os.PathLike[str],
+    now: float,
+    http: HttpCall = http_request,
+    requests_last_minute: int | None = None,
 ) -> SourceResult:
-    """Read the OpenRouter account: its credits, its key usage, and its allowance."""
+    """Read the OpenRouter account: its credits, its key usage, and its windows.
+
+    The free models of the account share one allowance: the number of free
+    model requests the key may make in the current UTC day. The key endpoint
+    reports how many of them are left, and the day ends at midnight UTC.
+    The per-minute limit is published rather than reported, so it is counted
+    against our own requests and it is marked as such.
+    """
     started = time.monotonic()
     source = "openrouter"
     key = read_env_file(env_path).get("OPENROUTER_API_KEY", "")
@@ -651,6 +661,7 @@ def read_openrouter(
             duration_s=time.monotonic() - started,
         )
     samples: list[Sample] = []
+    windows: list[dict[str, Any]] = []
     credit_body = (credits.json() or {}).get("data") if credits.ok else None
     if isinstance(credit_body, dict):
         total = credit_body.get("total_credits")
@@ -706,6 +717,14 @@ def read_openrouter(
                             float(value),
                         )
                     )
+            daily = _openrouter_daily_window(free, now)
+            if daily is not None:
+                windows.append(daily)
+                samples.extend(_window_samples(daily))
+    minute = _openrouter_minute_window(now, requests_last_minute)
+    if minute is not None:
+        windows.append(minute)
+        samples.extend(_window_samples(minute))
     for sample in list(samples):
         if sample[0] == "ghostship_ai_account_amount":
             samples.append(
@@ -722,6 +741,7 @@ def read_openrouter(
         metrics=samples,
         observed_at=now,
         duration_s=time.monotonic() - started,
+        windows=windows,
     )
 
 
@@ -747,6 +767,73 @@ def _window_samples(window: Mapping[str, Any]) -> list[Sample]:
     )
     samples.append(("ghostship_ai_quota_state", {**labels, "state": "measured"}, 1.0))
     return samples
+
+
+def _openrouter_daily_window(
+    free: Mapping[str, Any], now: float
+) -> dict[str, Any] | None:
+    """The daily allowance of the free models, as a window.
+
+    The counter of the provider counts every free model request of the day,
+    and the limit is the allowance of the tier, so the share of the window
+    that is left is the remaining share of the limit. A counter above the
+    limit means the allowance is spent.
+    """
+    limit = free.get("limit")
+    remaining = free.get("remaining")
+    used = free.get("used")
+    if not isinstance(limit, (int, float)) or isinstance(limit, bool) or float(limit) <= 0.0:
+        return None
+    if not isinstance(remaining, (int, float)) or isinstance(remaining, bool):
+        return None
+    share = 1.0 - float(remaining) / float(limit)
+    if isinstance(used, (int, float)) and not isinstance(used, bool) and float(used) > float(limit):
+        # The counter is above the allowance: the day is spent.
+        share = 1.0
+    return {
+        "provider": "openrouter",
+        "account": "default",
+        "model": "*",
+        "kind": "daily",
+        "quotaId": "free-models-per-day",
+        "usedRatio": _clamp(share),
+        # The counter covers the current UTC day, so the day ends at the next
+        # midnight UTC.
+        "resetEpoch": _next_utc_midnight(now),
+        "durationSeconds": OPENROUTER_DAILY_SECONDS,
+        "source": "openrouter",
+        "observedAtEpoch": now,
+        "basis": BASIS_PROVIDER,
+    }
+
+
+def _openrouter_minute_window(
+    now: float, requests_last_minute: int | None
+) -> dict[str, Any] | None:
+    """The published per-minute allowance of the free models.
+
+    The provider does not report this limit on the key endpoint, so the
+    number is the published one and the usage is our own count of the
+    requests we made in the last minute. It is a published limit counted
+    against our own requests, never a reading of the provider.
+    """
+    if requests_last_minute is None:
+        return None
+    counted = max(0, int(requests_last_minute))
+    share = counted / float(OPENROUTER_FREE_REQUESTS_PER_MINUTE)
+    return {
+        "provider": "openrouter",
+        "account": "default",
+        "model": "*",
+        "kind": "minute",
+        "quotaId": "free-models-per-minute",
+        "usedRatio": _clamp(share),
+        "resetEpoch": float(now) + OPENROUTER_MINUTE_SECONDS,
+        "durationSeconds": OPENROUTER_MINUTE_SECONDS,
+        "source": "openrouter",
+        "observedAtEpoch": now,
+        "basis": BASIS_PUBLISHED_COUNTED,
+    }
 
 
 # --------------------------------------------------------------- Ollama
