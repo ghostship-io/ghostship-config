@@ -27,6 +27,17 @@ _LABEL_NAME = re.compile(r"[^a-zA-Z0-9_]")
 MAX_LABEL_LENGTH = 120
 
 
+class ExactLabel(str):
+    """A label value that is published exactly as it is.
+
+    The exposition format escapes a backslash, a double quote and a newline
+    in a label value, and that is all it does: the reader sees the name the
+    provider wrote, with its spaces and its punctuation. Every other label
+    value is sanitised, so a value that reaches the text file stays safe to
+    read and to filter on.
+    """
+
+
 def label_value(value: object) -> str:
     """Return a Prometheus-safe label value."""
     text = str(value)
@@ -112,7 +123,12 @@ class MetricWriter:
         number = float(value)
         if math.isnan(number):
             return
-        clean = {label_name(key): label_value(item) for key, item in labels.items()}
+        clean = {
+            label_name(key): (
+                str(item) if isinstance(item, ExactLabel) else label_value(item)
+            )
+            for key, item in labels.items()
+        }
         key = (name, tuple(sorted(clean.items())))
         if key in self._seen:
             # The same series a second time. The first reading is the one
