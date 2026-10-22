@@ -491,6 +491,35 @@ class PrivacyTests(unittest.TestCase):
         self.assertNotIn("/", result["reason"])
 
 
+class FailingConnection:
+    """A connection whose first statement fails, like a closed database."""
+
+    def __init__(self, connection):
+        self.connection = connection
+        self.closed = False
+
+    def execute(self, *args, **kwargs):
+        raise sqlite3.OperationalError("injected failure after the connect")
+
+    def close(self):
+        self.closed = True
+        self.connection.close()
+
+
+class FailingSqlite:
+    """The database module, with a connect that returns a failing connection."""
+
+    Error = sqlite3.Error
+    DatabaseError = sqlite3.DatabaseError
+    OperationalError = sqlite3.OperationalError
+
+    def __init__(self, connection):
+        self.connection = connection
+
+    def connect(self, *args, **kwargs):
+        return self.connection
+
+
 class ReadOnlyTests(unittest.TestCase):
     """The database is opened read only."""
 
@@ -508,6 +537,22 @@ class ReadOnlyTests(unittest.TestCase):
                 readonly.close()
             finally:
                 connection.close()
+
+    def test_a_failure_after_the_connect_closes_the_connection(self):
+        module = reader()
+        content = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            path, _connection = build_database(directory, content["rows"])
+            injected = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            failing = FailingConnection(injected)
+            original = module.sqlite3
+            module.sqlite3 = FailingSqlite(failing)
+            self.addCleanup(setattr, module, "sqlite3", original)
+            with self.assertRaises(sqlite3.OperationalError):
+                module.open_database(path)
+            self.assertTrue(failing.closed)
+            with self.assertRaises(sqlite3.ProgrammingError):
+                injected.execute("SELECT 1")
 
     def test_the_module_never_writes_to_the_database(self):
         source = (COLLECTOR / "opencode_reader.py").read_text(encoding="utf-8").lower()
