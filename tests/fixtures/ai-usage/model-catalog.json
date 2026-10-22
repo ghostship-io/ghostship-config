@@ -1,0 +1,45 @@
+{
+ "note": "A small public model catalog in the shape of the models.dev document the collector reads. The opencode-go provider carries its own models, and the opencode provider carries the models the collector only finds through the merged lookup, so a route priced only in the merged catalog is a real case.",
+ "opencode-go": {
+  "models": {
+   "minimax-m3.1-flash-free": {
+    "name": "MiniMax M3.1 Flash Free",
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cache_read": 0
+    },
+    "release_date": "2026-10-19"
+   },
+   "minimax-m3.1": {
+    "name": "MiniMax M3.1",
+    "cost": {
+     "input": 1.0,
+     "output": 4.0
+    },
+    "release_date": "2026-10-19"
+   },
+   "minimax-m3.1-free": {
+    "name": "MiniMax M3.1 Free",
+    "cost": {
+     "input": 1.0,
+     "output": 4.0
+    },
+    "release_date": "2026-10-19"
+   }
+  }
+ },
+ "opencode": {
+  "models": {
+   "beam-free": {
+    "name": "Beam Free",
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cache_read": 0
+    },
+    "release_date": "2026-10-05"
+   }
+  }
+ }
+}

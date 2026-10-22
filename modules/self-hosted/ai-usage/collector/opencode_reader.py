@@ -290,6 +290,33 @@ def _never_limit(message: str, kind: str) -> bool:
     return any(phrase in text for phrase in _NEVER_LIMIT_PHRASES)
 
 
+# The phrases of a provider that retired a model. A retirement is not a
+# budget limit: it never opens an episode, and the request stays "other" for
+# the inference. The event says so with its own flag, so the collector can
+# keep the route out of every tier until the provider serves it again.
+_RETIREMENT_PHRASES = (
+    "has been deprecated",
+    "has been retired",
+    "free launch period",
+    "reached its end of life",
+    "is no longer available",
+)
+
+
+def is_retirement(data: Mapping[str, Any]) -> bool:
+    """True when a failed request says the provider retired the model.
+
+    The text is read to decide and is then dropped: it is never stored.
+    """
+    if not isinstance(data, Mapping):
+        return False
+    error = data.get("error")
+    if not isinstance(error, Mapping) or not error:
+        return False
+    text = _normalise(error_message(error))
+    return any(phrase in text for phrase in _RETIREMENT_PHRASES)
+
+
 def classify_error(error: Mapping[str, Any]) -> tuple[str, str | None]:
     """The outcome of a failed request, and the window it names."""
     kind = str(error.get("type") or "").strip().lower() if isinstance(error, Mapping) else ""
@@ -596,6 +623,7 @@ def read_events(
                     "outcome": outcome,
                     "usage": usage_tokens(data),
                     "window_hint": window_hint,
+                    "retired": is_retirement(data),
                 }
             )
             counts["outcomes"][outcome] += 1

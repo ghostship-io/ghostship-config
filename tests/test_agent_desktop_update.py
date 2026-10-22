@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import tempfile
 import unittest
@@ -151,6 +152,69 @@ class FingerprintTests(unittest.TestCase):
         rebased, allow = update.rebase_fingerprint(baseline, "155.0.8059.39-1", "156.0.8100.1-1")
         self.assertEqual(allow, ["uaData"])
         self.assertIn("Chrome/156.0.0.0", rebased["userAgent"])
+
+
+class CanaryNetworkTests(unittest.TestCase):
+    """A canary binds the desktop API in its own namespace, not in production's."""
+
+    def production_address(self) -> str:
+        """The address the production container owns on the desktop network."""
+        nix = (Path(__file__).resolve().parents[1] / "modules/self-hosted/agent-desktop.nix").read_text()
+        match = re.search(r"--network=agent_desktop_net:ip=([0-9.]+)", nix)
+        self.assertIsNotNone(match, "the production container must declare its own address")
+        return match.group(1)
+
+    def start_canary(self, environment):
+        """Start a canary with podman stubbed; return its run argv and its probes."""
+        runs, probes = [], []
+
+        def fake_run(cmd, **kwargs):
+            runs.append(list(cmd))
+            return subprocess.CompletedProcess(list(cmd), 0, "", "")
+
+        def fake_exec(self, *args, **kwargs):
+            probes.append(list(args))
+            return subprocess.CompletedProcess(list(args), 0, "", "")
+
+        config = {"canary_environment": environment, "canary_options": []}
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(update, "run", fake_run), \
+                    patch.object(update.Desktop, "exec", fake_exec), \
+                    patch.object(update.os, "chown", lambda *args: None):
+                update.start_canary(config, "agent-desktop-canary", "localhost/ghostship-agent-desktop:test",
+                                    Path(tmp), [f"--network={update.CANARY_NET}:ip={update.CANARY_IP}"])
+        return runs, probes
+
+    def test_the_canary_binds_the_api_on_an_address_its_namespace_has_and_probes_it(self):
+        """Catches the canary inheriting production's API bind address, which its namespace does not have."""
+        production = self.production_address()
+        runs, probes = self.start_canary({"TZ": "Pacific/Honolulu", "AGENT_DESKTOP_API_BIND": production})
+        argv = next(cmd for cmd in runs if cmd[:2] == ["podman", "run"])
+        environment = {}
+        for index, item in enumerate(argv):
+            if item == "-e" and index + 1 < len(argv):
+                key, _, value = argv[index + 1].partition("=")
+                environment[key] = value
+        bind = environment.get("AGENT_DESKTOP_API_BIND")
+        self.assertIsNotNone(bind, "the canary must be given an API bind address of its own")
+        self.assertNotEqual(bind, production, "the canary must not bind the production container's address")
+        self.assertIn(bind, ("127.0.0.1", "0.0.0.0"),
+                      "the bind address must exist in every canary namespace, including the network-less one")
+        self.assertIsNone(re.search(rf"(?<![\d.]){re.escape(production)}(?![\d.])", " ".join(argv)),
+                         "the production address must not reach the canary")
+        port = environment.get("AGENT_DESKTOP_API_PORT", "7080")
+        self.assertTrue(any(f"http://{bind}:{port}/healthz" in " ".join(probe) for probe in probes),
+                        "the readiness probe must ask the API for its health on the address the canary binds")
+
+    def test_production_keeps_its_own_api_address_and_environment(self):
+        """Catches a fix that moves production's API bind address or the production container's address."""
+        root = Path(__file__).resolve().parents[1]
+        nix = (root / "modules/self-hosted/agent-desktop.nix").read_text()
+        api = (root / "containers/agent-desktop/root/opt/ghostship-agent-desktop/agent_desktop_api.py").read_text()
+        production = self.production_address()
+        self.assertIn(f'os.environ.get("AGENT_DESKTOP_API_BIND", "{production}")', api)
+        self.assertIn('os.environ.get("AGENT_DESKTOP_API_PORT", "7080")', api)
+        self.assertNotIn("AGENT_DESKTOP_API_BIND", nix)
 
 
 class PhaseTests(unittest.TestCase):
