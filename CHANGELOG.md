@@ -1,9 +1,14 @@
 # Changelog
 
-## [3.17.58] - 2026-10-22
+## [3.17.59] - 2026-10-22
 
 - SIEM alert bridge: a re-fired alert is no longer silenced forever. The 6-hour renotify window throttles repeat notices of one occurrence, but a resolve-then-fire cycle inside the window was dropped and its notification timestamp was never advanced, so the fingerprint stayed silent for good while the topic said "resolved". A re-fire inside the window is now deferred rather than dropped: it is recorded as pending and announced on the first poll after the window has elapsed, if the alert is still firing by then, and at most once per window. A re-fire outside the window still announces immediately.
 - SIEM alert bridge: a failed resolution publish is no longer lost. The retry covered firing alerts only, so a resolution that ntfy refused left the topic showing a critical alert that was never resolved. A resolution is now published again on the next poll until it is delivered, like a firing alert, and an alert whose resolution has been undelivered for a day becomes a dead letter, listed by `--list` and counted by the `ghostship_siem_bridge_dead_letters` and `ghostship_siem_bridge_resolution_retries` metrics.
+
+## [3.17.58] - 2026-10-22
+
+- Main's Fleet checks are green again. The regression tests run inside the Nix check derivation, whose sandbox holds the store and little else, and two assumptions broke there. The activation helper starts with `#!/usr/bin/env bash`, and the sandbox has no `/usr/bin/env`, so the kernel could not resolve the shebang and the test reported the helper as missing although it was in the tree. The test now runs the helper with the interpreter its shebang names. The agent SSH command guard started every session in the login shell of the account the session ran as, and that account names a shell the sandbox does not have, so every session the guard started failed. The guard now falls back to a shell that exists when the account's shell is missing, and it accepts the shell the host pins.
+- Private-source environments: neither `private-source-ci` nor `private-source-main` asks for a reviewer. The owner removed that gate on 2026-10-22, because it should only hold back other people, and the environment-scoped read-only agent key is released without an approval. Only the `main` branch may deploy to `private-source-main`, and a pull request from a fork gets no environment secrets at all, because GitHub withholds them from a fork. The fleet operations document records that state, and the unused `GHOSTSHIP_PRIVATE_SOURCES` environment secret is gone.
 
 ## [3.17.57] - 2026-10-22
 
