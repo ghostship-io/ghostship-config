@@ -116,6 +116,10 @@
               coreutils
               actionlint
               apparmor-parser
+              # The AppArmor profile check parses the policies the host
+              # loads, which include <tunables/global> and the
+              # abstractions from this package.
+              apparmor-profiles
               shellcheck
               gitleaks
               vector
@@ -132,6 +136,9 @@
               iproute2
               bubblewrap
             ];
+            # The AppArmor profile check parses the policies the host loads
+            # with the include tree the host resolves them against.
+            APPARMOR_INCLUDE_DIR = "${pkgs.apparmor-profiles}/etc/apparmor.d";
           };
           default = pkgs.mkShellNoCC {
             packages = with pkgs; [
