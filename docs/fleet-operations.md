@@ -543,6 +543,26 @@ Coordinator incident daily-limit holds are classified from the exact known resul
 `over daily limit`, without exporting the note. A native active run is recorded
 state, not PID liveness; CI status does not establish objective completion.
 
+### Time selection: what each panel means
+
+Every dashboard follows the native Grafana time picker; there are no custom time
+buttons, presets or hand-rolled selectors, and navigation links keep the selected
+range and filters (`keepTime`/`includeVars`).
+
+| Panel kind | Semantics | Example |
+| --- | --- | --- |
+| Selected-range history | `stream:=autonomous-work _time:$__range` — the window is the picker, never a literal | work state timeline, webhook fires |
+| Current state | last collector snapshot (one-minute poll), explicitly labelled "snapshot", not a range total | next up, attention, in flight, schedules, projects, threads, handoffs |
+| UTC-day card | counted on the collector's UTC day and labelled as such, with a pointer to the range view | work today, webhooks today |
+| Rolling rate | five-minute rolling average over the selected range, labelled "rolling" | CPU total, CPU per core, container CPU/transmit, load |
+| As-of value | instant query at the end of the selected range | host memory/disk stats, quota and status cards |
+| Counter increase | only for a cumulative `_total` counter, never a summed rolling gauge | kernel audit records lost (`increase(..._total[10m])`) |
+
+Where the producer only exposes a rolling gauge, no panel claims a range total:
+the panel says what it is instead. This is enforced by
+`tests/test_siem_dashboard_time_semantics.py`, which also pins the selected-range
+panels to `$__range` and requires every `increase()` to name a `_total` counter.
+
 ### Provider page: decisions first, exceptions only, units that read
 
 The provider page is ordered for a ten-second read: the review banner, then the

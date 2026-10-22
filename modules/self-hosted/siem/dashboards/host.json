@@ -33,7 +33,7 @@
   {
    "id": 1001,
    "title": "CPU total  (all cores)",
-   "description": "Busy time across every core: 100 \u00d7 (1 \u2212 average idle rate over 5 minutes). One series per core is summed into one average, so no core is double counted.",
+   "description": "Busy time across every core as a five-minute rolling average over the selected range; it is a rate, not a counter total.",
    "type": "stat",
    "gridPos": {
     "x": 0,
@@ -675,7 +675,7 @@
   {
    "id": 1,
    "title": "CPU busy (total, all cores)",
-   "description": "Busy time over all cores, 0\u2013100 %.",
+   "description": "Busy time across every core as a five-minute rolling average over the selected range; it is a rate, not a counter total.",
    "type": "timeseries",
    "datasource": {
     "type": "prometheus",
@@ -804,7 +804,7 @@
   {
    "id": 4,
    "title": "Load",
-   "description": "Kernel load average.",
+   "description": "Kernel load average (rolling gauge, not a range total).",
    "type": "timeseries",
    "datasource": {
     "type": "prometheus",
@@ -923,7 +923,7 @@
   {
    "id": 5,
    "title": "Container CPU (cores)",
-   "description": "Busy cores per container, top 10.",
+   "description": "Busy cores per container as a five-minute rolling rate, top 10 (not a range total).",
    "type": "timeseries",
    "datasource": {
     "type": "prometheus",
@@ -978,7 +978,7 @@
   {
    "id": 6,
    "title": "Container memory",
-   "description": "Resident memory per container, top 10.",
+   "description": "Resident memory per container, a current gauge (not a range total), top 10.",
    "type": "timeseries",
    "datasource": {
     "type": "prometheus",
@@ -1033,7 +1033,7 @@
   {
    "id": 7,
    "title": "Container transmit (per netns)",
-   "description": "Transmit rate per container network namespace, top 10.",
+   "description": "Transmit rate per container network namespace as a five-minute rolling rate, top 10.",
    "type": "timeseries",
    "datasource": {
     "type": "prometheus",

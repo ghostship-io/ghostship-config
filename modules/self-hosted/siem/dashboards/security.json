@@ -33,7 +33,7 @@
   {
    "id": 1001,
    "title": "Log ingestion lag",
-   "description": "",
+   "description": "Counts and rows follow the selected time range.",
    "type": "stat",
    "gridPos": {
     "x": 0,
@@ -215,7 +215,7 @@
   {
    "id": 1004,
    "title": "Falco events",
-   "description": "",
+   "description": "Counts and rows follow the selected time range.",
    "type": "stat",
    "gridPos": {
     "x": 12,
@@ -273,7 +273,7 @@
   {
    "id": 1005,
    "title": "SSH failures",
-   "description": "",
+   "description": "Counts and rows follow the selected time range.",
    "type": "stat",
    "gridPos": {
     "x": 16,
@@ -489,7 +489,8 @@
      "mode": "multi",
      "sort": "desc"
     }
-   }
+   },
+   "description": "Counts and rows follow the selected time range."
   },
   {
    "id": 19,
@@ -647,7 +648,8 @@
      "mode": "multi",
      "sort": "desc"
     }
-   }
+   },
+   "description": "Counts and rows follow the selected time range."
   },
   {
    "id": 22,
@@ -699,7 +701,8 @@
      "mode": "multi",
      "sort": "desc"
     }
-   }
+   },
+   "description": "Counts and rows follow the selected time range."
   },
   {
    "id": 23,
@@ -782,7 +785,8 @@
     "sortOrder": "Descending",
     "enableLogDetails": true,
     "dedupStrategy": "none"
-   }
+   },
+   "description": "Counts and rows follow the selected time range."
   },
   {
    "id": 1007,
