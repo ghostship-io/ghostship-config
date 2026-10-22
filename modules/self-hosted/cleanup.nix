@@ -61,10 +61,10 @@ let
       units = [ "podman-agent-zero" ];
       containers = [ "agent-zero" ];
       volumes = [ "agent-zero-nix" ];
-      imageRefs = [ "ghcr.io/ghostship-io/ghostship-agent-zero:latest" ];
+      imageRefs = [ "ghcr.io/@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-agent-zero:latest" ];
       imageRepositories = [
         "docker.io/agent0ai/agent-zero"
-        "ghcr.io/ghostship-io/ghostship-agent-zero"
+        "ghcr.io/@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-agent-zero"
         "localhost/ghostship-agent-zero"
       ];
       homepageEntries = [ "Agent Zero" ];
@@ -78,9 +78,9 @@ let
         "hermes-runtime-env-sync"
       ];
       containers = [ "hermes" ];
-      imageRefs = [ "ghcr.io/ghostship-io/ghostship-hermes:latest" ];
+      imageRefs = [ "ghcr.io/@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-hermes:latest" ];
       imageRepositories = [
-        "ghcr.io/ghostship-io/ghostship-hermes"
+        "ghcr.io/@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-hermes"
         "localhost/ghostship-hermes"
         "localhost/ghostship-hermes-workstation"
       ];
@@ -138,7 +138,7 @@ let
       imageRepositories = [
         "localhost/ghostship-honcho"
         "localhost/honcho"
-        "ghcr.io/ghostship-io/honcho"
+        "ghcr.io/@GHOSTSHIP_GITHUB_ACCOUNT@/honcho"
       ];
       homepageEntries = [
         "Honcho"
@@ -419,7 +419,7 @@ let
       imageRefs = [ "localhost/ghostship-openchamber:openchamber" ];
       imageRepositories = [
         "localhost/ghostship-openchamber"
-        "ghcr.io/ghostship-io/ghostship-openchamber"
+        "ghcr.io/@GHOSTSHIP_GITHUB_ACCOUNT@/ghostship-openchamber"
       ];
       homepageEntries = [ "OpenChamber" ];
       muximuxSections = [ "OpenChamber" ];
@@ -497,6 +497,16 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
     wantedBy = [ "multi-user.target" ];
     serviceConfig.Type = "oneshot";
     script = ''
+      # The retired images were published in the owner's container registry
+      # account. The account name is supplied by the deployment in a file
+      # outside this repository.
+      owner_identity_file="/etc/ghostship/owner-identity.env"
+      if [ -r "$owner_identity_file" ]; then
+        set -a
+        . "$owner_identity_file"
+        set +a
+      fi
+      retirement_dir="/srv/retired-apps/$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ)"
       retirement_dir="/srv/retired-apps/$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ)"
       masks_removed=false
 
@@ -566,8 +576,24 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
         esac
       }
 
+      # The retired images were published in the owner's container registry
+      # account. The account name is supplied by the deployment outside this
+      # repository; an unset account is a deployment mistake, not a default.
+      expand_owner_account() {
+        case "$1" in
+          *@GHOSTSHIP_GITHUB_ACCOUNT@*)
+            if [ -z "''${GHOSTSHIP_GITHUB_ACCOUNT:-}" ]; then
+              printf 'error: GHOSTSHIP_GITHUB_ACCOUNT is not set; the owner identity file must define it\n' >&2
+              exit 1
+            fi
+            printf '%s' "$(printf '%s' "$1" | sed "s|@GHOSTSHIP_GITHUB_ACCOUNT@/$GHOSTSHIP_GITHUB_ACCOUNT|g")"
+            ;;
+          *) printf '%s' "$1" ;;
+        esac
+      }
+
       remove_image_ref() {
-        image="$1"
+        image="$(expand_owner_account "$1")"
 
         if ${pkgs.podman}/bin/podman image exists "$image" >/dev/null 2>&1; then
           ${pkgs.podman}/bin/podman rmi "$image" >/dev/null 2>&1 || true
@@ -575,7 +601,7 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
       }
 
       remove_image_repository() {
-        repository="$1"
+        repository="$(expand_owner_account "$1")"
 
         ${pkgs.podman}/bin/podman images --format '{{.Repository}}:{{.Tag}}' \
           | while IFS= read -r image; do

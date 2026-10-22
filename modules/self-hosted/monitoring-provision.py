@@ -105,15 +105,23 @@ def main():
 
     client.connect(os.environ["KUMA_URL"], transports=["polling"])
     try:
+        # The administrator account name is supplied by the deployment outside
+        # this repository; an unset value is a deployment mistake, not a
+        # default to fall back to.
+        username = (os.environ.get("GHOSTSHIP_KUMA_USERNAME") or "").strip()
+        if not username:
+            raise RuntimeError(
+                "GHOSTSHIP_KUMA_USERNAME is not set; the owner identity file must define it"
+            )
         # Query setup state explicitly; startup load can delay the setup event.
         if client.call("needSetup", timeout=20):
-            call("setup", ("the owner", os.environ["KUMA_PASSWORD"]))
+            call("setup", (username, os.environ["KUMA_PASSWORD"]))
         # Kuma establishes an automatic session on connection when auth is off.
         settings_result = client.call("getSettings", timeout=20)
         if not settings_result or not settings_result.get("ok"):
             call(
                 "login",
-                {"username": "the owner", "password": os.environ["KUMA_PASSWORD"]},
+                {"username": username, "password": os.environ["KUMA_PASSWORD"]},
             )
         enforce_access_only_auth(call, os.environ["KUMA_PASSWORD"])
         call("getMonitorList")
