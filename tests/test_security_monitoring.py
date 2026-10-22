@@ -1,5 +1,9 @@
+import contextlib
 import importlib.util
+import io
+import json
 from pathlib import Path
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1] / "modules/self-hosted"
@@ -283,6 +287,152 @@ class CheckTests(unittest.TestCase):
         check.dispatch(CONFIG, state, [finding], 0, lambda c, f, s: attempts.append(s) or False)
         check.dispatch(CONFIG, state, [finding], 60, lambda c, f, s: attempts.append(s) or True)
         self.assertEqual(attempts, ["firing", "firing"])
+
+
+class ScopedAcceptTests(unittest.TestCase):
+    """A reviewer re-baselines one drift category or one flow finding.
+
+    The stubs replace every host lookup, so the assertions cover the state
+    file only: what the reviewer asked for is accepted, and everything else
+    keeps alerting.
+    """
+
+    FLOWS = {"edges": {
+        "plex|host|tcp|22": {},
+        "romm|romm-db|tcp|3306": {},
+        "seerr|romm-db|tcp|3306": {},
+    }}
+    BASELINES = {
+        "listeners": ["tcp 0.0.0.0:22"],
+        "sshkeys": {"/etc/ssh/authorized_keys.d/agent": "old-digest"},
+        "persistence": {"/etc/systemd/system/legacy.service": "old-digest"},
+        "suid": ["/usr/local/bin/legacy-suid"],
+    }
+    CURRENT_SSHKEYS = {"/etc/ssh/authorized_keys.d/agent": "new-digest"}
+    CURRENT_PERSISTENCE = {"/etc/systemd/system/legacy.service": "new-digest"}
+    CURRENT_SUID = ["/usr/local/bin/legacy-suid", "/usr/local/bin/fresh-suid"]
+    COMMANDS = {
+        "podman": "",
+        "journalctl": "",
+        "auditctl": "enabled 1\nlost 0\n",
+        "nft": "table inet ghostship_flows\nchain nixos-fw \n",
+        "ss": "tcp LISTEN 0 128 0.0.0.0:8080 0.0.0.0:*\n",
+    }
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        root = Path(self.directory.name)
+        self.config_path = root / "config.json"
+        self.flows_path = root / "flows.json"
+        self.state_path = root / "state.json"
+        self.config_path.write_text(json.dumps({**CONFIG, "flows_state": str(self.flows_path)}))
+        self.flows_path.write_text(json.dumps(self.FLOWS))
+        self.write_state({"baselines": self.BASELINES, "accepted_flows": []})
+        self.originals = {name: getattr(check, name) for name in
+                          ("sh", "ssh_auth_files", "persistence_entries", "suid_files",
+                           "check_apparmor", "dispatch")}
+        check.sh = self.fake_sh
+        check.ssh_auth_files = lambda: dict(self.CURRENT_SSHKEYS)
+        check.persistence_entries = lambda: dict(self.CURRENT_PERSISTENCE)
+        check.suid_files = lambda: list(self.CURRENT_SUID)
+        check.check_apparmor = lambda cfg: []
+        check.dispatch = lambda *arguments: None
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        for name, value in self.originals.items():
+            setattr(check, name, value)
+
+    def fake_sh(self, argv, check=True):
+        return self.COMMANDS.get(argv[0], "")
+
+    def write_state(self, state):
+        self.state_path.write_text(json.dumps(state, indent=1, sort_keys=True))
+
+    def read_state(self):
+        return json.loads(self.state_path.read_text())
+
+    def run_check(self, *arguments):
+        """Run the checker over the stubs; return (code, stdout, stderr)."""
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                code = check.main(["--config", str(self.config_path), "--state", str(self.state_path),
+                                   *arguments])
+            except SystemExit as exit:
+                code = exit.code
+        return code, out.getvalue(), err.getvalue()
+
+    def findings(self):
+        return [entry["key"] for entry in self.read_state()["last_findings"]]
+
+    def test_accept_drift_rebaselines_only_the_named_category(self):
+        before = self.read_state()["baselines"]
+        code, _, _ = self.run_check("--accept-drift", "sshkeys")
+        self.assertEqual(code, 0)
+        after = self.read_state()["baselines"]
+        for category in ("listeners", "persistence", "suid"):
+            self.assertEqual(json.dumps(after[category], sort_keys=True),
+                             json.dumps(before[category], sort_keys=True),
+                             f"{category} changed by an sshkeys re-baseline")
+        self.assertEqual(after["sshkeys"], self.CURRENT_SSHKEYS)
+        found = self.findings()
+        self.assertEqual([key for key in found if key.startswith("sshkeys.")], [])
+        # The categories that were not named keep alerting.
+        self.assertTrue(any(key.startswith("listeners.") for key in found))
+        self.assertTrue(any(key.startswith("persistence.") for key in found))
+        self.assertTrue(any(key.startswith("suid.") for key in found))
+
+    def test_accept_drift_rebaselines_exactly_the_named_categories(self):
+        before = self.read_state()["baselines"]
+        code, _, _ = self.run_check("--accept-drift", "sshkeys", "--accept-drift", "suid")
+        self.assertEqual(code, 0)
+        after = self.read_state()["baselines"]
+        for category in ("listeners", "persistence"):
+            self.assertEqual(json.dumps(after[category], sort_keys=True),
+                             json.dumps(before[category], sort_keys=True))
+        self.assertEqual(after["sshkeys"], self.CURRENT_SSHKEYS)
+        self.assertEqual(after["suid"], sorted(self.CURRENT_SUID))
+        found = self.findings()
+        self.assertEqual([key for key in found if key.startswith("sshkeys.")], [])
+        self.assertEqual([key for key in found if key.startswith("suid.")], [])
+        self.assertTrue(any(key.startswith("listeners.") for key in found))
+        self.assertTrue(any(key.startswith("persistence.") for key in found))
+
+    def test_accept_flow_accepts_only_that_key(self):
+        code, _, _ = self.run_check("--accept-flow", "flow.hostssh.plex")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.read_state()["accepted_flows"], ["flow.hostssh.plex"])
+        found = self.findings()
+        self.assertNotIn("flow.hostssh.plex", found)
+        self.assertIn("flow.db.seerr.romm-db", found)
+
+    def test_accept_flow_with_an_unknown_key_changes_nothing(self):
+        before = self.state_path.read_bytes()
+        code, _, err = self.run_check("--accept-flow", "nosuch")
+        self.assertNotEqual(code, 0)
+        self.assertIn("unknown flow finding", err)
+        self.assertIn("nosuch", err)
+        self.assertEqual(self.state_path.read_bytes(), before)
+
+    def test_accept_cannot_be_combined_with_a_scoped_flag(self):
+        before = self.state_path.read_bytes()
+        for flag, value in (("--accept-drift", "sshkeys"), ("--accept-flow", "flow.hostssh.plex")):
+            with self.subTest(flag=flag):
+                code, _, err = self.run_check("--accept", flag, value)
+                self.assertNotEqual(code, 0)
+                self.assertIn("cannot be combined", err)
+                self.assertEqual(self.state_path.read_bytes(), before)
+
+    def test_accept_still_rebaselines_everything(self):
+        code, _, _ = self.run_check("--accept")
+        self.assertEqual(code, 0)
+        state = self.read_state()
+        self.assertEqual(state["accepted_flows"], ["flow.db.seerr.romm-db", "flow.hostssh.plex"])
+        self.assertEqual(state["baselines"]["sshkeys"], self.CURRENT_SSHKEYS)
+        self.assertEqual(state["baselines"]["suid"], sorted(self.CURRENT_SUID))
+        self.assertEqual(self.findings(), [])
 
 
 if __name__ == "__main__":

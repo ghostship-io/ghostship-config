@@ -19,6 +19,12 @@ Every failure is scoped, because a failure is not always about one model:
 * ``model`` - the provider refused this model. Only that model is
   unavailable.
 
+A retired model is a model of its own: the provider said the model is
+deprecated or retired, and it does not serve it again. The retirement is
+scoped to that one route, and the collector remembers it beyond the window
+of a failure, because a model that was retired yesterday is still retired
+today.
+
 The reason is a code and a fixed label, never the raw text of the error:
 a provider's own message can carry a name, an address or a token, and
 none of it leaves this process.
@@ -45,6 +51,9 @@ REASON_ACCOUNT_USAGE_LIMIT = "account_usage_limit"
 REASON_ROUTE_STARTUP_FAILED = "route_startup_failed"
 REASON_MODEL_REFUSED = "model_refused"
 REASON_PROVIDER_ERROR = "provider_error"
+# A model the provider retired. The route is gone, not broken: it does not
+# come back with a new allowance, and it is not the account that is spent.
+REASON_MODEL_RETIRED = "model_retired"
 
 REASON_LABELS = {
     REASON_ACCOUNT_USAGE_LIMIT: (
@@ -59,6 +68,10 @@ REASON_LABELS = {
         "the provider refused this model; only this model is unavailable"
     ),
     REASON_PROVIDER_ERROR: "the provider reported an error on this route",
+    # The published reason of a retired route is its code. A reader matches
+    # it against the state file and the routing snapshot, and a code never
+    # carries a provider's own words.
+    REASON_MODEL_RETIRED: "model_retired",
 }
 
 # The markers of an allowance that is spent. The text is only read to pick
@@ -102,6 +115,21 @@ _MODEL_REFUSED_MARKERS = (
     "model not found",
     "no such model",
     "unsupported model",
+)
+
+# The markers of a model the provider retired. A provider that retired a
+# model does not serve it again, so the failure is not a broken route and
+# not a spent account: the model itself is gone. The text is read to pick
+# the code and is then dropped, like every other error text.
+#
+# "free launch period" covers the wording of a free tier that ended: the
+# free variant of a model is retired when the launch period is over.
+_RETIREMENT_MARKERS = (
+    "has been deprecated",
+    "has been retired",
+    "free launch period",
+    "reached its end of life",
+    "is no longer available",
 )
 
 # How far back the state is read. A failure older than this is a past
@@ -197,6 +225,11 @@ def _classify(text: str) -> str:
     message can carry a name, an address or a token.
     """
     lowered = str(text or "").lower()
+    if any(marker in lowered for marker in _RETIREMENT_MARKERS):
+        # A retirement is read first: a provider that says the model is
+        # retired has said more about the route than any other text, and
+        # the route is not coming back with a new allowance.
+        return REASON_MODEL_RETIRED
     if any(marker in lowered for marker in _USAGE_LIMIT_MARKERS):
         return REASON_ACCOUNT_USAGE_LIMIT
     if _PAYMENT_STATUS.search(str(text or "")):
@@ -206,6 +239,19 @@ def _classify(text: str) -> str:
     if any(marker in lowered for marker in _MODEL_REFUSED_MARKERS):
         return REASON_MODEL_REFUSED
     return REASON_PROVIDER_ERROR
+
+
+def _bare_model(model: str) -> str:
+    """The model name without the account prefix the instance carries.
+
+    The T3 Code state names a model of the OpenCode instance with the
+    account it is charged to: "opencode-go/minimax-m3.1-flash-free". The
+    ranking knows the same model without the prefix, and the retirement of
+    a route is recorded under the name the ranking uses.
+    """
+    text = str(model or "")
+    prefix, separator, rest = text.partition("/")
+    return rest if separator and rest else text
 
 
 def account_of_model(model: str, instance: str = "") -> str:
@@ -445,6 +491,25 @@ def read_failures(
     model it is about, with the reason code, the fixed label and the
     moment it was observed. A failure that a later successful run has
     superseded is not reported: the route works again.
+    """
+    return read_observations(path, now, age_seconds=age_seconds)["failures"]
+
+
+def read_observations(
+    path: str | Path,
+    now: float,
+    *,
+    age_seconds: float | None = None,
+    success_age_seconds: float | None = None,
+) -> dict[str, Any]:
+    """The failures of the window and the successful runs of the routes.
+
+    The failures are the ones of the window, with their scope, their reason
+    code and the moment they were observed. The successes are the last
+    successful run of every route, and they are read over their own window:
+    a retirement outlives the window of the failure that reported it, and a
+    successful run that is older than the window still clears the
+    retirement when it is newer than the retirement.
 
     The read is bounded by the window: the runs of the window are read
     newest first, and only their attempts are read with them. The attempts
@@ -452,17 +517,22 @@ def read_failures(
     """
     moment = float(now)
     window = MAX_AGE_SECONDS if age_seconds is None else float(age_seconds)
+    success_window = (
+        window if success_age_seconds is None else float(success_age_seconds)
+    )
     cutoff = moment - window
+    success_cutoff = moment - success_window
+    empty: dict[str, Any] = {"failures": [], "successes": {}}
     try:
         connection = _connect(path)
     except RuntimeStateError:
-        return []
+        return empty
     try:
         if not _has_table(connection, RUNS_TABLE):
-            return []
-        runs = _recent_runs(connection, cutoff, moment)
+            return empty
+        runs = _recent_runs(connection, min(cutoff, success_cutoff), moment)
         if not runs:
-            return []
+            return empty
         attempts = _attempts_of_runs(connection, [run["run_id"] for run in runs])
         thread_ids = {run["thread_id"] for run in runs if run["thread_id"]}
         for entries in attempts.values():
@@ -472,7 +542,7 @@ def read_failures(
         errors = _errors(connection, thread_ids)
         runtimes = _runtimes(connection, thread_ids)
     except sqlite3.Error:
-        return []
+        return empty
     finally:
         connection.close()
 
@@ -483,7 +553,7 @@ def read_failures(
         entries = attempts.get(run["run_id"]) or []
         for attempt in entries or [run]:
             observed = attempt.get("observed_at") or run.get("observed_at")
-            if observed is None or observed < cutoff:
+            if observed is None:
                 continue
             instance = attempt.get("provider_instance_id") or run["provider_instance_id"]
             thread_id = attempt.get("thread_id") or run["thread_id"]
@@ -492,9 +562,12 @@ def read_failures(
             model = model or runtime.get("model", "")
             status = attempt.get("status") or run.get("status") or ""
             if status == "completed":
-                # A successful run of the route clears its failures.
-                for key in _targets_of(instance, model):
-                    successes[key] = max(successes.get(key, 0.0), float(observed))
+                if float(observed) >= success_cutoff:
+                    # A successful run of the route clears its failures.
+                    for key in _targets_of(instance, model):
+                        successes[key] = max(successes.get(key, 0.0), float(observed))
+                continue
+            if float(observed) < cutoff:
                 continue
             if status != "failed":
                 continue
@@ -509,7 +582,7 @@ def read_failures(
             existing = failures.get(key)
             if existing is not None and float(existing["observed_at"]) >= float(observed):
                 continue
-            failures[key] = {
+            record = {
                 "scope": scope,
                 "target": target,
                 "reason": reason,
@@ -518,12 +591,30 @@ def read_failures(
                 "model": model,
                 "provider_instance": instance,
             }
+            if reason == REASON_MODEL_RETIRED:
+                # A retirement names one route: the id the state carries, the
+                # account the route is charged to and the model without the
+                # account prefix, which is the name the ranking knows it by.
+                record["route"] = model
+                record["provider"] = account_of_model(model, instance)
+                record["model"] = _bare_model(model)
+            failures[key] = record
     # A later successful run of the same target clears the failure.
     for key in list(failures):
         cleared = successes.get(key)
         if cleared is not None and cleared > float(failures[key]["observed_at"]):
             failures.pop(key, None)
-    return sorted(failures.values(), key=lambda entry: (entry["scope"], entry["target"]))
+    return {
+        "failures": sorted(
+            failures.values(), key=lambda entry: (entry["scope"], entry["target"])
+        ),
+        # The last successful run of every route, by the id of the route.
+        "successes": {
+            target: float(observed)
+            for (scope, target), observed in successes.items()
+            if scope == SCOPE_MODEL
+        },
+    }
 
 
 def _scope_of(
@@ -532,6 +623,10 @@ def _scope_of(
     """The scope and the target of a failure."""
     if reason == REASON_ACCOUNT_USAGE_LIMIT:
         return SCOPE_ACCOUNT, (account_of_model(model, instance) if model else instance)
+    if reason == REASON_MODEL_RETIRED:
+        # The retirement is about one route, and the target is the id of
+        # that route.
+        return SCOPE_MODEL, (model or instance)
     if reason == REASON_MODEL_REFUSED:
         named = _named_model(error_text) or model
         return SCOPE_MODEL, (named or instance)
