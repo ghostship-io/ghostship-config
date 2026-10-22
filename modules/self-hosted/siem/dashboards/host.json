@@ -27,8 +27,9 @@
    },
    "options": {
     "mode": "markdown",
-    "content": "**Host \u00b7 rolling rates follow the time picker \u00b7 gauges are the latest sample**\n\nCPU is every core. Memory is total, used and available. An unknown reading is Unavailable, never a zero."
-   }
+    "content": "**Host \u00b7 the rolling rates follow the time picker \u00b7 the gauges are the latest sample**"
+   },
+   "description": "The CPU is every core, with the total above the grid. The memory is total, used and available. An unknown reading is Unavailable, never a zero."
   },
   {
    "id": 1001,

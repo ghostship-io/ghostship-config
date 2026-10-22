@@ -85,8 +85,9 @@
    },
    "options": {
     "mode": "markdown",
-    "content": "**Overview \u00b7 today in UTC \u00b7 latest snapshot for live agents**\n\nA receipt is never a green outcome. A truncated or unavailable source is a lower bound, not a zero. Panels follow the time picker. UTC-day tiles say so."
-   }
+    "content": "**Overview \u00b7 today in UTC \u00b7 the latest snapshot for live agents**"
+   },
+   "description": "A receipt is never a green outcome. A truncated or unavailable source is a lower bound, not a zero. The panels follow the time picker; the UTC-day tiles say so. Every tile links to the page it counts."
   },
   {
    "id": 2,
