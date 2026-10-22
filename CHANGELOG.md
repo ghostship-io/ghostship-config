@@ -1,9 +1,18 @@
 # Changelog
 
-## [3.17.98] - 2026-10-22
+## [3.17.100] - 2026-10-22
 
 - AI usage: a provider whose routes hit limit failures now shows its learned window and budget, instead of "no limit seen", in the ranking and in `routing.json` `quota.accounts`. A route of the provider that was never refused filed its own no-failure window under the provider key and hid the refused route's learned window; the quiet route no longer stands in for a refused one of its provider.
 - AI usage: the inferred windows reach `quota.accounts` at all. The account section was filled from the provider-reported windows only, so a learned window never arrived, and a refused route lost its record as soon as it had no ranked row. Each inferred record carries `kind: inferred`, `evidence: inferred`, its basis, and the window, budget, unit, scope, episode count and state it was measured from; a model-scoped limit keeps its model in `applies_to`, and an inferred window with a known share now counts as the provider's remaining capacity instead of an unknown window.
+
+## [3.17.99] - 2026-10-22
+
+- ghostship-agent is pinned to 5fb39a15, the rewritten main with the Google account settings read at runtime (#101, #125, #130). The previous pin, 7f8d9fda, is the rewritten 2318134e, whose Google tooling held the addresses that the privacy rewrite replaced.
+- The MCP container reads its account settings (the owner's and the agent's Google accounts, and the health document folders) from `/etc/ghostship/mcp-identity.env`, outside the repository.
+
+## [3.17.98] - 2026-10-22
+
+- The Providers page draws one card per provider with every capacity window. The collector publishes the windows of every account as gauges, read straight from the routing snapshot: the share that is left, the even-spend line, the reset, and the place the row takes in the card. The page never recomputes a window. One window is read more than once (the OpenCode Go status and the Go usage endpoint name the same windows), and the window is published once: the reading that carries the length of the window is the one that is published. An account that publishes no window of its own says that it is learning.
 
 ## [3.17.97] - 2026-10-22
 

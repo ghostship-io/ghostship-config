@@ -487,6 +487,40 @@ model only and never the provider's overall capacity. The metrics are
 `ghostship_ai_provider_capacity_remaining_ratio{provider,binding}` (known
 values only) and `ghostship_ai_provider_capacity_windows{provider,evidence}`.
 
+### Account windows
+
+The card of a provider holds one row per capacity window of the account.
+The collector publishes those rows as gauges, read straight from
+`quota.accounts`, so the page never recomputes a window:
+
+| Series | Value |
+| --- | --- |
+| `ghostship_ai_account_window_remaining_ratio{account,kind,quota_id,label,evidence}` | the share of the window that is left |
+| `ghostship_ai_account_window_expected_remaining_ratio{account,kind,quota_id,label,evidence}` | the share an even spend would have left by now: `clamp(seconds_to_reset / duration_seconds, 0, 1)`, with three decimals |
+| `ghostship_ai_account_window_reset_timestamp_seconds{account,kind,quota_id,label,evidence}` | when the window resets |
+| `ghostship_ai_account_window_order{account,kind,quota_id,label,evidence}` | the place of the row in the card: 1 session, 2 daily, 3 weekly, 4 monthly, 5 quota, 8 inferred, 9 other |
+| `ghostship_ai_account_window_learning{account}` | 1 for an account that publishes no window of its own yet |
+
+The labels of a row are the account, the kind of the window, the quota id
+the provider gave it, the label the row draws, and the evidence of the
+reading. The label is the kind of the window in title case, and a window
+that names a narrower period than its kind says which one after a dot
+(`Weekly · Fable`). The label is published exactly as it reads.
+
+One window is read more than once. The OpenCode Go status names its
+windows `go_rolling`, `go_weekly` and `go_monthly` while the Go usage
+endpoint names the same windows `rolling`, `weekly` and `monthly`, and two
+readings of one window arrive under one account. The window is published
+once, and the reading that is published is the one that carries the length
+of the window, then the one that carries its reset, then the freshest one,
+then the one with the least left, and finally the one that resets first. A
+reading that knows nothing never wins.
+
+A window with no length has no even-spend line, and a reading that could
+not be read publishes no share: the row keeps its place in the card and
+says that it is unknown. The mark of an account whose limit was never seen
+is not a window at all: the account is learning, and the card says so.
+
 ### Source health
 
 * `ghostship_ai_source_success{source,provider}` - 1 when the source read

@@ -352,6 +352,24 @@ METRIC_HELP = {
     "ghostship_ai_provider_capacity_windows": (
         "The account windows of a provider, split into known and unknown."
     ),
+    "ghostship_ai_account_window_remaining_ratio": (
+        "The share of an account window that is left. One series per window "
+        "of an account, and the label says which window it is."
+    ),
+    "ghostship_ai_account_window_expected_remaining_ratio": (
+        "The share of an account window that an even spend would have left "
+        "by now; the line of the bar."
+    ),
+    "ghostship_ai_account_window_reset_timestamp_seconds": (
+        "When an account window resets."
+    ),
+    "ghostship_ai_account_window_order": (
+        "The place a window takes in the card of its account: 1 is the "
+        "session window, and a monthly window comes after a weekly one."
+    ),
+    "ghostship_ai_account_window_learning": (
+        "One for an account that publishes no window of its own yet."
+    ),
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
     "ghostship_ai_collection_duplicate_series": (
@@ -1871,6 +1889,8 @@ def render(
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
         writer.add(name, labels, value)
     for name, labels, value in snapshot_module.provider_capacity_samples(snapshot or {}):
+        writer.add(name, labels, value)
+    for name, labels, value in snapshot_module.account_window_samples(snapshot or {}):
         writer.add(name, labels, value)
     for name, labels, value in feed_samples(snapshot or {}):
         writer.add(name, labels, value)
