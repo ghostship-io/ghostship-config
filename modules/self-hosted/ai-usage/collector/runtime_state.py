@@ -90,12 +90,17 @@ _MODEL_REFUSED_MARKERS = (
 )
 
 # How far back the state is read. A failure older than this is a past
-# event, not the state of a route.
+# event, not the state of a route. The window is configurable, because the
+# age of a state that matters is the owner's decision.
 MAX_AGE_SECONDS = 24 * 3600.0
 
 # How many rows one read may look at. The state is read on every
 # collection, so the read is bounded.
 MAX_ROWS = 2000
+
+# How many identifiers one statement may bind. A statement with thousands
+# of them is slow to prepare and slow to run.
+MAX_BINDINGS = 200
 
 # The tables the reader uses. A state database without them is not a state
 # database, and the reader says so instead of guessing.
@@ -192,17 +197,31 @@ def _named_model(text: str) -> str:
     return match.group(1) if match else ""
 
 
-def _attempts(
-    connection: sqlite3.Connection, cutoff: float
+def _recent_runs(
+    connection: sqlite3.Connection, cutoff: float, now: float
 ) -> list[dict[str, Any]]:
-    """The recent run attempts of the state, with their times and models."""
+    """The runs of the state that are recent enough to matter.
+
+    The runs carry their own times, so the read is bounded by the window
+    and it is ordered newest first. The attempts table carries no time of
+    its own, so it is never read on its own: an unbounded read of it
+    returns the oldest rows, and today's failures would be missed.
+    """
+    from datetime import datetime, timezone
+
+    window = datetime.fromtimestamp(cutoff, tz=timezone.utc).isoformat().replace(
+        "+00:00", "Z"
+    )
     rows = connection.execute(
-        f"SELECT thread_id, run_id, provider, provider_instance_id, status, payload_json "
-        f"FROM {ATTEMPTS_TABLE} LIMIT ?",
-        (MAX_ROWS,),
+        f"SELECT run_id, thread_id, provider, provider_instance_id, status, "
+        f"requested_at, completed_at, payload_json "
+        f"FROM {RUNS_TABLE} "
+        f"WHERE datetime(COALESCE(completed_at, requested_at)) >= datetime(?) "
+        f"ORDER BY datetime(COALESCE(completed_at, requested_at)) DESC LIMIT ?",
+        (window, MAX_ROWS),
     ).fetchall()
-    attempts: list[dict[str, Any]] = []
-    for thread_id, run_id, provider, instance, status, payload in rows:
+    runs: list[dict[str, Any]] = []
+    for run_id, thread_id, provider, instance, status, requested, completed, payload in rows:
         document: Mapping[str, Any] = {}
         if isinstance(payload, str):
             try:
@@ -211,105 +230,158 @@ def _attempts(
                 loaded = {}
             if isinstance(loaded, Mapping):
                 document = loaded
-        observed = _iso_epoch(document.get("completedAt")) or _iso_epoch(
-            document.get("startedAt")
-        )
-        attempts.append(
+        selection = document.get("modelSelection")
+        model = ""
+        if isinstance(selection, Mapping):
+            model = str(selection.get("model") or "")
+        runs.append(
             {
-                "thread_id": str(thread_id or ""),
                 "run_id": str(run_id or ""),
+                "thread_id": str(thread_id or ""),
                 "provider": str(provider or ""),
                 "provider_instance_id": str(instance or ""),
                 "status": str(status or ""),
-                "observed_at": observed,
-                "model": str(document.get("model") or ""),
+                "observed_at": _iso_epoch(completed) or _iso_epoch(requested),
+                "model": model,
             }
         )
-    return attempts
-
-
-def _runs(connection: sqlite3.Connection) -> dict[str, str]:
-    """The model of every run, by run id."""
-    if not _has_table(connection, RUNS_TABLE):
-        return {}
-    rows = connection.execute(
-        f"SELECT run_id, payload_json FROM {RUNS_TABLE} LIMIT ?", (MAX_ROWS,)
-    ).fetchall()
-    runs: dict[str, str] = {}
-    for run_id, payload in rows:
-        if not isinstance(payload, str):
-            continue
-        try:
-            document = json.loads(payload)
-        except ValueError:
-            continue
-        if not isinstance(document, Mapping):
-            continue
-        selection = document.get("modelSelection")
-        if not isinstance(selection, Mapping):
-            continue
-        runs[str(run_id)] = str(selection.get("model") or "")
     return runs
 
 
-def _errors(connection: sqlite3.Connection) -> dict[str, str]:
-    """The last error of every thread, by thread id."""
-    if not _has_table(connection, SESSIONS_TABLE):
+def _attempts_of_runs(
+    connection: sqlite3.Connection, run_ids: Iterable[str]
+) -> dict[str, list[dict[str, Any]]]:
+    """The attempts of the given runs, by run id."""
+    identifiers = [str(run_id) for run_id in run_ids if str(run_id)]
+    if not identifiers:
         return {}
-    rows = connection.execute(
-        f"SELECT thread_id, last_error FROM {SESSIONS_TABLE} "
-        f"WHERE last_error IS NOT NULL AND last_error != '' LIMIT ?",
-        (MAX_ROWS,),
-    ).fetchall()
-    return {str(thread_id): str(text) for thread_id, text in rows}
+    attempts: dict[str, list[dict[str, Any]]] = {}
+    # The number of identifiers is bounded by the number of recent runs, so
+    # the statement stays small and the read stays bounded.
+    for start in range(0, len(identifiers), MAX_BINDINGS):
+        chunk = identifiers[start:start + MAX_BINDINGS]
+        placeholders = ",".join("?" for _ in chunk)
+        rows = connection.execute(
+            f"SELECT thread_id, run_id, provider, provider_instance_id, status, "
+            f"payload_json FROM {ATTEMPTS_TABLE} "
+            f"WHERE run_id IN ({placeholders}) LIMIT ?",
+            (*chunk, MAX_ROWS),
+        ).fetchall()
+        for thread_id, run_id, provider, instance, status, payload in rows:
+            document: Mapping[str, Any] = {}
+            if isinstance(payload, str):
+                try:
+                    loaded = json.loads(payload)
+                except ValueError:
+                    loaded = {}
+                if isinstance(loaded, Mapping):
+                    document = loaded
+            observed = _iso_epoch(document.get("completedAt")) or _iso_epoch(
+                document.get("startedAt")
+            )
+            attempts.setdefault(str(run_id or ""), []).append(
+                {
+                    "thread_id": str(thread_id or ""),
+                    "run_id": str(run_id or ""),
+                    "provider": str(provider or ""),
+                    "provider_instance_id": str(instance or ""),
+                    "status": str(status or ""),
+                    "observed_at": observed,
+                    "model": str(document.get("model") or ""),
+                }
+            )
+    return attempts
 
 
-def _runtimes(connection: sqlite3.Connection) -> dict[str, dict[str, str]]:
-    """The model and the last error of every provider session."""
-    if not _has_table(connection, RUNTIME_TABLE):
+def _errors(
+    connection: sqlite3.Connection, thread_ids: Iterable[str]
+) -> dict[str, str]:
+    """The last error of the given threads, by thread id."""
+    identifiers = [str(thread_id) for thread_id in thread_ids if str(thread_id)]
+    if not identifiers:
         return {}
-    rows = connection.execute(
-        f"SELECT thread_id, runtime_payload_json FROM {RUNTIME_TABLE} LIMIT ?",
-        (MAX_ROWS,),
-    ).fetchall()
+    found: dict[str, str] = {}
+    for start in range(0, len(identifiers), MAX_BINDINGS):
+        chunk = identifiers[start:start + MAX_BINDINGS]
+        placeholders = ",".join("?" for _ in chunk)
+        rows = connection.execute(
+            f"SELECT thread_id, last_error FROM {SESSIONS_TABLE} "
+            f"WHERE thread_id IN ({placeholders}) "
+            f"AND last_error IS NOT NULL AND last_error != '' LIMIT ?",
+            (*chunk, MAX_ROWS),
+        ).fetchall()
+        for thread_id, text in rows:
+            found[str(thread_id)] = str(text)
+    return found
+
+
+def _runtimes(
+    connection: sqlite3.Connection, thread_ids: Iterable[str]
+) -> dict[str, dict[str, str]]:
+    """The model and the last error of the given provider sessions."""
+    identifiers = [str(thread_id) for thread_id in thread_ids if str(thread_id)]
+    if not identifiers:
+        return {}
     runtimes: dict[str, dict[str, str]] = {}
-    for thread_id, payload in rows:
-        if not isinstance(payload, str):
-            continue
-        try:
-            document = json.loads(payload)
-        except ValueError:
-            continue
-        if not isinstance(document, Mapping):
-            continue
-        runtimes[str(thread_id)] = {
-            "model": str(document.get("model") or ""),
-            "last_error": str(document.get("lastError") or ""),
-        }
+    for start in range(0, len(identifiers), MAX_BINDINGS):
+        chunk = identifiers[start:start + MAX_BINDINGS]
+        placeholders = ",".join("?" for _ in chunk)
+        rows = connection.execute(
+            f"SELECT thread_id, runtime_payload_json FROM {RUNTIME_TABLE} "
+            f"WHERE thread_id IN ({placeholders}) LIMIT ?",
+            (*chunk, MAX_ROWS),
+        ).fetchall()
+        for thread_id, payload in rows:
+            if not isinstance(payload, str):
+                continue
+            try:
+                document = json.loads(payload)
+            except ValueError:
+                continue
+            if not isinstance(document, Mapping):
+                continue
+            runtimes[str(thread_id)] = {
+                "model": str(document.get("model") or ""),
+                "last_error": str(document.get("lastError") or ""),
+            }
     return runtimes
 
 
-def read_failures(path: str | Path, now: float) -> list[dict[str, Any]]:
+def read_failures(
+    path: str | Path, now: float, *, age_seconds: float | None = None
+) -> list[dict[str, Any]]:
     """The recent failures of the T3 Code state, with their scope.
 
     A failure is reported once per target: the account, the route or the
     model it is about, with the reason code, the fixed label and the
     moment it was observed. A failure that a later successful run has
     superseded is not reported: the route works again.
+
+    The read is bounded by the window: the runs of the window are read
+    newest first, and only their attempts are read with them. The attempts
+    table carries no time of its own, so it is never read on its own.
     """
     moment = float(now)
-    cutoff = moment - MAX_AGE_SECONDS
+    window = MAX_AGE_SECONDS if age_seconds is None else float(age_seconds)
+    cutoff = moment - window
     try:
         connection = _connect(path)
     except RuntimeStateError:
         return []
     try:
-        if not _has_table(connection, ATTEMPTS_TABLE):
+        if not _has_table(connection, RUNS_TABLE):
             return []
-        attempts = _attempts(connection, cutoff)
-        runs = _runs(connection)
-        errors = _errors(connection)
-        runtimes = _runtimes(connection)
+        runs = _recent_runs(connection, cutoff, moment)
+        if not runs:
+            return []
+        attempts = _attempts_of_runs(connection, [run["run_id"] for run in runs])
+        thread_ids = {run["thread_id"] for run in runs if run["thread_id"]}
+        for entries in attempts.values():
+            for attempt in entries:
+                if attempt["thread_id"]:
+                    thread_ids.add(attempt["thread_id"])
+        errors = _errors(connection, thread_ids)
+        runtimes = _runtimes(connection, thread_ids)
     except sqlite3.Error:
         return []
     finally:
@@ -318,43 +390,45 @@ def read_failures(path: str | Path, now: float) -> list[dict[str, Any]]:
     # The last failure and the last success of every target.
     failures: dict[tuple[str, str], dict[str, Any]] = {}
     successes: dict[tuple[str, str], float] = {}
-    for attempt in attempts:
-        observed = attempt.get("observed_at")
-        if observed is None or observed < cutoff:
-            continue
-        instance = attempt["provider_instance_id"]
-        thread_id = attempt["thread_id"]
-        model = attempt["model"] or runs.get(attempt["run_id"], "")
-        runtime = runtimes.get(thread_id) or {}
-        model = model or runtime.get("model", "")
-        status = attempt["status"]
-        if status == "completed":
-            # A successful run of the route clears its failures.
-            for key in _targets_of(instance, model):
-                successes[key] = max(successes.get(key, 0.0), float(observed))
-            continue
-        if status != "failed":
-            continue
-        error_text = (
-            errors.get(thread_id)
-            or runtime.get("last_error")
-            or "the provider run did not finish"
-        )
-        reason = _classify(error_text)
-        scope, target = _scope_of(reason, instance, model, error_text)
-        key = (scope, target)
-        existing = failures.get(key)
-        if existing is not None and float(existing["observed_at"]) >= float(observed):
-            continue
-        failures[key] = {
-            "scope": scope,
-            "target": target,
-            "reason": reason,
-            "label": REASON_LABELS.get(reason, REASON_LABELS[REASON_PROVIDER_ERROR]),
-            "observed_at": float(observed),
-            "model": model,
-            "provider_instance": instance,
-        }
+    for run in runs:
+        entries = attempts.get(run["run_id"]) or []
+        for attempt in entries or [run]:
+            observed = attempt.get("observed_at") or run.get("observed_at")
+            if observed is None or observed < cutoff:
+                continue
+            instance = attempt.get("provider_instance_id") or run["provider_instance_id"]
+            thread_id = attempt.get("thread_id") or run["thread_id"]
+            model = attempt.get("model") or run.get("model") or ""
+            runtime = runtimes.get(thread_id) or {}
+            model = model or runtime.get("model", "")
+            status = attempt.get("status") or run.get("status") or ""
+            if status == "completed":
+                # A successful run of the route clears its failures.
+                for key in _targets_of(instance, model):
+                    successes[key] = max(successes.get(key, 0.0), float(observed))
+                continue
+            if status != "failed":
+                continue
+            error_text = (
+                errors.get(thread_id)
+                or runtime.get("last_error")
+                or "the provider run did not finish"
+            )
+            reason = _classify(error_text)
+            scope, target = _scope_of(reason, instance, model, error_text)
+            key = (scope, target)
+            existing = failures.get(key)
+            if existing is not None and float(existing["observed_at"]) >= float(observed):
+                continue
+            failures[key] = {
+                "scope": scope,
+                "target": target,
+                "reason": reason,
+                "label": REASON_LABELS.get(reason, REASON_LABELS[REASON_PROVIDER_ERROR]),
+                "observed_at": float(observed),
+                "model": model,
+                "provider_instance": instance,
+            }
     # A later successful run of the same target clears the failure.
     for key in list(failures):
         cleared = successes.get(key)

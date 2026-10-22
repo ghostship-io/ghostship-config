@@ -187,6 +187,172 @@ class PublicPullTests(unittest.TestCase):
         )
         self.assertAlmostEqual(aa_pull._cost_in_text(text), 1.48, places=6)
 
+    def _deprecated_records(self, count=53):
+        """The records of the models the leaderboard does not carry."""
+        records = {}
+        for index in range(count):
+            slug = f"deprecated-{index}"
+            records[slug] = {
+                "id": f"id-{slug}",
+                "slug": slug,
+                "model": f"Deprecated {index}",
+                "release_date": "2026-01-20",
+                "indices": {"intelligence_index": 40.0},
+                "cost_per_task": None,
+                "median_performance": 100.0,
+                "prices": {},
+                "deprecated": True,
+            }
+        return records
+
+    def test_the_model_pages_are_read_once_for_the_models_the_catalog_offers(self):
+        # A model page is four megabytes. The pull reads the pages of the
+        # models the live catalog still offers, and it reads each of them
+        # once: the cost of a deprecated model never changes.
+        calls: list[str] = []
+
+        def model_page(slug):
+            calls.append(slug)
+            return {
+                "url": f"https://artificialanalysis.ai/models/{slug}",
+                "http_status": 200,
+                "bytes": 10,
+                "blocked": False,
+                "error": None,
+                "text": (
+                    f"<p>On average, it costs $1.00 per task to evaluate "
+                    f"Model {slug} on the Intelligence Index.</p>"
+                ),
+            }
+
+        records = self._deprecated_records()
+        # The catalog offers three of them.
+        offered = [f"deprecated-{index}" for index in range(3)]
+
+        costs, fetches = aa_pull._read_model_pages(
+            records, {}, model_pages=model_page, offered=offered
+        )
+        self.assertEqual(fetches, 3)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(records["deprecated-0"]["cost_per_task"], 1.0)
+        self.assertEqual(
+            records["deprecated-0"]["cost_basis"], aa_pull.COST_BASIS_MODEL_PAGE
+        )
+        # The fifty models nobody offers are not read at all.
+        self.assertIsNone(records["deprecated-3"]["cost_per_task"])
+
+        # The second run reads nothing: the costs are known.
+        again, second_fetches = aa_pull._read_model_pages(
+            self._deprecated_records(),
+            {},
+            model_pages=model_page,
+            offered=offered,
+            known=costs,
+        )
+        self.assertEqual(second_fetches, 0)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(again["deprecated-0"]["cost"], 1.0)
+
+    def test_a_model_that_is_not_deprecated_is_read_again_at_most_weekly(self):
+        calls: list[str] = []
+
+        def model_page(slug):
+            calls.append(slug)
+            return {
+                "url": f"https://artificialanalysis.ai/models/{slug}",
+                "http_status": 200,
+                "bytes": 10,
+                "blocked": False,
+                "error": None,
+                "text": (
+                    "<p>On average, it costs $2.00 per task to evaluate "
+                    "Model on the Intelligence Index.</p>"
+                ),
+            }
+
+        def one_record():
+            return {
+                "present-but-absent": {
+                    "id": "id-x",
+                    "slug": "present-but-absent",
+                    "model": "Present But Absent",
+                    "release_date": "2026-01-20",
+                    "indices": {"intelligence_index": 40.0},
+                    "cost_per_task": None,
+                    "median_performance": 100.0,
+                    "prices": {},
+                    "deprecated": False,
+                }
+            }
+
+        known = {
+            "present-but-absent": {
+                "cost": 2.0,
+                "fetched_at": 1_800_000_000.0,
+                "deprecated": False,
+            }
+        }
+        # A cost that was read a moment ago is used as it is.
+        _costs, fetches = aa_pull._read_model_pages(
+            one_record(),
+            {},
+            model_pages=model_page,
+            offered=["present-but-absent"],
+            known=known,
+            now=1_800_000_100.0,
+        )
+        self.assertEqual(fetches, 0)
+        self.assertEqual(calls, [])
+        # A cost that is a week old is read again.
+        _costs, fetches = aa_pull._read_model_pages(
+            one_record(),
+            {},
+            model_pages=model_page,
+            offered=["present-but-absent"],
+            known=known,
+            now=1_800_000_000.0 + 8 * 24 * 3600,
+        )
+        self.assertEqual(fetches, 1)
+        self.assertEqual(len(calls), 1)
+
+    def test_the_model_page_reads_are_capped(self):
+        calls: list[str] = []
+
+        def model_page(slug):
+            calls.append(slug)
+            return {
+                "url": f"https://artificialanalysis.ai/models/{slug}",
+                "http_status": 200,
+                "bytes": 10,
+                "blocked": False,
+                "error": None,
+                "text": "<p>no cost here</p>",
+            }
+
+        records = {
+            f"model-{index}": {
+                "id": f"id-{index}",
+                "slug": f"model-{index}",
+                "model": f"Model {index}",
+                "release_date": "2026-01-20",
+                "indices": {"intelligence_index": 40.0},
+                "cost_per_task": None,
+                "median_performance": 100.0,
+                "prices": {},
+                "deprecated": True,
+            }
+            for index in range(50)
+        }
+        _costs, fetches = aa_pull._read_model_pages(
+            records,
+            {},
+            model_pages=model_page,
+            offered=[f"model-{index}" for index in range(50)],
+        )
+        # The pull is capped, so a run never reads a hundred pages.
+        self.assertEqual(fetches, aa_pull.MAX_MODEL_PAGE_FETCHES)
+        self.assertEqual(len(calls), aa_pull.MAX_MODEL_PAGE_FETCHES)
+
     def test_a_deprecated_model_is_published_with_its_flag(self):
         # The model page of a deprecated model carries the model itself, and
         # the page says which model superseded it.
