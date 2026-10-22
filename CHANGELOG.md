@@ -1,9 +1,13 @@
 # Changelog
 
-## [3.17.60] - 2026-10-22
+## [3.17.61] - 2026-10-22
 
 - Pin ghostship-agent f6a415dd (free-pool grant removal and conservative unknown limits). The revision descends from the pinned `cb003746`, so nothing on the pinned line is dropped and no `pin-regression-approved` line is needed. It carries the free-pool fixes: a route's eligibility no longer depends on a workload grant, an expired grant or its dates, so an account with no grant at all is routed whenever its limits have headroom; a route whose provider exposes no applicable window starts on the conservative default window (one request a minute, fifty a day, basis unknown) and is learned up or down from the responses; a workload routes only to pairs its bench admitted, and the package ships the research bench the research workload names; the routes rotate by quality band and remaining headroom, with the least recently used route breaking ties; and a cooldown is a bounded duration in seconds, so a provider-wide park no longer lands in the year 31745. It also reads the rate-limit headers of every provider that sends them (#73). It carries the merged policy tooling (#55), the review gate, role order, agent marker and hygiene policies (#61), and the GitHub coordinator's repository-alias handling (#64), which the organisation rename depends on.
 - Repository references follow the organisation move. The private agent input, its lock owners, the private-source CI import, the auto-upgrade and agent-desktop update remotes, and the desktop promotion target now name the `ghostship-io` organisation and the renamed repositories. The pin moves with the owner: the lock names `f6a415dd`, so its revision, content hash and timestamp change too. The private-source importer reads the owner from one constant, accepts the organisation's namespace and the previous account while a lock still names it, refuses any other owner, and derives the fetch URL from the lock it just validated. The coordinator's repository map, its incident repository and the webhook receiver's allowlist use the canonical names, and a repository alias map keeps existing issue owners, queued deliveries, CI issue mappings and pull request links across the transfer. Local checkout paths, T3 project identifiers, the Actions environment reviewer and the container image registry paths are unchanged.
+
+## [3.17.60] - 2026-10-22
+
+- The SSH command guard's refusals reach the journal. The guard passed the message to `systemd-cat` as an argument, and `systemd-cat` runs its arguments as a command, so every refusal failed to journal and the caller also saw a "Failed to execute" line after the refusal. The message now goes on stdin and the journal tool's own output is dropped.
 
 ## [3.17.59] - 2026-10-22
 
