@@ -810,7 +810,9 @@ class DashboardContractTests(unittest.TestCase):
             for panel in page['panels']:
                 if panel.get('type') == 'text':
                     content = panel['options']['content']
-                    self.assertEqual(content.count('ghostship-ai-usage'), 1)
+                    # Native dashboard links above own navigation; compact
+                    # text panels need not repeat the entire navigation bar.
+                    self.assertLessEqual(content.count('ghostship-ai-usage'), 1)
                     self.assertLessEqual(content.count('/d/ghostship-'), 5)
 
     def test_all_five_pages_have_consistent_direct_navigation_and_source_shapes(self):
@@ -957,6 +959,53 @@ class DashboardContractTests(unittest.TestCase):
 @unittest.skipUnless(os.environ.get('GHOSTSHIP_TEST_VLOGS') and os.environ.get('GHOSTSHIP_TEST_VMETRICS'),
                      'Set GHOSTSHIP_TEST_VLOGS and GHOSTSHIP_TEST_VMETRICS for disposable native-store checks')
 class NativeStoreTests(unittest.TestCase):
+    def test_allowance_cards_keep_identity_pacing_marker_and_parent_gate(self):
+        # Execute the actual repeated-card expressions with Grafana-style regex
+        # escaping. A slash in the composite identity previously made every
+        # card query invalid, while direct un-interpolated probes looked green.
+        import re
+        now = int(time.time())
+        stamp = now * 1000
+        rows = [f'ghostship_ai_provider_coverage{{provider="claude",source="t3"}} 1 {stamp}',
+                f'ghostship_ai_provider_coverage{{provider="cursor",source="t3"}} 1 {stamp}',
+                f'ghostship_ai_provider_capacity_remaining_ratio{{provider="claude"}} 0 {stamp}']
+        for quota, used in [('seven_day', 1.0), ('seven_day_fable', .05)]:
+            labels = f'provider="claude",account="account.test",model="",window="weekly",quota="{quota}",source="t3"'
+            for metric, value in [('used_ratio', used), ('expected_used_ratio', 2/7),
+                                  ('pace_delta_ratio', 2/7-used)]:
+                rows.append(f'ghostship_ai_quota_{metric}{{{labels}}} {value} {stamp}')
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        vm = self.server(os.environ['GHOSTSHIP_TEST_VMETRICS'], tmp.name + '/metrics')
+        urllib.request.urlopen(urllib.request.Request(vm + '/api/v1/import/prometheus',
+            data='\n'.join(rows).encode()), timeout=3).close()
+        urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
+        page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
+        by_id = {panel['id']: panel for panel in page['panels']}
+        identity = 'claude / account.test /  / weekly / seven_day_fable / t3'
+        escaped = re.sub(r'([.*/])', r'\\\1', identity)
+
+        def query(target):
+            expr = target['expr'].replace('$provider', '.*').replace('${allowance:regex}', escaped)
+            with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
+                result = json.load(response)['data']['result']
+            self.assertEqual(len(result), 1, 'Select exactly the full entitlement identity')
+            return float(result[0]['value'][1])
+
+        self.assertAlmostEqual(query(by_id[47]['targets'][0]), .95)
+        segments = [query(target) for target in by_id[48]['targets']]
+        self.assertAlmostEqual(sum(segments), 1.0)
+        self.assertAlmostEqual(sum(segments[:2]) + segments[2]/2, 5/7)
+        self.assertAlmostEqual(query(by_id[49]['targets'][1]), 100*(2/7-.05))
+        self.assertEqual(query(by_id[49]['targets'][2]), 0,
+                         'The shared exhausted weekly blocks the 95%-remaining sublimit')
+        expr = by_id[44]['targets'][0]['expr'].replace('$provider', '.*')
+        with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
+            providers = json.load(response)['data']['result']
+        self.assertEqual({row['metric']['provider']: float(row['value'][1]) for row in providers},
+                         {'claude': 0, 'cursor': -1},
+                         'Exhausted and unknown providers must remain distinct')
+
     def server(self, binary, directory):
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
@@ -1077,6 +1126,7 @@ class NativeStoreTests(unittest.TestCase):
 
     def test_ai_usage_decision_hierarchy_units_and_variables(self):
         page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
+        by_id = {panel['id']: panel for panel in page['panels']}
         titles = {panel['title']: panel for panel in page['panels']}
         winners = titles['Winners by tier']
         detail = titles['Winner detail  /  source, quality, expiry']
@@ -1105,7 +1155,14 @@ class NativeStoreTests(unittest.TestCase):
         self.assertLessEqual(sum(widths.values()), 460)
         # Rows are grouped by tier, never interleaved by position.
         self.assertEqual(winners['options']['sortBy'][0]['displayName'], 'tier')
-        self.assertEqual([v['name'] for v in page['templating']['list']], ['provider'])
+        self.assertEqual([v['name'] for v in page['templating']['list']], ['provider', 'allowance'])
+        allowance = page['templating']['list'][1]
+        self.assertEqual(allowance['hide'], 2)
+        # Repeated cards must select one complete entitlement, including
+        # sources and model scopes which may share a quota/window name.
+        for label in ('provider', 'account', 'model', 'window', 'quota', 'source'):
+            self.assertIn('"' + label + '"', allowance['query'])
+        self.assertEqual(by_id[46]['repeat'], 'allowance')
         candidates = titles['Candidates considered']
         self.assertTrue(all('$provider' in t['expr'] for t in candidates['targets']))
         self.assertLessEqual(len(candidates['targets']), 8)
