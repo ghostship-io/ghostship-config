@@ -401,30 +401,67 @@ class MedianAndMode(unittest.TestCase):
 
 
 class SingleModelAccount(unittest.TestCase):
-    """The written fit rule reaches an account of one model as well.
+    """An account that carries usage in one model is never fitted.
 
-    The rule fits the weights once there are more episodes than models in the
-    mix, so an account that serves one model and had two episodes is fitted
-    too: its budget is the normalised one and its share is weighed by the
-    fitted weight. This test names that reading so it is never a surprise.
+    The weights are fitted only when the episodes of the account involve at
+    least two models with usage and there are more episodes than those models.
+    An account that carries usage in a single model has nothing to share, so
+    its weights stay equal and its budget is the median usage of its episodes
+    in its own unit, exactly like the budget of a route that carries its own
+    limit.
     """
 
-    def test_the_fit_reaches_an_account_of_one_model(self):
-        events = [
-            event("acme", "sonnet", at(0, 8), usage=1000.0),
-            event("acme", "sonnet", at(0, 9), outcome="limit"),
-            event("acme", "sonnet", at(0, 11), usage=0.0),
-            event("acme", "sonnet", at(1, 8), usage=3000.0),
-            event("acme", "sonnet", at(1, 9), outcome="limit"),
-            event("acme", "sonnet", at(1, 11), usage=0.0),
-            event("acme", "sonnet", at(1, 12), usage=500.0),
-        ]
-        result = route(events, at(1, 12, 30))
-        self.assertEqual(result.scope, "unknown")
-        self.assertEqual(result.weights_basis, "fitted")
-        self.assertAlmostEqual(result.weights["sonnet"], 0.0004)
-        self.assertEqual(result.budget, 1.0)
-        self.assertAlmostEqual(result.left, 0.8)
+    def setUp(self):
+        self.events = []
+        for day, usage in enumerate((100.0, 300.0, 200.0)):
+            self.events.append(event("acme", "alpha", at(day, 8), usage=usage))
+            self.events.append(event("acme", "alpha", at(day, 9), outcome="limit"))
+            self.events.append(event("acme", "beta", at(day, 9, 30), outcome="limit"))
+            self.events.append(event("acme", "alpha", at(day, 11), usage=0.0))
+        self.events.append(event("acme", "alpha", at(2, 12), usage=50.0))
+        self.now = at(2, 12, 30)
+
+    def test_the_weights_stay_assumed(self):
+        result = route(self.events, self.now, model="alpha")
+        self.assertEqual(result.scope, "account")
+        self.assertEqual(result.weights_basis, "assumed")
+        self.assertEqual(result.weights["alpha"], 1.0)
+        self.assertEqual(result.weights["beta"], 1.0)
+        self.assertEqual(result.budget, 200.0)
+        self.assertEqual(result.unit, "tokens")
+        self.assertEqual(result.episodes, 3)
+        self.assertAlmostEqual(result.left, 0.75)
+
+
+class TwoModelsTwoEpisodes(unittest.TestCase):
+    """Two models with usage, but no more episodes than models: assumed.
+
+    The fit needs more episodes than the models of the mix, so two episodes
+    of two models keep the equal weights, and the budget is the median of the
+    summed usage of the episodes of the account.
+    """
+
+    def setUp(self):
+        self.events = []
+        for day, (alpha, beta) in enumerate(((100.0, 50.0), (300.0, 100.0))):
+            self.events.append(event("acme", "alpha", at(day, 8), usage=alpha))
+            self.events.append(event("acme", "beta", at(day, 8, 30), usage=beta))
+            self.events.append(event("acme", "alpha", at(day, 9), outcome="limit"))
+            self.events.append(event("acme", "beta", at(day, 9, 30), outcome="limit"))
+            self.events.append(event("acme", "alpha", at(day, 11), usage=0.0))
+        self.events.append(event("acme", "alpha", at(1, 12), usage=60.0))
+        self.events.append(event("acme", "beta", at(1, 12, 5), usage=40.0))
+        self.now = at(1, 12, 30)
+
+    def test_the_weights_stay_assumed(self):
+        result = route(self.events, self.now, model="alpha")
+        self.assertEqual(result.scope, "account")
+        self.assertEqual(result.weights_basis, "assumed")
+        self.assertEqual(result.weights["alpha"], 1.0)
+        self.assertEqual(result.weights["beta"], 1.0)
+        # The median of the summed usage of the two episodes: 150 and 400.
+        self.assertEqual(result.budget, 275.0)
+        self.assertAlmostEqual(result.left, 1.0 - 100.0 / 275.0)
 
 
 class OtherOutcomes(unittest.TestCase):

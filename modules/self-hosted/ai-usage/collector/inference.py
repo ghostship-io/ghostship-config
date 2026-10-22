@@ -40,10 +40,11 @@ The rules, in short:
 * The scope says whether the limit belongs to the model or to the account. A
   scope of `unknown` is computed across the account and labelled unknown.
 * An account-wide budget is shared between the models of the provider, either
-  with equal weights or with weights fitted from the episodes. The fit runs
-  once there are more completed episodes than models with usage in the mix, so
-  an account that serves one model and had more than one episode is fitted as
-  well, and its budget is the normalised one.
+  with equal weights or with weights fitted from the episodes. The weights are
+  fitted only when the episodes of the account involve at least two models with
+  usage and there are more episodes than those models. An account that carries
+  usage in a single model is never fitted: it has nothing to share, and its
+  budget stays the median usage of its episodes in its own unit.
 
 The names, the states and the fields follow the owner rule; the tests in
 `tests/test_ai_usage_inference.py` pin every worked value.
@@ -636,6 +637,11 @@ def _fit_account_weights(group: _Group) -> None:
     equal, and the basis says so. Once there are more episodes the weights
     are fitted, never below zero, so that each episode of the account adds up
     to one budget.
+
+    An account that carries usage in a single model is never fitted: there is
+    nothing to share between the models, and the budget of such an account
+    stays the median usage of its episodes in its own unit, exactly like the
+    budget of a route that carries its own limit.
     """
     models = group.models
     used = [
@@ -643,7 +649,7 @@ def _fit_account_weights(group: _Group) -> None:
         for model in models
         if sum(episode.per_model.get(model, 0.0) for episode in group.completed) > 0
     ]
-    if len(group.completed) > len(used) and used:
+    if len(used) >= 2 and len(group.completed) > len(used):
         rows = [
             [episode.per_model.get(model, 0.0) for model in used]
             for episode in group.completed
