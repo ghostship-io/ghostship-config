@@ -507,7 +507,6 @@ lib.mkIf (config.networking.hostName == "chill-penguin") {
         set +a
       fi
       retirement_dir="/srv/retired-apps/$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ)"
-      retirement_dir="/srv/retired-apps/$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ)"
       masks_removed=false
 
       # Preserve every missing OpenChamber repository before its source tree is
