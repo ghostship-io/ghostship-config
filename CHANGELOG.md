@@ -1,11 +1,15 @@
 # Changelog
 
-## [3.17.81] - 2026-10-22
+## [3.17.82] - 2026-10-22
 
 - The inferred capacity of a route no longer merges the routes that were never refused into the account of the provider. A route that was never refused has no limit of its own: it is measured on its own, with its whole allowance and no pace, and its use never ends the episode of another route. On live data the free routes of the Go provider were refused by nothing and still came out of the account of their paid models, which are refused and never recover.
 - The refusals of a route that never recovered are now evidence for its scope. The scope of a route is read from the episodes of its account group, the open one included, so another model of the provider that works right after the refusal shows that the limit was the model's own. The paid models of the Go provider were refused, never recovered, and the free route of the same provider worked seconds later: they came out as one account with a minute long window and a budget of a few thousand tokens, and they are now the models that were refused, with no window read out of their failures.
 - A refusal that opens the record of a group is the refusal of the group itself, so the episode of the group starts at that refusal. A record that began with a refusal produced no episode at all, because the scan looked for the first refusal after the first use: a route that was refused before it ever came back had no open episode, its scope came out unknown, and it was measured across the account, so the refusal of one model looked like the refusal of the whole provider.
 - The span of an open episode runs from after its refusal to the reading, so the refusal itself is never evidence of the scope by itself. Two routes of a provider that were refused at the same instant have nothing in that span, and the scope of each is unknown.
+
+## [3.17.81] - 2026-10-22
+
+- The owner identity values are supplied by the deployment, not by this repository. The account names and addresses the services log in as (the retired container registry account, the personal Google account the Keep broker verifies, the uptime kuma and ntfy administrator accounts and the account the private inputs were transferred from) are read from a root-owned file outside the repository, `/etc/ghostship/owner-identity.env`, and reach the units through their environment. A missing value fails with a clear message instead of a fallback, and the regression tests pin the same behaviour with synthetic names. The rendered configuration is unchanged once the deployment supplies the values.
 
 ## [3.17.80] - 2026-10-22
 
@@ -878,7 +882,7 @@
 ## [3.15.101] - 2026-10-12
 
 - Pin ghostship-agent 0.18.1: `health` op `types` and `query` over every Health Connect type, Ultrahuman lab biomarkers, full sleep and metrics, Wyze weigh-ins, and health documents with their text (OCR for scans).
-- The MCP container reads health documents only from the owner's "the owner" and "HealthConnect" Drive folders (`GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS`).
+- The MCP container reads health documents only from the owner's own Drive folders and the shared "HealthConnect" folder (`GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS`).
 
 ## [3.15.100] - 2026-10-12
 

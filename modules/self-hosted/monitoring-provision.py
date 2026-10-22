@@ -21,6 +21,21 @@ RETIRED_APP_MONITORS = {
 }
 
 
+def kuma_username(environ=None):
+    """The administrator account name the deployment supplies.
+
+    The name is part of the owner identity file outside this repository. An
+    unset value is a deployment mistake, never a default to fall back to.
+    """
+    environ = os.environ if environ is None else environ
+    username = (environ.get("GHOSTSHIP_KUMA_USERNAME") or "").strip()
+    if not username:
+        raise RuntimeError(
+            "GHOSTSHIP_KUMA_USERNAME is not set; the owner identity file must define it"
+        )
+    return username
+
+
 def is_retired_app_monitor(monitor, current_app_names):
     app_name = RETIRED_APP_MONITORS.get(monitor["name"])
     return (
@@ -105,15 +120,19 @@ def main():
 
     client.connect(os.environ["KUMA_URL"], transports=["polling"])
     try:
+        # The administrator account name is supplied by the deployment outside
+        # this repository; an unset value is a deployment mistake, not a
+        # default to fall back to.
+        username = kuma_username()
         # Query setup state explicitly; startup load can delay the setup event.
         if client.call("needSetup", timeout=20):
-            call("setup", ("the owner", os.environ["KUMA_PASSWORD"]))
+            call("setup", (username, os.environ["KUMA_PASSWORD"]))
         # Kuma establishes an automatic session on connection when auth is off.
         settings_result = client.call("getSettings", timeout=20)
         if not settings_result or not settings_result.get("ok"):
             call(
                 "login",
-                {"username": "the owner", "password": os.environ["KUMA_PASSWORD"]},
+                {"username": username, "password": os.environ["KUMA_PASSWORD"]},
             )
         enforce_access_only_auth(call, os.environ["KUMA_PASSWORD"])
         call("getMonitorList")

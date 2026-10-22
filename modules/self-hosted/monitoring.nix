@@ -184,6 +184,10 @@ in
     systemd.services.podman-ntfy.preStart = ''
       set -euo pipefail
       . ${secrets}
+      # The administrator account name is supplied by the deployment outside
+      # this repository.
+      . /etc/ghostship/owner-identity.env
+      : "''${GHOSTSHIP_NTFY_ADMIN_USER:?GHOSTSHIP_NTFY_ADMIN_USER is not set; the owner identity file must define it}"
       : "''${NTFY_ADMIN_HASH:?}" "''${NTFY_PUBLISH_HASH:?}" "''${NTFY_READER_HASH:?}"
       umask 077
       cat > /run/ghostship-ntfy/server.yml.new <<EOF
@@ -197,7 +201,7 @@ in
       cache-file: /var/lib/ntfy/cache.db
       cache-duration: 72h
       auth-users:
-        - 'the owner:$NTFY_ADMIN_HASH:admin'
+        - '$GHOSTSHIP_NTFY_ADMIN_USER:$NTFY_ADMIN_HASH:admin'
         - 'publisher:$NTFY_PUBLISH_HASH:user'
         - 'android:$NTFY_READER_HASH:user'
       auth-access:
@@ -228,6 +232,9 @@ in
         ExecStart = "${provision}/bin/ghostship-monitoring-provision";
         TimeoutStartSec = "3min";
         UMask = "0077";
+        # The administrator account name is supplied by the deployment outside
+        # this repository.
+        EnvironmentFile = [ "/etc/ghostship/owner-identity.env" ];
       };
     };
     # Attached centrally by notify-coverage.nix: failures to every covered unit,
