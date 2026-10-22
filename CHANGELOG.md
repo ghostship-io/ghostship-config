@@ -2,6 +2,7 @@
 
 ## [3.17.90] - 2026-10-22
 
+- Providers page: the Bulk and Free tables list the ranked winners and the routes that are out, as the concept shows. Live, every tier member followed the winners, so Bulk ran to about thirty rows and scrolled inside its panel; the other members remain in the collapsed "Why this order" rows.
 - Providers page: capacity is read per model, not per tier. The collector publishes a model's capacity once, labelled with its first tier, so the 3D table (asking for tier="3d") showed "Limits unknown" for every model; GPT-6.1-Sol's capacity is labelled frontier.
 - Providers page: Frontier lists Chief then Backup, as the concept shows; the "3D reserve" tag is shown only in Bulk and Free, where the reserve applies; the 3D table lists its winners and the routes that are out.
 
