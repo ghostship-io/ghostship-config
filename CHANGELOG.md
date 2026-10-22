@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.90] - 2026-10-22
+
+- Providers page: the header's "live data … UTC" time is now UTC. Grafana's date format renders in the viewer's own time zone, so the header showed a local time under a UTC label. A small panel helper formats the end time from its UTC fields only.
+
 ## [3.17.89] - 2026-10-22
 
 - Providers page: a provider without a capacity reading sorts below every provider with one, as the page says ("exhausted and unknown last"), whichever series made it appear; before, a provider with only an entitlement reset sorted among the readings.

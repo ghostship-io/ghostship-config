@@ -266,6 +266,37 @@ class ProvidersPageTests(unittest.TestCase):
     def setUpClass(cls):
         cls.page = json.loads(DASHBOARD.read_text(encoding="utf-8"))
 
+    def test_the_as_of_time_is_written_in_utc(self):
+        """The header says UTC, so the time it shows is UTC, whatever the viewer's zone.
+
+        Grafana's `__to:date:` format renders in the viewer's own time zone,
+        so the header showed a local time under a UTC label. The time is now
+        formatted by a helper that reads only the UTC fields of the end time.
+        """
+        header = next(
+            panel for panel, _collapsed in panels(self.page) if panel.get("id") == 200
+        )
+        content = header["options"]["content"]
+        self.assertNotIn("__to:date", content)
+        self.assertIn('{{utcStamp (variable "__to")}} UTC', content)
+        helpers = header["options"]["helpers"]
+        node = shutil.which("node")
+        if node is None:
+            self.fail("node is needed to run the helper")
+        script = (
+            "const helpers = {};\n"
+            "const handlebars = { registerHelper: (name, fn) => { helpers[name] = fn; } };\n"
+            + helpers
+            + "\nconsole.log(helpers.utcStamp(String(Date.UTC(2026, 9, 22, 19, 5, 0))));"
+            + "\nconsole.log(JSON.stringify(helpers.utcStamp('not a time')));"
+        )
+        # A viewer far from UTC: the helper must not use the local zone.
+        env = dict(os.environ, TZ="Etc/GMT+10")
+        result = subprocess.run(
+            [node, "-e", script], capture_output=True, text=True, env=env, check=True
+        )
+        self.assertEqual(result.stdout.split("\n")[:2], ["22 Oct 19:05", '""'])
+
     def test_the_sections_are_in_the_owner_s_order(self):
         """The owner reads the page from the top: Bulk, Free, Frontier, 3D, Providers."""
         titles = [
