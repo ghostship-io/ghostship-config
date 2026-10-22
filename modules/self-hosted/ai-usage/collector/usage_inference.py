@@ -125,17 +125,6 @@ class Inference:
         return sum(len(events) for events in self.records.values())
 
 
-def _unreadable(source: str, reason: str, now: float, duration: float) -> SourceResult:
-    """A source that could not be read, with its fixed reason code."""
-    return SourceResult(
-        source=source,
-        status="unreadable",
-        reason=reason,
-        observed_at=now,
-        duration_s=duration,
-    )
-
-
 def _result(source: str, reading: Mapping[str, Any], now: float, duration: float) -> SourceResult:
     """The status of one record, as the collector publishes it."""
     status = str(reading.get("status") or "unreadable")
@@ -167,10 +156,8 @@ def read_records(
     running, and the routes that reader would have fed keep the basis they
     had.
     """
-    started = time.monotonic()
     results: list[SourceResult] = []
     records: dict[str, list[dict[str, Any]]] = {SOURCE_OPENCODE: [], SOURCE_POOL: []}
-
     def read_opencode() -> tuple[dict[str, Any], float]:
         began = time.monotonic()
         try:
