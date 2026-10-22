@@ -5,7 +5,14 @@ into this bridge. Each firing alert is identified by its rule and labels.
 A new alert publishes to ntfy's security topic. High and critical alerts are
 also batched into one message to the campaign thread, rate limited and sent
 with a stable command id so a retry is applied once. A resolved alert
-publishes once.
+publishes once, and is published again until it is delivered.
+
+The renotify window throttles repeat notices of one occurrence; it never
+silences a new one. A re-fire inside the window is deferred, not dropped: it
+is announced on the first poll after the window has elapsed, if the alert is
+still firing by then, and never more than once per window. A publish that
+fails is retried on the next poll, for a firing alert as well as for a
+resolution; an alert undelivered for a day becomes a dead letter.
 
 Alert labels and annotations derive from logs that attackers influence. They
 are reduced to a safe character set and length, and the thread is told to
@@ -110,11 +117,26 @@ def advance(state, firing, now, config, unavailable=()):
         if fresh:
             record = alerts[alert["fingerprint"]] = {**(record or {}), **alert, "first_seen": now,
                                                      "resolved_at": None}
-        # A fresh alert notifies unless it did recently; an undelivered one retries.
-        if (fresh and due(record.get("ntfy_at"), now, config["ntfy_renotify"])) \
-                or ("ntfy_at" in record and record["ntfy_at"] is None):
+            # A new occurrence supersedes an undelivered resolution of the old one.
+            record.pop("resolved_pending", None)
+            record.pop("resolved_undelivered_since", None)
+        # A fresh alert announces unless it did recently, an undelivered one
+        # retries, and a re-fire inside the renotify window is deferred rather
+        # than dropped: it is announced once the window has elapsed, if the
+        # alert is still firing by then. One announcement per window.
+        last = record.get("ntfy_at")
+        if last is None:
+            announce = True
+        elif fresh:
+            announce = due(last, now, config["ntfy_renotify"])
+            if not announce:
+                record["ntfy_pending"] = True
+        else:
+            announce = bool(record.get("ntfy_pending")) and due(last, now, config["ntfy_renotify"])
+        if announce:
             events.append(("firing", alert))
             record["ntfy_at"] = now
+            record.pop("ntfy_pending", None)
         if fresh:
             pending = state.setdefault("pending", [])
             if (alert["severity"] in T3_SEVERITIES and alert["fingerprint"] not in pending
@@ -128,6 +150,11 @@ def advance(state, firing, now, config, unavailable=()):
         if (key not in current and not record.get("resolved_at") and record["source"] not in unavailable
                 and now - record["last_seen"] >= RESOLVE_AFTER):
             record["resolved_at"] = now
+            # A deferred announcement dies with the alert it was about.
+            record.pop("ntfy_pending", None)
+            events.append(("resolved", record))
+        elif record.get("resolved_at") and record.get("resolved_pending"):
+            # The resolution never reached the topic; publish it again.
             events.append(("resolved", record))
     # Forget alerts resolved over a week ago; keep their delivery times until then.
     for key in [k for k, r in alerts.items() if r.get("resolved_at") and now - r["resolved_at"] > 7 * 86400]:
@@ -270,13 +297,24 @@ def poll(config, state, now):
             print(f"siem alerts: ntfy publish failed: {exc}", file=sys.stderr)
             delivered = False
         record_delivery(health, "ntfy", delivered, now)
-        if not delivered and state_name == "firing":
+        record = state["alerts"].get(alert["fingerprint"])
+        if record is None:
+            continue
+        if not delivered:
             # Retry on the next poll instead of waiting out the renotify window.
-            record = state["alerts"][alert["fingerprint"]]
-            record["ntfy_at"] = None
-            record.setdefault("undelivered_since", now)
-        elif state_name == "firing":
-            state["alerts"][alert["fingerprint"]].pop("undelivered_since", None)
+            # A resolution is retried like a firing alert: it is the only notice
+            # that the alert is over, and a stale "critical" trains the operator
+            # to ignore the topic.
+            if state_name == "firing":
+                record["ntfy_at"] = None
+                record.setdefault("undelivered_since", now)
+            else:
+                record["resolved_pending"] = True
+                record.setdefault("resolved_undelivered_since", now)
+        else:
+            record.pop("undelivered_since", None)
+            record.pop("resolved_pending", None)
+            record.pop("resolved_undelivered_since", None)
     dead_letter(state, now)
     batch = t3_batch(state, now, config)
     if batch:
@@ -300,16 +338,23 @@ def record_delivery(health, channel, delivered, now):
 
 
 def dead_letter(state, now):
-    """Move firing alerts undelivered for a day to state["dead"]; keep them listed."""
+    """Move alerts undelivered for a day to state["dead"]; keep them listed."""
     dead = state.setdefault("dead", {})
     for key in [k for k in dead if k not in state.get("alerts", {})]:
         del dead[key]
     for key, record in state.get("alerts", {}).items():
         since = record.get("undelivered_since")
-        if since is not None and not record.get("resolved_at") and now - since >= DEAD_LETTER_AFTER \
-                and key not in dead:
+        if record.get("resolved_at"):
+            # A resolution that never arrived stays listed until it is delivered.
+            since = record.get("resolved_undelivered_since")
+            if since is not None and now - since >= DEAD_LETTER_AFTER:
+                dead[key] = {"name": record.get("name"), "severity": record.get("severity"), "since": since}
+            elif key in dead:
+                del dead[key]
+            continue
+        if since is not None and now - since >= DEAD_LETTER_AFTER and key not in dead:
             dead[key] = {"name": record.get("name"), "severity": record.get("severity"), "since": since}
-        if key in dead and (record.get("resolved_at") or since is None):
+        if key in dead and since is None:
             del dead[key]
 
 
@@ -339,6 +384,8 @@ def metrics(state, now):
         f"ghostship_siem_bridge_firing_alerts {len(firing)}",
         "# TYPE ghostship_siem_bridge_retry_queue gauge",
         f"ghostship_siem_bridge_retry_queue {sum(1 for r in firing if r.get('ntfy_at', 0) is None)}",
+        "# TYPE ghostship_siem_bridge_resolution_retries gauge",
+        f"ghostship_siem_bridge_resolution_retries {sum(1 for r in alerts.values() if r.get('resolved_pending'))}",
         "# TYPE ghostship_siem_bridge_t3_pending gauge",
         f"ghostship_siem_bridge_t3_pending {len(state.get('pending', []))}",
         "# TYPE ghostship_siem_bridge_dead_letters gauge",
