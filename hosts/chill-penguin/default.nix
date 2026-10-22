@@ -30,6 +30,14 @@ in
   };
   hardware.firmwareCompression = "none";
 
+  # CVE-2026-31431: the running Asahi kernel predates the AF_ALG AEAD fix.
+  # Deny module autoload and explicit modprobe until a patched kernel is running.
+  # This blocks the userspace AEAD interface, not kernel-internal cryptography.
+  boot.blacklistedKernelModules = [ "algif_aead" ];
+  boot.extraModprobeConfig = ''
+    install algif_aead ${pkgs.coreutils}/bin/false
+  '';
+
   # Network
   networking.hostName = "chill-penguin";
   networking.networkmanager.enable = true;

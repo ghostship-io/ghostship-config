@@ -18,6 +18,10 @@ let
   t3codeWorkspace = config.ghostship.agentHost.workspacePath;
   t3codeSecrets = config.ghostship.selfHostedSecrets.projections.t3code.path;
   t3codeSecretsFile = "/run/secrets/t3code.env";
+  # The rootless engine manager must stay in its user-<UID>.slice because Moby
+  # resolves the delegated cgroup controllers through that path. The outer T3
+  # container joins the same slice so one pair of limits bounds both.
+  engineSlice = "user-${toString config.ghostship.t3codeDocker.uid}.slice";
   imageName = "localhost/ghostship-t3code";
   imageTag = "t3code-runtime";
   # Tool maintenance, the idle restart, the server monitor, and the host image
@@ -2804,7 +2808,6 @@ in
       )
       ++ [
         "--systemd=always"
-        "--pids-limit=-1"
         "--stop-timeout=180"
         "--hostname=t3code.ghostship.io"
         "--network=ghostship_net"
@@ -2814,7 +2817,18 @@ in
         "--health-timeout=15s"
         "--health-retries=5"
         "--health-start-period=5m"
-      ];
+      ]
+      ++ (
+        if hardened then
+          [
+            "--pids-limit=${toString config.ghostship.t3code.hardening.containerPidsLimit}"
+            # The container joins the engine's user slice so the aggregate
+            # limits cover the container itself, not only conmon.
+            "--cgroup-parent=${engineSlice}"
+          ]
+        else
+          [ "--pids-limit=-1" ]
+      );
     volumes = [
       # Podman's systemd mode otherwise mounts /tmp as tmpfs. Temporary
       # checkouts must not consume the shared server/provider memory budget.

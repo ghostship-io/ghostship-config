@@ -10,6 +10,7 @@ in
     ./user-nixos.nix
     ./users.nix
     ./secrets.nix
+    ./security-package-fixes.nix
     ../agent-worker
   ];
 

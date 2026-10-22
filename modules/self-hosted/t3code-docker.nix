@@ -112,6 +112,19 @@ let
     TasksMax=infinity
     EOF
   '';
+  # The engine API socket path is writable by the untrusted container, so the
+  # relay authorizes the upstream peer with SO_PEERCRED before it forwards a
+  # single byte. Both scripts share one private libexec directory because the
+  # relay reuses the shared forwarding helpers.
+  apiRelay = pkgs.runCommand "t3code-docker-api-relay"
+    { nativeBuildInputs = [ pkgs.makeWrapper ]; }
+    ''
+      mkdir -p $out/libexec $out/bin
+      install -m 0555 ${../../packages/t3code/docker-sandbox/api-relay.py} $out/libexec/api-relay.py
+      install -m 0555 ${../../packages/t3code/docker-sandbox/ports.py} $out/libexec/ports.py
+      makeWrapper ${pkgs.python3}/bin/python $out/bin/t3code-docker-api-relay \
+        --add-flags "$out/libexec/api-relay.py"
+    '';
   runtimePaths = [
     pkgs.docker
     pkgs.systemd
@@ -506,7 +519,12 @@ in
           requires = [ "user@${uid}.service" ];
           after = [ "user@${uid}.service" ];
           serviceConfig = {
-            ExecStart = "${pkgs.systemd}/lib/systemd/systemd-socket-proxyd ${runtime}/docker.sock";
+            # The relay owns no listener: systemd hands over the socket on
+            # fd 3 and the relay forwards to the engine only after the
+            # upstream peer proved to be the engine UID. A redirected engine
+            # path therefore fails closed instead of reaching a root-only
+            # host socket with the relay's own privileges.
+            ExecStart = "${apiRelay}/bin/t3code-docker-api-relay --upstream ${runtime}/docker.sock --engine-uid ${uid}";
             # A different UID avoids exposing a host-rooted /proc/PID/root to the
             # engine through a relay process with the engine's own UID.
             User = "root";
@@ -521,6 +539,11 @@ in
             ];
             PrivateTmp = true;
             RestrictAddressFamilies = [ "AF_UNIX" ];
+            MemoryMax = "128M";
+            TasksMax = 64;
+            LimitNOFILE = 4096;
+            Restart = "on-failure";
+            RestartSec = 5;
           };
         };
         systemd.sockets.t3code-docker-ports = {

@@ -7,6 +7,12 @@ environment. Keep their existing launchers, credentials, and configuration.
 Do not apply `home/profiles/develop.nix` or run
 `ghostship-agent-maintenance` here; those target the NixOS develop hosts.
 
+Git worktrees share `refs/stash`. Preserve uncommitted work with a private
+patch or a recorded stash object ID; apply that exact object and verify the
+result before any removal. An unqualified `git stash pop` can consume another
+worker's entry even from a different worktree. Leave other workers' entries
+and worktrees untouched.
+
 ## Runtime memory containment
 
 The inner `t3code-server.service` shares a memory cgroup with provider tools.

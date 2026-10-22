@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.31] - 2026-10-21
+
+- Stage opt-in T3 runtime confinement, a peer-checked Docker API relay and aggregate resource ceilings. Candidate workflow acceptance passed; production enablement remains gated.
+- Pin Nix 2.34.9 and Podman 5.8.8 security fixes, register their evaluation checks and record the real sandboxed Nix build results. The configured Podman wrapper also passed its bounded host build and packaged-consumer readback; service-continuity review remains required before activation.
+- Persist the kernel module autoload containment and the daily advisory/update procedure. Containment remains distinct from a patched running kernel.
+
 ## [3.17.30] - 2026-10-21
 
 - Flow collector: a released container address keeps its previous owner for 15 minutes (one collection plus margin), not 24 hours. Gluetun's short-lived benchmark containers reused bazarr's, cloudflared's and flaresolverr's old addresses, and their udp/1337 probes were recorded as new edges for those services. After the grace period an unowned address reports as `lan:<ip>`.
