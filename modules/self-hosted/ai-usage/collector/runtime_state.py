@@ -63,6 +63,11 @@ REASON_LABELS = {
 
 # The markers of an allowance that is spent. The text is only read to pick
 # the code; it is never published.
+#
+# The payment markers are there because a provider that refuses a request
+# with "402 Payment Required" and a spent balance is an exhausted account,
+# not a broken route: every model of that account is unavailable until a
+# later run of it succeeds.
 _USAGE_LIMIT_MARKERS = (
     "usage limit",
     "rate limit",
@@ -70,6 +75,16 @@ _USAGE_LIMIT_MARKERS = (
     "quota exhausted",
     "upgrade for higher limits",
     "add usage credits",
+    "payment required",
+    "usage balance exhausted",
+)
+
+# The status of a refused payment, in the shape a provider writes it: the
+# status code with its name, or the code with the reason it carries. A bare
+# "402" is not a marker: a count of processed items, a line number, or a
+# model id may carry the same three digits without anything being wrong.
+_PAYMENT_STATUS = re.compile(
+    r"\b(?:HTTP|status|code)\D{0,12}402\b|\b402\s+Payment Required\b", re.I
 )
 
 # The markers of a runtime that could not start.
@@ -116,6 +131,21 @@ _INSTANCE_ACCOUNTS = {
     "ollama-cloud": "ollama",
     "ollama": "ollama",
     "openrouter": "openrouter",
+}
+
+# The account of a native provider instance. The instance names the account
+# it serves, and the ranking knows the same names. The OpenCode instance
+# serves several accounts; a model without a prefix is the OpenCode account
+# itself.
+INSTANCE_ACCOUNTS = {
+    "codex": "codex",
+    "claudeAgent": "claude",
+    "grok": "grok",
+    "antigravity": "antigravity",
+    "cursor": "cursor",
+    "pi": "pi",
+    "muse": "muse",
+    "opencode": "opencode",
 }
 
 
@@ -169,6 +199,8 @@ def _classify(text: str) -> str:
     lowered = str(text or "").lower()
     if any(marker in lowered for marker in _USAGE_LIMIT_MARKERS):
         return REASON_ACCOUNT_USAGE_LIMIT
+    if _PAYMENT_STATUS.search(str(text or "")):
+        return REASON_ACCOUNT_USAGE_LIMIT
     if any(marker in lowered for marker in _STARTUP_MARKERS):
         return REASON_ROUTE_STARTUP_FAILED
     if any(marker in lowered for marker in _MODEL_REFUSED_MARKERS):
@@ -176,19 +208,76 @@ def _classify(text: str) -> str:
     return REASON_PROVIDER_ERROR
 
 
-def account_of_model(model: str) -> str:
-    """The account a model of the OpenCode instance is charged to.
+def account_of_model(model: str, instance: str = "") -> str:
+    """The account a model of a provider instance is charged to.
 
     The OpenCode instance serves several accounts, and the model id names
     which one: "ollama-cloud/..." is the Ollama account, "opencode-go/..."
     is the Go subscription, and a model without a prefix is the OpenCode
-    account itself.
+    account itself. A model of another instance is charged to the account
+    that instance serves, so a Grok route is the Grok account and not the
+    OpenCode one.
     """
     text = str(model or "").strip()
     if "/" not in text:
-        return "opencode"
+        if not text:
+            return "opencode"
+        name = str(instance or "")
+        if not name:
+            return "opencode"
+        return INSTANCE_ACCOUNTS.get(name, name)
     prefix, _, _rest = text.partition("/")
     return _INSTANCE_ACCOUNTS.get(prefix, prefix)
+
+
+# The window our own requests are counted in, for a provider that publishes
+# a per-minute limit and does not report it.
+REQUEST_COUNT_SECONDS = 60.0
+
+
+def read_request_counts(
+    path: str | Path, now: float, *, age_seconds: float = REQUEST_COUNT_SECONDS
+) -> dict[str, int]:
+    """The number of requests we made per account in the last window.
+
+    The count is our own: the runs of the T3 Code state inside the window,
+    grouped by the account that was charged for them. It is never a reading
+    of the provider: it counts what we sent, and a provider that publishes a
+    per-minute limit is measured against it.
+    """
+    moment = float(now)
+    cutoff = moment - float(age_seconds)
+    try:
+        connection = _connect(path)
+    except RuntimeStateError:
+        return {}
+    try:
+        if not _has_table(connection, RUNS_TABLE):
+            return {}
+        runs = _recent_runs(connection, cutoff, moment)
+        if not runs:
+            return {}
+        attempts = _attempts_of_runs(connection, [run["run_id"] for run in runs])
+    except sqlite3.Error:
+        return {}
+    finally:
+        connection.close()
+    counts: dict[str, int] = {}
+    for run in runs:
+        for attempt in attempts.get(run["run_id"]) or [run]:
+            observed = attempt.get("observed_at") or run.get("observed_at")
+            if observed is None or observed < cutoff:
+                continue
+            model = attempt.get("model") or run.get("model") or ""
+            account = (
+                account_of_model(model, str(run.get("provider_instance_id") or ""))
+                if model
+                else str(run.get("provider_instance_id") or "")
+            )
+            if not account:
+                continue
+            counts[account] = counts.get(account, 0) + 1
+    return counts
 
 
 def _named_model(text: str) -> str:
@@ -442,7 +531,7 @@ def _scope_of(
 ) -> tuple[str, str]:
     """The scope and the target of a failure."""
     if reason == REASON_ACCOUNT_USAGE_LIMIT:
-        return SCOPE_ACCOUNT, (account_of_model(model) if model else instance)
+        return SCOPE_ACCOUNT, (account_of_model(model, instance) if model else instance)
     if reason == REASON_MODEL_REFUSED:
         named = _named_model(error_text) or model
         return SCOPE_MODEL, (named or instance)
@@ -453,6 +542,6 @@ def _targets_of(instance: str, model: str) -> list[tuple[str, str]]:
     """The keys a successful run clears."""
     targets: list[tuple[str, str]] = [(SCOPE_ROUTE, instance)]
     if model:
-        targets.append((SCOPE_ACCOUNT, account_of_model(model)))
+        targets.append((SCOPE_ACCOUNT, account_of_model(model, instance)))
         targets.append((SCOPE_MODEL, model))
     return targets

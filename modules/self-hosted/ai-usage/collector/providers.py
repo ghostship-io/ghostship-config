@@ -11,7 +11,7 @@ dashboard covers every account in use:
 * Antigravity: Google's quota endpoints, for both the shared family windows
   and the per-model quotas (Gemini included) that T3 merges away.
 * OpenRouter: credits, key usage, and the free-model request allowance.
-* Ollama: the Ollama Cloud usage endpoint.
+* Ollama: the Ollama Cloud usage and balance endpoints.
 
 Every reader is read-only: it never dispatches inference, rotates a
 credential, or changes an account.
@@ -25,9 +25,10 @@ import os
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 import codes
+import published
 from metrics import SourceResult, Sample
 from util import HttpResult, http_request, iso_to_epoch, read_env_file
 
@@ -38,6 +39,7 @@ OPENCODE_GO_USAGE_URL = "https://opencode.ai/zen/go/v1/usage"
 OPENROUTER_CREDITS_URL = "https://openrouter.ai/api/v1/credits"
 OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key"
 OLLAMA_USAGE_URL = "https://ollama.com/api/usage"
+OLLAMA_BALANCE_URL = "https://ollama.com/api/balance"
 ANTIGRAVITY_ENDPOINTS = (
     "https://daily-cloudcode-pa.googleapis.com",
     "https://cloudcode-pa.googleapis.com",
@@ -49,6 +51,50 @@ ANTIGRAVITY_USER_AGENT = (
 
 def _clamp(value: float) -> float:
     return max(0.0, min(1.0, value))
+
+
+# The basis of a window: where its number comes from. A number the provider
+# reported itself, a number its documentation publishes, and a published
+# limit counted against our own requests are never mixed.
+BASIS_PROVIDER = "provider_reported"
+BASIS_PROVIDER_DERIVED = "provider_reported+derived_length"
+BASIS_PUBLISHED_COUNTED = "published+counted"
+
+
+def _next_utc_midnight(now: float) -> float:
+    """The next midnight UTC, as epoch seconds."""
+    from datetime import datetime, timedelta, timezone
+
+    moment = datetime.fromtimestamp(float(now), tz=timezone.utc)
+    midnight = moment.replace(hour=0, minute=0, second=0, microsecond=0)
+    return (midnight + timedelta(days=1)).timestamp()
+
+
+def _load_window_state(path: str | os.PathLike[str] | None) -> dict[str, Any]:
+    """Read the remembered window observations, tolerating a missing file."""
+    if not path:
+        return {}
+    try:
+        document = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return document if isinstance(document, dict) else {}
+
+
+def _save_window_state(path: str | os.PathLike[str] | None, state: Mapping[str, Any]) -> None:
+    """Remember the window observations for the next collection."""
+    if not path:
+        return
+    target = Path(path)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(target.name + ".tmp")
+        temporary.write_text(
+            json.dumps(dict(state), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(temporary, target)
+    except OSError:
+        pass
 
 
 def _quota_sample(
@@ -571,9 +617,29 @@ def _merge_models(models: dict[str, dict[str, Any]], body: Any) -> None:
 
 
 # ----------------------------------------------------------- OpenRouter
+# The published per-minute allowance of the OpenRouter free models. The
+# documentation states it; the provider does not report it on the key
+# endpoint, and it only appears on the headers of a refused request. The
+# number is a published limit, and our own requests are counted against it.
+OPENROUTER_FREE_REQUESTS_PER_MINUTE = published.OPENROUTER_FREE_REQUESTS_PER_MINUTE
+OPENROUTER_MINUTE_SECONDS = 60.0
+OPENROUTER_DAILY_SECONDS = 86400.0
+
+
 def read_openrouter(
-    env_path: str | os.PathLike[str], now: float, http: HttpCall = http_request
+    env_path: str | os.PathLike[str],
+    now: float,
+    http: HttpCall = http_request,
+    requests_last_minute: int | None = None,
 ) -> SourceResult:
+    """Read the OpenRouter account: its credits, its key usage, and its windows.
+
+    The free models of the account share one allowance: the number of free
+    model requests the key may make in the current UTC day. The key endpoint
+    reports how many of them are left, and the day ends at midnight UTC.
+    The per-minute limit is published rather than reported, so it is counted
+    against our own requests and it is marked as such.
+    """
     started = time.monotonic()
     source = "openrouter"
     key = read_env_file(env_path).get("OPENROUTER_API_KEY", "")
@@ -595,6 +661,7 @@ def read_openrouter(
             duration_s=time.monotonic() - started,
         )
     samples: list[Sample] = []
+    windows: list[dict[str, Any]] = []
     credit_body = (credits.json() or {}).get("data") if credits.ok else None
     if isinstance(credit_body, dict):
         total = credit_body.get("total_credits")
@@ -650,6 +717,14 @@ def read_openrouter(
                             float(value),
                         )
                     )
+            daily = _openrouter_daily_window(free, now)
+            if daily is not None:
+                windows.append(daily)
+                samples.extend(_window_samples(daily))
+    minute = _openrouter_minute_window(now, requests_last_minute)
+    if minute is not None:
+        windows.append(minute)
+        samples.extend(_window_samples(minute))
     for sample in list(samples):
         if sample[0] == "ghostship_ai_account_amount":
             samples.append(
@@ -666,7 +741,99 @@ def read_openrouter(
         metrics=samples,
         observed_at=now,
         duration_s=time.monotonic() - started,
+        windows=windows,
     )
+
+
+def _window_samples(window: Mapping[str, Any]) -> list[Sample]:
+    """The quota samples of one measured window."""
+    labels = {
+        "provider": window["provider"],
+        "account": window["account"],
+        "model": window["model"],
+        "window": window["kind"],
+        "quota": window["quotaId"],
+        "source": window["source"],
+    }
+    samples: list[Sample] = [
+        ("ghostship_ai_quota_used_ratio", dict(labels), float(window["usedRatio"]))
+    ]
+    if window.get("resetEpoch") is not None:
+        samples.append(
+            ("ghostship_ai_quota_reset_timestamp_seconds", dict(labels), float(window["resetEpoch"]))
+        )
+    samples.append(
+        ("ghostship_ai_quota_observed_timestamp_seconds", dict(labels), float(window["observedAtEpoch"]))
+    )
+    samples.append(("ghostship_ai_quota_state", {**labels, "state": "measured"}, 1.0))
+    return samples
+
+
+def _openrouter_daily_window(
+    free: Mapping[str, Any], now: float
+) -> dict[str, Any] | None:
+    """The daily allowance of the free models, as a window.
+
+    The counter of the provider counts every free model request of the day,
+    and the limit is the allowance of the tier, so the share of the window
+    that is left is the remaining share of the limit. A counter above the
+    limit means the allowance is spent.
+    """
+    limit = free.get("limit")
+    remaining = free.get("remaining")
+    used = free.get("used")
+    if not isinstance(limit, (int, float)) or isinstance(limit, bool) or float(limit) <= 0.0:
+        return None
+    if not isinstance(remaining, (int, float)) or isinstance(remaining, bool):
+        return None
+    share = 1.0 - float(remaining) / float(limit)
+    if isinstance(used, (int, float)) and not isinstance(used, bool) and float(used) > float(limit):
+        # The counter is above the allowance: the day is spent.
+        share = 1.0
+    return {
+        "provider": "openrouter",
+        "account": "default",
+        "model": "*",
+        "kind": "daily",
+        "quotaId": "free-models-per-day",
+        "usedRatio": _clamp(share),
+        # The counter covers the current UTC day, so the day ends at the next
+        # midnight UTC.
+        "resetEpoch": _next_utc_midnight(now),
+        "durationSeconds": OPENROUTER_DAILY_SECONDS,
+        "source": "openrouter",
+        "observedAtEpoch": now,
+        "basis": BASIS_PROVIDER,
+    }
+
+
+def _openrouter_minute_window(
+    now: float, requests_last_minute: int | None
+) -> dict[str, Any] | None:
+    """The published per-minute allowance of the free models.
+
+    The provider does not report this limit on the key endpoint, so the
+    number is the published one and the usage is our own count of the
+    requests we made in the last minute. It is a published limit counted
+    against our own requests, never a reading of the provider.
+    """
+    if requests_last_minute is None:
+        return None
+    counted = max(0, int(requests_last_minute))
+    share = counted / float(OPENROUTER_FREE_REQUESTS_PER_MINUTE)
+    return {
+        "provider": "openrouter",
+        "account": "default",
+        "model": "*",
+        "kind": "minute",
+        "quotaId": "free-models-per-minute",
+        "usedRatio": _clamp(share),
+        "resetEpoch": float(now) + OPENROUTER_MINUTE_SECONDS,
+        "durationSeconds": OPENROUTER_MINUTE_SECONDS,
+        "source": "openrouter",
+        "observedAtEpoch": now,
+        "basis": BASIS_PUBLISHED_COUNTED,
+    }
 
 
 # --------------------------------------------------------------- Ollama
@@ -674,6 +841,26 @@ def read_openrouter(
 # session window is the one a lockout names: the provider refuses the
 # account with "you have reached your session usage limit".
 OLLAMA_WINDOWS = ("session", "weekly")
+
+# The length of the weekly window. The weekly allowance resets on Monday at
+# 00:00 UTC, so the window is a week long.
+OLLAMA_WEEKLY_SECONDS = 7 * 86400.0
+
+# The length of the session window while its cadence is unknown. The
+# provider publishes no length for it, so this is a derived fallback and it
+# is marked as derived: the real length is learned from the step between two
+# successive resets.
+OLLAMA_SESSION_SECONDS = 86400.0
+
+# The bounds a learned session length has to sit in. A step that is not a
+# plausible window length is not a length.
+OLLAMA_MIN_WINDOW_SECONDS = 60.0
+OLLAMA_MAX_WINDOW_SECONDS = 90 * 86400.0
+
+# The file that remembers the reset instants of the Ollama windows, so the
+# length of a session window can be learned from the step between two
+# successive resets. It holds those instants and nothing else.
+OLLAMA_WINDOW_STATE_FILE = "/var/lib/ghostship-ai-usage/ollama-windows.json"
 
 # The fields the usage endpoint may publish for a window. The endpoint is
 # the provider's own, and its shape is not ours to invent: a field that is
@@ -742,8 +929,20 @@ def _ollama_window_reading(
 
 
 def read_ollama(
-    env_path: str | os.PathLike[str], now: float, http: HttpCall = http_request
+    env_path: str | os.PathLike[str],
+    now: float,
+    http: HttpCall = http_request,
+    state_path: str | os.PathLike[str] | None = None,
 ) -> SourceResult:
+    """Read the Ollama Cloud account: its request counters and its windows.
+
+    The account has a session window and a weekly window, and the balance
+    endpoint is what reports them: the share of the window that is left and
+    the instant it resets. The length of the weekly window is a week. The
+    provider publishes no length for the session window, so it is learned
+    from the step between two successive resets, and it is marked as derived
+    until it is known.
+    """
     started = time.monotonic()
     source = "ollama"
     key = read_env_file(env_path).get("OLLAMA_API_KEY", "")
@@ -758,12 +957,14 @@ def read_ollama(
     samples: list[Sample] = []
     windows: list[dict] = []
     failures = 0
+    usage_body: Any = {}
     for window, range_value in (("24h", "24h"), ("7d", "7d"), ("30d", "30d")):
         response = http(f"{OLLAMA_USAGE_URL}?range={range_value}", headers=headers)
         if not response.ok:
             failures += 1
             continue
         body = response.json() or {}
+        usage_body = body
         totals = body.get("totals") if isinstance(body, dict) else None
         totals = totals if isinstance(totals, dict) else {}
         requests = totals.get("request_count")
@@ -785,12 +986,22 @@ def read_ollama(
                     now,
                 )
             )
-    # The session and the weekly window of the account. The provider names
-    # them in its own reading, and a window it does not describe is
+    # The session and the weekly window of the account. The balance
+    # endpoint is what reports them: the share of the window that is left
+    # and the instant it resets. A window the endpoint does not describe is
     # published as unknown: the provider stays visible, and the lockout it
     # reports is what makes the route unavailable.
+    previous = _load_window_state(state_path)
+    balance = http(OLLAMA_BALANCE_URL, headers=headers)
+    measured: dict[str, dict[str, Any]] = {}
+    if balance.ok:
+        measured = {
+            reading["kind"]: reading
+            for reading in _ollama_balance_windows(balance.json() or {}, now, previous)
+        }
+    else:
+        failures += 1
     for window in OLLAMA_WINDOWS:
-        used, limit, reset = _ollama_window_reading(body, window)
         labels = {
             "provider": "ollama",
             "account": "default",
@@ -799,42 +1010,38 @@ def read_ollama(
             "quota": window,
             "source": source,
         }
-        if used is None:
-            # The window exists, its number is unknown. It is published as
-            # an unknown state and it does not gate the route: an unknown
-            # reading is not evidence that the account is exhausted.
-            samples.append(
-                ("ghostship_ai_quota_state", {**labels, "state": "unknown"}, 1.0)
-            )
-            windows.append(
-                {
-                    "provider": "ollama",
-                    "account": "default",
-                    "model": "*",
-                    "kind": window,
-                    "quotaId": window,
-                    "usedRatio": None,
-                    "resetEpoch": reset,
-                    "durationSeconds": None,
-                    "source": source,
-                    "observedAtEpoch": now,
-                    # The window does not constrain the route on its own: the
-                    # account's lockout is observed, not inferred.
-                    "gating": False,
-                }
-            )
-            continue
-        samples.append(("ghostship_ai_quota_used_ratio", labels, _clamp(used)))
-        if reset is not None:
-            samples.append(
-                ("ghostship_ai_quota_reset_timestamp_seconds", labels, reset)
-            )
-        samples.append(
-            ("ghostship_ai_quota_observed_timestamp_seconds", labels, now)
-        )
-        samples.append(("ghostship_ai_quota_state", {**labels, "state": "measured"}, 1.0))
-        windows.append(
-            {
+        reading = measured.get(window)
+        if reading is None:
+            # The balance endpoint did not describe the window. The legacy
+            # reading of the usage endpoint is tried once, and a window that
+            # still has no number stays unknown.
+            used, _limit, reset = _ollama_window_reading(usage_body, window)
+            if used is None:
+                # The window exists, its number is unknown. It is published as
+                # an unknown state and it does not gate the route: an unknown
+                # reading is not evidence that the account is exhausted.
+                samples.append(
+                    ("ghostship_ai_quota_state", {**labels, "state": "unknown"}, 1.0)
+                )
+                windows.append(
+                    {
+                        "provider": "ollama",
+                        "account": "default",
+                        "model": "*",
+                        "kind": window,
+                        "quotaId": window,
+                        "usedRatio": None,
+                        "resetEpoch": reset,
+                        "durationSeconds": None,
+                        "source": source,
+                        "observedAtEpoch": now,
+                        # The window does not constrain the route on its own: the
+                        # account's lockout is observed, not inferred.
+                        "gating": False,
+                    }
+                )
+                continue
+            reading = {
                 "provider": "ollama",
                 "account": "default",
                 "model": "*",
@@ -845,8 +1052,20 @@ def read_ollama(
                 "durationSeconds": None,
                 "source": source,
                 "observedAtEpoch": now,
+                "basis": BASIS_PROVIDER,
             }
+        samples.append(("ghostship_ai_quota_used_ratio", labels, reading["usedRatio"]))
+        if reading.get("resetEpoch") is not None:
+            samples.append(
+                ("ghostship_ai_quota_reset_timestamp_seconds", labels, reading["resetEpoch"])
+            )
+        samples.append(
+            ("ghostship_ai_quota_observed_timestamp_seconds", labels, now)
         )
+        samples.append(("ghostship_ai_quota_state", {**labels, "state": "measured"}, 1.0))
+        windows.append(reading)
+    if state_path:
+        _save_window_state(state_path, _ollama_window_state(windows, previous))
     if not samples:
         return SourceResult(
             source=source,
@@ -863,3 +1082,121 @@ def read_ollama(
         duration_s=time.monotonic() - started,
         windows=windows,
     )
+
+
+def _ollama_balance_windows(
+    body: Any, now: float, previous: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """The session and the weekly window of the Ollama Cloud account.
+
+    The balance endpoint publishes the share of the window that is left and
+    the instant it resets. The used share is the rest of it. The length of
+    the weekly window is a week; the length of the session window is learned
+    from the step between two successive resets, because the provider
+    publishes none.
+    """
+    if not isinstance(body, Mapping):
+        return []
+    included = body.get("included")
+    included = included if isinstance(included, Mapping) else {}
+    published = _ollama_published_length(included)
+    windows: list[dict[str, Any]] = []
+    for window in OLLAMA_WINDOWS:
+        entry = included.get(window)
+        if not isinstance(entry, Mapping):
+            continue
+        remaining = entry.get("remaining_percent")
+        if not isinstance(remaining, (int, float)) or isinstance(remaining, bool):
+            continue
+        used = _clamp(1.0 - float(remaining) / 100.0)
+        reset = iso_to_epoch(entry.get("resets_at"))
+        duration, basis = _ollama_window_length(window, reset, published, previous)
+        windows.append(
+            {
+                "provider": "ollama",
+                "account": "default",
+                "model": "*",
+                "kind": window,
+                "quotaId": window,
+                "usedRatio": used,
+                "resetEpoch": reset,
+                "durationSeconds": duration,
+                "source": "ollama",
+                "observedAtEpoch": now,
+                "basis": basis,
+            }
+        )
+    return windows
+
+
+def _ollama_published_length(included: Mapping[str, Any]) -> float | None:
+    """The length of the allowance, when the provider publishes its period."""
+    period = included.get("period")
+    if not isinstance(period, Mapping):
+        return None
+    start = iso_to_epoch(period.get("from"))
+    end = iso_to_epoch(period.get("until"))
+    if start is None or end is None or end <= start:
+        return None
+    return float(end - start)
+
+
+def _ollama_window_length(
+    window: str,
+    reset: float | None,
+    published: float | None,
+    previous: Mapping[str, Any],
+) -> tuple[float | None, str]:
+    """The length of one Ollama window, and the basis of that length.
+
+    The weekly window resets on Monday, so it is a week long. The session
+    window publishes no length: the step between two successive resets is
+    what measures it, and until two resets have been seen the length is
+    derived, never measured.
+    """
+    if window == "weekly":
+        return OLLAMA_WEEKLY_SECONDS, BASIS_PROVIDER
+    known = previous.get(window) if isinstance(previous, Mapping) else None
+    known = known if isinstance(known, Mapping) else {}
+    last_reset = known.get("reset_at")
+    if (
+        reset is not None
+        and isinstance(last_reset, (int, float))
+        and not isinstance(last_reset, bool)
+        and float(reset) > float(last_reset)
+    ):
+        step = float(reset) - float(last_reset)
+        if OLLAMA_MIN_WINDOW_SECONDS <= step <= OLLAMA_MAX_WINDOW_SECONDS:
+            # Two successive resets: the step between them is the length of
+            # the session window.
+            return step, BASIS_PROVIDER_DERIVED
+    duration = known.get("duration_seconds")
+    if isinstance(duration, (int, float)) and not isinstance(duration, bool):
+        if OLLAMA_MIN_WINDOW_SECONDS <= float(duration) <= OLLAMA_MAX_WINDOW_SECONDS:
+            # The window has not reset since it was measured: its length is
+            # the one that was measured then.
+            return float(duration), BASIS_PROVIDER_DERIVED
+    if published is not None:
+        return published, BASIS_PROVIDER
+    return OLLAMA_SESSION_SECONDS, BASIS_PROVIDER_DERIVED
+
+
+def _ollama_window_state(
+    windows: Iterable[Mapping[str, Any]], previous: Mapping[str, Any]
+) -> dict[str, Any]:
+    """The reset instants and the lengths of the windows, for the next read."""
+    state: dict[str, Any] = {}
+    for window in windows:
+        kind = str(window.get("kind") or "")
+        if kind not in OLLAMA_WINDOWS:
+            continue
+        reset = window.get("resetEpoch")
+        duration = window.get("durationSeconds")
+        state[kind] = {
+            "reset_at": float(reset) if isinstance(reset, (int, float)) else None,
+            "duration_seconds": (
+                float(duration) if isinstance(duration, (int, float)) else None
+            ),
+        }
+    return state
+
