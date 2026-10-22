@@ -452,6 +452,7 @@ def quality_score(
     aa_cache: Mapping[str, Any] | None,
     provider: str,
     model: str,
+    options: Any = None,
 ) -> float | None:
     """The measured Artificial Analysis intelligence index, or None.
 
@@ -464,7 +465,7 @@ def quality_score(
     if aa_cache.get("status") != "ok":
         return None
     binding = aa_bind.resolve(
-        aa_cache.get("records") or (), provider, model
+        aa_cache.get("records") or (), provider, model, options=options
     )
     if binding.get("state") != "measured":
         return None
@@ -1152,6 +1153,7 @@ def rank_models(
     usage_tokens: Mapping[tuple[str, str], float] | None = None,
     three_d_scores: Mapping[tuple[str, str], Any] | None = None,
     aa_cache: Mapping[str, Any] | None = None,
+    native_models: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
     exclude_providers: Mapping[str, Iterable[str]] | None = None,
     free_route_accounts: Iterable[str] | None = None,
     now: float = 0.0,
@@ -1264,7 +1266,13 @@ def rank_models(
                 remaining is not None and remaining > MIN_REMAINING
             )
 
-        quality = quality_score(aa_cache, provider, model)
+        native_entry = (native_models or {}).get((provider, model)) or {}
+        quality = quality_score(
+            aa_cache,
+            provider,
+            model,
+            options=native_entry.get("options") if isinstance(native_entry, Mapping) else None,
+        )
 
         catalog_entry = _catalog_entry(catalog, provider, model)
         released = _release_epoch(catalog_entry)

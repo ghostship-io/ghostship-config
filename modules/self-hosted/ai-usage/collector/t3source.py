@@ -237,7 +237,19 @@ def _model_options(model: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         value = descriptor.get("currentValue")
         if isinstance(value, (str, bool, int, float)):
-            options.append({"id": identifier, "currentValue": value})
+            option: dict[str, Any] = {"id": identifier, "currentValue": value}
+            for key in ("values", "allowed", "allowedValues", "choices", "enum"):
+                allowed = descriptor.get(key)
+                if isinstance(allowed, (list, tuple)) and 0 < len(allowed) <= 64:
+                    cleaned = [
+                        item
+                        for item in allowed
+                        if isinstance(item, (str, int, float, bool))
+                    ]
+                    if cleaned:
+                        option["values"] = cleaned
+                        break
+            options.append(option)
     return options
 
 
