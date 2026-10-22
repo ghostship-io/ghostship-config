@@ -158,5 +158,49 @@ class OutcomeMappingTests(PoolReaderTestCase):
         self.assertIsNone(event["window_hint"])
 
 
+class MatchingTests(PoolReaderTestCase):
+    """An attempt takes the reservation of its route, in time order."""
+
+    def test_two_attempts_of_one_job_on_one_route_take_two_reservations(self):
+        reading = self.read()
+        first = self.event(reading, 1799994500)
+        second = self.event(reading, 1799994600)
+        self.assertEqual(first["outcome"], "other")
+        self.assertEqual(first["usage"], 0)
+        self.assertEqual(second["outcome"], "success")
+        self.assertEqual(second["usage"], 220)
+
+    def test_failed_attempts_contribute_no_usage(self):
+        reading = self.read()
+        events = [
+            event
+            for event in reading["events"]
+            if event["at"] in (1799994200, 1799994300, 1799994400)
+        ]
+        self.assertEqual(len(events), 3)
+        # Each of the three failures booked 5994 + 1024 before the dispatch.
+        # The estimate is not consumption, so the three contribute nothing.
+        self.assertEqual([event["usage"] for event in events], [0, 0, 0])
+        # The reading's usage is the two successes (150 + 220) and the two
+        # successes that are outside the reading window.
+        self.assertEqual(sum(event["usage"] or 0 for event in reading["events"]), 14406)
+
+    def test_attempt_without_a_reservation_is_counted_and_not_emitted(self):
+        reading = self.read()
+        self.assertEqual(reading["counts"]["attempts_without_reservation"], 1)
+        self.assertNotIn(1799995100, [event["at"] for event in reading["events"]])
+
+    def test_the_reading_counts_what_it_covered(self):
+        reading = self.read()
+        self.assertEqual(reading["status"], "ok")
+        self.assertEqual(reading["reason"], "ok")
+        self.assertEqual(reading["counts"]["attempts_read"], 17)
+        self.assertEqual(reading["counts"]["attempts_without_reservation"], 1)
+        self.assertEqual(
+            reading["counts"]["outcomes"], {"success": 4, "limit": 3, "other": 9}
+        )
+        self.assertEqual(len(reading["events"]), 16)
+
+
 if __name__ == "__main__":
     unittest.main()

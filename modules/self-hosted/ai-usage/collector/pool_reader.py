@@ -42,12 +42,14 @@ The contract is fixed:
         ],
         "counts": {
             "attempts_read": <int>,
+            "attempts_without_reservation": <int>,
             "outcomes": {"success": <int>, "limit": <int>, "other": <int>},
         },
     }
 
-`attempts_read` counts the attempts on the job receipts, and `outcomes`
-counts the emitted events. An attempt that cannot be placed is counted and
+`attempts_read` counts the attempts on the job receipts,
+`attempts_without_reservation` counts the attempts that had no reservation
+to pair with, and `outcomes` counts the emitted events. An attempt that cannot be placed is counted and
 not emitted: a reading never invents an event.
 """
 
@@ -123,6 +125,7 @@ RESERVATION_OUTPUT = 6
 def _empty_counts() -> dict[str, Any]:
     return {
         "attempts_read": 0,
+        "attempts_without_reservation": 0,
         "outcomes": {outcome: 0 for outcome in OUTCOMES},
     }
 
@@ -285,6 +288,7 @@ def read_events(path: str | os.PathLike[str], now: float) -> dict[str, Any]:
                 index = matched.get(route, 0)
                 rows = by_route.get(route) or []
                 if index >= len(rows):
+                    counts["attempts_without_reservation"] += 1
                     continue
                 matched[route] = index + 1
                 event = _attempt_event(attempt, rows[index])
