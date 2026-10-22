@@ -14,6 +14,7 @@ Every record in this file is synthetic and lives in a temporary directory.
 No live database is opened, and the only repository file that is read is
 the committed fixture of the pool ledger.
 """
+import importlib.util
 import json
 import os
 import shutil
@@ -31,8 +32,30 @@ if str(COLLECTOR) not in sys.path:
 
 import catalog as catalog_module  # noqa: E402
 import main  # noqa: E402
-import usage_inference  # noqa: E402
 from metrics import SourceResult  # noqa: E402
+
+_MODULES: dict[str, object] = {}
+
+
+def load(name, file):
+    """A collector module, loaded on demand.
+
+    The module is loaded inside the test, so a checkout without it fails
+    every test with the same clear error instead of hiding the whole file
+    behind one import failure.
+    """
+    if name not in _MODULES:
+        spec = importlib.util.spec_from_file_location(name, COLLECTOR / file)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        _MODULES[name] = module
+    return _MODULES[name]
+
+
+def usage():
+    """The wiring between the records and the inference."""
+    return load("ai_usage_wiring_usage", "usage_inference.py")
 
 # Monday 2026-01-05 00:00 UTC. Every case of a day uses this clock.
 DAY0 = 1767571200.0
@@ -135,7 +158,7 @@ class WiringTestCase(unittest.TestCase):
     def infer(self, records=(), routes=(), ledger=None, now=NOW):
         """Read the records, put them on the routes, and infer."""
         database = build_database(self.directory, list(records))
-        return usage_inference.read_and_infer(
+        return usage().read_and_infer(
             now,
             opencode_db=database,
             events_cache=self.cache,
@@ -474,7 +497,7 @@ class UnreadableTests(WiringTestCase):
     """A record that cannot be read never fails the run."""
 
     def test_both_records_unreadable_leave_the_routes_unknown(self):
-        inferred = usage_inference.read_and_infer(
+        inferred = usage().read_and_infer(
             NOW,
             opencode_db=os.path.join(self.directory, "absent.db"),
             events_cache=self.cache,
@@ -494,7 +517,7 @@ class UnreadableTests(WiringTestCase):
         self.assertEqual(unknown[0]["reason"], "no_window")
 
     def test_the_source_status_is_published_with_the_readers_reason(self):
-        inferred = usage_inference.read_and_infer(
+        inferred = usage().read_and_infer(
             NOW,
             opencode_db=os.path.join(self.directory, "absent.db"),
             events_cache=self.cache,
