@@ -191,6 +191,56 @@ def account_of_model(model: str) -> str:
     return _INSTANCE_ACCOUNTS.get(prefix, prefix)
 
 
+# The window our own requests are counted in, for a provider that publishes
+# a per-minute limit and does not report it.
+REQUEST_COUNT_SECONDS = 60.0
+
+
+def read_request_counts(
+    path: str | Path, now: float, *, age_seconds: float = REQUEST_COUNT_SECONDS
+) -> dict[str, int]:
+    """The number of requests we made per account in the last window.
+
+    The count is our own: the runs of the T3 Code state inside the window,
+    grouped by the account that was charged for them. It is never a reading
+    of the provider: it counts what we sent, and a provider that publishes a
+    per-minute limit is measured against it.
+    """
+    moment = float(now)
+    cutoff = moment - float(age_seconds)
+    try:
+        connection = _connect(path)
+    except RuntimeStateError:
+        return {}
+    try:
+        if not _has_table(connection, RUNS_TABLE):
+            return {}
+        runs = _recent_runs(connection, cutoff, moment)
+        if not runs:
+            return {}
+        attempts = _attempts_of_runs(connection, [run["run_id"] for run in runs])
+    except sqlite3.Error:
+        return {}
+    finally:
+        connection.close()
+    counts: dict[str, int] = {}
+    for run in runs:
+        for attempt in attempts.get(run["run_id"]) or [run]:
+            observed = attempt.get("observed_at") or run.get("observed_at")
+            if observed is None or observed < cutoff:
+                continue
+            model = attempt.get("model") or run.get("model") or ""
+            account = (
+                account_of_model(model)
+                if model
+                else str(run.get("provider_instance_id") or "")
+            )
+            if not account:
+                continue
+            counts[account] = counts.get(account, 0) + 1
+    return counts
+
+
 def _named_model(text: str) -> str:
     """The model a provider's refusal names, or the empty string."""
     match = re.search(r'"model"\s*:\s*"([^"]+)"', str(text or ""))

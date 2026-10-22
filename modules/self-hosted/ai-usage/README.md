@@ -42,7 +42,7 @@ that cannot be read reports a status; it never reports a healthy zero.
 | `grok` | The credit billing of the Grok CLI account: used share of the current period and the period end | `cli-chat-proxy.grok.com`, with the Grok CLI credential |
 | `opencode-go` | The Go subscription windows: rolling (session), weekly and monthly used shares, their resets, and the status the provider reports | `opencode.ai/zen/go/v1/usage`, with the credential OpenCode itself holds |
 | `antigravity` | Both quota views Google exposes: the shared family windows (5-hour, weekly, shared) and the per-model quotas that T3 merges away | Google's `cloudcode-pa` quota endpoints, with the stored account token |
-| `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag and the free-model request allowance | `openrouter.ai` credits and key endpoints |
+| `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag, the free-model allowance as a daily window, and the published per-minute limit counted against our own requests | `openrouter.ai` credits and key endpoints, plus the T3 Code state for the count |
 | `ollama` | The request counts of the Ollama Cloud account per window, and the session and the weekly window of the account | `ollama.com/api/usage` and `ollama.com/api/balance` |
 | `free_pool` | The free inference pool: the provider states, the paged model catalog with geography, availability, selection, cooldown and admissions, the local admission limits, the health history, the observed latency, the concurrency, the recent jobs, and the quota amounts seen in provider headers | The broker's read-only status surface over its Unix socket, plus the pool's own reservation ledger |
 | `model_catalog` | The models that can be used at no cost right now and their per-million-token prices | OpenCode's cached copy of the public models.dev catalog |
@@ -63,7 +63,7 @@ Every window carries the basis of its numbers, and the bases are never mixed:
 
 | Basis | What it means | Which windows |
 | --- | --- | --- |
-| `provider_reported` | The provider reported every number of the window | The Grok, Antigravity, OpenCode Go and Ollama windows |
+| `provider_reported` | The provider reported every number of the window | The Grok, Antigravity, OpenCode Go, OpenRouter daily and Ollama windows |
 | `provider_reported+derived_length` | The provider reported the share and the reset, and the length of the window is derived | The Ollama session window, whose length is learned from the step between two successive resets |
 | `published` | The number is what the provider's own documentation publishes, not a reading | The OpenCode Go free routes, which the documentation lists as unlimited |
 | `published+counted` | A published limit, counted against the requests we made ourselves | The OpenRouter per-minute limit of the free models |
@@ -74,6 +74,14 @@ publishes. The collector remembers the reset instants it has seen
 nothing else) and measures the length from the step between two successive
 resets. Until two resets have been seen the length is a derived fallback, and
 it is marked as derived: it is never published as a measurement.
+
+The OpenRouter free models share one allowance: the number of free model
+requests the key may make in the current UTC day. The key endpoint reports
+how many of them are left, the day ends at midnight UTC, and a counter above
+the limit means the day is spent. The per-minute limit of the free models is
+published rather than reported, so the collector counts the requests we made
+in the last minute in the T3 Code state and counts them against the
+published number.
 
 ## Metrics
 

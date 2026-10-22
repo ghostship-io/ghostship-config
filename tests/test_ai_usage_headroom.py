@@ -149,5 +149,70 @@ class OllamaBalanceTests(unittest.TestCase):
         self.assertFalse(session["gating"])
 
 
+class OpenRouterWindowTests(unittest.TestCase):
+    """The key endpoint reports the free-model allowance of the day."""
+
+    def _read(self, directory, free=None, requests_last_minute=None):
+        body = {
+            "data": {
+                "usage_daily": 0.1,
+                "is_free_tier": False,
+                "free_model_daily_requests": (
+                    free
+                    if free is not None
+                    else {"used": 21, "limit": 1000, "remaining": 979}
+                ),
+            }
+        }
+
+        def fake_http(url, **kwargs):
+            if "credits" in url:
+                return FakeResponse(body={"data": {"total_credits": 20, "total_usage": 0.5}})
+            return FakeResponse(body=body)
+
+        return providers.read_openrouter(
+            env_file(directory, "OPENROUTER_API_KEY"),
+            NOW,
+            http=fake_http,
+            requests_last_minute=requests_last_minute,
+        )
+
+    def test_the_daily_allowance_is_a_window(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._read(directory)
+        daily = window_of(result.windows, "daily")
+        self.assertIsNotNone(daily)
+        self.assertAlmostEqual(daily["usedRatio"], 1.0 - 979 / 1000)
+        self.assertEqual(daily["durationSeconds"], DAY)
+        # The counter covers the current UTC day.
+        self.assertEqual(daily["resetEpoch"], 1800057600.0)
+        self.assertEqual(daily["model"], "*")
+        self.assertEqual(daily["basis"], providers.BASIS_PROVIDER)
+
+    def test_a_counter_above_the_limit_is_a_spent_day(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._read(
+                directory, free={"used": 2997, "limit": 1000, "remaining": 0}
+            )
+        daily = window_of(result.windows, "daily")
+        self.assertEqual(daily["usedRatio"], 1.0)
+
+    def test_the_minute_allowance_counts_our_own_requests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._read(directory, requests_last_minute=5)
+        minute = window_of(result.windows, "minute")
+        self.assertIsNotNone(minute)
+        self.assertAlmostEqual(minute["usedRatio"], 5 / 20)
+        self.assertEqual(minute["durationSeconds"], 60.0)
+        # A published limit counted against our own requests is never a
+        # reading of the provider.
+        self.assertEqual(minute["basis"], providers.BASIS_PUBLISHED_COUNTED)
+
+    def test_without_a_count_there_is_no_minute_window(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self._read(directory)
+        self.assertIsNone(window_of(result.windows, "minute"))
+
+
 if __name__ == "__main__":
     unittest.main()
