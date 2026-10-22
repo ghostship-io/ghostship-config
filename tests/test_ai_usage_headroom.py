@@ -544,5 +544,48 @@ class EnabledProviderHeadroomTests(unittest.TestCase):
             self.assertEqual(row.get("unknown_reason"), "")
 
 
+class ObservedFailureTests(unittest.TestCase):
+    """An exhausted account takes every route of that provider with it."""
+
+    def test_an_account_failure_reaches_every_route_of_the_provider(self):
+        catalog = catalog_module.Catalog(
+            {
+                "xai": {
+                    "models": {
+                        "grok-code": {"name": "Grok Code", "cost": {"input": 1.0, "output": 3.0}},
+                        "grok-4.7": {"name": "Grok 4.7", "cost": {"input": 1.0, "output": 3.0}},
+                    }
+                }
+            }
+        )
+        ranked = ranking.rank_models(
+            models=[
+                ranking.ModelRecord("grok", "grok-code"),
+                ranking.ModelRecord("grok", "grok-4.7"),
+            ],
+            catalog=catalog,
+            quota_windows={},
+            free_models=set(),
+            usage_tokens={},
+            observed_failures=[
+                {
+                    "scope": "account",
+                    "target": "grok",
+                    "reason": "account_usage_limit",
+                    "label": (
+                        "the account reported that its usage limit is spent; "
+                        "every model of the account is unavailable"
+                    ),
+                    "observed_at": NOW,
+                }
+            ],
+            now=NOW,
+        )
+        self.assertEqual(len(ranked), 2)
+        for entry in ranked:
+            self.assertFalse(entry.available)
+            self.assertEqual(entry.observed_failure["reason"], "account_usage_limit")
+
+
 if __name__ == "__main__":
     unittest.main()

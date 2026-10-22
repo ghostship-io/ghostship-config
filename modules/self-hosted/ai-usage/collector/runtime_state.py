@@ -63,6 +63,11 @@ REASON_LABELS = {
 
 # The markers of an allowance that is spent. The text is only read to pick
 # the code; it is never published.
+#
+# The payment markers are there because a provider that refuses a request
+# with "402 Payment Required" and a spent balance is an exhausted account,
+# not a broken route: every model of that account is unavailable until a
+# later run of it succeeds.
 _USAGE_LIMIT_MARKERS = (
     "usage limit",
     "rate limit",
@@ -70,6 +75,9 @@ _USAGE_LIMIT_MARKERS = (
     "quota exhausted",
     "upgrade for higher limits",
     "add usage credits",
+    "payment required",
+    "usage balance exhausted",
+    "402",
 )
 
 # The markers of a runtime that could not start.
@@ -116,6 +124,21 @@ _INSTANCE_ACCOUNTS = {
     "ollama-cloud": "ollama",
     "ollama": "ollama",
     "openrouter": "openrouter",
+}
+
+# The account of a native provider instance. The instance names the account
+# it serves, and the ranking knows the same names. The OpenCode instance
+# serves several accounts; a model without a prefix is the OpenCode account
+# itself.
+INSTANCE_ACCOUNTS = {
+    "codex": "codex",
+    "claudeAgent": "claude",
+    "grok": "grok",
+    "antigravity": "antigravity",
+    "cursor": "cursor",
+    "pi": "pi",
+    "muse": "muse",
+    "opencode": "opencode",
 }
 
 
@@ -176,17 +199,24 @@ def _classify(text: str) -> str:
     return REASON_PROVIDER_ERROR
 
 
-def account_of_model(model: str) -> str:
-    """The account a model of the OpenCode instance is charged to.
+def account_of_model(model: str, instance: str = "") -> str:
+    """The account a model of a provider instance is charged to.
 
     The OpenCode instance serves several accounts, and the model id names
     which one: "ollama-cloud/..." is the Ollama account, "opencode-go/..."
     is the Go subscription, and a model without a prefix is the OpenCode
-    account itself.
+    account itself. A model of another instance is charged to the account
+    that instance serves, so a Grok route is the Grok account and not the
+    OpenCode one.
     """
     text = str(model or "").strip()
     if "/" not in text:
-        return "opencode"
+        if not text:
+            return "opencode"
+        name = str(instance or "")
+        if not name:
+            return "opencode"
+        return INSTANCE_ACCOUNTS.get(name, name)
     prefix, _, _rest = text.partition("/")
     return _INSTANCE_ACCOUNTS.get(prefix, prefix)
 
@@ -231,7 +261,7 @@ def read_request_counts(
                 continue
             model = attempt.get("model") or run.get("model") or ""
             account = (
-                account_of_model(model)
+                account_of_model(model, str(run.get("provider_instance_id") or ""))
                 if model
                 else str(run.get("provider_instance_id") or "")
             )
@@ -492,7 +522,7 @@ def _scope_of(
 ) -> tuple[str, str]:
     """The scope and the target of a failure."""
     if reason == REASON_ACCOUNT_USAGE_LIMIT:
-        return SCOPE_ACCOUNT, (account_of_model(model) if model else instance)
+        return SCOPE_ACCOUNT, (account_of_model(model, instance) if model else instance)
     if reason == REASON_MODEL_REFUSED:
         named = _named_model(error_text) or model
         return SCOPE_MODEL, (named or instance)
@@ -503,6 +533,6 @@ def _targets_of(instance: str, model: str) -> list[tuple[str, str]]:
     """The keys a successful run clears."""
     targets: list[tuple[str, str]] = [(SCOPE_ROUTE, instance)]
     if model:
-        targets.append((SCOPE_ACCOUNT, account_of_model(model)))
+        targets.append((SCOPE_ACCOUNT, account_of_model(model, instance)))
         targets.append((SCOPE_MODEL, model))
     return targets

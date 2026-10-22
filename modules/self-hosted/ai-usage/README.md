@@ -416,6 +416,23 @@ provider-reported dollar charge.
 * `ghostship_ai_pool_catalog_updated_timestamp_seconds` - when the pool
   catalog was refreshed.
 
+### The observed failures of a route
+
+The T3 Code state records what happened when it ran a child. A failure is
+scoped, because a failure is not always about one model: an account failure
+reaches every model of that account, a route failure every model of that
+provider instance, and a model failure only that model.
+
+A refusal that says the account has no money left is an exhausted account,
+not a broken route. The markers are "usage limit", "rate limit", "quota
+exceeded", "quota exhausted", "upgrade for higher limits", "add usage
+credits", "payment required", "usage balance exhausted" and the status
+`402`: every one of them is read as an account whose allowance is spent, so
+every route of that provider is unavailable with the reason
+`account_usage_limit` until a later run of it succeeds. The text of the
+error is only read to pick the code; the provider's own words never reach a
+metric, a label or a log line.
+
 ### The model ranking
 
 The ranking is the collector's opinion layer. It turns the model inventory,
