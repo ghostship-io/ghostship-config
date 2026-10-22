@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.81] - 2026-10-22
+
+- The owner identity values are supplied by the deployment, not by this repository. The account names and addresses the services log in as (the retired container registry account, the personal Google account the Keep broker verifies, the uptime kuma and ntfy administrator accounts and the account the private inputs were transferred from) are read from a root-owned file outside the repository, `/etc/ghostship/owner-identity.env`, and reach the units through their environment. A missing value fails with a clear message instead of a fallback, and the regression tests pin the same behaviour with synthetic names. The rendered configuration is unchanged once the deployment supplies the values.
+
 ## [3.17.80] - 2026-10-22
 
 - CI parses every AppArmor profile the host loads. The check parsed six profiles of the thirty-five in the repository, so a policy the kernel would refuse could pass CI: PR #167 named a thirteenth transition in the agent desktop policy, `apparmor_parser` refused the whole policy, the reload failed, and the kernel kept the previous rules. The check now evaluates `nixosConfigurations.chill-penguin` and parses every policy the host loads, exactly as the host renders it, with the include tree the host resolves `<tunables/global>` and the abstractions against. All thirty-six loaded policies parse.
@@ -871,7 +875,7 @@
 ## [3.15.101] - 2026-10-12
 
 - Pin ghostship-agent 0.18.1: `health` op `types` and `query` over every Health Connect type, Ultrahuman lab biomarkers, full sleep and metrics, Wyze weigh-ins, and health documents with their text (OCR for scans).
-- The MCP container reads health documents only from the owner's "the owner" and "HealthConnect" Drive folders (`GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS`).
+- The MCP container reads health documents only from the owner's own Drive folders and the shared "HealthConnect" folder (`GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS`).
 
 ## [3.15.100] - 2026-10-12
 
