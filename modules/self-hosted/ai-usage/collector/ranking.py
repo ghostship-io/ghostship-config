@@ -168,6 +168,10 @@ class RankedModel:
     # The observed failure of the route, when there is one. The reason is a
     # code and a fixed label, never the provider's own text.
     observed_failure: dict[str, Any] = dataclasses.field(default_factory=dict)
+    # Why the model is not usable right now, or an empty string when it is.
+    # The reason is published with the availability, so a model that is not
+    # offered stays visible with the reason it is not.
+    availability_reason: str = ""
     # True when the provider publishes this route as unlimited. The route
     # then carries its own window and the paid allowance of the account
     # does not gate it.
@@ -176,6 +180,16 @@ class RankedModel:
 
 # The tiers, in the order the dashboard reads them.
 TIERS = ("frontier", "bulk", "free", "3d")
+
+# The reasons a model is not usable right now. They are fixed labels, never
+# the provider's own text, and they are published with the availability of
+# the model, so a reader knows why a route is not offered.
+REASON_AVAILABLE = ""
+REASON_ROUTE_FAILED = "the route failed and is not usable right now"
+REASON_ROUTE_PARKED = "the route is parked by its own source"
+REASON_CAPACITY_SPENT = "an allowance of the account is spent"
+REASON_CAPACITY_UNKNOWN = "the headroom of the account is unknown"
+REASON_NOT_OFFERED = "the route is not offered by the instance"
 
 # Lineage priors. A model starts from the prior of its lineage, which is
 # matched on the catalog family first and on the model id second.
@@ -1045,6 +1059,8 @@ class _Candidate:
     # then carries its own window and the paid allowance of the account
     # does not gate it.
     unlimited: bool = False
+    # Why the model is not usable right now, or an empty string when it is.
+    availability_reason: str = ""
     # The owner's frontier workhorses, as the runtime policy names them.
     workhorses: tuple[str, ...] = FRONTIER_WORKHORSES
 
@@ -1494,21 +1510,34 @@ def rank_models(
             # The T3 Code state says this route is broken right now. The
             # model is not usable, and it stays visible with the reason.
             available = False
+            availability_reason = str(failure.get("label") or "") or REASON_ROUTE_FAILED
         elif external_state is False:
             # A source that watches the route says it is not usable now, for
             # example a cooling down pool route.
             available = False
+            availability_reason = REASON_ROUTE_PARKED
         elif not gating_windows:
             # The provider reports no quota for this account, or only a
             # window it did not read. The model can still be used, but its
             # headroom is unknown, not unlimited.
             available = bool(in_inventory)
+            availability_reason = (
+                REASON_CAPACITY_UNKNOWN if available else REASON_NOT_OFFERED
+            )
         else:
             # A window that is unknown, malformed, or stale makes the
             # headroom unknown, and unknown headroom is not usable headroom.
             available = bool(in_inventory) and (
                 remaining is not None and remaining > MIN_REMAINING
             )
+            if available:
+                availability_reason = REASON_AVAILABLE
+            elif not in_inventory:
+                availability_reason = REASON_NOT_OFFERED
+            elif remaining is None:
+                availability_reason = REASON_CAPACITY_UNKNOWN
+            else:
+                availability_reason = REASON_CAPACITY_SPENT
 
         native_entry = (native_models or {}).get((provider, model)) or {}
         native_options = (
@@ -1596,6 +1625,7 @@ def rank_models(
                 frontier_surplus=_frontier_surplus(list(windows), now),
                 applied_windows=list(windows),
                 unlimited=any(_is_unlimited_window(window) for window in model_windows),
+                availability_reason=availability_reason,
             )
         )
 
@@ -1685,6 +1715,7 @@ def rank_models(
                     three_d_tokens=candidate.three_d_tokens,
                     observed_failure=dict(failure or {}),
                     unlimited=candidate.unlimited,
+                    availability_reason=candidate.availability_reason,
                 )
             )
             continue
@@ -1719,6 +1750,7 @@ def rank_models(
                     three_d_tokens=candidate.three_d_tokens,
                     observed_failure=dict(failure or {}),
                     unlimited=candidate.unlimited,
+                    availability_reason=candidate.availability_reason,
                 )
             )
         if not tier_entries:
@@ -1750,6 +1782,7 @@ def rank_models(
                     three_d_tokens=candidate.three_d_tokens,
                     observed_failure=dict(failure or {}),
                     unlimited=candidate.unlimited,
+                    availability_reason=candidate.availability_reason,
                 )
             )
         entries.extend(tier_entries)
@@ -1798,13 +1831,22 @@ def rank_models(
 def rank_samples(
     ranked: list[RankedModel], *, now: float
 ) -> list[tuple[str, dict[str, str], float]]:
-    """Render the ranking as Prometheus samples."""
+    """Render the ranking as Prometheus samples.
+
+    Every ranked model is published, including the ones that cannot be used
+    right now: an unavailable or exhausted model keeps its capacity series
+    (zero when the allowance is spent), its availability with the reason it
+    is not usable, and its rank. A consumer can therefore list a model that
+    is not offered at the bottom of a tier with the reason beside it. Only
+    the winners are allowed to exclude a model.
+    """
     samples: list[tuple[str, dict[str, str], float]] = []
     seen: set[tuple[str, str]] = set()
 
     for entry in ranked:
         provider = label_value(entry.provider)
         model = label_value(entry.model)
+        tier = label_value(entry.tier)
         key = (provider, model)
         if key not in seen:
             seen.add(key)
@@ -1818,16 +1860,23 @@ def rank_samples(
             samples.append(
                 (
                     "ghostship_ai_model_available",
-                    dict(labels),
+                    {
+                        **labels,
+                        # The reason the model is not usable, or an empty
+                        # string when it is. It is a fixed label, never the
+                        # provider's own text.
+                        "reason": label_value(entry.availability_reason),
+                    },
                     1.0 if entry.available else 0.0,
                 )
             )
             if entry.remaining is not None:
                 # An unknown capacity is not reported as zero or as unlimited.
+                # A spent allowance is reported as zero.
                 samples.append(
                     (
                         "ghostship_ai_model_capacity_remaining",
-                        dict(labels),
+                        {**labels, "tier": tier},
                         float(entry.remaining),
                     )
                 )
@@ -1835,7 +1884,7 @@ def rank_samples(
                 samples.append(
                     (
                         "ghostship_ai_model_capacity_expires_in_seconds",
-                        dict(labels),
+                        {**labels, "tier": tier},
                         float(entry.expires_in_seconds),
                     )
                 )
@@ -1862,11 +1911,18 @@ def rank_samples(
                         1.0,
                     )
                 )
+        # The rank of every model, including the ones that hold no tier: a
+        # model that is not usable stays visible with its rank.
+        samples.append(
+            (
+                "ghostship_ai_model_rank",
+                {"tier": tier, "provider": provider, "model": model},
+                float(entry.rank),
+            )
+        )
         if not entry.tier or not entry.available:
             continue
-        tier = label_value(entry.tier)
         tier_labels = {"tier": tier, "provider": provider, "model": model}
-        samples.append(("ghostship_ai_model_rank", dict(tier_labels), float(entry.rank)))
         samples.append(("ghostship_ai_model_score", dict(tier_labels), float(entry.score)))
         samples.append(
             (

@@ -198,8 +198,12 @@ METRIC_HELP = {
     "ghostship_ai_model_rank": "The rank of a model inside a tier, 1 is best.",
     "ghostship_ai_model_score": "The ranking score of a model inside a tier.",
     "ghostship_ai_model_quality": "The quality score of a model.",
-    "ghostship_ai_model_available": "Whether a model can be used right now.",
-    "ghostship_ai_model_capacity_remaining": "The remaining share of a model's account capacity.",
+    "ghostship_ai_model_available": (
+        "Whether a model can be used right now, with the reason it cannot."
+    ),
+    "ghostship_ai_model_capacity_remaining": (
+        "The remaining share of a model's account capacity, zero when it is spent."
+    ),
     "ghostship_ai_model_quota_unknown": (
         "One for a model whose headroom is unknown, with the reason it is unknown."
     ),

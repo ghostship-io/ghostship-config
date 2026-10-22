@@ -510,17 +510,25 @@ capacity left. The reserve changes the order and the eligibility, never the
 value.
 
 * `ghostship_ai_model_rank{tier,provider,model}` - the rank inside a tier, 1 is
-  best.
+  best. Every ranked model keeps it, including the models that cannot be
+  used right now: an unavailable model holds the rank 0 of the empty tier
+  and is never dropped from the metrics.
 * `ghostship_ai_model_score{tier,provider,model}` - the ranking score inside
   a tier.
 * `ghostship_ai_model_quality{provider,model}` - the quality score, 0 to 100.
-* `ghostship_ai_model_available{provider,model}` - whether the model can be
-  used right now.
-* `ghostship_ai_model_capacity_remaining{provider,model}` - the remaining
-  share of the model's account capacity, 0 to 1.
-* `ghostship_ai_model_capacity_expires_in_seconds{provider,model}` - the
+* `ghostship_ai_model_available{provider,model,reason}` - whether the model
+  can be used right now, with the reason it cannot: a spent allowance, an
+  unknown headroom, a route that failed, or a route that is not offered.
+  The reason is a fixed label, never the provider's own text.
+* `ghostship_ai_model_capacity_remaining{tier,provider,model}` - the remaining
+  share of the model's account capacity, 0 to 1. A spent allowance is
+  published as 0; an unknown capacity is not published at all, because an
+  unknown capacity is never a zero.
+* `ghostship_ai_model_capacity_expires_in_seconds{tier,provider,model}` - the
   seconds until that capacity expires; negative when the window is already
   past its reset.
+* `ghostship_ai_model_quota_unknown{provider,model,reason}` - 1 for a model
+  whose headroom is unknown, with the reason it is unknown.
 * `ghostship_ai_model_tier{provider,model,tier}` - 1 for every tier a model
   belongs to.
 * `ghostship_ai_model_evaluated_timestamp_seconds{provider,model}` - when the

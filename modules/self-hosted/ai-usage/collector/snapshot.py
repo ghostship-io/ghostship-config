@@ -3099,13 +3099,6 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
                 1.0 if (row.get("availability") or {}).get("state") == "available" else 0.0,
             )
         )
-        samples.append(
-            (
-                "ghostship_ai_model_available",
-                labels,
-                1.0 if (row.get("availability") or {}).get("state") == "available" else 0.0,
-            )
-        )
         pace_delta = (row.get("capacity") or {}).get("pace_delta")
         if isinstance(pace_delta, (int, float)) and not isinstance(pace_delta, bool):
             samples.append(

@@ -587,5 +587,67 @@ class ObservedFailureTests(unittest.TestCase):
             self.assertEqual(entry.observed_failure["reason"], "account_usage_limit")
 
 
+class PublishedAvailabilityTests(unittest.TestCase):
+    """An unavailable model keeps its capacity, its availability and its rank."""
+
+    def _rank(self):
+        catalog = catalog_module.Catalog(
+            {
+                "opencode-go": {
+                    "models": {
+                        "minimax-m3.1": {
+                            "name": "MiniMax M3.1",
+                            "cost": {"input": 1.0, "output": 4.0},
+                        }
+                    }
+                }
+            }
+        )
+        return ranking.rank_models(
+            models=[ranking.ModelRecord("opencode-go", "minimax-m3.1")],
+            catalog=catalog,
+            quota_windows={
+                "opencode-go": [
+                    ranking.QuotaWindow(
+                        kind="monthly",
+                        used_ratio=1.0,
+                        reset_epoch=NOW + 10 * DAY,
+                        duration_seconds=30 * DAY,
+                        observed_at=NOW,
+                        quota_id="go_monthly",
+                    )
+                ]
+            },
+            free_models=set(),
+            usage_tokens={},
+            now=NOW,
+        )
+
+    def test_an_exhausted_model_is_published_with_a_zero_and_a_reason(self):
+        ranked = self._rank()
+        self.assertFalse(ranked[0].available)
+        samples = ranking.rank_samples(ranked, now=NOW)
+        capacity = [
+            (labels, value)
+            for name, labels, value in samples
+            if name == "ghostship_ai_model_capacity_remaining"
+        ]
+        # The allowance is spent, so the capacity is zero and it is published.
+        self.assertEqual([value for _labels, value in capacity], [0.0])
+        available = [
+            (labels, value)
+            for name, labels, value in samples
+            if name == "ghostship_ai_model_available"
+        ]
+        self.assertEqual([value for _labels, value in available], [0.0])
+        self.assertTrue(available[0][0]["reason"])
+        ranks = [
+            (labels, value)
+            for name, labels, value in samples
+            if name == "ghostship_ai_model_rank"
+        ]
+        self.assertEqual(len(ranks), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
