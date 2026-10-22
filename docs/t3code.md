@@ -121,6 +121,41 @@ Upstream: [provider setup](https://github.com/pingdotgg/t3code/blob/main/docs/us
 [Antigravity sign-in](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-antigravity.md),
 and [official ACP registry](https://github.com/agentclientprotocol/registry/tree/main/antigravity-acp).
 
+## Native subscription limits
+
+Confirm an update through the running server's
+`/.well-known/t3/environment` version, then inspect fresh provider
+`usageLimits` readings. A staged executable's `--version` does not establish
+activation. Official T3 Code 0.1.1 fixes missing zero-use Grok billing periods
+and merges Antigravity quota summaries from both Google endpoints. Gemini
+coverage can still be intermittent: a nonempty summary containing only the
+Claude/GPT windows prevents the model-quota fallback from running. One good
+reading does not establish stable Gemini coverage.
+Flash uses the Gemini family label; selecting a Flash model does not create
+a separate Flash quota row.
+
+OpenCode 2's active Console OAuth login can work while T3 reads an expired
+legacy Go key. In T3 0.1.1, its Go probe skips Console OAuth credentials;
+replacing the working OAuth login is unnecessary. The existing
+`OPENCODE_AUTH_CONTENT` instance environment override can supply
+`{"opencode-go":{"type":"api","key":"<current Console OAuth access token>"}}`
+to T3's quota reader. The usage endpoint accepts that access token as a bearer
+credential; this compatibility format does not convert OpenCode's login to API
+key authentication. See [upstream OAuth tracking](https://github.com/pingdotgg/t3code/issues/14983).
+
+This is a temporary, manually synchronized override. Obtain the active token
+inside the process applying the change, save the environment variable through
+T3's settings API as **sensitive**, and verify that settings reads redact it.
+OpenCode retains ownership of OAuth renewal; reapply the override when its
+access token rotates or the selected account changes. Remove it when T3 can
+read the native OAuth credential directly. Verify all three Go windows and
+their reset times against the same account's usage response.
+
+OpenRouter and Ollama model discovery does not provide native Limits entries.
+T3 0.1.1 has no quota reader for either, and its configurable CLIProxyAPI usage
+hub reader accepts only Codex and Claude accounts. A working provider usage API
+alone cannot add those accounts to the native panel through settings.
+
 ## OpenCode 2 upgrades
 
 OpenCode 2 uses `@opencode/cli`; `opencode-ai@latest` remains on version 1.
@@ -317,6 +352,18 @@ attempted even if another fails. Cursor reads the release pinned by its
 installer and downloads only when that release is not already active. Changed provider tools or T3 settings queue a
 server restart, which waits for T3 to become idle. Ghostship tool package
 changes do not: its command wrappers load the new package on every invocation.
+
+Upstream 0.1.1 uses standalone release archives; its old
+`@t3code/t3-linux-arm64@0.1.1` npm payload is not published. The container's
+current npm-based updater still needs that packaging migration. A manual
+upgrade can use the official architecture-specific archive and `SHA256SUMS`,
+retain the extracted version under `~/.t3/runtime/versions/`, and keep the
+existing library-setting `~/.local/bin/t3` wrapper. Register the versioned
+launcher's path in `~/.t3/runtime/launchers` for upstream update discovery.
+Stage and verify before an authorized application restart; keep the container
+running. A detached host-side systemd activation must invoke NixOS's Bash by
+absolute path and provide its command PATH; `/usr/bin/env bash` can fail before
+the update starts.
 
 T3 shows a provider "Update available" notice when the npm registry's `latest`
 tag is newer than the installed Codex, Claude, OpenCode or Grok version. The
