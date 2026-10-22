@@ -156,6 +156,33 @@ QUOTA_ALIASES = {
     "go_weekly": "weekly",
 }
 
+# Why a headroom is unknown. The codes are fixed, so the dashboard can group
+# them, and the texts say it in words. An unknown headroom without a reason
+# is a gap a reader cannot explain, so a reason is always there.
+UNKNOWN_REASON_NO_WINDOW = "no_window"
+UNKNOWN_REASON_WINDOW_UNKNOWN = "window_unknown"
+
+UNKNOWN_REASON_TEXT = {
+    UNKNOWN_REASON_NO_WINDOW: (
+        "the provider publishes no quota window for this account"
+    ),
+    UNKNOWN_REASON_WINDOW_UNKNOWN: (
+        "the provider's window was not read, is stale, or has already reset"
+    ),
+}
+
+
+def unknown_reason_code(windows: Iterable[Any], remaining: Any) -> str:
+    """The code of the reason a headroom is unknown, or an empty string.
+
+    A headroom that is known has no reason to give: it is measured. A
+    headroom that is unknown always has one, so a consumer never has to
+    guess why a window is missing.
+    """
+    if isinstance(remaining, (int, float)) and not isinstance(remaining, bool):
+        return ""
+    return UNKNOWN_REASON_WINDOW_UNKNOWN if list(windows or ()) else UNKNOWN_REASON_NO_WINDOW
+
 
 def _entitlement_parts(window: Any) -> dict[str, str]:
     def get(name: str, default: str = "") -> str:
@@ -180,6 +207,10 @@ def _entitlement_parts(window: Any) -> dict[str, str]:
         "observed_at": _get(window, "observed_at", "observedAtEpoch", "observed_at_epoch"),
         "used_ratio": _get(window, "used_ratio", "usedRatio"),
         "reset_at": _get(window, "reset_at", "resetAt", "resetEpoch", "reset_epoch"),
+        # The basis of the numbers of the window, and the end of its
+        # entitlement when the provider publishes one.
+        "basis": str(get("basis") or ""),
+        "ends_at": _get(window, "ends_at", "endsAt", "ends_at_epoch"),
     }
 
 
@@ -217,6 +248,8 @@ def entitlements(windows: Iterable[Any], now: float | None = None) -> list[dict[
                 "used_ratio": parts["used_ratio"],
                 "reset_at": parts["reset_at"],
                 "observed_at": parts["observed_at"],
+                "basis": parts["basis"],
+                "ends_at": parts["ends_at"],
                 "usable": pace is not None,
                 "expected_used_ratio": None if pace is None else pace["expected_used_ratio"],
                 "pace_delta_ratio": None if pace is None else pace["pace_delta_ratio"],
@@ -257,12 +290,30 @@ def entitlements(windows: Iterable[Any], now: float | None = None) -> list[dict[
                 "pace_delta_ratio": chosen["pace_delta_ratio"],
                 "reset_at": chosen["reset_at"],
                 "observed_at": chosen["observed_at"],
+                "basis": chosen["basis"],
+                "ends_at": chosen["ends_at"],
                 "state": "measured",
-                "basis": "the current usable reading with the least remaining",
+                "selection": "the current usable reading with the least remaining",
             }
         else:
+            chosen = None
             entry["display"] = None
             entry["display_state"] = "unknown"
+        # The basis of the entitlement and the end of it. An entitlement
+        # without a usable numeric reading still has an identity, so the
+        # basis comes from its freshest reading: a route the provider
+        # publishes as a promotion is a promotion, measured or not.
+        freshest = max(
+            entry["readings"],
+            key=lambda reading: (
+                _epoch(reading["observed_at"]) or 0.0,
+                str(reading["source"] or ""),
+            ),
+        )
+        entry["basis"] = str(
+            (chosen or freshest)["basis"] or ""
+        )
+        entry["ends_at"] = (chosen or freshest)["ends_at"]
         result.append(entry)
     return sorted(result, key=lambda entry: entry["entitlement"])
 
@@ -288,6 +339,12 @@ def entitlement_display_samples(
             "quota": entry["canonical_quota"],
             "source": str((display or {}).get("source") or ""),
             "entitlement": entry["entitlement"],
+            # The basis of the numbers of the entitlement, and the end of it
+            # when the provider publishes one. An end that is not published
+            # is unknown, and an unknown end is an empty label and never a
+            # zero.
+            "basis": str(entry.get("basis") or ""),
+            "ends_at": _iso_label(entry.get("ends_at")),
         }
         samples.append(("ghostship_ai_entitlement_info", dict(labels), 1.0))
         if not isinstance(display, Mapping):
@@ -331,6 +388,20 @@ def entitlement_display_samples(
                 )
             )
     return samples
+
+
+def _iso_label(value: Any) -> str:
+    """The end of an entitlement as a label, or an empty string.
+
+    An end that the provider does not publish is unknown, and an unknown end
+    is an empty label: it is never a zero and never a guess.
+    """
+    moment = _epoch(value)
+    if moment is None:
+        return ""
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(moment, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _epoch(value: Any) -> float | None:

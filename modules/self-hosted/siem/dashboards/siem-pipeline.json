@@ -17,18 +17,19 @@
  "panels": [
   {
    "id": 1000,
-   "title": "PIPELINE / Evidence delivery",
+   "title": "",
    "type": "text",
    "gridPos": {
     "x": 0,
     "y": 0,
     "w": 24,
-    "h": 4
+    "h": 2
    },
    "options": {
     "mode": "markdown",
-    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline) \u00b7 [AI usage](/d/ghostship-ai-usage)\n\nNow and the last six hours. Store ingestion, audit loss, alert delivery and collector freshness. Unknown values mean missing/stale evidence; they are not converted to healthy zeros."
-   }
+    "content": "**SIEM pipeline \u00b7 the selected range for the rates \u00b7 the log tables stay collapsed**"
+   },
+   "description": "A stalled bridge or a lost audit record is a status. Everything else is a measurement. A missing reading is Unavailable, never a zero."
   },
   {
    "id": 8,
@@ -39,10 +40,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "w": 6,
-    "h": 4,
     "x": 0,
-    "y": 4
+    "y": 2,
+    "w": 4,
+    "h": 4
    },
    "targets": [
     {
@@ -58,23 +59,78 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "noValue": "Unknown"
+     "noValue": "Unavailable",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#0ca30c",
+        "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 1
+       },
+       {
+        "color": "#d03b3b",
+        "value": 5
+       }
+      ]
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 5,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 5,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
+    },
+    "justifyMode": "center",
+    "wideLayout": true
    },
-   "description": "Zero is shown only while watchdog and node samples are fresh and both vmalert systemd units are active. Unknown otherwise; unit state is not proof that every rule is correct."
+   "description": "Latest snapshot, gated on a fresh watchdog. Unavailable when the gate fails, never a fake 0 from outside the gate."
   },
   {
    "id": 9,
@@ -85,10 +141,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "w": 6,
-    "h": 4,
-    "x": 6,
-    "y": 4
+    "x": 4,
+    "y": 2,
+    "w": 4,
+    "h": 4
    },
    "targets": [
     {
@@ -105,22 +161,78 @@
    "fieldConfig": {
     "defaults": {
      "unit": "s",
-     "noValue": "Unknown"
+     "noValue": "Unavailable",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#0ca30c",
+        "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 30
+       },
+       {
+        "color": "#d03b3b",
+        "value": 120
+       }
+      ]
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 30,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 30,
+        "to": 120,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 120,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
-   }
+    },
+    "justifyMode": "center",
+    "wideLayout": true
+   },
+   "description": "Latest snapshot of log ingestion lag."
   },
   {
    "id": 10,
@@ -131,10 +243,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "w": 6,
-    "h": 4,
-    "x": 12,
-    "y": 4
+    "x": 8,
+    "y": 2,
+    "w": 4,
+    "h": 4
    },
    "targets": [
     {
@@ -151,22 +263,29 @@
    "fieldConfig": {
     "defaults": {
      "unit": "s",
-     "noValue": "Unknown"
+     "noValue": "Unavailable",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     }
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
-   }
+    },
+    "justifyMode": "center",
+    "wideLayout": true
+   },
+   "description": "Latest snapshot of journal retention."
   },
   {
    "id": 11,
@@ -177,10 +296,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "w": 6,
-    "h": 4,
-    "x": 18,
-    "y": 4
+    "x": 12,
+    "y": 2,
+    "w": 4,
+    "h": 4
    },
    "targets": [
     {
@@ -196,308 +315,74 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "noValue": "Unknown"
+     "noValue": "Unavailable",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#0ca30c",
+        "value": null
+       },
+       {
+        "color": "#d03b3b",
+        "value": 1
+       }
+      ]
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
-   }
-  },
-  {
-   "id": 12,
-   "title": "Bridge: seconds since last poll",
-   "type": "timeseries",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "w": 12,
-    "h": 8,
-    "x": 0,
-    "y": 12
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "time() - ghostship_siem_bridge_last_poll_timestamp_seconds",
-     "legendFormat": "poll"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "s",
-     "noValue": "Unknown",
-     "custom": {
-      "fillOpacity": 8,
-      "lineWidth": 1,
-      "spanNulls": false
-     }
     },
-    "overrides": []
+    "justifyMode": "center",
+    "wideLayout": true
    },
-   "options": {
-    "legend": {
-     "displayMode": "table",
-     "placement": "bottom",
-     "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
-   }
-  },
-  {
-   "id": 13,
-   "title": "Bridge delivery failures (consecutive)",
-   "type": "timeseries",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "w": 12,
-    "h": 8,
-    "x": 12,
-    "y": 12
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "ghostship_siem_bridge_delivery_consecutive_failures",
-     "legendFormat": "{{channel}}"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "Unknown",
-     "custom": {
-      "fillOpacity": 8,
-      "lineWidth": 1,
-      "spanNulls": false
-     }
-    },
-    "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "table",
-     "placement": "bottom",
-     "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
-   }
-  },
-  {
-   "id": 14,
-   "title": "Vector buffer (VictoriaLogs sink)",
-   "type": "timeseries",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "w": 12,
-    "h": 8,
-    "x": 0,
-    "y": 20
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "vector_buffer_size_bytes{component_id=\"victorialogs\"}",
-     "legendFormat": "buffer"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "bytes",
-     "noValue": "Unknown",
-     "custom": {
-      "fillOpacity": 8,
-      "lineWidth": 1,
-      "spanNulls": false
-     }
-    },
-    "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "table",
-     "placement": "bottom",
-     "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
-   }
-  },
-  {
-   "id": 15,
-   "title": "Kernel audit backlog",
-   "type": "timeseries",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "w": 12,
-    "h": 8,
-    "x": 12,
-    "y": 20
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "ghostship_audit_backlog",
-     "legendFormat": "backlog"
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "ghostship_audit_backlog_limit",
-     "legendFormat": "limit"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "Unknown",
-     "custom": {
-      "fillOpacity": 8,
-      "lineWidth": 1,
-      "spanNulls": false
-     }
-    },
-    "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "table",
-     "placement": "bottom",
-     "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
-   }
-  },
-  {
-   "id": 16,
-   "title": "Firing alerts by name",
-   "type": "table",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "w": 24,
-    "h": 8,
-    "x": 0,
-    "y": 28
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "ALERTS{alertstate=\"firing\"}",
-     "legendFormat": "{{alertname}}",
-     "instant": true,
-     "format": "table"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "Unknown"
-    },
-    "overrides": []
-   },
-   "options": {
-    "showHeader": true,
-    "cellHeight": "sm"
-   },
-   "transformations": [
-    {
-     "id": "organize",
-     "options": {
-      "excludeByName": {
-       "Time": true,
-       "Value": true,
-       "__name__": true,
-       "alertstate": true
-      },
-      "renameByName": {
-       "alertname": "Alert",
-       "severity": "Severity",
-       "container": "Container"
-      }
-     }
-    }
-   ],
-   "description": "Currently firing native vmalert series. Empty is expected when the fresh firing count above is zero. This table uses an instant table result so alert labels remain columns."
+   "description": "Rolling 10-minute increase of kernel audit records lost."
   },
   {
    "id": 1001,
    "title": "Watchdog age",
-   "description": "",
+   "description": "Latest snapshot. Age of the SIEM watchdog run.",
    "type": "stat",
    "gridPos": {
-    "x": 0,
-    "y": 8,
-    "w": 8,
+    "x": 16,
+    "y": 2,
+    "w": 4,
     "h": 4
    },
    "datasource": {
@@ -518,52 +403,87 @@
    "fieldConfig": {
     "defaults": {
      "unit": "s",
-     "noValue": "Unknown",
+     "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
       "steps": [
        {
-        "color": "green",
+        "color": "#0ca30c",
         "value": null
        },
        {
-        "color": "orange",
-        "value": 90
+        "color": "#fab219",
+        "value": 120
        },
        {
-        "color": "red",
+        "color": "#d03b3b",
         "value": 180
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 120,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 120,
+        "to": 180,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 180,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
+    },
+    "justifyMode": "center",
+    "wideLayout": true
    }
   },
   {
    "id": 1002,
    "title": "Node sample age",
-   "description": "",
+   "description": "Latest snapshot. Age of node_uname_info.",
    "type": "stat",
    "gridPos": {
-    "x": 8,
-    "y": 8,
-    "w": 8,
+    "x": 20,
+    "y": 2,
+    "w": 4,
     "h": 4
    },
    "datasource": {
@@ -584,9 +504,10 @@
    "fieldConfig": {
     "defaults": {
      "unit": "s",
-     "noValue": "Unknown",
+     "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -604,31 +525,65 @@
         "value": 180
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 90,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 90,
+        "to": 180,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 180,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
+    },
+    "justifyMode": "center",
+    "wideLayout": true
    }
   },
   {
    "id": 1003,
    "title": "Work snapshot age",
-   "description": "Unknown until the autonomous-work collector is deployed; stale after 180s.",
+   "description": "Latest snapshot. Age of the autonomous-work collector snapshot.",
    "type": "stat",
    "gridPos": {
-    "x": 16,
-    "y": 8,
+    "x": 0,
+    "y": 5,
     "w": 8,
     "h": 4
    },
@@ -650,24 +605,149 @@
    "fieldConfig": {
     "defaults": {
      "unit": "s",
-     "noValue": "Unknown",
+     "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
       "steps": [
        {
-        "color": "green",
+        "color": "#0ca30c",
         "value": null
        },
        {
-        "color": "orange",
-        "value": 90
+        "color": "#fab219",
+        "value": 180
        },
        {
-        "color": "red",
-        "value": 180
+        "color": "#d03b3b",
+        "value": 600
+       }
+      ]
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 180,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 180,
+        "to": 600,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 600,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "justifyMode": "center",
+    "wideLayout": true
+   }
+  },
+  {
+   "id": 12,
+   "title": "Bridge: seconds since last poll",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 10,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "time() - ghostship_siem_bridge_last_poll_timestamp_seconds",
+     "legendFormat": "poll"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 2,
+      "spanNulls": false,
+      "drawStyle": "line",
+      "lineInterpolation": "linear",
+      "gradientMode": "none",
+      "showPoints": "never",
+      "insertNulls": false,
+      "axisBorderShow": false,
+      "axisColorMode": "text",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
        }
       ]
      }
@@ -675,24 +755,394 @@
     "overrides": []
    },
    "options": {
-    "colorMode": "value",
-    "graphMode": "none",
-    "textMode": "value_and_name",
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": false,
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "single",
+     "sort": "none"
     }
-   }
+   },
+   "description": " Follows the time picker."
+  },
+  {
+   "id": 13,
+   "title": "Bridge delivery failures (consecutive)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 10,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "ghostship_siem_bridge_delivery_consecutive_failures",
+     "legendFormat": "{{channel}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 2,
+      "spanNulls": false,
+      "drawStyle": "line",
+      "lineInterpolation": "linear",
+      "gradientMode": "none",
+      "showPoints": "never",
+      "insertNulls": false,
+      "axisBorderShow": false,
+      "axisColorMode": "text",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": false,
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "single",
+     "sort": "none"
+    }
+   },
+   "description": " Follows the time picker."
+  },
+  {
+   "id": 14,
+   "title": "Vector buffer (VictoriaLogs sink)",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 18,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "vector_buffer_size_bytes{component_id=\"victorialogs\"}",
+     "legendFormat": "buffer"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 2,
+      "spanNulls": false,
+      "drawStyle": "line",
+      "lineInterpolation": "linear",
+      "gradientMode": "none",
+      "showPoints": "never",
+      "insertNulls": false,
+      "axisBorderShow": false,
+      "axisColorMode": "text",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": false,
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "single",
+     "sort": "none"
+    }
+   },
+   "description": " Follows the time picker."
+  },
+  {
+   "id": 15,
+   "title": "Kernel audit backlog",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 18,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "ghostship_audit_backlog",
+     "legendFormat": "backlog"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "ghostship_audit_backlog_limit",
+     "legendFormat": "backlog"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 2,
+      "spanNulls": false,
+      "drawStyle": "line",
+      "lineInterpolation": "linear",
+      "gradientMode": "none",
+      "showPoints": "never",
+      "insertNulls": false,
+      "axisBorderShow": false,
+      "axisColorMode": "text",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": []
+    },
+    "tooltip": {
+     "mode": "single",
+     "sort": "none"
+    }
+   },
+   "description": " Follows the time picker."
+  },
+  {
+   "id": 20,
+   "type": "row",
+   "title": "Firing alerts by name",
+   "collapsed": true,
+   "gridPos": {
+    "x": 0,
+    "y": 26,
+    "w": 24,
+    "h": 1
+   },
+   "panels": [
+    {
+     "id": 16,
+     "title": "Firing alerts by name",
+     "type": "table",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "gridPos": {
+      "x": 0,
+      "y": 28,
+      "w": 24,
+      "h": 8
+     },
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+       },
+       "expr": "ALERTS{alertstate=\"firing\"}",
+       "legendFormat": "{{alertname}}",
+       "instant": true,
+       "format": "table"
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "noValue": "Unavailable"
+      },
+      "overrides": []
+     },
+     "options": {
+      "showHeader": true,
+      "cellHeight": "sm"
+     },
+     "transformations": [
+      {
+       "id": "organize",
+       "options": {
+        "excludeByName": {
+         "Time": true,
+         "Value": true,
+         "__name__": true,
+         "alertstate": true
+        },
+        "renameByName": {
+         "alertname": "Alert",
+         "severity": "Severity",
+         "container": "Container"
+        }
+       }
+      }
+     ],
+     "description": "Latest snapshot of firing alert names. Collapsed so the page stays short."
+    }
+   ]
   }
  ],
  "links": [
   {
-   "title": "Work overview",
+   "title": "Overview",
    "type": "link",
    "url": "/d/ghostship-autonomous-work",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": true,
+   "keepTime": true
+  },
+  {
+   "title": "Work",
+   "type": "link",
+   "url": "/d/ghostship-autonomous-work",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": true,
+   "keepTime": true
+  },
+  {
+   "title": "Providers",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
    "icon": "dashboard",
    "targetBlank": false,
    "includeVars": true,
@@ -724,16 +1174,7 @@
    "targetBlank": false,
    "includeVars": true,
    "keepTime": true
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": true,
-   "keepTime": true
   }
  ],
- "description": "Provisioned read-only Ghostship monitoring. Direct navigation; data comes from the existing SIEM stores."
+ "description": "Evidence delivery health. Alert names sit in a collapsed row."
 }

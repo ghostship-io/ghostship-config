@@ -142,6 +142,39 @@ class PublicPullTests(unittest.TestCase):
             self.assertEqual(result["status"], "ok")
             self.assertFalse(result["changed"])
 
+    def test_a_fresh_cache_without_its_aa3d_file_still_pulls(self):
+        """The 3D tier needs the AA-3D file; a fresh main cache must not skip it.
+
+        On the host the main cache was fresh while the AA-3D file had never
+        been written, so every run returned early and the 3D tier stayed empty.
+        """
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "aa.json"
+            cache.write_text(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "intelligence_index_version": "4.3",
+                        "fetched_at_epoch": NOW - 60,
+                        "records": [{"slug": "kept", "model": "Kept"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            fetched = []
+
+            def read(url):
+                fetched.append(url)
+                return {"url": url, "http_status": 403, "bytes": 0,
+                        "blocked": True, "error": "HTTP 403"}
+
+            result = aa_pull.refresh(cache, now=NOW, read=read,
+                                     aa3d_path=Path(folder) / "aa-3d.json")
+            self.assertTrue(fetched)
+            self.assertNotEqual(result.get("reason"), "the cache is still fresh")
+
     def test_the_diff_names_the_new_and_the_changed_models(self):
         old = {
             "records": [
