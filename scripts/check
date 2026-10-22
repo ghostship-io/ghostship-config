@@ -92,6 +92,7 @@ python3 -m unittest discover -s tests -p test_ai_usage_pool_recent_jobs.py
 python3 -m unittest discover -s tests -p test_ai_usage_duplicate_series.py
 python3 -m unittest discover -s tests -p test_ai_usage_quota.py
 python3 -m unittest discover -s tests -p test_ai_usage_headroom.py
+python3 -m unittest discover -s tests -p test_ai_usage_retired_routes.py
 python3 -m unittest discover -s tests -p test_ai_usage_opencode_reader.py
 python3 -m unittest discover -s tests -p test_ai_usage_pool_reader.py
 python3 -m unittest discover -s tests -p test_ai_usage_inference.py
