@@ -1662,9 +1662,20 @@ def main(argv: list[str] | None = None) -> int:
         default=SNAPSHOT_PATH,
         help="Where the canonical ranking and eligibility snapshot is written.",
     )
+    parser.add_argument(
+        "--routing-enabled",
+        choices=("true", "false"),
+        default="false",
+        help=(
+            "The owner's routing switch. The collector publishes it to its "
+            "consumers and never acts on it itself."
+        ),
+    )
     args = parser.parse_args(argv)
 
     started = time.monotonic()
+    routing_enabled = args.routing_enabled == "true"
+    log(f"the routing switch is {'on' if routing_enabled else 'off'}")
     now = wall_clock() if args.now is None else args.now
     aa_cache = aa.load_cache(args.aa_cache, now)
     aa_3d_cache = aa_3d.load_cache(args.aa_3d_cache, now)

@@ -24,6 +24,10 @@ listener and no new port: the service is a oneshot job that writes a file.
   writing, for a manual run.
 * Directories: `/var/lib/ghostship-container-metrics` (0755) and
   `/var/lib/ghostship-ai-usage` (0700), both created by systemd-tmpfiles.
+* The routing switch: `ghostship.aiUsage.routing.enabled` is the owner's
+  switch, it is off by default, and the collector receives it as
+  `--routing-enabled true|false`. The collector publishes the switch to its
+  consumers and never acts on it itself.
 * The collector is Python standard library only. The unit is hardened like the
   rest of this repository: `ProtectSystem=strict`, `ProtectHome`, no
   capabilities, `ReadWritePaths` limited to the two directories above, and
