@@ -11,7 +11,7 @@ The owner rule is in ghostship-agent's `config/agents/routing-policy.md`,
 limit failures. The pool's own limits are admission caps and are never a
 capacity reading; what the ledger holds is the use of the route.
 
-Three rules keep the reading honest:
+Four rules keep the reading honest:
 
 * the ledger belongs to the running pool, so it is opened read only, with
   the `mode=ro` URI, and nothing in this module writes to it. The write
@@ -55,8 +55,9 @@ The contract is fixed:
 `attempts_read` counts the attempts on the job receipts, `probes_read`
 counts the reservations of the requests that have no receipt,
 `attempts_without_reservation` counts the attempts that had no reservation
-to pair with, and `outcomes` counts the emitted events. An attempt that cannot be placed is counted and
-not emitted: a reading never invents an event.
+to pair with, and `outcomes` counts the emitted events. An attempt that
+cannot be placed is counted and not emitted: a reading never invents an
+event.
 """
 
 from __future__ import annotations
