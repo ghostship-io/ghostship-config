@@ -19,6 +19,31 @@ let
   # name private repositories, so the committed template carries placeholders
   # and the coordinator receives a configuration rendered at activation time
   # from the github-engineering projection.
+  # The previous owner and the two renamed repositories, so that existing
+  # issue owners, queued deliveries, CI issue mappings and pull request links
+  # survive the transfer. The alias targets are the canonical repositories
+  # above; the coordinator resolves a legacy name to its canonical one and
+  # keeps the pre-transfer identity for commands it has already sent.
+  # The canonical repository names are public. Their project ids and required
+  # checks are private or account data, so they live in the projection.
+  canonicalRepositories = [
+    "ghostship-io/ghostship-config"
+    "ghostship-io/ghostship-agent"
+    "ghostship-io/ghostship-3dprinting"
+    "ghostship-io/ghostship-roms"
+    "ghostship-io/ghostship-xplus4"
+    "ghostship-io/ghostship-newsletter"
+    "ghostship-io/ghostship-orca"
+  ];
+  repositoryAliases = {
+    "ghostship-io/ghostship-config" = "ghostship-io/ghostship-config";
+    "ghostship-io/ghostship-agent" = "ghostship-io/ghostship-agent";
+    "ghostship-io/ghostship-3dprinting" = "ghostship-io/ghostship-3dprinting";
+    "ghostship-io/ghostship-roms" = "ghostship-io/ghostship-roms";
+    "ghostship-io/ghostship-xplus4" = "ghostship-io/ghostship-xplus4";
+    "ghostship-io/ghostship-newsletter" = "ghostship-io/ghostship-newsletter";
+    "ghostship-io/ghostship-orca" = "ghostship-io/ghostship-orca";
+  };
   coordinatorConfig = pkgs.writeText "ghostship-github-coordinator.json" (builtins.toJSON {
     allowed_user_ids = "{{GITHUB_ALLOWED_USER_IDS:json}}";
     ntfy_url = "http://ntfy:8080";
@@ -45,8 +70,11 @@ let
     review_max_active = 2;
     model_rankings_path = "/run/ghostship-integrations/model-routing.json";
     repositories = "{{T3_REPOSITORIES:json}}";
+    # The coordinator resolves a legacy repository name to its canonical one
+    # and keeps the pre-transfer identity for the commands it already sent.
+    repository_aliases = repositoryAliases;
     # Host incidents launch bounded repair threads in the fleet's own project.
-    incidents = { repository = "{{GITHUB_INCIDENT_REPOSITORY}}"; daily_limit = 3; };
+    incidents = { repository = "ghostship-io/ghostship-config"; daily_limit = 3; };
   });
   coordinatorConfigPath = "/run/ghostship-github/coordinator.json";
   renderCoordinatorConfig = pkgs.writeShellScript "ghostship-github-coordinator-render" ''
@@ -66,6 +94,16 @@ in
 {
   options.ghostship.githubEngineering.enable =
     lib.mkEnableOption "hooks.ghostship.io webhook receiver and T3 engineering coordinator";
+
+  # The coordinator can be held off while the receiver keeps spooling events.
+  # A runtime drop-in under /run does not survive an activation, so the hold
+  # lives here. Clear the spool and incidents before turning it back on, or
+  # it replays the backlog.
+  options.ghostship.githubEngineering.coordinatorAutoStart = lib.mkOption {
+    type = lib.types.bool;
+    default = true;
+    description = "Start the GitHub coordinator at boot and on activation.";
+  };
 
   config = lib.mkIf cfg.enable {
     ghostship.notify.incidentSpool = "${root}/incidents";
@@ -171,9 +209,13 @@ in
       imageFile = github.ingressImage;
       pull = "never";
       user = "62030:62032";
-      # The repository names name private repositories, so the receiver reads
-      # them from its secrets file rather than from the command line.
-      cmd = [ "--port" "8080" "--spool" "/spool" "--secrets" "/run/secrets/hooks.env" ];
+      # The repository names are public, so the receiver is told them. Their
+      # project ids are private and live in the projection.
+      cmd = [ "--port" "8080" "--spool" "/spool" "--secrets" "/run/secrets/hooks.env"
+              # The receiver serves the canonical repositories and, while the
+              # transfer lasts, the names they had before it.
+              "--repositories" (lib.concatStringsSep ","
+                (canonicalRepositories ++ builtins.attrNames repositoryAliases)) ];
       volumes = [
         "${root}/spool:/spool:rw,noexec,nosuid,nodev"
         "${config.ghostship.selfHostedSecrets.projections.ghostship-hooks.path}:/run/secrets/hooks.env:ro"
@@ -228,6 +270,7 @@ in
 
     virtualisation.oci-containers.containers.ghostship-github-coordinator = {
       image = "ghostship-github-coordinator:${github.coordinatorImage.imageTag}";
+      autoStart = cfg.coordinatorAutoStart;
       imageFile = github.coordinatorImage;
       pull = "never";
       user = "62031:62032";

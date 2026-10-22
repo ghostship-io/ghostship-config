@@ -5,11 +5,6 @@
     # One platform: the full agent flake builds the private-integration image,
     # the Keep broker, and the capability runtime with this deployment's
     # icon.
-    # The private agent source is supplied out of band. This tree names no
-    # private repository, revision, or content hash: the placeholder is
-    # replaced from a private specification before evaluation, by
-    # scripts/private-inputs.py. See docs/agent-revision-pinning.md.
-    ghostship-private-agent.url = "path:./private-agent-source";
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 

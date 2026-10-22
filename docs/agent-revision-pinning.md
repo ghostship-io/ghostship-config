@@ -148,6 +148,11 @@ so echoing it into a log would publish the discovery chain.
    to the host's root-only file, not to a commit here.
 3. If the host does not hold a GitHub credential for the private source,
    prime the fetcher cache instead:
+=======
+1. Merge the change in `ghostship-io/ghostship-agent` and note the merged commit.
+2. Bump `ghostship-private-agent.url` in `flake.nix` to that commit.
+3. Import the pinned source on a machine with repository access, then copy
+   its store path to the host:
 
    ```sh
    nix flake prefetch 'git+file:///path/to/the-private-checkout?rev=<rev>' --json
@@ -162,6 +167,43 @@ so echoing it into a log would publish the discovery chain.
 
 If a future bump is not primed, the host's upgrade fails with the `404`
 archive error described above and the running generation is unaffected.
+
+## The organisation namespace
+
+The private agent source now lives in the `ghostship-io` organisation. The
+committed tree names no revision of it: the input is a placeholder and the
+revision and its content hash live in the private specification. The
+repositories were renamed at the same time — `nixos-config` became
+`ghostship-config` and `orca-advanced-calibration` became `ghostship-orca` —
+while local checkout paths and T3 project identifiers stayed the same.
+
+The coordinator's repository map, its incident repository and the webhook
+receiver's allowlist now name the canonical repositories. The receiver also
+serves the seven previous names, and the coordinator configuration carries a
+`repository_aliases` map from each previous name to its canonical one, so that
+existing issue owners, queued deliveries, CI issue mappings and pull request
+links survive the transfer.
+
+Those aliases take effect only in an agent revision that implements them, so
+the revision the specification pins must carry that implementation.
+
+## The pin must not move backwards
+
+A pull request that moves the pin to a revision that does not descend from the
+pinned one silently drops everything that is on the pinned line. The Fleet
+checks job runs `scripts/check-agent-pin.py`, which compares the pull
+request's `ghostship-private-agent` revision with the base branch's and fails
+unless the new revision descends from the old one. Git answers that in the
+fetched agent source, which the job reads with the read-only agent key.
+
+An intentional move to another line needs an explicit approval line in the
+pull request body or in one of its commits, naming the reason:
+
+```text
+pin-regression-approved: the pinned line was merged into main
+```
+
+The line needs a reason; an empty approval does not pass the check.
 
 ## Why not a standing token
 

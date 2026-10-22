@@ -8,7 +8,7 @@
 # Daily canary-tested update of the agent desktop image (Chrome stable,
 # BladeBro, webtop base); see agent-desktop-update.py for the pipeline, its
 # trust model and its gates. Promotion commits containers/agent-desktop/
-# versions.json to nixos-config main and deploys it with nixos-upgrade.
+# versions.json to ghostship-config main and deploys it with nixos-upgrade.
 let
   googleFingerprint = "EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796";
 
