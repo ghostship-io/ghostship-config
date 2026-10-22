@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.76] - 2026-10-22
+
+- The AI usage collector learns the capacity of the routes that report nothing. The providers with no usage API, no balance and no rate-limit headers, and every free route, showed "Limits unknown" on the Providers page. The owner rule reads their capacity from the limit failures instead, and this adds the computation of that rule: a route that runs until it is refused shows the window of its limit failures, the budget it reached, the share it has left, the share an even spend would have left, the paced availability and whether the limit was the model's own or the account's. The module takes the events of a record and returns the capacity per route. It reads no file, no database and no network, and it is not wired into the collector yet: the readers and the publication come later against this interface.
+- A budget that an account shares between its models is fitted only when the episodes of the account involve at least two models with usage and there are more episodes than those models. An account that carries usage in a single model is never fitted: it has nothing to share between its models, its weights stay equal with the basis "assumed", and its budget is the median usage of its episodes in its own unit, exactly like the budget of a route that carries its own limit.
+
 ## [3.17.75] - 2026-10-22
 
 - The AI usage collector publishes the free pool's recent jobs as a count. The pool published one `ghostship_ai_pool_recent_jobs` sample per recent job, so two jobs that shared a provider, a worker, a client and a status were the same metric series twice. The renderer dropped the repeat and kept the first value, so the published number was one where it was two, and the collector's own duplicate counter reported the repeat on every run. The series is now the count of the recent jobs that share its labels and it is published once per label set. The labels and their defaults are unchanged, a job without a provider is still skipped, and a status that repeats a job publishes no duplicate series at all.
