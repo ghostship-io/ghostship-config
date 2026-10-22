@@ -13,6 +13,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1] / "modules/self-hosted/ai-usage" / "collector"
 if str(ROOT) not in sys.path:
@@ -348,6 +349,199 @@ class GoFreeRouteTests(unittest.TestCase):
         self.assertIn("unlimited (published)", labels)
         self.assertEqual(row["quota_state"], "available")
         self.assertEqual(row["capacity"]["remaining_ratio"], 1.0)
+
+
+class EnabledProviderHeadroomTests(unittest.TestCase):
+    """Every enabled provider has a headroom window, or says why it has none.
+
+    The owner rule, enforced with tooling: the snapshot of the enabled
+    providers is checked, and a row whose headroom is unknown without a
+    reason fails the check.
+    """
+
+    FIXTURE = (
+        Path(__file__).resolve().parents[1]
+        / "tests/fixtures/ai-usage/enabled-providers.json"
+    )
+
+    def _fixture(self):
+        return json.loads(self.FIXTURE.read_text(encoding="utf-8"))
+
+    def _catalog(self, fixture):
+        prices = {
+            ("opencode-go", "minimax-m3.1-flash-free"): {"input": 0, "output": 0},
+            ("opencode-go", "minimax-m3.1"): {"input": 1.0, "output": 4.0},
+            ("openrouter", "cohere/north-mini-code:free"): {"input": 0, "output": 0},
+            ("ollama", "deepseek-v4.1-flash"): {"input": 0.15, "output": 0.6},
+            ("codex", "gpt-6.1-sol"): {"input": 1.0, "output": 2.0},
+            ("claude", "claude-opus-5-5"): {"input": 4.0, "output": 20.0},
+            ("grok", "grok-code"): {"input": 1.0, "output": 3.0},
+        }
+        document: dict[str, Any] = {}
+        for entry in fixture["providers"]:
+            provider = entry["provider"]
+            models = document.setdefault(provider, {"models": {}})
+            for model in entry["models"]:
+                models["models"][model] = {
+                    "name": model,
+                    "cost": prices[(provider, model)],
+                }
+        return catalog_module.Catalog(document)
+
+    def _readings(self, directory):
+        """The measured windows of the accounts that report their own."""
+        share = Path(directory) / ".local" / "share" / "opencode"
+        share.mkdir(parents=True)
+        (share / "auth.json").write_text(
+            json.dumps({"opencode-go": {"type": "api", "key": "go-key"}}),
+            encoding="utf-8",
+        )
+        ollama = providers.read_ollama(
+            env_file(directory, "OLLAMA_API_KEY"),
+            NOW,
+            http=lambda url, **kwargs: FakeResponse(
+                body={
+                    "included": {
+                        "session": {
+                            "remaining_percent": 25,
+                            "resets_at": "2027-01-15T20:00:00Z",
+                        },
+                        "weekly": {
+                            "remaining_percent": 64.15,
+                            "resets_at": "2027-01-18T00:00:00Z",
+                        },
+                    },
+                    "totals": {"request_count": 10},
+                }
+            ),
+        )
+        openrouter = providers.read_openrouter(
+            env_file(directory, "OPENROUTER_API_KEY"),
+            NOW,
+            http=lambda url, **kwargs: FakeResponse(
+                body={
+                    "data": {
+                        "free_model_daily_requests": {
+                            "used": 21,
+                            "limit": 1000,
+                            "remaining": 979,
+                        }
+                    }
+                }
+            ),
+            requests_last_minute=2,
+        )
+        go = providers.read_opencode_go(
+            directory,
+            NOW,
+            http=lambda url, **kwargs: FakeResponse(
+                body={
+                    "usage": {
+                        "rolling": {"status": "ok", "percent": 0, "resetsAt": "2027-01-15T13:00:00Z"},
+                        "weekly": {"status": "ok", "percent": 10, "resetsAt": "2027-01-18T00:00:00Z"},
+                        "monthly": {
+                            "status": "rate-limited",
+                            "percent": 100,
+                            "resetsAt": "2027-01-30T22:34:27Z",
+                        },
+                    }
+                }
+            ),
+        )
+        measured: list[dict[str, Any]] = []
+        for result in (ollama, openrouter, go):
+            measured.extend(result.windows)
+        return measured
+
+    def _snapshot(self, directory):
+        snapshot_module = load("ai_usage_headroom_snapshot", "snapshot.py")
+        fixture = self._fixture()
+        catalog = self._catalog(fixture)
+        offered = [
+            (entry["provider"], model)
+            for entry in fixture["providers"]
+            for model in entry["models"]
+        ]
+        measured = self._readings(directory)
+        context = {"offered_models": offered}
+        inputs = main.ranking_inputs([], catalog, context, measured, now=NOW)
+        ranked = ranking.rank_models(
+            models=[ranking.ModelRecord(provider, model) for provider, model in offered],
+            catalog=catalog,
+            quota_windows=inputs["windows"],
+            free_models=inputs["free"],
+            promo_models=inputs["promo"],
+            usage_tokens={},
+            now=NOW,
+        )
+        return snapshot_module.build_snapshot(
+            now=NOW,
+            sources=[],
+            ranked=ranked,
+            native_models={},
+            policy={
+                "frontierPrimeModels": (),
+                "allowedGptModels": (),
+                "backgroundProviderInstances": (),
+            },
+            catalog=catalog,
+            facts={},
+            measured_windows=measured,
+        )
+
+    def test_every_enabled_provider_has_a_window_or_a_reason(self):
+        snapshot_module = load("ai_usage_headroom_snapshot", "snapshot.py")
+        with tempfile.TemporaryDirectory() as directory:
+            data = self._snapshot(directory)
+        rows = {row["provider"]: row for row in data["candidates"]}
+        for entry in self._fixture()["providers"]:
+            provider = entry["provider"]
+            self.assertIn(provider, rows)
+            row = rows[provider]
+            remaining = (row.get("capacity") or {}).get("remaining_ratio")
+            if remaining is None:
+                # The headroom is unknown, so it says why.
+                self.assertTrue(
+                    row.get("unknown_reason"),
+                    f"{provider} has an unknown headroom and no reason",
+                )
+            else:
+                self.assertEqual(row.get("unknown_reason"), "")
+        # The rule itself: an unknown headroom without a reason is a gap.
+        self.assertEqual(snapshot_module.unknown_headroom_violations(data["candidates"]), [])
+
+    def test_an_unknown_headroom_without_a_reason_is_a_violation(self):
+        snapshot_module = load("ai_usage_headroom_snapshot", "snapshot.py")
+        violations = snapshot_module.unknown_headroom_violations(
+            [
+                {
+                    "provider": "ollama",
+                    "model": "deepseek-v4.1-flash",
+                    "quota_state": "unknown",
+                    "unknown_reason": "",
+                }
+            ]
+        )
+        self.assertEqual(
+            violations, [{"provider": "ollama", "model": "deepseek-v4.1-flash"}]
+        )
+
+    def test_the_accounts_that_report_their_own_windows_have_headroom(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data = self._snapshot(directory)
+        rows = {(row["provider"], row["model"]): row for row in data["candidates"]}
+        for key in (
+            ("ollama", "deepseek-v4.1-flash"),
+            ("openrouter", "cohere/north-mini-code:free"),
+            ("opencode-go", "minimax-m3.1-flash-free"),
+            ("opencode-go", "minimax-m3.1"),
+        ):
+            row = rows[key]
+            self.assertIsNotNone(
+                (row.get("capacity") or {}).get("remaining_ratio"),
+                f"{key} has no headroom window",
+            )
+            self.assertEqual(row.get("unknown_reason"), "")
 
 
 if __name__ == "__main__":
