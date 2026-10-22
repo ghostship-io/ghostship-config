@@ -13,9 +13,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   check:
-    # Pull requests wait for review in private-source-ci before the read-only
-    # agent key is released. Merged code on main uses private-source-main,
-    # which only main may deploy to, with no approval.
+    # Neither private-source environment asks for a reviewer. Pull requests use
+    # private-source-ci, which holds the read-only agent key, and merged code
+    # on main uses private-source-main, which only the main branch may deploy
+    # to. A pull request from a fork gets no environment secrets at all.
     environment: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'private-source-main' || 'private-source-ci' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
