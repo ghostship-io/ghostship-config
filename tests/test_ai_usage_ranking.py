@@ -1,6 +1,9 @@
 """Tests for the AI usage model ranking engine."""
 
 import json
+import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -11,6 +14,7 @@ if str(COLLECTOR) not in sys.path:
     sys.path.append(str(COLLECTOR))
 
 import catalog as catalog_module  # noqa: E402
+import metrics  # noqa: E402
 import ranking  # noqa: E402
 
 # A fixed clock, so the release dates below are stable.
@@ -1135,6 +1139,34 @@ class ExcludedProviderTests(unittest.TestCase):
         self.assertEqual(found[0].tier, "")
 
 
+def label_value_of(text: str, key: str) -> str:
+    """The value of one label in the rendered text, parsed strictly.
+
+    The text exposition format escapes a backslash, a double quote and a
+    newline in a label value. Nothing else is an escape, and the value ends
+    at the closing double quote.
+    """
+    marker = f'{key}="'
+    index = text.index(marker) + len(marker)
+    value: list[str] = []
+    while index < len(text):
+        character = text[index]
+        if character == "\\":
+            index += 1
+            if index >= len(text):
+                raise AssertionError("the label value ends with an escape")
+            escape = text[index]
+            if escape not in ('"', "\\", "n"):
+                raise AssertionError(f"unknown escape in the label value: {escape}")
+            value.append("\n" if escape == "n" else escape)
+        elif character == '"':
+            return "".join(value)
+        else:
+            value.append(character)
+        index += 1
+    raise AssertionError("the label value is not closed")
+
+
 class ModelNameTests(unittest.TestCase):
     """Every candidate carries a human name, and the name is never empty.
 
@@ -1201,10 +1233,10 @@ class ModelNameTests(unittest.TestCase):
             native_models=native,
             catalog=self._catalog(),
         )
-        # The label value is the Prometheus-safe form of the name.
+        # The name is published exactly: it is a name.
         self.assertEqual(
             names[("opencode-go", "minimax-m3.1-flash-free")],
-            "MiniMax_M3.1_Flash_Free",
+            "MiniMax M3.1 Flash Free",
         )
 
     def test_the_model_catalog_label_is_the_name_when_the_instance_names_none(self):
@@ -1234,7 +1266,7 @@ class ModelNameTests(unittest.TestCase):
             aa_cache=self._aa_cache(),
             catalog=catalog_module.Catalog({}),
         )
-        self.assertEqual(names[("opencode-go", "glm-5.3-flash")], "GLM-5.3_Flash")
+        self.assertEqual(names[("opencode-go", "glm-5.3-flash")], "GLM-5.3 Flash")
 
     def test_the_raw_id_is_the_name_when_nothing_names_the_model(self):
         name = ranking.model_display_name(
@@ -1251,11 +1283,11 @@ class ModelNameTests(unittest.TestCase):
             aa_cache=self._aa_cache(),
             catalog=catalog_module.Catalog({}),
         )
-        # The label values are the Prometheus-safe form, as every label of
-        # this collector is.
+        # The model label keeps the sanitised form of every label of this
+        # collector; only the name is published exactly.
         self.assertEqual(
             names[("openrouter", "qwen_qwen3.8-27b")],
-            "qwen_qwen3.8-27b",
+            "qwen/qwen3.8-27b",
         )
 
     def test_every_candidate_has_one_info_series_with_a_name(self):
@@ -1289,8 +1321,89 @@ class ModelNameTests(unittest.TestCase):
         labels, value = info[0]
         self.assertEqual(labels["provider"], "opencode-go")
         self.assertEqual(labels["model"], "minimax-m3.1-flash-free")
-        self.assertEqual(labels["name"], "MiniMax_M3.1_Flash_Free")
+        self.assertEqual(labels["name"], "MiniMax M3.1 Flash Free")
         self.assertEqual(value, 1.0)
+
+
+class ModelNameLabelTests(unittest.TestCase):
+    """The name of a model is published exactly; every other label is not.
+
+    The name is a name: the reader sees the spaces and the punctuation the
+    provider wrote. The text exposition format escapes a backslash, a double
+    quote and a newline, and that is all it does.
+    """
+
+    def _render(self, provider, model, name):
+        native = {
+            (provider, model): {
+                "providerInstance": "opencode",
+                "modelId": model,
+                "name": name,
+            }
+        }
+        ranked = [
+            ranking.RankedModel(
+                tier="bulk",
+                provider=provider,
+                model=model,
+                rank=1,
+                score=1.0,
+                quality=None,
+                remaining=None,
+                expires_in_seconds=None,
+                available=True,
+            )
+        ]
+        samples = ranking.rank_samples(ranked, now=NOW, native_models=native)
+        writer = metrics.MetricWriter()
+        writer.declare("ghostship_ai_model_info", "gauge", "One for a candidate model.")
+        for metric, labels, value in samples:
+            writer.add(metric, labels, value)
+        return writer.render()
+
+    def test_the_name_is_published_exactly(self):
+        text = self._render(
+            "opencode-go",
+            "minimax-m3.1-flash-free",
+            "MiniMax M3.1 Flash Free",
+        )
+        self.assertIn('name="MiniMax M3.1 Flash Free"', text)
+
+    def test_a_name_with_a_quote_a_backslash_and_a_newline_round_trips(self):
+        name = 'MiniMax "M3.1"\\Flash\nFree'
+        text = self._render("opencode-go", "minimax-m3.1-flash-free", name)
+        # The exposition format escapes the backslash, the double quote and
+        # the newline, and nothing else.
+        self.assertIn('name="MiniMax \\"M3.1\\"\\\\Flash\\nFree"', text)
+        # The escaped form parses back into the name it came from.
+        self.assertEqual(label_value_of(text, "name"), name)
+        # A real parser reads the file when the shell has one.
+        promtool = shutil.which("promtool")
+        if not promtool:
+            return
+        with tempfile.NamedTemporaryFile("w", suffix=".prom", delete=False) as handle:
+            handle.write(text)
+            path = handle.name
+        try:
+            result = subprocess.run(
+                [promtool, "check", "metrics", path],
+                capture_output=True,
+                text=True,
+            )
+        finally:
+            os.unlink(path)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_the_model_label_is_still_sanitised(self):
+        # The name is published exactly; the model id keeps the sanitised
+        # form every other label of this collector has.
+        text = self._render(
+            "cloudflare-workers-ai",
+            "@cf/openai/gpt-oss-120b",
+            "GPT OSS 120B",
+        )
+        self.assertIn('model="_cf_openai_gpt-oss-120b"', text)
+        self.assertIn('name="GPT OSS 120B"', text)
 
 
 if __name__ == "__main__":
