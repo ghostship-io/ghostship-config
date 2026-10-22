@@ -1227,24 +1227,25 @@ def rank_models(
     candidates: list[_Candidate] = []
     for provider, model in sorted(universe):
         account = account_for(provider, model)
-        # A model of its own windows uses those windows and not the windows
-        # of its account: the model quota is the precise one.
-        windows = windows_by_model.get((provider, model))
-        if windows is None:
-            windows = [
-                window
-                for window in windows_by_account.get(account, [])
-                if _window_applies(window, model)
-            ]
-            # A promotional or free route is not exempt from its account's
-            # paid allowance by price, a model suffix or an operation while
-            # the allowance is spent. Only a scope the provider reports (a
-            # model window, or a window that names other models) separates
-            # it. The observed free route is recorded on the scope, never
-            # used to remove a measured window.
-            observed_free_route = (
-                (provider, model) in free_pairs or (provider, model) in promo_pairs
-            ) and account in free_route_accounts
+        observed_free_route = False
+        # Every applicable limit gates the model: the shared account windows
+        # that name it (or name no model) and its own model windows. A model
+        # reading does not replace the shared cap; an unrelated family window
+        # is excluded by its scope.
+        parent_windows = [
+            window
+            for window in windows_by_account.get(account, [])
+            if _window_applies(window, model)
+        ]
+        model_windows = list(windows_by_model.get((provider, model)) or [])
+        windows = parent_windows + model_windows
+        # A promotional or free route is not exempt from its account's paid
+        # allowance by price, a model suffix or an operation while the
+        # allowance is spent. Only a scope the provider reports separates it;
+        # the observation is recorded, never used to remove a measured window.
+        observed_free_route = (
+            (provider, model) in free_pairs or (provider, model) in promo_pairs
+        ) and account in free_route_accounts
         detail = _capacity_detail(windows, now)
         remaining = detail["remaining"]
         expires_in = detail["expiresIn"]
@@ -1330,14 +1331,15 @@ def rank_models(
                 account=account,
                 quota_scope={
                     "account": account,
-                    "model_window": (provider, model) in windows_by_model,
-                    "windows": len(list(windows)),
+                    "parent_windows": len(parent_windows),
+                    "model_windows": len(model_windows),
+                    "windows": len(windows),
                     "observed_free_route": bool(observed_free_route),
                     "exemption": False,
                     "basis": (
-                        "the model window the provider reports"
-                        if (provider, model) in windows_by_model
-                        else "the account allowance; price and a model suffix do not exempt a route"
+                        "every applicable limit gates the model: the shared "
+                        "account windows and its own model windows; price and "
+                        "a model suffix do not exempt a route"
                     ),
                 },
                 frontier_surplus=_frontier_surplus(list(windows), now),
