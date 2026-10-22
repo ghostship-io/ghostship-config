@@ -1,6 +1,7 @@
 """The activation helper: the system profile is set before the switch, and the
 two generation links are verified afterwards."""
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -8,6 +9,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/activate-host"
+
+
+def interpreter() -> str:
+    """The shell the helper's shebang names.
+
+    The helper starts with `#!/usr/bin/env bash`, and a Nix build sandbox has
+    no /usr/bin/env, so the kernel cannot resolve the shebang and the helper
+    looks missing. The test runs the helper with the interpreter the shebang
+    names, which the sandbox does have.
+    """
+    shebang = SCRIPT.read_text().splitlines()[0]
+    parts = shebang[2:].split() if shebang.startswith("#!") else []
+    if parts and os.path.basename(parts[0]) == "env":
+        parts = parts[1:]
+    name = parts[0] if parts else "sh"
+    return shutil.which(name) or name
 
 
 class ActivateHostTests(unittest.TestCase):
@@ -55,7 +72,7 @@ class ActivateHostTests(unittest.TestCase):
         }
 
     def run_helper(self, *arguments):
-        return subprocess.run([str(SCRIPT), *arguments], env=self.environment,
+        return subprocess.run([interpreter(), str(SCRIPT), *arguments], env=self.environment,
                               capture_output=True, text=True, timeout=30)
 
     def steps(self):

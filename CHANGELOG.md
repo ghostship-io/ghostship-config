@@ -1,12 +1,17 @@
 # Changelog
 
-## [3.17.58] - 2026-10-22
+## [3.17.59] - 2026-10-22
 
 - Stage opt-in T3 runtime confinement, a peer-checked Docker API relay and aggregate resource ceilings. Candidate workflow acceptance passed; production enablement remains gated.
 - Pin Nix 2.34.9 and Podman 5.8.8 security fixes, register their evaluation checks and record the real sandboxed Nix build results. The configured Podman wrapper also passed its bounded host build and packaged-consumer readback; service-continuity review remains required before activation.
 - Persist the kernel module autoload containment and the daily advisory/update procedure. Containment remains distinct from a patched running kernel.
-- The runtime hardening branch is merged onto the current `main`, which had moved on since the branch was published. The hardening release notes carried the same version number as a released entry of `main`, so they move to this version, one above the released one, and the entries of the merged `main` keep their own numbers.
+- The runtime hardening branch is merged onto the current `main`, which had moved on since the branch was published. The hardening release notes carried the same version number as a released entry of `main`, so they move to this version, above the released ones, and the entries of the merged `main` keep their own numbers.
 - The Nix overlay's fallback-path check passes again. The upstream check compared the fallback paths of the nixpkgs input with the version of `nixVersions.stable`, and it could never pass against a pinned input, because it reads a file of the input and compares it with the release this repository pins. A test that is red by construction is a permanent failure for every consumer that builds the package set, and the upstream guarantee it stood for was inverted for this repository. The check keeps its slot and now proves what decides the difference: the fallback paths either name the installed Nix, or nothing in the input's NixOS modules reads them, so the difference cannot reach a runtime consumer. It fails when a reader appears, and it still prints the paths that are not up to date on every run, so the drift stays visible. The file belongs to the input, so the repair is the input's to make.
+
+## [3.17.58] - 2026-10-22
+
+- Main's Fleet checks are green again. The regression tests run inside the Nix check derivation, whose sandbox holds the store and little else, and two assumptions broke there. The activation helper starts with `#!/usr/bin/env bash`, and the sandbox has no `/usr/bin/env`, so the kernel could not resolve the shebang and the test reported the helper as missing although it was in the tree. The test now runs the helper with the interpreter its shebang names. The agent SSH command guard started every session in the login shell of the account the session ran as, and that account names a shell the sandbox does not have, so every session the guard started failed. The guard now falls back to a shell that exists when the account's shell is missing, and it accepts the shell the host pins.
+- Private-source environments: neither `private-source-ci` nor `private-source-main` asks for a reviewer. The owner removed that gate on 2026-10-22, because it should only hold back other people, and the environment-scoped read-only agent key is released without an approval. Only the `main` branch may deploy to `private-source-main`, and a pull request from a fork gets no environment secrets at all, because GitHub withholds them from a fork. The fleet operations document records that state, and the unused `GHOSTSHIP_PRIVATE_SOURCES` environment secret is gone.
 
 ## [3.17.57] - 2026-10-22
 
