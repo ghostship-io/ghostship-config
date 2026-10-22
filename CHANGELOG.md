@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.56] - 2026-10-22
+
+- Test fixture lint: the tests read only committed fixtures. `scripts/check-test-fixtures.py` fails the check when a test reads a scratch path such as `/tmp`, `/var/tmp`, `/home` or `/workspace`, which exists on the machine that runs the test rather than in the repository, and which is how pull request #190's `test_ai_usage_aa_pull.py` read `/tmp/aa-pull/raw` and failed in CI. A test that needs such a path builds it in a temporary directory, or states on the line why the reference is harmless with a `# fixture-path-ok: <reason>` comment.
+
 ## [3.17.55] - 2026-10-22
 
 - T3 restart guard: T3 Code is never restarted unless it is idle, except when the owner has asked for work to be activated or deployed. A forced restart bypasses the idle gate and interrupts the work in flight, so `t3code-safe-restart --force` now requires `--owner-request "<short quote or reference of the owner's instruction>"` and refuses without one. Every forced restart is recorded in `/var/lib/t3code-restarts/ledger.jsonl` with the time, the actor, the reference, and the container identity before and after the restart, and in the journal under the `t3code-restart` tag. The queued restart still waits for the activity probe to confirm idle and defers while T3 Code is busy, and the evaluation check asserts that a switch has no unit to restart, so `podman-t3code` keeps `restartIfChanged = false`.

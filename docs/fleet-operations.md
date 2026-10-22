@@ -425,7 +425,10 @@ Fleet checks after review when needed.
 
 CI evaluates all host derivations without building the fleet, builds the config
 writer, runs regression tests, checks shell/workflow syntax, and scans the source
-for secrets. It does not claim native ARM builds, live container startup, secret
+for secrets. The tests read only committed fixtures: a lint fails the check when
+a test reads a scratch path such as `/tmp`, `/home` or `/workspace`, unless the
+test builds it in a temporary directory or the line states why the reference is
+harmless with a `# fixture-path-ok: <reason>` comment. It does not claim native ARM builds, live container startup, secret
 decryption on every host, GPU/controller acceptance, or successful restore drills.
 
 An activation must record the system generation. Use `scripts/activate-host`
