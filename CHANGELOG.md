@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.99] - 2026-10-22
+
+- ai-usage: a Requesty request counts toward its learned limit. OpenCode records the request as "vendor/model", while the collector's route is the model alone, so every such event was unmatched and dropped, and the limit failures of the route never reached the inference. The matching now falls back to the model alone when the whole id is unknown, exactly and folded, within the same provider: the prefix is never taken from another provider, never added, and only one segment of it is ever stripped.
+
 ## [3.17.98] - 2026-10-22
 
 - The Providers page draws one card per provider with every capacity window. The collector publishes the windows of every account as gauges, read straight from the routing snapshot: the share that is left, the even-spend line, the reset, and the place the row takes in the card. The page never recomputes a window. One window is read more than once (the OpenCode Go status and the Go usage endpoint name the same windows), and the window is published once: the reading that carries the length of the window is the one that is published. An account that publishes no window of its own says that it is learning.
