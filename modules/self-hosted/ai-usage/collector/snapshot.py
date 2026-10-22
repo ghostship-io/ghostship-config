@@ -1998,14 +1998,19 @@ def build_snapshot(
     }
     provider_capacity: dict[str, Any] = {}
     for account, windows in accounts.items():
+        # The provider's overall capacity is the account-level windows. A
+        # model-scoped subordinate window constrains that model only.
+        applicable = [
+            window for window in windows if not window.get("applies_to")
+        ]
         reported = [
             window
-            for window in windows
+            for window in applicable
             if window.get("evidence") == "provider_reported"
             and isinstance(window.get("remaining_ratio"), (int, float))
             and not isinstance(window.get("remaining_ratio"), bool)
         ]
-        unknown = [window for window in windows if window not in reported]
+        unknown = [window for window in applicable if window not in reported]
         spent = [window for window in reported if float(window["remaining_ratio"]) <= 0.0]
         binding = None
         remaining: float | None = None
@@ -2014,6 +2019,10 @@ def build_snapshot(
             # still has room.
             binding = sorted(spent, key=lambda window: str(window.get("kind") or ""))[0]
             remaining = 0.0
+        elif unknown:
+            # An unknown window is not room: a positive reading from the
+            # known windows is suppressed until the account is complete.
+            remaining = None
         elif reported:
             binding = min(reported, key=lambda window: float(window["remaining_ratio"]))
             remaining = float(binding["remaining_ratio"])
@@ -2026,7 +2035,7 @@ def build_snapshot(
                 "quota": binding.get("quota"),
                 "reset_at": binding.get("reset_at"),
             },
-            "windows": len(windows),
+            "windows": len(applicable),
             "unknown_windows": len(unknown),
             "basis": (
                 "the lowest applicable remaining share; any spent window "
@@ -2235,6 +2244,49 @@ def build_snapshot(
             "omitted": omitted,
         },
     }
+
+
+def provider_capacity_samples(
+    snapshot: Mapping[str, Any],
+) -> list[tuple[str, dict[str, str], float]]:
+    """The provider capacity, with its binding window, as gauges.
+
+    A positive capacity is published only when it is known: an unknown window
+    suppresses it, and a spent window publishes zero with its binding.
+    """
+    samples: list[tuple[str, dict[str, str], float]] = []
+    quota = snapshot.get("quota") or {}
+    for provider, capacity in sorted((quota.get("provider_capacity") or {}).items()):
+        if not isinstance(capacity, Mapping):
+            continue
+        binding = capacity.get("binding") or {}
+        kind = str(binding.get("kind") or "unknown") if isinstance(binding, Mapping) else "unknown"
+        remaining = capacity.get("remaining_ratio")
+        if isinstance(remaining, (int, float)) and not isinstance(remaining, bool):
+            samples.append(
+                (
+                    "ghostship_ai_provider_capacity_remaining_ratio",
+                    {"provider": str(provider), "binding": kind},
+                    float(remaining),
+                )
+            )
+        known = max(0, int(capacity.get("windows") or 0) - int(capacity.get("unknown_windows") or 0))
+        unknown = int(capacity.get("unknown_windows") or 0)
+        samples.append(
+            (
+                "ghostship_ai_provider_capacity_windows",
+                {"provider": str(provider), "evidence": "known"},
+                float(known),
+            )
+        )
+        samples.append(
+            (
+                "ghostship_ai_provider_capacity_windows",
+                {"provider": str(provider), "evidence": "unknown"},
+                float(unknown),
+            )
+        )
+    return samples
 
 
 def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, str], float]]:

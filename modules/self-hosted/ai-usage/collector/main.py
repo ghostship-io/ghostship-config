@@ -172,6 +172,13 @@ METRIC_HELP = {
     "ghostship_ai_model_pace_delta_ratio": (
         "The most constraining pace among the windows of a model."
     ),
+    "ghostship_ai_provider_capacity_remaining_ratio": (
+        "The lowest applicable account window of a provider; a spent window "
+        "publishes zero, and an unknown window publishes nothing."
+    ),
+    "ghostship_ai_provider_capacity_windows": (
+        "The account windows of a provider, split into known and unknown."
+    ),
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
 }
@@ -857,6 +864,8 @@ def render(
     for name, labels, value in extra:
         writer.add(name, labels, value)
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
+        writer.add(name, labels, value)
+    for name, labels, value in snapshot_module.provider_capacity_samples(snapshot or {}):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
