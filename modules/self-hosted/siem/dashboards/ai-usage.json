@@ -24,11 +24,11 @@
     "x": 0,
     "y": 0,
     "w": 24,
-    "h": 2
+    "h": 3
    },
    "options": {
     "mode": "markdown",
-    "content": "**Ranking as of the selected end time \u00b7 AA snapshot from the collector \u00b7 Routing OFF (awaiting owner approval)**\n\nPaced Availability = % left \u2212 expected % left in the binding window. Raw remaining is labelled % left. Observation only; a missing series is Unavailable, never 0."
+    "content": "**Ranking as of the selected end time \u00b7 AA snapshot from the collector \u00b7 Routing OFF (awaiting owner approval)**\n\nPaced Availability = % left \u2212 expected % left in the binding window. Raw remaining is labelled % left. A missing series is Unavailable, never 0."
    }
   },
   {
@@ -41,11 +41,11 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 2,
+    "y": 3,
     "w": 6,
-    "h": 9
+    "h": 7
    },
-   "description": "Latest snapshot. Each bar is lowest-applicable % left for that route. Ordered by Paced Availability (highest first); the first row is the next pick. Chief is Claude Opus 5.5; Backup is Codex GPT-6.1-Sol \u2014 those labels stay on those models even when another route leads on Paced Availability. Workhorses stay visible at 0% left when blocked. No eligible measured model when the tier is empty.",
+   "description": "Latest snapshot. Each bar is the lowest-applicable % left of that route. The order is Paced Availability: % left minus the expected % left in the binding window, highest first. The first row is the next pick. Chief and Backup are the owner's frontier roles and stay on those models even when another route leads on Paced Availability. A route reserved for 3D work is marked. A route with no measured allowance reads Limits unknown. An empty tier reads No eligible measured model.",
    "targets": [
     {
      "refId": "A",
@@ -53,7 +53,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "label_replace(label_replace((label_join(((max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"frontier\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"frontier\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"codex|claude\",provider=~\"$provider\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"codex|claude\",provider=~\"$provider\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) + 99)), \"bar\", \" \u00b7 \", \"provider\", \"model\")), \"bar\", \"Chief (Claude Opus 5.5)\", \"model\", \"claude-opus-5-5\"), \"bar\", \"Backup (Codex GPT-6.1-Sol)\", \"model\", \"gpt-6[.]1-sol\")",
+     "expr": "label_replace(label_join(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"frontier\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Chief (Claude Opus 5.5)\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"Backup (Codex GPT-6.1-Sol)\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\"), \"reserve_marker\", \" \", \"model\", \"reserve\"), \"model\", \"$1 (3D reserve)\", \"reserve_marker\", \"^(.*) 3d$\")",
      "instant": true,
      "range": false,
      "format": "table"
@@ -64,7 +64,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "label_replace(label_replace((label_join(((max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) and on(provider, model) ((max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"frontier\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"frontier\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"codex|claude\",provider=~\"$provider\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"codex|claude\",provider=~\"$provider\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) + 99))) or on(provider, model) (0 * ((max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"frontier\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"frontier\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"codex|claude\",provider=~\"$provider\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"codex|claude\",provider=~\"$provider\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) + 99)) - 1)), \"bar\", \" \u00b7 \", \"provider\", \"model\")), \"bar\", \"Chief (Claude Opus 5.5)\", \"model\", \"claude-opus-5-5\"), \"bar\", \"Backup (Codex GPT-6.1-Sol)\", \"model\", \"gpt-6[.]1-sol\")",
+     "expr": "label_replace(label_join(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model) (((max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) and on(provider, model) (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"frontier\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"frontier\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"frontier\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) - 1))), \"model\", \"Chief (Claude Opus 5.5)\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"Backup (Codex GPT-6.1-Sol)\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\"), \"reserve_marker\", \" \", \"model\", \"reserve\"), \"model\", \"$1 (3D reserve)\", \"reserve_marker\", \"^(.*) 3d$\")",
      "instant": true,
      "range": false,
      "format": "table"
@@ -94,7 +94,7 @@
       },
       "renameByName": {
        "Value #A": "Order",
-       "Value #B": "% left"
+       "Value #B": "Limit left"
       }
      }
     },
@@ -103,7 +103,7 @@
      "options": {
       "mappings": [
        {
-        "fieldName": "bar",
+        "fieldName": "model",
         "handlerKey": "field.name"
        },
        {
@@ -121,43 +121,57 @@
      "max": 1,
      "decimals": 0,
      "noValue": "No eligible measured model",
-     "displayName": "",
+     "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "#d03b3b",
-        "value": null
-       },
-       {
-        "color": "#fab219",
-        "value": 0.1
-       },
-       {
-        "color": "#0ca30c",
-        "value": 0.3
-       }
-      ]
-     },
-     "links": [
-      {
-       "title": "Evidence and alternatives",
-       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
-      }
-     ],
      "mappings": [
       {
        "type": "value",
        "options": {
         "-1": {
-         "text": "Unavailable",
+         "text": "Limits unknown",
          "color": "#B8BFCC",
          "index": 0
         }
        }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 0.1,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.1,
+        "to": 0.3,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.3,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      }
+     ],
+     "links": [
+      {
+       "title": "Evidence and alternatives",
+       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
       }
      ]
     },
@@ -166,9 +180,9 @@
    "options": {
     "orientation": "horizontal",
     "displayMode": "basic",
-    "showUnfilled": true,
+    "showUnfilled": false,
     "valueMode": "text",
-    "namePlacement": "left",
+    "namePlacement": "top",
     "sizing": "manual",
     "minVizHeight": 28,
     "minVizWidth": 8,
@@ -176,7 +190,7 @@
      "calcs": [
       "lastNotNull"
      ],
-     "fields": "/^(?!Order$|% left$|Time$|Value #A$|Value #B$).+/",
+     "fields": "/^(?!Order$|Limit left$|Time$|Value #A$|Value #B$).+/",
      "values": false
     },
     "maxVizHeight": 36,
@@ -196,11 +210,11 @@
    },
    "gridPos": {
     "x": 6,
-    "y": 2,
+    "y": 3,
     "w": 6,
-    "h": 9
+    "h": 7
    },
-   "description": "Latest snapshot. Each bar is lowest-applicable % left for that route. Ordered by Paced Availability (highest first); the first row is the next pick. 3D-qualified routes are listed in Why this order. First row is the next pick. No eligible measured model when the tier is empty.",
+   "description": "Latest snapshot. Each bar is the lowest-applicable % left of that route. The order is Paced Availability: % left minus the expected % left in the binding window, highest first. The first row is the next pick. Chief and Backup are the owner's frontier roles and stay on those models even when another route leads on Paced Availability. A route reserved for 3D work is marked. A route with no measured allowance reads Limits unknown. An empty tier reads No eligible measured model.",
    "targets": [
     {
      "refId": "A",
@@ -208,7 +222,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "label_join((max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))), \"bar\", \" \u00b7 \", \"provider\", \"model\")",
+     "expr": "label_replace(label_join(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(((max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) * on(provider, model) group_left(reserve) (max by (provider, model, reserve) (ghostship_ai_model_reserved{reserve=\"3d\"}))) or on(provider, model) (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\"), \"reserve_marker\", \" \", \"model\", \"reserve\"), \"model\", \"$1 (3D reserve)\", \"reserve_marker\", \"^(.*) 3d$\")",
      "instant": true,
      "range": false,
      "format": "table"
@@ -219,7 +233,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "label_join(((max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) and on(provider, model) (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) - 1)), \"bar\", \" \u00b7 \", \"provider\", \"model\")",
+     "expr": "label_replace(label_join(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(((max by (provider, model) (((max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) and on(provider, model) (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) - 1))) * on(provider, model) group_left(reserve) (max by (provider, model, reserve) (ghostship_ai_model_reserved{reserve=\"3d\"}))) or on(provider, model) (max by (provider, model) (((max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) and on(provider, model) (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) - 1))))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\"), \"reserve_marker\", \" \", \"model\", \"reserve\"), \"model\", \"$1 (3D reserve)\", \"reserve_marker\", \"^(.*) 3d$\")",
      "instant": true,
      "range": false,
      "format": "table"
@@ -249,7 +263,7 @@
       },
       "renameByName": {
        "Value #A": "Order",
-       "Value #B": "% left"
+       "Value #B": "Limit left"
       }
      }
     },
@@ -258,7 +272,7 @@
      "options": {
       "mappings": [
        {
-        "fieldName": "bar",
+        "fieldName": "model",
         "handlerKey": "field.name"
        },
        {
@@ -276,43 +290,57 @@
      "max": 1,
      "decimals": 0,
      "noValue": "No eligible measured model",
-     "displayName": "",
+     "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "#d03b3b",
-        "value": null
-       },
-       {
-        "color": "#fab219",
-        "value": 0.1
-       },
-       {
-        "color": "#0ca30c",
-        "value": 0.3
-       }
-      ]
-     },
-     "links": [
-      {
-       "title": "Evidence and alternatives",
-       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
-      }
-     ],
      "mappings": [
       {
        "type": "value",
        "options": {
         "-1": {
-         "text": "Unavailable",
+         "text": "Limits unknown",
          "color": "#B8BFCC",
          "index": 0
         }
        }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 0.1,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.1,
+        "to": 0.3,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.3,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      }
+     ],
+     "links": [
+      {
+       "title": "Evidence and alternatives",
+       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
       }
      ]
     },
@@ -321,9 +349,9 @@
    "options": {
     "orientation": "horizontal",
     "displayMode": "basic",
-    "showUnfilled": true,
+    "showUnfilled": false,
     "valueMode": "text",
-    "namePlacement": "left",
+    "namePlacement": "top",
     "sizing": "manual",
     "minVizHeight": 28,
     "minVizWidth": 8,
@@ -331,7 +359,7 @@
      "calcs": [
       "lastNotNull"
      ],
-     "fields": "/^(?!Order$|% left$|Time$|Value #A$|Value #B$).+/",
+     "fields": "/^(?!Order$|Limit left$|Time$|Value #A$|Value #B$).+/",
      "values": false
     },
     "maxVizHeight": 36,
@@ -344,18 +372,18 @@
   {
    "id": 42,
    "type": "bargauge",
-   "title": "Dedicated free \u00b7 % left \u00b7 Paced Availability",
+   "title": "Free \u00b7 % left \u00b7 Paced Availability",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
    },
    "gridPos": {
     "x": 12,
-    "y": 2,
+    "y": 3,
     "w": 6,
-    "h": 9
+    "h": 7
    },
-   "description": "Latest snapshot. Each bar is lowest-applicable % left for that route. Ordered by Paced Availability (highest first); the first row is the next pick. Promotional and pool routes. First row is the next pick. No eligible measured model when the tier is empty.",
+   "description": "Latest snapshot. Each bar is the lowest-applicable % left of that route. The order is Paced Availability: % left minus the expected % left in the binding window, highest first. The first row is the next pick. Chief and Backup are the owner's frontier roles and stay on those models even when another route leads on Paced Availability. A route reserved for 3D work is marked. A route with no measured allowance reads Limits unknown. An empty tier reads No eligible measured model.",
    "targets": [
     {
      "refId": "A",
@@ -363,7 +391,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "label_join((max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))), \"bar\", \" \u00b7 \", \"provider\", \"model\")",
+     "expr": "label_replace(label_join(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(((max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) * on(provider, model) group_left(reserve) (max by (provider, model, reserve) (ghostship_ai_model_reserved{reserve=\"3d\"}))) or on(provider, model) (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\"), \"reserve_marker\", \" \", \"model\", \"reserve\"), \"model\", \"$1 (3D reserve)\", \"reserve_marker\", \"^(.*) 3d$\")",
      "instant": true,
      "range": false,
      "format": "table"
@@ -374,7 +402,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "label_join(((max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) and on(provider, model) (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) - 1)), \"bar\", \" \u00b7 \", \"provider\", \"model\")",
+     "expr": "label_replace(label_join(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(((max by (provider, model) (((max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) and on(provider, model) (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) - 1))) * on(provider, model) group_left(reserve) (max by (provider, model, reserve) (ghostship_ai_model_reserved{reserve=\"3d\"}))) or on(provider, model) (max by (provider, model) (((max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) and on(provider, model) (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) - 1))))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\"), \"reserve_marker\", \" \", \"model\", \"reserve\"), \"model\", \"$1 (3D reserve)\", \"reserve_marker\", \"^(.*) 3d$\")",
      "instant": true,
      "range": false,
      "format": "table"
@@ -404,7 +432,7 @@
       },
       "renameByName": {
        "Value #A": "Order",
-       "Value #B": "% left"
+       "Value #B": "Limit left"
       }
      }
     },
@@ -413,7 +441,7 @@
      "options": {
       "mappings": [
        {
-        "fieldName": "bar",
+        "fieldName": "model",
         "handlerKey": "field.name"
        },
        {
@@ -431,43 +459,57 @@
      "max": 1,
      "decimals": 0,
      "noValue": "No eligible measured model",
-     "displayName": "",
+     "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "#d03b3b",
-        "value": null
-       },
-       {
-        "color": "#fab219",
-        "value": 0.1
-       },
-       {
-        "color": "#0ca30c",
-        "value": 0.3
-       }
-      ]
-     },
-     "links": [
-      {
-       "title": "Evidence and alternatives",
-       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
-      }
-     ],
      "mappings": [
       {
        "type": "value",
        "options": {
         "-1": {
-         "text": "Unavailable",
+         "text": "Limits unknown",
          "color": "#B8BFCC",
          "index": 0
         }
        }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 0.1,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.1,
+        "to": 0.3,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.3,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      }
+     ],
+     "links": [
+      {
+       "title": "Evidence and alternatives",
+       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
       }
      ]
     },
@@ -476,9 +518,9 @@
    "options": {
     "orientation": "horizontal",
     "displayMode": "basic",
-    "showUnfilled": true,
+    "showUnfilled": false,
     "valueMode": "text",
-    "namePlacement": "left",
+    "namePlacement": "top",
     "sizing": "manual",
     "minVizHeight": 28,
     "minVizWidth": 8,
@@ -486,7 +528,7 @@
      "calcs": [
       "lastNotNull"
      ],
-     "fields": "/^(?!Order$|% left$|Time$|Value #A$|Value #B$).+/",
+     "fields": "/^(?!Order$|Limit left$|Time$|Value #A$|Value #B$).+/",
      "values": false
     },
     "maxVizHeight": 36,
@@ -506,11 +548,11 @@
    },
    "gridPos": {
     "x": 18,
-    "y": 2,
+    "y": 3,
     "w": 6,
-    "h": 9
+    "h": 7
    },
-   "description": "Latest snapshot. Each bar is lowest-applicable % left for that route. Ordered by Paced Availability (highest first); the first row is the next pick. 3D reserve ranking. Pending AA-3D evidence stays Unavailable, never a fake score. No eligible measured model when the tier is empty.",
+   "description": "Latest snapshot. Each bar is the lowest-applicable % left of that route. The order is Paced Availability: % left minus the expected % left in the binding window, highest first. The first row is the next pick. Chief and Backup are the owner's frontier roles and stay on those models even when another route leads on Paced Availability. A route reserved for 3D work is marked. A route with no measured allowance reads Limits unknown. An empty tier reads No eligible measured model.",
    "targets": [
     {
      "refId": "A",
@@ -518,7 +560,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "label_join((max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))), \"bar\", \" \u00b7 \", \"provider\", \"model\")",
+     "expr": "label_replace(label_join(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\"), \"reserve_marker\", \" \", \"model\", \"reserve\"), \"model\", \"$1 (3D reserve)\", \"reserve_marker\", \"^(.*) 3d$\")",
      "instant": true,
      "range": false,
      "format": "table"
@@ -529,7 +571,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "label_join(((max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) and on(provider, model) (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) - 1)), \"bar\", \" \u00b7 \", \"provider\", \"model\")",
+     "expr": "label_replace(label_join(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(max by (provider, model) (((max by (provider, model) ((ghostship_ai_model_capacity_remaining{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) and on(provider, model) (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))) or on(provider, model) (0 * (max by (provider, model) ((ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"} and (timestamp(ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) - 1))), \"model\", \"Claude Opus 5.5\", \"model\", \"^claude-opus-5-5$\"), \"model\", \"GPT-6.1-Sol\", \"model\", \"^gpt-6[.]1-sol$\"), \"model\", \"GPT-6.1\", \"model\", \"^gpt-6[.]1$\"), \"model\", \"Claude Haiku 5.5\", \"model\", \"^claude-haiku-5-5$\"), \"model\", \"Claude Sonnet 5.5\", \"model\", \"^claude-sonnet-5-5$\"), \"model\", \"GPT-5.4\", \"model\", \"^gpt-5[.]4$\"), \"model\", \"Gemini 3.8 Flash\", \"model\", \"^gemini-3[.]8-flash$\"), \"model\", \"Gemini 3.8 Pro\", \"model\", \"^gemini-3[.]8-pro$\"), \"model\", \"Grok 4.6\", \"model\", \"^grok-4[.]6$\"), \"model\", \"Grok 4.5\", \"model\", \"^grok-4[.]5$\"), \"model\", \"DeepSeek V4.1 Flash\", \"model\", \"^deepseek-v4[.]1-flash$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash_1017$\"), \"model\", \"DeepSeek V4.1 Flash 1017\", \"model\", \"^deepseek-v4[.]1-flash:1017$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax_minimax-m3[.]1-flash_free$\"), \"model\", \"MiniMax M3.1 Flash (free)\", \"model\", \"^minimax/minimax-m3[.]1-flash:free$\"), \"model\", \"GPT-OSS 120B\", \"model\", \"^gpt-oss-120b$\"), \"model\", \"Qwen3 Coder 480B\", \"model\", \"^qwen3-coder-480b$\"), \"reserve_marker\", \" \", \"model\", \"reserve\"), \"model\", \"$1 (3D reserve)\", \"reserve_marker\", \"^(.*) 3d$\")",
      "instant": true,
      "range": false,
      "format": "table"
@@ -559,7 +601,7 @@
       },
       "renameByName": {
        "Value #A": "Order",
-       "Value #B": "% left"
+       "Value #B": "Limit left"
       }
      }
     },
@@ -568,7 +610,7 @@
      "options": {
       "mappings": [
        {
-        "fieldName": "bar",
+        "fieldName": "model",
         "handlerKey": "field.name"
        },
        {
@@ -586,43 +628,57 @@
      "max": 1,
      "decimals": 0,
      "noValue": "No eligible measured model",
-     "displayName": "",
+     "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "#d03b3b",
-        "value": null
-       },
-       {
-        "color": "#fab219",
-        "value": 0.1
-       },
-       {
-        "color": "#0ca30c",
-        "value": 0.3
-       }
-      ]
-     },
-     "links": [
-      {
-       "title": "Evidence and alternatives",
-       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
-      }
-     ],
      "mappings": [
       {
        "type": "value",
        "options": {
         "-1": {
-         "text": "Unavailable",
+         "text": "Limits unknown",
          "color": "#B8BFCC",
          "index": 0
         }
        }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 0.1,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.1,
+        "to": 0.3,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.3,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      }
+     ],
+     "links": [
+      {
+       "title": "Evidence and alternatives",
+       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
       }
      ]
     },
@@ -631,9 +687,9 @@
    "options": {
     "orientation": "horizontal",
     "displayMode": "basic",
-    "showUnfilled": true,
+    "showUnfilled": false,
     "valueMode": "text",
-    "namePlacement": "left",
+    "namePlacement": "top",
     "sizing": "manual",
     "minVizHeight": 28,
     "minVizWidth": 8,
@@ -641,7 +697,7 @@
      "calcs": [
       "lastNotNull"
      ],
-     "fields": "/^(?!Order$|% left$|Time$|Value #A$|Value #B$).+/",
+     "fields": "/^(?!Order$|Limit left$|Time$|Value #A$|Value #B$).+/",
      "values": false
     },
     "maxVizHeight": 36,
@@ -658,7 +714,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 11,
+    "y": 10,
     "w": 24,
     "h": 1
    },
@@ -666,15 +722,15 @@
   },
   {
    "id": 44,
-   "title": "$provider \u00b7 % left",
    "type": "stat",
+   "title": "$provider \u00b7 % left",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
    },
    "gridPos": {
     "x": 0,
-    "y": 12,
+    "y": 11,
     "w": 6,
     "h": 5
    },
@@ -685,7 +741,7 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "sort((min by (provider) ((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) or on(provider) (0 * max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) - 1))",
+     "expr": "(min by (provider) ((ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))) or on(provider) (0 * (max by (provider) ((ghostship_ai_provider_coverage{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_coverage{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))) - 1))",
      "instant": true,
      "range": false,
      "legendFormat": "{{provider}}"
@@ -696,52 +752,65 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "100 * (max by (provider) ((ghostship_ai_entitlement_pace_delta_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_entitlement_pace_delta_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90))))",
+     "expr": "100 * max by (provider) ((ghostship_ai_provider_paced_availability{provider=~\"$provider\"} and (timestamp(ghostship_ai_provider_paced_availability{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) or (ghostship_ai_entitlement_pace_delta_ratio{provider=~\"$provider\"} and (timestamp(ghostship_ai_entitlement_pace_delta_ratio{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)))",
      "instant": true,
      "range": false,
      "legendFormat": "Paced Availability"
-    },
-    {
-     "refId": "C",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "min by (provider) (clamp_min((ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"} and (timestamp(ghostship_ai_entitlement_reset_timestamp_seconds{provider=~\"$provider\"}) > scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90)) - time(), 0))",
-     "instant": true,
-     "range": false,
-     "legendFormat": "resets in"
     }
    ],
    "fieldConfig": {
     "defaults": {
-     "noValue": "limits unknown",
+     "noValue": "Limits unknown",
      "color": {
-      "mode": "thresholds"
-     },
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "#d03b3b",
-        "value": null
-       },
-       {
-        "color": "#fab219",
-        "value": 0.1
-       },
-       {
-        "color": "#0ca30c",
-        "value": 0.3
-       }
-      ]
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "mappings": [
       {
        "type": "value",
        "options": {
         "-1": {
-         "text": "limits unknown",
+         "text": "Limits unknown",
+         "color": "#B8BFCC",
+         "index": 0
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 0.1,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.1,
+        "to": 0.3,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.3,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "special",
+       "options": {
+        "null": {
+         "text": "Limits unknown",
          "color": "#B8BFCC",
          "index": 0
         }
@@ -792,22 +861,13 @@
        {
         "id": "displayName",
         "value": "Paced Availability"
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byFrameRefID",
-       "options": "C"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "dtdurations"
        },
        {
-        "id": "displayName",
-        "value": "resets in"
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3987e5"
+        }
        }
       ]
      }
@@ -827,7 +887,7 @@
      "values": true
     }
    },
-   "description": "Latest snapshot. Lowest applicable % left for this provider (a spent parent window blocks the whole provider). Unknown windows show limits unknown, never a fake 0. Paced Availability is percent free minus expected percent free in the binding window.",
+   "description": "Latest snapshot. The headline is the lowest applicable % left of this provider: a spent parent window blocks the whole provider. Paced Availability is % left minus the expected % left in the binding window; positive means ahead of the pace that window draws. A provider with no measured window reads Limits unknown, never a fake 0.",
    "repeat": "provider",
    "repeatDirection": "h",
    "maxPerRow": 4
@@ -845,11 +905,11 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 17,
+    "y": 16,
     "w": 6,
-    "h": 7
+    "h": 5
    },
-   "description": "Latest snapshot. One bar per entitlement window: % left. The binding window is the lowest applicable (the overall meter). Expected-left / Paced Availability for each window is in Why this order. Missing windows: limits unknown.",
+   "description": "Latest snapshot. One bar per allowance window of this provider, % left. Expected % left and Paced Availability per window are in Why this order. A window with no measurement reads Limits unknown.",
    "targets": [
     {
      "refId": "A",
@@ -869,33 +929,57 @@
      "min": 0,
      "max": 1,
      "decimals": 0,
-     "noValue": "limits unknown",
+     "noValue": "Limits unknown",
      "color": {
-      "mode": "thresholds"
-     },
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "#d03b3b",
-        "value": null
-       },
-       {
-        "color": "#fab219",
-        "value": 0.1
-       },
-       {
-        "color": "#0ca30c",
-        "value": 0.3
-       }
-      ]
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "mappings": [
       {
        "type": "value",
        "options": {
         "-1": {
-         "text": "Unavailable",
+         "text": "Limits unknown",
+         "color": "#B8BFCC",
+         "index": 0
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 0.1,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.1,
+        "to": 0.3,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.3,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "special",
+       "options": {
+        "null": {
+         "text": "Limits unknown",
          "color": "#B8BFCC",
          "index": 0
         }
@@ -903,28 +987,29 @@
       }
      ],
      "displayName": ""
-    }
+    },
+    "overrides": []
    },
    "options": {
     "orientation": "horizontal",
     "displayMode": "basic",
-    "valueMode": "text",
     "showUnfilled": true,
-    "minVizHeight": 22,
-    "minVizWidth": 8,
+    "valueMode": "text",
     "namePlacement": "left",
     "sizing": "manual",
-    "maxVizHeight": 26,
-    "text": {
-     "titleSize": 13,
-     "valueSize": 16
-    },
+    "minVizHeight": 26,
+    "minVizWidth": 8,
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
+    },
+    "maxVizHeight": 32,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 15
     }
    }
   },
@@ -934,7 +1019,7 @@
    "title": "Why this order \u00b7 ${allowance:text}  (per-window % left, expected-left marker, Paced Availability)",
    "gridPos": {
     "x": 0,
-    "y": 25,
+    "y": 21,
     "w": 24,
     "h": 1
    },
@@ -1381,7 +1466,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 26,
+    "y": 22,
     "w": 24,
     "h": 1
    },
@@ -1761,7 +1846,7 @@
        "format": "table"
       }
      ],
-     "description": "Formula and component weights, with the configured scope. Gates are unavailable: the producer publishes only the rule body and no gate series, so no gate rows are shown and none are implied. Missing benchmark components are omitted and known weights are renormalized. Collector-wide signals; independent of the Provider filter.",
+     "description": "The live formula and the weights the producer used. Bulk, free and frontier: 0.70 intelligence + 0.30 cost efficiency. 3D: 0.45 intelligence + 0.25 AA-3D + 0.30 cost efficiency. Both inputs are required: a missing benchmark leaves the value unknown, nothing is renormalized and no gate series is implied. Collector-wide signals; independent of the Provider filter.",
      "fieldConfig": {
       "defaults": {
        "noValue": "Unavailable"
@@ -1986,7 +2071,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 28,
+    "y": 23,
     "w": 24,
     "h": 1
    },
@@ -3241,7 +3326,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 30,
+    "y": 24,
     "w": 24,
     "h": 1
    },
@@ -4139,7 +4224,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 32,
+    "y": 25,
     "w": 24,
     "h": 1
    },
@@ -4592,7 +4677,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 34,
+    "y": 26,
     "w": 24,
     "h": 1
    },

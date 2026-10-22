@@ -997,7 +997,7 @@ class DesignContractTests(unittest.TestCase):
         for pid, title in (
                 (40, 'Frontier · % left · Paced Availability'),
                 (41, 'Bulk · % left · Paced Availability'),
-                (42, 'Dedicated free · % left · Paced Availability'),
+                (42, 'Free · % left · Paced Availability'),
                 (43, '3D · % left · Paced Availability')):
             self.assertEqual(by_id[pid]['title'], title)
             self.assertIn('Paced Availability', by_id[pid]['description'])
@@ -1018,19 +1018,30 @@ class DesignContractTests(unittest.TestCase):
         self.assertIn('Chief (Claude Opus 5.5)', joined_40)
         self.assertIn('Backup (Codex GPT-6.1-Sol)', joined_40)
 
-    def test_allowance_left_thresholds_unknown_copy_and_no_table_in_top_band(self):
+    def test_allowance_left_bands_unknown_copy_and_no_table_in_top_band(self):
         """Defect: remaining bars use the wrong cutoffs, unknown windows fake a 0, or a table sits in the first screen."""
         page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
         by_id = panels_by_id(page)
-        steps = by_id[40]['fieldConfig']['defaults']['thresholds']['steps']
-        self.assertEqual(
-            [(s.get('value'), s['color']) for s in steps],
-            [(None, '#d03b3b'), (0.10, '#fab219'), (0.30, '#0ca30c')])
+        for pid in (40, 41, 42, 43, 44, 50):
+            defaults = by_id[pid]['fieldConfig']['defaults']
+            # The bands are value mappings so that the unknown state keeps
+            # the panel's grey base colour instead of a red critical.
+            self.assertEqual(defaults['color'],
+                             {'mode': 'fixed', 'fixedColor': '#B8BFCC'}, pid)
+            ranges = [(m['options']['from'], m['options']['to'],
+                       m['options']['result']['color'])
+                      for m in defaults['mappings'] if m['type'] == 'range']
+            self.assertEqual(ranges, [(0, 0.1, '#d03b3b'), (0.1, 0.3, '#fab219'),
+                                       (0.3, 1, '#0ca30c')], pid)
+            unknown = [m for m in defaults['mappings'] if m['type'] == 'value']
+            self.assertEqual(unknown[0]['options']['-1']['text'], 'Limits unknown', pid)
+            self.assertEqual(unknown[0]['options']['-1']['color'], '#B8BFCC', pid)
         self.assertEqual(by_id[40]['fieldConfig']['defaults']['noValue'],
                          'No eligible measured model')
         mapping = by_id[44]['fieldConfig']['defaults']['mappings'][0]['options']['-1']
-        self.assertEqual(mapping['text'], 'limits unknown')
+        self.assertEqual(mapping['text'], 'Limits unknown')
         self.assertEqual(by_id[44]['repeat'], 'provider')
+        self.assertEqual(by_id[50]['repeat'], 'provider')
         self.assertEqual(by_id[46]['repeat'], 'allowance')
         self.assertTrue(by_id[46]['collapsed'])
         self.assertEqual(by_id[31]['title'], 'Facts and their coverage')
@@ -1040,6 +1051,32 @@ class DesignContractTests(unittest.TestCase):
             for panel in dashboard['panels']:
                 if panel.get('type') in ('table', 'logs') and panel['gridPos']['y'] < max_y:
                     self.fail((name, panel['title'], panel['gridPos']))
+
+    def test_tier_rows_show_the_human_model_name_the_role_and_the_reserve(self):
+        """Defect: a raw model id is shown where a person would say a name, the owner's roles are missing, or a reserved route is not marked."""
+        page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
+        by_id = panels_by_id(page)
+        frontier = ' '.join(t['expr'] for t in by_id[40]['targets'])
+        self.assertIn('Chief (Claude Opus 5.5)', frontier)
+        self.assertIn('Backup (Codex GPT-6.1-Sol)', frontier)
+        self.assertIn('Claude Opus 5.5', frontier)
+        self.assertIn('GPT-6.1-Sol', frontier)
+        # The display name joins the provider and the model of the row.
+        self.assertEqual(by_id[40]['fieldConfig']['defaults']['displayName'],
+                         '${__field.labels.provider} · ${__field.name}')
+        bulk = ' '.join(t['expr'] for t in by_id[41]['targets'])
+        self.assertIn('ghostship_ai_model_reserved', bulk)
+        self.assertIn('3D reserve', bulk)
+        # The provider card shows the allowance and the Paced Availability.
+        names = []
+        for override in by_id[44]['fieldConfig']['overrides']:
+            for prop in override['properties']:
+                if prop['id'] == 'displayName':
+                    names.append(prop['value'])
+        self.assertEqual(names, ['% left', 'Paced Availability'])
+        pace = by_id[44]['targets'][1]['expr']
+        self.assertIn('ghostship_ai_provider_paced_availability', pace)
+        self.assertIn('100 *', pace)
 
 
 @unittest.skipUnless(os.environ.get('GHOSTSHIP_TEST_VLOGS') and os.environ.get('GHOSTSHIP_TEST_VMETRICS'),
