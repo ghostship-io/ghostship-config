@@ -17,6 +17,25 @@ from pathlib import Path
 # revisions can be answered from the fetched commits alone.
 FETCH_DEPTH = 1000
 
+# The owner of the private flake inputs. The organisation owns them now, and
+# the previous account is accepted only while a lock still names it: a lock
+# written before the transfer keeps working, and nothing else is accepted.
+CANONICAL_OWNER = "ghostship-io"
+TRANSITION_OWNERS = frozenset({"owner"})
+ACCEPTED_OWNERS = frozenset({CANONICAL_OWNER}) | TRANSITION_OWNERS
+
+
+def accepted_owner(owner: str) -> bool:
+    """True when a locked input's owner is one this deployment accepts."""
+    return owner in ACCEPTED_OWNERS
+
+
+def supported_source(locked: dict, repository: str) -> bool:
+    """True when a locked input is the private source this deployment expects."""
+    return (locked.get("type") == "github"
+            and accepted_owner(locked.get("owner") or "")
+            and locked.get("repo") == repository)
+
 
 def github_host_keys(token: str = "") -> list[str]:
     """The SSH host keys GitHub publishes, so a fetch can verify the host."""

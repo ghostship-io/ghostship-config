@@ -40,10 +40,10 @@ that cannot be read reports a status; it never reports a healthy zero.
 | `t3` | Provider limits: the subscription windows T3 Code knows about (Codex, Claude, Grok, OpenCode Go, Antigravity), their used share, their reset time and the time the provider checked them | T3 Code's read-only RPC (`server.refreshProviders`, `server.getConfig`) |
 | `t3_usage` | The usage summary: daily and hourly token and cost buckets over `24h`, `7d` and `30d`, plus the records T3 could not price | T3 Code's read-only RPC (`server.getUsageSummary`) |
 | `grok` | The credit billing of the Grok CLI account: used share of the current period and the period end | `cli-chat-proxy.grok.com`, with the Grok CLI credential |
-| `opencode-go` | The Go subscription windows: rolling (session), weekly and monthly used shares, their resets, and the status the provider reports | `opencode.ai/zen/go/v1/usage`, with the credential OpenCode itself holds |
+| `opencode-go` | The Go subscription windows: rolling (session), weekly and monthly used shares, their resets, and the status the provider reports; the free Go routes the documentation lists as unlimited | `opencode.ai/zen/go/v1/usage`, with the credential OpenCode itself holds |
 | `antigravity` | Both quota views Google exposes: the shared family windows (5-hour, weekly, shared) and the per-model quotas that T3 merges away | Google's `cloudcode-pa` quota endpoints, with the stored account token |
-| `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag and the free-model request allowance | `openrouter.ai` credits and key endpoints |
-| `ollama` | The request counts of the Ollama Cloud account per window | `ollama.com/api/usage` |
+| `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag, the free-model allowance as a daily window, and the published per-minute limit counted against our own requests | `openrouter.ai` credits and key endpoints, plus the T3 Code state for the count |
+| `ollama` | The request counts of the Ollama Cloud account per window, and the session and the weekly window of the account | `ollama.com/api/usage` and `ollama.com/api/balance` |
 | `free_pool` | The free inference pool: the provider states, the paged model catalog with geography, availability, selection, cooldown and admissions, the local admission limits, the health history, the observed latency, the concurrency, the recent jobs, and the quota amounts seen in provider headers | The broker's read-only status surface over its Unix socket, plus the pool's own reservation ledger |
 | `model_catalog` | The models that can be used at no cost right now and their per-million-token prices | OpenCode's cached copy of the public models.dev catalog |
 
@@ -51,6 +51,56 @@ The 3D reading is not a provider source: it is the measured use of our own 3D
 printing projects. Only session history files inside a directory whose name
 mentions `3dprint` are read, only for the last 30 days, and only a bounded
 number of files.
+
+## The windows and where their numbers come from
+
+A window is only headroom when it carries three things: the share of the
+window that is used, the instant it resets, and how long it runs. A window
+without one of them is visible and it does not constrain a route, because an
+unknown reading is not evidence that an account is exhausted.
+
+Every window carries the basis of its numbers, and the bases are never mixed:
+
+| Basis | What it means | Which windows |
+| --- | --- | --- |
+| `provider_reported` | The provider reported every number of the window | The Grok, Antigravity, OpenCode Go, OpenRouter daily and Ollama windows |
+| `provider_reported+derived_length` | The provider reported the share and the reset, and the length of the window is derived | The Ollama session window, whose length is learned from the step between two successive resets |
+| `promotion` | The provider's documentation publishes the allowance for a limited time, and no end date | The OpenCode Go free routes, which the documentation lists as unlimited "for a limited time" |
+| `published+counted` | A published limit, counted against the requests we made ourselves | The OpenRouter per-minute limit of the free models |
+
+The length of the Ollama session window is the one number no endpoint
+publishes. The collector remembers the reset instants it has seen
+(`/var/lib/ghostship-ai-usage/ollama-windows.json`, reset instants and
+nothing else) and measures the length from the step between two successive
+resets. Until two resets have been seen the length is a derived fallback, and
+it is marked as derived: it is never published as a measurement.
+
+The OpenRouter free models share one allowance: the number of free model
+requests the key may make in the current UTC day. The key endpoint reports
+how many of them are left, the day ends at midnight UTC, and a counter above
+the limit means the day is spent. The per-minute limit of the free models is
+published rather than reported, so the collector counts the requests we made
+in the last minute in the T3 Code state and counts them against the
+published number.
+
+The Go free routes are a different thing from a route that costs nothing
+because of a promotion. The Go documentation lists them as unlimited, and a
+live probe confirmed it: a free route answered while the paid monthly
+window of the plan was at 100% used, and the paid route of the same provider
+did not. The same documentation says the free models are unlimited "for a
+limited time", so the basis of those routes is `promotion` and the end of
+the promotion is unknown: the documentation publishes no end date, and an
+unknown end is never a guess. Each of those routes carries a window of its
+own, the window says `unlimited (limited-time promotion)`, and the paid
+allowance of the account does not gate them. The paid routes of the same
+account are gated by it, as they were. A route the collector observed to be
+broken is still unavailable: the observation of the route beats the
+published listing.
+
+The basis of a window and the end of its entitlement are published twice:
+the row of the routing snapshot carries them beside the capacity, and the
+entitlement series carry them as the labels `basis` and `ends_at`. An end
+that the provider does not publish is an empty label, never a zero.
 
 ## Metrics
 
@@ -375,6 +425,27 @@ provider-reported dollar charge.
 * `ghostship_ai_pool_catalog_updated_timestamp_seconds` - when the pool
   catalog was refreshed.
 
+### The observed failures of a route
+
+The T3 Code state records what happened when it ran a child. A failure is
+scoped, because a failure is not always about one model: an account failure
+reaches every model of that account, a route failure every model of that
+provider instance, and a model failure only that model.
+
+A refusal that says the account has no money left is an exhausted account,
+not a broken route. The markers are "usage limit", "rate limit", "quota
+exceeded", "quota exhausted", "upgrade for higher limits", "add usage
+credits", "payment required" and "usage balance exhausted", and the status
+of a refused payment in the shape a provider writes it: `HTTP 402`, `status
+code: 402` or `402 Payment Required`. A bare "402" is not a status: a count
+of processed items, a line number and a model id carry the same three digits
+without anything being wrong, and reading them as a spent account would hide
+every route of that provider. Every one of them is read as an account whose
+allowance is spent, so every route of that provider is unavailable with the
+reason `account_usage_limit` until a later run of it succeeds. The text of the
+error is only read to pick the code; the provider's own words never reach a
+metric, a label or a log line.
+
 ### The model ranking
 
 The ranking is the collector's opinion layer. It turns the model inventory,
@@ -452,17 +523,25 @@ capacity left. The reserve changes the order and the eligibility, never the
 value.
 
 * `ghostship_ai_model_rank{tier,provider,model}` - the rank inside a tier, 1 is
-  best.
+  best. Every ranked model keeps it, including the models that cannot be
+  used right now: an unavailable model holds the rank 0 of the empty tier
+  and is never dropped from the metrics.
 * `ghostship_ai_model_score{tier,provider,model}` - the ranking score inside
   a tier.
 * `ghostship_ai_model_quality{provider,model}` - the quality score, 0 to 100.
-* `ghostship_ai_model_available{provider,model}` - whether the model can be
-  used right now.
-* `ghostship_ai_model_capacity_remaining{provider,model}` - the remaining
-  share of the model's account capacity, 0 to 1.
-* `ghostship_ai_model_capacity_expires_in_seconds{provider,model}` - the
+* `ghostship_ai_model_available{provider,model,reason}` - whether the model
+  can be used right now, with the reason it cannot: a spent allowance, an
+  unknown headroom, a route that failed, or a route that is not offered.
+  The reason is a fixed label, never the provider's own text.
+* `ghostship_ai_model_capacity_remaining{tier,provider,model}` - the remaining
+  share of the model's account capacity, 0 to 1. A spent allowance is
+  published as 0; an unknown capacity is not published at all, because an
+  unknown capacity is never a zero.
+* `ghostship_ai_model_capacity_expires_in_seconds{tier,provider,model}` - the
   seconds until that capacity expires; negative when the window is already
   past its reset.
+* `ghostship_ai_model_quota_unknown{provider,model,reason}` - 1 for a model
+  whose headroom is unknown, with the reason it is unknown.
 * `ghostship_ai_model_tier{provider,model,tier}` - 1 for every tier a model
   belongs to.
 * `ghostship_ai_model_evaluated_timestamp_seconds{provider,model}` - when the
@@ -497,6 +576,24 @@ Concretely:
 * An unknown cap or balance is omitted, never read as unlimited.
 * The pool's local admission caps are labelled as local policy, never as a
   provider's own allowance.
+
+## An unknown headroom always says why
+
+An unknown headroom is not a gap in the reading; it is a state the
+dashboard has to be able to explain. Every candidate row of the routing
+snapshot therefore carries an `unknown_reason` beside its `quota_state`, and
+the reason is one of two:
+
+| Reason | What it means |
+| --- | --- |
+| `the provider publishes no quota window for this account` | The account has no window at all: nothing reports a limit for it |
+| `the provider's window was not read, is stale, or has already reset` | There is a window, but its reading cannot be used |
+
+The rule is enforced with tooling: the snapshot of the enabled providers
+(`tests/fixtures/ai-usage/enabled-providers.json`) is checked, and a row
+whose headroom is unknown without a reason fails the check. The same reason
+is published as `ghostship_ai_model_quota_unknown`, so the dashboard can
+list the unknown headrooms with the reason beside them.
 
 ## Privacy
 
