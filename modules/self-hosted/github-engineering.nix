@@ -32,23 +32,24 @@ let
     allowed_user_ids = [ a local store id ];
     ntfy_url = "http://ntfy:8080";
     t3_environment_id = "the owner's local area";
-    model_selection = {
-      instanceId = "codex"; model = "gpt-6.1-sol";
-      options = [ { id = "reasoningEffort"; value = "high"; } ];
-    };
-    # Frontier leads retain integration and final review. Bulk implementation
+    # The chief reviewer leads launched threads; the backup reviewer stands in
+    # while it is unavailable (routing-policy.md "Roles"). Bulk implementation
     # remains delegated under the canonical engineering/routing policy.
+    model_selection = {
+      instanceId = "claudeAgent"; model = "claude-opus-5-5";
+      options = [ { id = "effort"; value = "high"; } ];
+    };
     frontier_models = [
-      { instanceId = "codex"; model = "gpt-6.1-sol"; }
       { instanceId = "claudeAgent"; model = "claude-opus-5-5"; }
+      { instanceId = "codex"; model = "gpt-6.1-sol"; }
     ];
     # Existing authenticated subscriptions only. Each provider owns its options;
     # measured exhaustion skips it, and an unknown balance is shown as unknown.
     model_routes = [
-      { instanceId = "codex"; model = "gpt-6.1-sol";
-        options = [ { id = "reasoningEffort"; value = "high"; } ]; }
       { instanceId = "claudeAgent"; model = "claude-opus-5-5";
         options = [ { id = "effort"; value = "high"; } ]; }
+      { instanceId = "codex"; model = "gpt-6.1-sol";
+        options = [ { id = "reasoningEffort"; value = "high"; } ]; }
     ];
     review_max_active = 2;
     model_rankings_path = "/run/ghostship-integrations/model-routing.json";
