@@ -68,6 +68,32 @@ def find_target(panel, needle):
     raise AssertionError(f"no target of {panel.get('title')!r} names {needle!r}")
 
 
+def target_by_field(panel, field):
+    """The target that carries a named field of the row."""
+    organize = next(
+        transformation
+        for transformation in panel.get("transformations") or []
+        if transformation["id"] == "organize"
+    )
+    rename = organize["options"]["renameByName"]
+    for reference, name in rename.items():
+        if name != field:
+            continue
+        ref_id = reference.split("#")[-1]
+        for target in panel.get("targets") or []:
+            if target.get("refId") == ref_id:
+                return target
+    raise AssertionError(
+        f"no target of {panel.get('title')!r} carries the field {field!r}"
+    )
+
+
+def inner(expression):
+    """The expression of a target without the aggregation around it."""
+    match = re.match(r"^max by \([^)]*\) \((.*)\)$", expression or "", re.S)
+    return match.group(1) if match else expression
+
+
 def cells(fragment):
     """The classes of the cells of a table row."""
     return [
@@ -221,7 +247,7 @@ class ProvidersPageTests(unittest.TestCase):
         """The line in the bar is the share the window expects to be left now."""
         for title in TIERS:
             panel = section(self.page, title)
-            expected = find_target(panel, "clamp_max")
+            expected = target_by_field(panel, "expected")
             self.assertIn("ghostship_ai_model_capacity_remaining", expected["expr"], title)
             self.assertIn("ghostship_ai_model_paced_availability", expected["expr"], title)
             self.assertIn("clamp_min", expected["expr"], title)
@@ -372,6 +398,18 @@ class ProvidersPageTests(unittest.TestCase):
                     f"{title} column {index}: {header!r} and {cell!r}",
                 )
 
+    def test_the_order_of_a_tier_reads_the_spent_routes(self):
+        """The order of a table depends on the route that cannot be used.
+
+        Without it the spent route keeps the place the collector gave it, and
+        it stands above the routes that can run.
+        """
+        for title in list(TIERS) + ["Providers"]:
+            panel = section(self.page, title)
+            order = target_by_field(panel, "order")["expr"]
+            spent = target_by_field(panel, "out")["expr"]
+            self.assertIn(inner(spent), order, title)
+
 
 class VictoriaMetricsFixture:
     """A disposable VictoriaMetrics with the review fixture in it."""
@@ -480,8 +518,8 @@ class WorkedCasesTests(unittest.TestCase):
     def test_the_share_left_and_the_pace_of_every_route(self):
         """The bar of a route is the share left now, and the pace is the collector's."""
         panel = section(self.page, "Bulk")
-        left = self.rows(panel, find_target(panel, "ghostship_ai_model_capacity_remaining"))
-        pace = self.rows(panel, find_target(panel, "ghostship_ai_model_paced_availability"))
+        left = self.rows(panel, target_by_field(panel, "left"))
+        pace = self.rows(panel, target_by_field(panel, "pace"))
         self.assertAlmostEqual(left["claude-haiku-5-5"], 0.92)
         self.assertAlmostEqual(pace["claude-haiku-5-5"], 0.58)
         self.assertAlmostEqual(left["gemini-3.8-flash"], 0.46)
@@ -496,59 +534,89 @@ class WorkedCasesTests(unittest.TestCase):
             ("Frontier", "gpt-6.1-sol", 0.69),
         ):
             panel = section(self.page, title)
-            target = find_target(panel, "clamp_max")
+            target = target_by_field(panel, "expected")
             rows = self.rows(panel, target)
             self.assertAlmostEqual(rows[model], expected, msg=f"{title} {model}")
 
     def test_the_pace_of_the_worked_cases_in_points(self):
         """58 points ahead, on pace, and 60 points behind."""
         panel = section(self.page, "Bulk")
-        points = self.rows(panel, find_target(panel, "abs(round(100 *"))
+        points = self.rows(panel, target_by_field(panel, "points"))
         self.assertEqual(points["claude-haiku-5-5"], 58)
         self.assertEqual(points["gemini-3.8-flash"], 0)
         self.assertEqual(points["grok-4.6"], 0)
         frontier = section(self.page, "Frontier")
-        behind = self.rows(frontier, find_target(frontier, "abs(round(100 *"))
+        behind = self.rows(frontier, target_by_field(frontier, "points"))
         self.assertEqual(behind["gpt-6.1-sol"], 60)
 
     def test_the_kind_of_the_pace(self):
         """Three is ahead of the pace, two is on it, one is behind it."""
         panel = section(self.page, "Bulk")
-        kind = self.rows(panel, find_target(panel, ">= bool 5"))
+        kind = self.rows(panel, target_by_field(panel, "kind"))
         self.assertEqual(kind["claude-haiku-5-5"], 3)
         self.assertEqual(kind["gemini-3.8-flash"], 2)
         frontier = section(self.page, "Frontier")
-        behind = self.rows(frontier, find_target(frontier, ">= bool 5"))
+        behind = self.rows(frontier, target_by_field(frontier, "kind"))
         self.assertEqual(behind["gpt-6.1-sol"], 1)
 
     def test_a_spent_route_sinks_to_the_bottom_of_its_table(self):
         """A spent route keeps its place in the table, under the routes that can run."""
         panel = section(self.page, "Bulk")
-        order = self.rows(panel, find_target(panel, "1000 -"), "model")
+        order = self.rows(panel, target_by_field(panel, "order"), "model")
         self.assertGreater(order["claude-haiku-5-5"], order["gemini-3.8-flash"])
         self.assertGreater(order["gemini-3.8-flash"], order["grok-4.6"])
         self.assertLess(order["grok-4.6"], 0)
 
+    def test_a_spent_route_comes_after_every_route_that_can_run(self):
+        """The spent route of a tier stands below every route that can run.
+
+        The collector gave the exhausted route of the free pool the seventh
+        place, above the route that is not a winner at all.
+        """
+        panel = section(self.page, "Free")
+        order = self.rows(panel, target_by_field(panel, "order"))
+        spent = self.rows(panel, target_by_field(panel, "out"))
+        exhausted = [model for model, flag in spent.items() if flag]
+        self.assertTrue(exhausted, "the fixture has a spent route")
+        for model in exhausted:
+            for other, flag in spent.items():
+                if flag:
+                    continue
+                self.assertLess(order[model], order[other], f"{model} before {other}")
+
+    def test_a_spent_provider_comes_after_every_provider_that_can_run(self):
+        """The spent account of a provider stands below the accounts that can run."""
+        panel = section(self.page, "Providers")
+        order = self.rows(panel, target_by_field(panel, "order"), "provider")
+        spent = self.rows(panel, target_by_field(panel, "out"), "provider")
+        exhausted = [provider for provider, flag in spent.items() if flag]
+        self.assertTrue(exhausted, "the fixture has a spent account")
+        for provider in exhausted:
+            for other, flag in spent.items():
+                if flag:
+                    continue
+                self.assertLess(order[provider], order[other], f"{provider} before {other}")
+
     def test_a_route_with_unknown_limits_is_flagged_and_never_zero(self):
         """A route with no measured allowance reads unknown, and its share is not a zero."""
         panel = section(self.page, "Free")
-        left = self.rows(panel, find_target(panel, "ghostship_ai_model_capacity_remaining"))
-        has_cap = self.rows(panel, find_target(panel, "count by (provider, model)"))
+        left = self.rows(panel, target_by_field(panel, "left"))
+        has_cap = self.rows(panel, target_by_field(panel, "hasCap"))
         self.assertEqual(has_cap["nemotron-3.5-super-vl"], 0)
         self.assertNotEqual(left.get("nemotron-3.5-super-vl"), 0.0)
 
     def test_a_promotion_route_is_marked_and_has_no_measured_allowance(self):
         """The promotion route is unlimited: it has no allowance and no window."""
         panel = section(self.page, "Bulk")
-        promotion = self.rows(panel, find_target(panel, 'basis="promotion"'))
+        promotion = self.rows(panel, target_by_field(panel, "promotion"))
         self.assertEqual(promotion["minimax_minimax-m3.1-flash_free"], 1)
-        has_cap = self.rows(panel, find_target(panel, "count by (provider, model)"))
+        has_cap = self.rows(panel, target_by_field(panel, "hasCap"))
         self.assertEqual(has_cap["minimax_minimax-m3.1-flash_free"], 0)
 
     def test_a_route_reserved_for_3d_work_is_marked(self):
         """The reserve of the 3D tier is visible in the tier that holds the route."""
         panel = section(self.page, "Bulk")
-        target = find_target(panel, "ghostship_ai_model_reserved")
+        target = target_by_field(panel, "reservedValue")
         rows = self.store.query(target["expr"].replace("$provider", ".*"))
         marks = {row["metric"]["model"]: row["metric"].get("reserveTag") for row in rows}
         self.assertEqual(marks.get("gemini-3.8-flash"), "3d")
@@ -556,7 +624,7 @@ class WorkedCasesTests(unittest.TestCase):
     def test_a_route_in_the_free_quality_band_is_marked(self):
         """The band of the free winners is the label the collector publishes."""
         panel = section(self.page, "Free")
-        target = find_target(panel, "qualityBand")
+        target = target_by_field(panel, "qualityBandValue")
         rows = self.store.query(target["expr"].replace("$provider", ".*"))
         bands = {row["metric"]["model"]: row["metric"].get("qualityBand") for row in rows}
         self.assertEqual(bands.get("minimax_minimax-m3.1-flash"), "true")
@@ -565,7 +633,7 @@ class WorkedCasesTests(unittest.TestCase):
     def test_the_providers_are_sorted_by_paced_availability_with_the_spent_last(self):
         """The lowest window decides, and a spent or unknown account comes last."""
         panel = section(self.page, "Providers")
-        order = self.rows(panel, find_target(panel, "ghostship_ai_provider_paced_availability"), "provider")
+        order = self.rows(panel, target_by_field(panel, "order"), "provider")
         self.assertGreater(order["claude"], order["antigravity"])
         self.assertGreater(order["antigravity"], order["codex"])
         self.assertLess(order["ollama"], order["codex"])
