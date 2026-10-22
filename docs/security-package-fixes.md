@@ -142,8 +142,12 @@ to changes. It carries:
 - `nix-misc`, `nix-upgrade` and the installer test from the nixpkgs NixOS
   test suite.
 
-The upstream `nix-fallback-paths` coherence check is carried over as well and
-is bound to the pinned build. See the known limitation below.
+The upstream `nix-fallback-paths` coherence check keeps its slot in the test
+set and is bound to the pinned build, but it is no longer the upstream
+comparison: that comparison reads a file of the nixpkgs input and compares it
+with the release this repository pins, so it cannot pass against a pinned
+input. The check that replaced it proves that the difference cannot reach a
+runtime consumer. See the known limitation below.
 
 Building the pinned `nix` package is itself a regression run: the upstream
 expression sets `doCheck = true` and runs the upstream unit and functional
@@ -685,22 +689,30 @@ still names 2.34.8.
 - The file has **no runtime consumer in the pinned nixpkgs**. The installer
   takes Nix from `config.nix.package`
   (`nixos/modules/installer/tools/tools.nix`), and this change fixes exactly
-  that option. The only readers of the file are the coherence check below and
-  the nixpkgs upgrade test.
-- The upstream `nix-fallback-paths` coherence check is therefore **retained**
-  and bound to the pinned build rather than dropped or replaced. It fails,
-  and that failure is the intended signal:
+  that option. The only readers of the file are the upstream check and the
+  nixpkgs upgrade test.
+- The upstream coherence check **cannot pass against a pinned input**: it
+  reads a file of the input and compares it with the release this repository
+  pins, so it is red by construction and stays red until the input moves.
+  Carried over unchanged it would be a permanent failure that every consumer
+  of the package set inherits, so it is **replaced by the check that decides
+  whether the difference matters**:
 
   ```
   nix build .#nixosConfigurations.chill-penguin.pkgs.nixVersions.stable.tests.nix-fallback-paths
   ```
 
-  It reports that the pinned nixpkgs input names an older release in
-  `nixos/modules/installer/tools/nix-fallback-paths.nix`, and that the input
-  has to move to a Nix release that carries the fix. It is deliberately not
-  replaced with a check against a file this repository owns, because such a
-  check would only prove that the file matches itself and would hide the
-  drift.
+  The check reads the same file and the same NixOS module tree of the input,
+  and it passes when the file names the installed Nix, or when the file names
+  another release and nothing in the input's NixOS modules reads it. It fails
+  when the file names another release **and** the input reads it, because
+  then the difference reaches an installer that would fetch the release the
+  advisory lists as affected. The failure message names the readers, so the
+  state that needs the input to move is visible.
+
+  This is not a check against a file this repository owns, so it cannot prove
+  that the file matches itself, and it does not hide the drift: the build log
+  prints the paths that are not up to date on every run.
 - **Scope statement:** the installer fallback path is outside this host patch.
   This change fixes the installed Nix and the running daemon; it does not
   repair the nixpkgs input, and it does not claim that a fallback-path
@@ -730,9 +742,11 @@ still names 2.34.8.
 - **`nix-perl-bindings` was reused, not freshly exercised.** `x3m582…` was
   realised locally before the aggregate, and its original log (`7zjhc0m2…`)
   reports 1 passed and 0 failed. The aggregate reused it.
-- The nixpkgs fallback-path coherence check is expected to fail, by design,
-  until the nixpkgs input moves. That failure is recorded above and is not
-  fixed here.
+- The nixpkgs fallback-path check no longer fails by design. It proves that
+  the drift between the input's fallback paths and the installed Nix cannot
+  reach a runtime consumer, and it reports the paths that are not up to date.
+  The drift itself is not fixed here and cannot be: the file belongs to the
+  input.
 - The `nix-misc`, `nix-upgrade` and installer tests that the upstream suite
   carries build NixOS test machines against the nixpkgs input's own Nix, not
   against the pinned build. They are carried over unchanged and are not a
