@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.65] - 2026-10-22
+
+- Pin ghostship-agent 2318134e (0.43.2): capability handlers import on first call, so the MCP browser tools work again. 0.43.1 left registration importing every handler, and the GitHub handlers' missing package still failed every MCP call.
+
 ## [3.17.64] - 2026-10-22
 
 - Pin ghostship-agent af089700 (0.43.1): restores the MCP server's agent browser; GitHub review capabilities are CLI-only.
