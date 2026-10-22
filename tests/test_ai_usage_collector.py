@@ -426,11 +426,12 @@ class DashboardTests(unittest.TestCase):
 
     def test_every_query_uses_a_published_metric(self):
         known = set(main.METRIC_HELP)
-        # One metric of the page is published by the collector in a change
-        # that is not in this branch yet: the display name of a model. The
-        # page reads it when the collector publishes it, and falls back to
-        # the raw model id when it does not.
-        pending = {"ghostship_ai_model_info"}
+        # Two metrics of the page are published by the collector in changes
+        # that are not in this branch yet: the display name of a model and
+        # the basis of its capacity. The page reads them when the collector
+        # publishes them, and falls back to the raw model id and to the
+        # behaviour of today when it does not.
+        pending = {"ghostship_ai_model_info", "ghostship_ai_model_capacity_basis"}
         for panel in self.dashboard.get("panels") or []:
             for target in panel.get("targets") or []:
                 expression = target.get("expr") or ""
