@@ -97,7 +97,7 @@
         "x": 0,
         "y": 45,
         "w": 24,
-        "h": 13
+        "h": 10
       },
       "description": "The bulk tier: the route the next coding job goes to. The order is the collector's own winner position, never a ranking made here; the routes that are not winners follow them, and a route that is spent or refused sinks to the bottom with its reason. The fill of a bar is the share left now, the line in it is the share the window expects to be left now, and the pace reads the Paced Availability between the two.",
       "targets": [
@@ -550,7 +550,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 58,
+        "y": 55,
         "w": 24,
         "h": 19
       },
@@ -961,7 +961,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 77,
+        "y": 74,
         "w": 24,
         "h": 6
       },
@@ -1335,9 +1335,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 83,
+        "y": 80,
         "w": 24,
-        "h": 8
+        "h": 11
       },
       "description": "The 3D tier: the models that carry AA-3D evidence. The order, the capacity and the Paced Availability are the collector's. A route reserved for this work keeps its tag in the other tiers, so a reader can see that a model is held back.",
       "targets": [
