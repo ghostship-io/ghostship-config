@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.90] - 2026-10-22
+
+- The Keep broker's agent account address is supplied by the deployment (`GHOSTSHIP_KEEP_AGENT_EMAIL` in `/etc/ghostship/owner-identity.env`), like the personal account, so the repository names no account address.
+
 ## [3.17.89] - 2026-10-22
 
 - Providers page: a provider without a capacity reading sorts below every provider with one, as the page says ("exhausted and unknown last"), whichever series made it appear; before, a provider with only an entitlement reset sorted among the readings.
