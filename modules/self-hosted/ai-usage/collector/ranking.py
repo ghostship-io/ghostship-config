@@ -495,21 +495,54 @@ KNOWN_ACCOUNTS = (
     "openrouter",
 )
 
+# The account of a provider. The provider name is authoritative: the quota
+# windows are reported per account, and the account that serves a model is
+# the provider the model is offered by.
+#
+# The catalog keys of the paid accounts are mapped back onto their account.
+# That is the inverse of the alias the catalog already declares, not a guess
+# about a model: the collector names these providers "claude" and "codex",
+# and the catalog calls them "anthropic" and "openai".
+#
+# The free pool's own provider ids keep their identity. "gpt-oss-120b" on the
+# pool's "ovh" provider is not a Codex model, "gemini-3.8-flash" on the pool's
+# "google" provider is not an Antigravity model, and the OpenCode route is
+# not the Grok account. "google" is deliberately not mapped: it is a free
+# pool provider, and the Antigravity account is reached by its own name.
+ACCOUNT_OF_PROVIDER = {
+    "anthropic": "claude",
+    "openai": "codex",
+    "xai": "grok",
+}
+
+# The native T3 Code provider instances that may name a paid account by the
+# vendor prefix of their model id, and only when the account of that instance
+# is genuinely that vendor's subscription.
+#
+# The list is empty on purpose: every provider the collector knows is its own
+# account, so a model id prefix is never an account. The mechanism stays here
+# so a future native instance can be added without changing the rule.
+NATIVE_INSTANCE_ACCOUNT_PREFIXES: dict[str, dict[str, str]] = {}
+
 
 def account_for(provider: str, model: str) -> str:
-    """The account that serves a model."""
+    """The account that serves a model.
+
+    The provider is the account. A free pool provider and the OpenCode route
+    keep their own account, so an exhausted Codex allowance never removes a
+    pool model or an OpenCode route from a tier.
+    """
     name = str(provider or "")
     if name in KNOWN_ACCOUNTS:
         return name
+    mapped = ACCOUNT_OF_PROVIDER.get(name)
+    if mapped is not None:
+        return mapped
+    prefixes = NATIVE_INSTANCE_ACCOUNT_PREFIXES.get(name) or {}
     model_id = str(model or "")
-    if model_id.startswith("claude"):
-        return "claude"
-    if model_id.startswith("gpt"):
-        return "codex"
-    if model_id.startswith("grok"):
-        return "grok"
-    if model_id.startswith("gemini"):
-        return "antigravity"
+    for prefix, account in prefixes.items():
+        if model_id.startswith(prefix):
+            return account
     return name
 
 
