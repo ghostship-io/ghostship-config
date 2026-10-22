@@ -654,9 +654,9 @@
   },
   {
    "id": 8,
-   "title": "CPU per core",
-   "description": "Busy time per core, 0\u2013100 %; one line per cpu series.",
-   "type": "timeseries",
+   "title": "CPU per core  /  activity grid",
+   "description": "One row per core, numeric order 0..19, time on the x axis. Each cell is that core's busy percentage over the step; colour is a restrained threshold (green under 70 %, orange to 90 %, red above). Hover shows the exact utilization. A gap means no sample for that core in that step, not zero load.",
+   "type": "state-timeline",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
@@ -674,37 +674,57 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "100 * (1 - avg by (cpu) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+     "expr": "sort_by_label_numeric(100 * (1 - avg by (cpu) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))), \"cpu\")",
      "legendFormat": "core {{cpu}}"
     }
    ],
    "fieldConfig": {
     "defaults": {
      "unit": "percent",
-     "noValue": "Unknown",
+     "min": 0,
+     "max": 100,
+     "noValue": "\u2014",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 70
+       },
+       {
+        "color": "red",
+        "value": 90
+       }
+      ]
+     },
      "custom": {
-      "fillOpacity": 8,
+      "fillOpacity": 80,
       "lineWidth": 1,
       "spanNulls": false
-     },
-     "max": 100,
-     "min": 0
+     }
     },
     "overrides": []
    },
    "options": {
+    "mergeValues": false,
+    "showValue": "auto",
+    "alignValue": "center",
+    "rowHeight": 0.85,
     "legend": {
-     "displayMode": "table",
-     "placement": "bottom",
      "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
+     "displayMode": "list",
+     "placement": "bottom"
     },
     "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
+     "mode": "single",
+     "sort": "none"
     }
    }
   },
