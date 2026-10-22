@@ -17,12 +17,19 @@ Three rules keep the reading honest:
   this module writes to it. The write ahead log is always read, because a
   database whose log holds the newest rows read as if the log were not
   there would be stale;
-* the read is bounded twice over: every query is bound to the last 35 days
-  by `time_created`, and the whole read is given a wall clock limit that
-  aborts the query when it is reached;
+* the read is bounded three times over: every query is bound to the last 35
+  days by `time_created`, the query asks only for the fields the reader
+  uses, and the whole read is given a wall clock limit that aborts the
+  query when it is reached;
 * the text of a provider's error is read in memory to pick the outcome. It
   is never stored, never returned and never logged. A real limit message
   names the account it belongs to, and that name stays in the process.
+
+The query extracts the fields it needs with SQLite's own JSON functions, so
+the whole record never travels into Python. A record is about 27 KB, and a
+35 day read of them is more than a gigabyte that Python would have to
+receive and parse; extracting them in the database is about three times
+faster.
 
 The contract is fixed:
 
@@ -334,6 +341,58 @@ def provider_for(provider_id: str) -> str | None:
     return PROVIDER_MAP.get(str(provider_id or "").strip().lower())
 
 
+# The fields the reader uses, and the paths they are read from.
+EXTRACTED_FIELDS = ("model", "time", "finish", "error", "tokens", "retry")
+
+# The query reads only the fields the reader uses. The whole record is never
+# selected: it is about 27 KB a row, so a 35 day read of it is more than a
+# gigabyte that Python would have to receive and parse. SQLite extracts the
+# fields itself, in one pass over the record.
+#
+# `json_valid` keeps a record that does not parse from ending the query: the
+# row is read, it carries no fields, and it is counted as a row the reader
+# cannot place.
+READ_SQL = (
+    "SELECT time_created, "
+    "json_extract(CASE WHEN json_valid(data) THEN data END, "
+    "'$.model', '$.time', '$.finish', '$.error', '$.tokens', '$.retry') "
+    "FROM session_message "
+    "WHERE type = 'assistant' AND time_created >= ? "
+    "ORDER BY time_created"
+)
+
+
+def record_from_extracted(payload: Any) -> dict[str, Any]:
+    """The request record, from the fields the query extracted.
+
+    The shape is the shape OpenCode writes, so the classifier reads the
+    extracted fields exactly as it reads the whole record: the model, the
+    time, the finish, the error, the tokens and the retry.
+    """
+    values: Any = payload
+    if isinstance(values, (bytes, bytearray)):
+        try:
+            values = values.decode("utf-8")
+        except UnicodeDecodeError:
+            values = None
+    if isinstance(values, str):
+        try:
+            values = json.loads(values)
+        except ValueError:
+            values = None
+    if not isinstance(values, list):
+        return {}
+    record: dict[str, Any] = {}
+    for index, name in enumerate(EXTRACTED_FIELDS):
+        if index >= len(values):
+            break
+        value = values[index]
+        if value is None:
+            continue
+        record[name] = value
+    return record
+
+
 def _event_time(data: Mapping[str, Any], time_created: Any) -> float:
     """The instant of a request, in epoch seconds.
 
@@ -450,22 +509,14 @@ def read_events(
     # The progress handler aborts the query when the read is out of time.
     connection.set_progress_handler(lambda: 1 if time.monotonic() > deadline else 0, PROGRESS_STEPS)
     try:
-        cursor = connection.execute(
-            "SELECT time_created, data FROM session_message "
-            "WHERE type = 'assistant' AND time_created >= ? "
-            "ORDER BY time_created",
-            (cutoff,),
-        )
-        for time_created, raw in cursor:
+        cursor = connection.execute(READ_SQL, (cutoff,))
+        for time_created, payload in cursor:
             if time.monotonic() > deadline:
                 # The read is out of time: the partial reading is dropped,
                 # because a half reading is not a reading.
                 return _unreadable(REASON_TIMEOUT)
             counts["rows_read"] += 1
-            data = _parse(raw)
-            if not isinstance(data, Mapping):
-                counts["rows_unmapped"] += 1
-                continue
+            data = record_from_extracted(payload)
             provider_id, model = model_of(data)
             provider = provider_for(provider_id)
             if provider is None:
@@ -498,19 +549,3 @@ def read_events(
         "counts": counts,
     }
 
-
-def _parse(raw: Any) -> Any:
-    """The record's own JSON, or None when it does not parse."""
-    if isinstance(raw, Mapping):
-        return raw
-    if isinstance(raw, (bytes, bytearray)):
-        try:
-            raw = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            return None
-    if not isinstance(raw, str):
-        return None
-    try:
-        return json.loads(raw)
-    except ValueError:
-        return None

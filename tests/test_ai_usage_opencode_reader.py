@@ -557,6 +557,97 @@ class BoundedReadTests(unittest.TestCase):
         self.assertLessEqual(reader().BUSY_TIMEOUT_S, 2.0)
 
 
+class ExtractionTests(unittest.TestCase):
+    """The query reads the fields the reader uses, not the whole record."""
+
+    def test_the_query_never_selects_the_bare_record(self):
+        statement = reader().READ_SQL
+        selected = statement.split(" FROM ")[0]
+        # Every mention of the record column is inside the extraction.
+        outside = selected.replace("json_valid(data)", "").replace("THEN data END", "")
+        self.assertNotIn("data", outside)
+
+    def test_the_query_extracts_the_fields_the_reader_uses(self):
+        statement = reader().READ_SQL
+        for path in (
+            "'$.model'",
+            "'$.time'",
+            "'$.finish'",
+            "'$.error'",
+            "'$.tokens'",
+            "'$.retry'",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, statement)
+
+    def test_the_extracted_record_classifies_like_the_whole_record(self):
+        module = reader()
+        content = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            path, connection = build_database(directory, content["rows"])
+            try:
+                extracted = {}
+                readonly = module.open_database(path)
+                try:
+                    for time_created, payload in readonly.execute(module.READ_SQL, (0,)):
+                        extracted[time_created] = module.record_from_extracted(payload)
+                finally:
+                    readonly.close()
+                for row in content["rows"]:
+                    if row["type"] != "assistant":
+                        continue
+                    record = extracted.get(row["time_created"])
+                    self.assertIsNotNone(record, row["id"])
+                    with self.subTest(row=row["id"]):
+                        self.assertEqual(
+                            module.classify(record), module.classify(row["data"])
+                        )
+                        self.assertEqual(
+                            module.usage_tokens(record), module.usage_tokens(row["data"])
+                        )
+                        self.assertEqual(module.model_of(record), module.model_of(row["data"]))
+            finally:
+                connection.close()
+
+    def test_the_extracted_record_carries_the_retry(self):
+        module = reader()
+        content = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            path, connection = build_database(directory, content["rows"])
+            try:
+                readonly = module.open_database(path)
+                try:
+                    for _time_created, payload in readonly.execute(module.READ_SQL, (0,)):
+                        record = module.record_from_extracted(payload)
+                        if "retry" in record:
+                            self.assertEqual(record["retry"], {"attempt": 2, "last": 1799895500000})
+                            return
+                finally:
+                    readonly.close()
+                self.fail("the retry was not extracted")
+            finally:
+                connection.close()
+
+    def test_a_record_that_does_not_parse_is_counted_and_not_emitted(self):
+        module = reader()
+        with tempfile.TemporaryDirectory() as directory:
+            path, connection = build_database(directory, [])
+            try:
+                connection.execute(
+                    "INSERT INTO session_message (id, session_id, type, time_created, data) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    ("msg_broken", "ses_example_1", "assistant", 1799996400000, "not json"),
+                )
+                connection.commit()
+                result = module.read_events(path, 1800000000.0)
+            finally:
+                connection.close()
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["counts"]["rows_read"], 1)
+        self.assertEqual(result["counts"]["rows_unmapped"], 1)
+        self.assertEqual(result["events"], [])
+
+
 class ConnectionTests(unittest.TestCase):
     """The connection is closed on every path."""
 
