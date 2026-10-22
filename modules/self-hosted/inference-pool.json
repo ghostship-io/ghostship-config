@@ -16,8 +16,8 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://console.groq.com/docs/rate-limits",
-        "checked_at": "2026-10-16T11:05:08.621583+00:00",
-        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "china_hosting_workloads": [
@@ -39,8 +39,8 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://ai.google.dev/gemini-api/docs/pricing",
-        "checked_at": "2026-10-16T11:05:08.621583+00:00",
-        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       }
     },
@@ -58,9 +58,9 @@
         "official_api": true,
         "never_bill": true,
         "unattended_allowed": true,
-        "source": "https://docs.api.nvidia.com/nim/docs/product",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00",
+        "source": "https://build.nvidia.com/docs/rate-limits",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "china_hosting_workloads": [
@@ -83,8 +83,8 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
-        "checked_at": "2026-10-16T11:05:08.621583+00:00",
-        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "china_hosting_workloads": [
@@ -104,8 +104,8 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://vercel.com/docs/ai-gateway/pricing",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "free_only": true,
@@ -130,8 +130,8 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://openrouter.ai/docs/api-reference/limits",
-        "checked_at": "2026-10-16T11:05:08.621583+00:00",
-        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "china_hosting_workloads": [
@@ -183,8 +183,8 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://docs.z.ai/guides/overview/pricing",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "china_hosting_workloads": [
@@ -208,8 +208,8 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://docs.cohere.com/docs/north-mini-code-1.0",
-        "checked_at": "2026-10-16T11:05:08.621583+00:00",
-        "expires_at": "2026-10-23T11:05:08.621583+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "model_ids": [
           "north-mini-code-1-0"
         ]
@@ -243,8 +243,8 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://kilo.ai/docs/gateway/authentication",
-        "checked_at": "2026-10-16T12:03:42.260908+00:00",
-        "expires_at": "2026-10-23T12:03:42.260908+00:00"
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00"
       },
       "reason": "Official anonymous free API, pinned :free models only; one shared per-IP ledger",
       "china_hosting_workloads": [
@@ -265,9 +265,9 @@
         "official_api": true,
         "never_bill": true,
         "unattended_allowed": true,
-        "source": "https://www.requesty.ai/terms",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00",
+        "source": "https://www.requesty.ai/pricing",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "china_hosting_workloads": [
@@ -289,14 +289,14 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://docs.mistral.ai/admin/billing-usage/usage-limits",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "billing_verified": {
-        "basis": "Mistral Free plan, pay-as-you-go off, no payment method (coordinator check 2026-10-18)",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00"
+        "basis": "Mistral Free plan, pay-as-you-go off, no payment method (coordinator check 2026-10-22)",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00"
       }
     },
     "orcarouter": {
@@ -314,8 +314,8 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://www.orcarouter.ai/models?price=free",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "china_hosting_workloads": [
@@ -337,8 +337,8 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://kilo.ai/docs/getting-started/using-kilo-for-free",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "china_hosting_workloads": [
@@ -360,14 +360,14 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://console.upstage.ai/docs/getting-started",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "billing_verified": {
-        "basis": "$10 welcome coupon, no payment method, no auto-recharge (coordinator check 2026-10-18)",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00"
+        "basis": "$10 welcome coupon, no payment method, no auto-recharge (coordinator check 2026-10-22)",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00"
       },
       "free_credit_verified": true,
       "credit_expires_at": "2027-01-16T00:00:00Z"
@@ -387,14 +387,14 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://docs.inceptionlabs.ai/get-started/rate-limits",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       },
       "billing_verified": {
-        "basis": "Inception Free plan (100M tokens once), no card (coordinator check 2026-10-18)",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00"
+        "basis": "Inception Free plan (100M tokens once), no card (coordinator check 2026-10-22)",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00"
       }
     },
     "poolside": {
@@ -433,8 +433,8 @@
         "never_bill": true,
         "unattended_allowed": true,
         "source": "https://docs.ovhcloud.com/en/guides/public-cloud/ai-machine-learning/ai-endpoints-getting-started",
-        "checked_at": "2026-10-18T20:00:00+00:00",
-        "expires_at": "2026-10-25T20:00:00+00:00",
+        "checked_at": "2026-10-22T05:49:50+00:00",
+        "expires_at": "2026-10-29T05:49:50+00:00",
         "provider_wide": true
       }
     }
