@@ -40,7 +40,7 @@ that cannot be read reports a status; it never reports a healthy zero.
 | `t3` | Provider limits: the subscription windows T3 Code knows about (Codex, Claude, Grok, OpenCode Go, Antigravity), their used share, their reset time and the time the provider checked them | T3 Code's read-only RPC (`server.refreshProviders`, `server.getConfig`) |
 | `t3_usage` | The usage summary: daily and hourly token and cost buckets over `24h`, `7d` and `30d`, plus the records T3 could not price | T3 Code's read-only RPC (`server.getUsageSummary`) |
 | `grok` | The credit billing of the Grok CLI account: used share of the current period and the period end | `cli-chat-proxy.grok.com`, with the Grok CLI credential |
-| `opencode-go` | The Go subscription windows: rolling (session), weekly and monthly used shares, their resets, and the status the provider reports | `opencode.ai/zen/go/v1/usage`, with the credential OpenCode itself holds |
+| `opencode-go` | The Go subscription windows: rolling (session), weekly and monthly used shares, their resets, and the status the provider reports; the free Go routes the documentation lists as unlimited | `opencode.ai/zen/go/v1/usage`, with the credential OpenCode itself holds |
 | `antigravity` | Both quota views Google exposes: the shared family windows (5-hour, weekly, shared) and the per-model quotas that T3 merges away | Google's `cloudcode-pa` quota endpoints, with the stored account token |
 | `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag, the free-model allowance as a daily window, and the published per-minute limit counted against our own requests | `openrouter.ai` credits and key endpoints, plus the T3 Code state for the count |
 | `ollama` | The request counts of the Ollama Cloud account per window, and the session and the weekly window of the account | `ollama.com/api/usage` and `ollama.com/api/balance` |
@@ -82,6 +82,16 @@ the limit means the day is spent. The per-minute limit of the free models is
 published rather than reported, so the collector counts the requests we made
 in the last minute in the T3 Code state and counts them against the
 published number.
+
+The Go free routes are a different thing from a route that costs nothing
+because of a promotion. The Go documentation lists them as unlimited, and a
+live probe confirmed it: a free route answered while the paid monthly
+window of the plan was at 100% used, and the paid route of the same provider
+did not. So each of those routes carries a window of its own, the window
+says `unlimited (published)`, and the paid allowance of the account does not
+gate them. The paid routes of the same account are gated by it, as they
+were. A route the collector observed to be broken is still unavailable: the
+observation of the route beats the published listing.
 
 ## Metrics
 

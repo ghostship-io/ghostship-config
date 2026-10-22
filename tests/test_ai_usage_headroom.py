@@ -29,6 +29,9 @@ def load(name, file):
 
 providers = load("ai_usage_headroom_providers", "providers.py")
 ranking = load("ai_usage_headroom_ranking", "ranking.py")
+main = load("ai_usage_headroom_main", "main.py")
+catalog_module = load("ai_usage_headroom_catalog", "catalog.py")
+published = load("ai_usage_headroom_published", "published.py")
 
 NOW = 1_800_000_000.0
 DAY = 86400.0
@@ -212,6 +215,139 @@ class OpenRouterWindowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             result = self._read(directory)
         self.assertIsNone(window_of(result.windows, "minute"))
+
+
+class GoFreeRouteTests(unittest.TestCase):
+    """The Go free routes are published as unlimited, and the paid routes are not."""
+
+    CATALOG = {
+        "opencode-go": {
+            "models": {
+                "minimax-m3.1-flash-free": {
+                    "name": "MiniMax M3.1 Flash Free",
+                    "cost": {"input": 0, "output": 0},
+                },
+                "minimax-m3.1": {
+                    "name": "MiniMax M3.1",
+                    "cost": {"input": 1.0, "output": 4.0},
+                },
+            }
+        }
+    }
+
+    def _spent_allowance(self):
+        return [
+            ranking.QuotaWindow(
+                kind="monthly",
+                used_ratio=1.0,
+                reset_epoch=NOW + 10 * DAY,
+                duration_seconds=30 * DAY,
+                observed_at=NOW,
+                quota_id="go_monthly",
+            )
+        ]
+
+    def _unlimited(self):
+        return [
+            ranking.QuotaWindow(
+                kind="unlimited",
+                used_ratio=0.0,
+                reset_epoch=None,
+                quota_id=published.UNLIMITED_QUOTA_ID,
+                observed_at=NOW,
+                basis="published",
+            )
+        ]
+
+    def _rank(self, model, model_windows):
+        windows = {"opencode-go": self._spent_allowance()}
+        if model_windows:
+            windows[f"opencode-go/{model}"] = model_windows
+        return ranking.rank_models(
+            models=[ranking.ModelRecord("opencode-go", model)],
+            catalog=catalog_module.Catalog(self.CATALOG),
+            quota_windows=windows,
+            free_models={("opencode-go", "minimax-m3.1-flash-free")},
+            usage_tokens={},
+            now=NOW,
+        )
+
+    def test_the_free_route_is_not_gated_by_the_spent_allowance(self):
+        ranked = self._rank("minimax-m3.1-flash-free", self._unlimited())
+        entry = ranked[0]
+        self.assertTrue(entry.available)
+        self.assertEqual(entry.remaining, 1.0)
+        self.assertTrue(entry.unlimited)
+        self.assertTrue(
+            any("unlimited (published)" in reason for reason in entry.reasons)
+        )
+
+    def test_a_paid_route_is_still_blocked_by_the_spent_allowance(self):
+        ranked = self._rank("minimax-m3.1", [])
+        entry = ranked[0]
+        self.assertFalse(entry.available)
+        self.assertEqual(entry.remaining, 0.0)
+        self.assertFalse(entry.unlimited)
+
+    def test_the_collector_publishes_the_unlimited_window_for_the_free_routes(self):
+        catalog = catalog_module.Catalog(self.CATALOG)
+        context = {
+            "offered_models": [
+                ("opencode-go", "minimax-m3.1-flash-free"),
+                ("opencode-go", "minimax-m3.1"),
+            ]
+        }
+        inputs = main.ranking_inputs([], catalog, context, [], now=NOW)
+        windows = inputs["windows"]
+        free_route = windows.get("opencode-go/minimax-m3.1-flash-free") or []
+        self.assertEqual(len(free_route), 1)
+        self.assertEqual(free_route[0].quota_id, published.UNLIMITED_QUOTA_ID)
+        self.assertEqual(free_route[0].kind, "unlimited")
+        self.assertEqual(free_route[0].basis, "published")
+        # The paid route keeps the allowance of the account and no window
+        # of its own.
+        self.assertNotIn("opencode-go/minimax-m3.1", windows)
+
+    def test_a_paid_route_the_catalog_prices_is_never_unlimited(self):
+        catalog = catalog_module.Catalog(
+            {
+                "opencode-go": {
+                    "models": {
+                        "minimax-m3.1-free": {
+                            "name": "MiniMax M3.1 (a paid route)",
+                            "cost": {"input": 1.0, "output": 4.0},
+                        }
+                    }
+                }
+            }
+        )
+        context = {"offered_models": [("opencode-go", "minimax-m3.1-free")]}
+        inputs = main.ranking_inputs([], catalog, context, [], now=NOW)
+        # The catalog prices the route and it is not free, so the published
+        # unlimited listing does not apply to it.
+        self.assertNotIn("opencode-go/minimax-m3.1-free", inputs["windows"])
+
+    def test_the_snapshot_says_the_route_is_unlimited(self):
+        snapshot_module = load("ai_usage_headroom_snapshot", "snapshot.py")
+        ranked = self._rank("minimax-m3.1-flash-free", self._unlimited())
+        data = snapshot_module.build_snapshot(
+            now=NOW,
+            sources=[],
+            ranked=ranked,
+            native_models={},
+            policy={
+                "frontierPrimeModels": (),
+                "allowedGptModels": (),
+                "backgroundProviderInstances": (),
+            },
+            catalog=catalog_module.Catalog(self.CATALOG),
+            facts={},
+        )
+        row = data["candidates"][0]
+        labels = [window.get("label") for window in row["quota_windows_applied"]]
+        self.assertIn("unlimited (published)", labels)
+        self.assertEqual(row["quota_state"], "available")
+        self.assertEqual(row["capacity"]["remaining_ratio"], 1.0)
 
 
 if __name__ == "__main__":

@@ -29,6 +29,7 @@ import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
 import pool as pool_module  # noqa: E402
 import pool_published  # noqa: E402
+import published as published_module  # noqa: E402
 import quota as quota_module  # noqa: E402
 import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
@@ -593,6 +594,34 @@ def _window_scope(quota_id: str) -> tuple[str, ...]:
     return ()
 
 
+def _published_unlimited_routes(
+    catalog: catalog_module.Catalog, inventory: Iterable[tuple[str, str]]
+) -> list[tuple[str, str]]:
+    """The routes the provider publishes as unlimited.
+
+    The Go documentation lists its free routes as unlimited, and a live
+    probe confirmed it: a free route answered while the paid monthly
+    window of the plan was spent. The rule is the published one, and the
+    catalog may not contradict it: a route the catalog prices is only
+    unlimited when it prices it free.
+    """
+    free_prices = {
+        str(entry.get("model") or "")
+        for entry in (catalog.free_models(published_module.GO_PROVIDER) or [])
+    }
+    routes: list[tuple[str, str]] = []
+    for provider, model in sorted(inventory or ()):
+        if not published_module.unlimited_route(provider, model):
+            continue
+        entry = catalog.model_entry(provider, model)
+        if entry is not None and model not in free_prices:
+            # The catalog prices the route and it is not free: the published
+            # unlimited listing does not apply to it.
+            continue
+        routes.append((str(provider), str(model)))
+    return routes
+
+
 def provider_limit_samples(
     inputs: Mapping[str, Any],
 ) -> list[Sample]:
@@ -821,6 +850,21 @@ def ranking_inputs(
         else:
             # A window the provider reports for one model only.
             windows.setdefault(f"{provider}/{model}", []).append(window)
+    # The routes the provider publishes as unlimited. The route carries a
+    # window of its own, so it has a stated state instead of no state, and
+    # the paid allowance of the account does not gate it.
+    for provider, model in _published_unlimited_routes(catalog, inventory):
+        windows.setdefault(f"{provider}/{model}", []).append(
+            ranking_module.QuotaWindow(
+                kind="unlimited",
+                used_ratio=0.0,
+                reset_epoch=None,
+                quota_id=published_module.UNLIMITED_QUOTA_ID,
+                duration_seconds=None,
+                observed_at=moment,
+                basis=providers_module.BASIS_PUBLISHED,
+            )
+        )
     # The free pool's own evidence: the admissions of a route, its limits
     # and its cooldown. The admission is what lets a pool route hold the
     # free tier and take a workload.
