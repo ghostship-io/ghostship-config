@@ -1,8 +1,18 @@
 # Changelog
 
-## [3.17.51] - 2026-10-22
+## [3.17.61] - 2026-10-22
 
 - Grafana dashboards lead with graphics: Providers (four tier columns of % left, T3-style provider cards, collapsed Why this order), Overview, Host, Security and Pipeline. Shared navigation is Overview, Work, Providers, Host, Security, Pipeline. Allowance bars show remaining ("% left") coloured critical below 10%, warning below 30%, otherwise good. The ordering measure is labelled **Paced Availability**. Freshness keeps series whose timestamp is within 90s of the newest collection, so entitlement and fact cards stay filled when sample timestamps are a few seconds apart. Frontier bars are labelled Chief (Claude Opus 5.5) and Backup (Codex GPT-6.1-Sol); order inside the tier stays Paced Availability. Every ranked route of a tier is listed with the % left of its lowest applicable window: the available routes by Paced Availability, the exhausted and unavailable ones below them, greyed, with the reason they are spent. An unknown allowance is grey and reads Limits unknown, never a red bar that looks like 0%. The model names are the names a person would say, not the provider's own id.
+
+## [3.17.59] - 2026-10-22
+
+- The GitHub coordinator's hold lives in the host configuration. It was held off with a runtime drop-in under `/run`, and an activation clears runtime unit overrides, so the 2026-10-22 deploy started it and it replayed part of the deployment backlog before it was stopped again. `ghostship.githubEngineering.coordinatorAutoStart` (default on) now decides whether boot or an activation starts it, and chill-penguin sets it off until the replay fix passes a backlog replay. The webhook receiver keeps spooling while the coordinator is held.
+
+## [3.17.58] - 2026-10-22
+
+- Main's Fleet checks are green again. The regression tests run inside the Nix check derivation, whose sandbox holds the store and little else, and two assumptions broke there. The activation helper starts with `#!/usr/bin/env bash`, and the sandbox has no `/usr/bin/env`, so the kernel could not resolve the shebang and the test reported the helper as missing although it was in the tree. The test now runs the helper with the interpreter its shebang names. The agent SSH command guard started every session in the login shell of the account the session ran as, and that account names a shell the sandbox does not have, so every session the guard started failed. The guard now falls back to a shell that exists when the account's shell is missing, and it accepts the shell the host pins.
+- Private-source environments: neither `private-source-ci` nor `private-source-main` asks for a reviewer. The owner removed that gate on 2026-10-22, because it should only hold back other people, and the environment-scoped read-only agent key is released without an approval. Only the `main` branch may deploy to `private-source-main`, and a pull request from a fork gets no environment secrets at all, because GitHub withholds them from a fork. The fleet operations document records that state, and the unused `GHOSTSHIP_PRIVATE_SOURCES` environment secret is gone.
+
 ## [3.17.57] - 2026-10-22
 
 - Test fixtures hold no personal identifier. The command guard's test used the owner's key line, with the owner's handle and home host, in a public repository; it now uses a role placeholder with synthetic key material, and the agent pin fixture uses a synthetic organisation. The command guard's regression tests also prove that the `nix-daemon --stdio` command of the `ssh-ng` transport and an interactive session, which sends no command at all, both pass the guard.
