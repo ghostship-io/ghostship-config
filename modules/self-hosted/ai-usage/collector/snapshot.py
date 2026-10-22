@@ -708,6 +708,7 @@ def _candidate(
             "state": "settled" if settled else "pending",
             "reason": pending_reason,
         },
+        "free_pool": _free_pool_record(None),
         "provenance": {
             "source": "collector",
             "observed_at": _iso(now),
@@ -760,15 +761,106 @@ WORKLOAD_CLASSES = (
 
 def _admitted_for(row: Mapping[str, Any], workload: str) -> bool:
     """True when a row has admission evidence for one workload class."""
-    evidence = row.get("admission_evidence")
-    if not isinstance(evidence, list):
-        return False
-    for entry in evidence:
-        if not isinstance(entry, Mapping):
-            continue
+    for entry in _admission_entries(row):
         if str(entry.get("workload") or "") == workload and entry.get("admitted") is True:
             return True
     return False
+
+
+def _admission_entries(row: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Every admission entry of a row: the durable fact and the free pool."""
+    entries: list[Mapping[str, Any]] = []
+    evidence = row.get("admission_evidence")
+    if isinstance(evidence, list):
+        entries.extend(entry for entry in evidence if isinstance(entry, Mapping))
+    pool = row.get("free_pool") or {}
+    admission = pool.get("admission")
+    if isinstance(admission, list):
+        entries.extend(entry for entry in admission if isinstance(entry, Mapping))
+    return entries
+
+
+def _admitted_for_any(row: Mapping[str, Any]) -> bool:
+    """True when a row has an admission for at least one workload."""
+    return any(entry.get("admitted") is True for entry in _admission_entries(row))
+
+
+def _is_pool_route(row: Mapping[str, Any]) -> bool:
+    """True when the route runs as a pool inference job, not as a native one.
+
+    A dedicated free route the live instance catalog proves is a native
+    route runs as a provider-native thread and may carry a delegate. A route
+    the collector only knows from the free pool has no native instance, so
+    it runs as an inference job and needs a current admission.
+    """
+    access = row.get("access") or {}
+    if access.get("kind") != ACCESS_DEDICATED_FREE:
+        return False
+    return not bool((row.get("native") or {}).get("mapped"))
+
+
+def _free_pool_record(evidence: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The free pool's own evidence about one route.
+
+    The limits keep the basis they were read with: the provider's own
+    documentation, the pool's own setting, an observation of the provider's
+    response headers, or unknown. A cooldown that cannot be true is an
+    issue, not a block: the route stays usable and the issue is published.
+    """
+    empty = {
+        "state": "not_a_pool_route",
+        "basis": "the route is not one of the free pool's integrations",
+        "admission": [],
+        "limits": [],
+        "cooldown_until": None,
+        "cooldown_basis": None,
+        "issues": [],
+    }
+    if not isinstance(evidence, Mapping):
+        return empty
+    admission = []
+    for entry in evidence.get("admission") or ():
+        if not isinstance(entry, Mapping):
+            continue
+        admission.append(
+            {
+                "workload": str(entry.get("workload") or ""),
+                "admitted": entry.get("admitted") is True,
+            }
+        )
+    limits = []
+    for entry in evidence.get("limits") or ():
+        if not isinstance(entry, Mapping):
+            continue
+        limits.append(
+            {
+                "limit": str(entry.get("limit") or ""),
+                "value": entry.get("value"),
+                "scope": str(entry.get("scope") or "account"),
+                "basis": str(entry.get("basis") or "unknown"),
+            }
+        )
+    issues = [str(issue) for issue in evidence.get("issues") or ()]
+    cooldown = evidence.get("cooldown_until")
+    cooldown_value = None
+    if isinstance(cooldown, (int, float)) and not isinstance(cooldown, bool):
+        cooldown_value = float(cooldown)
+    return {
+        "state": "pool_route",
+        "basis": (
+            "the free pool's own limits, admissions and cooldown; the limits "
+            "keep the basis they were read with"
+        ),
+        "admission": admission,
+        "limits": limits,
+        "cooldown_until": cooldown_value,
+        "cooldown_basis": (
+            "invalid" if "invalid_cooldown" in issues else (
+                "pool" if cooldown_value is not None else None
+            )
+        ),
+        "issues": issues,
+    }
 
 
 def _display_tier(tiers: list[str]) -> str:
@@ -1966,6 +2058,11 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
     The frontier tier takes the prime models of the owner policy. The other
     tiers take the delegates, and a delegate may not be a model the owner
     policy does not permit.
+
+    The free tier is an access tier: a dedicated free route may hold it
+    even when the collector has no native instance for it, because the pool
+    runs it as an inference job. A pool route needs a current admission; a
+    native free route is a provider-native thread and needs none.
     """
     aa = row.get("aa") or {}
     if aa.get("state") != "measured":
@@ -1989,6 +2086,14 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
         return bool((eligibility.get("frontier_prime") or {}).get("allowed")) and (
             _frontier_workhorse(str(row.get("model") or ""))
         )
+    if tier == "free":
+        if (row.get("access") or {}).get("kind") != ACCESS_DEDICATED_FREE:
+            return bool((eligibility.get("delegate") or {}).get("allowed"))
+        if _is_pool_route(row):
+            # A pool route runs as an inference job: it needs a current
+            # admission before it may hold the tier.
+            return _admitted_for_any(row)
+        return True
     return bool((eligibility.get("delegate") or {}).get("allowed"))
 
 
@@ -2026,6 +2131,7 @@ def build_snapshot(
     facts: Mapping[str, Any] | None = None,
     free_models: Iterable[Any] | None = None,
     promo_models: Iterable[Any] | None = None,
+    pool_evidence: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
 ) -> dict[str, Any]:
     """Build the routing snapshot from the ranked models and the readings."""
@@ -2088,6 +2194,7 @@ def build_snapshot(
             version=feed_version,
         )
         _fill_value(row, catalog, fact, now, free_set, promo_set, aa_3d_cache)
+        row["free_pool"] = _free_pool_record((pool_evidence or {}).get((provider, model)))
         for tier in row["tiers"]:
             tiers.setdefault(tier, []).append(_key(provider, model))
         account = str(row.get("account") or "")
