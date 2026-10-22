@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.17.72] - 2026-10-22
+## [3.17.73] - 2026-10-22
 
 - The AI usage collector says which metric series it dropped as a repeat. The renderer dropped a repeated name with the same labels and logged only how many series it dropped, so a run that dropped one or two series said nothing about them, and the emitter that published a series twice could not be found. Every dropped series is now named in the run's log, with its labels in the order they appear in the text file, and the line says whether the repeat carried the value that was kept or a different one. A run names at most twenty dropped series and then says how many it did not name, so the log stays a log. The first value is still the one that is published, the file still holds every series once, and `ghostship_ai_collection_duplicate_series` still counts every repeat.
 
