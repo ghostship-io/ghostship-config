@@ -729,15 +729,7 @@ def _candidate(
         },
         "capacity": {
             "remaining_ratio": None if remaining is None else round(remaining, 4),
-            "source": (
-                "pool"
-                if capacity_measured
-                and any(
-                    str(window.get("basis") or "") in ("published", "configured", "observed", "unknown")
-                    for window in windows
-                )
-                else ("measured" if capacity_measured else "unknown")
-            ),
+            "source": "measured" if capacity_measured else "unknown",
             "measured": capacity_measured,
             "expires_in_seconds": None if expires_in is None else int(round(expires_in)),
             # The capacity binding is the window with the least headroom.
