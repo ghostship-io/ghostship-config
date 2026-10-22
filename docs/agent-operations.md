@@ -169,7 +169,11 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   local `git push origin main`;
   remote `git -C /home/nixos/nixos-config pull --ff-only origin main`;
   remote `nixos-rebuild build --flake .#chill-penguin`;
-  remote `./result/bin/switch-to-configuration switch`.
+  remote `scripts/activate-host --toplevel ./result`.
+  `scripts/activate-host` sets the system profile before the switch and
+  verifies that `/run/current-system` and the system profile name the same
+  generation. A bare `switch-to-configuration switch` does not record the
+  system generation, and a reboot then reverts to the profile's generation.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on

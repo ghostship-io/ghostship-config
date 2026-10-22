@@ -36,6 +36,9 @@ python3 -m unittest discover -s tests -p test_ssh_command_guard.py
 printf 'Checking the boot generation drift check\n'
 python3 -m unittest discover -s tests -p test_boot_generation_drift.py
 
+printf 'Checking the host activation helper\n'
+python3 -m unittest discover -s tests -p test_activate_host.py
+
 printf 'Checking SIEM log parsing and secret redaction\n'
 vector --quiet test tests/siem-vector.toml
 python3 -m unittest discover -s tests -p test_siem_alerts.py
