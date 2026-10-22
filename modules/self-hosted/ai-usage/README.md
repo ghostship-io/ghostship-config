@@ -145,7 +145,16 @@ asserts.
 
 Runtime reasoning is independent of the AA benchmark condition. The model
 ranking uses the measured AA intelligence and cost per task; the runtime
-policy is owner-defined: **medium by default, high for escalations**. The
+policy is owner-defined: **medium by default, high for escalations**. One
+explicit exception is approved: the exact DeepSeek V4.1 Flash models
+(`deepseek-v4.1-flash` and `deepseek-v4.1-flash:1017`, after the provider
+namespace) run **High by default**. The id is compared exactly, with no
+substring, family or suffix rule; no other DeepSeek, MiniMax or similarly
+named model inherits it, and a Flash model whose option does not list High is
+a fail-closed capability mismatch. The exception is published in
+`aa.condition` (`execution_default`, `execution_exception`, `execution_basis`),
+`alignment`/`alignment_meta` and `runtime_policy`, and it never changes the AA
+reference. The
 alignment is a runtime recommendation: `alignment` names the option id and
 `medium`, `alignment_meta.escalation` names `high`, and `alignment_meta`
 carries `recommended`, `applied` and the actual current value. The AA

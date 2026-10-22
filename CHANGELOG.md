@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.45] - 2026-10-22
+
+- AI usage collection: the owner approved a High execution default for the exact DeepSeek V4.1 Flash models. `deepseek-v4.1-flash` and `deepseek-v4.1-flash:1017` (after the provider namespace) now run High by default, while every other model keeps medium with high escalation. The id is compared exactly: no substring, family or suffix rule, so other DeepSeek models, MiniMax and similarly named ids do not inherit it, and a Flash model whose option does not list High is a fail-closed capability mismatch with its supported list published. The exception is visible in `aa.condition` (`execution_default`, `execution_exception`, `execution_basis`), in `alignment`/`alignment_meta` and in `runtime_policy`, and the AA best-80/20 reference and its Max condition are unchanged.
+
 ## [3.17.44] - 2026-10-22
 
 - AI usage collection: a promotional or free route is no longer exempt from its account's paid allowance by observation alone. The ranking previously removed the paid allowance windows from a free route when the route was seen operational while that allowance was spent; that is an inference, not a reported scope. On the same account and provider (OpenCode Go's monthly/window set, where the free MiniMax Flash shares the `opencode-go` account), the measured window is now attached, the model shows the spent remainder and is not a winner. `capacity.scope` publishes the account, the applied window count, whether a model window was used, the observed free route, and `exemption` (false unless a reported scope separates it). A provider-reported model window remains the separate scope. Tests cover both the same-account block and the operational observation no longer removing the window. Routing stays off.

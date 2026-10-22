@@ -858,36 +858,71 @@ class StockDescriptorTests(unittest.TestCase):
         self.assertEqual(row["aa"]["alignment_meta"]["escalation"], {"variant": "high"})
         self.assertEqual(row["aa"]["runtime_policy"]["state"], "selectable")
 
-    def test_a_model_without_medium_is_an_explicit_capability_mismatch(self):
-        # DeepSeek V4.1 Flash 1017 advertises variant low/high/max only.
-        options = [
-            {"id": "variant", "values": ["low", "high", "max"]},
-        ]
-        models = visual_model("ollama", "deepseek-v4.1-flash:1017")
+    def test_deepseek_v41_flash_uses_the_approved_high_default(self):
+        options = [{"id": "variant", "values": ["low", "high", "max"]}]
+        for provider, model, aa_slug, aa_name in (
+            ("ollama", "deepseek-v4.1-flash:1017", "deepseek-v4-1-flash-1017", "DeepSeek V4.1 Flash 1017 (Max)"),
+            ("deepseek", "deepseek/deepseek-v4.1-flash", "deepseek-v4-1-flash", "DeepSeek V4.1 Flash (Max)"),
+        ):
+            data = build(
+                visual_model(provider, model),
+                [record(aa_slug, 45.1, 0.262, name=aa_name)],
+                native_options={(provider, model): options},
+            )
+            row = data["candidates"][0]
+            self.assertTrue(row["aa"]["selectable"], model)
+            self.assertEqual(row["aa"]["alignment"], {"variant": "high"}, model)
+            self.assertEqual(row["aa"]["alignment_meta"]["value"], "high")
+            self.assertEqual(row["aa"]["alignment_meta"]["escalation"], {"variant": "high"})
+            self.assertEqual(row["aa"]["condition"]["execution_default"], "high", model)
+            self.assertTrue(row["aa"]["condition"]["execution_exception"], model)
+            self.assertEqual(row["aa"]["runtime_policy"]["default"], "high")
+            self.assertTrue(row["aa"]["runtime_policy"]["exception"])
+            # The AA reference is still the best measured 80/20, unchanged.
+            self.assertEqual(row["aa"]["reference"]["condition"], "max", model)
+
+    def test_the_high_exception_does_not_inherit(self):
+        options = [{"id": "variant", "values": ["low", "high", "max"]}]
+        for model in (
+            "deepseek-v4-flash",
+            "deepseek-v4.1-flash-extra",
+            "my-deepseek-v4.1-flash-clone",
+        ):
+            data = build(
+                visual_model("ollama", model),
+                [record("deepseek-v4-1-flash", 39.5, 0.4, name="DeepSeek V4.1 Flash (Max)")],
+                native_options={("ollama", model): options},
+            )
+            row = data["candidates"][0]
+            self.assertFalse(row["aa"]["selectable"], model)
+            self.assertFalse(row["aa"]["condition"]["execution_exception"], model)
+            self.assertEqual(row["aa"]["runtime_policy"]["default"], "medium", model)
+            self.assertEqual(row["aa"]["runtime_policy"]["state"], "capability_mismatch", model)
+
+    def test_the_minimax_flash_keeps_the_medium_default(self):
+        options = [{"id": "variant", "values": ["low", "medium", "high", "xhigh", "max"]}]
         data = build(
-            models,
-            [
-                record(
-                    "deepseek-v4-1-flash-1017",
-                    45.1,
-                    0.262,
-                    name="DeepSeek V4.1 Flash 1017 (Max)",
-                )
-            ],
+            visual_model("opencode-go", "minimax-m3.1-flash"),
+            [record("minimax-m3-1-flash", 42.7, 0.2201, name="MiniMax-M3.1-Flash")],
+            native_options={("opencode-go", "minimax-m3.1-flash"): options},
+        )
+        row = data["candidates"][0]
+        self.assertEqual(row["aa"]["runtime_policy"]["default"], "medium")
+        self.assertFalse(row["aa"]["condition"]["execution_exception"])
+        self.assertEqual(row["aa"]["alignment"], {"variant": "medium"})
+
+    def test_a_flash_without_high_fails_closed(self):
+        options = [{"id": "variant", "values": ["low", "medium"]}]
+        data = build(
+            visual_model("ollama", "deepseek-v4.1-flash:1017"),
+            [record("deepseek-v4-1-flash-1017", 45.1, 0.262, name="DeepSeek V4.1 Flash 1017 (Max)")],
             native_options={("ollama", "deepseek-v4.1-flash:1017"): options},
         )
         row = data["candidates"][0]
         self.assertFalse(row["aa"]["selectable"])
         self.assertEqual(row["aa"]["alignment"], {})
-        self.assertEqual(row["aa"]["alignment_meta"]["escalation"], {"variant": "high"})
-        runtime = row["aa"]["runtime_policy"]
-        self.assertEqual(runtime["state"], "capability_mismatch")
-        self.assertEqual(runtime["option"], "variant")
-        self.assertEqual(runtime["supported"], ["low", "high", "max"])
-        self.assertFalse(runtime["default_supported"])
-        # The measured Max is still visible and is not our run condition.
-        self.assertEqual(row["aa"]["condition"]["measured_variant"], "max")
-        self.assertEqual(row["aa"]["condition"]["execution_default"], "medium")
+        self.assertEqual(row["aa"]["runtime_policy"]["state"], "capability_mismatch")
+        self.assertEqual(row["aa"]["runtime_policy"]["supported"], ["low", "medium"])
 
     def test_a_model_without_a_reasoning_option_is_not_subject_to_the_policy(self):
         models = visual_model("claude", "claude-opus-5-5")

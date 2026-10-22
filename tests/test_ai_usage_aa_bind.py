@@ -349,11 +349,13 @@ class CatalogCoverageShapeTests(unittest.TestCase):
         self.assertEqual(deepseek["aa"]["condition"]["measured_variant"], "max")
         self.assertEqual(deepseek["aa"]["condition"]["native_variant"], "")
         self.assertFalse(deepseek["aa"]["variant_mismatch"])
-        # The benchmark condition is the reference's Max, and our runtime
-        # condition is Medium; the model's options do not support it.
+        # The benchmark condition is the reference's Max; the owner-approved
+        # DeepSeek Flash exception runs High, independent of it.
         self.assertEqual(deepseek["aa"]["condition"]["measured_variant"], "max")
-        self.assertEqual(deepseek["aa"]["condition"]["execution_default"], "medium")
-        self.assertFalse(deepseek["aa"]["selectable"])
+        self.assertEqual(deepseek["aa"]["condition"]["execution_default"], "high")
+        self.assertTrue(deepseek["aa"]["condition"]["execution_exception"])
+        self.assertTrue(deepseek["aa"]["selectable"])
+        self.assertEqual(deepseek["aa"]["alignment"], {"variant": "high"})
         self.assertEqual(deepseek["value"]["strength"], 45.1)
 
     def test_the_text_only_evidence_keeps_beam_out_of_the_3d_tier(self):
