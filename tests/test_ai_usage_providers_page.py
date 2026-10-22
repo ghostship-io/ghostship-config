@@ -33,7 +33,6 @@ FIXTURE_ROUTING_ON = ROOT / "tests/fixtures/ai-usage/providers-review-routing-on
 SECTIONS = ("Bulk", "Free", "Frontier", "3D", "Providers")
 TIERS = {"Bulk": "bulk", "Free": "free", "Frontier": "frontier", "3D": "3d"}
 
-
 def panels(page):
     """The panels of the page, with the ones a collapsed row holds."""
     out = []
@@ -458,25 +457,51 @@ class ProvidersPageTests(unittest.TestCase):
         self.assertNotIn("ghostship_ai_provider_limit", expressions(panel))
 
     def test_a_tag_is_never_a_clipped_box(self):
-        """The tag of a route keeps its text on a narrow screen.
+        """The narrow screen hides the tag of a route: it is never a cut grey box.
 
         The name of the model and its tag shared one line that the narrow
         screen cut, so the tag became an empty grey box.
         """
         for title in list(TIERS) + ["Providers"]:
             panel = section(self.page, title)
-            content = panel["options"]["content"]
             styles = panel["options"].get("styles") or ""
-            template = Template(content)
-            for tag in template.tags():
-                self.assertFalse(
-                    template.inside(tag, clipped_selectors(styles)),
-                    f"{title}: the tag {tag.get('classes')} is cut with the name",
-                )
+            rules = css_rules(media_body(styles))
+            declarations = " ".join(
+                body
+                for name, body in rules
+                if ".tag" in [selector.strip() for selector in name.split(",")]
+            )
+            self.assertIn("display: none", declarations, title)
         # The tiers carry the tags of the collector.
         self.assertTrue(
             Template(section(self.page, "Bulk")["options"]["content"]).tags()
         )
+
+    def test_the_narrow_screen_holds_one_line(self):
+        """A row of a narrow screen is one line: the name, the provider and the capacity.
+
+        A row that wraps is a row the panel cuts, and the rows a rule
+        sinks to the bottom are the last ones of the table.
+        """
+        for title in list(TIERS) + ["Providers"]:
+            panel = section(self.page, title)
+            styles = panel["options"].get("styles") or ""
+            rules = css_rules(media_body(styles))
+            for selector in (".name", ".prov", ".unk"):
+                declarations = " ".join(
+                    body
+                    for name, body in rules
+                    if selector in [part.strip() for part in name.split(",")]
+                )
+                self.assertIn("white-space: nowrap", declarations, f"{title} {selector}")
+                self.assertIn("overflow: hidden", declarations, f"{title} {selector}")
+                self.assertIn("text-overflow: ellipsis", declarations, f"{title} {selector}")
+
+    def test_the_capacity_text_carries_its_whole_text(self):
+        """The capacity text of a narrow screen is cut with an ellipsis: the title holds it all."""
+        for title in list(TIERS) + ["Providers"]:
+            content = section(self.page, title)["options"]["content"]
+            self.assertIn('class="unk" title="', content, title)
 
     def test_the_on_pace_pace_carries_its_number_on_a_narrow_screen(self):
         """Every pace of a narrow screen carries a number: the on-pace one reads '● 0'."""
