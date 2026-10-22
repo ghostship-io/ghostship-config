@@ -549,9 +549,9 @@ provider-reported dollar charge.
 * `ghostship_ai_pool_latency_seconds{provider,model}` - the observed latency.
 * `ghostship_ai_pool_concurrency{provider,account,kind}` - the current and the
   allowed concurrency; `kind` is `current` or `limit`.
-* `ghostship_ai_pool_recent_jobs{provider,worker,client,status}` - 1 for a
-  recent job. The listing is bounded recent history, not a complete queue
-  census.
+* `ghostship_ai_pool_recent_jobs{provider,worker,client,status}` - the count
+  of the recent jobs with these labels. The listing is bounded recent
+  history, not a complete queue census.
 * `ghostship_ai_pool_quota_amount{provider,model,kind,unit}` - a quota amount
   seen in a provider response header; `kind` is `limit` or `remaining`.
 * `ghostship_ai_pool_quota_reset_seconds{provider,model,unit}` - when that

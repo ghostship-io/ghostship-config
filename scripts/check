@@ -86,6 +86,7 @@ python3 -m unittest discover -s tests -p test_ai_usage_aa_normalize.py
 python3 -m unittest discover -s tests -p test_ai_usage_aa_pull.py
 python3 -m unittest discover -s tests -p test_ai_usage_gate.py
 python3 -m unittest discover -s tests -p test_ai_usage_free_pool.py
+python3 -m unittest discover -s tests -p test_ai_usage_pool_recent_jobs.py
 python3 -m unittest discover -s tests -p test_ai_usage_duplicate_series.py
 python3 -m unittest discover -s tests -p test_ai_usage_quota.py
 python3 -m unittest discover -s tests -p test_ai_usage_headroom.py

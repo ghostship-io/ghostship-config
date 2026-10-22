@@ -359,22 +359,38 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                         )
                     )
                     break
+    # The recent jobs are counted by their label set. A metric series is a
+    # name with a label set, and two jobs that share a provider, a worker, a
+    # client and a status are the same series: publishing one sample per
+    # job published that series twice, the writer dropped the repeat, and
+    # the published number was one where it was two. The series is the
+    # count of those jobs, published once.
+    recent_jobs: dict[tuple[str, str, str, str], int] = {}
     for job in status.get("jobs") or []:
         if not isinstance(job, dict):
             continue
         provider = str(job.get("provider") or "")
         if not provider:
             continue
+        key = (
+            provider,
+            str(job.get("worker") or "unknown"),
+            str(job.get("client") or "default"),
+            str(job.get("status") or "unknown"),
+        )
+        recent_jobs[key] = recent_jobs.get(key, 0) + 1
+    for key in sorted(recent_jobs):
+        provider, worker, client, job_status = key
         samples.append(
             _pool_sample(
                 "ghostship_ai_pool_recent_jobs",
                 {
                     "provider": provider,
-                    "worker": str(job.get("worker") or "unknown"),
-                    "client": str(job.get("client") or "default"),
-                    "status": str(job.get("status") or "unknown"),
+                    "worker": worker,
+                    "client": client,
+                    "status": job_status,
                 },
-                1.0,
+                float(recent_jobs[key]),
             )
         )
     updated = status.get("catalog_updated_at")
