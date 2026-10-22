@@ -847,7 +847,7 @@
 ## [3.15.101] - 2026-10-12
 
 - Pin ghostship-agent 0.18.1: `health` op `types` and `query` over every Health Connect type, Ultrahuman lab biomarkers, full sleep and metrics, Wyze weigh-ins, and health documents with their text (OCR for scans).
-- The MCP container reads health documents only from the owner's "the owner" and "HealthConnect" Drive folders (`GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS`).
+- The MCP container reads health documents only from the owner's own Drive folders and "HealthConnect" Drive folders (`GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS`).
 
 ## [3.15.100] - 2026-10-12
 
