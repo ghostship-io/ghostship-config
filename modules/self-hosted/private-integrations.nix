@@ -20,7 +20,7 @@ let
     # acquisition. No account index is configured or assumed.
     accounts = {
       User = { identity = "personal"; expected_email = "@GHOSTSHIP_KEEP_PERSONAL_EMAIL@"; };
-      Agent = { identity = "agent"; expected_email = "<agent-email>"; };
+      Agent = { identity = "agent"; expected_email = "@GHOSTSHIP_KEEP_AGENT_EMAIL@"; };
     };
     principal = "chatgpt-personal-owner";
     client = "${tools.google-pp-cli}/bin/google-pp-cli";

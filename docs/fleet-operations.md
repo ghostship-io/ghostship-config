@@ -114,6 +114,8 @@ their environment:
 
 - `GHOSTSHIP_GITHUB_ACCOUNT` — the GitHub account that owns the retired
   container images and the repositories before they moved to the organisation.
+- `GHOSTSHIP_KEEP_AGENT_EMAIL` — the agent's Google account the Keep broker
+  verifies for the agent identity.
 - `GHOSTSHIP_KEEP_PERSONAL_EMAIL` — the personal Google account the Keep
   broker verifies before it reads anything.
 - `GHOSTSHIP_KUMA_USERNAME` — the uptime-kuma administrator account name.
