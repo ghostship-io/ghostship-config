@@ -267,6 +267,7 @@ class EntrypointSmokeTests(unittest.TestCase):
             )
             self.assertEqual(rows["gpt-6.1-sol"]["three_d"]["state"], "measured")
             self.assertEqual(written["aa_coverage"]["states"]["measured"], 1)
+            self.assertIn("entitlements", written["quota"])
 
 
 def fake_aa3d_cache():

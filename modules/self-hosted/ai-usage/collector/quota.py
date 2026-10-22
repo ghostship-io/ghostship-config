@@ -144,3 +144,116 @@ def quota_pace_samples(windows: Iterable[Any], now: float) -> list[tuple[str, di
             ("ghostship_ai_quota_pace_delta_ratio", labels, pace["pace_delta_ratio"])
         )
     return samples
+
+
+# The verified alias of the OpenCode Go quota ids. The T3 status surface names
+# the same three windows go_monthly/go_rolling/go_weekly that the Go usage
+# endpoint names monthly/rolling/weekly. The pairing is published, and no
+# reading is dropped.
+QUOTA_ALIASES = {
+    "go_monthly": "monthly",
+    "go_rolling": "rolling",
+    "go_weekly": "weekly",
+}
+
+
+def _entitlement_parts(window: Any) -> dict[str, str]:
+    def get(name: str, default: str = "") -> str:
+        value = window.get(name) if isinstance(window, Mapping) else getattr(window, name, None)
+        return default if value is None else str(value)
+
+    provider = get("provider")
+    account = get("account") or "default"
+    model = get("model") or "*"
+    kind = get("kind") or get("window")
+    quota = get("quota_id") or get("quota")
+    canonical = QUOTA_ALIASES.get(quota, quota)
+    return {
+        "provider": provider,
+        "account": account,
+        "model": model,
+        "window": kind,
+        "quota": quota,
+        "canonical_quota": canonical,
+        "source": get("source"),
+        "entitlement": f"{provider}:{account}:{model}:{kind}:{canonical}",
+        "observed_at": get("observed_at"),
+        "used_ratio": get("used_ratio"),
+        "reset_at": get("reset_at"),
+    }
+
+
+def entitlements(windows: Iterable[Any], now: float | None = None) -> list[dict[str, Any]]:
+    """The entitlement of every reading, with its sources kept apart.
+
+    Two readings that name the same verified entitlement (provider, account,
+    model, window and canonical quota) are grouped, and each keeps its own
+    source and quota id. Nothing is merged and nothing is dropped.
+    """
+    grouped: dict[str, dict[str, Any]] = {}
+    for window in windows or ():
+        parts = _entitlement_parts(window)
+        if not parts["provider"] or not parts["window"]:
+            continue
+        entry = grouped.setdefault(
+            parts["entitlement"],
+            {
+                "entitlement": parts["entitlement"],
+                "provider": parts["provider"],
+                "account": parts["account"],
+                "model": parts["model"],
+                "window": parts["window"],
+                "canonical_quota": parts["canonical_quota"],
+                "readings": [],
+            },
+        )
+        entry["readings"].append(
+            {
+                "source": parts["source"],
+                "quota": parts["quota"],
+                "used_ratio": parts["used_ratio"],
+                "reset_at": parts["reset_at"],
+                "observed_at": parts["observed_at"],
+            }
+        )
+    result = []
+    for entry in grouped.values():
+        sources = sorted({str(reading["source"] or "") for reading in entry["readings"]})
+        entry["sources"] = sources
+        entry["relationship"] = (
+            "same_entitlement_independent_readings"
+            if len(sources) > 1
+            else "single_reading"
+        )
+        entry["alias"] = any(
+            str(reading["quota"]) != entry["canonical_quota"]
+            for reading in entry["readings"]
+        )
+        result.append(entry)
+    return sorted(result, key=lambda entry: entry["entitlement"])
+
+
+def entitlement_samples(
+    windows: Iterable[Any], now: float | None = None
+) -> list[tuple[str, dict[str, str], float]]:
+    """One info sample per reading, with the shared entitlement label."""
+    samples: list[tuple[str, dict[str, str], float]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for entry in entitlements(windows, now):
+        for reading in entry["readings"]:
+            key = (entry["entitlement"], str(reading["source"]), str(reading["quota"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            labels = {
+                "provider": entry["provider"],
+                "account": entry["account"],
+                "model": entry["model"],
+                "window": entry["window"],
+                "quota": str(reading["quota"] or ""),
+                "source": str(reading["source"] or ""),
+                "entitlement": entry["entitlement"],
+                "relationship": entry["relationship"],
+            }
+            samples.append(("ghostship_ai_quota_entitlement", labels, 1.0))
+    return samples

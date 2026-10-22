@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.43] - 2026-10-22
+
+- AI usage collection: reconcile duplicate allowance readings without dropping an identity. The T3 status surface's `go_monthly`/`go_rolling`/`go_weekly` windows and the OpenCode Go endpoint's `monthly`/`rolling`/`weekly` windows are published as one entitlement per verified alias: each reading keeps its own source and quota id, and all of them share `entitlement` with `relationship=same_entitlement_independent_readings` and `alias=true`. The snapshot exposes `quota.entitlements` with every reading, and `ghostship_ai_quota_entitlement` is emitted per reading with the shared id and the exact source. Different accounts or model scopes stay separate entitlements, and an unpaired window keeps its exact key. Nothing is merged or dropped, and no dashboard is edited.
+
 ## [3.17.42] - 2026-10-22
 
 - AI usage collection: the AA record selection is now independent of the native runtime setting. The resolver takes the best measured `0.80 intelligence + 0.20 cost per task` value among the exact records of a model, with both inputs required, no Max preference and no dependence on a native current value; changing only the native option from low to medium leaves the reference, indices and score identical (covered by a test). The chosen measured condition is the published reference, every other condition is retained in `alternatives` with its own value, and two records of the same condition are an ambiguity that is refused. A record without both inputs has no reference and the model is not selected, while its raw record stays visible. The runtime reasoning policy (medium default, high escalation) remains separate, and the DeepSeek V4.1 Flash 1017 medium mismatch stays an explicit capability mismatch until the owner answers.

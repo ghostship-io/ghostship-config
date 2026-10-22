@@ -177,6 +177,24 @@ question from CAD and printable-geometry suitability, so it is cited as
 future evidence and is not a score here. The collector opens no new client
 and fetches nothing for it.
 
+### Quota entitlements
+
+Two sources can report the same allowance. The OpenCode Go status surface
+names its windows `go_monthly`, `go_rolling` and `go_weekly`, while the Go
+usage endpoint names the same three windows `monthly`, `rolling` and `weekly`;
+both can appear in one scrape under the same account and model scope.
+
+The producer publishes the verified alias instead of dropping one: each
+reading keeps its own `source` and `quota` id, and all readings of one
+entitlement share `entitlement` (`provider:account:model:window:canonical
+quota`) with `relationship` = `same_entitlement_independent_readings` and
+`alias` = true. The snapshot lists them under `quota.entitlements`
+(`readings[]` with source, quota, used ratio, reset and observation), and the
+metric `ghostship_ai_quota_entitlement{provider,account,model,window,quota,
+source,entitlement,relationship}` is 1 for every reading. A window with no
+verified pair stays its own entitlement. Nothing is merged and nothing is
+dropped, so a UI can group by `entitlement` and still show both readings.
+
 ### Provider capacity
 
 `quota.provider_capacity{provider}` is the lowest applicable account window,
