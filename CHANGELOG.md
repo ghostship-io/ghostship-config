@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.44] - 2026-10-22
+
+- AI usage collection: a promotional or free route is no longer exempt from its account's paid allowance by observation alone. The ranking previously removed the paid allowance windows from a free route when the route was seen operational while that allowance was spent; that is an inference, not a reported scope. On the same account and provider (OpenCode Go's monthly/window set, where the free MiniMax Flash shares the `opencode-go` account), the measured window is now attached, the model shows the spent remainder and is not a winner. `capacity.scope` publishes the account, the applied window count, whether a model window was used, the observed free route, and `exemption` (false unless a reported scope separates it). A provider-reported model window remains the separate scope. Tests cover both the same-account block and the operational observation no longer removing the window. Routing stays off.
+
 ## [3.17.43] - 2026-10-22
 
 - AI usage collection: reconcile duplicate allowance readings without dropping an identity. The T3 status surface's `go_monthly`/`go_rolling`/`go_weekly` windows and the OpenCode Go endpoint's `monthly`/`rolling`/`weekly` windows are published as one entitlement per verified alias: each reading keeps its own source and quota id, and all of them share `entitlement` with `relationship=same_entitlement_independent_readings` and `alias=true`. The snapshot exposes `quota.entitlements` with every reading, and `ghostship_ai_quota_entitlement` is emitted per reading with the shared id and the exact source. Different accounts or model scopes stay separate entitlements, and an unpaired window keeps its exact key. Nothing is merged or dropped, and no dashboard is edited.
