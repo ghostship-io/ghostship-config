@@ -1917,6 +1917,71 @@ def _fill_value(
     }
 
 
+# The capacity below which a reserved model is withheld from the work of
+# the other tiers. The owner decided that a model that qualifies for the 3D
+# tier is kept for CAD work while its provider has room.
+RESERVE_CAPACITY_FLOOR = 0.50
+
+# The tiers a reserve withholds a model from. The 3D tier is the tier the
+# model is reserved for.
+RESERVED_TIERS = ("bulk", "free")
+
+
+def _apply_reserve(
+    candidates: list[dict[str, Any]], provider_capacity: Mapping[str, Any]
+) -> None:
+    """Mark the models that are reserved for the 3D tier.
+
+    A model that qualifies for the 3D tier - an explicit visual input and a
+    measured AA-3D score - is reserved for CAD work. It ranks after every
+    other winner of the other tiers, and it is not used for their work at
+    all while its provider's remaining capacity is below the floor.
+
+    The reserve changes the order and the eligibility. It never changes the
+    value of a model.
+    """
+    for row in candidates:
+        three_d = row.get("three_d") or {}
+        reserved = str(three_d.get("state") or "") == "measured"
+        account = str(row.get("account") or "")
+        capacity = (provider_capacity.get(account) or {}).get("remaining_ratio")
+        if not reserved:
+            row["reserve"] = {
+                "3d": False,
+                "reason": "the model does not qualify for the 3D tier",
+                "capacity": capacity,
+            }
+            continue
+        withheld = (
+            isinstance(capacity, (int, float))
+            and not isinstance(capacity, bool)
+            and float(capacity) < RESERVE_CAPACITY_FLOOR
+        )
+        if withheld:
+            reason = (
+                "the model is reserved for the 3D tier and its provider has "
+                "less than half of its capacity left"
+            )
+        else:
+            reason = (
+                "the model is reserved for the 3D tier, so it ranks after "
+                "every other winner of the other tiers"
+            )
+        row["reserve"] = {
+            "3d": True,
+            "reason": reason,
+            "capacity": capacity,
+            "withheld": bool(withheld),
+            "tiers": list(RESERVED_TIERS),
+            "floor": RESERVE_CAPACITY_FLOOR,
+            "basis": (
+                "the owner reserves the models that qualify for the 3D tier "
+                "for CAD work; the reserve changes the order and the "
+                "eligibility, never the value"
+            ),
+        }
+
+
 def _winners(
     candidates: list[dict[str, Any]],
     tiers: dict[str, list[str]],
@@ -1963,11 +2028,15 @@ def _winners(
                 # its place.
                 continue
             current = chosen.get(row["provider"])
-            if current is None or _winner_key(row) > _winner_key(current):
+            if current is None or _winner_key(row, tier) > _winner_key(current, tier):
                 chosen[row["provider"]] = row
         ordered = sorted(
             chosen.values(),
             key=lambda row: (
+                # A model reserved for the 3D tier comes last in the tiers
+                # it is reserved away from. The reserve changes the order,
+                # never the value.
+                1 if (row.get("reserve") or {}).get("3d") else 0,
                 -(_pace_of(row) if _pace_of(row) is not None else 0.0),
                 row["provider"],
                 row["model"],
@@ -2308,6 +2377,11 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
         return bool((eligibility.get("frontier_prime") or {}).get("allowed")) and bool(
             selection.get("frontier_workhorse")
         )
+    reserve = row.get("reserve") or {}
+    if tier in RESERVED_TIERS and reserve.get("3d") and reserve.get("withheld"):
+        # The model is reserved for the 3D tier, and its provider has too
+        # little capacity left to spend it on the other work.
+        return False
     if tier == "free":
         if (row.get("access") or {}).get("kind") != ACCESS_DEDICATED_FREE:
             return bool((eligibility.get("delegate") or {}).get("allowed"))
@@ -2319,9 +2393,18 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
     return bool((eligibility.get("delegate") or {}).get("allowed"))
 
 
-def _winner_key(row: dict[str, Any]) -> tuple:
-    """The order of the candidates of one provider: value, then quality."""
-    value = (row.get("value") or {}).get("value")
+def _winner_key(row: dict[str, Any], tier: str = "") -> tuple:
+    """The order of the candidates of one provider: value, then quality.
+
+    The 3D tier is ordered by the 3D value: the intelligence, the measured
+    AA-3D capability and the cost, with the weights of the policy. The
+    ordinary value is not a substitute for it, and it does not replace it
+    either.
+    """
+    if tier == "3d":
+        value = (row.get("value_3d") or {}).get("value")
+    else:
+        value = (row.get("value") or {}).get("value")
     quality = (row.get("quality") or {}).get("value")
     return (
         float(value) if isinstance(value, (int, float)) else 0.0,
@@ -2450,13 +2533,92 @@ def build_snapshot(
             candidates.append(row)
         else:
             omitted += 1
+    provider_capacity: dict[str, Any] = {}
+    for account, windows in accounts.items():
+        # The provider's overall capacity is the account-level windows. A
+        # model-scoped subordinate window constrains that model only.
+        applicable = [
+            window for window in windows if not window.get("applies_to")
+        ]
+        reported = [
+            window
+            for window in applicable
+            if window.get("evidence") == "provider_reported"
+            and isinstance(window.get("remaining_ratio"), (int, float))
+            and not isinstance(window.get("remaining_ratio"), bool)
+        ]
+        unknown = [window for window in applicable if window not in reported]
+        spent = [window for window in reported if float(window["remaining_ratio"]) <= 0.0]
+        binding = None
+        remaining: float | None = None
+        if spent:
+            # A spent window blocks the provider even when another window
+            # still has room.
+            binding = sorted(spent, key=lambda window: str(window.get("kind") or ""))[0]
+            remaining = 0.0
+        elif unknown:
+            # An unknown window is not room: a positive reading from the
+            # known windows is suppressed until the account is complete.
+            remaining = None
+        elif reported:
+            binding = min(reported, key=lambda window: float(window["remaining_ratio"]))
+            remaining = float(binding["remaining_ratio"])
+        provider_capacity[account] = {
+            "remaining_ratio": None if remaining is None else round(remaining, 4),
+            "binding": None
+            if binding is None
+            else {
+                "kind": binding.get("kind"),
+                "quota": binding.get("quota"),
+                "reset_at": binding.get("reset_at"),
+            },
+            "windows": len(applicable),
+            "unknown_windows": len(unknown),
+            "basis": (
+                "the lowest applicable remaining share; any spent window "
+                "blocks the provider, and an unknown window is not room"
+            ),
+        }
+    _apply_reserve(candidates, provider_capacity)
+
+    # The order of a tier: the published value decides, and a model
+    # reserved for the 3D tier comes after every other member of the tiers
+    # it is reserved away from. The 3D tier is ordered by the 3D value.
+    reserve_of = {
+        _key(row["provider"], row["model"]): 1
+        if (row.get("reserve") or {}).get("3d")
+        else 0
+        for row in candidates
+    }
+    value_of: dict[str, Any] = {}
+    for tier_name in TIER_NAMES:
+        for row in candidates:
+            key = _key(row["provider"], row["model"])
+            value_of[(tier_name, key)] = (
+                (row.get("value_3d") or {}).get("value")
+                if tier_name == "3d"
+                else (row.get("value") or {}).get("value")
+            )
     for tier, members in tiers.items():
         order = {
             _key(entry.provider, entry.model): entry.rank
             for entry in ranked
             if entry.tier == tier
         }
-        tiers[tier] = sorted(set(members), key=lambda key: (order.get(key, 0), key))
+        tiers[tier] = sorted(
+            set(members),
+            key=lambda key: (
+                reserve_of.get(key, 0) if tier in RESERVED_TIERS else 0,
+                -(
+                    float(value_of.get((tier, key)))
+                    if isinstance(value_of.get((tier, key)), (int, float))
+                    and not isinstance(value_of.get((tier, key)), bool)
+                    else 0.0
+                ),
+                order.get(key, 0),
+                key,
+            ),
+        )
     _calibrate_values(candidates)
     winners, tier_coverage = _winners(candidates, tiers, aa_cache=aa_cache)
     pending_identities = _pending_identities(candidates, facts_source, now)
@@ -2535,52 +2697,6 @@ def build_snapshot(
         "new_models": list((aa_cache or {}).get("new_models") or ()),
         "changed_models": list((aa_cache or {}).get("changed_models") or ()),
     }
-    provider_capacity: dict[str, Any] = {}
-    for account, windows in accounts.items():
-        # The provider's overall capacity is the account-level windows. A
-        # model-scoped subordinate window constrains that model only.
-        applicable = [
-            window for window in windows if not window.get("applies_to")
-        ]
-        reported = [
-            window
-            for window in applicable
-            if window.get("evidence") == "provider_reported"
-            and isinstance(window.get("remaining_ratio"), (int, float))
-            and not isinstance(window.get("remaining_ratio"), bool)
-        ]
-        unknown = [window for window in applicable if window not in reported]
-        spent = [window for window in reported if float(window["remaining_ratio"]) <= 0.0]
-        binding = None
-        remaining: float | None = None
-        if spent:
-            # A spent window blocks the provider even when another window
-            # still has room.
-            binding = sorted(spent, key=lambda window: str(window.get("kind") or ""))[0]
-            remaining = 0.0
-        elif unknown:
-            # An unknown window is not room: a positive reading from the
-            # known windows is suppressed until the account is complete.
-            remaining = None
-        elif reported:
-            binding = min(reported, key=lambda window: float(window["remaining_ratio"]))
-            remaining = float(binding["remaining_ratio"])
-        provider_capacity[account] = {
-            "remaining_ratio": None if remaining is None else round(remaining, 4),
-            "binding": None
-            if binding is None
-            else {
-                "kind": binding.get("kind"),
-                "quota": binding.get("quota"),
-                "reset_at": binding.get("reset_at"),
-            },
-            "windows": len(applicable),
-            "unknown_windows": len(unknown),
-            "basis": (
-                "the lowest applicable remaining share; any spent window "
-                "blocks the provider, and an unknown window is not room"
-            ),
-        }
 
     source_records = []
     for source in sources:

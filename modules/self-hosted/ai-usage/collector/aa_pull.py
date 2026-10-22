@@ -650,6 +650,64 @@ def pull(
             "records": len(ordered),
         },
         "records": ordered,
+        # The AA-3D board, in the contract the collector reads it in.
+        "aa3d": aa3d_document(aa3d, time.time()),
+    }
+
+
+def aa3d_document(board: Mapping[str, Any], now: float) -> dict[str, Any]:
+    """The AA-3D board, in the cache contract the collector reads.
+
+    The board is the measured Elo of every model the page shows, with its
+    interval. The ranks are the order of the board, and the normalization
+    is the reader's own: the min-max over the complete board.
+    """
+    import aa_3d
+
+    entries: list[dict[str, Any]] = []
+    ranked = sorted(
+        (
+            entry
+            for entry in (board or {}).values()
+            if isinstance(entry, Mapping) and _number(entry.get("elo")) is not None
+        ),
+        key=lambda entry: -float(entry["elo"]),
+    )
+    for position, entry in enumerate(ranked, start=1):
+        elo = _number(entry.get("elo"))
+        if elo is None:
+            continue
+        low = _number(entry.get("ci95_lower"))
+        high = _number(entry.get("ci95_upper"))
+        record: dict[str, Any] = {
+            "model": str(entry.get("name") or ""),
+            "elo": round(float(elo), 1),
+            "elo_interval": (
+                {"low": round(float(low), 1), "high": round(float(high), 1)}
+                if low is not None and high is not None
+                else {}
+            ),
+            "rank": position,
+            "rank_range": "",
+            "anchor": False,
+            "cost_per_task": None,
+        }
+        entries.append(record)
+    return {
+        "schema": aa_3d.SCHEMA,
+        "schema_version": 1,
+        "benchmark": aa_3d.BENCHMARK,
+        "benchmark_version": "public-pages",
+        "source_url": aa_3d.SOURCE_URL,
+        "observed_at": time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)
+        ),
+        "completeness": {
+            "complete": True,
+            "scope": "entire_displayed_leaderboard",
+            "records": len(entries),
+        },
+        "records": entries,
     }
 
 
@@ -686,6 +744,7 @@ def refresh(
     now: float | None = None,
     read: Any = None,
     model_pages: Any = None,
+    aa3d_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Refresh the cache from the public pages, at most once a day.
 
@@ -726,6 +785,7 @@ def refresh(
     if not isinstance(previous, dict):
         previous = {}
     difference = aa_diff.diff(previous, document)
+    board = document.pop("aa3d", None)
     # The new and the changed models travel with the cache, so the
     # collector publishes them without reading the old pull.
     document = {
@@ -737,6 +797,8 @@ def refresh(
         ],
     }
     changed = write_snapshot(cache_path, document)
+    if aa3d_path is not None and isinstance(board, Mapping):
+        write_snapshot(aa3d_path, board)
     return {
         "status": "ok",
         "reason": "",
@@ -762,6 +824,11 @@ def main(argv: list[str] | None = None) -> int:
         description="Pull the Artificial Analysis public pages into the cache.",
     )
     parser.add_argument("--output", required=True, help="The cache to write.")
+    parser.add_argument(
+        "--aa3d-output",
+        default="",
+        help="The AA-3D board cache to write, beside the quality cache.",
+    )
     parser.add_argument(
         "--model-pages",
         action="store_true",
@@ -790,7 +857,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
-    result = refresh(args.output, model_pages=pages if args.model_pages else None)
+    result = refresh(
+        args.output,
+        model_pages=pages if args.model_pages else None,
+        aa3d_path=args.aa3d_output or None,
+    )
     print(json.dumps({key: value for key, value in result.items() if key != "diff"}))
     return 0 if result.get("status") == "ok" else 2
 
