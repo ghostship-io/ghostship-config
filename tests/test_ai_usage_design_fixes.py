@@ -143,3 +143,100 @@ class AccountAttributionTests(unittest.TestCase):
         pool = [item for item in ranked if item.provider == "kilo"][0]
         self.assertEqual(pool.account, "kilo")
         self.assertEqual(pool.quota_scope["parent_windows"], 0)
+
+
+class AccessClassificationTests(unittest.TestCase):
+    """F3: a promotional zero price is not a dedicated free route."""
+
+    def test_a_promotional_zero_price_wins_over_the_free_class(self):
+        record = snapshot._access_record(
+            "openrouter",
+            "cohere/north-mini-code:free",
+            {("openrouter", "cohere/north-mini-code:free")},
+            {("openrouter", "cohere/north-mini-code:free")},
+            {"input": 0.0, "output": 0.0},
+        )
+        self.assertEqual(record["kind"], snapshot.ACCESS_PROVIDER_PROMO)
+        self.assertIn("paid provider route", record["basis"])
+
+    def test_a_free_route_of_the_free_pool_is_a_dedicated_free_route(self):
+        record = snapshot._access_record(
+            "kilo",
+            "cohere/north-mini-code:free",
+            {("kilo", "cohere/north-mini-code:free")},
+            set(),
+            {"input": 0.0, "output": 0.0},
+        )
+        self.assertEqual(record["kind"], snapshot.ACCESS_DEDICATED_FREE)
+        self.assertEqual(record["execution"], "inference_job")
+
+    def test_a_t3_route_free_by_listing_is_a_dedicated_free_route(self):
+        record = snapshot._access_record(
+            "openrouter",
+            "cohere/north-mini-code:free",
+            {("openrouter", "cohere/north-mini-code:free")},
+            set(),
+            {"input": 0.0, "output": 0.0},
+            native_mapped=True,
+        )
+        self.assertEqual(record["kind"], snapshot.ACCESS_DEDICATED_FREE)
+        self.assertEqual(record["execution"], "provider_native")
+
+    def test_a_paid_route_with_a_price_is_not_free(self):
+        record = snapshot._access_record(
+            "codex", "gpt-6.1-sol", set(), set(), {"input": 1.0, "output": 2.0}
+        )
+        self.assertEqual(record["kind"], snapshot.ACCESS_PROVIDER_PAID)
+
+    def test_a_route_without_a_price_is_unknown(self):
+        record = snapshot._access_record("kilo", "gpt-4o-mini", set(), set(), None)
+        self.assertEqual(record["kind"], snapshot.ACCESS_UNKNOWN)
+
+
+class FreeSetTests(unittest.TestCase):
+    """The collector keeps the free routes and the promotional routes apart."""
+
+    def _catalog(self):
+        return catalog_module.Catalog(
+            {
+                "openrouter": {
+                    "models": {
+                        "cohere/north-mini-code:free": {
+                            "id": "cohere/north-mini-code:free",
+                            "name": "North Mini Code (free)",
+                            "cost": {"input": 0, "output": 0},
+                        }
+                    }
+                },
+                "opencode-go": {
+                    "models": {
+                        "minimax-m3.1-flash-free": {
+                            "id": "minimax-m3.1-flash-free",
+                            "name": "MiniMax M3.1 Flash Free",
+                            "cost": {"input": 0, "output": 0},
+                        }
+                    }
+                },
+                "opencode": {
+                    "models": {
+                        "big-pickle": {
+                            "id": "big-pickle",
+                            "name": "Big Pickle",
+                            "cost": {"input": 0, "output": 0},
+                        }
+                    }
+                },
+            }
+        )
+
+    def test_the_free_route_providers_are_free_and_the_rest_is_promotional(self):
+        main = _load("ai_usage_design_main", "main")
+        catalog = self._catalog()
+        inputs = main.ranking_inputs([], catalog, {}, [])
+        free = inputs["free"]
+        promo = inputs["promo"]
+        self.assertIn(("openrouter", "cohere/north-mini-code:free"), free)
+        self.assertIn(("opencode-go", "minimax-m3.1-flash-free"), free)
+        self.assertIn(("opencode", "big-pickle"), promo)
+        self.assertNotIn(("opencode", "big-pickle"), free)
+        self.assertNotIn(("openrouter", "cohere/north-mini-code:free"), promo)
