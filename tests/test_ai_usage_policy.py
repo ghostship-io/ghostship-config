@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1] / "modules/self-hosted/ai-usage" / "c
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import aa_3d  # noqa: E402
 import aa_bind  # noqa: E402
 import facts  # noqa: E402
 import ranking  # noqa: E402
@@ -53,7 +54,7 @@ def Catalog(models):
     return catalog_module.Catalog(document)
 
 
-def build(models, records, *, windows=None, facts_map=None, policy=None):
+def build(models, records, *, windows=None, facts_map=None, policy=None, aa_3d=None):
     catalog = Catalog(models)
     pairs = list(models)
     ranked = ranking.rank_models(
@@ -89,6 +90,7 @@ def build(models, records, *, windows=None, facts_map=None, policy=None):
         aa_cache=cache(records),
         free_models=set(),
         promo_models=set(pairs),
+        aa_3d_cache=aa_3d,
         measured_windows=[
             {
                 "provider": provider,
@@ -243,42 +245,77 @@ class ProviderCapacityTests(unittest.TestCase):
 
 
 class ThreeDAdmissionTests(unittest.TestCase):
-    def test_without_an_admission_the_row_is_pending_and_not_in_the_tier(self):
+    def _aa_3d(self, records):
+        return {
+            "status": "ok",
+            "source": "artificialanalysis",
+            "benchmark": "aa-3d",
+            "conditions": "interactive Three.js scenes; not CAD",
+            "fetched_at_epoch": NOW,
+            "records": records,
+        }
+
+    def test_without_a_measured_aa_3d_elo_the_row_is_pending(self):
         models = visual_model("codex", "gpt-6.1-sol")
         data = build(models, [record("gpt-6-1-sol", 51.8, 0.4)])
         row = data["candidates"][0]
         self.assertEqual(row["three_d"]["state"], "pending")
-        self.assertTrue(row["three_d"]["visual"])
-        self.assertFalse(row["three_d"]["admitted"])
+        self.assertIsNone(row["three_d"]["elo"])
         self.assertNotIn("3d", row["tiers"])
         self.assertEqual(data["tiers"].get("3d", []), [])
 
-    def test_a_verified_admission_and_an_image_input_admit_the_model(self):
+    def test_the_measured_elo_is_the_3d_rank_and_the_index_is_not(self):
         models = visual_model("codex", "gpt-6.1-sol")
-        admission = facts.make_fact(
-            provider="codex",
-            model="gpt-6.1-sol",
-            indices={"intelligence_index": 51.8},
-            benchmark_id="gpt-6.1-sol",
-            brief_url="https://artificialanalysis.ai/models",
-            now=NOW,
-        )
-        admission["admission_evidence"] = [
-            {"workload": "3d", "admitted": True, "at": NOW}
-        ]
         data = build(
             models,
             [record("gpt-6-1-sol", 51.8, 0.4)],
-            facts_map={facts.identity_key("codex", "gpt-6.1-sol"): admission},
+            aa_3d=self._aa_3d(
+                [
+                    {
+                        "id": "aa3d-1",
+                        "slug": "gpt-6-1-sol",
+                        "model": "gpt-6.1-sol",
+                        "elo": 1218.4,
+                        "source": "https://artificialanalysis.ai/evaluations/aa-3d",
+                        "observed_at": "2026-10-20T00:00:00Z",
+                        "task_count": 55,
+                        "conditions": {"benchmark": "aa-3d", "tasks": 55},
+                    }
+                ]
+            ),
         )
         row = data["candidates"][0]
-        self.assertEqual(row["three_d"]["state"], "admitted")
+        self.assertEqual(row["three_d"]["state"], "measured")
+        self.assertEqual(row["three_d"]["elo"], 1218.4)
+        self.assertEqual(row["three_d"]["authority"], "artificialanalysis-aa-3d")
+        self.assertEqual(row["three_d"]["task_count"], 55)
         self.assertIn("3d", row["tiers"])
         self.assertIn("codex:gpt-6.1-sol", data["tiers"].get("3d", []))
+        # The general intelligence index is published beside it, never as the
+        # 3D score.
+        self.assertEqual(row["aa"]["indices"]["intelligence"], 51.8)
+        three_d_entry = [entry for entry in data["tier_winners"].get("3d", [])]
+        self.assertTrue(three_d_entry)
+        self.assertEqual(three_d_entry[0]["value"], row["value"]["value"])
 
-    def test_a_text_only_record_can_never_be_admitted(self):
+    def test_a_text_only_record_can_never_be_ranked_for_3d(self):
         models = visual_model("ollama", "beam")
-        data = build(models, [record("reflection-beam", 30.3, 0.2, name="Beam 1.0")])
+        data = build(
+            models,
+            [record("reflection-beam", 30.3, 0.2, name="Beam 1.0")],
+            aa_3d=self._aa_3d(
+                [
+                    {
+                        "id": "aa3d-beam",
+                        "slug": "reflection-beam",
+                        "model": "Beam 1.0",
+                        "elo": 1100.0,
+                        "source": "https://artificialanalysis.ai/evaluations/aa-3d",
+                        "observed_at": "2026-10-20T00:00:00Z",
+                    }
+                ]
+            ),
+        )
         row = data["candidates"][0]
         self.assertEqual(row["three_d"]["state"], "ineligible")
         self.assertNotIn("3d", row["tiers"])
@@ -382,3 +419,149 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(row["aa"]["condition"]["variant_match"], "exact")
         self.assertTrue(row["aa"]["selectable"])
         self.assertEqual(row["aa"]["alignment"], {})
+
+
+class AA3DContractTests(unittest.TestCase):
+    """The AA-3D reader and the cost-aware 3D value."""
+
+    def _document(self, records, normalization=None):
+        document = {
+            "status": "ok",
+            "source": "artificialanalysis",
+            "benchmark": "aa-3d",
+            "conditions": "interactive Three.js scenes; not CAD",
+            "fetched_at_epoch": NOW,
+            "records": records,
+        }
+        if normalization is not None:
+            document["normalization"] = normalization
+        return document
+
+    def _record(self, **overrides):
+        base = {
+            "id": "aa3d-1",
+            "slug": "gpt-6-1-sol",
+            "model": "gpt-6.1-sol",
+            "elo": 1200.0,
+            "elo_interval": {"low": 1180.0, "high": 1220.0},
+            "cost_per_task": 0.5,
+            "source": "https://artificialanalysis.ai/evaluations/aa-3d",
+            "observed_at": "2026-10-20T00:00:00Z",
+            "task_count": 55,
+            "conditions": {"benchmark": "aa-3d", "tasks": 55},
+        }
+        base.update(overrides)
+        return base
+
+    def _load(self, document):
+        import tempfile, json as json_module
+
+        handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        handle.write(json_module.dumps(document))
+        handle.close()
+        try:
+            return aa_3d.load_cache(handle.name, NOW)
+        finally:
+            Path(handle.name).unlink()
+
+    def test_the_reader_keeps_the_measurement_and_refuses_bad_values(self):
+        cache = self._load(
+            {
+                "status": "ok",
+                "source": "artificialanalysis",
+                "fetched_at_epoch": NOW,
+                "records": [
+                    self._record(),
+                    self._record(id="bad-negative", slug="x", model="x", elo=-1.0),
+                    self._record(id="bad-inf", slug="y", model="y", elo=float("inf")),
+                ],
+            }
+        )
+        self.assertEqual(cache["status"], "ok")
+        self.assertEqual(len(cache["records"]), 1)
+        record = cache["records"][0]
+        self.assertEqual(record["elo"], 1200.0)
+        self.assertEqual(record["elo_interval"], {"low": 1180.0, "high": 1220.0})
+        self.assertEqual(record["cost_per_task"], 0.5)
+        self.assertEqual(record["task_count"], 55)
+        self.assertTrue(record["source"].startswith("https://"))
+
+    def test_a_stale_snapshot_is_not_measured(self):
+        cache = self._load(
+            {
+                "status": "ok",
+                "fetched_at_epoch": NOW - 60 * DAY,
+                "records": [self._record()],
+            }
+        )
+        self.assertEqual(cache["status"], "stale")
+        self.assertEqual(aa_3d.lookup(cache, "codex", "gpt-6.1-sol")["state"], "stale")
+
+    def test_the_elo_is_normalized_only_by_the_published_transform(self):
+        self.assertIsNone(aa_3d.normalize(1200.0, None))
+        normalization = {"kind": "min-max", "floor": 1000.0, "ceiling": 1400.0}
+        self.assertAlmostEqual(aa_3d.normalize(1200.0, normalization), 0.5)
+        self.assertIsNone(aa_3d.normalize(1200.0, {"kind": "min-max", "floor": 1400.0, "ceiling": 1400.0}))
+
+    def test_the_3d_value_uses_the_aa_3d_cost_not_the_language_cost(self):
+        models = visual_model("codex", "gpt-6.1-sol")
+        # The language record says 0.10; the AA-3D record says 0.5.
+        data = build(
+            models,
+            [record("gpt-6-1-sol", 51.8, 0.10)],
+            aa_3d=self._load(
+                self._document(
+                    [self._record()],
+                    normalization={"kind": "min-max", "floor": 1000.0, "ceiling": 1400.0},
+                )
+            ),
+        )
+        row = data["candidates"][0]
+        value_3d = row["value_3d"]
+        self.assertAlmostEqual(value_3d["value"], round(0.8 * 0.5 + 0.2 * (1 / 1.5), 6), places=6)
+        self.assertEqual(value_3d["raw"]["cost_per_task"], 0.5)
+        self.assertEqual(value_3d["raw"]["elo"], 1200.0)
+        self.assertEqual(value_3d["raw"]["elo_interval"]["low"], 1180.0)
+        self.assertEqual(value_3d["raw"]["normalization_state"], "applied")
+        # The language value stays separate and uses the language cost.
+        self.assertEqual(row["aa"]["cost_per_task"], 0.10)
+
+    def test_without_the_normalization_the_3d_value_is_unknown_and_the_elo_visible(self):
+        models = visual_model("codex", "gpt-6.1-sol")
+        data = build(models, [record("gpt-6-1-sol", 51.8, 0.10)], aa_3d=self._load(self._document([self._record()])))
+        row = data["candidates"][0]
+        self.assertIsNone(row["value_3d"]["value"])
+        self.assertEqual(row["value_3d"]["missing"], ["elo"])
+        self.assertEqual(row["three_d"]["elo"], 1200.0)
+        self.assertEqual(row["three_d"]["normalization_state"], "unknown")
+
+    def test_without_the_3d_cost_the_value_is_unknown_and_the_raw_stays(self):
+        models = visual_model("codex", "gpt-6.1-sol")
+        data = build(
+            models,
+            [record("gpt-6-1-sol", 51.8, 0.10)],
+            aa_3d=self._load(
+                self._document(
+                    [self._record(cost_per_task=None)],
+                    normalization={"kind": "min-max", "floor": 1000.0, "ceiling": 1400.0},
+                )
+            ),
+        )
+        row = data["candidates"][0]
+        self.assertIsNone(row["value_3d"]["value"])
+        self.assertEqual(row["value_3d"]["missing"], ["cost_per_task"])
+        self.assertEqual(row["three_d"]["elo"], 1200.0)
+        self.assertIsNone(row["three_d"]["cost_per_task"])
+
+    def test_an_explicit_source_normalized_value_is_used(self):
+        models = visual_model("codex", "gpt-6.1-sol")
+        data = build(
+            models,
+            [record("gpt-6-1-sol", 51.8, 0.10)],
+            aa_3d=self._load(
+                self._document([self._record(normalized=0.75)])
+            ),
+        )
+        row = data["candidates"][0]
+        self.assertEqual(row["value_3d"]["raw"]["normalization_state"], "source")
+        self.assertAlmostEqual(row["value_3d"]["value"], round(0.8 * 0.75 + 0.2 * (1 / 1.5), 6), places=6)

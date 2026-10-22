@@ -82,6 +82,33 @@ subtract rolling gauges. VictoriaMetrics does keep the recorded history, so
 as-of and range queries over the gauges above (quota filling, resets, decision
 changes) are correct.
 
+### The AA-3D contract
+
+The 3D tier ranks the measured Artificial Analysis AA-3D evaluation
+(<https://artificialanalysis.ai/evaluations/aa-3d>), read from a separate,
+bounded snapshot file passed with `--aa-3d-cache`. The collector opens no
+socket, starts no poller and holds no credential for it: the root acquires
+the public source through the existing client and drops the file.
+
+Each record is validated before use: a finite non-negative Elo, its
+confidence interval, the source, the observation date, the task count, the
+benchmark conditions, and, where the source publishes it, the AA-3D cost per
+task. A malformed row is refused, never read as zero. A snapshot older than
+30 days, or one with no usable row, is not measured.
+
+The Elo is not a 0..100 index. It is normalized only by the transform the
+source publishes (`normalization` in the snapshot: `min-max` with a floor and
+a ceiling, or `linear` with an offset and a scale, or an explicit
+`normalized` value on the record). Without a published transform the
+normalized capability is unknown and there is no combined 3D value, while the
+raw Elo, its interval and the source stay visible.
+
+The 3D value is cost-aware with the same published 80/20 policy: `0.80 *
+normalized Elo + 0.20 * 1 / (1 + AA-3D cost per task)`. It uses the AA-3D
+cost, never the language benchmark's cost per task. A missing 3D cost leaves
+the combined value unknown. The tier is still gated by proven image input and
+excludes Astra and Fable from selection.
+
 ### 3D evidence
 
 The 3D tier has no prior and no blended score. A model enters it only with

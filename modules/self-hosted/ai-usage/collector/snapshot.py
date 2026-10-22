@@ -53,6 +53,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+import aa_3d
 import aa_bind as bind_module
 import facts as facts_module
 
@@ -1194,20 +1195,19 @@ def _visual_capable(entry: Any) -> bool:
 
 
 def _three_d_state(row: Mapping[str, Any], entry: Any) -> dict[str, Any]:
-    """The 3D evidence of a row: admitted, or pending.
+    """The AA-3D evidence of a row: the measured Elo, or pending.
 
-    The tier needs an explicit, verified admission for 3D work and a catalog
-    that proves image input. There is no prior. Artificial Analysis publishes
-    an AA-3D evaluation of interactive 3D scenes; it is a different question
-    from CAD and printable geometry, so it is cited as future evidence only
-    and is not a score here.
+    The tier ranks Artificial Analysis' AA-3D Elo and nothing else. The
+    general intelligence index, a family prior and token volume are never a
+    3D score. The catalog must still prove image input, because the
+    benchmark's interactive-scene work needs it.
     """
     visual = _visual_capable(entry)
-    admitted = _admitted_for(row, "3d")
     text_only = bool((row.get("aa") or {}).get("text_only"))
-    if admitted and visual and not text_only:
-        state = "admitted"
-        reason = "a verified 3D workload admission and a proven image input"
+    measured = row.get("_aa_3d") or {}
+    if measured.get("state") == "measured" and visual and not text_only:
+        state = "measured"
+        reason = "a measured AA-3D Elo and a proven image input"
     elif text_only:
         state = "ineligible"
         reason = "the official record is text only"
@@ -1216,15 +1216,28 @@ def _three_d_state(row: Mapping[str, Any], entry: Any) -> dict[str, Any]:
         reason = "the catalog does not prove image input"
     else:
         state = "pending"
-        reason = "no verified 3D workload admission yet"
+        reason = str(measured.get("reason") or "no measured AA-3D Elo")
     return {
         "state": state,
         "reason": reason,
         "visual": visual,
-        "admitted": admitted,
-        "evidence": (
-            "a verified admission record; AA-3D (interactive 3D scenes) may "
-            "inform it later but is not a CAD or printable-geometry score"
+        "elo": measured.get("elo") if state == "measured" else None,
+        "elo_interval": measured.get("elo_interval") if state == "measured" else {},
+        "cost_per_task": measured.get("cost_per_task") if state == "measured" else None,
+        "normalized": measured.get("normalized") if state == "measured" else None,
+        "normalization": measured.get("normalization") if state == "measured" else None,
+        "normalization_state": measured.get("normalization_state")
+        if state == "measured"
+        else "unknown",
+        "authority": "artificialanalysis-aa-3d",
+        "source": measured.get("source") if state == "measured" else None,
+        "benchmark": measured.get("benchmark") if state == "measured" else None,
+        "conditions": measured.get("conditions") if state == "measured" else {},
+        "observed_at": measured.get("observed_at") if state == "measured" else None,
+        "task_count": measured.get("task_count") if state == "measured" else None,
+        "note": (
+            "an AA-3D Elo measures interactive 3D scene work, not CAD or "
+            "printable geometry, and not general intelligence"
         ),
     }
 
@@ -1337,6 +1350,7 @@ def _fill_value(
     now: float | None = None,
     free_set: set[tuple[str, str]] | None = None,
     promo_set: set[tuple[str, str]] | None = None,
+    aa_3d_cache: Mapping[str, Any] | None = None,
 ) -> None:
     """The strength, the relative price, and the value of one model."""
     provider = row.get("provider") or ""
@@ -1482,15 +1496,20 @@ def _fill_value(
                 entry = getter(provider, model)
             except Exception:  # pragma: no cover - a catalog without the model
                 entry = None
+    provider_name = str(row.get("provider") or "")
+    model_name = str(row.get("model") or "")
+    row["_aa_3d"] = aa_3d.lookup(aa_3d_cache, provider_name, model_name)
     three_d = _three_d_state(row, entry)
     row["three_d"].update(three_d)
-    if three_d["state"] != "admitted":
-        # Without explicit evidence the model is not a 3D candidate; the
+    row["aa_3d"] = row.pop("_aa_3d", {"state": "missing"})
+    row["value_3d"] = _three_d_value(row)
+    if three_d["state"] != "measured":
+        # Without a measured AA-3D Elo the model is not a 3D candidate; the
         # pending state stays visible on the row.
         row["tiers"] = [tier for tier in row["tiers"] if tier != "3d"]
     elif "3d" not in row["tiers"]:
-        # The verified admission is the evidence the snapshot holds; the
-        # ranking's 3D list is an input, not the authority.
+        # The measured Elo is the evidence; the ranking's 3D list is an
+        # input, not the authority.
         row["tiers"].append("3d")
     indices = intelligence.get("indices") or {}
 
@@ -1667,6 +1686,63 @@ def _normalised_model(model: str) -> str:
     return str(model or "").strip().lower().replace(".", "-")
 
 
+def _three_d_value(row: Mapping[str, Any]) -> dict[str, Any]:
+    """The cost-aware 3D value: 0.80 * normalized Elo + 0.20 * efficiency.
+
+    The capability input is the AA-3D Elo under the source's own explicit
+    normalization, and the efficiency input is the AA-3D cost per task. The
+    language benchmark's cost per task is never substituted. Without the
+    normalization or the 3D cost the combined value is unknown, while the raw
+    Elo, its interval and the source stay visible.
+    """
+    three_d = row.get("three_d") or {}
+    elo = three_d.get("elo")
+    normalized = three_d.get("normalized")
+    cost = three_d.get("cost_per_task")
+    components = {
+        "elo": normalized if isinstance(normalized, (int, float)) else None,
+        "cost_per_task": (
+            1.0 / (1.0 + float(cost))
+            if isinstance(cost, (int, float))
+            and not isinstance(cost, bool)
+            and math.isfinite(float(cost))
+            and float(cost) >= 0.0
+            else None
+        ),
+    }
+    missing = [name for name, value in components.items() if value is None]
+    value = None
+    if not missing:
+        value = round(
+            0.80 * float(components["elo"]) + 0.20 * float(components["cost_per_task"]),
+            6,
+        )
+    return {
+        "value": value,
+        "components": {
+            name: None if component is None else round(float(component), 4)
+            for name, component in components.items()
+        },
+        "weights": {"elo": 0.80, "cost_per_task": 0.20},
+        "raw": {
+            "elo": elo,
+            "elo_interval": three_d.get("elo_interval") or {},
+            "cost_per_task": cost,
+            "normalized": normalized,
+            "normalization": three_d.get("normalization"),
+            "normalization_state": three_d.get("normalization_state"),
+            "source": three_d.get("source"),
+            "observed_at": three_d.get("observed_at"),
+            "task_count": three_d.get("task_count"),
+        },
+        "missing": missing,
+        "note": (
+            "the AA-3D cost per task and the AA-3D Elo only; an Elo is "
+            "normalized only by the source's published transform"
+        ),
+    }
+
+
 def _selection_excluded(model: str) -> bool:
     return _normalised_model(model) in SELECTION_EXCLUDED_MODELS
 
@@ -1732,6 +1808,7 @@ def build_snapshot(
     policy: Mapping[str, Any] | None = None,
     aa_cache: Mapping[str, Any] | None = None,
     measured_windows: Iterable[Mapping[str, Any]] | None = None,
+    aa_3d_cache: Mapping[str, Any] | None = None,
     catalog: Any = None,
     facts: Mapping[str, Any] | None = None,
     free_models: Iterable[Any] | None = None,
@@ -1797,7 +1874,7 @@ def build_snapshot(
             now=now,
             version=feed_version,
         )
-        _fill_value(row, catalog, fact, now, free_set, promo_set)
+        _fill_value(row, catalog, fact, now, free_set, promo_set, aa_3d_cache)
         for tier in row["tiers"]:
             tiers.setdefault(tier, []).append(_key(provider, model))
         account = str(row.get("account") or "")
