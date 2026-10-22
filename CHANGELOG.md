@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.34] - 2026-10-21
+
+- Make Grafana the autonomous-work landing page, with direct navigation among work, host, security and pipeline dashboards. Read bounded T3, broker, runtime and systemd observations into the existing Victoria stores, with source/freshness limits and no transcripts or new orchestration service.
+- Configure revision-bound security/integration review in existing repository owners and approved usage-aware model routing. Prefer the owner's OpenCode MiniMax Flash Free route; preserve provider-specific options and explicit deployment approval. Correct the canonical ROM repository name and use actual NixOS CI check names for proof.
+
 ## [3.17.33] - 2026-10-21
 
 - Close observed newsletter failure episodes independently of ntfy resolution delivery. A relapse gets a fresh persisted incident ID and a firing notification after the pending resolution succeeds. A compact sequence retains every unacknowledged handoff across repeated recovery/relapse cycles, retries one per observation even while healthy, and preserves existing episode IDs. Real-notifier and pinned-coordinator fault injection covers the relapse, bounded pending state, and a lost durable acknowledgement.
