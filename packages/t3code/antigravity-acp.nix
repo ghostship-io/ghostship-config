@@ -34,7 +34,7 @@ let
   guestGlibc =
     if emulated then (import pkgs.path { system = "x86_64-linux"; }).glibc else glibc;
 in
-stdenvNoCC.mkDerivation {
+stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "antigravity-acp";
   inherit version;
   dontUnpack = true;
@@ -92,6 +92,10 @@ stdenvNoCC.mkDerivation {
     if [ ! -x "\$harness" ]; then
       harness="$out/libexec/localharness_external"
     fi
+    # The emulated ACP server passes its x86 glibc path to the native harness.
+    # Restore native libraries here so downloaded MCP children (including T3,
+    # which needs libatomic.so.1) do not inherit the guest-only loader path.
+    export LD_LIBRARY_PATH="${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}"
     exec "\$harness" "\$@"
     EOF
     chmod 0755 "$out/bin/agy_acp_server.par" "$out/bin/localharness_external" "$out/libexec/agy_acp-launch"
@@ -105,4 +109,8 @@ stdenvNoCC.mkDerivation {
       "aarch64-linux"
     ];
   };
-}
+  passthru.tests.native-loader = import ./antigravity-native-loader-test.nix {
+    inherit pkgs guestGlibc emulated;
+    package = finalAttrs.finalPackage;
+  };
+})
