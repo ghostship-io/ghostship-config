@@ -104,8 +104,17 @@ class DeliveryTests(unittest.TestCase):
         self.bridge = mock.Mock()
         # The broker reconciles native ownership/capacity before a launch.
         self.bridge.shell.return_value = {"threads": [], "archivedThreads": []}
-        # Native launch receipts return the reserved caller-provided identity.
-        self.bridge.launch.side_effect = lambda *_args, **kwargs: {"thread_id": kwargs["thread_id"]}
+        # A native launch receipt carries the thread id. The coordinator
+        # reads it from the receipt, so the mock returns one whether the
+        # caller names it or the receipt does.
+        self.launched_threads = []
+
+        def launch(*_args, **kwargs):
+            thread = kwargs.get("thread_id") or f"test-thread-{len(self.launched_threads) + 1}"
+            self.launched_threads.append(thread)
+            return {"thread_id": thread}
+
+        self.bridge.launch.side_effect = launch
         store = self.coordinator_module.Store(self.root / "coordinator.sqlite")
         self.addCleanup(store.db.close)
         self.coordinator = self.coordinator_module.Coordinator({

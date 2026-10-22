@@ -119,3 +119,9 @@ cddfb4e32db826151d97352b8e37c648         # public TRaSH Guides custom format ide
 030077557e0500000920000000026803         # public SDL gamepad controller GUID in emulation launchers
 agent-workspace@ghostship            # public agent workspace key comment from PR 197
 en/github-models                     # public GitHub models documentation path on docs.github.com
+
+# --- this repository and the upstream sources it cites ---------------
+ghostship-io/ghostship-config  # this repository's published forge name
+ghostship-io/ghostship-config.git  # this repository's published forge path
+nix-community/nixos-apple-silicon  # upstream source
+linuxserver/webtop  # upstream image
