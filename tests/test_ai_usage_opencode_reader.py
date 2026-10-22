@@ -1207,9 +1207,22 @@ class CacheRobustnessTests(unittest.TestCase):
         result = self.run_reader()
         self.assertEqual(result["complete_since"], self.now - 3 * 86400)
 
+    def test_a_cache_of_another_version_is_discarded(self):
+        cache = {
+            "version": reader().CACHE_VERSION - 1,
+            "complete_since": self.now - 10 * 86400,
+            "cursor": int((self.now - 3600) * 1000),
+            "events": [],
+        }
+        self.cache_path.write_text(json.dumps(cache), encoding="utf-8")
+        result = self.run_reader()
+        # The history of the discarded cache is not trusted: the reader starts
+        # the backfill again from its own newest slice.
+        self.assertEqual(result["complete_since"], self.now - 3 * 86400)
+
     def test_future_dated_events_are_dropped(self):
         cache = {
-            "version": 1,
+            "version": reader().CACHE_VERSION,
             "complete_since": self.now - 3 * 86400,
             "cursor": int((self.now - 3600) * 1000),
             "events": [
@@ -1238,7 +1251,7 @@ class CacheRobustnessTests(unittest.TestCase):
 
     def test_a_cache_from_the_future_is_not_trusted_for_its_history(self):
         cache = {
-            "version": 1,
+            "version": reader().CACHE_VERSION,
             "complete_since": self.now + 86400,
             "cursor": int((self.now - 3600) * 1000),
             "events": [],
