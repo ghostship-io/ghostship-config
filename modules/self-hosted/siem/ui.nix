@@ -97,8 +97,14 @@ let
     ];
   });
   # Real files, not symlinks: only this directory is mounted in the container.
+  # Grafana reads the plugin and the alerting provisioning directories on
+  # every start and logs an error for each one it cannot find, so the tree
+  # carries them empty: no plugin and no alerting configuration is
+  # provisioned, the directories are there so the search finds nothing to
+  # complain about.
   provisioning = pkgs.runCommand "grafana-siem-provisioning" { } ''
     mkdir -p $out/datasources $out/dashboards $out/dashboards-json
+    mkdir -p $out/plugins $out/alerting
     cp ${datasourcesFile} $out/datasources/siem.yaml
     cp ${dashboardsFile} $out/dashboards/siem.yaml
     cp ${./dashboards}/*.json $out/dashboards-json/
@@ -188,6 +194,13 @@ in
         GF_SECURITY_COOKIE_SECURE = "true";
         GF_SECURITY_COOKIE_SAMESITE = "strict";
         GF_SECURITY_CONTENT_SECURITY_POLICY = "true";
+        # No default administrator: Grafana would otherwise create admin/admin
+        # on the first start, and the account outlives the login paths that are
+        # closed below, so it would wait on the internal network for a
+        # password path to be reopened. The auth proxy signs the users in and
+        # assigns them Viewer, and the dashboards are provisioned, so nothing
+        # needs an administrator.
+        GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION = "true";
         GF_AUTH_DISABLE_LOGIN_FORM = "true";
         GF_AUTH_BASIC_ENABLED = "false";
         GF_AUTH_ANONYMOUS_ENABLED = "false";

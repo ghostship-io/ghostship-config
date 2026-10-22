@@ -83,7 +83,7 @@ class FactsPublicationTests(unittest.TestCase):
             indices={"intelligence_index": 42.0},
             now=NOW,
         )
-        fact["aliases"] = ["<owner-email>"]
+        fact["aliases"] = ["person@private.invalid"]
         fact["native_bindings"] = {"token": "sk-live-AAAABBBB"}
         fact["note"] = "/srv/apps/secret path"
         data = snapshot.build_snapshot(
@@ -93,7 +93,7 @@ class FactsPublicationTests(unittest.TestCase):
             facts={facts.identity_key("minimax", "MiniMax M3.1 Flash"): fact},
         )
         text = json.dumps(data)
-        for sentinel in ("<owner-email>", "sk-live", "/srv/apps/secret"):
+        for sentinel in ("private.invalid", "sk-live", "/srv/apps/secret"):
             self.assertNotIn(sentinel, text)
 
     def test_the_published_fact_has_only_allowlisted_fields(self):
@@ -280,7 +280,7 @@ class FactsAttestationTests(unittest.TestCase):
     """Every text field a published fact carries, probed with sentinels."""
 
     SENTINELS = (
-        "<owner-email>",
+        "person@private.invalid",
         "/srv/apps/t3code/home/.grok/auth.json",
         "sk-live-AAAABBBBCCCC",
         "acct-1234567890",
@@ -302,11 +302,11 @@ class FactsAttestationTests(unittest.TestCase):
             self.assertNotIn(sentinel, text)
 
     def test_the_provider_and_the_model_must_be_proven(self):
-        fact = self._fact(provider="<owner-email>", model="/srv/x")
+        fact = self._fact(provider="person@private.invalid", model="/srv/x")
         self.assertIsNone(facts.public_record(fact, {"minimax:MiniMax M3.1 Flash"}))
 
     def test_the_basis_is_not_published(self):
-        fact = self._fact(basis="account <owner-email> owes /srv/apps/x")
+        fact = self._fact(basis="account person@private.invalid owes /srv/apps/x")
         record = facts.public_record(fact)
         self.assertNotIn("basis", record)
         self.assertEqual(record["attestation"], "artificialanalysis_free")
@@ -316,7 +316,7 @@ class FactsAttestationTests(unittest.TestCase):
         allowed = facts.public_record(self._fact())
         self.assertEqual(allowed["brief_url"], "https://artificialanalysis.ai/models/minimax")
         for url in (
-            "https://example.com/<owner-email>",
+            "https://example.com/person@private.invalid",
             "https://artificialanalysis.ai.evil.example/x",
             "file:///srv/apps/secret",
             "https://artificialanalysis.ai/models?token=sk-live-AAAABBBBCCCC",
@@ -324,7 +324,7 @@ class FactsAttestationTests(unittest.TestCase):
             self.assertIsNone(facts.public_record(self._fact(brief_url=url))["brief_url"])
 
     def test_the_pending_reason_is_a_code(self):
-        fact = self._fact(status="pending", pending_reason="the brief for <owner-email>")
+        fact = self._fact(status="pending", pending_reason="the brief for person@private.invalid")
         record = facts.public_record(fact)
         self.assertEqual(record["pending_reason"], "unknown")
         self._assert_clean(json.dumps(record))
@@ -332,7 +332,7 @@ class FactsAttestationTests(unittest.TestCase):
     def test_the_canonical_identity_and_the_benchmark_id_are_not_published(self):
         fact = self._fact(
             canonical_identity="acct-1234567890 /srv/apps/x",
-            benchmark_id="<owner-email>",
+            benchmark_id="person@private.invalid",
         )
         record = facts.public_record(fact)
         self.assertNotIn("canonical_identity", record)
@@ -342,7 +342,7 @@ class FactsAttestationTests(unittest.TestCase):
     def test_an_admission_workload_must_be_a_known_class(self):
         fact = self._fact(
             admission_evidence=[
-                {"workload": "<owner-email>", "admitted": True, "score": 1.0, "at": NOW},
+                {"workload": "person@private.invalid", "admitted": True, "score": 1.0, "at": NOW},
                 {"workload": "research", "admitted": True, "score": 1.0, "at": NOW},
             ]
         )
