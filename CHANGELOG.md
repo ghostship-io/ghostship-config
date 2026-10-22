@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.52] - 2026-10-22
+
+- Add an off-by-default per-container network policy candidate with explicit rootful-context, identity and capability admission, stateful ingress replies and flow revocation checks. Real isolated packet tests cover allowed dependencies, blocked lateral/host traffic and atomic reload; production activation retains dependency, bridge-conntrack and identity-forgery gates.
+
 ## [3.17.51] - 2026-10-22
 
 - Stage opt-in T3 runtime confinement, a peer-checked Docker API relay and aggregate resource ceilings. Candidate workflow acceptance passed; production enablement remains gated.
