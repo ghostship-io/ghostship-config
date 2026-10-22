@@ -84,6 +84,24 @@ TIMEOUT_SECONDS = aa.TIMEOUT_SECONDS
 COST_BASIS_PUBLISHED = "aa_leaderboard"
 COST_BASIS_MODEL_PAGE = "aa_model_page"
 
+# A model page is about four megabytes. The pull reads only the pages of the
+# models the live catalog still offers, and it reads at most this many of
+# them in one run. The count is reported with the result.
+MAX_MODEL_PAGE_FETCHES = 10
+
+# A deprecated model is superseded, not changed: its published cost is read
+# once and never again. A model that is not deprecated but is absent from
+# the leaderboard may still change, so it is read again - but not more than
+# once a week.
+MODEL_PAGE_REFETCH_SECONDS = 7 * 24 * 3600.0
+
+
+def _normalise(name: str) -> str:
+    """The name without its separators, so a page and a catalog agree."""
+    return "".join(
+        character for character in str(name or "").lower() if character.isalnum()
+    )
+
 # The markers of a page that publishes its cost per task in its text.
 _COST_IN_TEXT = re.compile(
     r"it costs \$([0-9]+(?:\.[0-9]+)?) per task to evaluate ([^<]+?) on the "
@@ -489,10 +507,89 @@ def parse_aa3d(html: str) -> dict[str, dict[str, Any]]:
     return found
 
 
+def _read_model_pages(
+    records: dict[str, dict[str, Any]],
+    leaderboard: Mapping[str, Any],
+    *,
+    model_pages: Any = None,
+    offered: Iterable[str] = (),
+    known: Mapping[str, Any] | None = None,
+    now: float | None = None,
+) -> tuple[dict[str, Any], int]:
+    """The published cost of the models whose page has to be read.
+
+    A model page is about four megabytes, so the page is read only for a
+    model the live catalog still offers, only when its cost is not known
+    already, and at most this many times in one run. The cost of a
+    deprecated model never changes, so it is read once and never again; a
+    model that is not deprecated is read again at most once a week.
+
+    The result is the cost of every model whose page was read or whose
+    cost was already known, and the number of pages that were read.
+    """
+    moment = time.time() if now is None else float(now)
+    catalogue = {_normalise(slug) for slug in offered or () if str(slug)}
+    cached = dict(known or {})
+    costs: dict[str, Any] = {}
+    fetches = 0
+    for slug, entry in sorted(records.items()):
+        if entry.get("cost_per_task") is not None:
+            continue
+        if not entry.get("deprecated") and slug in leaderboard:
+            continue
+        if catalogue and _normalise(slug) not in catalogue:
+            # Nobody uses this model: its page is not worth a read.
+            continue
+        previous = cached.get(slug)
+        if isinstance(previous, Mapping):
+            cost = _number(previous.get("cost"))
+            fetched_at = _number(previous.get("fetched_at"))
+            deprecated = bool(previous.get("deprecated"))
+            if cost is not None and (
+                deprecated
+                or (
+                    fetched_at is not None
+                    and (moment - fetched_at) < MODEL_PAGE_REFETCH_SECONDS
+                )
+            ):
+                entry["cost_per_task"] = cost
+                entry["cost_basis"] = COST_BASIS_MODEL_PAGE
+                costs[slug] = dict(previous)
+                continue
+        if model_pages is None or fetches >= MAX_MODEL_PAGE_FETCHES:
+            continue
+        fetches += 1
+        page = model_pages(slug)
+        if not page:
+            continue
+        text = str(page.get("text") or "")
+        model = parse_model_page(text) if text else {}
+        if model.get("slug") and not entry.get("deprecated"):
+            # The page carries a model the leaderboard did not list.
+            entry["deprecated"] = bool(model.get("deprecated"))
+            if entry.get("indices", {}).get("intelligence_index") is None:
+                entry["indices"]["intelligence_index"] = _number(
+                    model.get("intelligence")
+                )
+        cost = _cost_in_text(text)
+        if cost is None:
+            continue
+        entry["cost_per_task"] = cost
+        entry["cost_basis"] = COST_BASIS_MODEL_PAGE
+        costs[slug] = {
+            "cost": cost,
+            "fetched_at": moment,
+            "deprecated": bool(entry.get("deprecated")),
+        }
+    return costs, fetches
+
+
 def pull(
     *,
     read: Any = None,
     model_pages: Any = None,
+    catalog_slugs: Iterable[str] = (),
+    cached_costs: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pull the public pages and build the cache document.
 
@@ -500,7 +597,15 @@ def pull(
     the pull module; `model_pages` reads the model page of a model that
     the leaderboard does not carry. Both are injectable, so a test can read
     a fixture without a network.
+
+    `catalog_slugs` are the models the live catalog still offers, and only
+    those have their model page read: a page is four megabytes, and a
+    model nobody uses is not worth a read. `cached_costs` are the model
+    page costs of an earlier pull, and a model whose cost is known is not
+    read again.
     """
+    offered = {_normalise(slug) for slug in catalog_slugs or () if str(slug)}
+    known = dict(cached_costs or {})
     reader = read or _fetch
     sources: list[dict[str, Any]] = []
     pages: dict[str, str] = {}
@@ -600,31 +705,17 @@ def pull(
                 "high": entry.get("ci95_upper"),
             }
     # A deprecated or leaderboard-absent model: its own page publishes the
-    # cost per task. One GET per model, and the published number, never an
-    # estimate.
-    if model_pages is not None:
-        for slug, entry in sorted(records.items()):
-            if entry.get("cost_per_task") is not None:
-                continue
-            if not entry.get("deprecated") and slug in leaderboard:
-                continue
-            page = model_pages(slug)
-            if not page:
-                continue
-            text = str(page.get("text") or "")
-            model = parse_model_page(text) if text else {}
-            if model.get("slug") and not entry.get("deprecated"):
-                # The page carries a model the leaderboard did not list.
-                entry["deprecated"] = bool(model.get("deprecated"))
-                if entry.get("intelligence_index") is None:
-                    entry["indices"]["intelligence_index"] = _number(
-                        model.get("intelligence")
-                    )
-            cost = _cost_in_text(text)
-            if cost is None:
-                continue
-            entry["cost_per_task"] = cost
-            entry["cost_basis"] = COST_BASIS_MODEL_PAGE
+    # cost per task. The page is read only for a model the live catalog
+    # still offers, only when its cost is not known already, and at most
+    # this many times in one run. The published number is used as it is
+    # published, and a cost is never estimated.
+    model_page_costs, fetches = _read_model_pages(
+        records,
+        leaderboard,
+        model_pages=model_pages,
+        offered=offered,
+        known=known,
+    )
     ordered = [records[slug] for slug in sorted(records)]
     fetched_at = (
         datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
@@ -650,6 +741,9 @@ def pull(
             "records": len(ordered),
         },
         "records": ordered,
+        # The model page costs of this pull, and the models that were read.
+        "model_page_costs": model_page_costs,
+        "model_page_fetches": fetches,
         # The AA-3D board, in the contract the collector reads it in.
         "aa3d": aa3d_document(aa3d, time.time()),
     }
@@ -738,6 +832,29 @@ def read_model_page(url: str) -> dict[str, Any]:
     return _fetch(url)
 
 
+def catalog_slugs(path: str | Path) -> list[str]:
+    """The models the live catalog offers.
+
+    A model nobody uses is not worth a four megabyte page, so the pull
+    reads the pages of these models only.
+    """
+    try:
+        document = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(document, dict):
+        return []
+    found: list[str] = []
+    for entry in document.values():
+        if not isinstance(entry, dict):
+            continue
+        models = entry.get("models")
+        if not isinstance(models, dict):
+            continue
+        found.extend(str(model) for model in models)
+    return sorted(set(found))
+
+
 def refresh(
     cache_path: str | Path,
     *,
@@ -745,6 +862,7 @@ def refresh(
     read: Any = None,
     model_pages: Any = None,
     aa3d_path: str | Path | None = None,
+    catalog_slugs: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Refresh the cache from the public pages, at most once a day.
 
@@ -763,8 +881,22 @@ def refresh(
             "changed": False,
             "new_models": 0,
             "changed_models": 0,
+            "model_page_fetches": 0,
         }
-    document = pull(read=read, model_pages=model_pages)
+    previous = {}
+    try:
+        previous = json.loads(Path(cache_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        previous = {}
+    if not isinstance(previous, dict):
+        previous = {}
+    cached_costs = previous.get("model_page_costs")
+    document = pull(
+        read=read,
+        model_pages=model_pages,
+        catalog_slugs=catalog_slugs,
+        cached_costs=cached_costs if isinstance(cached_costs, Mapping) else {},
+    )
     if document.get("blocked"):
         # A page was blocked. The last good snapshot is kept: a blocked
         # page is not a reason to publish an empty cache, and nothing is
@@ -776,16 +908,12 @@ def refresh(
             "changed": False,
             "new_models": 0,
             "changed_models": 0,
+            "model_page_fetches": int(document.get("model_page_fetches") or 0),
         }
-    previous = {}
-    try:
-        previous = json.loads(Path(cache_path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        previous = {}
-    if not isinstance(previous, dict):
-        previous = {}
     difference = aa_diff.diff(previous, document)
     board = document.pop("aa3d", None)
+    page_costs = document.pop("model_page_costs", None)
+    fetches = int(document.pop("model_page_fetches", 0) or 0)
     # The new and the changed models travel with the cache, so the
     # collector publishes them without reading the old pull.
     document = {
@@ -795,6 +923,12 @@ def refresh(
             {"slug": slug, "name": entry.get("name") or ""}
             for slug, entry in sorted((difference.get("changed") or {}).items())
         ],
+        # The model page costs travel with the cache, so a model whose cost
+        # is known is never read again.
+        "model_page_costs": {
+            **(previous.get("model_page_costs") or {}),
+            **(page_costs or {}),
+        },
     }
     changed = write_snapshot(cache_path, document)
     if aa3d_path is not None and isinstance(board, Mapping):
@@ -807,6 +941,7 @@ def refresh(
         "new_models": len(difference.get("added") or []),
         "changed_models": len(difference.get("changed") or {}),
         "removed_models": len(difference.get("removed") or []),
+        "model_page_fetches": fetches,
         "new_model_names": [
             entry.get("name") or entry.get("slug")
             for entry in (difference.get("added") or [])
@@ -828,6 +963,14 @@ def main(argv: list[str] | None = None) -> int:
         "--aa3d-output",
         default="",
         help="The AA-3D board cache to write, beside the quality cache.",
+    )
+    parser.add_argument(
+        "--catalog",
+        default="",
+        help=(
+            "The live model catalog. Only the models it offers have their "
+            "model page read."
+        ),
     )
     parser.add_argument(
         "--model-pages",
@@ -861,6 +1004,7 @@ def main(argv: list[str] | None = None) -> int:
         args.output,
         model_pages=pages if args.model_pages else None,
         aa3d_path=args.aa3d_output or None,
+        catalog_slugs=catalog_slugs(args.catalog) if args.catalog else (),
     )
     print(json.dumps({key: value for key, value in result.items() if key != "diff"}))
     return 0 if result.get("status") == "ok" else 2

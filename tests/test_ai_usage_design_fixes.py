@@ -659,6 +659,32 @@ class ObservedAvailabilityTests(unittest.TestCase):
                     attempt.get("provider_instance_id", "opencode"),
                 ),
             )
+            # The run carries the time of the attempt and the model of the
+            # selection, and it is the run the reader bounds its read by.
+            connection.execute(
+                "INSERT INTO orchestration_v2_projection_runs VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    attempt.get("run_id", "run-1"),
+                    attempt.get("thread_id", "thread-1"),
+                    index,
+                    attempt.get("provider", "opencode"),
+                    "provider-thread",
+                    attempt.get("status", "failed"),
+                    attempt.get("started_at"),
+                    attempt.get("completed_at"),
+                    json.dumps(
+                        {
+                            "modelSelection": {
+                                "instanceId": attempt.get(
+                                    "provider_instance_id", "opencode"
+                                ),
+                                "model": attempt.get("model", ""),
+                            }
+                        }
+                    ),
+                    attempt.get("provider_instance_id", "opencode"),
+                ),
+            )
         for index, session in enumerate(sessions):
             connection.execute(
                 "INSERT INTO projection_thread_sessions VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -901,6 +927,314 @@ class ObservedAvailabilityTests(unittest.TestCase):
         row = data["candidates"][0]
         self.assertIn("observed_failure", row["availability"])
         self.assertIsNone(row["availability"]["observed_failure"])
+
+    def test_a_growing_state_still_reports_todays_failures(self):
+        # The attempts table carries no time of its own and it grows. A read
+        # that is not bounded by the window and ordered by the time of the
+        # run returns the oldest rows, and today's failures are missed.
+        import sqlite3
+        import tempfile
+        from datetime import datetime, timedelta, timezone
+
+        reader = self._reader()
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "statev2.sqlite"
+            connection = sqlite3.connect(path)
+            connection.execute(
+                "CREATE TABLE orchestration_v2_projection_runs "
+                "(run_id TEXT, thread_id TEXT, ordinal INTEGER, provider TEXT, "
+                "provider_thread_id TEXT, status TEXT, requested_at TEXT, "
+                "completed_at TEXT, payload_json TEXT, provider_instance_id TEXT)"
+            )
+            connection.execute(
+                "CREATE TABLE orchestration_v2_projection_run_attempts "
+                "(attempt_id TEXT, thread_id TEXT, run_id TEXT, "
+                "attempt_ordinal INTEGER, root_node_id TEXT, provider TEXT, "
+                "provider_thread_id TEXT, provider_turn_id TEXT, status TEXT, "
+                "payload_json TEXT, provider_instance_id TEXT)"
+            )
+            connection.execute(
+                "CREATE TABLE projection_thread_sessions "
+                "(thread_id TEXT, status TEXT, provider_name TEXT, "
+                "provider_session_id TEXT, provider_thread_id TEXT, "
+                "active_turn_id TEXT, last_error TEXT, updated_at TEXT, "
+                "runtime_mode TEXT, provider_instance_id TEXT)"
+            )
+            connection.execute(
+                "CREATE TABLE provider_session_runtime "
+                "(thread_id TEXT, provider_name TEXT, adapter_key TEXT, "
+                "runtime_mode TEXT, status TEXT, last_seen_at TEXT, "
+                "resume_cursor_json TEXT, runtime_payload_json TEXT, "
+                "provider_instance_id TEXT)"
+            )
+            now = datetime(2026, 10, 22, 4, 0, tzinfo=timezone.utc)
+            old = now - timedelta(days=40)
+            # 2,500 old successful runs, so the table is past the bound.
+            for index in range(2500):
+                moment = old + timedelta(seconds=index)
+                connection.execute(
+                    "INSERT INTO orchestration_v2_projection_runs VALUES "
+                    "(?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        f"run-old-{index}",
+                        f"thread-old-{index}",
+                        index,
+                        "opencode",
+                        "pt",
+                        "completed",
+                        moment.isoformat(),
+                        moment.isoformat(),
+                        json.dumps(
+                            {
+                                "modelSelection": {
+                                    "instanceId": "opencode",
+                                    "model": "opencode/old-model",
+                                }
+                            }
+                        ),
+                        "opencode",
+                    ),
+                )
+                connection.execute(
+                    "INSERT INTO orchestration_v2_projection_run_attempts VALUES "
+                    "(?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        f"attempt-old-{index}",
+                        f"thread-old-{index}",
+                        f"run-old-{index}",
+                        1,
+                        "root",
+                        "opencode",
+                        "pt",
+                        None,
+                        "completed",
+                        json.dumps({"completedAt": moment.isoformat()}),
+                        "opencode",
+                    ),
+                )
+            # Three recent failures, and one failure that is too old.
+            for index, (offset, error) in enumerate(
+                (
+                    (0.5, "Go usage limit exceeded"),
+                    (1.5, "MCP load failed for t3-code: error while loading shared libraries"),
+                    (2.5, "Bad Request: {\"model\":\"deepseek-v4.1-flash\"}"),
+                )
+            ):
+                moment = now - timedelta(hours=offset)
+                thread = f"thread-new-{index}"
+                run = f"run-new-{index}"
+                connection.execute(
+                    "INSERT INTO orchestration_v2_projection_runs VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        run,
+                        thread,
+                        3000 + index,
+                        "opencode",
+                        "pt",
+                        "failed",
+                        moment.isoformat(),
+                        moment.isoformat(),
+                        json.dumps(
+                            {
+                                "modelSelection": {
+                                    "instanceId": "opencode",
+                                    "model": "opencode/model",
+                                }
+                            }
+                        ),
+                        "opencode",
+                    ),
+                )
+                connection.execute(
+                    "INSERT INTO orchestration_v2_projection_run_attempts VALUES "
+                    "(?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        f"attempt-new-{index}",
+                        thread,
+                        run,
+                        1,
+                        "root",
+                        "opencode",
+                        "pt",
+                        None,
+                        "failed",
+                        json.dumps({"completedAt": moment.isoformat()}),
+                        "opencode",
+                    ),
+                )
+                connection.execute(
+                    "INSERT INTO projection_thread_sessions VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        thread,
+                        "stopped",
+                        "opencode",
+                        "session",
+                        "pt",
+                        None,
+                        error,
+                        moment.isoformat(),
+                        "full-access",
+                        "opencode",
+                    ),
+                )
+            stale = now - timedelta(days=40)
+            connection.execute(
+                "INSERT INTO orchestration_v2_projection_runs VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "run-stale",
+                    "thread-stale",
+                    9999,
+                    "opencode",
+                    "pt",
+                    "failed",
+                    stale.isoformat(),
+                    stale.isoformat(),
+                    json.dumps(
+                        {"modelSelection": {"instanceId": "opencode", "model": "opencode/old"}}
+                    ),
+                    "opencode",
+                ),
+            )
+            connection.execute(
+                "INSERT INTO orchestration_v2_projection_run_attempts VALUES "
+                "(?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "attempt-stale",
+                    "thread-stale",
+                    "run-stale",
+                    1,
+                    "root",
+                    "opencode",
+                    "pt",
+                    None,
+                    "failed",
+                    json.dumps({"completedAt": stale.isoformat()}),
+                    "opencode",
+                ),
+            )
+            connection.execute(
+                "INSERT INTO projection_thread_sessions VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "thread-stale",
+                    "stopped",
+                    "opencode",
+                    "session",
+                    "pt",
+                    None,
+                    "Go usage limit exceeded",
+                    stale.isoformat(),
+                    "full-access",
+                    "opencode",
+                ),
+            )
+            connection.commit()
+            connection.close()
+
+            failures = reader.read_failures(path, now.timestamp())
+        reasons = sorted(entry["reason"] for entry in failures)
+        self.assertEqual(
+            reasons,
+            [
+                "account_usage_limit",
+                "model_refused",
+                "route_startup_failed",
+            ],
+        )
+        # The failure that is older than the window is not reported.
+        self.assertEqual(len(failures), 3)
+
+    def test_a_failure_older_than_the_window_is_ignored(self):
+        import sqlite3
+
+        reader = self._reader()
+        # The window is the owner's decision, and it is honoured.
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "statev2.sqlite"
+            connection = sqlite3.connect(path)
+            connection.execute(
+                "CREATE TABLE orchestration_v2_projection_runs "
+                "(run_id TEXT, thread_id TEXT, ordinal INTEGER, provider TEXT, "
+                "provider_thread_id TEXT, status TEXT, requested_at TEXT, "
+                "completed_at TEXT, payload_json TEXT, provider_instance_id TEXT)"
+            )
+            connection.execute(
+                "CREATE TABLE orchestration_v2_projection_run_attempts "
+                "(attempt_id TEXT, thread_id TEXT, run_id TEXT, "
+                "attempt_ordinal INTEGER, root_node_id TEXT, provider TEXT, "
+                "provider_thread_id TEXT, provider_turn_id TEXT, status TEXT, "
+                "payload_json TEXT, provider_instance_id TEXT)"
+            )
+            connection.execute(
+                "CREATE TABLE projection_thread_sessions "
+                "(thread_id TEXT, status TEXT, provider_name TEXT, "
+                "provider_session_id TEXT, provider_thread_id TEXT, "
+                "active_turn_id TEXT, last_error TEXT, updated_at TEXT, "
+                "runtime_mode TEXT, provider_instance_id TEXT)"
+            )
+            connection.execute(
+                "CREATE TABLE provider_session_runtime "
+                "(thread_id TEXT, provider_name TEXT, adapter_key TEXT, "
+                "runtime_mode TEXT, status TEXT, last_seen_at TEXT, "
+                "resume_cursor_json TEXT, runtime_payload_json TEXT, "
+                "provider_instance_id TEXT)"
+            )
+            moment = "2026-10-20T00:00:00Z"
+            connection.execute(
+                "INSERT INTO orchestration_v2_projection_runs VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "run-1",
+                    "thread-1",
+                    1,
+                    "opencode",
+                    "pt",
+                    "failed",
+                    moment,
+                    moment,
+                    json.dumps(
+                        {"modelSelection": {"instanceId": "opencode", "model": "opencode/m"}}
+                    ),
+                    "opencode",
+                ),
+            )
+            connection.execute(
+                "INSERT INTO orchestration_v2_projection_run_attempts VALUES "
+                "(?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "attempt-1",
+                    "thread-1",
+                    "run-1",
+                    1,
+                    "root",
+                    "opencode",
+                    "pt",
+                    None,
+                    "failed",
+                    json.dumps({"completedAt": moment}),
+                    "opencode",
+                ),
+            )
+            connection.execute(
+                "INSERT INTO projection_thread_sessions VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "thread-1",
+                    "stopped",
+                    "opencode",
+                    "session",
+                    "pt",
+                    None,
+                    "Go usage limit exceeded",
+                    moment,
+                    "full-access",
+                    "opencode",
+                ),
+            )
+            connection.commit()
+            connection.close()
+            # The failure is two days old, and the window is one hour.
+            failures = reader.read_failures(
+                path, 1_800_000_000.0, age_seconds=3600.0
+            )
+        self.assertEqual(failures, [])
 
 
 class PacedAvailabilityTests(unittest.TestCase):
