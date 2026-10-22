@@ -33,6 +33,10 @@ listener and no new port: the service is a oneshot job that writes a file.
   capabilities, `ReadWritePaths` limited to the two directories above, and
   read-only access to `/srv/apps/t3code/home`, `/run/ghostship-integrations`
   and `/run/ghostship-secrets`.
+* The two request records are read from the container home, read only, and
+  the OpenCode reader keeps its cache of the events in the state directory
+  (`/var/lib/ghostship-ai-usage/opencode-events.json`). The reader's cache
+  is its own state, and the path can be moved with `--events-cache`.
 
 ## Sources and what each one reads
 
@@ -49,6 +53,8 @@ that cannot be read reports a status; it never reports a healthy zero.
 | `openrouter` | Credits, key usage per window, the spend cap, the free-tier flag, the free-model allowance as a daily window, and the published per-minute limit counted against our own requests | `openrouter.ai` credits and key endpoints, plus the T3 Code state for the count |
 | `ollama` | The request counts of the Ollama Cloud account per window, and the session and the weekly window of the account | `ollama.com/api/usage` and `ollama.com/api/balance` |
 | `free_pool` | The free inference pool: the provider states, the paged model catalog with geography, availability, selection, cooldown and admissions, the local admission limits, the health history, the observed latency, the concurrency, the recent jobs, and the quota amounts seen in provider headers | The broker's read-only status surface over its Unix socket, plus the pool's own reservation ledger |
+| `opencode_events` | The request records of the routes the agents use, and the capacity they imply: the events of every request, and the window, the budget, the scope and the remaining share they add up to | OpenCode's own SQLite database, read only, with the collector's cache of the events in its state directory |
+| `pool_events` | The request records of the free pool's routes, and the capacity they imply | The free pool's own reservation ledger, read only |
 | `model_catalog` | The models that can be used at no cost right now and their per-million-token prices | OpenCode's cached copy of the public models.dev catalog |
 
 The 3D reading is not a provider source: it is the measured use of our own 3D
@@ -67,8 +73,9 @@ limit failures in it (the owner rule is in ghostship-agent's
 
 The reader is `collector/opencode_reader.py`. It reads the SQLite database
 OpenCode keeps at `.local/share/opencode/opencode.db` inside the container
-home. It is not a source yet: the collector does not read it, and no metric
-carries it. What it produces is fixed:
+home. It is a source now: the collector reads it as `opencode_events`, and
+the capacity it implies is published with the route it belongs to. What it
+produces is fixed:
 
 * `status` is `ok` or `unreadable`, and `reason` is a fixed code
   (`ok`, `database_missing`, `database_unreadable`, `database_corrupt`,
@@ -150,8 +157,9 @@ capacity reading.
 
 The reader is `collector/pool_reader.py`. It reads the SQLite ledger the
 pool keeps at `.local/state/ghostship-agent/runtime/jobs.sqlite` inside the
-container home. It is not a source yet: the collector does not read it, and
-no metric carries it. What it produces is fixed, and it is the same
+container home. It is a source now: the collector reads it as
+`pool_events`, and the capacity it implies is published with the route it
+belongs to. What it produces is fixed, and it is the same
 contract as the OpenCode reader:
 
 * `status` is `ok` or `unreadable`, and `reason` is a fixed code (`ok`,
@@ -187,6 +195,42 @@ read has a wall clock limit of 20 seconds that aborts the query when it is
 reached, the busy timeout is 2 seconds, and the connection is closed on
 every path so no read transaction is left open.
 
+## The inferred capacity of a route
+
+The providers that report no usage, and every free route, showed "Limits
+unknown" on the Providers page. The owner rule reads their capacity from
+their limit failures instead, and the collector now does that.
+
+`collector/usage_inference.py` is the wiring between the two readers and the
+inference (`collector/inference.py`, which does the computation and reads no
+file). Every run reads both records at the same time, puts their events on
+the routes of the collector's inventory, and infers the capacity of every
+route they touch. The two reads run together and each of them caps itself
+at twenty seconds, so the pair never holds the collector.
+
+The rules:
+
+* A reported reading always wins. A route that reports its usage keeps its
+  reported window, and a route whose account already carries a window keeps
+  that one. An inference is never published over a reading.
+* The window of an inferred route is keyed by the route when the limit is
+  the model's own, and by the provider when the limit belongs to the
+  account. The scope of a limit with no other model in its span is the
+  account, and it is labelled `unknown`.
+* The window of a route that was never refused reads like the window of a
+  route the provider publishes as unlimited: all of the allowance is left,
+  there is no pace, and the headroom is never unknown.
+* A route that was refused and has not worked since is spent: it has
+  nothing left, and it resets when the window it spent is known.
+* An event whose route is not in the inventory is counted and published as
+  unmatched. A reading never invents a route. The model ids are matched
+  exactly, and apart from their case: a provider may spell a route id in
+  another case, and the case is not part of the route. Two routes that
+  differ only in their case are never guessed between.
+* A record that cannot be read is reported as unreadable with the reader's
+  own reason code, contributes no events, and never fails the run. The
+  routes it would have fed keep the basis they had.
+
 ## The windows and where their numbers come from
 
 A window is only headroom when it carries three things: the share of the
@@ -202,6 +246,8 @@ Every window carries the basis of its numbers, and the bases are never mixed:
 | `provider_reported+derived_length` | The provider reported the share and the reset, and the length of the window is derived | The Ollama session window, whose length is learned from the step between two successive resets |
 | `promotion` | The provider's documentation publishes the allowance for a limited time, and no end date | The OpenCode Go free routes, which the documentation lists as unlimited "for a limited time" |
 | `published+counted` | A published limit, counted against the requests we made ourselves | The OpenRouter per-minute limit of the free models |
+| `inferred from N limit episodes` | The window was inferred from the limit failures of the route: the episodes, the window they ran over and the budget they reached | The routes of the request records the inference measured |
+| `inferred: no limit failure in the records` | The route was never refused in the record, so nothing is measured: all of the allowance is left and there is no pace | The same |
 
 The length of the Ollama session window is the one number no endpoint
 publishes. The collector remembers the reset instants it has seen
@@ -447,7 +493,12 @@ values only) and `ghostship_ai_provider_capacity_windows{provider,evidence}`.
   cleanly, 0 when it failed. A failed source is never silently dropped.
 * `ghostship_ai_source_status{source,provider,status}` - 1 for the current
   status of the source. `status` is one of `ok`, `partial`,
-  `missing_credentials`, `unsupported`, `error`.
+  `missing_credentials`, `unsupported`, `error`, and `unreadable` for the
+  two request records, which cannot be read at all. The `reason` label
+  carries the fixed code of the failure, and the two records have their own
+  codes: `database_missing`, `database_unreadable`, `database_corrupt`,
+  `database_schema_missing`, `cache_unwritten`, `ledger_missing`,
+  `ledger_unreadable`, `ledger_corrupt` and `ledger_schema_missing`.
 * `ghostship_ai_source_last_success_timestamp_seconds{source,provider}` - when
   the source last produced a reading.
 * `ghostship_ai_source_observed_timestamp_seconds{source,provider}` - when the
@@ -696,6 +747,24 @@ value.
 * `ghostship_ai_model_capacity_expires_in_seconds{tier,provider,model}` - the
   seconds until that capacity expires; negative when the window is already
   past its reset.
+* `ghostship_ai_model_capacity_basis{provider,model,basis,state,window,scope,unit,weights}`
+  - 1 for every ranked route, with the basis of its capacity: `reported` for
+  a reading the provider reported, `inferred` for a capacity inferred from
+  the limit failures of the route, `published` for a route the provider
+  publishes as unlimited, and `unknown` for a route with no window at all.
+  The other labels carry the inference behind it: the state
+  (`in_window`, `exhausted` or `no_failure`), the window it was measured
+  over, the scope (`model`, `account` or `unknown`), the unit (`tokens` or
+  `requests`) and the weights (`assumed` or `fitted`). They are empty for a
+  route whose capacity was not inferred.
+* `ghostship_ai_model_capacity_budget{provider,model,unit}` - the budget an
+  inferred capacity was measured against, in the unit it was measured in.
+  It is published only when the budget is known.
+* `ghostship_ai_model_capacity_episodes{provider,model}` - the limit episodes
+  an inferred capacity was measured from.
+* `ghostship_ai_inference_unmatched_events{source}` - the recorded events
+  whose route is not in the collector's inventory. They are counted and
+  never guessed.
 * `ghostship_ai_model_quota_unknown{provider,model,reason}` - 1 for a model
   whose headroom is unknown, with the reason it is unknown.
 * `ghostship_ai_model_tier{provider,model,tier}` - 1 for every tier a model
@@ -806,7 +875,7 @@ the reasons, the quota state, the components, and the eligibility:
 | `tiers`, `rank`, `score`, `reasons` | where the model sits and why |
 | `quota_state` | `available`, `exhausted`, or `unknown` |
 | `quality` | the quality with its source: `prior` or `measured`. There is no numerical quality claim without a source |
-| `capacity` | the remaining share, when it expires, and the pace against the line the window draws by now |
+| `capacity` | the remaining share, when it expires, and the pace against the line the window draws by now. `capacity_basis` says where the capacity comes from: `reported`, `inferred`, `published` or `unknown`. `inference` holds the inference behind an inferred capacity: the window it was measured over, the budget, the unit, the scope, the weights, the episode count and the state. It is empty for a route whose capacity was not inferred |
 | `usage` | the token volume of the last seven days, labelled as a volume and not as a task success |
 | `intelligence` | the Artificial Analysis record of the model: the indices, the cost per task, the median performance, and the token prices of the feed, with the version and the fetch time. A model the feed does not list is unknown, not bad |
 | `frontier_surplus` | whether a frontier model may carry volume work: the entitlement it comes from (its kind, its length, its reset, its quota id), the surplus, the reserve the review keeps, and the pace. A weekly or monthly allowance that resets within a day is not the same thing as a session window that resets in a few hours, so the window is named |
