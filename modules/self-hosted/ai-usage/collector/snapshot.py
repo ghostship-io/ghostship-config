@@ -79,9 +79,10 @@ TIER_NAMES = ("frontier", "bulk", "free", "3d")
 
 # The visible label of a window whose state the provider publishes rather
 # than reports. The OpenCode Go documentation lists the free routes as
-# unlimited, so the window says so instead of leaving the reader to guess.
+# unlimited "for a limited time", so the label says that it is a promotion
+# and not a permanent entitlement.
 WINDOW_LABELS = {
-    "free-unlimited": "unlimited (published)",
+    "free-unlimited": "unlimited (limited-time promotion)",
 }
 
 
@@ -124,6 +125,7 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
     applies = _get("applies_to", "appliesTo", default=())
     observed = _get("observed_at", "observedAtEpoch")
     basis = str(_get("basis", default="") or "")
+    ends = _finite(_get("ends_at", "endsAt"))
 
     used_value = _finite(used)
     known = used_value is not None and 0.0 <= used_value <= 1.0
@@ -155,6 +157,9 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
         # which one a reader is looking at.
         "basis": basis,
         "label": WINDOW_LABELS.get(quota_id, ""),
+        # When the entitlement of the window ends. A promotion without a
+        # published end has none, and that is unknown rather than zero.
+        "ends_at": _iso(ends) if ends is not None else None,
         # The check time is the moment the provider reported the window. It
         # is never the moment the snapshot was written.
         "check_at": _iso(observed_value) if observed_value is not None else None,
@@ -729,6 +734,15 @@ def _candidate(
             "expires_in_seconds": None if expires_in is None else int(round(expires_in)),
             # The capacity binding is the window with the least headroom.
             "capacity_binding": _binding_record(
+                getattr(entries[0], "capacity_binding", None) if entries else None
+            ),
+            # The basis of the numbers of the binding window, and the end of
+            # its entitlement when the provider publishes one. A promotion
+            # without a published end has none, and that is unknown.
+            "basis": _binding_basis(
+                getattr(entries[0], "capacity_binding", None) if entries else None
+            ),
+            "ends_at": _binding_ends_at(
                 getattr(entries[0], "capacity_binding", None) if entries else None
             ),
             # The pace binding is the window that runs out first, and it is
@@ -1453,6 +1467,8 @@ def _applied_windows(windows: Iterable[Any]) -> list[dict[str, Any]]:
         used = getattr(window, "used_ratio", None)
         reset = getattr(window, "reset_epoch", None)
         quota_id = str(getattr(window, "quota_id", "") or "default")
+        basis = str(getattr(window, "basis", "") or "")
+        ends = getattr(window, "ends_at", None)
         records.append(
             {
                 "quota": quota_id,
@@ -1462,6 +1478,14 @@ def _applied_windows(windows: Iterable[Any]) -> list[dict[str, Any]]:
                 # The label of a window whose state the provider publishes
                 # rather than reports, so a reader sees what it is.
                 "label": WINDOW_LABELS.get(quota_id, ""),
+                # The basis of the numbers of the window, and the end of its
+                # entitlement when the provider publishes one.
+                "basis": basis,
+                "ends_at": (
+                    _iso(float(ends))
+                    if isinstance(ends, (int, float)) and not isinstance(ends, bool)
+                    else None
+                ),
                 "remaining_ratio": (
                     round(max(0.0, 1.0 - float(used)), 4)
                     if isinstance(used, (int, float)) and not isinstance(used, bool)
@@ -1487,6 +1511,28 @@ def _binding_record(window: Any) -> dict[str, Any] | None:
         "duration_seconds": int(duration) if isinstance(duration, (int, float)) else None,
         "reset_at": _iso(reset) if isinstance(reset, (int, float)) else None,
     }
+
+
+def _binding_basis(window: Any) -> str:
+    """The basis of the numbers of the window a binding came from."""
+    if window is None:
+        return ""
+    basis = getattr(window, "basis", None)
+    if basis is None and isinstance(window, Mapping):
+        basis = window.get("basis")
+    return str(basis or "")
+
+
+def _binding_ends_at(window: Any) -> str | None:
+    """The end of the entitlement of the window a binding came from."""
+    if window is None:
+        return None
+    ends = getattr(window, "ends_at", None)
+    if ends is None and isinstance(window, Mapping):
+        ends = window.get("ends_at")
+    if not isinstance(ends, (int, float)) or isinstance(ends, bool):
+        return None
+    return _iso(float(ends))
 
 
 def _binding_id(window: Any) -> str | None:

@@ -256,8 +256,9 @@ class GoFreeRouteTests(unittest.TestCase):
                 used_ratio=0.0,
                 reset_epoch=None,
                 quota_id=published.UNLIMITED_QUOTA_ID,
+                ends_at=published.GO_FREE_ENDS_AT,
                 observed_at=NOW,
-                basis="published",
+                basis=published.GO_FREE_BASIS,
             )
         ]
 
@@ -281,7 +282,7 @@ class GoFreeRouteTests(unittest.TestCase):
         self.assertEqual(entry.remaining, 1.0)
         self.assertTrue(entry.unlimited)
         self.assertTrue(
-            any("unlimited (published)" in reason for reason in entry.reasons)
+            any("unlimited (limited-time promotion)" in reason for reason in entry.reasons)
         )
 
     def test_a_paid_route_is_still_blocked_by_the_spent_allowance(self):
@@ -305,10 +306,83 @@ class GoFreeRouteTests(unittest.TestCase):
         self.assertEqual(len(free_route), 1)
         self.assertEqual(free_route[0].quota_id, published.UNLIMITED_QUOTA_ID)
         self.assertEqual(free_route[0].kind, "unlimited")
-        self.assertEqual(free_route[0].basis, "published")
+        self.assertEqual(free_route[0].basis, "promotion")
+        self.assertIsNone(free_route[0].ends_at)
         # The paid route keeps the allowance of the account and no window
         # of its own.
         self.assertNotIn("opencode-go/minimax-m3.1", windows)
+
+    def test_the_free_route_is_a_limited_time_promotion(self):
+        # The Go documentation lists the free models as unlimited "for a
+        # limited time". That is a promotion with no published end date, not
+        # a permanent entitlement, and the window says so.
+        catalog = catalog_module.Catalog(self.CATALOG)
+        context = {
+            "offered_models": [
+                ("opencode-go", "minimax-m3.1-flash-free"),
+                ("opencode-go", "minimax-m3.1"),
+            ]
+        }
+        inputs = main.ranking_inputs([], catalog, context, [], now=NOW)
+        window = inputs["windows"]["opencode-go/minimax-m3.1-flash-free"][0]
+        self.assertEqual(window.basis, "promotion")
+        self.assertIsNone(window.ends_at)
+        self.assertEqual(published.GO_FREE_BASIS, "promotion")
+        self.assertIsNone(published.GO_FREE_ENDS_AT)
+
+    def test_the_snapshot_carries_the_basis_and_the_unknown_end_date(self):
+        snapshot_module = load("ai_usage_headroom_snapshot", "snapshot.py")
+        ranked = self._rank("minimax-m3.1-flash-free", self._unlimited())
+        data = snapshot_module.build_snapshot(
+            now=NOW,
+            sources=[],
+            ranked=ranked,
+            native_models={},
+            policy={
+                "frontierPrimeModels": (),
+                "allowedGptModels": (),
+                "backgroundProviderInstances": (),
+            },
+            catalog=catalog_module.Catalog(self.CATALOG),
+            facts={},
+        )
+        row = data["candidates"][0]
+        applied = row["quota_windows_applied"][0]
+        self.assertEqual(applied["label"], "unlimited (limited-time promotion)")
+        self.assertEqual(applied["basis"], "promotion")
+        self.assertIsNone(applied["ends_at"])
+        # The row carries the basis of its window and the end of the
+        # promotion, which is not published.
+        self.assertEqual(row["capacity"]["basis"], "promotion")
+        self.assertIsNone(row["capacity"]["ends_at"])
+
+    def test_the_metric_labels_carry_the_basis_and_the_end_date(self):
+        quota_module = load("ai_usage_headroom_quota", "quota.py")
+        measured = [
+            {
+                "provider": "opencode-go",
+                "account": "default",
+                "model": "minimax-m3.1-flash-free",
+                "kind": "unlimited",
+                "quotaId": published.UNLIMITED_QUOTA_ID,
+                "usedRatio": 0.0,
+                "resetEpoch": None,
+                "durationSeconds": None,
+                "source": "published",
+                "observedAtEpoch": NOW,
+                "basis": published.GO_FREE_BASIS,
+                "endsAt": published.GO_FREE_ENDS_AT,
+            }
+        ]
+        samples = quota_module.entitlement_display_samples(measured, NOW)
+        by_name = {name: labels for name, labels, _value in samples}
+        self.assertIn("ghostship_ai_entitlement_info", by_name)
+        labels = by_name["ghostship_ai_entitlement_info"]
+        self.assertEqual(labels["basis"], "promotion")
+        # The end of the promotion is not published, so the label says that
+        # it is unknown.
+        self.assertEqual(labels["ends_at"], "")
+
 
     def test_a_paid_route_the_catalog_prices_is_never_unlimited(self):
         catalog = catalog_module.Catalog(
@@ -347,7 +421,7 @@ class GoFreeRouteTests(unittest.TestCase):
         )
         row = data["candidates"][0]
         labels = [window.get("label") for window in row["quota_windows_applied"]]
-        self.assertIn("unlimited (published)", labels)
+        self.assertIn("unlimited (limited-time promotion)", labels)
         self.assertEqual(row["quota_state"], "available")
         self.assertEqual(row["capacity"]["remaining_ratio"], 1.0)
 

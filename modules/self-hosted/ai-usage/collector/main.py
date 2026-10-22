@@ -124,7 +124,9 @@ METRIC_HELP = {
     ),
     "ghostship_ai_entitlement_info": (
         "One for one canonical display reading per entitlement, even when no "
-        "numeric reading is usable."
+        "numeric reading is usable. The labels carry the basis of the "
+        "numbers and the end of the entitlement, which is empty when the "
+        "provider publishes none."
     ),
     "ghostship_ai_entitlement_used_ratio": (
         "The used share of the canonical reading of an entitlement."
@@ -850,6 +852,14 @@ def ranking_inputs(
                 else None
             ),
             basis=str(measured.get("basis") or ""),
+            # When the entitlement of the window ends, when the provider
+            # publishes an end. A promotion without a published end has no
+            # end, and that is unknown rather than zero.
+            ends_at=(
+                float(measured.get("endsAt"))
+                if isinstance(measured.get("endsAt"), (int, float))
+                else None
+            ),
             gating=gating is not False,
         )
         if model == "*":
@@ -859,7 +869,9 @@ def ranking_inputs(
             windows.setdefault(f"{provider}/{model}", []).append(window)
     # The routes the provider publishes as unlimited. The route carries a
     # window of its own, so it has a stated state instead of no state, and
-    # the paid allowance of the account does not gate it.
+    # the paid allowance of the account does not gate it. The documentation
+    # lists those routes as unlimited "for a limited time", so the basis of
+    # the window is a promotion and the end of it is unknown.
     for provider, model in _published_unlimited_routes(catalog, inventory):
         windows.setdefault(f"{provider}/{model}", []).append(
             ranking_module.QuotaWindow(
@@ -868,8 +880,9 @@ def ranking_inputs(
                 reset_epoch=None,
                 quota_id=published_module.UNLIMITED_QUOTA_ID,
                 duration_seconds=None,
+                ends_at=published_module.GO_FREE_ENDS_AT,
                 observed_at=moment,
-                basis=providers_module.BASIS_PUBLISHED,
+                basis=published_module.GO_FREE_BASIS,
             )
         )
     # The free pool's own evidence: the admissions of a route, its limits
