@@ -213,10 +213,12 @@ class FrontierMembershipTests(unittest.TestCase):
                     {
                         "model": "claude-opus-5-5",
                         "indices": {"intelligence_index": 100.0, "coding_index": 95.0},
+                        "cost_per_task": 0.2,
                     },
                     {
                         "model": "gpt-6.1-sol",
                         "indices": {"intelligence_index": 98.0, "coding_index": 96.0},
+                        "cost_per_task": 0.3,
                     },
                 ],
             },

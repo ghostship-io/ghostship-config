@@ -133,6 +133,16 @@ including the shape `options=[{id, label, ...}]`. A descriptor without a
 current value is a real option, not a discard; the run setting is simply not
 reported.
 
+The AA record is selected independently of the native runtime setting.
+`aa_bind.resolve(..., mode="reference")` ignores the native options: among the
+exact records of one model it takes the best measured `0.80 intelligence +
+0.20 cost per task` value, with both inputs required and no Max preference or
+guess. The chosen condition is published as the reference, every other
+measured condition is kept in `alternatives`, and two records of the same
+condition are an ambiguity that is refused. Changing only the native current
+value therefore cannot change the reference or the score, which a test
+asserts.
+
 Runtime reasoning is independent of the AA benchmark condition. The model
 ranking uses the measured AA intelligence and cost per task; the runtime
 policy is owner-defined: **medium by default, high for escalations**. The

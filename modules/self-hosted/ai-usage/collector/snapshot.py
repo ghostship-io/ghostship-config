@@ -422,7 +422,7 @@ def _intelligence_record(
             "age_seconds": cache.get("age_seconds"),
         }
     binding = bind_module.resolve(
-        cache.get("records") or [], provider, model, options=native_options
+        cache.get("records") or [], provider, model, mode="reference"
     )
     if binding.get("state") != "measured":
         return {
@@ -440,6 +440,9 @@ def _intelligence_record(
         }
     record = binding["record"]
     return {
+        "reference": binding.get("reference"),
+        "alternatives": binding.get("alternatives") or [],
+        "value_missing": binding.get("value_missing") or [],
         "state": "measured",
         "source": "artificialanalysis",
         "index_version": cache.get("index_version"),
@@ -457,6 +460,8 @@ def _intelligence_record(
         "native_variant": binding.get("native_variant") or "",
         "variant_match": binding.get("variant_match") or "",
         "variant_mismatch": bool(binding.get("variant_mismatch")),
+        "reference": binding.get("reference"),
+        "alternatives": binding.get("alternatives") or [],
         "condition_confirmed": bool(binding.get("condition_confirmed")),
         "condition_unknown": bool(binding.get("condition_unknown")),
         "identity_match": binding.get("identity_match") or "",
@@ -1452,7 +1457,12 @@ def _fill_value(
         "not_applicable",
     )
     row["aa"] = {
-        "state": "measured" if strength is not None else "missing",
+        "state": (
+            "measured"
+            if strength is not None
+            else str(intelligence.get("state") or "missing")
+        ),
+        "reason": str(intelligence.get("reason") or ""),
         "indices": {
             "intelligence": indices.get("intelligence_index"),
             "coding": indices.get("coding_index"),
@@ -1490,6 +1500,9 @@ def _fill_value(
             "identity_match": intelligence.get("identity_match") or "",
         },
         "variants": intelligence.get("variants") or [],
+        "reference": intelligence.get("reference"),
+        "alternatives": intelligence.get("alternatives") or [],
+        "value_missing": intelligence.get("value_missing") or [],
         "matched_by": intelligence.get("matched_by") or "",
         "variant_mismatch": variant_mismatch,
         "selectable": selectable,
@@ -1907,10 +1920,13 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
         # No verified record: the model is unranked, waiting for the feed.
         # It is never promoted by an estimate.
         return False
+    if aa.get("reference") is None:
+        # The selection reference needs both measured inputs. Without it the
+        # model is visible with its raw record and is not selected.
+        return False
     if not aa.get("selectable", True):
-        # The record was measured under another effort setting that this
-        # model cannot be aligned to: the mismatch stays visible and the
-        # model is not selected.
+        # The runtime reasoning policy is not satisfiable: the mismatch stays
+        # visible and the model is not selected.
         return False
     if _selection_excluded(str(row.get("model") or "")):
         # Astra and Fable are read, counted and shown; they are never picked.

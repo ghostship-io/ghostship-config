@@ -464,10 +464,15 @@ def quality_score(
         return None
     if aa_cache.get("status") != "ok":
         return None
+    # The model-selection reference is independent of the native setting: the
+    # best measured 80/20 value among the exact records, not the record that
+    # matches a runtime option.
     binding = aa_bind.resolve(
-        aa_cache.get("records") or (), provider, model, options=options
+        aa_cache.get("records") or (), provider, model, mode="reference"
     )
     if binding.get("state") != "measured":
+        return None
+    if binding.get("reference") is None:
         return None
     record = binding.get("record") or {}
     indices = record.get("indices") or {}

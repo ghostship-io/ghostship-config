@@ -416,7 +416,7 @@ class AlignmentTests(unittest.TestCase):
             promo_models={("claude", "claude-opus-5-5")},
         )
         row = data["candidates"][0]
-        self.assertEqual(row["aa"]["condition"]["variant_match"], "exact")
+        self.assertEqual(row["aa"]["condition"]["variant_match"], "reference")
         self.assertTrue(row["aa"]["selectable"])
         self.assertEqual(row["aa"]["alignment"], {"effort": "medium"})
         self.assertEqual(row["aa"]["alignment_meta"]["escalation"], {"effort": "high"})
@@ -831,7 +831,7 @@ class StockDescriptorTests(unittest.TestCase):
             native_options={("claude", "claude-opus-5-5"): self._source_options()},
         )
         row = data["candidates"][0]
-        self.assertEqual(row["aa"]["condition"]["variant_match"], "unconfirmed")
+        self.assertEqual(row["aa"]["condition"]["variant_match"], "reference")
         # The AA condition stays Max, visible; our run is Medium.
         self.assertEqual(row["aa"]["condition"]["measured_variant"], "max")
         self.assertEqual(row["aa"]["condition"]["execution_default"], "medium")
@@ -975,3 +975,83 @@ class CatalogCoverageReconciliationTests(unittest.TestCase):
         self.assertEqual(ranking_coverage["candidates"], 1)
         self.assertEqual(ranking_coverage["excluded"], 1)
         self.assertEqual(ranking_coverage["excluded_models"], [["codex", "not-offered"]])
+
+
+class AAReferenceIndependenceTests(unittest.TestCase):
+    """The AA reference is independent of the native runtime setting."""
+
+    def _records(self):
+        return [
+            record("gpt-6-1-sol", 51.8, 0.5, name="GPT-6.1 Sol (Max)"),
+            record("gpt-6-1-sol-high", 50.2, 0.1, name="GPT-6.1 Sol (High)"),
+        ]
+
+    def _options(self, current):
+        return [
+            {
+                "id": "reasoningEffort",
+                "currentValue": current,
+                "options": [{"id": "low"}, {"id": "medium"}, {"id": "high"}, {"id": "max"}],
+            }
+        ]
+
+    def _build(self, current):
+        models = visual_model("codex", "gpt-6.1-sol")
+        return build(
+            models,
+            self._records(),
+            native_options={("codex", "gpt-6.1-sol"): self._options(current)},
+        )
+
+    def test_changing_only_the_current_value_does_not_change_the_reference(self):
+        low = self._build("low")["candidates"][0]
+        medium = self._build("medium")["candidates"][0]
+        for key in ("id", "slug", "name", "reference", "alternatives"):
+            self.assertEqual(low["aa"][key], medium["aa"][key], key)
+        self.assertEqual(low["aa"]["indices"], medium["aa"]["indices"])
+        self.assertEqual(low["value"]["value"], medium["value"]["value"])
+        self.assertEqual(low["quality"]["value"], medium["quality"]["value"])
+
+    def test_the_best_measured_value_is_the_reference_not_max(self):
+        row = self._build("medium")["candidates"][0]
+        # High: 0.80 * 0.502 + 0.20 / 1.1 = 0.583... beats Max:
+        # 0.80 * 0.518 + 0.20 / 1.5 = 0.547...
+        self.assertEqual(row["aa"]["condition"]["measured_variant"], "high")
+        self.assertEqual(row["aa"]["reference"]["condition"], "high")
+        self.assertEqual(len(row["aa"]["alternatives"]), 2)
+        self.assertEqual(
+            {entry["condition"] for entry in row["aa"]["alternatives"]}, {"max", "high"}
+        )
+        self.assertAlmostEqual(
+            row["aa"]["reference"]["value"], row["value"]["value"], places=4
+        )
+
+    def test_duplicate_conflicting_same_condition_records_are_ambiguous(self):
+        records = [
+            record("gpt-6-1-sol", 51.8, 0.5, name="GPT-6.1 Sol (Max)"),
+            record("gpt-6-1-sol-dup", 52.0, 0.4, name="GPT-6.1 Sol (Max)"),
+        ]
+        models = visual_model("codex", "gpt-6.1-sol")
+        data = build(
+            models,
+            records,
+            native_options={("codex", "gpt-6.1-sol"): self._options("medium")},
+        )
+        row = data["candidates"][0]
+        self.assertEqual(row["aa"]["state"], "ambiguous")
+        self.assertIsNone(row["aa"]["reference"])
+        self.assertIsNone(row["value"]["value"])
+        self.assertEqual(row["rank"], {})
+
+    def test_a_record_without_a_cost_has_no_reference_but_stays_visible(self):
+        models = visual_model("codex", "gpt-6.1-sol")
+        data = build(
+            models,
+            [record("gpt-6-1-sol", 51.8, None, name="GPT-6.1 Sol (Max)")],
+            native_options={("codex", "gpt-6.1-sol"): self._options("medium")},
+        )
+        row = data["candidates"][0]
+        self.assertIsNone(row["aa"]["reference"])
+        self.assertEqual(row["aa"]["indices"]["intelligence"], 51.8)
+        self.assertIsNone(row["value"]["value"])
+        self.assertEqual(row["rank"], {})
