@@ -4,7 +4,7 @@ One run: discover upstream Chrome stable, BladeBro and the webtop base; plan
 at most one candidate; build it under the exact tag a switch deploys; prove it
 in lab canaries (functional gates on fresh profiles, then profile
 compatibility on network-less copies of a read-only /srv snapshot); then
-commit it to nixos-config main, drain active agent runs, snapshot, deploy
+commit it to ghostship-config main, drain active agent runs, snapshot, deploy
 through nixos-upgrade.service and verify production, rolling back on failure.
 
 Trust: Chrome versions and checksums come only from an InRelease whose
@@ -1237,14 +1237,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--soak-hours", type=float, default=24.0)
     parser.add_argument("--components", default="base,chrome,bladebro",
                         help="comma-separated components this run may update")
-    parser.add_argument("--repo", default=REPO_URL, help="nixos-config remote (a local path for lab runs)")
+    parser.add_argument("--repo", default=REPO_URL, help="ghostship-config remote (a local path for lab runs)")
     parser.add_argument("--ref", default="main")
     parser.add_argument("--notify", choices=("auto", "on", "off"), default="auto",
                         help="auto: off for --dry-run, on otherwise")
     parser.add_argument("--reset", action="store_true", help="clear a rollback-failed halt after manual repair")
     args = parser.parse_args(argv)
     if args.dry_run is False and args.repo != REPO_URL:
-        parser.error("--repo is for --dry-run lab runs; promotion always uses nixos-config main")
+        parser.error("--repo is for --dry-run lab runs; promotion always uses ghostship-config main")
     config = json.loads(Path(args.config).read_text()) if args.config else {}
     notifier = Notifier(config.get("notify"), args.notify == "on" or (args.notify == "auto" and not args.dry_run))
     soak = args.soak_hours * 3600

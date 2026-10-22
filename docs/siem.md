@@ -124,6 +124,14 @@ polls both APIs:
 - Every new firing alert publishes to ntfy `security`: critical at priority
   5, high 4, warning 3. A resolution publishes once at priority 2. The same
   alert is not republished for 6 hours.
+- The 6-hour window throttles repeat notices of one occurrence, it never
+  silences a new one. An alert that resolves and fires again inside the window
+  is deferred, not dropped: it is announced on the first poll after the window
+  has elapsed, if it is still firing by then, and at most once per window.
+- A publish that fails is retried on the next poll, for a firing alert as well
+  as for a resolution: a resolution that never reaches the topic leaves the
+  alert looking critical forever. An alert undelivered for a day becomes a
+  dead letter, listed by `--list` and counted in the bridge metrics.
 - High and critical alerts are batched into one message to the security
   campaign thread (ed27de17). At most one message goes out every 10 minutes,
   12 a day, and an alert is not resent for 24 hours. Each message has a stable
@@ -135,8 +143,9 @@ polls both APIs:
 Pipeline health is watched independently of the bridge. The bridge writes
 `siem-bridge.prom` (node_exporter textfile): last poll, last success per
 vmalert source, last good delivery and failure counts per channel (ntfy, T3),
-retry queue, T3 pending and dead letters. A firing alert undelivered for a
-day becomes a dead letter, listed by `--list`. `ghostship-siem-watchdog` (root
+retry queue, resolution retries, T3 pending and dead letters. A firing alert
+undelivered for a day becomes a dead letter, listed by `--list`; so does a
+resolution that has not been delivered for a day. `ghostship-siem-watchdog` (root
 timer, every 2 minutes, `security-monitoring.nix`) alerts when the bridge has
 not polled for 3 minutes, a vmalert source fails for 5, delivery fails 3 times
 in a row, a dead letter exists, a vmalert or store API stops answering, or the
