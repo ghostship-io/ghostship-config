@@ -46,6 +46,12 @@ INSTANCE_PROVIDERS = {
 # The OpenCode instance reports the Go subscription windows.
 WINDOW_PROVIDERS = {"go_rolling": "opencode-go", "go_weekly": "opencode-go", "go_monthly": "opencode-go"}
 
+# The Ollama Cloud account has its own session window and its own weekly
+# window. The OpenCode instance serves it beside the Go subscription, so a
+# window that names Ollama belongs to the Ollama account and not to the Go
+# one. A window that names no account at all stays with its instance.
+OLLAMA_WINDOW_MARKERS = ("ollama",)
+
 # Model ids carried by the OpenCode instance name their upstream provider.
 MODEL_PREFIX_PROVIDERS = {
     "opencode-go": "opencode-go",
@@ -339,6 +345,14 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
         for window in limits.get("windows") or []:
             window_id = str(window.get("id") or "")
             provider_name = WINDOW_PROVIDERS.get(window_id, name)
+            if window_id not in WINDOW_PROVIDERS:
+                # A window that names its own account belongs to that
+                # account, not to the instance that reported it. The Ollama
+                # Cloud session and weekly windows are reported by the
+                # OpenCode instance, and they are the Ollama account's.
+                lowered = window_id.lower()
+                if any(marker in lowered for marker in OLLAMA_WINDOW_MARKERS):
+                    provider_name = "ollama"
             used = window.get("usedPercent")
             if used is None:
                 continue
