@@ -102,10 +102,10 @@
           ''
             # NOTE: name may contain cross compilation details between the pname
             #       and version this is permitted thanks to ([^-]*-)*
-            if grep -qE 'nix-([^-]*-)*${
+            if ! grep -vqE 'nix-([^-]*-)*${
               lib.strings.replaceStrings [ "." ] [ "\\." ] nix.version
             }$' <<< "$paths"; then
-              echo "the fallback paths name the installed Nix (nix-${nix.version})"
+              echo "every fallback path names the installed Nix (nix-${nix.version})"
             else
               echo "the fallback paths name another release than the installed Nix (nix-${nix.version})"
               echo "The following paths are not up to date:"
