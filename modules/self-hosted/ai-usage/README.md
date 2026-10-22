@@ -65,7 +65,7 @@ Every window carries the basis of its numbers, and the bases are never mixed:
 | --- | --- | --- |
 | `provider_reported` | The provider reported every number of the window | The Grok, Antigravity, OpenCode Go, OpenRouter daily and Ollama windows |
 | `provider_reported+derived_length` | The provider reported the share and the reset, and the length of the window is derived | The Ollama session window, whose length is learned from the step between two successive resets |
-| `published` | The number is what the provider's own documentation publishes, not a reading | The OpenCode Go free routes, which the documentation lists as unlimited |
+| `promotion` | The provider's documentation publishes the allowance for a limited time, and no end date | The OpenCode Go free routes, which the documentation lists as unlimited "for a limited time" |
 | `published+counted` | A published limit, counted against the requests we made ourselves | The OpenRouter per-minute limit of the free models |
 
 The length of the Ollama session window is the one number no endpoint
@@ -87,11 +87,20 @@ The Go free routes are a different thing from a route that costs nothing
 because of a promotion. The Go documentation lists them as unlimited, and a
 live probe confirmed it: a free route answered while the paid monthly
 window of the plan was at 100% used, and the paid route of the same provider
-did not. So each of those routes carries a window of its own, the window
-says `unlimited (published)`, and the paid allowance of the account does not
-gate them. The paid routes of the same account are gated by it, as they
-were. A route the collector observed to be broken is still unavailable: the
-observation of the route beats the published listing.
+did not. The same documentation says the free models are unlimited "for a
+limited time", so the basis of those routes is `promotion` and the end of
+the promotion is unknown: the documentation publishes no end date, and an
+unknown end is never a guess. Each of those routes carries a window of its
+own, the window says `unlimited (limited-time promotion)`, and the paid
+allowance of the account does not gate them. The paid routes of the same
+account are gated by it, as they were. A route the collector observed to be
+broken is still unavailable: the observation of the route beats the
+published listing.
+
+The basis of a window and the end of its entitlement are published twice:
+the row of the routing snapshot carries them beside the capacity, and the
+entitlement series carry them as the labels `basis` and `ends_at`. An end
+that the provider does not publish is an empty label, never a zero.
 
 ## Metrics
 

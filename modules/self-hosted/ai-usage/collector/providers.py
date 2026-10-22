@@ -58,7 +58,6 @@ def _clamp(value: float) -> float:
 # limit counted against our own requests are never mixed.
 BASIS_PROVIDER = "provider_reported"
 BASIS_PROVIDER_DERIVED = "provider_reported+derived_length"
-BASIS_PUBLISHED = "published"
 BASIS_PUBLISHED_COUNTED = "published+counted"
 
 

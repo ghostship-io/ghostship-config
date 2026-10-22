@@ -111,6 +111,9 @@ class QuotaWindow:
     # reported, a number its documentation publishes, or a published limit
     # counted against our own requests. The bases are never mixed.
     basis: str = ""
+    # When the entitlement of the window ends, when the provider publishes
+    # an end. A window without one has no end: it is unknown, never zero.
+    ends_at: float | None = None
     # Whether the window constrains the route. A window a source publishes
     # without reading is visible and it does not gate: an unknown reading is
     # not evidence that an account is exhausted.
@@ -1219,9 +1222,13 @@ def _reasons(candidate: "_Candidate", tier: str) -> list[str]:
     else:
         reasons.append(f"quality {candidate.quality:.0f} (the verified index)")
     if candidate.unlimited:
-        # The provider publishes this route as unlimited, so it is not gated
-        # by the paid allowance of the account.
-        reasons.append("unlimited (published): the provider publishes this route as unlimited")
+        # The provider publishes this route as unlimited for a limited time,
+        # so it is not gated by the paid allowance of the account and it is
+        # a promotion, not a permanent entitlement.
+        reasons.append(
+            "unlimited (limited-time promotion): the provider publishes this "
+            "route as unlimited for a limited time"
+        )
     if candidate.remaining is None:
         reasons.append("capacity unknown: the provider reported no usable window")
     else:
