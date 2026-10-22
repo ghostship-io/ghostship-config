@@ -123,6 +123,7 @@ class RankedModel:
     pace: float | None = None
     pace_binding: Any = None
     capacity_binding: Any = None
+    applied_windows: tuple[Any, ...] = ()
     frontier_surplus: dict[str, Any] = dataclasses.field(default_factory=dict)
     used_tokens: float = 0.0
     three_d_prior: float | None = None
@@ -923,6 +924,7 @@ class _Candidate:
     pace_binding: Any
     capacity_binding: Any
     frontier_surplus: dict[str, Any]
+    applied_windows: list[Any]
 
     @property
     def key(self) -> tuple[str, str]:
@@ -1158,6 +1160,8 @@ def rank_models(
     catalog: Any,
     quota_windows: Mapping[str, Iterable[Any]] | None,
     free_models: Iterable[Any],
+    promo_models: Iterable[Any] | None = None,
+    external_availability: Mapping[tuple[str, str], bool] | None = None,
     usage_tokens: Mapping[tuple[str, str], float] | None = None,
     three_d_scores: Mapping[tuple[str, str], Any] | None = None,
     exclude_providers: Mapping[str, Iterable[str]] | None = None,
@@ -1189,6 +1193,19 @@ def rank_models(
         pair = _record_pair(record)
         if pair:
             free_pairs.add(pair)
+    # The promotional zero-price models of a paid provider. They are not the
+    # dedicated free routes: they are paid provider routes that cost nothing
+    # right now, so they belong to bulk, strongly preferred.
+    promo_pairs: set[tuple[str, str]] = set()
+    for record in promo_models or ():
+        pair = _record_pair(record)
+        if pair and pair not in free_pairs:
+            promo_pairs.add(pair)
+    external = {
+        pair: bool(value)
+        for pair, value in (external_availability or {}).items()
+        if isinstance(pair, tuple) and len(pair) == 2
+    }
 
     three_d: dict[tuple[str, str], Any] = {}
     for key, entry in (three_d_scores or {}).items():
@@ -1220,7 +1237,9 @@ def rank_models(
                 for window in windows_by_account.get(account, [])
                 if _window_applies(window, model)
             ]
-            if (provider, model) in free_pairs and account in free_route_accounts:
+            if (
+                (provider, model) in free_pairs or (provider, model) in promo_pairs
+            ) and account in free_route_accounts:
                 # The provider is observed to serve this free route while its
                 # paid allowance is spent, so the paid allowance is not
                 # evidence about this model. The observation is recorded by
@@ -1239,7 +1258,12 @@ def rank_models(
         pace = detail["pace"]
 
         in_inventory = (provider, model) in inventory
-        if not windows:
+        external_state = external.get((provider, model))
+        if external_state is False:
+            # A source that watches the route says it is not usable now, for
+            # example a cooling down pool route.
+            available = False
+        elif not windows:
             # The provider reports no quota for this account. The model can
             # still be used, but its headroom is unknown, not unlimited.
             available = bool(in_inventory)
@@ -1305,6 +1329,7 @@ def rank_models(
                 capacity_binding=detail["binding"],
                 account=account,
                 frontier_surplus=_frontier_surplus(list(windows), now),
+                applied_windows=list(windows),
             )
         )
 
@@ -1400,6 +1425,7 @@ def rank_models(
                     pace=candidate.pace,
                     pace_binding=candidate.pace_binding,
                     capacity_binding=candidate.capacity_binding,
+                    applied_windows=tuple(candidate.applied_windows),
                     frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
@@ -1431,6 +1457,7 @@ def rank_models(
                     pace=candidate.pace,
                     pace_binding=candidate.pace_binding,
                     capacity_binding=candidate.capacity_binding,
+                    applied_windows=tuple(candidate.applied_windows),
                     frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
@@ -1459,6 +1486,7 @@ def rank_models(
                     pace=candidate.pace,
                     pace_binding=candidate.pace_binding,
                     capacity_binding=candidate.capacity_binding,
+                    applied_windows=tuple(candidate.applied_windows),
                     frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,

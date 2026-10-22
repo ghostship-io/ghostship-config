@@ -67,7 +67,43 @@ POLICY = {
 }
 
 
-def build(entries, native=None, sources=None):
+def _aa_cache(entries):
+    records = []
+    seen = set()
+    for entry in entries:
+        key = (entry.provider, entry.model)
+        if key in seen:
+            continue
+        seen.add(key)
+        records.append(
+            {
+                "id": f"id-{entry.provider}-{entry.model}",
+                "slug": entry.model,
+                "model": entry.model,
+                "provider": entry.provider,
+                "release_date": "2026-01-01",
+                "indices": {
+                    "intelligence_index": entry.quality,
+                    "coding_index": entry.quality,
+                    "agentic_index": entry.quality,
+                    "engineering_index": entry.quality,
+                },
+                "cost_per_task": 0.2,
+                "median_performance": 100.0,
+                "prices": {},
+            }
+        )
+    return {
+        "status": "ok",
+        "index_version": "4.3",
+        "fetched_at": "2027-01-15T00:00:00Z",
+        "fetched_at_epoch": NOW - 60.0,
+        "age_seconds": 60.0,
+        "records": records,
+    }
+
+
+def build(entries, native=None, sources=None, aa_cache=None):
     return snapshot.build_snapshot(
         now=NOW,
         sources=sources
@@ -84,6 +120,7 @@ def build(entries, native=None, sources=None):
         ranked=entries,
         native_models=native or {},
         policy=POLICY,
+        aa_cache=_aa_cache(entries) if aa_cache is None else aa_cache,
     )
 
 
@@ -140,12 +177,18 @@ class SnapshotContractTests(unittest.TestCase):
         unknown = build([Ranked(tier="bulk", remaining=None, windows=())])
         self.assertEqual(unknown["candidates"][0]["quota_state"], "unknown")
 
-    def test_the_quality_is_labelled_as_a_prior(self):
+    def test_the_quality_is_the_verified_record(self):
         data = build([Ranked()])
         quality = data["candidates"][0]["quality"]
-        self.assertEqual(quality["source"], "prior")
-        self.assertFalse(quality["measured"])
+        # No prior: the public quality is the measured index, and a model
+        # without one is unranked instead.
+        self.assertEqual(quality["source"], "measured")
+        self.assertTrue(quality["measured"])
         self.assertTrue(quality["basis"])
+        missing = build([Ranked()], aa_cache={"status": "ok", "index_version": "4.3", "fetched_at_epoch": NOW - 60.0, "records": []})
+        self.assertEqual(missing["candidates"][0]["aa"]["state"], "missing")
+        self.assertIsNone(missing["candidates"][0]["value"]["value"])
+        self.assertEqual(missing["candidates"][0]["rank"], {})
 
     def test_the_windows_carry_their_provenance(self):
         data = build([Ranked(windows=(Window(),))])

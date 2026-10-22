@@ -52,7 +52,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from aa import lookup as aa_lookup
+import aa_bind as bind_module
 import facts as facts_module
 
 SCHEMA = "ghostship.ai-usage.routing"
@@ -288,8 +288,79 @@ def _eligibility(
     }
 
 
+# The access classes of a model. The class says how the model is reached and
+# what it costs, never what it can do: capability and workload admission are a
+# separate statement.
+ACCESS_DEDICATED_FREE = "dedicated_free"
+ACCESS_PROVIDER_PROMO = "provider_promo"
+ACCESS_PROVIDER_PAID = "provider_paid"
+ACCESS_UNKNOWN = "unknown"
+
+
+def _access_record(
+    provider: str,
+    model: str,
+    free_models: set[tuple[str, str]],
+    promo_models: set[tuple[str, str]],
+    prices: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """How a model is reached, and what it costs.
+
+    The dedicated free routes are the ones this fleet runs itself, through the
+    free inference pool. A zero price elsewhere is a paid provider route that
+    costs nothing right now, and the two are not the same thing.
+    """
+    pair = (provider, model)
+    if pair in free_models:
+        kind = ACCESS_DEDICATED_FREE
+        basis = "the dedicated free inference pool"
+    elif pair in promo_models:
+        kind = ACCESS_PROVIDER_PROMO
+        basis = "a paid provider route that costs nothing right now"
+    elif isinstance(prices, Mapping) and any(
+        isinstance(value, (int, float)) for value in prices.values()
+    ):
+        kind = ACCESS_PROVIDER_PAID
+        basis = "the provider's own listing"
+    else:
+        kind = ACCESS_UNKNOWN
+        basis = "no published price"
+    return {
+        "kind": kind,
+        "basis": basis,
+        "price": dict(prices or {}),
+        "execution": (
+            "inference_job"
+            if kind == ACCESS_DEDICATED_FREE
+            else "provider_native"
+        ),
+    }
+
+
+def _cache_is_usable(cache: Mapping[str, Any] | None, now: float | None) -> bool:
+    """True when the feed cache may be read as the current evidence."""
+    if not isinstance(cache, Mapping) or cache.get("status") != "ok":
+        return False
+    if not str(cache.get("index_version") or "").strip():
+        return False
+    if now is None:
+        return True
+    fetched = cache.get("fetched_at_epoch")
+    if not isinstance(fetched, (int, float)) or isinstance(fetched, bool):
+        return False
+    if fetched != fetched or fetched in (float("inf"), float("-inf")):
+        return False
+    if fetched > now + 300.0:
+        return False
+    return (now - float(fetched)) <= 36 * 3600.0
+
+
 def _intelligence_record(
-    cache: Mapping[str, Any] | None, model: str
+    cache: Mapping[str, Any] | None,
+    provider: str,
+    model: str,
+    native_options: Any = None,
+    now: float | None = None,
 ) -> dict[str, Any]:
     """The Artificial Analysis record of one model, or the coverage gap.
 
@@ -299,6 +370,13 @@ def _intelligence_record(
     """
     if not cache:
         return {"state": "no_cache", "source": "artificialanalysis"}
+    if not _cache_is_usable(cache, now):
+        return {
+            "state": "stale" if cache.get("status") == "ok" else str(cache.get("status") or "missing"),
+            "source": "artificialanalysis",
+            "index_version": cache.get("index_version"),
+            "fetched_at": cache.get("fetched_at"),
+        }
     if cache.get("status") != "ok":
         return {
             "state": str(cache.get("status") or "missing"),
@@ -308,24 +386,47 @@ def _intelligence_record(
             "fetched_at": cache.get("fetched_at"),
             "age_seconds": cache.get("age_seconds"),
         }
-    record = aa_lookup(cache, model)
-    if record is None:
+    binding = bind_module.resolve(
+        cache.get("records") or [], provider, model, options=native_options
+    )
+    if binding.get("state") != "measured":
         return {
-            "state": "not_listed",
+            "state": str(binding.get("state") or "missing"),
+            "reason": str(binding.get("reason") or ""),
             "source": "artificialanalysis",
             "index_version": cache.get("index_version"),
             "fetched_at": cache.get("fetched_at"),
             "age_seconds": cache.get("age_seconds"),
+            "provenance": {
+                "provider": provider,
+                "model": model,
+                "native_variant": binding.get("variant") or "",
+            },
         }
+    record = binding["record"]
     return {
         "state": "measured",
         "source": "artificialanalysis",
-        "index_version": record.get("index_version"),
-        "fetched_at": record.get("fetched_at"),
+        "index_version": cache.get("index_version"),
+        "fetched_at": cache.get("fetched_at"),
+        "age_seconds": cache.get("age_seconds"),
+        "id": binding.get("id") or "",
+        "slug": binding.get("slug") or "",
+        "name": binding.get("name") or "",
         "indices": record.get("indices") or {},
         "cost_per_task": record.get("cost_per_task"),
         "median_performance": record.get("median_performance"),
         "token_prices": record.get("prices") or {},
+        "release_date": binding.get("release_date"),
+        "measured_variant": binding.get("measured_variant") or "",
+        "native_variant": binding.get("native_variant") or "",
+        "variant_match": binding.get("variant_match") or "",
+        "variant_mismatch": bool(binding.get("variant_mismatch")),
+        "variants": binding.get("variants") or [],
+        "matched_by": binding.get("matched_by") or "",
+        "checkpoint": binding.get("checkpoint") or "",
+        "text_only": bind_module.is_text_only(record),
+        "provenance": binding.get("provenance") or {},
         "note": (
             "the token prices and the cost per task are different things: "
             "the price is per million tokens, the cost per task is what a "
@@ -342,6 +443,8 @@ def _candidate(
     native: Mapping[str, Any] | None,
     policy: Mapping[str, Any],
     aa_cache: Mapping[str, Any] | None = None,
+    free_set: set[tuple[str, str]] | None = None,
+    promo_set: set[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """One candidate row."""
     tiers: list[str] = []
@@ -419,6 +522,15 @@ def _candidate(
         "rank": ranks,
         "score": scores,
         "reasons": reasons,
+        "quota_windows_applied": _applied_windows(
+            getattr(entries[0], "applied_windows", ()) if entries else ()
+        ),
+        "quota_scope_basis": (
+            "a window is shared when the provider does not scope it to a model "
+            "family, and a subordinate when its own scope names one; the scope "
+            "comes from the provider's window identity, and the most "
+            "constraining of every window that applies decides the model"
+        ),
         # The availability is the ranking's own judgement: a model of an
         # account that reports no quota at all is usable, with an unknown
         # headroom. The quota state keeps the three window states.
@@ -483,7 +595,15 @@ def _candidate(
             "usage_tokens": round(three_d_tokens, 1),
             "source": "prior" if three_d_tokens <= 0 else "prior+measured",
         },
-        "intelligence": _intelligence_record(aa_cache, model),
+        "intelligence": _intelligence_record(
+            aa_cache, provider, model, native_record.get("options"), now
+        ),
+        "access": {
+            "kind": ACCESS_UNKNOWN,
+            "basis": "",
+            "price": {},
+            "execution": "provider_native",
+        },
         "price": {
             "input": None,
             "output": None,
@@ -492,7 +612,7 @@ def _candidate(
             "relative_index": None,
         },
         "value": {
-            "strength": round(quality, 2),
+            "strength": round(quality, 2) if quality is not None else None,
             "strength_source": "prior",
             "relative_cost": None,
             "value": None,
@@ -555,19 +675,32 @@ WORKLOAD_CLASSES = (
     },
     {
         "id": "engineering",
-        "free_eligible": False,
+        "free_eligible": True,
         "private_data": True,
         "complexity": "high",
         "description": "engineering work on private code",
     },
     {
         "id": "review",
-        "free_eligible": False,
+        "free_eligible": True,
         "private_data": True,
         "complexity": "high",
         "description": "the frontier review of a change, and its security and integration checks",
     },
 )
+
+
+def _admitted_for(row: Mapping[str, Any], workload: str) -> bool:
+    """True when a row has admission evidence for one workload class."""
+    evidence = row.get("admission_evidence")
+    if not isinstance(evidence, list):
+        return False
+    for entry in evidence:
+        if not isinstance(entry, Mapping):
+            continue
+        if str(entry.get("workload") or "") == workload and entry.get("admitted") is True:
+            return True
+    return False
 
 
 def _display_tier(tiers: list[str]) -> str:
@@ -600,15 +733,34 @@ def _recommendations(
             and row.get("rank")
             and (row.get("admission") or {}).get("state") == "settled"
         ]
-        if not entry["free_eligible"] or entry.get("complexity") == "high":
-            # The role cap does not depend on the measured quality: a free
-            # route never carries high complexity work.
+        if entry.get("complexity") == "high":
+            # A dedicated free route needs admission evidence for the workload
+            # before it may take a high complexity class, mapped or not. A
+            # paid route is considered, and the role and private data gates
+            # below still apply.
             eligible = [
-                row for row in eligible if not row["tiers"] or "free" not in row["tiers"]
+                row
+                for row in eligible
+                if (row.get("access") or {}).get("kind") != ACCESS_DEDICATED_FREE
+                or _admitted_for(row, name)
             ]
         if entry["private_data"]:
             eligible = [row for row in eligible if row["native"]["mapped"]]
-        preferred = [row for row in eligible if "free" in row["tiers"]]
+        elif entry.get("complexity") != "high":
+            # A low complexity class keeps a dedicated free route with no
+            # admission evidence; a promotional zero-price paid route is not a
+            # dedicated free one, so it does not take the free preference.
+            eligible = [
+                row
+                for row in eligible
+                if (row.get("native") or {}).get("mapped")
+                or (row.get("access") or {}).get("kind") == ACCESS_DEDICATED_FREE
+            ]
+        preferred = [
+            row
+            for row in eligible
+            if (row.get("access") or {}).get("kind") == ACCESS_DEDICATED_FREE
+        ]
         # A mapped free route is preferred over a read only pool route: it can
         # also carry a delegate, and a pool route never can.
         choice_pool = sorted(
@@ -628,12 +780,26 @@ def _recommendations(
                 "native": chosen["native"],
                 "role": chosen["role"],
                 "reason": (
-                    "a free route is preferred for this class; it is a read only "
-                    "research route and may not carry private work"
+                    "a dedicated free route is preferred for this class; it "
+                    "runs as an inference job through the existing pool"
                     if not chosen["native"]["mapped"]
-                    else "a free route is preferred for this class"
+                    else "a dedicated free route is preferred for this class"
                 ),
                 "delegate": bool(chosen["native"]["mapped"]),
+                "route": {
+                    "kind": (
+                        "inference_job"
+                        if not chosen["native"]["mapped"]
+                        else "provider_native"
+                    ),
+                    "execution": "the existing free inference pool",
+                    "gap": (
+                        "the route has no native T3 model; it runs as an "
+                        "inference job, not as a provider-native thread"
+                        if not chosen["native"]["mapped"]
+                        else ""
+                    ),
+                },
                 "private_data": bool(entry["private_data"]),
             }
             continue
@@ -716,14 +882,13 @@ def _recommendations(
 # an unknown is never a zero, and it never makes a model look worse than it is
 # measured to be.
 VALUE_WEIGHTS = {
-    "strength": 0.35,
+    "intelligence": 0.35,
     "coding": 0.1,
     "agentic": 0.1,
     "engineering": 0.1,
     "cost_per_task": 0.1,
     "speed": 0.1,
-    "recency": 0.1,
-    "token_price": 0.05,
+    "token_price": 0.15,
 }
 
 # The calculation of a winner, published with the snapshot so every number
@@ -734,11 +899,11 @@ CALCULATION = {
         "catalog"
     ),
     "strength": {
-        "formula": "0.5 * quality + 0.5 * aa_intelligence",
-        "weights": {"quality": 0.5, "aa_intelligence": 0.5},
+        "formula": "the verified Artificial Analysis intelligence index",
+        "weights": {"intelligence": 1.0},
         "fallback": (
-            "the quality prior alone when the Artificial Analysis feed has no "
-            "record for the model; the source is published with the score"
+            "none; a model without a measured, fresh, current-version record "
+            "has no strength and is unranked, awaiting the feed"
         ),
     },
     "value": {
@@ -749,13 +914,12 @@ CALCULATION = {
         ),
         "weights": dict(VALUE_WEIGHTS),
         "components": {
-            "strength": "0.5 * quality prior + 0.5 * the intelligence index",
-            "coding": "the coding index over 100",
-            "agentic": "the agentic index over 100",
-            "engineering": "the engineering index over 100",
+            "intelligence": "the verified intelligence index over 100",
+            "coding": "the verified coding index over 100",
+            "agentic": "the verified agentic index over 100",
+            "engineering": "the verified engineering index over 100",
             "cost_per_task": "1 / (1 + the cost per task of the feed)",
             "speed": "the median output tokens per second over (100 + it)",
-            "recency": "1 - the age of the release over a year",
             "token_price": (
                 "1 / (1 + the provider's listed blended token price), within "
                 "the provider"
@@ -824,6 +988,104 @@ def _relative_cost(prices: Mapping[str, Any] | None) -> float | None:
     return total if seen else None
 
 
+def _median(values: list[float]) -> float | None:
+    """The median of a list of numbers, or None when it is empty."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2.0
+
+
+def _calibrate_values(candidates: list[dict[str, Any]]) -> None:
+    """The value of every model on one common, calibrated basis.
+
+    Every component carries the same weight for every model. A component a
+    model was not measured on sits at the median of the measured values of
+    the cohort, so missing evidence neither helps nor hurts: it is a neutral
+    estimate, and the coverage and the uncertainty of the row say how much of
+    the value was measured. Dropping the missing components and renormalizing
+    the weights would let a model win by being measured on less.
+    """
+    cohort: dict[str, float] = {}
+    for name in VALUE_WEIGHTS:
+        measured = [
+            float(component["value"])
+            for row in candidates
+            for component in [((row.get("_components") or {}).get(name) or {})]
+            if component.get("source") == "measured"
+            and isinstance(component.get("value"), (int, float))
+        ]
+        median = _median(measured)
+        if median is not None:
+            cohort[name] = round(median, 4)
+    for row in candidates:
+        components = row.get("_components") or {}
+        known_weight = 0.0
+        total = 0.0
+        for name, weight in VALUE_WEIGHTS.items():
+            component = components.get(name) or {}
+            value = component.get("value")
+            source = component.get("source")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                total += weight * float(value)
+                known_weight += weight
+            elif name in cohort:
+                total += weight * cohort[name]
+            # A component with no measurement and no cohort value is left out
+            # of the total, and it is not counted in the known coverage.
+        value_block = row.get("value") or {}
+        strength_component = (components.get("intelligence") or {}).get("value")
+        if not isinstance(strength_component, (int, float)):
+            # No verified record: no scalar at all. A median filled number
+            # would be a guess, and a guess never ranks a model.
+            value_block["components"] = {
+                name: {
+                    "value": (
+                        round(float((components.get(name) or {}).get("value")), 4)
+                        if isinstance((components.get(name) or {}).get("value"), (int, float))
+                        else None
+                    ),
+                    "source": str((components.get(name) or {}).get("source") or "unknown"),
+                }
+                for name in VALUE_WEIGHTS
+            }
+            value_block["weights"] = dict(VALUE_WEIGHTS)
+            value_block["cohort"] = {"basis": "", "values": {}}
+            value_block["coverage"] = 0.0
+            value_block["uncertainty"] = 1.0
+            value_block["value"] = None
+            row["value"] = value_block
+            row.pop("_components", None)
+            continue
+        value_block["components"] = {
+            name: {
+                "value": (
+                    round(float((components.get(name) or {}).get("value")), 4)
+                    if isinstance((components.get(name) or {}).get("value"), (int, float))
+                    else None
+                ),
+                "source": str((components.get(name) or {}).get("source") or "unknown"),
+            }
+            for name in VALUE_WEIGHTS
+        }
+        value_block["weights"] = {name: weight for name, weight in VALUE_WEIGHTS.items()}
+        value_block["cohort"] = {
+            "basis": (
+                "the median of the measured values of the candidates, used only "
+                "for a component a model was not measured on"
+            ),
+            "values": dict(cohort),
+        }
+        value_block["coverage"] = round(known_weight, 3)
+        value_block["uncertainty"] = round(1.0 - known_weight, 3)
+        value_block["value"] = round(total, 4)
+        row["value"] = value_block
+        row.pop("_components", None)
+
+
 def _pending_identities(
     candidates: list[dict[str, Any]], facts: Mapping[str, Any], now: float
 ) -> list[dict[str, Any]]:
@@ -836,7 +1098,8 @@ def _pending_identities(
     pending: list[dict[str, Any]] = []
     seen: set[str] = set()
     for row in candidates:
-        if not row.get("tiers"):
+        if not row.get("tiers") and (row.get("aa") or {}).get("state") == "measured":
+            # A verified model that no tier admitted is not a research target.
             continue
         provider = str(row.get("provider") or "")
         model = str(row.get("model") or "")
@@ -888,6 +1151,36 @@ def _pending_identities(
             }
         )
     return pending
+
+
+def _applied_windows(windows: Iterable[Any]) -> list[dict[str, Any]]:
+    """The windows that apply to a model, with their scope.
+
+    A shared window applies to every model of the account; a model scoped
+    window names the family it belongs to. The most constraining of them
+    decides the availability, so a subordinate sublimit is never read as an
+    independent allowance.
+    """
+    records: list[dict[str, Any]] = []
+    for window in windows or ():
+        scope = getattr(window, "applies_to", ()) or ()
+        used = getattr(window, "used_ratio", None)
+        reset = getattr(window, "reset_epoch", None)
+        records.append(
+            {
+                "quota": str(getattr(window, "quota_id", "") or "default"),
+                "kind": str(getattr(window, "kind", "") or "other"),
+                "scope": "model" if scope else "shared",
+                "applies_to": [str(token) for token in scope],
+                "remaining_ratio": (
+                    round(max(0.0, 1.0 - float(used)), 4)
+                    if isinstance(used, (int, float)) and not isinstance(used, bool)
+                    else None
+                ),
+                "reset_at": _iso(float(reset)) if isinstance(reset, (int, float)) else None,
+            }
+        )
+    return records
 
 
 def _binding_record(window: Any) -> dict[str, Any] | None:
@@ -946,6 +1239,8 @@ def _fill_value(
     catalog: Any,
     fact: Mapping[str, Any] | None = None,
     now: float | None = None,
+    free_set: set[tuple[str, str]] | None = None,
+    promo_set: set[tuple[str, str]] | None = None,
 ) -> None:
     """The strength, the relative price, and the value of one model."""
     provider = row.get("provider") or ""
@@ -965,31 +1260,103 @@ def _fill_value(
             "source": "provider listing",
             "relative_index": None,
         }
-    quality = float((row.get("quality") or {}).get("value") or 0.0)
-    intelligence = row.get("intelligence") or {}
-    indices = intelligence.get("indices") or {}
+    intelligence = dict(row.get("intelligence") or {})
+    indices = dict(intelligence.get("indices") or {})
+    # The verified record of the exact model: the current feed when it lists
+    # the model, otherwise the durable fact that was built from the feed.
+    if not indices.get("intelligence_index") and isinstance(fact, Mapping):
+        fact_indices = fact.get("indices") or {}
+        if isinstance(fact_indices.get("intelligence_index"), (int, float)):
+            indices = dict(fact_indices)
+            intelligence = {
+                "state": "measured",
+                "indices": indices,
+                "index_version": fact.get("benchmark_version"),
+                "fetched_at": fact.get("fetched_at"),
+            }
     measured = intelligence.get("state") == "measured"
-    strength = quality
-    source = "prior"
+    # The quality is the verified Artificial Analysis record, and nothing
+    # else. There is no prior, no blend and no fallback: a model without a
+    # record has no quality, and it is not ranked.
+    strength: float | None = None
+    source = "unknown"
     if measured:
         index = indices.get("intelligence_index")
         if isinstance(index, (int, float)) and not isinstance(index, bool):
-            strength = 0.5 * quality + 0.5 * float(index)
+            strength = float(index)
             source = "measured"
-    if isinstance(fact, Mapping) and fact.get("status") in ("current", "estimated"):
-        # A durable fact of the model: the strength of the fact, with the
-        # confidence it carries. An estimate is bounded and never claims to
-        # be a measurement.
-        fact_indices = fact.get("indices") or {}
-        fact_index = fact_indices.get("intelligence_index")
-        if isinstance(fact_index, (int, float)) and not isinstance(fact_index, bool):
-            if fact.get("status") == "estimated":
-                bounded = min(float(fact_index) * float(fact.get("confidence") or 0.4), 70.0)
-                strength = 0.5 * quality + 0.5 * bounded
-                source = "estimated"
-            else:
-                strength = 0.5 * quality + 0.5 * float(fact_index)
-                source = "measured"
+    if strength is None:
+        # No verified record: the model is unranked and waits for the feed.
+        # The ranking's tier is dropped here, at the public decision layer.
+        row["tiers"] = []
+        row["rank"] = {}
+        row["score"] = {}
+        row["role"] = "unranked"
+    measured_variant = str(intelligence.get("measured_variant") or "")
+    variant_mismatch = bool(intelligence.get("variant_mismatch"))
+    alignment: dict[str, Any] = {}
+    selectable = strength is not None
+    if strength is not None and variant_mismatch:
+        # The record was measured under another effort setting. The model is
+        # selectable only when its native options can be aligned to the
+        # measured setting; otherwise the mismatch stays visible and it is
+        # not selected. Nothing is guessed about the unmeasured setting.
+        if bind_module.can_align((row.get("native") or {}).get("options"), measured_variant):
+            selectable = True
+            alignment = {"reasoningEffort": measured_variant}
+        else:
+            selectable = False
+    row["aa"] = {
+        "state": "measured" if strength is not None else "missing",
+        "indices": {
+            "intelligence": indices.get("intelligence_index"),
+            "coding": indices.get("coding_index"),
+            "agentic": indices.get("agentic_index"),
+            "engineering": indices.get("engineering_index"),
+        },
+        "id": intelligence.get("id"),
+        "slug": intelligence.get("slug"),
+        "name": intelligence.get("name"),
+        "release_date": intelligence.get("release_date"),
+        "index_version": intelligence.get("index_version"),
+        "fetched_at": intelligence.get("fetched_at"),
+        "condition": {
+            "measured_variant": measured_variant,
+            "native_variant": intelligence.get("native_variant") or "",
+            "variant_match": intelligence.get("variant_match") or "",
+            "variants": intelligence.get("variants") or [],
+            "checkpoint": intelligence.get("checkpoint") or "",
+        },
+        "variants": intelligence.get("variants") or [],
+        "matched_by": intelligence.get("matched_by") or "",
+        "variant_mismatch": variant_mismatch,
+        "selectable": selectable,
+        "alignment": alignment,
+        "text_only": bool(intelligence.get("text_only")),
+        "reason": intelligence.get("reason") or "",
+        "basis": "the verified Artificial Analysis record of the exact model",
+    }
+    # The public quality is the verified index, never a prior. A model with
+    # no record carries no quality number at all.
+    row["quality"] = (
+        {
+            "value": round(strength, 2),
+            "source": "measured",
+            "measured": True,
+            "basis": "the verified Artificial Analysis intelligence index",
+        }
+        if strength is not None
+        else {
+            "value": None,
+            "source": "unknown",
+            "measured": False,
+            "basis": "no verified record; the model awaits the feed",
+        }
+    )
+    if row["aa"]["text_only"]:
+        # The official evidence says text only: the model is never a 3D
+        # candidate, whatever a catalog modality field claims.
+        row["tiers"] = [tier for tier in row["tiers"] if tier != "3d"]
     indices = intelligence.get("indices") or {}
 
     def index(name: str) -> float | None:
@@ -1006,7 +1373,9 @@ def _fill_value(
     if not isinstance(released, str):
         released = row.get("released_at")
     components: dict[str, float | None] = {
-        "strength": max(0.0, min(1.0, strength / 100.0)),
+        "intelligence": (
+            max(0.0, min(1.0, strength / 100.0)) if strength is not None else None
+        ),
         "coding": index("coding_index"),
         "agentic": index("agentic_index"),
         "engineering": index("engineering_index"),
@@ -1020,7 +1389,6 @@ def _fill_value(
             if isinstance(speed, (int, float)) and not isinstance(speed, bool)
             else None
         ),
-        "recency": None,
         "token_price": (
             1.0 / (1.0 + max(relative, PRICE_FLOOR)) if relative is not None else None
         ),
@@ -1045,10 +1413,21 @@ def _fill_value(
             components["recency"] = max(0.0, min(1.0, 1.0 - age_days / 365.0))
         except ValueError:
             components["recency"] = None
-    value, used_weights = _component_value(components)
+    component_sources = {
+        name: ("measured" if value is not None else "unknown")
+        for name, value in components.items()
+    }
+    row["_components"] = {
+        name: {"value": components[name], "source": component_sources[name]}
+        for name in components
+    }
+    row["access"] = _access_record(
+        provider, model, free_set or set(), promo_set or set(), prices
+    )
     row["value"] = {
-        "strength": round(strength, 2),
+        "strength": None if strength is None else round(strength, 2),
         "strength_source": source,
+        "strength_basis": {"measured": 1.0} if strength is not None else {},
         "confidence": (
             float(fact.get("confidence"))
             if isinstance(fact, Mapping) and isinstance(fact.get("confidence"), (int, float))
@@ -1062,12 +1441,6 @@ def _fill_value(
             else ("estimate" if source == "estimated" else "quality_prior")
         ),
         "relative_cost": None if relative is None else round(relative, 4),
-        "components": {
-            name: (None if value is None else round(value, 4))
-            for name, value in components.items()
-        },
-        "weights": {name: round(weight, 3) for name, weight in used_weights.items()},
-        "value": None if value is None else round(value, 4),
         "formula": CALCULATION["value"]["formula"],
     }
 
@@ -1152,6 +1525,16 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
     tiers take the delegates, and a delegate may not be a model the owner
     policy does not permit.
     """
+    aa = row.get("aa") or {}
+    if aa.get("state") != "measured":
+        # No verified record: the model is unranked, waiting for the feed.
+        # It is never promoted by an estimate.
+        return False
+    if not aa.get("selectable", True):
+        # The record was measured under another effort setting that this
+        # model cannot be aligned to: the mismatch stays visible and the
+        # model is not selected.
+        return False
     eligibility = row.get("eligibility") or {}
     if tier == "frontier":
         return bool((eligibility.get("frontier_prime") or {}).get("allowed"))
@@ -1188,10 +1571,20 @@ def build_snapshot(
     measured_windows: Iterable[Mapping[str, Any]] | None = None,
     catalog: Any = None,
     facts: Mapping[str, Any] | None = None,
+    free_models: Iterable[Any] | None = None,
+    promo_models: Iterable[Any] | None = None,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
 ) -> dict[str, Any]:
     """Build the routing snapshot from the ranked models and the readings."""
     facts_index = facts_module.index(facts or {})
+    free_set: set[tuple[str, str]] = set()
+    for record in free_models or ():
+        if isinstance(record, tuple) and len(record) == 2:
+            free_set.add((str(record[0]), str(record[1])))
+    promo_set: set[tuple[str, str]] = set()
+    for record in promo_models or ():
+        if isinstance(record, tuple) and len(record) == 2:
+            promo_set.add((str(record[0]), str(record[1])))
     native_models = native_models or {}
     policy = dict(policy or {})
     entries: dict[tuple[str, str], list[Any]] = {}
@@ -1228,6 +1621,8 @@ def build_snapshot(
             native_models.get((provider, model)),
             policy,
             aa_cache,
+            free_set,
+            promo_set,
         )
         variant = _row_variant(row)
         fact = facts_module.lookup_by_model(
@@ -1238,7 +1633,7 @@ def build_snapshot(
             now=now,
             version=feed_version,
         )
-        _fill_value(row, catalog, fact, now)
+        _fill_value(row, catalog, fact, now, free_set, promo_set)
         for tier in row["tiers"]:
             tiers.setdefault(tier, []).append(_key(provider, model))
         account = str(row.get("account") or "")
@@ -1260,7 +1655,14 @@ def build_snapshot(
                     "reason": row["admission"]["reason"],
                 }
             )
-        if row["rank"] or row["admission"]["state"] == "pending" or row["quota_state"] != "unknown":
+        if (
+            row["rank"]
+            or row["admission"]["state"] == "pending"
+            or row["quota_state"] != "unknown"
+            or row["aa"]["state"] != "measured"
+        ):
+            # An unranked model stays visible with its reason: the dashboard
+            # shows it waiting for the feed, not silently dropped.
             candidates.append(row)
         else:
             omitted += 1
@@ -1271,6 +1673,7 @@ def build_snapshot(
             if entry.tier == tier
         }
         tiers[tier] = sorted(set(members), key=lambda key: (order.get(key, 0), key))
+    _calibrate_values(candidates)
     winners, tier_coverage = _winners(candidates, tiers)
     pending_identities = _pending_identities(candidates, facts_source, now)
     # The tiers are the operational list: one current winner per upstream
@@ -1281,6 +1684,50 @@ def build_snapshot(
         tier: [winner["key"] for winner in rows] for tier, rows in winners.items()
     }
 
+    aa_coverage_rows = []
+    for row in candidates:
+        aa = row.get("aa") or {}
+        condition = aa.get("condition") or {}
+        aa_coverage_rows.append(
+            {
+                "provider": row["provider"],
+                "model": row["model"],
+                "state": aa.get("state"),
+                "reason": aa.get("reason") or "",
+                "aa_id": aa.get("id"),
+                "aa_slug": aa.get("slug"),
+                "aa_name": aa.get("name"),
+                "release_date": aa.get("release_date"),
+                "measured_variant": condition.get("measured_variant"),
+                "native_variant": condition.get("native_variant"),
+                "variant_match": condition.get("variant_match"),
+                "checkpoint": condition.get("checkpoint"),
+                "matched_by": aa.get("matched_by"),
+                "selectable": aa.get("selectable"),
+            }
+        )
+    aa_states: dict[str, int] = {}
+    aa_reasons: dict[str, int] = {}
+    for coverage_row in aa_coverage_rows:
+        state = str(coverage_row["state"])
+        aa_states[state] = aa_states.get(state, 0) + 1
+        reason = str(coverage_row["reason"])
+        if reason:
+            aa_reasons[reason] = aa_reasons.get(reason, 0) + 1
+    aa_coverage = {
+        "source": "artificialanalysis",
+        "index_version": (aa_cache or {}).get("index_version"),
+        "fetched_at": (aa_cache or {}).get("fetched_at"),
+        "basis": (
+            "every candidate is bound to the exact measured record by id, "
+            "slug, name or documented alias after removing routing, promotion "
+            "and packaging wrappers; nothing is matched by substring"
+        ),
+        "total": len(aa_coverage_rows),
+        "states": aa_states,
+        "reasons": aa_reasons,
+        "candidates": aa_coverage_rows,
+    }
     source_records = []
     for source in sources:
         record = dict(source)
@@ -1429,16 +1876,17 @@ def build_snapshot(
         "workload_policy": {
             "classes": [dict(entry) for entry in WORKLOAD_CLASSES],
             "free_rule": (
-                "a free route is the lowest intelligence tier and carries only "
-                "low complexity work: bounded research, cheap and easy tasks, "
-                "and bulk metadata updates with checks. It never holds the "
-                "frontier, never carries private work, and never decides a "
-                "complex engineering, security, or integration question, "
-                "whatever its measured quality is"
+                "a dedicated free route is preferred for the low complexity "
+                "classes without further proof. For a high complexity class it "
+                "is considered only with admission evidence of that route for "
+                "that workload, and the private data and frontier review gates "
+                "still apply. A provider's promotional zero-price model is a "
+                "paid bulk route, not a dedicated free one"
             ),
-            "complexity_ceiling": (
-                "a free route is capped at the low complexity classes "
-                "independently of any quality score"
+            "complexity_rule": (
+                "a high complexity class needs per workload admission evidence "
+                "for the route, or a native route; neither a price nor a model "
+                "name is evidence"
             ),
         },
         "recommendations": _recommendations(candidates, WORKLOAD_CLASSES),
@@ -1469,6 +1917,7 @@ def build_snapshot(
             "pending_identities": pending_identities,
         },
         "pending": pending,
+        "aa_coverage": aa_coverage,
         "counts": {
             "candidates": len(candidates),
             "ranked": sum(1 for row in candidates if row["rank"]),
@@ -1498,6 +1947,9 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
         labels = {"provider": provider, "model": model}
         value = row.get("value") or {}
         for name, field in (
+            # The strength is the verified intelligence index of the model,
+            # kept for the existing panels. It is not a prior: a model without
+            # a record has no strength and is unranked.
             ("ghostship_ai_model_strength", "strength"),
             ("ghostship_ai_model_relative_cost", "relative_cost"),
             ("ghostship_ai_model_value", "value"),

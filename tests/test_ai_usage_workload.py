@@ -43,6 +43,13 @@ def Row(provider, model, tier, mapped=True, instance="opencode", score=50.0, ava
         },
         "role": "prime" if tier == "frontier" else "delegate",
         "quota_state": "available",
+                "aa": {"state": "measured"},
+        "access": {
+            "kind": "dedicated_free" if tier == "free" else "provider_paid",
+            "basis": "the dedicated free inference pool" if tier == "free" else "",
+            "price": {},
+            "execution": "inference_job" if tier == "free" else "provider_native",
+        },
         "eligibility": {
             "frontier_prime": {"allowed": tier == "frontier", "basis": "policy:owner"},
             "delegate": {"allowed": mapped, "basis": "policy:owner+native+tier"},
@@ -97,10 +104,19 @@ class WorkloadTests(unittest.TestCase):
         self.assertEqual(result["research"]["tier"], "frontier")
         self.assertIn("no free route", result["research"]["reason"])
 
-    def test_the_complexity_ceiling_is_independent_of_the_quality(self):
-        for entry in snapshot.WORKLOAD_CLASSES:
-            if entry["complexity"] == "high":
-                self.assertFalse(entry["free_eligible"])
+    def test_a_high_complexity_class_needs_admission_evidence(self):
+        # A high complexity class is not closed to a free route by policy:
+        # it needs per workload admission evidence, which a bare free row does
+        # not have.
+        result = snapshot._recommendations(rows(), snapshot.WORKLOAD_CLASSES)
+        self.assertNotEqual(result["engineering"]["tier"], "free")
+
+    def test_the_complexity_rule_is_documented(self):
+        rule = snapshot.build_snapshot(
+            now=NOW, sources=[], ranked=[]
+        )["workload_policy"]
+        self.assertIn("admission evidence", rule["complexity_rule"])
+        self.assertIn("promotional zero-price", rule["free_rule"])
 
 
 class QualityFeedTests(unittest.TestCase):

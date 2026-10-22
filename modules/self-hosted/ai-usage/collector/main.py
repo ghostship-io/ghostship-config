@@ -142,7 +142,10 @@ METRIC_HELP = {
     "ghostship_ai_three_d_usage_tokens": "Tokens spent on 3D printing work.",
     "ghostship_ai_three_d_score": "The combined 3D score of a model.",
     "ghostship_ai_three_d_observed_timestamp_seconds": "When the 3D reading was taken.",
-    "ghostship_ai_model_strength": "The strength a model was measured or estimated at.",
+    "ghostship_ai_model_strength": (
+        "The verified Artificial Analysis intelligence index of the model; a "
+        "model without a record has no strength and is unranked."
+    ),
     "ghostship_ai_model_relative_cost": "The blended token price of a model, the provider's own listing.",
     "ghostship_ai_model_value": "The value of a model: the strength over the relative price.",
     "ghostship_ai_model_intelligence_index": "A benchmark index of a model.",
@@ -490,6 +493,8 @@ def ranking_inputs(
     for provider, model in context.get("offered_models") or []:
         inventory.add((str(provider), str(model)))
     free: set[tuple[str, str]] = set()
+    promo: set[tuple[str, str]] = set()
+    external: dict[tuple[str, str], bool] = {}
     usage: dict[tuple[str, str], float] = {}
     pool_providers: set[str] = set()
     quota_used: dict[tuple[str, str, str, str], float] = {}
@@ -501,6 +506,8 @@ def ranking_inputs(
             inventory.add((provider, model))
             free.add((provider, model))
             pool_providers.add(provider)
+        elif name == "ghostship_ai_pool_model_available":
+            external[(provider, model)] = value > 0
         elif name == "ghostship_ai_free_model":
             free.add((provider, model))
         elif name == "ghostship_ai_usage_tokens" and labels.get("window") == "7d":
@@ -543,9 +550,11 @@ def ranking_inputs(
                 labels.get("source", ""),
             )
             quota_reset[key] = value
+    # A provider's promotional zero-price model is a paid route that costs
+    # nothing right now. It belongs to bulk, not to the dedicated free tier.
     for provider in ("opencode-go", "opencode", "openrouter", "ollama"):
         for entry in catalog.free_models(provider):
-            free.add((entry["provider"], entry["model"]))
+            promo.add((entry["provider"], entry["model"]))
     windows: dict[str, list[Any]] = {}
     for measured in measured_windows:
         provider = str(measured.get("provider") or "")
@@ -576,7 +585,7 @@ def ranking_inputs(
         else:
             # A window the provider reports for one model only.
             windows.setdefault(f"{provider}/{model}", []).append(window)
-    return sorted(inventory), free, usage, windows, pool_providers
+    return sorted(inventory), free, promo, external, usage, windows, pool_providers
 
 
 def ranking_samples(
@@ -596,9 +605,11 @@ def ranking_samples(
     measured_windows: list[dict[str, Any]] = []
     for result in results:
         measured_windows.extend(result.windows)
-    inventory, free, usage, windows, pool_providers = ranking_inputs(
+    inventory, free, promo, external, usage, windows, pool_providers = ranking_inputs(
         results, catalog, context, measured_windows
     )
+    context["free_models"] = free
+    context["promo_models"] = promo
     samples: list[Sample] = []
     three_d_scores: dict[tuple[str, str], dict[str, Any]] = {}
     try:
@@ -637,6 +648,8 @@ def ranking_samples(
         "catalog": catalog,
         "quota_windows": windows,
         "free_models": free,
+        "promo_models": promo,
+        "external_availability": external,
         "usage_tokens": usage,
         "three_d_scores": three_d_scores,
         "now": now,
@@ -646,6 +659,10 @@ def ranking_samples(
         # The free inference pool belongs to the free tier, not to the bulk
         # tier of the paid accounts.
         rank_kwargs["exclude_providers"] = {"bulk": sorted(pool_providers)}
+    if "promo_models" in inspect.signature(ranking_module.rank_models).parameters:
+        rank_kwargs["promo_models"] = sorted(promo)
+    if "external_availability" in inspect.signature(ranking_module.rank_models).parameters:
+        rank_kwargs["external_availability"] = external
     if "free_route_accounts" in inspect.signature(ranking_module.rank_models).parameters:
         rank_kwargs["free_route_accounts"] = sorted(
             free_route_accounts(results, context, measured_windows)
@@ -912,6 +929,8 @@ def main(argv: list[str] | None = None) -> int:
         measured_windows=measured,
         catalog=catalog,
         facts=read_facts(args.facts),
+        free_models=context.get("free_models") or set(),
+        promo_models=context.get("promo_models") or set(),
     )
     text = render(results, extra, now, duration, snapshot)
     if args.stdout:

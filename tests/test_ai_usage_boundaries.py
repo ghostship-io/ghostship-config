@@ -227,6 +227,8 @@ class PermissionTests(unittest.TestCase):
             "admission": {"state": "settled"},
             "role": "delegate",
             "quota_state": "available",
+                "aa": {"state": "measured"},
+            "aa": {"state": "measured"},
         }
 
     def test_only_the_permitted_gpt_model_is_permitted(self):
@@ -263,6 +265,7 @@ class PermissionTests(unittest.TestCase):
                     "delegate": {"allowed": False},
                 },
                 "quota_state": "available",
+                "aa": {"state": "measured"},
                 "native": {"mapped": True},
             },
             {
@@ -280,6 +283,7 @@ class PermissionTests(unittest.TestCase):
                     "delegate": {"allowed": True},
                 },
                 "quota_state": "available",
+                "aa": {"state": "measured"},
                 "native": {"mapped": True},
             },
         ]
@@ -307,6 +311,7 @@ class TierContractTests(unittest.TestCase):
                     "delegate": {"allowed": True},
                 },
                 "quota_state": "available",
+                "aa": {"state": "measured"},
                 "native": {"mapped": True},
             },
             {
@@ -324,6 +329,7 @@ class TierContractTests(unittest.TestCase):
                     "delegate": {"allowed": True},
                 },
                 "quota_state": "available",
+                "aa": {"state": "measured"},
                 "native": {"mapped": True},
             },
         ]
