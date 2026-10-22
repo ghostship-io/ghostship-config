@@ -86,7 +86,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -152,7 +152,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -210,7 +210,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -268,7 +268,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -334,7 +334,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -400,7 +400,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -466,7 +466,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -528,7 +528,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -586,69 +586,13 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
-   }
-  },
-  {
-   "id": 1,
-   "title": "CPU busy (total, all cores)",
-   "description": "Busy time over all cores, 0\u2013100 %.",
-   "type": "timeseries",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "x": 0,
-    "y": 12,
-    "w": 12,
-    "h": 8
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
-     "legendFormat": "all cores"
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "percent",
-     "noValue": "Unknown",
-     "custom": {
-      "fillOpacity": 8,
-      "lineWidth": 1,
-      "spanNulls": false
-     },
-     "max": 100,
-     "min": 0
-    },
-    "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "table",
-     "placement": "bottom",
-     "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
-    },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
     }
    }
   },
@@ -662,10 +606,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "x": 12,
+    "x": 0,
     "y": 12,
-    "w": 12,
-    "h": 8
+    "w": 24,
+    "h": 14
    },
    "targets": [
     {
@@ -729,6 +673,62 @@
    }
   },
   {
+   "id": 1,
+   "title": "CPU busy (total, all cores)",
+   "description": "Busy time over all cores, 0\u2013100 %.",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 26,
+    "w": 24,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+     "legendFormat": "all cores"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     },
+     "max": 100,
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
    "id": 2,
    "title": "Memory  (total, used, available)",
    "description": "All three series are bytes from the same exporter: used = total \u2212 available.",
@@ -739,7 +739,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 20,
+    "y": 34,
     "w": 12,
     "h": 8
    },
@@ -812,7 +812,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 20,
+    "y": 34,
     "w": 12,
     "h": 8
    },
@@ -876,7 +876,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 28,
+    "y": 42,
     "w": 12,
     "h": 8
    },
@@ -931,7 +931,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 28,
+    "y": 42,
     "w": 12,
     "h": 8
    },
@@ -986,7 +986,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 36,
+    "y": 50,
     "w": 12,
     "h": 8
    },
@@ -1041,7 +1041,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 36,
+    "y": 50,
     "w": 12,
     "h": 8
    },
