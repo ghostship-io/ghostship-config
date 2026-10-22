@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.97] - 2026-10-22
+
+- ai-usage: the free providers are read under the free pool's names. OpenCode reaches the free pool through an integration of its own (kilo-free, groq-free, cf-workers and the other "-free" ids), and the reader's map named none of them, so their requests were counted unmapped and never emitted, and the inferred limits never saw their usage. The map now carries the aliases of the pool's provider registry, and the event cache is at version two: a version one cache holds no free row, so it is discarded and the 35 days are read again.
+
 ## [3.17.96] - 2026-10-22
 
 - chill-penguin: model routing is off (`ghostship.aiUsage.routing.enabled = false`), by the owner's decision. The static worker table in ghostship-agent's runtime policy governs until the owner approves the selection framework; routing.json, the `ghostship_ai_routing_enabled` gauge and the page chip read off.
