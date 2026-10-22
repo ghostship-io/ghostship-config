@@ -340,6 +340,11 @@ METRIC_HELP = {
 
 GAUGE_METRICS = tuple(METRIC_HELP)
 
+# How many dropped series a run names. A run that drops a handful of series
+# names every one of them; a run that drops many names the first ones and
+# says how many it did not name, so the log stays a log and not a dump.
+MAX_NAMED_DUPLICATE_SERIES = 20
+
 
 def log(message: str) -> None:
     print(f"ai-usage: {message}", file=sys.stderr, flush=True)
@@ -1590,9 +1595,18 @@ def render(
     writer.add("ghostship_ai_collection_timestamp_seconds", {}, now)
     writer.add("ghostship_ai_collection_duration_seconds", {}, duration)
     # A series is published once. A repeat is dropped and counted, and the
-    # count is published, so a duplicate never passes unnoticed.
-    if writer.duplicates:
-        log(f"dropped {writer.duplicates} duplicate metric series")
+    # count is published, so a duplicate never passes unnoticed. The run
+    # names every series it dropped, so the emitter that published a series
+    # twice can be found, and it says whether the repeat carried the value
+    # that was kept.
+    for dropped in writer.dropped[:MAX_NAMED_DUPLICATE_SERIES]:
+        log(
+            f"dropped repeated series {dropped.describe()}"
+            f" ({'same' if dropped.same_value else 'different'} value)"
+        )
+    unnamed = len(writer.dropped) - MAX_NAMED_DUPLICATE_SERIES
+    if unnamed > 0:
+        log(f"and {unnamed} more")
     writer.add(
         "ghostship_ai_collection_duplicate_series", {}, float(writer.duplicates)
     )
