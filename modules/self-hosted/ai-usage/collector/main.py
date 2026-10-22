@@ -238,6 +238,33 @@ METRIC_HELP = {
         "The state of the Artificial Analysis pull: the source, the state and "
         "the number of records."
     ),
+    "ghostship_ai_model_aa_condition": (
+        "The reasoning condition the benchmark measured the model under, and "
+        "whether that condition is confirmed."
+    ),
+    "ghostship_ai_model_execution_reasoning": (
+        "The execution reasoning the owner's policy proposes for a model: the "
+        "default, the escalation, and whether the model supports them."
+    ),
+    "ghostship_ai_model_capacity_binding": (
+        "The window that binds the capacity of a model, and the share of it "
+        "that is left."
+    ),
+    "ghostship_ai_model_pace_binding": (
+        "The window that binds the pace of a model, and the pace itself."
+    ),
+    "ghostship_ai_frontier_member": (
+        "One for a model the owner's policy admits to the frontier, with the "
+        "state it is in."
+    ),
+    "ghostship_ai_frontier_wait_seconds": (
+        "The seconds until the frontier model becomes available again."
+    ),
+    "ghostship_ai_three_d_elo": "The measured AA-3D Elo of a model.",
+    "ghostship_ai_model_value_3d": (
+        "The value of a model for 3D work: the intelligence, the AA-3D "
+        "capability and the cost, with the weights of the policy."
+    ),
     "ghostship_ai_calculation_component": "One for each part of the calculation of a winner.",
     "ghostship_ai_calculation_weight": "The weight of a part of the calculation.",
     "ghostship_ai_calculation_transform": (
@@ -1240,6 +1267,125 @@ def feed_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
     return samples
 
 
+def decision_input_samples(
+    snapshot: Mapping[str, Any],
+) -> list[Sample]:
+    """The inputs a decision was made on, as gauges.
+
+    The benchmark condition and the execution reasoning are two different
+    statements and both are published: the condition is what the benchmark
+    measured, the reasoning is what the owner's policy proposes to run. The
+    window that binds the capacity and the window that binds the pace are
+    published apart, and the frontier membership carries its wait and its
+    reset.
+    """
+    samples: list[Sample] = []
+    for row in snapshot.get("candidates") or []:
+        if not isinstance(row, Mapping):
+            continue
+        provider = str(row.get("provider") or "")
+        model = str(row.get("model") or "")
+        if not provider or not model:
+            continue
+        labels = {"provider": provider, "model": model}
+        aa = row.get("aa") or {}
+        condition = aa.get("condition") or {}
+        measured_variant = str(condition.get("measured_variant") or "")
+        if measured_variant:
+            samples.append(
+                (
+                    "ghostship_ai_model_aa_condition",
+                    {
+                        **labels,
+                        "variant": measured_variant,
+                        "confirmed": (
+                            "confirmed" if condition.get("confirmed") else "unconfirmed"
+                        ),
+                    },
+                    1.0,
+                )
+            )
+        execution = aa.get("execution") or {}
+        default = str(execution.get("default") or "")
+        escalation = str(execution.get("escalation") or "")
+        if default or escalation:
+            samples.append(
+                (
+                    "ghostship_ai_model_execution_reasoning",
+                    {
+                        **labels,
+                        "default": default,
+                        "escalation": escalation,
+                        "supported": str(execution.get("state") or ""),
+                    },
+                    1.0,
+                )
+            )
+        capacity = row.get("capacity") or {}
+        capacity_binding = str(capacity.get("capacity_binding_id") or "")
+        if capacity_binding:
+            samples.append(
+                (
+                    "ghostship_ai_model_capacity_binding",
+                    {**labels, "window": capacity_binding},
+                    1.0,
+                )
+            )
+        pace_binding = str(capacity.get("pace_binding_id") or "")
+        if pace_binding:
+            samples.append(
+                (
+                    "ghostship_ai_model_pace_binding",
+                    {**labels, "window": pace_binding},
+                    1.0,
+                )
+            )
+        three_d = row.get("three_d") or {}
+        elo = three_d.get("elo")
+        if isinstance(elo, (int, float)) and not isinstance(elo, bool):
+            samples.append(
+                ("ghostship_ai_three_d_elo", labels, float(elo))
+            )
+        value_3d = (row.get("value_3d") or {}).get("value")
+        if isinstance(value_3d, (int, float)) and not isinstance(value_3d, bool):
+            samples.append(
+                (
+                    "ghostship_ai_model_value_3d",
+                    {
+                        **labels,
+                        "cost_source": str(
+                            (row.get("value_3d") or {}).get("cost_source") or ""
+                        ),
+                        "proxy": (
+                            "proxy" if (row.get("value_3d") or {}).get("proxy") else "measured"
+                        ),
+                    },
+                    float(value_3d),
+                )
+            )
+    frontier = (snapshot.get("coverage") or {}).get("frontier") or {}
+    for member in frontier.get("eligible") or ():
+        if not isinstance(member, Mapping):
+            continue
+        labels = {
+            "provider": str(member.get("provider") or ""),
+            "model": str(member.get("model") or ""),
+        }
+        samples.append(
+            (
+                "ghostship_ai_frontier_member",
+                {**labels, "state": str(member.get("state") or "")},
+                1.0,
+            )
+        )
+        wait = member.get("seconds_to_reset")
+        if isinstance(wait, (int, float)) and not isinstance(wait, bool):
+            samples.append(
+                ("ghostship_ai_frontier_wait_seconds", labels, float(wait))
+            )
+    return samples
+
+
 def render(
     results: list[SourceResult],
     extra: list[Sample],
@@ -1300,6 +1446,8 @@ def render(
     for name, labels, value in snapshot_module.provider_capacity_samples(snapshot or {}):
         writer.add(name, labels, value)
     for name, labels, value in feed_samples(snapshot or {}):
+        writer.add(name, labels, value)
+    for name, labels, value in decision_input_samples(snapshot or {}):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
