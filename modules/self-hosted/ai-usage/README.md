@@ -329,6 +329,9 @@ values only) and `ghostship_ai_provider_capacity_windows{provider,evidence}`.
 * `ghostship_ai_collection_timestamp_seconds` and
   `ghostship_ai_collection_duration_seconds` - when the collection ran and how
   long it took.
+* `ghostship_ai_routing_enabled` - 1 when the owner's routing switch is on, 0
+  when it is off. The gauge carries no label: it is one switch for the whole
+  snapshot.
 
 ### Quota and account
 
@@ -624,6 +627,7 @@ The contract, version 1:
 | `generated_at` | the UTC ISO-8601 moment the snapshot was written |
 | `max_age_seconds` | how long a consumer may trust it (900) |
 | `partial` | true when a source failed or reported nothing |
+| `routing` | the owner's routing switch: `enabled` is true only when the owner turned it on, and `source` says where the switch came from (`nixos-option`). The block is always there, so a consumer never has to guess whether it read a snapshot without a switch |
 | `coverage` | every source with its status, observation time, and age, plus whether a frontier prime is available right now and, when it is not, why a consumer has to wait for it |
 | `policy` | the owner's direction: the prime frontier models, the GPT models that may run, the instance the background agents use, and the frontier review rule with its authority and its fail closed rule |
 | `tiers` | the ordered members of `frontier`, `bulk`, `free`, and `3d` |
@@ -687,6 +691,23 @@ before it is integrated, a bulk review is never a final approval, and a
 required frontier that is unavailable is waited for instead of being
 quietly replaced by a delegate. The snapshot says so in `policy` and in
 `coverage.frontier`.
+
+## The routing switch
+
+Routing is off until the owner turns it on. The switch is the NixOS option
+`ghostship.aiUsage.routing.enabled`, it is a boolean, and it defaults to
+false. The unit passes it to the collector as `--routing-enabled
+true|false`, and the collector publishes it in three places:
+
+| Where | What |
+| --- | --- |
+| `routing` in the routing snapshot | `{"enabled": false, "source": "nixos-option"}`. The block is always present, so a consumer never reads a missing switch as an open one |
+| every `--projection` file | the same bytes as the canonical snapshot, so the switch cannot differ between the file and its projections |
+| `ghostship_ai_routing_enabled` | a gauge without labels: `1` when the switch is on, `0` when it is off |
+
+The collector never acts on the switch. It publishes the owner's decision
+and leaves the decision itself to the consumer, and nothing else in the
+repository sets the option: turning routing on is the owner's action alone.
 
 ## The daily evaluation
 
