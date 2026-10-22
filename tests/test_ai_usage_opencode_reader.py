@@ -105,11 +105,30 @@ def event_at(result, epoch_ms):
     return None
 
 
-def synthetic_rows(count):
+def capture_statements(module, test):
+    """The statements the reader runs, with the bounds they carry.
+
+    The trace callback of a connection reports every statement it runs with
+    its parameters inlined, so the bound the reader asked for is visible.
+    """
+    statements = []
+    original = module.open_database
+
+    def wrapper(target):
+        connection = original(target)
+        connection.set_trace_callback(statements.append)
+        return connection
+
+    module.open_database = wrapper
+    test.addCleanup(setattr, module, "open_database", original)
+    return statements
+
+
+def synthetic_rows(count, start=1799900000000, step=1000, provider="opencode-go"):
     """A batch of invented request records."""
     rows = []
     for index in range(count):
-        moment = 1799900000000 + index
+        moment = start + index * step
         rows.append(
             {
                 "id": f"msg_synthetic_{index}",
@@ -117,7 +136,7 @@ def synthetic_rows(count):
                 "type": "assistant",
                 "time_created": moment,
                 "data": {
-                    "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+                    "model": {"providerID": provider, "id": "example/minimax-m3.1-flash"},
                     "time": {"created": moment},
                     "tokens": {"input": 10, "output": 5, "reasoning": 0},
                     "finish": "stop",
@@ -691,6 +710,57 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(result["counts"]["rows_read"], 1)
         self.assertEqual(result["counts"]["rows_unmapped"], 1)
         self.assertEqual(result["events"], [])
+
+
+class IncrementalReadTests(unittest.TestCase):
+    """A read that takes a bound reads only the rows inside it."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.now = 1800000000.0
+        self.rows = synthetic_rows(
+            10, start=int((self.now - 10 * 3600) * 1000), step=3600000
+        )
+        self.path, self.connection = build_database(self.directory.name, self.rows)
+        self.addCleanup(self.connection.close)
+
+    def test_a_read_with_a_since_bound_reads_no_older_row(self):
+        result = reader().read_events(self.path, self.now, since=self.now - 7200)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["counts"]["rows_read"], 2)
+        for event in result["events"]:
+            self.assertGreaterEqual(event["at"], self.now - 7200)
+
+    def test_a_read_with_an_until_bound_reads_no_newer_row(self):
+        result = reader().read_events(self.path, self.now, until=self.now - 18000)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["counts"]["rows_read"], 5)
+        for event in result["events"]:
+            self.assertLess(event["at"], self.now - 18000)
+
+    def test_a_read_with_both_bounds_reads_the_rows_between_them(self):
+        result = reader().read_events(
+            self.path, self.now, since=self.now - 18000, until=self.now - 7200
+        )
+        self.assertEqual(result["counts"]["rows_read"], 3)
+
+    def test_the_read_reports_the_newest_row_it_read(self):
+        result = reader().read_events(self.path, self.now)
+        self.assertEqual(result["cursor"], int((self.now - 3600) * 1000))
+
+    def test_the_query_carries_the_bound_it_was_given(self):
+        module = reader()
+        statements = capture_statements(module, self)
+        module.read_events(self.path, self.now, since=self.now - 7200)
+        bounds = [text for text in statements if "session_message" in text]
+        self.assertTrue(bounds)
+        for statement in bounds:
+            self.assertIn(str(int((self.now - 7200) * 1000)), statement)
+
+    def test_a_read_without_a_bound_reads_the_whole_window(self):
+        result = reader().read_events(self.path, self.now)
+        self.assertEqual(result["counts"]["rows_read"], 10)
 
 
 class ConnectionTests(unittest.TestCase):

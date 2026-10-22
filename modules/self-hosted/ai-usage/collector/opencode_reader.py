@@ -92,8 +92,23 @@ BUSY_TIMEOUT_S = 2.0
 # inside the wall clock it names.
 PROGRESS_STEPS = 100
 
-# The two statuses a reading has.
+# The overlap of an incremental read. A row that OpenCode inserted at the
+# start of a step and completed later carries the time of its insertion, so
+# a window of two hours re-reads the rows a step may still have been
+# writing.
+OVERLAP_S = 2 * 3600
+
+# The slice a backfill run reads: at most three days, walking back from the
+# start of the complete history.
+BACKFILL_DAYS = 3
+BACKFILL_S = BACKFILL_DAYS * DAY_SECONDS
+
+# The version of the cache file. A cache of another version is discarded.
+CACHE_VERSION = 1
+
+# The three statuses a reading has.
 STATUS_OK = "ok"
+STATUS_PARTIAL = "partial"
 STATUS_UNREADABLE = "unreadable"
 
 # The reason codes. They are a closed set, and they never carry a message: a
@@ -104,6 +119,7 @@ REASON_UNREADABLE = "database_unreadable"
 REASON_CORRUPT = "database_corrupt"
 REASON_SCHEMA = "database_schema_missing"
 REASON_TIMEOUT = "timeout"
+REASON_CACHE = "cache_unwritten"
 
 REASONS = frozenset(
     {
@@ -113,6 +129,7 @@ REASONS = frozenset(
         REASON_CORRUPT,
         REASON_SCHEMA,
         REASON_TIMEOUT,
+        REASON_CACHE,
     }
 )
 
@@ -361,6 +378,17 @@ READ_SQL = (
     "ORDER BY time_created"
 )
 
+# The same read, bounded at both ends: a backfill slice reads the days
+# before the complete history and nothing after it.
+READ_SQL_UNTIL = (
+    "SELECT time_created, "
+    "json_extract(CASE WHEN json_valid(data) THEN data END, "
+    "'$.model', '$.time', '$.finish', '$.error', '$.tokens', '$.retry') "
+    "FROM session_message "
+    "WHERE type = 'assistant' AND time_created >= ? AND time_created < ? "
+    "ORDER BY time_created"
+)
+
 
 def record_from_extracted(payload: Any) -> dict[str, Any]:
     """The request record, from the fields the query extracted.
@@ -450,6 +478,7 @@ def _unreadable(reason: str) -> dict[str, Any]:
         "reason": reason if reason in REASONS else REASON_UNREADABLE,
         "events": [],
         "counts": _empty_counts(),
+        "cursor": None,
     }
 
 
@@ -486,6 +515,8 @@ def read_events(
     path: str | os.PathLike[str],
     now: float,
     *,
+    since: float | None = None,
+    until: float | None = None,
     days: int = READ_DAYS,
     timeout_s: float = READ_TIMEOUT_S,
 ) -> dict[str, Any]:
@@ -495,10 +526,15 @@ def read_events(
     unreadable with a fixed reason code and no events, because an unreadable
     reading is not a reading of zero usage.
 
-    The read is bounded twice over: the query only asks for the last `days`
-    days, and the whole read is given `timeout_s` seconds of wall clock. A
-    read that runs out of time aborts its query and is reported as
-    unreadable with the reason `timeout`.
+    The read is bounded three times over: the query only asks for the last
+    `days` days, `since` and `until` bound it further in epoch seconds, and
+    the whole read is given `timeout_s` seconds of wall clock. A read that
+    runs out of time aborts its query and is reported as unreadable with the
+    reason `timeout`.
+
+    The reading carries the cursor as well: the newest row time the read
+    saw, in epoch milliseconds. That is where the next incremental read
+    starts.
     """
     try:
         connection = open_database(path)
@@ -510,17 +546,39 @@ def read_events(
     events: list[dict[str, Any]] = []
     counts = _empty_counts()
     cutoff = int((float(now) - float(days) * DAY_SECONDS) * 1000)
+    lower = cutoff
+    if since is not None:
+        lower = max(lower, int(round(float(since) * 1000)))
+    upper = None
+    if until is not None:
+        upper = int(round(float(until) * 1000))
+    if upper is not None and upper <= lower:
+        # The window is empty: there is nothing to read.
+        connection.close()
+        return {
+            "status": STATUS_OK,
+            "reason": REASON_OK,
+            "events": events,
+            "counts": counts,
+            "cursor": None,
+        }
     deadline = time.monotonic() + float(timeout_s)
     # The progress handler aborts the query when the read is out of time.
     connection.set_progress_handler(lambda: 1 if time.monotonic() > deadline else 0, PROGRESS_STEPS)
+    cursor: int | None = None
     try:
-        cursor = connection.execute(READ_SQL, (cutoff,))
-        for time_created, payload in cursor:
+        if upper is None:
+            cursor_rows = connection.execute(READ_SQL, (lower,))
+        else:
+            cursor_rows = connection.execute(READ_SQL_UNTIL, (lower, upper))
+        for time_created, payload in cursor_rows:
             if time.monotonic() > deadline:
                 # The read is out of time: the partial reading is dropped,
                 # because a half reading is not a reading.
                 return _unreadable(REASON_TIMEOUT)
             counts["rows_read"] += 1
+            if isinstance(time_created, int) and not isinstance(time_created, bool):
+                cursor = time_created if cursor is None else max(cursor, time_created)
             data = record_from_extracted(payload)
             provider_id, model = model_of(data)
             provider = provider_for(provider_id)
@@ -552,5 +610,6 @@ def read_events(
         "reason": REASON_OK,
         "events": events,
         "counts": counts,
+        "cursor": cursor,
     }
 
