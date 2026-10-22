@@ -187,7 +187,9 @@ METRIC_HELP = {
     "ghostship_ai_pool_health_events": "Successes and failures recorded for a pool model.",
     "ghostship_ai_pool_latency_seconds": "Observed latency of a pool model.",
     "ghostship_ai_pool_concurrency": "Current and allowed concurrency of a pool provider.",
-    "ghostship_ai_pool_recent_jobs": "One for a recent job in the free pool.",
+    "ghostship_ai_pool_recent_jobs": (
+        "The count of recent jobs in the free pool with these labels."
+    ),
     "ghostship_ai_pool_quota_amount": "A quota amount observed in provider response headers.",
     "ghostship_ai_pool_quota_reset_seconds": "When an observed quota resets.",
     "ghostship_ai_pool_quota_observed_timestamp_seconds": "When an observed quota was seen.",
