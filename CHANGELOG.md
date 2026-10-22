@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.58] - 2026-10-22
+
+- SIEM alert bridge: a re-fired alert is no longer silenced forever. The 6-hour renotify window throttles repeat notices of one occurrence, but a resolve-then-fire cycle inside the window was dropped and its notification timestamp was never advanced, so the fingerprint stayed silent for good while the topic said "resolved". A re-fire inside the window is now deferred rather than dropped: it is recorded as pending and announced on the first poll after the window has elapsed, if the alert is still firing by then, and at most once per window. A re-fire outside the window still announces immediately.
+- SIEM alert bridge: a failed resolution publish is no longer lost. The retry covered firing alerts only, so a resolution that ntfy refused left the topic showing a critical alert that was never resolved. A resolution is now published again on the next poll until it is delivered, like a firing alert, and an alert whose resolution has been undelivered for a day becomes a dead letter, listed by `--list` and counted by the `ghostship_siem_bridge_dead_letters` and `ghostship_siem_bridge_resolution_retries` metrics.
+
 ## [3.17.57] - 2026-10-22
 
 - Test fixtures hold no personal identifier. The command guard's test used the owner's key line, with the owner's handle and home host, in a public repository; it now uses a role placeholder with synthetic key material, and the agent pin fixture uses a synthetic organisation. The command guard's regression tests also prove that the `nix-daemon --stdio` command of the `ssh-ng` transport and an interactive session, which sends no command at all, both pass the guard.
