@@ -126,6 +126,7 @@ def synthetic_rows(count):
         )
     return rows
 
+
 class ClassificationTests(unittest.TestCase):
     """Every outcome the reader can pick, one assertion each."""
 
@@ -271,6 +272,7 @@ class ClassificationTests(unittest.TestCase):
         data = request(finish="stop", retry={"attempt": 2})
         self.assertEqual(self.classify(data), ("success", None))
 
+
 class ProviderMappingTests(unittest.TestCase):
     """The provider table is committed, and nothing is guessed."""
 
@@ -305,6 +307,7 @@ class ProviderMappingTests(unittest.TestCase):
 
     def test_an_unknown_provider_is_not_mapped(self):
         self.assertIsNone(reader().provider_for("a-provider-nobody-knows"))
+
 
 class FixtureDatabaseTests(unittest.TestCase):
     """The read of the committed fixture, in a directory the test builds."""
@@ -403,6 +406,205 @@ class FixtureDatabaseTests(unittest.TestCase):
         event = event_at(result, 1799982000000)
         self.assertIsNotNone(event)
         self.assertEqual(event["at"], 1799982000000 / 1000.0)
+
+
+class UnreadableTests(unittest.TestCase):
+    """A database that cannot be read is reported, never raised."""
+
+    def test_a_missing_database_is_unreadable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = reader().read_events(Path(directory) / "absent.db", 1800000000.0)
+        self.assertEqual(result["status"], "unreadable")
+        self.assertEqual(result["reason"], "database_missing")
+        self.assertEqual(result["events"], [])
+
+    def test_a_wal_database_without_its_shared_memory_is_unreadable(self):
+        content = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            path, connection = build_database(directory, content["rows"])
+            # The records move into the database file and one more record
+            # stays in the write ahead log, the way a live database looks.
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            connection.execute(
+                "INSERT INTO session_message (id, session_id, type, time_created, data) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("msg_after_the_checkpoint", "ses_example_7", "assistant", 1799999000000, "{}"),
+            )
+            connection.commit()
+            readonly = Path(directory) / "readonly"
+            readonly.mkdir()
+            shutil.copyfile(path, readonly / path.name)
+            shutil.copyfile(str(path) + "-wal", readonly / (path.name + "-wal"))
+            connection.close()
+            os.chmod(readonly, 0o555)
+            try:
+                result = reader().read_events(
+                    readonly / path.name, content["now_epoch_ms"] / 1000.0
+                )
+            finally:
+                os.chmod(readonly, 0o755)
+        self.assertEqual(result["status"], "unreadable")
+        self.assertEqual(result["reason"], "database_unreadable")
+        self.assertEqual(result["events"], [])
+        self.assertEqual(result["counts"]["rows_read"], 0)
+
+    def test_an_unreadable_reading_reports_no_usage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = reader().read_events(Path(directory) / "absent.db", 1800000000.0)
+        self.assertEqual(
+            result["counts"], {"rows_read": 0, "rows_unmapped": 0, "outcomes": {"success": 0, "limit": 0, "other": 0}}
+        )
+
+
+class PrivacyTests(unittest.TestCase):
+    """The text of a provider's error never leaves the reader."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        content = fixture()
+        self.now = content["now_epoch_ms"] / 1000.0
+        self.path, self.connection = build_database(self.directory.name, content["rows"])
+        self.addCleanup(self.connection.close)
+        self.result = reader().read_events(self.path, self.now)
+
+    def test_no_event_carries_the_error_text(self):
+        rendered = json.dumps(self.result, default=str)
+        self.assertNotIn("example-user", rendered)
+        self.assertNotIn("usage limit", rendered)
+        self.assertNotIn("Rate limit", rendered)
+
+    def test_the_status_and_the_counts_carry_no_error_text(self):
+        rendered = json.dumps(
+            {"status": self.result["status"], "reason": self.result["reason"], "counts": self.result["counts"]},
+            default=str,
+        )
+        self.assertNotIn("example-user", rendered)
+
+    def test_the_reason_is_one_of_the_fixed_codes(self):
+        self.assertIn(self.result["reason"], reader().REASONS)
+
+    def test_the_reason_of_a_failure_is_a_code_and_not_a_message(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = reader().read_events(Path(directory) / "absent.db", 1800000000.0)
+        self.assertIn(result["reason"], reader().REASONS)
+        self.assertNotIn("/", result["reason"])
+
+
+class ReadOnlyTests(unittest.TestCase):
+    """The database is opened read only."""
+
+    def test_the_connection_refuses_a_write(self):
+        content = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            path, connection = build_database(directory, content["rows"])
+            try:
+                readonly = reader().open_database(path)
+                with self.assertRaises(sqlite3.OperationalError):
+                    readonly.execute(
+                        "INSERT INTO session_message (id, session_id, type, time_created, data) "
+                        "VALUES ('x', 'y', 'assistant', 0, '{}')"
+                    )
+                readonly.close()
+            finally:
+                connection.close()
+
+    def test_the_module_never_writes_to_the_database(self):
+        source = (COLLECTOR / "opencode_reader.py").read_text(encoding="utf-8").lower()
+        for forbidden in (
+            "immutable",
+            "vacuum",
+            "wal_checkpoint",
+            "journal_mode",
+            "attach",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+
+    def test_the_module_opens_the_database_with_the_read_only_uri(self):
+        source = (COLLECTOR / "opencode_reader.py").read_text(encoding="utf-8")
+        self.assertIn("mode=ro", source)
+
+
+class BoundedReadTests(unittest.TestCase):
+    """The read is bounded by the window and by the clock."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.path, self.connection = build_database(self.directory.name, synthetic_rows(2000))
+        self.addCleanup(self.connection.close)
+        self.now = 1800000000.0
+
+    def test_a_read_that_runs_out_of_time_is_unreadable(self):
+        result = reader().read_events(self.path, self.now, timeout_s=0.0)
+        self.assertEqual(result["status"], "unreadable")
+        self.assertEqual(result["reason"], "timeout")
+        self.assertEqual(result["events"], [])
+
+    def test_a_read_within_the_limit_is_ok(self):
+        result = reader().read_events(self.path, self.now)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["counts"]["rows_read"], 2000)
+
+    def test_the_read_window_is_thirty_five_days(self):
+        self.assertEqual(reader().READ_DAYS, 35)
+
+    def test_the_read_limit_is_twenty_seconds(self):
+        self.assertEqual(reader().READ_TIMEOUT_S, 20.0)
+
+    def test_the_busy_timeout_is_two_seconds(self):
+        self.assertLessEqual(reader().BUSY_TIMEOUT_S, 2.0)
+
+
+class ConnectionTests(unittest.TestCase):
+    """The connection is closed on every path."""
+
+    def capture(self):
+        """The connections the reader opens during a test."""
+        module = reader()
+        connections = []
+        original = module.open_database
+
+        def wrapper(target):
+            connection = original(target)
+            connections.append(connection)
+            return connection
+
+        module.open_database = wrapper
+        self.addCleanup(setattr, module, "open_database", original)
+        return connections
+
+    def test_the_connection_is_closed_after_a_successful_read(self):
+        content = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            path, connection = build_database(directory, content["rows"])
+            try:
+                connections = self.capture()
+                result = reader().read_events(path, content["now_epoch_ms"] / 1000.0)
+                self.assertEqual(result["status"], "ok")
+                self.assertEqual(len(connections), 1)
+                with self.assertRaises(sqlite3.ProgrammingError):
+                    connections[0].execute("SELECT 1")
+            finally:
+                connection.close()
+
+    def test_the_connection_is_closed_after_a_failed_read(self):
+        content = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            path, connection = build_database(directory, content["rows"])
+            try:
+                connections = self.capture()
+                result = reader().read_events(
+                    path, content["now_epoch_ms"] / 1000.0, timeout_s=0.0
+                )
+                self.assertEqual(result["status"], "unreadable")
+                self.assertEqual(len(connections), 1)
+                with self.assertRaises(sqlite3.ProgrammingError):
+                    connections[0].execute("SELECT 1")
+            finally:
+                connection.close()
+
 
 if __name__ == "__main__":
     unittest.main()
