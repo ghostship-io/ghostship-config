@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.93] - 2026-10-22
+
+- Providers page: the header renders again. Business Text runs panel helpers as `new Function("context", code)`, so a helper registers through `context.handlebars`; the header's helper used a bare `handlebars` and the panel showed "handlebars is not defined". The test now runs the helper exactly that way.
+- Providers page: every reset time reads in UTC ("resets 13:00 UTC"), like the header; the date helper rendered the viewer's local time. Frontier keeps only its two role rows, now that capacity is read per model.
+
 ## [3.17.92] - 2026-10-22
 
 - Providers page: the Bulk and Free tables list the ranked winners and the routes that are out, as the concept shows. Live, every tier member followed the winners, so Bulk ran to about thirty rows and scrolled inside its panel; the other members remain in the collapsed "Why this order" rows.
