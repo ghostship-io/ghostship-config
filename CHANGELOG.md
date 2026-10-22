@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.54] - 2026-10-22
+
+- Agent pin guard: a pull request that moves the `ghostship-private-agent` pin to a revision that does not descend from the pinned one silently dropped everything on the pinned line. `scripts/check-agent-pin.py` now compares the pull request's pinned revision with the base branch's and fails unless the new revision descends from the old one, which git answers in the fetched agent source, or the pull request body or one of its commits carries an explicit `pin-regression-approved: <reason>` line. The check runs in the Fleet checks job, where the read-only agent key is available, and skips outside a pull request. The shared private-source access moves to `scripts/private_source.py`, which the CI import now uses as well.
+
 ## [3.17.53] - 2026-10-22
 
 - Host activation helper: `scripts/activate-host` records the system generation before switching. It runs `nix-env -p /nix/var/nix/profiles/system --set <toplevel>`, then `<toplevel>/bin/switch-to-configuration switch`, then compares `readlink -f /run/current-system` with `readlink -f /nix/var/nix/profiles/system` and exits non-zero when they differ. A bare `switch-to-configuration switch` on a built toplevel leaves the two apart, so a reboot reverts to the profile's generation. The repository had no activation script, so the helper is new; the deploy flow in the operating notes and the fleet operations document use it.
