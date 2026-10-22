@@ -19,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -28,6 +28,7 @@ import aa_3d  # noqa: E402
 import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
 import pool as pool_module  # noqa: E402
+import pool_published  # noqa: E402
 import quota as quota_module  # noqa: E402
 import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
@@ -142,6 +143,25 @@ METRIC_HELP = {
     "ghostship_ai_pool_model_cooldown_until_seconds": "When a pool model's cooldown ends.",
     "ghostship_ai_pool_model_admission": "Whether a pool model is admitted for a workload.",
     "ghostship_ai_pool_limit": "A local admission limit of the free pool.",
+    "ghostship_ai_pool_observed_limit": (
+        "A limit the provider's own response headers carried, as observed."
+    ),
+    "ghostship_ai_pool_published_limit": (
+        "A limit the provider itself publishes, with the source it was read "
+        "from."
+    ),
+    "ghostship_ai_provider_limit": (
+        "A limit of a free provider, with the basis it was read with: "
+        "published, configured, observed or unknown."
+    ),
+    "ghostship_ai_pool_cooldown_invalid": (
+        "One for a cooldown of a pool route that cannot be true; the route is "
+        "not blocked by it."
+    ),
+    "ghostship_ai_pool_admission": (
+        "Whether a pool route is admitted for a workload, with the score the "
+        "pool's own bench gave it."
+    ),
     "ghostship_ai_pool_provider_state": "One for the current state of a pool provider.",
     "ghostship_ai_pool_health_events": "Successes and failures recorded for a pool model.",
     "ghostship_ai_pool_latency_seconds": "Observed latency of a pool model.",
@@ -484,6 +504,65 @@ def _window_scope(quota_id: str) -> tuple[str, ...]:
     return ()
 
 
+def provider_limit_samples(
+    inputs: Mapping[str, Any],
+) -> list[Sample]:
+    """The limits of every free provider, with the basis of each reading.
+
+    A limit is published once per basis it was read with: the number the
+    provider itself publishes, the ceiling the pool enforces, the number
+    the provider's response headers carried, and the fact that a limit
+    exists but no number is known for it. The bases are never mixed: a
+    reader sees which reading a number came from.
+    """
+    samples: list[Sample] = []
+    pool_providers = set(inputs.get("pool_providers") or ())
+    limits = inputs.get("pool_limits") or {}
+    for (provider, model, limit, scope), entry in sorted(limits.items()):
+        value, basis = entry if isinstance(entry, tuple) else (entry, "configured")
+        samples.append(
+            (
+                "ghostship_ai_provider_limit",
+                {
+                    "provider": provider,
+                    "model": model,
+                    "limit": limit,
+                    "scope": scope,
+                    "basis": basis,
+                },
+                float(value),
+            )
+        )
+    for provider in sorted(pool_providers):
+        for name, value, basis in pool_published.published_limits(provider):
+            samples.append(
+                (
+                    "ghostship_ai_provider_limit",
+                    {
+                        "provider": provider,
+                        "model": "*",
+                        "limit": name,
+                        "scope": "account",
+                        "basis": basis,
+                    },
+                    float(value),
+                )
+            )
+            samples.append(
+                (
+                    "ghostship_ai_pool_published_limit",
+                    {
+                        "provider": provider,
+                        "limit": name,
+                        "source": pool_published.PUBLISHED_SOURCE,
+                        "checked_at": pool_published.PUBLISHED_CHECKED_AT,
+                    },
+                    float(value),
+                )
+            )
+    return samples
+
+
 def free_route_accounts(
     results: list[SourceResult],
     context: dict[str, Any],
@@ -532,9 +611,11 @@ def ranking_inputs(
     catalog: catalog_module.Catalog,
     context: dict[str, Any],
     measured_windows: list[dict[str, Any]] | None = None,
+    now: float | None = None,
 ) -> dict[str, Any]:
     """Derive the ranking inputs from what the sources reported."""
     measured_windows = measured_windows or []
+    moment = time.time() if now is None else float(now)
     inventory: set[tuple[str, str]] = set()
     for provider, model in context.get("offered_models") or []:
         inventory.add((str(provider), str(model)))
@@ -543,6 +624,7 @@ def ranking_inputs(
     external: dict[tuple[str, str], bool] = {}
     usage: dict[tuple[str, str], float] = {}
     pool_providers: set[str] = set()
+    pool_models: set[tuple[str, str]] = set()
     quota_used: dict[tuple[str, str, str, str], float] = {}
     quota_reset: dict[tuple[str, str, str, str], float] = {}
     for name, labels, value in _iter_samples(results):
@@ -552,6 +634,7 @@ def ranking_inputs(
             inventory.add((provider, model))
             free.add((provider, model))
             pool_providers.add(provider)
+            pool_models.add((provider, model))
         elif name == "ghostship_ai_pool_model_available":
             external[(provider, model)] = value > 0
         elif name == "ghostship_ai_free_model":
@@ -662,13 +745,54 @@ def ranking_inputs(
                 str(labels.get("limit") or ""),
                 str(labels.get("scope") or "account"),
             )
-            pool_limits[key] = float(value)
+            pool_limits[key] = (float(value), "configured")
+        elif name == "ghostship_ai_pool_observed_limit":
+            # A limit the provider's own response headers carried.
+            key = (
+                pool_provider,
+                pool_model,
+                str(labels.get("limit") or ""),
+                str(labels.get("scope") or "account"),
+            )
+            pool_limits.setdefault(key, (float(value), "observed"))
         elif name == "ghostship_ai_pool_model_cooldown_until_seconds":
             pool_cooldowns[(pool_provider, pool_model)] = float(value)
+    # The cooldown is the pool's own evidence that a route is parked. A
+    # cooldown that cannot be true is a broken reading, not a park: it is
+    # reported as an issue and it never blocks a route.
+    provider_cooldown = {
+        provider: value
+        for (provider, model), value in pool_cooldowns.items()
+        if model == "*"
+    }
+    model_cooldown = {
+        key: value
+        for key, value in pool_cooldowns.items()
+        if key[1] != "*"
+    }
+    pool_issues: dict[tuple[str, str], list[str]] = {}
+    for (pool_provider, pool_model) in sorted(pool_models):
+        cooldown = model_cooldown.get(
+            (pool_provider, pool_model), provider_cooldown.get(pool_provider)
+        )
+        if cooldown is None:
+            continue
+        if cooldown > moment + MAX_COOLDOWN_SECONDS:
+            pool_issues.setdefault((pool_provider, pool_model), []).append(
+                "invalid_cooldown"
+            )
+            # The route is not blocked by a cooldown that cannot be true.
+            external[(pool_provider, pool_model)] = True
+        elif cooldown > moment:
+            external[(pool_provider, pool_model)] = False
     pool_evidence: dict[tuple[str, str], dict[str, Any]] = {}
-    for (pool_provider, pool_model), cooldown in sorted(pool_cooldowns.items()):
+    for route in sorted(pool_models):
         pool_evidence.setdefault(
-            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+            route, {"admission": [], "limits": [], "issues": []}
+        )
+    for key, cooldown in sorted(pool_cooldowns.items()):
+        pool_evidence.setdefault(
+            (key[0], key[1]), {"admission": [], "limits": [], "issues": []}
         )
     for (pool_provider, pool_model, workload), admitted in sorted(pool_admissions.items()):
         entry = pool_evidence.setdefault(
@@ -680,10 +804,20 @@ def ranking_inputs(
             (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
         )
         entry["limits"].append(
-            {"limit": limit, "value": value, "scope": scope, "basis": "configured"}
+            {
+                "limit": limit,
+                "value": value[0],
+                "scope": scope,
+                "basis": value[1],
+            }
         )
     for key, entry in pool_evidence.items():
-        entry["cooldown_until"] = pool_cooldowns.get(key)
+        # A provider-wide cooldown belongs to every route of that provider.
+        cooldown = pool_cooldowns.get(key)
+        if cooldown is None:
+            cooldown = provider_cooldown.get(key[0])
+        entry["cooldown_until"] = cooldown
+        entry["issues"] = list(pool_issues.get(key, []))
     return {
         "inventory": sorted(inventory),
         "free": free,
@@ -692,7 +826,10 @@ def ranking_inputs(
         "usage": usage,
         "windows": windows,
         "pool_providers": pool_providers,
+        "pool_models": sorted(pool_models),
         "pool_evidence": pool_evidence,
+        "pool_issues": pool_issues,
+        "pool_limits": pool_limits,
     }
 
 
@@ -715,7 +852,7 @@ def ranking_samples(
     measured_windows: list[dict[str, Any]] = []
     for result in results:
         measured_windows.extend(result.windows)
-    inputs = ranking_inputs(results, catalog, context, measured_windows)
+    inputs = ranking_inputs(results, catalog, context, measured_windows, now=now)
     inventory = inputs["inventory"]
     free = inputs["free"]
     promo = inputs["promo"]
@@ -727,6 +864,19 @@ def ranking_samples(
     context["promo_models"] = promo
     context["pool_evidence"] = inputs["pool_evidence"]
     samples: list[Sample] = []
+    # The limits of every free provider, with the basis of each reading.
+    samples.extend(provider_limit_samples(inputs))
+    # A cooldown that cannot be true is an issue, not a park. The route is
+    # not blocked by it, and the issue is published so a reader sees it.
+    for (provider, model), issues in sorted((inputs.get("pool_issues") or {}).items()):
+        for issue in issues:
+            samples.append(
+                (
+                    "ghostship_ai_pool_cooldown_invalid",
+                    {"provider": provider, "model": model, "issue": issue},
+                    1.0,
+                )
+            )
     three_d_scores: dict[tuple[str, str], dict[str, Any]] = {}
     try:
         three_d = threed_module.collect(t3_home, catalog, inventory, now) or {}

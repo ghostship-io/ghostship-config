@@ -363,6 +363,134 @@ class SnapshotWriteTests(unittest.TestCase):
                 snapshot.write_snapshot(blocked / "routing.json", {"schema": "x"})
 
 
+class PoolLimitTests(unittest.TestCase):
+    """F4: the pool's limits reach the decision and carry their basis."""
+
+    def _result(self, samples):
+        metrics = _load("ai_usage_design_metrics", "metrics")
+        return metrics.SourceResult(
+            source="free_pool", status="ok", reason="ok", metrics=samples
+        )
+
+    def _inputs(self, samples, now=NOW):
+        main = _load("ai_usage_design_main_limits", "main")
+        results = [self._result(samples)]
+        return main, main.ranking_inputs(results, catalog_module.Catalog({}), {}, [], now=now)
+
+    def test_every_limit_is_published_with_its_basis(self):
+        main, inputs = self._inputs(
+            [
+                (
+                    "ghostship_ai_pool_model_info",
+                    {"provider": "kilo", "model": "cohere/north-mini-code:free"},
+                    1.0,
+                ),
+                (
+                    "ghostship_ai_pool_limit",
+                    {"provider": "kilo", "model": "*", "limit": "rpm", "scope": "account"},
+                    2.0,
+                ),
+                (
+                    "ghostship_ai_pool_observed_limit",
+                    {"provider": "kilo", "model": "*", "limit": "rpd", "scope": "account"},
+                    200.0,
+                ),
+            ]
+        )
+        samples = main.provider_limit_samples(inputs)
+        found = {
+            (labels["limit"], labels["basis"]): value
+            for name, labels, value in samples
+            if name == "ghostship_ai_provider_limit"
+        }
+        self.assertEqual(found[("rpm", "configured")], 2.0)
+        self.assertEqual(found[("rpd", "observed")], 200.0)
+        # The provider's own published limit is a third, separate reading.
+        self.assertIn(("rph", "published"), found)
+        self.assertEqual(found[("rph", "published")], 200.0)
+
+    def test_a_documented_limit_without_a_number_is_unknown(self):
+        main = _load("ai_usage_design_main_limits", "main")
+        published = _load("ai_usage_design_pool_published", "pool_published")
+        limits = dict(
+            (name, (value, basis))
+            for name, value, basis in published.published_limits("google")
+        )
+        self.assertEqual(limits["rpm"][1], "unknown")
+        self.assertEqual(limits["rpm"][0], published.UNKNOWN_LIMIT_VALUE)
+
+    def test_an_implausible_cooldown_is_an_issue_and_never_blocks(self):
+        # kilo-keyed's cooldown is a millisecond timestamp read as seconds.
+        impossible = 1001792618529
+        samples = [
+            (
+                "ghostship_ai_pool_model_info",
+                {"provider": "kilo-keyed", "model": "cohere/north-mini-code:free"},
+                1.0,
+            ),
+            (
+                "ghostship_ai_pool_model_available",
+                {"provider": "kilo-keyed", "model": "cohere/north-mini-code:free"},
+                0.0,
+            ),
+            (
+                "ghostship_ai_pool_model_cooldown_until_seconds",
+                {"provider": "kilo-keyed", "model": "*"},
+                float(impossible),
+            ),
+        ]
+        main, inputs = self._inputs(samples)
+        route = ("kilo-keyed", "cohere/north-mini-code:free")
+        self.assertEqual(inputs["pool_issues"].get(route), ["invalid_cooldown"])
+        # The route is not blocked by a cooldown that cannot be true.
+        self.assertTrue(inputs["external"].get(route))
+        evidence = inputs["pool_evidence"][route]
+        self.assertIn("invalid_cooldown", evidence["issues"])
+
+    def test_a_real_cooldown_still_blocks_the_route(self):
+        samples = [
+            (
+                "ghostship_ai_pool_model_info",
+                {"provider": "kilo", "model": "cohere/north-mini-code:free"},
+                1.0,
+            ),
+            (
+                "ghostship_ai_pool_model_available",
+                {"provider": "kilo", "model": "cohere/north-mini-code:free"},
+                0.0,
+            ),
+            (
+                "ghostship_ai_pool_model_cooldown_until_seconds",
+                {"provider": "kilo", "model": "cohere/north-mini-code:free"},
+                float(NOW + 3600),
+            ),
+        ]
+        _main, inputs = self._inputs(samples)
+        route = ("kilo", "cohere/north-mini-code:free")
+        self.assertFalse(inputs["external"].get(route))
+        self.assertNotIn(route, inputs["pool_issues"])
+
+    def test_the_admission_of_a_route_reaches_the_snapshot(self):
+        samples = [
+            (
+                "ghostship_ai_pool_model_info",
+                {"provider": "kilo", "model": "cohere/north-mini-code:free"},
+                1.0,
+            ),
+            (
+                "ghostship_ai_pool_model_admission",
+                {"provider": "kilo", "model": "cohere/north-mini-code:free", "workload": "light"},
+                1.0,
+            ),
+        ]
+        _main, inputs = self._inputs(samples)
+        route = ("kilo", "cohere/north-mini-code:free")
+        self.assertEqual(
+            inputs["pool_evidence"][route]["admission"],
+            [{"workload": "light", "admitted": True}],
+        )
+
+
 class FreeTierTests(unittest.TestCase):
 
     POOL_MODEL = ("kilo", "cohere/north-mini-code:free")
