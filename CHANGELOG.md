@@ -1,9 +1,13 @@
 # Changelog
 
-## [3.17.97] - 2026-10-22
+## [3.17.98] - 2026-10-22
 
 - AI usage: a provider whose routes hit limit failures now shows its learned window and budget, instead of "no limit seen", in the ranking and in `routing.json` `quota.accounts`. A route of the provider that was never refused filed its own no-failure window under the provider key and hid the refused route's learned window; the quiet route no longer stands in for a refused one of its provider.
 - AI usage: the inferred windows reach `quota.accounts` at all. The account section was filled from the provider-reported windows only, so a learned window never arrived, and a refused route lost its record as soon as it had no ranked row. Each inferred record carries `kind: inferred`, `evidence: inferred`, its basis, and the window, budget, unit, scope, episode count and state it was measured from; a model-scoped limit keeps its model in `applies_to`, and an inferred window with a known share now counts as the provider's remaining capacity instead of an unknown window.
+
+## [3.17.97] - 2026-10-22
+
+- ai-usage: the free providers are read under the free pool's names. OpenCode reaches the free pool through an integration of its own (kilo-free, groq-free, cf-workers and the other "-free" ids), and the reader's map named none of them, so their requests were counted unmapped and never emitted, and the inferred limits never saw their usage. The map now carries the aliases of the pool's provider registry, and the event cache is at version two: a version one cache holds no free row, so it is discarded and the 35 days are read again.
 
 ## [3.17.96] - 2026-10-22
 

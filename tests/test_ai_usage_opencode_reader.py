@@ -19,6 +19,32 @@ ROOT = Path(__file__).resolve().parents[1]
 COLLECTOR = ROOT / "modules" / "self-hosted" / "ai-usage" / "collector"
 FIXTURE = ROOT / "tests" / "fixtures" / "ai-usage" / "opencode-messages.json"
 
+# The free providers OpenCode reaches through their own integrations, and the
+# free pool's provider each one of them belongs to. The table comes from the
+# pool's provider registry: the integration is the way OpenCode reaches the
+# provider, the pool's name is the name the collector publishes.
+FREE_PROVIDER_ALIASES = {
+    "kilo-free": "kilo",
+    "kilo-keyed-free": "kilo-keyed",
+    "groq-free": "groq",
+    "nvidia-free": "nvidia",
+    "google-free": "google",
+    "cf-workers": "cloudflare-workers-ai",
+    "cloudflare-free": "cloudflare-workers-ai",
+    "vercel-free": "vercel",
+    "requesty-free": "requesty",
+    "huggingface-free": "huggingface",
+    "cohere-free": "cohere",
+    "mistral-free": "mistral",
+    "github-models-free": "github-models",
+    "zai-free": "zai",
+    "orcarouter-free": "orcarouter",
+    "upstage-free": "upstage",
+    "inception-free": "inception",
+    "poolside-free": "poolside",
+    "ovh-free": "ovh",
+}
+
 _MODULE = None
 
 
@@ -319,13 +345,97 @@ class ProviderMappingTests(unittest.TestCase):
             with self.subTest(provider=provider_id):
                 self.assertEqual(reader().provider_for(provider_id), name)
 
+    def test_the_free_provider_aliases_are_mapped(self):
+        for provider_id, name in FREE_PROVIDER_ALIASES.items():
+            with self.subTest(provider=provider_id):
+                self.assertEqual(reader().provider_for(provider_id), name)
+
     def test_an_unmapped_provider_is_not_mapped(self):
-        for provider_id in ("kilo", "kilo-free", "groq-free", "cf-workers", "ghm"):
+        for provider_id in ("kilo", "ghm"):
             with self.subTest(provider=provider_id):
                 self.assertIsNone(reader().provider_for(provider_id))
 
     def test_an_unknown_provider_is_not_mapped(self):
         self.assertIsNone(reader().provider_for("a-provider-nobody-knows"))
+
+
+class FreeProviderAliasTests(unittest.TestCase):
+    """The free integrations read under the free pool's provider name."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.state = Path(self.directory.name) / "state"
+        self.state.mkdir()
+        self.cache_path = self.state / "opencode-events.json"
+        self.now = 1800000000.0
+
+    def free_row(self, moment_ms, provider="kilo-free", model="examplevendor/example-model:free", finish="stop", error=None):
+        """One request record of a free integration, in the shape OpenCode writes."""
+        data = {
+            "model": {"providerID": provider, "id": model},
+            "time": {"created": moment_ms},
+            "finish": finish,
+        }
+        if error is not None:
+            data["error"] = error
+        return {
+            "id": "msg_free_alias",
+            "session_id": "ses_example_8",
+            "type": "assistant",
+            "time_created": moment_ms,
+            "data": data,
+        }
+
+    def build(self, rows):
+        path, connection = build_database(self.directory.name, rows)
+        self.addCleanup(connection.close)
+        return path
+
+    def test_a_free_alias_row_becomes_one_event(self):
+        moment = int((self.now - 2 * 86400) * 1000)
+        path = self.build([self.free_row(moment)])
+        result = reader().read_events(path, self.now)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["counts"]["rows_read"], 1)
+        self.assertEqual(result["counts"]["rows_unmapped"], 0)
+        self.assertEqual(len(result["events"]), 1)
+        event = result["events"][0]
+        self.assertEqual(event["provider"], "kilo")
+        self.assertEqual(event["model"], "examplevendor/example-model:free")
+        self.assertEqual(event["at"], moment / 1000.0)
+        self.assertEqual(event["outcome"], "success")
+
+    def test_a_version_one_cache_is_discarded_and_its_rows_are_read_again(self):
+        moment = int((self.now - 2 * 86400) * 1000)
+        path = self.build([self.free_row(moment)])
+        cache = {
+            "version": 1,
+            "complete_since": self.now - 3 * 86400,
+            "cursor": int((self.now - 3600) * 1000),
+            "events": [],
+        }
+        self.cache_path.write_text(json.dumps(cache), encoding="utf-8")
+        result = reader().collect_events(path, self.cache_path, self.now)
+        providers = [event["provider"] for event in result["events"]]
+        self.assertIn("kilo", providers)
+        moments = [event["at"] for event in result["events"] if event["provider"] == "kilo"]
+        self.assertIn(moment / 1000.0, moments)
+        written = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        self.assertEqual(written["version"], 2)
+
+    def test_the_free_alias_cache_holds_no_error_text(self):
+        moment = int((self.now - 2 * 86400) * 1000)
+        error = failure(
+            "provider.quota", "you (example-user) have reached your session usage limit"
+        )
+        path = self.build([self.free_row(moment, finish="error", error=error)])
+        result = reader().collect_events(path, self.cache_path, self.now)
+        providers = [event["provider"] for event in result["events"]]
+        self.assertIn("kilo", providers)
+        written = self.cache_path.read_text(encoding="utf-8")
+        self.assertNotIn("example-user", written)
+        self.assertNotIn("usage limit", written)
 
 
 class FixtureDatabaseTests(unittest.TestCase):
@@ -1097,9 +1207,22 @@ class CacheRobustnessTests(unittest.TestCase):
         result = self.run_reader()
         self.assertEqual(result["complete_since"], self.now - 3 * 86400)
 
+    def test_a_cache_of_another_version_is_discarded(self):
+        cache = {
+            "version": reader().CACHE_VERSION - 1,
+            "complete_since": self.now - 10 * 86400,
+            "cursor": int((self.now - 3600) * 1000),
+            "events": [],
+        }
+        self.cache_path.write_text(json.dumps(cache), encoding="utf-8")
+        result = self.run_reader()
+        # The history of the discarded cache is not trusted: the reader starts
+        # the backfill again from its own newest slice.
+        self.assertEqual(result["complete_since"], self.now - 3 * 86400)
+
     def test_future_dated_events_are_dropped(self):
         cache = {
-            "version": 1,
+            "version": reader().CACHE_VERSION,
             "complete_since": self.now - 3 * 86400,
             "cursor": int((self.now - 3600) * 1000),
             "events": [
@@ -1128,7 +1251,7 @@ class CacheRobustnessTests(unittest.TestCase):
 
     def test_a_cache_from_the_future_is_not_trusted_for_its_history(self):
         cache = {
-            "version": 1,
+            "version": reader().CACHE_VERSION,
             "complete_since": self.now + 86400,
             "cursor": int((self.now - 3600) * 1000),
             "events": [],
