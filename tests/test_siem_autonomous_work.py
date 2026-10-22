@@ -1031,7 +1031,12 @@ class DesignContractTests(unittest.TestCase):
             ranges = [(m['options']['from'], m['options']['to'],
                        m['options']['result']['color'])
                       for m in defaults['mappings'] if m['type'] == 'range']
-            self.assertEqual(ranges, [(0, 0.1, '#d03b3b'), (0.1, 0.3, '#fab219'),
+            # In a tier column a route with 0% left is spent, not critical:
+            # it is grey with its reason. On a provider meter 0% left is
+            # critical, because the provider itself is spent.
+            low = 0.0001 if pid in (40, 41, 42, 43) else 0
+            self.assertEqual(ranges, [(low, 0.1, '#d03b3b'),
+                                       (0.1, 0.3, '#fab219'),
                                        (0.3, 1, '#0ca30c')], pid)
             unknown = [m for m in defaults['mappings'] if m['type'] == 'value']
             self.assertEqual(unknown[0]['options']['-1']['text'], 'Limits unknown', pid)
@@ -1064,9 +1069,9 @@ class DesignContractTests(unittest.TestCase):
         # The display name joins the provider and the model of the row.
         self.assertEqual(by_id[40]['fieldConfig']['defaults']['displayName'],
                          '${__field.labels.provider} · ${__field.name}')
+        # The 3D reserve is a label of the tier rows, joined on the raw id.
         bulk = ' '.join(t['expr'] for t in by_id[41]['targets'])
         self.assertIn('ghostship_ai_model_reserved', bulk)
-        self.assertIn('3D reserve', bulk)
         # The provider card shows the allowance and the Paced Availability.
         names = []
         for override in by_id[44]['fieldConfig']['overrides']:
@@ -1141,13 +1146,22 @@ class NativeStoreTests(unittest.TestCase):
         self.assertEqual({row['metric']['provider']: float(row['value'][1]) for row in providers},
                          {'claude': 0, 'cursor': -1},
                          'Exhausted and unknown providers must remain distinct')
-        for target, expected in zip(by_id[41]['targets'],
-                                    [{'current': 1, 'unknown': 2}, {'current': .8, 'unknown': -1}]):
-            expr = target['expr'].replace('$provider', '.*')
-            with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
-                result = json.load(response)['data']['result']
-            self.assertEqual({r['metric']['model']: float(r['value'][1]) for r in result}, expected,
-                             'Old series inside the lookback must not become current recommendations')
+        # The tier column lists every ranked route of the tier: the
+        # available ones first, the spent or unknown ones below them.
+        expr = by_id[41]['targets'][0]['expr'].replace('$provider', '.*')
+        with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
+            result = json.load(response)['data']['result']
+        keys = {r['metric']['model']: float(r['value'][1]) for r in result}
+        self.assertEqual(set(keys), {'current', 'other-provider'},
+                         'Every ranked route of the tier is listed, and an old one is not')
+        self.assertGreater(keys['current'], keys['other-provider'],
+                           'An available route sorts above a spent one')
+        expr = by_id[41]['targets'][1]['expr'].replace('$provider', '.*')
+        with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
+            result = json.load(response)['data']['result']
+        self.assertEqual({r['metric']['model']: float(r['value'][1]) for r in result},
+                         {'current': .8, 'other-provider': -1},
+                         'A route with no measured allowance reads unknown, never zero')
         expr = by_id[10]['targets'][0]['expr'].replace('$provider', 'ollama')
         for selected_time, expected in [(now, {'current'}), (now-60, {'obsolete'})]:
             with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode(
@@ -1277,6 +1291,56 @@ class NativeStoreTests(unittest.TestCase):
         # The table names the model the way a person would say it.
         self.assertIn('Claude Opus 5.5', models)
         self.assertNotIn('stale-model', models)
+
+    def test_tier_column_keeps_an_exhausted_route_last_with_its_reason(self):
+        """Defect: an exhausted route is hidden, sorted above the available ones, or shown without its reason."""
+        import re
+        now = int(time.time())
+        stamp = now * 1000
+        rows = [f'ghostship_ai_collection_duration_seconds 1 {stamp}']
+        # One available route and one exhausted route in the same tier.
+        rows.append(f'ghostship_ai_model_rank{{tier="bulk",provider="claude",model="claude-haiku-5-5"}} 1 {stamp}')
+        rows.append(f'ghostship_ai_model_rank{{tier="bulk",provider="grok",model="grok-4.6"}} 2 {stamp}')
+        rows.append(f'ghostship_ai_model_capacity_remaining{{provider="claude",model="claude-haiku-5-5"}} 0.76 {stamp}')
+        rows.append(f'ghostship_ai_model_capacity_remaining{{provider="grok",model="grok-4.6"}} 0 {stamp}')
+        rows.append(f'ghostship_ai_model_paced_availability{{provider="claude",model="claude-haiku-5-5"}} 0.08 {stamp}')
+        rows.append(f'ghostship_ai_model_paced_availability{{provider="grok",model="grok-4.6"}} 0 {stamp}')
+        rows.append(f'ghostship_ai_model_capacity_expires_in_seconds{{provider="grok",model="grok-4.6"}} {now+3600} {stamp}')
+        rows.append(f'ghostship_ai_provider_capacity_remaining_ratio{{provider="grok",binding="session"}} 0 {stamp}')
+        rows.append(f'ghostship_ai_entitlement_used_ratio{{provider="grok",account="a",model="_",window="session",quota="session",source="t3",entitlement="grok:a:_:session:session"}} 1 {stamp}')
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        vm = self.server(os.environ['GHOSTSHIP_TEST_VMETRICS'], tmp.name + '/metrics')
+        urllib.request.urlopen(urllib.request.Request(vm + '/api/v1/import/prometheus',
+            data='\n'.join(rows).encode()), timeout=3).close()
+        urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
+        page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
+        by_id = panels_by_id(page)
+
+        def query(expr):
+            url = vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr})
+            with urllib.request.urlopen(url, timeout=5) as response:
+                return json.load(response)['data']['result']
+
+        def column(target_index):
+            expr = by_id[41]['targets'][target_index]['expr'].replace('$provider', '.*')
+            return query(expr)
+
+        order = column(0)
+        left = column(1)
+        models = {row['metric']['model'] for row in left}
+        self.assertEqual(models, {'Claude Haiku 5.5', 'Grok 4.6 · session limit'},
+                         'An exhausted route stays visible in its tier, with its reason')
+        exhausted = [row for row in left if row['metric']['model'].startswith('Grok 4.6')]
+        self.assertEqual(len(exhausted), 1)
+        self.assertAlmostEqual(float(exhausted[0]['value'][1]), 0.0,
+                               msg='An exhausted route shows 0% left')
+        self.assertEqual(exhausted[0]['metric'].get('why'), 'session limit',
+                         'An exhausted route carries the reason it is spent')
+        keys = {row['metric']['model']: float(row['value'][1]) for row in order}
+        self.assertIn('Grok 4.6 · session limit', keys)
+        self.assertLess(keys['Grok 4.6 · session limit'], keys['Claude Haiku 5.5'],
+                        'The exhausted route sorts below every available route')
 
     def server(self, binary, directory):
         with socket.socket() as sock:
