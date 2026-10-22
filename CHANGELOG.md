@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.90] - 2026-10-22
+
+- Providers page: the Bulk and Free tables list the ranked winners and the routes that are out, as the concept shows. Live, every tier member followed the winners, so Bulk ran to about thirty rows and scrolled inside its panel; the other members remain in the collapsed "Why this order" rows.
+
 ## [3.17.89] - 2026-10-22
 
 - Providers page: a provider without a capacity reading sorts below every provider with one, as the page says ("exhausted and unknown last"), whichever series made it appear; before, a provider with only an entitlement reset sorted among the readings.
