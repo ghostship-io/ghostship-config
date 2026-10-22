@@ -54,8 +54,10 @@ let
     model_rankings_path = "/run/ghostship-integrations/model-routing.json";
     repositories = lib.mapAttrs (_: r: r // {
       base = "main";
+      # Off until the owner approves the ranking for routing: the review
+      # routes are frontier (Codex/Claude) and their quota is reserved.
       automatic_review = {
-        enabled = true;
+        enabled = false;
         debounce_seconds = 30;
         max_active = 1;
         timeout_seconds = 1800;
