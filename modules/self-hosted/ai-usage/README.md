@@ -104,9 +104,14 @@ normalized capability is unknown and there is no combined 3D value, while the
 raw Elo, its interval and the source stay visible.
 
 The 3D value is cost-aware with the same published 80/20 policy: `0.80 *
-normalized Elo + 0.20 * 1 / (1 + AA-3D cost per task)`. It uses the AA-3D
-cost, never the language benchmark's cost per task. A missing 3D cost leaves
-the combined value unknown. The tier is still gated by proven image input and
+normalized Elo + 0.20 * 1 / (1 + cost per task)`. The cost is the AA-3D cost
+per task when the feed publishes it (`cost_source: aa3d`); when it does not,
+the owner explicitly approved the normal Artificial Analysis cost per task of
+the same model as a proxy, published as
+`cost_source: artificialanalysis_intelligence` with `proxy: true` and the
+statement that it is not a measured 3D cost. The AA-3D page shows a cost
+graph without enumerated values, so nothing is read from it or extrapolated.
+Missing both costs leaves the combined value unknown. The tier is still gated by proven image input and
 excludes Astra and Fable from selection.
 
 ### 3D evidence

@@ -535,7 +535,7 @@ class AA3DContractTests(unittest.TestCase):
         self.assertEqual(row["three_d"]["elo"], 1200.0)
         self.assertEqual(row["three_d"]["normalization_state"], "unknown")
 
-    def test_without_the_3d_cost_the_value_is_unknown_and_the_raw_stays(self):
+    def test_without_the_3d_cost_the_language_cost_is_an_explicit_proxy(self):
         models = visual_model("codex", "gpt-6.1-sol")
         data = build(
             models,
@@ -548,10 +548,35 @@ class AA3DContractTests(unittest.TestCase):
             ),
         )
         row = data["candidates"][0]
+        value_3d = row["value_3d"]
+        self.assertEqual(value_3d["cost_source"], "artificialanalysis_intelligence")
+        self.assertTrue(value_3d["proxy"])
+        self.assertIn("not a measured 3D cost", value_3d["cost_basis"])
+        # The approved proxy is used explicitly, with the language cost.
+        self.assertAlmostEqual(
+            value_3d["value"], round(0.8 * 0.5 + 0.2 * (1 / 1.1), 6), places=6
+        )
+        self.assertEqual(value_3d["raw"]["cost_per_task"], 0.10)
+        self.assertIsNone(value_3d["raw"]["aa3d_cost_per_task"])
+        self.assertEqual(row["three_d"]["elo"], 1200.0)
+
+    def test_missing_both_costs_leaves_no_full_value(self):
+        models = visual_model("codex", "gpt-6.1-sol")
+        data = build(
+            models,
+            [record("gpt-6-1-sol", 51.8, None)],
+            aa_3d=self._load(
+                self._document(
+                    [self._record(cost_per_task=None)],
+                    normalization={"kind": "min-max", "floor": 1000.0, "ceiling": 1400.0},
+                )
+            ),
+        )
+        row = data["candidates"][0]
         self.assertIsNone(row["value_3d"]["value"])
         self.assertEqual(row["value_3d"]["missing"], ["cost_per_task"])
+        self.assertIsNone(row["value_3d"]["cost_source"])
         self.assertEqual(row["three_d"]["elo"], 1200.0)
-        self.assertIsNone(row["three_d"]["cost_per_task"])
 
     def test_an_explicit_source_normalized_value_is_used(self):
         models = visual_model("codex", "gpt-6.1-sol")

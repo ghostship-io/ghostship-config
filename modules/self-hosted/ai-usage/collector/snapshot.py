@@ -1690,24 +1690,36 @@ def _three_d_value(row: Mapping[str, Any]) -> dict[str, Any]:
     """The cost-aware 3D value: 0.80 * normalized Elo + 0.20 * efficiency.
 
     The capability input is the AA-3D Elo under the source's own explicit
-    normalization, and the efficiency input is the AA-3D cost per task. The
-    language benchmark's cost per task is never substituted. Without the
-    normalization or the 3D cost the combined value is unknown, while the raw
-    Elo, its interval and the source stay visible.
+    normalization. The efficiency input is the AA-3D cost per task when the
+    feed publishes it. When it does not, the owner explicitly approved the
+    normal Artificial Analysis cost per task of the same model as a proxy:
+    it is published with `cost_source=artificialanalysis_intelligence` and
+    `proxy=true`, and it is never called a measured 3D cost. Missing both
+    costs leaves the combined value unknown, while the raw Elo, its interval
+    and the source stay visible.
     """
     three_d = row.get("three_d") or {}
+    aa = row.get("aa") or {}
     elo = three_d.get("elo")
     normalized = three_d.get("normalized")
-    cost = three_d.get("cost_per_task")
+    aa_3d_cost = three_d.get("cost_per_task")
+    language_cost = aa.get("cost_per_task")
+    cost = aa_3d_cost if isinstance(aa_3d_cost, (int, float)) and not isinstance(aa_3d_cost, bool) else None
+    cost_source = "aa3d" if cost is not None else None
+    proxy = False
+    if cost is None and isinstance(language_cost, (int, float)) and not isinstance(language_cost, bool):
+        cost = float(language_cost)
+        cost_source = "artificialanalysis_intelligence"
+        proxy = True
+    if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+        if not math.isfinite(float(cost)) or float(cost) < 0.0:
+            cost = None
+            proxy = False
+            cost_source = None
     components = {
         "elo": normalized if isinstance(normalized, (int, float)) else None,
         "cost_per_task": (
-            1.0 / (1.0 + float(cost))
-            if isinstance(cost, (int, float))
-            and not isinstance(cost, bool)
-            and math.isfinite(float(cost))
-            and float(cost) >= 0.0
-            else None
+            1.0 / (1.0 + float(cost)) if cost is not None else None
         ),
     }
     missing = [name for name, value in components.items() if value is None]
@@ -1724,10 +1736,24 @@ def _three_d_value(row: Mapping[str, Any]) -> dict[str, Any]:
             for name, component in components.items()
         },
         "weights": {"elo": 0.80, "cost_per_task": 0.20},
+        "cost_source": cost_source,
+        "proxy": proxy,
+        "cost_basis": (
+            "the AA-3D cost per task"
+            if cost_source == "aa3d"
+            else (
+                "the normal Artificial Analysis cost per task of the same "
+                "model, an owner-approved proxy and not a measured 3D cost"
+                if proxy
+                else "no cost per task"
+            )
+        ),
         "raw": {
             "elo": elo,
             "elo_interval": three_d.get("elo_interval") or {},
             "cost_per_task": cost,
+            "aa3d_cost_per_task": aa_3d_cost,
+            "language_cost_per_task": language_cost,
             "normalized": normalized,
             "normalization": three_d.get("normalization"),
             "normalization_state": three_d.get("normalization_state"),
@@ -1737,8 +1763,8 @@ def _three_d_value(row: Mapping[str, Any]) -> dict[str, Any]:
         },
         "missing": missing,
         "note": (
-            "the AA-3D cost per task and the AA-3D Elo only; an Elo is "
-            "normalized only by the source's published transform"
+            "the AA-3D Elo under the source's published normalization; an Elo "
+            "is not a 0..100 index and is never divided by 100"
         ),
     }
 
