@@ -2,6 +2,7 @@
 
 ## [3.17.49] - 2026-10-22
 
+- GitHub-launched threads lead with the chief reviewer (Claude Opus 5.5), with Codex GPT-6.1-Sol as the backup, per the owner's role policy.
 - Make Grafana the autonomous-work landing page, with direct navigation among work, host, security and pipeline dashboards. Read bounded T3, broker, runtime and systemd observations into the existing Victoria stores, with source/freshness limits and no transcripts or new orchestration service.
 - Configure revision-bound security/integration review in existing repository owners and approved usage-aware model routing. Prefer the owner's OpenCode MiniMax Flash Free route; preserve provider-specific options and explicit deployment approval. Correct the canonical ROM repository name and use actual NixOS CI check names for proof.
 - Close observed newsletter failure episodes independently of ntfy resolution delivery. A relapse gets a fresh persisted incident ID and a firing notification after the pending resolution succeeds. A compact sequence retains every unacknowledged handoff across repeated recovery/relapse cycles, retries one per observation even while healthy, and preserves existing episode IDs. Real-notifier and pinned-coordinator fault injection covers the relapse, bounded pending state, and a lost durable acknowledgement.
