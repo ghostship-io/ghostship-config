@@ -69,7 +69,7 @@
       },
       "options": {
         "afterRender": "",
-        "content": "<div class=\"routing\"><span class=\"title\">Model routing</span>{{#each data}}<span class=\"chip {{#if (eq routing 1)}}on{{else}}off{{/if}}\">{{#if (eq routing 1)}}Routing ON{{else}}Routing OFF \u00b7 awaiting your approval{{/if}}</span>{{/each}}<span class=\"asof\">live data {{variable \"__to:date:D MMM HH:mm\"}} UTC</span></div>",
+        "content": "<div class=\"routing\"><span class=\"title\">Model routing</span>{{#each data}}<span class=\"chip {{#if (eq routing 1)}}on{{else}}off{{/if}}\">{{#if (eq routing 1)}}Routing ON{{else}}Routing OFF \u00b7 awaiting your approval{{/if}}</span>{{/each}}<span class=\"asof\">live data {{utcStamp (variable \"__to\")}} UTC</span></div>",
         "defaultContent": "<div class=\"routing\"><span class=\"title\">Model routing</span><span class=\"chip off\">Routing OFF \u00b7 awaiting your approval</span><span class=\"asof\">live data {{variable \"__to:date:D MMM HH:mm\"}} UTC</span></div>",
         "editor": {
           "format": "none",
@@ -78,7 +78,7 @@
         "editors": [],
         "externalStyles": [],
         "contentPartials": [],
-        "helpers": "",
+        "helpers": "handlebars.registerHelper('utcStamp', function (value) {\n  // The as-of time in UTC, from the dashboard's end time in epoch milliseconds.\n  // Only a number is formatted here; no label text is read.\n  const moment = new Date(Number(value));\n  if (isNaN(moment.getTime())) { return ''; }\n  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\n  const pad = (n) => String(n).padStart(2, '0');\n  return moment.getUTCDate() + ' ' + months[moment.getUTCMonth()] + ' ' + pad(moment.getUTCHours()) + ':' + pad(moment.getUTCMinutes());\n});\n",
         "renderMode": "allRows",
         "status": "",
         "styles": "\n.routing { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }\n.routing .title { font-size: 18px; font-weight: 600; }\n.routing .chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid rgba(127,127,127,0.5); opacity: 0.85; white-space: nowrap; }\n.routing .chip.off { border-color: #d97706; color: #d97706; opacity: 1; }\n.routing .chip.on { border-color: #2f9e44; color: #2f9e44; opacity: 1; }\n.routing .asof { font-size: 12px; opacity: 0.7; margin-left: auto; }\n@media (max-width: 520px) { .routing .asof { display: none; } .routing .chip { font-size: 11px; padding: 2px 7px; } }\n",
