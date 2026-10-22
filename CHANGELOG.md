@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.59] - 2026-10-22
+
+- The GitHub coordinator's hold lives in the host configuration. It was held off with a runtime drop-in under `/run`, and an activation clears runtime unit overrides, so the 2026-10-22 deploy started it and it replayed part of the deployment backlog before it was stopped again. `ghostship.githubEngineering.coordinatorAutoStart` (default on) now decides whether boot or an activation starts it, and chill-penguin sets it off until the replay fix passes a backlog replay. The webhook receiver keeps spooling while the coordinator is held.
+
 ## [3.17.58] - 2026-10-22
 
 - Main's Fleet checks are green again. The regression tests run inside the Nix check derivation, whose sandbox holds the store and little else, and two assumptions broke there. The activation helper starts with `#!/usr/bin/env bash`, and the sandbox has no `/usr/bin/env`, so the kernel could not resolve the shebang and the test reported the helper as missing although it was in the tree. The test now runs the helper with the interpreter its shebang names. The agent SSH command guard started every session in the login shell of the account the session ran as, and that account names a shell the sandbox does not have, so every session the guard started failed. The guard now falls back to a shell that exists when the account's shell is missing, and it accepts the shell the host pins.
