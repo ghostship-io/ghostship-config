@@ -1,11 +1,18 @@
 # Changelog
 
-## [3.17.80] - 2026-10-22
+## [3.17.81] - 2026-10-22
 
 - The inferred capacity of a route no longer merges the routes that were never refused into the account of the provider. A route that was never refused has no limit of its own: it is measured on its own, with its whole allowance and no pace, and its use never ends the episode of another route. On live data the free routes of the Go provider were refused by nothing and still came out of the account of their paid models, which are refused and never recover.
 - The refusals of a route that never recovered are now evidence for its scope. The scope of a route is read from the episodes of its account group, the open one included, so another model of the provider that works right after the refusal shows that the limit was the model's own. The paid models of the Go provider were refused, never recovered, and the free route of the same provider worked seconds later: they came out as one account with a minute long window and a budget of a few thousand tokens, and they are now the models that were refused, with no window read out of their failures.
 - A refusal that opens the record of a group is the refusal of the group itself, so the episode of the group starts at that refusal. A record that began with a refusal produced no episode at all, because the scan looked for the first refusal after the first use: a route that was refused before it ever came back had no open episode, its scope came out unknown, and it was measured across the account, so the refusal of one model looked like the refusal of the whole provider.
 - The span of an open episode runs from after its refusal to the reading, so the refusal itself is never evidence of the scope by itself. Two routes of a provider that were refused at the same instant have nothing in that span, and the scope of each is unknown.
+
+## [3.17.80] - 2026-10-22
+
+- CI parses every AppArmor profile the host loads. The check parsed six profiles of the thirty-five in the repository, so a policy the kernel would refuse could pass CI: PR #167 named a thirteenth transition in the agent desktop policy, `apparmor_parser` refused the whole policy, the reload failed, and the kernel kept the previous rules. The check now evaluates `nixosConfigurations.chill-penguin` and parses every policy the host loads, exactly as the host renders it, with the include tree the host resolves `<tunables/global>` and the abstractions against. All thirty-six loaded policies parse.
+- The include tree is read the same way on every machine. The host pins its own platform, so the AppArmor package its parser searches is a store path of that platform: on the x86_64 CI it could not be built, `nix build` ended in nothing without an error, and the check failed on a directory that was never there. The check reads the copy of the machine it runs on instead, the same profile sources, realises it before reading it, and refuses a package version that is not the host's.
+- The named transition budget is held. `apparmor_parser` 5.x keeps at most twelve distinct named exec transition targets in one profile block, and the limit lives in that block's exec table, not in the file. The check counts the transitions of every profile block, fails above twelve, and prints the count of every policy so an author sees the budget before it runs out. The agent desktop policy names twelve of them, which is the whole budget.
+- Every profile file in the repository belongs to a policy or to an allowlist with a reason. A new file that no policy loads fails the check until it is declared, so a profile cannot be added without a policy to load it.
 
 ## [3.17.79] - 2026-10-22
 
