@@ -67,8 +67,9 @@ change them in a PR. Grafana alerting is off: vmalert and the bridge alert.
 - `ghostship_siemui_net` (10.89.22.0/24) is internal: no route out, and no
   host service but DNS. Its members are Grafana, vmauth and cloudflared;
   vmauth alone also joins `ghostship_siem_net`.
-- The image is distroless and pinned by digest. The VictoriaLogs plugin is
-  vendored by hash. Plugin installs, preinstalls, update checks, key
+- The image is distroless and pinned by digest. The VictoriaLogs datasource
+  and the Business Text panel (6.3.0) are vendored by hash and unpacked into
+  the read-only plugin bundle. Plugin installs, preinstalls, update checks, key
   retrieval, telemetry, snapshots and public dashboards are off.
 
 ## What is collected
