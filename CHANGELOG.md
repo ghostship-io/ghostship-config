@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.88] - 2026-10-22
+
+- The Keep broker's agent account address is supplied by the deployment (`GHOSTSHIP_KEEP_AGENT_EMAIL` in `/etc/ghostship/owner-identity.env`), like the personal account, so the repository names no account address.
+
 ## [3.17.87] - 2026-10-22
 
 - AI usage collector: every model of the Providers page carries a human name. The collector publishes one `ghostship_ai_model_info{provider,model,name}` series per candidate model, and the name is the first one that exists: the label T3 Code's model catalog gives the model, else the Artificial Analysis record's name without its reasoning condition ("GLM-5.3 Flash (High)" is the model "GLM-5.3 Flash"), else the raw model id. The name is never empty, so every row says what the model is. The Artificial Analysis name comes from the exact identity binding, the same record the quality score comes from: a record whose name only starts with the model id is a different model, and its name is never borrowed. The name label is published exactly, with its spaces and its punctuation, escaped the way the text exposition format requires; every other label keeps the sanitised form it has today.
