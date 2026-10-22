@@ -16,6 +16,7 @@ in
   ghostship.privateIntegrations.skillsReconcile.enable = true;
   ghostship.githubEngineering.enable = true;
   ghostship.newsletterHealth.enable = true;
+  ghostship.bootGenerationDrift.enable = true;
 
   ghostship.host.roles = {
     server = true;
