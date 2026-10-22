@@ -303,12 +303,24 @@ class RoutingSwitchModuleTests(unittest.TestCase):
             "options.ghostship.aiUsage.routing.enabled",
             MODULE.read_text(encoding="utf-8"),
         )
+        # The owner's decision lives in the configuration of the host that
+        # runs the collector, as one explicit assignment; no other file may
+        # set it.
+        host = REPO / "hosts/chill-penguin/default.nix"
         others = []
         for path in sorted(REPO.rglob("*.nix")):
             if ".git" in path.parts or path == MODULE:
                 continue
-            if "aiUsage" in path.read_text(encoding="utf-8"):
-                others.append(str(path.relative_to(REPO)))
+            text = path.read_text(encoding="utf-8")
+            if "aiUsage" not in text:
+                continue
+            if path == host:
+                lines = [line.strip() for line in text.splitlines() if "aiUsage" in line]
+                self.assertEqual(
+                    lines, ["ghostship.aiUsage.routing.enabled = true;"], str(path)
+                )
+                continue
+            others.append(str(path.relative_to(REPO)))
         self.assertEqual(others, [])
 
 
