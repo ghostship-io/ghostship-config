@@ -104,6 +104,11 @@ for the last 35 days, the whole read has a wall clock limit of 20 seconds
 that aborts the query when it is reached, and the connection is closed on
 every path so no read transaction is left open.
 
+The query asks only for the fields the reader uses: SQLite extracts them
+from the record with its own JSON functions, so the whole record, about
+27 KB a row, never travels into Python. The error's own words come with
+the extraction and are classified in memory.
+
 The text of a provider's error is read in memory, to pick the outcome, and
 it never leaves the process: it is not stored, not returned, not logged and
 not in an event. A real limit message names the account it belongs to.
