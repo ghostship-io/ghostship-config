@@ -57,7 +57,7 @@ class PinGuardTests(unittest.TestCase):
 
     def lock(self, revision):
         return {"nodes": {guard.INPUT: {"locked": {
-            "type": "github", "owner": "owner", "repo": "ghostship-agent", "rev": revision}}}}
+            "type": "github", "owner": "example-org", "repo": "example-agent", "rev": revision}}}}
 
     def write_lock(self, name, revision):
         path = self.root / name

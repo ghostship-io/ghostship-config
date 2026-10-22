@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.57] - 2026-10-22
+
+- Test fixtures hold no personal identifier. The command guard's test used the owner's key line, with the owner's handle and home host, in a public repository; it now uses a role placeholder with synthetic key material, and the agent pin fixture uses a synthetic organisation. The command guard's regression tests also prove that the `nix-daemon --stdio` command of the `ssh-ng` transport and an interactive session, which sends no command at all, both pass the guard.
+
 ## [3.17.56] - 2026-10-22
 
 - Test fixture lint: the tests read only committed fixtures. `scripts/check-test-fixtures.py` fails the check when a test reads a scratch path such as `/tmp`, `/var/tmp`, `/home` or `/workspace`, which exists on the machine that runs the test rather than in the repository, and which is how pull request #190's `test_ai_usage_aa_pull.py` read `/tmp/aa-pull/raw` and failed in CI. A test that needs such a path builds it in a temporary directory, or states on the line why the reference is harmless with a `# fixture-path-ok: <reason>` comment.

@@ -60,7 +60,9 @@ def main():
                 raise SystemExit('Unsupported private source directory: ' + name)
             checkout = root/('checkout-' + suffix)
             env = private_source.ssh_environment(key, known)
-            private_source.fetch_source(checkout, 'git@github.com:owner/' + spec['repo'] + '.git',
+            # The owner was checked above, so the URL carries no name of its own.
+            private_source.fetch_source(checkout,
+                                        'git@github.com:' + locked['owner'] + '/' + spec['repo'] + '.git',
                                         locked['rev'], env)
             key.unlink()
             archive = root/(suffix + '.tar')

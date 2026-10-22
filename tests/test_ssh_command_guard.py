@@ -26,6 +26,7 @@ ALLOWED = [
     "readlink -f /run/current-system",
     "cat /root/t3-force-restart-result.json",
     "nix-store --serve",
+    "nix-daemon --stdio",
     "podman inspect t3code",
     "systemctl --failed | journalctl -u podman-t3code --no-pager -n 20",
     "readlink -f /nix/var/nix/profiles/system",
@@ -107,14 +108,15 @@ class ClassifierTests(unittest.TestCase):
 class WrapperTests(unittest.TestCase):
     """The wrapper itself: refuse with 126, or execute the command unchanged."""
 
-    def run_guard(self, command, **environment):
+    def run_guard(self, command, stdin=None, **environment):
         env = {**os.environ, **environment}
         if command is None:
             env.pop("SSH_ORIGINAL_COMMAND", None)
         else:
             env["SSH_ORIGINAL_COMMAND"] = command
         return subprocess.run([sys.executable, str(SCRIPT), "--journal", "/bin/false"],
-                              env=env, capture_output=True, text=True, timeout=30)
+                              env=env, capture_output=True, text=True, timeout=30,
+                              stdin=stdin)
 
     def test_a_refused_command_exits_126_with_a_message(self):
         result = self.run_guard("grep -rl keyword /etc /root")
@@ -132,12 +134,30 @@ class WrapperTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("sftp-server", result.stdout)
 
+    def test_the_sshng_transport_command_runs_unchanged(self):
+        """The ssh-ng transport runs `nix-daemon --stdio` on the host."""
+        with tempfile.TemporaryDirectory() as directory:
+            stub = Path(directory) / "nix-daemon"
+            stub.write_text("#!/bin/sh\nprintf 'nix-daemon %s\\n' \"$*\"\n")
+            stub.chmod(0o700)
+            result = self.run_guard("nix-daemon --stdio", PATH=f"{directory}:{os.environ['PATH']}")
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("nix-daemon --stdio", result.stdout)
+
+    def test_a_session_without_a_command_starts_a_shell(self):
+        """An interactive session sends no SSH_ORIGINAL_COMMAND."""
+        result = self.run_guard(None, stdin=subprocess.DEVNULL)
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("refused", result.stderr.lower())
+
 
 class PruneTests(unittest.TestCase):
     """A copy of the agent key outside the managed file would bypass the guard."""
 
     MATERIAL = "AAAAC3NzaC1lZDI1NTE5AAAAIAPNLcXkA3IdqGKkbpWyl2xd4v5cCqzp8OblCDILPlL8"
-    OWNER = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFh0VLGYtDCgU2MKtiHmHf8al1iq12zpFQR2g1yEpHkL owner@home.local"
+    # A role placeholder with synthetic key material: the repository is public
+    # and holds no personal identifier.
+    OWNER = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFIXTUREOWNERKEYMATERIALFORTHETESTONLY owner@example.invalid"
 
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
