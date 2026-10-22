@@ -140,13 +140,13 @@
       "locked": {
         "lastModified": 1792617193,
         "narHash": "sha256-WhMt8wwKyJt44xfe4QGwzsWr6XR8l8B7bp676KRfIh0=",
-        "owner": "owner",
+        "owner": "ghostship-io",
         "repo": "ghostship-agent",
         "rev": "cb0037469a19089813efa79d74b8fd3fce19c93d",
         "type": "github"
       },
       "original": {
-        "owner": "owner",
+        "owner": "ghostship-io",
         "repo": "ghostship-agent",
         "rev": "cb0037469a19089813efa79d74b8fd3fce19c93d",
         "type": "github"
