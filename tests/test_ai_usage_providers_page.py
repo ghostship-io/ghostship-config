@@ -203,6 +203,50 @@ class ProvidersPageTests(unittest.TestCase):
             self.assertNotIn("Routing OFF", json.dumps(panel), panel.get("title"))
             self.assertNotIn("Routing ON", json.dumps(panel), panel.get("title"))
 
+    def test_a_route_with_no_limit_seen_says_so_and_draws_no_bar(self):
+        """An inferred capacity with no failure seen is not a measured allowance."""
+        for title in TIERS:
+            content = section(self.page, title)["options"]["content"]
+            self.assertIn("No limit seen", content, title)
+            # The text comes before the bar: a route with no limit seen never
+            # draws one.
+            self.assertLess(
+                content.index("No limit seen"), content.index('class="barrow"'), title
+            )
+            self.assertIn("ghostship_ai_model_capacity_basis", expressions(section(self.page, title)), title)
+
+    def test_an_inferred_route_carries_its_tag(self):
+        """The tag says that the capacity was inferred, and which window."""
+        for title in TIERS:
+            content = section(self.page, title)["options"]["content"]
+            self.assertIn("inferred · {{window}}", content, title)
+            self.assertIn('class="tag"', content, title)
+
+    def test_the_reasons_of_the_collector_are_read_as_words(self):
+        """No cell of the page carries a raw code of the collector."""
+        codes = set()
+        for line in FIXTURE.read_text(encoding="utf-8").splitlines():
+            if line.startswith("#") or "=" not in line:
+                continue
+            labels = line.split("}", 1)[0]
+            for part in labels.split("{", 1)[-1].split(","):
+                if part.startswith("reason=") or part.startswith("window="):
+                    codes.add(part.split("=", 1)[1].strip('"'))
+        self.assertTrue(codes, "the fixture carries the codes of the collector")
+        page = DASHBOARD.read_text(encoding="utf-8")
+        for code in codes:
+            if "_" not in code:
+                continue
+            # The code is either mapped by a query of the page, or read with
+            # its underscores turned into spaces by the template.
+            self.assertTrue(
+                f'^{code}$' in page or f'"{code}"' in page or "join (split" in page,
+                f"{code} would reach the page as it is",
+            )
+        for title in list(TIERS) + ["Providers"]:
+            content = section(self.page, title)["options"]["content"]
+            self.assertNotIn("no_window", content, title)
+
     def test_the_evidence_rows_stay_below_the_page_and_collapsed(self):
         """The detail is still there, and it is still out of the way."""
         rows = [panel for panel, collapsed in panels(self.page) if panel.get("type") == "row"]
