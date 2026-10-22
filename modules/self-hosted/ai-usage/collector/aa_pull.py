@@ -872,7 +872,14 @@ def refresh(
     """
     moment = time.time() if now is None else float(now)
     current = aa.load_cache(cache_path, moment)
-    if current.get("status") == "ok":
+    aa3d_usable = True
+    if aa3d_path is not None:
+        # The 3D tier reads the AA-3D file. A fresh main cache must not skip
+        # a pull that has never written it, or the 3D tier stays empty.
+        import aa_3d
+
+        aa3d_usable = (aa_3d.load_cache(str(aa3d_path), moment) or {}).get("status") == "ok"
+    if current.get("status") == "ok" and aa3d_usable:
         # The cache is fresh: the pull runs once a day, and the collector
         # reads it every five minutes.
         return {
