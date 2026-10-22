@@ -326,11 +326,57 @@ class ProvidersPageTests(unittest.TestCase):
     def test_the_order_of_a_tier_is_the_collector_s_position(self):
         """The rows are sorted by the collector's own key, and the panel does not re-rank."""
         for title in TIERS:
+            if title == "Frontier":
+                # Frontier's rows are the owner's two roles, not a ranking:
+                # see test_the_frontier_reads_chief_then_backup.
+                continue
             panel = section(self.page, title)
             sorts = [t for t in panel.get("transformations") or [] if t["id"] == "sortBy"]
             self.assertEqual(len(sorts), 1, title)
             self.assertEqual(sorts[0]["options"]["sort"][0]["field"], "order", title)
             self.assertTrue(sorts[0]["options"]["sort"][0]["desc"], title)
+
+    def test_the_frontier_reads_chief_then_backup(self):
+        """The Frontier rows are the chief and the backup, in that order, as the concept shows."""
+        panel = section(self.page, "Frontier")
+        sorts = [t for t in panel.get("transformations") or [] if t["id"] == "sortBy"]
+        self.assertEqual(sorts[0]["options"]["sort"], [{"field": "role", "desc": True}])
+        # Descending order of the role names puts Chief before Backup.
+        self.assertEqual(sorted(["Backup", "Chief"], reverse=True), ["Chief", "Backup"])
+
+    def test_capacity_is_read_per_model_not_per_tier(self):
+        """A model's capacity series carries one tier label, so no tier table filters on it.
+
+        Live, every 3D row read "Limits unknown": the collector publishes a
+        model's capacity once, labelled with its first tier (GPT-6.1-Sol's is
+        frontier), and the 3D table asked for tier="3d".
+        """
+        for title in TIERS:
+            panel = section(self.page, title)
+            for target in panel["targets"]:
+                self.assertNotRegex(
+                    target["expr"],
+                    r'ghostship_ai_model_capacity_remaining\{tier=',
+                    f"{title} {target['refId']}",
+                )
+
+    def test_the_3d_reserve_tag_is_shown_only_where_it_applies(self):
+        """The reserve changes the order of Bulk and Free; Frontier and 3D carry no tag."""
+        for title in ("Frontier", "3D"):
+            content = section(self.page, title)["options"]["content"]
+            self.assertNotIn("3D reserve", content, title)
+        for title in ("Bulk", "Free"):
+            content = section(self.page, title)["options"]["content"]
+            self.assertIn("3D reserve", content, title)
+
+    def test_the_3d_table_lists_its_winners_and_the_routes_that_are_out(self):
+        panel = section(self.page, "3D")
+        filters = [step for step in panel["transformations"] if step["id"] == "filterByValue"]
+        self.assertEqual(len(filters), 1)
+        self.assertEqual(
+            sorted(rule["fieldName"] for rule in filters[0]["options"]["filters"]),
+            ["out", "rank"],
+        )
 
     def test_no_bargauge_or_stat_panel_sits_outside_a_collapsed_row(self):
         """The owner asked for tables, not gauges: the gauges stay in the evidence."""
@@ -792,6 +838,38 @@ class WorkedCasesTests(unittest.TestCase):
             for other, flag in has_cap.items():
                 if flag:
                     self.assertLess(order[provider], order[other], f"{provider} before {other}")
+
+    def test_a_tier_lists_its_winners_and_the_routes_that_are_out(self):
+        """Bulk and Free list the ranked winners and the spent routes, nothing else.
+
+        Live, a tier has a few winners and many more members; listing every
+        member made the Bulk table about thirty rows long and scroll inside
+        its panel. The other members stay in the collapsed evidence rows.
+        """
+        for title in ("Bulk", "Free"):
+            panel = section(self.page, title)
+            filters = [
+                step for step in panel["transformations"] if step["id"] == "filterByValue"
+            ]
+            self.assertEqual(len(filters), 1, title)
+            options = filters[0]["options"]
+            self.assertEqual((options["type"], options["match"]), ("include", "any"))
+            self.assertEqual(
+                sorted(
+                    (rule["fieldName"], rule["config"]["id"], rule["config"]["options"]["value"])
+                    for rule in options["filters"]
+                ),
+                [("out", "greater", 0), ("rank", "greater", 0)],
+            )
+            rank = self.rows(panel, target_by_field(panel, "rank"))
+            out = self.rows(panel, target_by_field(panel, "out"))
+            kept = {route for route in rank if rank[route] > 0 or out.get(route, 0) > 0}
+            dropped = set(rank) - kept
+            if title == "Free":
+                # The fixture's available non-winner is dropped; its spent
+                # route stays, sunk at the bottom.
+                self.assertIn("gpt-oss-120b", dropped)
+                self.assertIn("gemma-3-27b", kept)
 
     def test_a_sunk_route_keeps_no_place(self):
         """A route that cannot be used keeps no place: its rank cell reads '–'."""
