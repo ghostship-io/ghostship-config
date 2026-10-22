@@ -654,8 +654,8 @@
   },
   {
    "id": 8,
-   "title": "CPU per core  /  activity grid",
-   "description": "One row per core, numeric order 0..19, time on the x axis. Each cell is that core's busy percentage over the step; colour is a restrained threshold (green under 70 %, orange to 90 %, red above). Hover shows the exact utilization. A gap means no sample for that core in that step, not zero load.",
+   "title": "CPU per core  /  5-minute busy average",
+   "description": "One row per core in numeric order 0..19, time on the x axis. Every cell is that core's busy percentage as a five-minute average (1 - idle rate over 5m), so a single skipped scrape is interpolated rather than shown as a gap; a core with no samples at all has no row. Colour is a restrained threshold (green under 70%, orange to 90%, red above) and the tooltip carries the exact average.",
    "type": "state-timeline",
    "datasource": {
     "type": "prometheus",
