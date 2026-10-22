@@ -281,7 +281,7 @@ class StaticRouteTableTests(unittest.TestCase):
     def test_a_readable_policy_is_ok(self):
         samples = static_routes.samples(write_policy(self), SNAPSHOT)
         ok = by_row(samples, "ghostship_ai_static_route_policy_ok")
-        self.assertEqual(ok["None"][1], 1.0)
+        self.assertEqual(ok[None][1], 1.0)
 
     def test_a_missing_policy_publishes_no_rows_and_is_not_ok(self):
         directory = tempfile.TemporaryDirectory()
@@ -313,10 +313,14 @@ class StaticRouteWiringTests(unittest.TestCase):
             if line.startswith("ghostship_ai_static_route_info{")
         ]
         self.assertEqual(len(rows), 5)
+        by_number = {
+            re.search(r'row="([0-9]+)"', line).group(1): line for line in rows
+        }
         self.assertIn(
-            'used_for="Narrow implementation (1st), Research (2nd)"', rows[0]
+            'used_for="Narrow implementation (1st), Research (2nd)"',
+            by_number["1"],
         )
-        self.assertIn('role="Bulk 1"', rows[0])
+        self.assertIn('role="Bulk 1"', by_number["1"])
         self.assertIn("ghostship_ai_static_route_policy_ok 1", text)
 
     def test_the_collector_still_renders_when_the_policy_is_missing(self):
@@ -337,10 +341,9 @@ class StaticRouteWiringTests(unittest.TestCase):
     def test_the_unit_passes_the_policy_file(self):
         module = MODULE.read_text(encoding="utf-8")
         self.assertIn("--runtime-policy", module)
-        self.assertIn(
-            "${inputs.ghostship-agent-policy}/config/agents/runtime-policy.json",
-            module,
-        )
+        self.assertIn("args.inputs", module)
+        self.assertIn("ghostship-agent-policy", module)
+        self.assertIn("config/agents/runtime-policy.json", module)
 
     def test_the_policy_has_its_own_flake_input(self):
         flake = FLAKE.read_text(encoding="utf-8")
@@ -359,6 +362,13 @@ class StaticRouteWiringTests(unittest.TestCase):
             script,
             r"'ghostship-agent-policy':\s*\{\s*'repo':\s*'ghostship-agent',\s*'key':\s*'agent'",
         )
+
+    def test_ci_working_paths_are_named_after_the_input(self):
+        """Both inputs share one read key, so one may not reuse the other's paths."""
+        script = CI_INPUTS.read_text(encoding="utf-8")
+        self.assertIn("'checkout-' + name", script)
+        self.assertIn("'source-' + name", script)
+        self.assertIn("name + '.tar'", script)
 
 
 if __name__ == "__main__":
