@@ -785,6 +785,43 @@ class ObservedAvailabilityTests(unittest.TestCase):
         self.assertEqual(failures[0]["scope"], "account")
         self.assertEqual(failures[0]["target"], "opencode-go")
 
+    def test_a_payment_refusal_is_an_account_failure(self):
+        # A provider that refuses a request with "402 Payment Required" and a
+        # spent balance has an exhausted account, not a broken route: every
+        # route of that account is unavailable until a later success.
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            failures = self._observed(
+                folder,
+                [
+                    {
+                        "thread_id": "thread-1",
+                        "provider_instance_id": "grok",
+                        "status": "failed",
+                        "completed_at": "2027-01-15T00:00:00Z",
+                        "model": "grok-code",
+                    }
+                ],
+                sessions=[
+                    {
+                        "thread_id": "thread-1",
+                        "last_error": (
+                            "API error (status 402 Payment Required): Grok Build "
+                            "usage balance exhausted"
+                        ),
+                        "updated_at": "2027-01-15T00:00:00Z",
+                    }
+                ],
+            )
+        self.assertEqual(len(failures), 1)
+        failure = failures[0]
+        self.assertEqual(failure["scope"], "account")
+        # The account of the instance that serves the model, so every route
+        # of that provider is unavailable.
+        self.assertEqual(failure["target"], "grok")
+        self.assertEqual(failure["reason"], "account_usage_limit")
+
     def test_a_startup_failure_is_a_route_failure(self):
         import tempfile
 
