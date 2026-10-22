@@ -84,7 +84,7 @@ DNS_ANSWER = "203.0.113.10"
 def synthetic_policy(ingress: bool = False) -> dict:
     """The policy the harness loads. Same shape the module generates."""
     return {
-        "version": 1,
+        "version": 2,
         "containers": {
             "candidate": {
                 "container": "candidate-app",

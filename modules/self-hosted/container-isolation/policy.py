@@ -18,7 +18,9 @@ A containment policy describes exactly one container and is deliberately small:
                     "category": "unclassified"}],
       "ingress": {"enabled": false, "ports": []},
       "capabilities": [],
-      "privileged": false
+      "privileged": false,
+      "namespaces": {"pid": [], "userns": [], "ipc": [], "uts": [],
+                     "cgroupns": [], "pod": []}
     }
 
 Three properties of the model matter:
@@ -38,6 +40,15 @@ Three properties of the model matter:
 The renderer emits the same shape as the FlareSolverr egress rules
 (modules/self-hosted/flaresolverr-egress.nft): one inet table and one bridge
 table per container, replaced in a single nft transaction.
+
+The admission is fail-closed and states what a contained container may hold:
+
+* The capabilities are an allowlist, not a denylist. A container may hold
+  only the capabilities in ALLOWED_CAPABILITIES, and the refusal names the
+  one that is not in it.
+* The namespaces are read from the argv the oci-containers module builds.
+  A container that shares the host's pid, user, ipc, uts or cgroup
+  namespace, or that runs in a pod, is outside the rules and refused.
 """
 
 from __future__ import annotations
@@ -45,6 +56,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import re
+from pathlib import Path
 
 PROTOCOLS = ("tcp", "udp")
 IPV6_MODES = ("deny", "allow")
@@ -55,6 +67,19 @@ NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 # Free-text fields must not carry coordinates: the repository is public.
 URL_PATTERN = re.compile(r"[a-z][a-z0-9+.-]*://", re.IGNORECASE)
 ADDRESS_IN_TEXT_PATTERN = re.compile(r"\b\d{1,3}(\.\d{1,3}){3}\b")
+# The namespaces a contained container may not share with the host. A
+# container in the host's pid namespace sees the host's processes, and one in
+# the host's user namespace acts as the host's root: both are outside the
+# rules the policy enforces.
+HOST_NAMESPACE_FLAGS = ("pid", "userns", "ipc", "uts", "cgroupns")
+# The capabilities a contained container may hold. The list lives in one JSON
+# file next to this module, and the Nix admission reads the same file, so the
+# two sets cannot drift apart. It is Podman's default set without NET_RAW.
+ALLOWED_CAPABILITIES = tuple(
+    json.loads(
+        (Path(__file__).resolve().with_name("allowed-capabilities.json")).read_text()
+    )["allowedCapabilities"]
+)
 # Destinations that are never reachable through a public egress edge.
 PRIVATE_IPV4 = (
     "0.0.0.0/8",
@@ -103,6 +128,48 @@ def normalize_capability(value: str) -> str:
     """Podman's capability spelling: case-insensitive, optional CAP_ prefix."""
     upper = str(value).strip().upper()
     return upper[len("CAP_"):] if upper.startswith("CAP_") else upper
+
+
+def _is_host_namespace(value) -> bool:
+    """True when a namespace flag names the host's namespace or another one.
+
+    Podman spells the shared namespaces "host", "container:<name>" (another
+    container) and "ns:/proc/<pid>/ns/<kind>" (a path into the host's
+    namespaces). All three put the container outside the rules.
+    """
+    lowered = str(value).strip().lower()
+    return (
+        lowered == "host"
+        or lowered.startswith("container:")
+        or lowered.startswith("ns:")
+    )
+
+
+def _namespace_problems(namespaces) -> list:
+    """Refuse a container that shares a host namespace or runs in a pod."""
+    problems: list = []
+    if not isinstance(namespaces, dict):
+        return ["namespaces must be an object with the namespace flags of the container"]
+    for flag in HOST_NAMESPACE_FLAGS:
+        values = namespaces.get(flag) or []
+        if not isinstance(values, list):
+            problems.append(f"namespaces.{flag} must be a list")
+            continue
+        for value in values:
+            if _is_host_namespace(value):
+                problems.append(
+                    f"namespace {flag}={value} shares the host's namespace, which is "
+                    "outside the rules the policy enforces"
+                )
+    pod = namespaces.get("pod") or []
+    if not isinstance(pod, list):
+        problems.append("namespaces.pod must be a list")
+    elif pod:
+        problems.append(
+            "a container in a pod shares another container's namespaces, which is "
+            "outside the rules the policy enforces"
+        )
+    return problems
 
 
 def _text_is_clean(value: str) -> bool:
@@ -280,14 +347,16 @@ def validate_container(policy_name: str, policy: dict) -> list:
         for capability in capabilities:
             for name in str(capability).split(","):
                 normalized = normalize_capability(name)
-                if normalized in ("NET_ADMIN", "ALL", "NET_RAW", "SYS_ADMIN"):
+                if normalized not in ALLOWED_CAPABILITIES:
                     problems.append(
-                        f"capability {normalized} defeats the policy: a container with it can "
-                        "change its own identity, craft its own frames, or setns into another "
-                        "network namespace the rules do not govern"
+                        f"capability {normalized} is not in the allowed capability set "
+                        f"({', '.join(ALLOWED_CAPABILITIES)}): a capability outside that set "
+                        "can load kernel code, open host files, inject into another "
+                        "process, or change the container's own identity"
                     )
     if policy.get("privileged"):
         problems.append("a privileged container cannot be contained")
+    problems.extend(_namespace_problems(policy.get("namespaces")))
     return problems
 
 
@@ -297,8 +366,8 @@ def admit(policies: dict) -> None:
     if not isinstance(policies, dict):
         raise PolicyError("the policy set must be an object")
     version = policies.get("version")
-    if version != 1:
-        problems.append("policy set version must be 1")
+    if version != 2:
+        problems.append("policy set version must be 2")
     containers = policies.get("containers")
     if not isinstance(containers, dict):
         problems.append("policy set needs a containers object")
