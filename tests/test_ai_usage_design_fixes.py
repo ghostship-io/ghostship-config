@@ -1192,6 +1192,270 @@ class OllamaWindowTests(unittest.TestCase):
         self.assertIsNotNone(windows["weekly"]["resetEpoch"])
 
 
+class UnmeasuredModelTests(unittest.TestCase):
+    """An unmeasured model never wins a tier."""
+
+    def _rank(self, records, models):
+        ranking_module = _load("ai_usage_design_ranking_grok", "ranking")
+        catalog = catalog_module.Catalog(
+            {
+                "xai": {
+                    "models": {
+                        model: catalog_entry(model) for model in models
+                    }
+                }
+            }
+        )
+        cache = {
+            "status": "ok",
+            "index_version": "4.3",
+            "fetched_at_epoch": NOW,
+            "records": records,
+        }
+        return ranking_module.rank_models(
+            models=[ranking_module.ModelRecord("grok", model) for model in models],
+            catalog=catalog,
+            quota_windows={},
+            free_models=set(),
+            usage_tokens={},
+            aa_cache=cache,
+            now=NOW,
+        )
+
+    def test_an_unmeasured_grok_never_wins_the_bulk_tier(self):
+        models = ["grok-4.5", "grok-4.6", "grok-4.7"]
+        records = [
+            {
+                "id": "id-grok-4-7",
+                "slug": "grok-4-7",
+                "model": "Grok 4.7 (Xhigh)",
+                "release_date": "2026-09-21",
+                "indices": {"intelligence_index": 46.4465506302286},
+                "cost_per_task": 3.738325952106939,
+                "median_performance": 100.0,
+                "prices": {},
+            }
+        ]
+        ranked = self._rank(records, models)
+        bulk = [item for item in ranked if item.tier == "bulk"]
+        self.assertTrue(bulk)
+        self.assertEqual(bulk[0].model, "grok-4.7")
+        # The unmeasured models are visible and they are not in the tier.
+        self.assertNotIn("grok-4.6", {item.model for item in bulk})
+        self.assertNotIn("grok-4.5", {item.model for item in bulk})
+
+    def test_a_cheap_price_never_makes_an_unmeasured_model_win(self):
+        # The name-suffix and price factor is gone: a model the feed does
+        # not measure never holds a tier, however cheap its listing is.
+        ranking_module = _load("ai_usage_design_ranking_grok2", "ranking")
+        catalog = catalog_module.Catalog(
+            {
+                "xai": {
+                    "models": {
+                        "grok-4.6": catalog_entry(
+                            "grok-4.6", cost={"input": 0.0, "output": 0.0}
+                        ),
+                        "grok-4.7": catalog_entry("grok-4.7"),
+                    }
+                }
+            }
+        )
+        models = [
+            ranking_module.ModelRecord("grok", "grok-4.6"),
+            ranking_module.ModelRecord("grok", "grok-4.7"),
+        ]
+        records = [
+            {
+                "id": "id-grok-4-7",
+                "slug": "grok-4-7",
+                "model": "Grok 4.7 (Xhigh)",
+                "release_date": "2026-09-21",
+                "indices": {"intelligence_index": 46.4465506302286},
+                "cost_per_task": 3.738325952106939,
+                "median_performance": 100.0,
+                "prices": {},
+            }
+        ]
+        cache = {
+            "status": "ok",
+            "index_version": "4.3",
+            "fetched_at_epoch": NOW,
+            "records": records,
+        }
+        ranked = ranking_module.rank_models(
+            models=models,
+            catalog=catalog,
+            quota_windows={},
+            free_models=set(),
+            usage_tokens={},
+            aa_cache=cache,
+            now=NOW,
+        )
+        bulk = [item for item in ranked if item.tier == "bulk"]
+        self.assertEqual([item.model for item in bulk], ["grok-4.7"])
+
+    def test_a_measured_grok_4_6_may_win_the_bulk_tier(self):
+        # Grok 4.6 is a measured model: it has its own record, with the cost
+        # per task its model page publishes. It may win on that record, and
+        # never on a name or a price.
+        models = ["grok-4.5", "grok-4.6", "grok-4.7"]
+        records = [
+            {
+                "id": "id-grok-4-7",
+                "slug": "grok-4-7",
+                "model": "Grok 4.7 (Xhigh)",
+                "release_date": "2026-09-21",
+                "indices": {"intelligence_index": 46.4465506302286},
+                "cost_per_task": 3.738325952106939,
+                "median_performance": 100.0,
+                "prices": {},
+            },
+            {
+                "id": "id-grok-4-6",
+                "slug": "grok-4-6",
+                "model": "Grok 4.6 (High)",
+                "release_date": "2026-07-01",
+                "indices": {"intelligence_index": 44.3113073012592},
+                "cost_per_task": 1.4848449196688633,
+                "median_performance": 100.0,
+                "prices": {},
+            },
+        ]
+        ranked = self._rank(records, models)
+        bulk = [item for item in ranked if item.tier == "bulk"]
+        self.assertTrue(bulk)
+        # The measured 4.6 is ahead of the measured 4.7: its value is higher
+        # and its cost is lower.
+        self.assertEqual(bulk[0].model, "grok-4.6")
+        # Grok 4.5 has no record at all, so it is not in the tier.
+        self.assertNotIn("grok-4.5", {item.model for item in bulk})
+
+
+class DecisionInputTests(unittest.TestCase):
+    """F5: the inputs a decision was made on are published."""
+
+    def _snapshot(self):
+        ranking_module = _load("ai_usage_design_ranking_inputs", "ranking")
+        models = [ranking_module.ModelRecord("codex", "gpt-6.1-sol")]
+        catalog = catalog_module.Catalog(
+            {"openai": {"models": {"gpt-6.1-sol": catalog_entry("gpt-6.1-sol")}}}
+        )
+        cache = {
+            "status": "ok",
+            "index_version": "4.3",
+            "fetched_at_epoch": NOW,
+            "records": [
+                {
+                    "id": "id-gpt-6-1-sol",
+                    "slug": "gpt-6-1-sol",
+                    "model": "GPT-6.1 Sol (Max)",
+                    "release_date": "2026-01-20",
+                    "indices": {"intelligence_index": 51.8},
+                    "cost_per_task": 0.1,
+                    "median_performance": 100.0,
+                    "prices": {},
+                }
+            ],
+        }
+        ranked = ranking_module.rank_models(
+            models=models,
+            catalog=catalog,
+            quota_windows={
+                "codex": [
+                    ranking_module.QuotaWindow(
+                        kind="weekly",
+                        used_ratio=0.4,
+                        reset_epoch=NOW + 3 * DAY,
+                        duration_seconds=7 * DAY,
+                        observed_at=NOW,
+                    )
+                ]
+            },
+            free_models=set(),
+            usage_tokens={},
+            aa_cache=cache,
+            native_models={
+                ("codex", "gpt-6.1-sol"): {
+                    "providerInstance": "codex",
+                    "modelId": "gpt-6.1-sol",
+                    "options": [],
+                }
+            },
+            now=NOW,
+        )
+        return snapshot.build_snapshot(
+            now=NOW,
+            sources=[{"id": "t3", "status": "ok", "reason": "ok", "observed_at_epoch": NOW}],
+            ranked=ranked,
+            aa_cache=cache,
+            catalog=catalog,
+            native_models={
+                ("codex", "gpt-6.1-sol"): {
+                    "providerInstance": "codex",
+                    "modelId": "gpt-6.1-sol",
+                    "options": [],
+                }
+            },
+            policy={
+                "frontierPrimeModels": ("gpt-6.1-sol",),
+                "excludedModels": (),
+                "allowedGptModels": ("gpt-6.1-sol",),
+                "backgroundProviderInstances": ("codex",),
+            },
+        )
+
+    def test_the_benchmark_condition_and_the_execution_reasoning_are_published(self):
+        main = _load("ai_usage_design_main_inputs", "main")
+        samples = main.decision_input_samples(self._snapshot())
+        conditions = {
+            labels["variant"]
+            for name, labels, _value in samples
+            if name == "ghostship_ai_model_aa_condition"
+        }
+        self.assertIn("max", conditions)
+        reasoning = [
+            labels
+            for name, labels, _value in samples
+            if name == "ghostship_ai_model_execution_reasoning"
+        ]
+        self.assertTrue(reasoning)
+        self.assertEqual(reasoning[0]["default"], "medium")
+        self.assertEqual(reasoning[0]["escalation"], "high")
+
+    def test_the_binding_windows_are_published(self):
+        main = _load("ai_usage_design_main_inputs2", "main")
+        samples = main.decision_input_samples(self._snapshot())
+        capacity = [
+            labels["window"]
+            for name, labels, _value in samples
+            if name == "ghostship_ai_model_capacity_binding"
+        ]
+        pace = [
+            labels["window"]
+            for name, labels, _value in samples
+            if name == "ghostship_ai_model_pace_binding"
+        ]
+        self.assertTrue(capacity)
+        self.assertTrue(pace)
+
+    def test_the_frontier_membership_carries_its_wait(self):
+        main = _load("ai_usage_design_main_inputs3", "main")
+        samples = main.decision_input_samples(self._snapshot())
+        members = [
+            labels
+            for name, labels, _value in samples
+            if name == "ghostship_ai_frontier_member"
+        ]
+        self.assertTrue(members)
+        self.assertEqual(members[0]["model"], "gpt-6.1-sol")
+        waits = [
+            value
+            for name, _labels, value in samples
+            if name == "ghostship_ai_frontier_wait_seconds"
+        ]
+        self.assertTrue(waits)
+
+
 class PoolLimitTests(unittest.TestCase):
     """F4: the pool's limits reach the decision and carry their basis."""
 
