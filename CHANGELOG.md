@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.102] - 2026-10-22
+
+- The Providers page opens with the capacity cards: one card per provider, with a small icon and every capacity window the account has, and a chip for every provider that publishes no window of its own yet. The numbers of a card are the collector's account window gauges, read in one query, so the page never recomputes a window: the share that is left, the even-spend line, the reset, and the place the row takes in the card. The pace of a row reads the difference between the share that is left and the share the window expects to be left, a window that is spent says so, and a window the provider did not report carries the tag that it was inferred. The card order, the names, the icons and the notes are the presentation the owner approved.
+
 ## [3.17.101] - 2026-10-22
 
 - AI usage collector: the owner's static model selection is published for the Providers page. While routing is off, the selection in force is `worker_routes.entries` of the runtime policy, and the collector now reads it through `--runtime-policy` and publishes one row per model: the role the table gives it (Bulk 1, Bulk 2, Large, Deploys, Research), every entry that names it with the route's place in that entry, and the share left, the Paced Availability and the reset the routing snapshot already measured for that route. A model listed twice is one row and a model outside the table has none; a route the snapshot does not carry keeps its row with no capacity; a missing or unreadable policy publishes no rows and `ghostship_ai_static_route_policy_ok 0` while everything else is still written. The policy has its own flake input, `ghostship-agent-policy`, so the T3 Code input and its lock entry are unchanged.
