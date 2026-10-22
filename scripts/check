@@ -58,6 +58,7 @@ vector --quiet test tests/siem-vector.toml
 python3 -m unittest discover -s tests -p test_siem_alerts.py
 python3 -m unittest discover -s tests -p test_siem_podman_snapshot.py
 python3 -m unittest discover -s tests -p test_siem_watchdog.py
+python3 -m unittest discover -s tests -p test_siem_grafana_plugins.py
 python3 -m unittest discover -s tests -p test_newsletter_health.py
 python3 -m unittest discover -s tests -p test_ghostship_notify.py
 vmalert -dryRun -loggerLevel=ERROR -rule.defaultRuleType=vlogs \
