@@ -653,5 +653,165 @@ class LiveGoProvider(unittest.TestCase):
             self.assertIsNone(result.window, f"{provider}/{model}")
 
 
+class TheRefusalThatStartsTheEpisode(unittest.TestCase):
+    """Case A: a route that was refused before it ever came back.
+
+    The record of the provider begins with the refusal of the route, and the
+    route never succeeded again. The refusal itself starts the episode, so the
+    route has an open episode, and that episode is evidence for its scope:
+    the other model of the provider works after the refusal, so the refusal
+    was the model's own. The model that was never refused is measured on its
+    own, and it never joins an account.
+    """
+
+    def setUp(self):
+        self.events = [
+            event("acme", "alpha", at(0, 10), outcome="limit"),
+            event("acme", "beta", at(0, 10, 1), usage=500.0),
+            event("acme", "beta", at(0, 10, 30), usage=500.0),
+        ]
+        self.now = at(0, 11)
+
+    def test_the_refusal_is_the_model_of_the_route(self):
+        result = route(self.events, self.now, model="alpha")
+        self.assertEqual(result.scope, "model")
+        self.assertEqual(result.state, "exhausted")
+        self.assertEqual(result.left, 0.0)
+        self.assertIsNone(result.window)
+        self.assertIsNone(result.window_seconds)
+        self.assertIsNone(result.budget)
+        self.assertEqual(result.episodes, 0)
+
+    def test_the_route_that_was_never_refused_is_alone(self):
+        result = route(self.events, self.now, model="beta")
+        self.assertEqual(result.state, "no_failure")
+        self.assertEqual(result.left, 1.0)
+        self.assertIsNone(result.window)
+        self.assertIsNone(result.budget)
+        self.assertEqual(result.episodes, 0)
+        self.assertIsNone(result.share)
+        # The weights of a route that is measured on its own are its own.
+        self.assertEqual(dict(result.weights), {"beta": 1.0})
+
+
+class TheAccountOfTwoRefusedRoutes(unittest.TestCase):
+    """Case B: two routes of a provider that were both refused.
+
+    The routes of the account share one episode: the refusal of the account
+    is the first refusal of the group, and the recovery of the account is
+    the first success after it, on a route of the account. The span of that
+    episode holds the refusal of the other route and no success, so the
+    limit of both routes is the account's.
+    """
+
+    def setUp(self):
+        self.events = [
+            event("acme", "alpha", at(0, 9), usage=1000.0),
+            event("acme", "beta", at(0, 9), usage=500.0),
+            event("acme", "alpha", at(0, 10), outcome="limit"),
+            event("acme", "beta", at(0, 10, 5), outcome="limit"),
+            event("acme", "alpha", at(0, 15), usage=0.0),
+            event("acme", "beta", at(0, 15, 2), usage=0.0),
+        ]
+        self.now = at(0, 16)
+
+    def test_both_routes_are_the_account(self):
+        results = inference.infer_capacity(self.events, self.now)
+        for model in ("alpha", "beta"):
+            result = results[("acme", model)]
+            self.assertEqual(result.scope, "account", model)
+            # One merged episode: the refusal of the account is the refusal
+            # of alpha, and the recovery of the account is its success.
+            self.assertEqual(result.episodes, 1, model)
+            # The episode runs from 09:00 to 15:00: six hours, which snaps to
+            # the five hour window.
+            self.assertEqual(result.window, "5h", model)
+            self.assertEqual(result.window_seconds, 18000, model)
+            self.assertEqual(result.budget, 1500.0, model)
+            self.assertEqual(result.state, "in_window", model)
+
+    def test_the_recovery_of_the_account_is_the_first_success(self):
+        # The recovery of the account is the success of alpha at 15:00, so
+        # the success of beta at 15:02 is behind it and never enters the
+        # span of the episode. The refusal of alpha at 10:00 is inside that
+        # span, so the limit of beta is the account's and not its own.
+        results = inference.infer_capacity(self.events, self.now)
+        self.assertEqual(results[("acme", "beta")].scope, "account")
+
+
+class ThePaidRoutesAndTheFreeRouteOfOneProvider(unittest.TestCase):
+    """Case C: the live regression of the provider that mixes paid and free.
+
+    Two paid routes of a provider were refused and never came back, and the
+    free route of the same provider kept working every few minutes. The free
+    route was never refused, so it is measured on its own, and its use never
+    ends the episode of the paid routes. The paid routes are the models that
+    were refused: the free route works after their refusal, so their limits
+    were their own, and no minute long window is read out of their failures.
+    """
+
+    def setUp(self):
+        self.events = [
+            event("go", "go-paid-a", at(0, 8), usage=1000.0),
+            event("go", "go-paid-a", at(0, 8, 4), outcome="limit"),
+            event("go", "go-paid-b", at(0, 8, 1), usage=1000.0),
+            event("go", "go-paid-b", at(0, 9, 10), outcome="limit"),
+        ]
+        for index in range(58):
+            self.events.append(
+                event("go", "go-free", at(0, 8, 5 + index * 2), usage=100.0)
+            )
+        self.now = at(0, 10)
+
+    def test_the_paid_routes_are_their_own_models(self):
+        for model in ("go-paid-a", "go-paid-b"):
+            result = route(self.events, self.now, provider="go", model=model)
+            self.assertEqual(result.scope, "model", model)
+            self.assertEqual(result.state, "exhausted", model)
+            self.assertEqual(result.left, 0.0, model)
+            self.assertIsNone(result.window, model)
+            self.assertEqual(result.episodes, 0, model)
+
+    def test_the_free_route_is_measured_on_its_own(self):
+        result = route(self.events, self.now, provider="go", model="go-free")
+        self.assertEqual(result.state, "no_failure")
+        self.assertEqual(result.left, 1.0)
+        self.assertIsNone(result.window)
+        self.assertIsNone(result.budget)
+        self.assertEqual(result.episodes, 0)
+
+    def test_no_minute_long_window_is_read(self):
+        results = inference.infer_capacity(self.events, self.now)
+        for (provider, model), result in results.items():
+            self.assertNotEqual(result.window, "1m", f"{provider}/{model}")
+            self.assertIsNone(result.window, f"{provider}/{model}")
+
+
+class TheSpanOfAnOpenEpisode(unittest.TestCase):
+    """The span of an open episode runs from after the refusal.
+
+    The refusal itself is never evidence of the scope: the span of an open
+    episode runs from after the refusal to the reading. Two routes of a
+    provider that were refused at the same instant have nothing in that
+    span, so the scope of each is unknown, and both are measured across the
+    account.
+    """
+
+    def setUp(self):
+        self.events = [
+            event("acme", "alpha", at(0, 10), outcome="limit"),
+            event("acme", "beta", at(0, 10), outcome="limit"),
+        ]
+        self.now = at(0, 11)
+
+    def test_the_refusal_is_not_evidence_of_the_scope(self):
+        for model in ("alpha", "beta"):
+            result = route(self.events, self.now, model=model)
+            self.assertEqual(result.scope, "unknown", model)
+            self.assertEqual(result.state, "exhausted", model)
+            self.assertEqual(result.left, 0.0, model)
+            self.assertIsNone(result.window, model)
+
+
 if __name__ == "__main__":
     unittest.main()
