@@ -1,0 +1,568 @@
+"""The routing switch of the AI usage snapshot, and the billing of a route.
+
+The switch belongs to the owner. The NixOS option
+`ghostship.aiUsage.routing.enabled` reaches the collector, and the collector
+publishes it: a consumer reads the switch and decides, and the switch is off
+until the owner turns it on. The switch is published in the routing snapshot,
+in every projection of that snapshot, and in the
+`ghostship_ai_routing_enabled` gauge.
+
+The billing class says how a route is paid for: a subscription the owner
+already has, a route that costs nothing by construction, a route that costs
+nothing right now because of a promotion, a route that is paid per token, or
+a route whose billing is not known. The class is derived from the access
+class the collector already keeps, so the two never disagree, and it is
+never guessed from a price.
+
+The NixOS option is evaluated with Nix where Nix is available. The
+sandboxed check has no Nix, so the module is inspected there instead. Both
+paths assert the same contract, and both fail when the switch is missing.
+"""
+
+import contextlib
+import io
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+COLLECTOR = REPO / "modules/self-hosted/ai-usage/collector"
+MODULE = REPO / "modules/self-hosted/ai-usage/default.nix"
+if str(COLLECTOR) not in sys.path:
+    sys.path.insert(0, str(COLLECTOR))
+
+import main as main_module  # noqa: E402
+import ranking as ranking_module  # noqa: E402
+import snapshot as snapshot_module  # noqa: E402
+
+NOW = 1_800_000_000.0
+
+# The billing classes a route may carry.
+BILLING_CLASSES = {
+    "subscription",
+    "free",
+    "promotion",
+    "pay_per_token",
+    "unknown",
+}
+
+POLICY = {
+    "frontierPrimeModels": (),
+    "allowedGptModels": ("gpt-6.1-sol",),
+    "backgroundProviderInstances": ("opencode",),
+}
+
+# The evaluation of the module is done once: it copies the repository into
+# the store, and one evaluation answers every question about the option.
+_EVALUATION = None
+
+# The evaluation of the module. The unit is a systemd service, and only its
+# option tree is needed here, so the systemd options are stubbed instead of
+# a whole host: the switch itself is the module's own logic.
+EVAL_EXPRESSION = """
+let
+  flake = builtins.getFlake "path:__REPO__";
+  pkgs = flake.inputs.nixpkgs.legacyPackages.${builtins.currentSystem};
+  lib = pkgs.lib;
+  systemdStub = { lib, ... }: {
+    options.systemd = {
+      services = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.submodule {
+          options = {
+            description = lib.mkOption { type = lib.types.str; default = ""; };
+            after = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+            wants = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+            serviceConfig = lib.mkOption { type = lib.types.attrsOf lib.types.anything; default = {}; };
+          };
+        });
+        default = {};
+      };
+      timers = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.submodule {
+          options = {
+            description = lib.mkOption { type = lib.types.str; default = ""; };
+            wantedBy = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+            timerConfig = lib.mkOption { type = lib.types.attrsOf lib.types.anything; default = {}; };
+          };
+        });
+        default = {};
+      };
+      tmpfiles = lib.mkOption {
+        type = lib.types.submodule {
+          options.rules = lib.mkOption { type = lib.types.listOf lib.types.str; default = []; };
+        };
+        default = {};
+      };
+    };
+  };
+  module = __MODULE__;
+  evaluate = extra: lib.evalModules {
+    modules = [ module systemdStub ] ++ extra;
+    specialArgs = { inherit pkgs; };
+  };
+  off = evaluate [ ];
+  on = evaluate [ { ghostship.aiUsage.routing.enabled = true; } ];
+in
+{
+  default = off.config.ghostship.aiUsage.routing.enabled;
+  off = off.config.systemd.services.ghostship-ai-usage.serviceConfig.ExecStart;
+  on = on.config.systemd.services.ghostship-ai-usage.serviceConfig.ExecStart;
+}
+"""
+
+
+def evaluate_module():
+    """Evaluate the module with Nix, or return None when Nix is not here."""
+    global _EVALUATION
+    if _EVALUATION is not None:
+        return _EVALUATION
+    nix = shutil.which("nix")
+    if not nix:
+        return None
+    expression = EVAL_EXPRESSION.replace("__REPO__", str(REPO)).replace(
+        "__MODULE__", str(MODULE)
+    )
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "routing-switch.nix"
+        path.write_text(expression, encoding="utf-8")
+        result = subprocess.run(
+            [nix, "eval", "--impure", "--json", "--file", str(path)],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+    if result.returncode != 0:
+        raise AssertionError(f"the module did not evaluate: {result.stderr.strip()}")
+    _EVALUATION = json.loads(result.stdout)
+    return _EVALUATION
+
+
+class ModuleText:
+    """The module's own text, for the checks that do not need Nix."""
+
+    def __init__(self):
+        self.text = MODULE.read_text(encoding="utf-8")
+
+    def option_block(self):
+        """The declaration of the routing option, as the module writes it."""
+        marker = "options.ghostship.aiUsage.routing.enabled"
+        start = self.text.index(marker)
+        return self.text[start : self.text.index("};", start)]
+
+    def exec_start(self):
+        for line in self.text.splitlines():
+            if "ExecStart" in line:
+                return line
+        raise AssertionError("the unit has no ExecStart")
+
+
+class FakeCatalog:
+    """A catalog that prices the models the test names, and nothing else."""
+
+    def __init__(self, models, prices=None):
+        self.prices = dict(prices or {})
+        self.document = {}
+        for provider, model in models:
+            entry = {
+                "name": model,
+                "family": provider,
+                "release_date": "2026-01-01",
+            }
+            if (provider, model) in self.prices:
+                entry["cost"] = self.prices[(provider, model)]
+            models_of_provider = self.document.setdefault(provider, {"models": {}})
+            models_of_provider["models"][model] = entry
+
+    def model_entry(self, provider, model):
+        return (self.document.get(provider) or {}).get("models", {}).get(model)
+
+    def price_for(self, provider, model):
+        return self.prices.get((provider, model))
+
+    def model_name(self, provider, model):
+        return model
+
+    def release_date(self, provider, model):
+        return "2026-01-01"
+
+
+def aa_record(model):
+    """A measured record of one model, so the ranking may use it."""
+    return {
+        "model": model,
+        "indices": {
+            "intelligence_index": 50.0,
+            "coding_index": 50.0,
+            "agentic_index": 50.0,
+            "engineering_index": 50.0,
+        },
+        "cost_per_task": 0.2,
+        "median_performance": 100.0,
+    }
+
+
+def aa_cache(models):
+    return {
+        "status": "ok",
+        "index_version": "4.3",
+        "fetched_at": "2027-01-15T08:00:00Z",
+        "fetched_at_epoch": NOW - 60.0,
+        "age_seconds": 60.0,
+        "records": [aa_record(model) for model in models],
+    }
+
+
+def build_snapshot(
+    models, prices=None, free_models=(), promo_models=(), routing_enabled=False
+):
+    """Build a real snapshot of the named models, with a real ranking."""
+    feed = aa_cache([model for _provider, model in models])
+    catalog = FakeCatalog(models, prices)
+    ranked = ranking_module.rank_models(
+        models=[
+            ranking_module.ModelRecord(provider, model) for provider, model in models
+        ],
+        catalog=catalog,
+        quota_windows={},
+        free_models=set(free_models),
+        promo_models=set(promo_models),
+        usage_tokens={},
+        aa_cache=feed,
+        now=NOW,
+    )
+    return snapshot_module.build_snapshot(
+        now=NOW,
+        sources=[
+            {"id": "t3", "status": "ok", "reason": "ok", "observed_at_epoch": NOW}
+        ],
+        ranked=ranked,
+        native_models={
+            (provider, model): {
+                "providerInstance": provider,
+                "modelId": model,
+                "options": [],
+            }
+            for provider, model in models
+        },
+        policy=POLICY,
+        aa_cache=feed,
+        catalog=catalog,
+        free_models=set(free_models),
+        promo_models=set(promo_models),
+        routing_enabled=routing_enabled,
+    )
+
+
+def billing_of(data, provider, model):
+    """The billing class of one candidate row."""
+    rows = [
+        row
+        for row in data.get("candidates") or []
+        if row.get("provider") == provider and row.get("model") == model
+    ]
+    assert rows, f"{provider}/{model} is not a candidate of the snapshot"
+    return (rows[0].get("access") or {}).get("billing")
+
+
+class RoutingSwitchModuleTests(unittest.TestCase):
+    """The NixOS option, and the unit it reaches."""
+
+    def test_the_option_defaults_to_false(self):
+        evaluated = evaluate_module()
+        if evaluated is None:
+            # No Nix here: the declaration itself has to say the default.
+            block = ModuleText().option_block()
+            self.assertIn("type = lib.types.bool;", block)
+            self.assertIn("default = false;", block)
+            return
+        self.assertIs(evaluated["default"], False)
+
+    def test_the_unit_exec_start_reflects_the_switch(self):
+        evaluated = evaluate_module()
+        if evaluated is None:
+            text = ModuleText()
+            self.assertIn("--routing-enabled ${routingEnabled}", text.exec_start())
+            self.assertIn(
+                'routingEnabled = if cfg.routing.enabled then "true" else "false";',
+                text.text,
+            )
+            return
+        self.assertIn("--routing-enabled false", evaluated["off"])
+        self.assertIn("--routing-enabled true", evaluated["on"])
+
+    def test_nothing_else_sets_the_switch(self):
+        # The option is the owner's, and only the owner sets it. It is
+        # declared in the module of the collector, and no other module of the
+        # repository may turn it on.
+        self.assertIn(
+            "options.ghostship.aiUsage.routing.enabled",
+            MODULE.read_text(encoding="utf-8"),
+        )
+        others = []
+        for path in sorted(REPO.rglob("*.nix")):
+            if ".git" in path.parts or path == MODULE:
+                continue
+            if "aiUsage" in path.read_text(encoding="utf-8"):
+                others.append(str(path.relative_to(REPO)))
+        self.assertEqual(others, [])
+
+
+class RoutingSnapshotTests(unittest.TestCase):
+    """The switch in the snapshot, in the projections, and in the metrics."""
+
+    def test_the_snapshot_carries_the_routing_block_and_it_is_off_by_default(self):
+        data = build_snapshot([("claude", "claude-opus-5-5")])
+        self.assertIn("routing", data)
+        self.assertIs(data["routing"]["enabled"], False)
+        self.assertEqual(data["routing"]["source"], "nixos-option")
+
+    def test_the_switch_on_publishes_the_routing_block(self):
+        data = build_snapshot([("claude", "claude-opus-5-5")], routing_enabled=True)
+        self.assertIs(data["routing"]["enabled"], True)
+        self.assertEqual(data["routing"]["source"], "nixos-option")
+
+    def test_the_gauge_reads_zero_while_the_switch_is_off(self):
+        data = build_snapshot([("claude", "claude-opus-5-5")])
+        text = main_module.render([], [], NOW, 1.0, data)
+        self.assertIn("# HELP ghostship_ai_routing_enabled", text)
+        self.assertIn("ghostship_ai_routing_enabled 0\n", text + "\n")
+
+    def test_the_gauge_reads_one_while_the_switch_is_on(self):
+        data = build_snapshot([("claude", "claude-opus-5-5")], routing_enabled=True)
+        text = main_module.render([], [], NOW, 1.0, data)
+        self.assertIn("# HELP ghostship_ai_routing_enabled", text)
+        self.assertIn("ghostship_ai_routing_enabled 1\n", text + "\n")
+
+    def test_the_gauge_carries_no_label(self):
+        data = build_snapshot([("claude", "claude-opus-5-5")], routing_enabled=True)
+        text = main_module.render([], [], NOW, 1.0, data)
+        samples = [
+            line
+            for line in text.splitlines()
+            if line.startswith("ghostship_ai_routing_enabled")
+        ]
+        self.assertEqual(samples, ["ghostship_ai_routing_enabled 1"])
+
+    def test_a_projection_carries_the_same_routing_block(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            canonical = root / "routing.json"
+            projection = root / "model-routing.json"
+            data = build_snapshot([("claude", "claude-opus-5-5")], routing_enabled=True)
+            snapshot_module.write_snapshot(str(canonical), data)
+            snapshot_module.publish(data, [str(projection)])
+            written = json.loads(canonical.read_text(encoding="utf-8"))
+            projected = json.loads(projection.read_text(encoding="utf-8"))
+            self.assertEqual(
+                written["routing"], {"enabled": True, "source": "nixos-option"}
+            )
+            self.assertEqual(projected["routing"], written["routing"])
+
+    def test_the_collector_writes_the_switch_into_the_snapshot_and_the_projection(self):
+        # The whole way through: the unit's argument, the snapshot, the
+        # projection, and the gauge.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            canonical = root / "routing.json"
+            projection = root / "model-routing.json"
+            output = root / "ai-usage.prom"
+            original = main_module.collect
+            main_module.collect = lambda *args, **kwargs: ([], [], {})
+            try:
+                with contextlib.redirect_stderr(io.StringIO()):
+                    code = main_module.main(
+                        [
+                            "--output",
+                            str(output),
+                            "--state",
+                            str(root / "state.json"),
+                            "--snapshot",
+                            str(canonical),
+                            "--projection",
+                            str(projection),
+                            "--facts",
+                            "/dev/null",
+                            "--aa-cache",
+                            "/dev/null",
+                            "--aa-3d-cache",
+                            "/dev/null",
+                            "--now",
+                            str(NOW),
+                            "--routing-enabled",
+                            "true",
+                        ]
+                    )
+            finally:
+                main_module.collect = original
+            self.assertEqual(code, 0)
+            written = json.loads(canonical.read_text(encoding="utf-8"))
+            projected = json.loads(projection.read_text(encoding="utf-8"))
+            self.assertIs(written["routing"]["enabled"], True)
+            self.assertEqual(projected["routing"], written["routing"])
+            metrics = output.read_text(encoding="utf-8")
+            self.assertIn("ghostship_ai_routing_enabled 1", metrics)
+
+    def test_the_collector_keeps_the_switch_off_without_the_argument(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            canonical = root / "routing.json"
+            output = root / "ai-usage.prom"
+            original = main_module.collect
+            main_module.collect = lambda *args, **kwargs: ([], [], {})
+            try:
+                with contextlib.redirect_stderr(io.StringIO()):
+                    code = main_module.main(
+                        [
+                            "--output",
+                            str(output),
+                            "--state",
+                            str(root / "state.json"),
+                            "--snapshot",
+                            str(canonical),
+                            "--facts",
+                            "/dev/null",
+                            "--aa-cache",
+                            "/dev/null",
+                            "--aa-3d-cache",
+                            "/dev/null",
+                            "--now",
+                            str(NOW),
+                        ]
+                    )
+            finally:
+                main_module.collect = original
+            self.assertEqual(code, 0)
+            written = json.loads(canonical.read_text(encoding="utf-8"))
+            self.assertIs(written["routing"]["enabled"], False)
+            metrics = output.read_text(encoding="utf-8")
+            self.assertIn("ghostship_ai_routing_enabled 0", metrics)
+
+
+class BillingClassTests(unittest.TestCase):
+    """How every route is paid for."""
+
+    def test_claude_is_a_subscription(self):
+        data = build_snapshot(
+            [("claude", "claude-opus-5-5")],
+            prices={("claude", "claude-opus-5-5"): {"input": 3.0, "output": 15.0}},
+        )
+        self.assertEqual(billing_of(data, "claude", "claude-opus-5-5"), "subscription")
+
+    def test_codex_is_a_subscription(self):
+        data = build_snapshot(
+            [("codex", "gpt-6.1-sol")],
+            prices={("codex", "gpt-6.1-sol"): {"input": 1.0, "output": 4.0}},
+        )
+        self.assertEqual(billing_of(data, "codex", "gpt-6.1-sol"), "subscription")
+
+    def test_antigravity_is_a_subscription(self):
+        data = build_snapshot(
+            [("antigravity", "gemini-3.8-flash")],
+            prices={
+                ("antigravity", "gemini-3.8-flash"): {"input": 0.3, "output": 1.0}
+            },
+        )
+        self.assertEqual(
+            billing_of(data, "antigravity", "gemini-3.8-flash"), "subscription"
+        )
+
+    def test_a_dedicated_free_route_is_free(self):
+        data = build_snapshot(
+            [("opencode-go", "minimax-m3.1-flash-free")],
+            free_models={("opencode-go", "minimax-m3.1-flash-free")},
+        )
+        self.assertEqual(
+            billing_of(data, "opencode-go", "minimax-m3.1-flash-free"), "free"
+        )
+
+    def test_a_promotional_route_is_a_promotion(self):
+        data = build_snapshot(
+            [("ollama", "gpt-oss-120b")],
+            promo_models={("ollama", "gpt-oss-120b")},
+        )
+        self.assertEqual(billing_of(data, "ollama", "gpt-oss-120b"), "promotion")
+
+    def test_grok_is_paid_per_token(self):
+        data = build_snapshot(
+            [("grok", "grok-4.7")],
+            prices={("grok", "grok-4.7"): {"input": 2.0, "output": 8.0}},
+        )
+        self.assertEqual(billing_of(data, "grok", "grok-4.7"), "pay_per_token")
+
+    def test_a_pool_route_is_free(self):
+        data = build_snapshot(
+            [("groq", "qwen3.8-27b")],
+            free_models={("groq", "qwen3.8-27b")},
+        )
+        self.assertEqual(billing_of(data, "groq", "qwen3.8-27b"), "free")
+
+    def test_a_route_without_a_price_is_unknown(self):
+        data = build_snapshot([("pi", "default")])
+        self.assertEqual(billing_of(data, "pi", "default"), "unknown")
+
+    def test_a_paid_route_of_an_unknown_provider_is_unknown(self):
+        # The negative case: a price is not a subscription.
+        data = build_snapshot(
+            [("newco", "x")], prices={("newco", "x"): {"input": 1.0, "output": 2.0}}
+        )
+        billing = billing_of(data, "newco", "x")
+        self.assertEqual(billing, "unknown")
+        self.assertNotEqual(billing, "subscription")
+
+    def test_every_candidate_and_winner_carries_a_billing_class(self):
+        models = [
+            ("claude", "claude-opus-5-5"),
+            ("codex", "gpt-6.1-sol"),
+            ("antigravity", "gemini-3.8-flash"),
+            ("opencode-go", "minimax-m3.1-flash-free"),
+            ("ollama", "gpt-oss-120b"),
+            ("grok", "grok-4.7"),
+            ("groq", "qwen3.8-27b"),
+            ("pi", "default"),
+            ("newco", "x"),
+        ]
+        data = build_snapshot(
+            models,
+            prices={
+                ("claude", "claude-opus-5-5"): {"input": 3.0, "output": 15.0},
+                ("codex", "gpt-6.1-sol"): {"input": 1.0, "output": 4.0},
+                ("antigravity", "gemini-3.8-flash"): {"input": 0.3, "output": 1.0},
+                ("grok", "grok-4.7"): {"input": 2.0, "output": 8.0},
+                ("newco", "x"): {"input": 1.0, "output": 2.0},
+            },
+            free_models={
+                ("opencode-go", "minimax-m3.1-flash-free"),
+                ("groq", "qwen3.8-27b"),
+            },
+            promo_models={("ollama", "gpt-oss-120b")},
+        )
+        candidates = data.get("candidates") or []
+        self.assertTrue(candidates)
+        for row in candidates:
+            billing = (row.get("access") or {}).get("billing")
+            self.assertIn(
+                billing,
+                BILLING_CLASSES,
+                f"{row.get('provider')}/{row.get('model')} has no billing class",
+            )
+        winners = data.get("tier_winners") or {}
+        seen = 0
+        for tier, entries in winners.items():
+            for winner in entries:
+                seen += 1
+                billing = (winner.get("access") or {}).get("billing")
+                self.assertIn(
+                    billing,
+                    BILLING_CLASSES,
+                    f"the winner of {tier} has no billing class",
+                )
+        self.assertTrue(seen, "the snapshot has no winner to check")
+
+
+if __name__ == "__main__":
+    unittest.main()

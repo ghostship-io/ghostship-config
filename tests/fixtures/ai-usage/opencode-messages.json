@@ -1,0 +1,467 @@
+{
+  "_comment": "Synthetic OpenCode request records for the reader's tests. Every row is invented: the handles are placeholders, the model ids are examples and the instants are offsets from now_epoch_ms. No row is copied from a live database.",
+  "now_epoch_ms": 1800000000000,
+  "rows": [
+    {
+      "id": "msg_success_stop",
+      "session_id": "ses_example_1",
+      "type": "assistant",
+      "time_created": 1799996400000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1799996400000},
+        "tokens": {"input": 1200, "output": 340, "reasoning": 60, "cache": {"read": 800, "write": 0}},
+        "finish": "stop"
+      }
+    },
+    {
+      "id": "msg_success_tool_calls",
+      "session_id": "ses_example_1",
+      "type": "assistant",
+      "time_created": 1799992800000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1799992800000},
+        "tokens": {"input": 900, "output": 120, "reasoning": 0},
+        "finish": "tool-calls"
+      }
+    },
+    {
+      "id": "msg_success_length",
+      "session_id": "ses_example_1",
+      "type": "assistant",
+      "time_created": 1799989200000,
+      "data": {
+        "model": {"providerID": "openrouter", "id": "example/some-router-model"},
+        "time": {"created": 1799989200000},
+        "tokens": {"input": 40000, "output": 0, "reasoning": 0},
+        "finish": "length"
+      }
+    },
+    {
+      "id": "msg_success_content_filter",
+      "session_id": "ses_example_2",
+      "type": "assistant",
+      "time_created": 1799985600000,
+      "data": {
+        "model": {"providerID": "openrouter", "id": "example/some-router-model"},
+        "time": {"created": 1799985600000},
+        "tokens": {"input": 300, "output": 0, "reasoning": 0},
+        "finish": "content-filter"
+      }
+    },
+    {
+      "id": "msg_other_no_finish",
+      "session_id": "ses_example_2",
+      "type": "assistant",
+      "time_created": 1799982000000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "tokens": {"input": 10, "output": 0, "reasoning": 0}
+      }
+    },
+    {
+      "id": "msg_other_unknown_finish",
+      "session_id": "ses_example_2",
+      "type": "assistant",
+      "time_created": 1799978400000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1799978400000},
+        "tokens": {"input": 10, "output": 0, "reasoning": 0},
+        "finish": "unknown"
+      }
+    },
+    {
+      "id": "msg_limit_session_window",
+      "session_id": "ses_example_3",
+      "type": "assistant",
+      "time_created": 1799974800000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1799974800000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.quota",
+          "data": {"message": "you (example-user) have reached your session usage limit"}
+        }
+      }
+    },
+    {
+      "id": "msg_limit_weekly_window",
+      "session_id": "ses_example_3",
+      "type": "assistant",
+      "time_created": 1799971200000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1799971200000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.quota",
+          "data": {"message": "you (example-user) have reached your weekly usage limit"}
+        }
+      }
+    },
+    {
+      "id": "msg_limit_daily_window",
+      "session_id": "ses_example_3",
+      "type": "assistant",
+      "time_created": 1799967600000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1799967600000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.rate-limit",
+          "data": {"message": "Rate limit exceeded: limit_rpd/example-model. Daily limit reached for example-model"}
+        }
+      }
+    },
+    {
+      "id": "msg_limit_free_models_per_day",
+      "session_id": "ses_example_3",
+      "type": "assistant",
+      "time_created": 1799964000000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/free-model"},
+        "time": {"created": 1799964000000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.rate-limit",
+          "data": {"message": "Rate limit exceeded: free-models-per-day"}
+        }
+      }
+    },
+    {
+      "id": "msg_limit_quota_type",
+      "session_id": "ses_example_3",
+      "type": "assistant",
+      "time_created": 1799960400000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/free-model"},
+        "time": {"created": 1799960400000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.quota",
+          "data": {"message": "Rate limit exceeded. Please try again later."}
+        }
+      }
+    },
+    {
+      "id": "msg_limit_go_usage",
+      "session_id": "ses_example_3",
+      "type": "assistant",
+      "time_created": 1799956800000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/free-model"},
+        "time": {"created": 1799956800000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.quota",
+          "data": {"message": "Go usage limit exceeded"}
+        }
+      }
+    },
+    {
+      "id": "msg_limit_current_quota",
+      "session_id": "ses_example_3",
+      "type": "assistant",
+      "time_created": 1799953200000,
+      "data": {
+        "model": {"providerID": "opencode", "id": "example/paid-model"},
+        "time": {"created": 1799953200000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.quota",
+          "data": {"message": "You exceeded your current quota, please check your plan"}
+        }
+      }
+    },
+    {
+      "id": "msg_limit_positive_balance",
+      "session_id": "ses_example_3",
+      "type": "assistant",
+      "time_created": 1799949600000,
+      "data": {
+        "model": {"providerID": "opencode", "id": "example/paid-model"},
+        "time": {"created": 1799949600000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.quota",
+          "data": {"message": "This request requires a positive account balance"}
+        }
+      }
+    },
+    {
+      "id": "msg_limit_credit_card",
+      "session_id": "ses_example_3",
+      "type": "assistant",
+      "time_created": 1799946000000,
+      "data": {
+        "model": {"providerID": "opencode", "id": "example/paid-model"},
+        "time": {"created": 1799946000000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.quota",
+          "data": {"message": "AI Gateway requires a valid credit card on file"}
+        }
+      }
+    },
+    {
+      "id": "msg_other_concurrent_requests",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799942400000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1799942400000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.rate-limit",
+          "data": {"message": "Too Many Requests: too many concurrent requests"}
+        }
+      }
+    },
+    {
+      "id": "msg_other_organization_concurrency",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799938800000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1799938800000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.rate-limit",
+          "data": {"message": "Your organization reached its limit of concurrent requests"}
+        }
+      }
+    },
+    {
+      "id": "msg_other_worker_concurrency",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799935200000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1799935200000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.rate-limit",
+          "data": {"message": "Worker local total request limit reached (8/8)"}
+        }
+      }
+    },
+    {
+      "id": "msg_other_free_models_per_minute",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799931600000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/free-model"},
+        "time": {"created": 1799931600000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.rate-limit",
+          "data": {"message": "Rate limit exceeded: free-models-per-min."}
+        }
+      }
+    },
+    {
+      "id": "msg_other_transient_rate_limit",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799928000000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/free-model"},
+        "time": {"created": 1799928000000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.rate-limit",
+          "data": {"message": "Rate limit exceeded: abc123def."}
+        }
+      }
+    },
+    {
+      "id": "msg_other_upstream_transient",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799924400000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/free-model"},
+        "time": {"created": 1799924400000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.rate-limit",
+          "data": {"message": "example-model is temporarily rate-limited upstream, please retry"}
+        }
+      }
+    },
+    {
+      "id": "msg_other_request_too_large",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799920800000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/free-model"},
+        "time": {"created": 1799920800000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.error",
+          "data": {"message": "Request too large for model example-model on tokens per minute (TPM)"}
+        }
+      }
+    },
+    {
+      "id": "msg_other_expired_key",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799917200000,
+      "data": {
+        "model": {"providerID": "opencode", "id": "example/paid-model"},
+        "time": {"created": 1799917200000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.auth-error",
+          "data": {"message": "This API key has expired"}
+        }
+      }
+    },
+    {
+      "id": "msg_other_invalid_token",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799913600000,
+      "data": {
+        "model": {"providerID": "opencode", "id": "example/paid-model"},
+        "time": {"created": 1799913600000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.auth-error",
+          "data": {"message": "Your authentication token is invalid"}
+        }
+      }
+    },
+    {
+      "id": "msg_other_aborted",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799910000000,
+      "data": {
+        "model": {"providerID": "opencode", "id": "example/paid-model"},
+        "time": {"created": 1799910000000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.aborted",
+          "data": {"message": "Step interrupted"}
+        }
+      }
+    },
+    {
+      "id": "msg_other_response_timeout",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799906400000,
+      "data": {
+        "model": {"providerID": "opencode", "id": "example/paid-model"},
+        "time": {"created": 1799906400000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.error",
+          "data": {"message": "Timed out waiting for response headers"}
+        }
+      }
+    },
+    {
+      "id": "msg_other_provider_error",
+      "session_id": "ses_example_4",
+      "type": "assistant",
+      "time_created": 1799902800000,
+      "data": {
+        "model": {"providerID": "opencode", "id": "example/paid-model"},
+        "time": {"created": 1799902800000},
+        "tokens": {"input": 0, "output": 0, "reasoning": 0},
+        "finish": "error",
+        "error": {
+          "type": "provider.error",
+          "data": {"message": "Provider returned error"}
+        }
+      }
+    },
+    {
+      "id": "msg_unmapped_provider",
+      "session_id": "ses_example_5",
+      "type": "assistant",
+      "time_created": 1799899200000,
+      "data": {
+        "model": {"providerID": "kilo-free", "id": "example/kilo-model"},
+        "time": {"created": 1799899200000},
+        "tokens": {"input": 500, "output": 100, "reasoning": 0},
+        "finish": "stop"
+      }
+    },
+    {
+      "id": "msg_with_retry",
+      "session_id": "ses_example_5",
+      "type": "assistant",
+      "time_created": 1799895600000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1799895600000},
+        "tokens": {"input": 100, "output": 20, "reasoning": 0},
+        "finish": "stop",
+        "retry": {"attempt": 2, "last": 1799895500000}
+      }
+    },
+    {
+      "id": "msg_without_tokens",
+      "session_id": "ses_example_5",
+      "type": "assistant",
+      "time_created": 1799892000000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1799892000000},
+        "finish": "stop"
+      }
+    },
+    {
+      "id": "msg_older_than_the_window",
+      "session_id": "ses_example_6",
+      "type": "assistant",
+      "time_created": 1796544000000,
+      "data": {
+        "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+        "time": {"created": 1796544000000},
+        "tokens": {"input": 1000, "output": 200, "reasoning": 0},
+        "finish": "stop"
+      }
+    },
+    {
+      "id": "msg_not_a_model_request",
+      "session_id": "ses_example_6",
+      "type": "user",
+      "time_created": 1799997000000,
+      "data": {"role": "user"}
+    }
+  ]
+}
