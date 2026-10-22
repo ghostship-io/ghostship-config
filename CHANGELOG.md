@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.96] - 2026-10-22
+
+- chill-penguin: model routing is off (`ghostship.aiUsage.routing.enabled = false`), by the owner's decision. The static worker table in ghostship-agent's runtime policy governs until the owner approves the selection framework; routing.json, the `ghostship_ai_routing_enabled` gauge and the page chip read off.
+
 ## [3.17.95] - 2026-10-22
 
 - chill-penguin: model routing is on (`ghostship.aiUsage.routing.enabled = true`). The owner approved turning it on once the Providers page and its data passed live validation; the evidence is in the AI-usage program's morning summary. The route picker reads the switch from routing.json, and the page's chip reads Routing ON.
