@@ -169,12 +169,23 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   local `git push origin main`;
   remote `git -C /home/nixos/nixos-config pull --ff-only origin main`;
   remote `nixos-rebuild build --flake .#chill-penguin`;
-  remote `./result/bin/switch-to-configuration switch`.
+  remote `scripts/activate-host --toplevel ./result`.
+  `scripts/activate-host` sets the system profile before the switch and
+  verifies that `/run/current-system` and the system profile name the same
+  generation. A bare `switch-to-configuration switch` does not record the
+  system generation, and a reboot then reverts to the profile's generation.
 - If `git push` is unavailable or fails, stop and ask the user to fix push
   access instead of inventing another deployment path.
 - Cloudflare SSH compatibility on `chill-penguin` depends on
   `services.openssh.macs` including plain `hmac-sha2-256` and
   `hmac-sha2-512` in addition to the `*-etm` variants.
+- The agent SSH key runs `ghostship-ssh-command-guard` as its forced command
+  (`modules/self-hosted/ssh-command-guard.nix`). It refuses a recursive content
+  read rooted at `/etc`, `/root`, `/home`, `/var/lib` or `/` with exit status
+  126 and a journal line under the `ghostship-ssh-command-guard` tag, and runs
+  every other command unchanged. Read named files only; a search of the host is
+  not a named file. The owner's own keys are authorized without a forced
+  command.
 
 ## Nix, Builds, and Host Boot
 
