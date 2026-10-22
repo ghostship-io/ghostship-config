@@ -620,6 +620,9 @@ def _candidate(
             "expected_used_ratio": None if expected is None else round(expected, 4),
             "measured_used_ratio": None if actual is None else round(actual, 4),
             "pace_delta": None if pace is None else round(pace, 4),
+            "scope": dict(
+                (getattr(entries[0], "quota_scope", None) or {}) if entries else {}
+            ),
             "capacity_binding_id": _binding_id(
                 getattr(entries[0], "capacity_binding", None) if entries else None
             ),

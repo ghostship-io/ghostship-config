@@ -130,6 +130,7 @@ class RankedModel:
     capacity_binding: Any = None
     applied_windows: tuple[Any, ...] = ()
     frontier_surplus: dict[str, Any] = dataclasses.field(default_factory=dict)
+    quota_scope: dict[str, Any] = dataclasses.field(default_factory=dict)
     used_tokens: float = 0.0
     three_d_tokens: float = 0.0
 
@@ -910,6 +911,7 @@ class _Candidate:
     expected: float | None
     actual: float | None
     account: str
+    quota_scope: dict[str, Any]
     pace_binding: Any
     capacity_binding: Any
     frontier_surplus: dict[str, Any]
@@ -1234,16 +1236,15 @@ def rank_models(
                 for window in windows_by_account.get(account, [])
                 if _window_applies(window, model)
             ]
-            if (
+            # A promotional or free route is not exempt from its account's
+            # paid allowance by price, a model suffix or an operation while
+            # the allowance is spent. Only a scope the provider reports (a
+            # model window, or a window that names other models) separates
+            # it. The observed free route is recorded on the scope, never
+            # used to remove a measured window.
+            observed_free_route = (
                 (provider, model) in free_pairs or (provider, model) in promo_pairs
-            ) and account in free_route_accounts:
-                # The provider is observed to serve this free route while its
-                # paid allowance is spent, so the paid allowance is not
-                # evidence about this model. The observation is recorded by
-                # the collector; the ranking only reads it.
-                windows = [
-                    window for window in windows if not _is_allowance_window(window)
-                ]
+            ) and account in free_route_accounts
         detail = _capacity_detail(windows, now)
         remaining = detail["remaining"]
         expires_in = detail["expiresIn"]
@@ -1327,6 +1328,18 @@ def rank_models(
                 pace_binding=detail["paceBinding"],
                 capacity_binding=detail["binding"],
                 account=account,
+                quota_scope={
+                    "account": account,
+                    "model_window": (provider, model) in windows_by_model,
+                    "windows": len(list(windows)),
+                    "observed_free_route": bool(observed_free_route),
+                    "exemption": False,
+                    "basis": (
+                        "the model window the provider reports"
+                        if (provider, model) in windows_by_model
+                        else "the account allowance; price and a model suffix do not exempt a route"
+                    ),
+                },
                 frontier_surplus=_frontier_surplus(list(windows), now),
                 applied_windows=list(windows),
             )
@@ -1421,6 +1434,7 @@ def rank_models(
                     capacity_binding=candidate.capacity_binding,
                     applied_windows=tuple(candidate.applied_windows),
                     frontier_surplus=candidate.frontier_surplus,
+                    quota_scope=candidate.quota_scope,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
@@ -1452,6 +1466,7 @@ def rank_models(
                     capacity_binding=candidate.capacity_binding,
                     applied_windows=tuple(candidate.applied_windows),
                     frontier_surplus=candidate.frontier_surplus,
+                    quota_scope=candidate.quota_scope,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
@@ -1480,6 +1495,7 @@ def rank_models(
                     capacity_binding=candidate.capacity_binding,
                     applied_windows=tuple(candidate.applied_windows),
                     frontier_surplus=candidate.frontier_surplus,
+                    quota_scope=candidate.quota_scope,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,

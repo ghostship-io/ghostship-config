@@ -177,6 +177,18 @@ question from CAD and printable-geometry suitability, so it is cited as
 future evidence and is not a score here. The collector opens no new client
 and fetches nothing for it.
 
+### Free-route quota scope
+
+A free or promotional route is not exempt from the paid allowance of its
+account by its zero price, a model suffix, or an observation that it was
+usable while the allowance was spent. Only a scope the provider reports
+separates it: a window keyed to that model, or an account window whose scope
+names other models. The row publishes `capacity.scope` with the account, the
+applied window count, whether a model window was used, whether the free route
+was observed operational (`observed_free_route`), and `exemption` (false
+unless a reported scope separates it). A spent account window therefore
+reaches the free route and shows zero, and the route is not a winner.
+
 ### Quota entitlements
 
 Two sources can report the same allowance. The OpenCode Go status surface
