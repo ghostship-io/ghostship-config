@@ -37,6 +37,8 @@ CREDENTIAL_FILE = re.compile(r"^/etc/(?:gshadow|shadow)(?:[-.*].*)?$")
 
 GREP_TOOLS = {"grep", "egrep", "fgrep", "zgrep", "rgrep", "ugrep"}
 RIPGREP_TOOLS = {"rg", "ripgrep"}
+# Shells a session falls back to when the account's shell is missing.
+FALLBACK_SHELLS = ("/bin/sh", "/bin/bash", "/usr/bin/bash")
 # Tools that read file contents. Only these are checked for credential files,
 # so listing a name is not treated as reading it.
 CONTENT_READERS = {
@@ -308,23 +310,35 @@ def classify_segment(name: str, rest: list[str], segment: list[str], cwd: str, h
     return Verdict.allow()
 
 
-def login_shell() -> str:
-    """The login shell of the account the session runs as."""
+def login_shell(override: str | None = None) -> str:
+    """The shell a session runs in.
+
+    The host may pin the shell. Otherwise the account's login shell is used
+    when it is there: an account may name a shell the host does not have, and
+    a container or a build sandbox has no account database at all, which would
+    leave the session without a shell to run in.
+    """
+    if override:
+        return override
+    candidates = []
     try:
-        return pwd.getpwuid(os.getuid()).pw_shell or "/bin/sh"
+        candidates.append(pwd.getpwuid(os.getuid()).pw_shell)
     except KeyError:
-        return "/bin/sh"
+        pass
+    candidates.extend(FALLBACK_SHELLS)
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    return FALLBACK_SHELLS[0]
 
 
-def run_login_shell() -> int:
+def run_login_shell(shell: str) -> int:
     """Start the login shell, as sshd does for a session without a command."""
-    shell = login_shell()
     os.execv(shell, ["-" + os.path.basename(shell)])
 
 
-def run_command(command: str) -> int:
+def run_command(command: str, shell: str) -> int:
     """Run the requested command through the login shell, as sshd does."""
-    shell = login_shell()
     os.execv(shell, [os.path.basename(shell), "-c", command])
 
 
@@ -375,14 +389,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--file", help="authorized keys file to prune")
     parser.add_argument("--material", action="append", default=[],
                         help="key material that must only be authorized through the guard")
+    parser.add_argument("--shell",
+                        help="the shell a session runs in; the account's login shell by default")
     args = parser.parse_args(argv)
     if args.mode == "prune":
         if not args.file:
             parser.error("prune needs --file")
         return prune(args.file, args.material)
     original = os.environ.get("SSH_ORIGINAL_COMMAND")
+    shell = login_shell(args.shell)
     if original is None or not original.strip():
-        run_login_shell()
+        run_login_shell(shell)
         return 0
     verdict = classify(original, cwd=os.getcwd(), home=os.path.expanduser("~"))
     if verdict.refused:
@@ -391,7 +408,7 @@ def main(argv: list[str] | None = None) -> int:
         print(message, file=sys.stderr)
         journal(args.journal, f"{os.uname().nodename} {message} Command: {original[:512]}")
         return 126
-    run_command(original)
+    run_command(original, shell)
     return 0
 
 
