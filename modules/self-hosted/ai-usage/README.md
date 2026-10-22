@@ -82,6 +82,18 @@ subtract rolling gauges. VictoriaMetrics does keep the recorded history, so
 as-of and range queries over the gauges above (quota filling, resets, decision
 changes) are correct.
 
+### 3D evidence
+
+The 3D tier has no prior and no blended score. A model enters it only with
+two pieces of evidence: the catalog proves it accepts image input, and a
+verified workload admission exists for 3D work. Until that admission exists
+the row says `state: pending` and holds no 3D rank. Artificial Analysis
+publishes an AA-3D evaluation of interactive 3D scenes
+(<https://artificialanalysis.ai/evaluations/aa-3d>); it is a different
+question from CAD and printable-geometry suitability, so it is cited as
+future evidence and is not a score here. The collector opens no new client
+and fetches nothing for it.
+
 ### Source health
 
 * `ghostship_ai_source_success{source,provider}` - 1 when the source read

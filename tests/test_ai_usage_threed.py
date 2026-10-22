@@ -167,65 +167,32 @@ class ThreeDUsageTest(unittest.TestCase):
         self.assertEqual(usage, {})
 
 
-class ThreeDPriorTest(unittest.TestCase):
-    def test_the_frontier_ranks_above_an_unknown_model(self) -> None:
-        unknown = threed.three_d_prior("somewhere", "some-unknown-model")
-        self.assertLess(unknown, threed.three_d_prior("antigravity", "gemini-3-pro"))
-        self.assertLess(unknown, threed.three_d_prior("antigravity", "claude-opus-4-1"))
-        self.assertLess(unknown, threed.three_d_prior("antigravity", "gpt-5.1-sol"))
+class ThreeDEvidenceTest(unittest.TestCase):
+    """The tier has no prior: only a proven visual and measured usage."""
 
-    def test_a_catalog_description_of_3d_work_lifts_the_prior(self) -> None:
-        plain = threed.three_d_prior("claude", "claude-sonnet-4-5")
-        lifted = threed.three_d_prior(
-            "claude",
-            "claude-sonnet-4-5",
-            {"description": "Strong at CAD and mesh geometry for 3D printing"},
+    def test_visual_capability_needs_the_image_modality(self) -> None:
+        self.assertTrue(
+            threed.visual_capable({"modalities": {"input": ["text", "image"]}})
         )
-        self.assertGreater(lifted, plain)
+        self.assertFalse(threed.visual_capable({"attachment": True}))
+        self.assertFalse(threed.visual_capable({"description": "good at CAD"}))
+        self.assertFalse(threed.visual_capable(None))
 
-    def test_a_preview_model_loses_a_little_of_the_prior(self) -> None:
-        settled = threed.three_d_prior("antigravity", "gemini-3-pro")
-        preview = threed.three_d_prior("antigravity", "gemini-3-pro-preview")
-        self.assertLess(preview, settled)
-
-    def test_the_prior_stays_within_range(self) -> None:
-        entry = {"description": "3d cad mesh geometry engineering physics", "attachment": True}
-        for provider, model in (
-            ("antigravity", "gemini-4-pro"),
-            ("claude", "claude-opus-4-1"),
-            ("grok", "grok-4"),
-            ("somewhere", "unknown-model"),
-        ):
-            score = threed.three_d_prior(provider, model, entry)
-            self.assertGreaterEqual(score, 0.0)
-            self.assertLessEqual(score, 1.0)
+    def test_there_is_no_prior_left(self) -> None:
+        self.assertFalse(hasattr(threed, "three_d_prior"))
+        self.assertFalse(hasattr(threed, "three_d_score"))
 
 
-class ThreeDScoreTest(unittest.TestCase):
-    def test_the_score_rises_with_usage(self) -> None:
-        unused = threed.three_d_samples(
-            "claude", "claude-opus-4-1", prior=0.92, tokens=0, now=NOW
-        )
-        used = threed.three_d_samples(
-            "claude", "claude-opus-4-1", prior=0.92, tokens=1_000_000, now=NOW
-        )
-        scores = {name: value for name, _labels, value in unused}
-        scores_used = {name: value for name, _labels, value in used}
-        self.assertGreater(scores_used["ghostship_ai_three_d_score"], scores["ghostship_ai_three_d_score"])
-        self.assertEqual(scores["ghostship_ai_three_d_usage_tokens"], 0.0)
-        self.assertEqual(scores_used["ghostship_ai_three_d_usage_tokens"], 1_000_000.0)
-
-    def test_the_samples_carry_the_expected_metric_names(self) -> None:
+class ThreeDSampleTest(unittest.TestCase):
+    def test_the_samples_carry_the_measured_usage_only(self) -> None:
         samples = threed.three_d_samples(
-            "claude", "claude-opus-4-1", prior=0.92, tokens=10, now=NOW
+            "claude", "claude-opus-4-1", tokens=10, now=NOW
         )
         names = sorted(name for name, _labels, _value in samples)
         self.assertEqual(
             names,
             [
                 "ghostship_ai_three_d_observed_timestamp_seconds",
-                "ghostship_ai_three_d_prior",
-                "ghostship_ai_three_d_score",
                 "ghostship_ai_three_d_usage_tokens",
             ],
         )
@@ -240,7 +207,7 @@ class ThreeDCollectTest(unittest.TestCase):
         self.home = Path(self._temporary.name)
         self.addCleanup(self._temporary.cleanup)
 
-    def test_collect_reports_the_prior_the_usage_and_the_score(self) -> None:
+    def test_collect_reports_the_measured_usage_and_the_visual_proof(self) -> None:
         _write_jsonl(
             self.home / ".claude" / "projects" / "-work-ghostship-3dprinting-bracket" / "s.jsonl",
             [
@@ -252,9 +219,14 @@ class ThreeDCollectTest(unittest.TestCase):
                 }
             ],
         )
+        catalog = {
+            "antigravity": {
+                "models": {"gemini-3-pro": {"modalities": {"input": ["text", "image"]}}}
+            }
+        }
         rows = threed.collect(
             str(self.home),
-            None,
+            catalog,
             [("antigravity", "gemini-3-pro")],
             NOW,
         )
@@ -262,25 +234,12 @@ class ThreeDCollectTest(unittest.TestCase):
         self.assertIn(("antigravity", "gemini-3-pro"), rows)
         used = rows[("claude", "claude-opus-4-1")]
         self.assertEqual(used["tokens"], 150)
-        self.assertGreater(used["score"], threed.three_d_score(used["prior"], 0))
+        self.assertFalse(used["visual"])
         unused = rows[("antigravity", "gemini-3-pro")]
         self.assertEqual(unused["tokens"], 0)
-        self.assertGreater(unused["prior"], 0.9)
-
-    def test_collect_uses_the_catalog_entry_of_a_model(self) -> None:
-        catalog = {
-            "anthropic": {
-                "models": {
-                    "claude-sonnet-4-5": {
-                        "description": "Good at CAD and 3D printing meshes",
-                        "modalities": {"input": ["text", "image"]},
-                    }
-                }
-            }
-        }
-        rows = threed.collect(str(self.home), catalog, [("claude", "claude-sonnet-4-5")], NOW)
-        row = rows[("claude", "claude-sonnet-4-5")]
-        self.assertGreater(row["prior"], 0.85)
+        self.assertTrue(unused["visual"])
+        self.assertNotIn("prior", unused)
+        self.assertNotIn("score", unused)
 
 
 if __name__ == "__main__":

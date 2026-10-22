@@ -62,6 +62,11 @@ try:  # pragma: no cover - the collector always ships catalog.py
 except ImportError:  # pragma: no cover - standalone use
     PROVIDER_ALIASES: dict[str, tuple[str, ...]] = {}
 
+try:  # pragma: no cover - the collector always ships aa_bind.py
+    import aa_bind
+except ImportError:  # pragma: no cover - standalone use
+    aa_bind = None  # type: ignore[assignment]
+
 
 @dataclasses.dataclass
 class ModelRecord:
@@ -110,7 +115,7 @@ class RankedModel:
     model: str
     rank: int
     score: float
-    quality: float
+    quality: float | None
     remaining: float | None
     expires_in_seconds: float | None
     available: bool
@@ -126,7 +131,6 @@ class RankedModel:
     applied_windows: tuple[Any, ...] = ()
     frontier_surplus: dict[str, Any] = dataclasses.field(default_factory=dict)
     used_tokens: float = 0.0
-    three_d_prior: float | None = None
     three_d_tokens: float = 0.0
 
 
@@ -203,16 +207,15 @@ RECENT_BONUS = 3.0
 FRESH_DAYS = 90.0
 FRESH_BONUS = 1.0
 
-# The quality a model needs to hold the frontier.
-FRONTIER_MIN_QUALITY = 95.0
+# A tier admits a model on measured evidence only: there is no quality
+# threshold here, because a threshold would be a guess about a score the feed
+# did not publish. The value and strength of a model are the measured
+# Artificial Analysis record, and a model without one is unranked.
 
-# The lineage prior a model needs to hold the frontier. The prior is the
-# standing of the model line itself, so a capability bonus (a large context
-# window, reasoning) cannot push a second rate model into the frontier.
-FRONTIER_MIN_PRIOR = 97.0
-
-# The quality a model needs to be worth bulk work.
-BULK_MIN_QUALITY = 60.0
+# The owner's frontier workhorses, and the only models that hold the frontier.
+# The list is explicit policy, not a score: another model with a higher index
+# does not take it over.
+FRONTIER_WORKHORSES = ("gpt-6.1-sol", "claude-opus-5-5")
 
 # The 3D tier stays small: only the best models are worth printing with.
 THREE_D_MAX_MEMBERS = 20
@@ -446,59 +449,35 @@ def _is_preview(*texts: str) -> bool:
 
 
 def quality_score(
-    catalog: Any,
+    aa_cache: Mapping[str, Any] | None,
     provider: str,
     model: str,
-    *,
-    now: float = 0.0,
-) -> float:
-    """The quality of one model, from 0 to 100."""
-    entry = _catalog_entry(catalog, provider, model)
-    family = entry.get("family")
-    score = _lineage_prior(family if isinstance(family, str) else "", model)
+) -> float | None:
+    """The measured Artificial Analysis intelligence index, or None.
 
-    released = _release_epoch(entry)
-    if released is None:
-        score -= 5
-    else:
-        age_days = (now - released) / DAY
-        if age_days <= RECENT_DAYS:
-            # A model that arrived in the last month is worth a little more
-            # than its lineage's older siblings.
-            score += RECENT_BONUS
-        elif age_days <= FRESH_DAYS:
-            score += FRESH_BONUS
-        if age_days > OLD_DAYS:
-            # A model older than a year is worth less; a model that is still
-            # within the year is worth the same as one released last month.
-            score -= 15
-
-    context = _context_window(entry)
-    if context >= 500000:
-        score += 3
-    elif context >= 200000:
-        score += 1
-
-    if entry.get("reasoning"):
-        score += 1
-    if entry.get("tool_call"):
-        score += 1
-
-    description = entry.get("description")
-    if _is_preview(
-        _catalog_name(catalog, provider, model),
-        description if isinstance(description, str) else "",
-        model,
-    ):
-        score -= 6
-
-    return _clamp(score)
+    There is no fallback and no prior: a model the feed has not measured has
+    no quality, and it is not ranked. The exact identity binding refuses a
+    record of another model, release or reasoning variant.
+    """
+    if aa_bind is None or not isinstance(aa_cache, Mapping):
+        return None
+    if aa_cache.get("status") != "ok":
+        return None
+    binding = aa_bind.resolve(
+        aa_cache.get("records") or (), provider, model
+    )
+    if binding.get("state") != "measured":
+        return None
+    record = binding.get("record") or {}
+    indices = record.get("indices") or {}
+    index = indices.get("intelligence_index")
+    if isinstance(index, (int, float)) and not isinstance(index, bool):
+        return float(index)
+    return None
 
 
-# The accounts the collector knows. A model is served by the account of its
-# provider: a model that the OpenCode instance serves through the Go plan
-# belongs to the Go account, even when its name starts like a model of
-# another account.
+# The accounts a provider name maps to. The provider name wins over the model
+# id, so a model served through an account keeps that account.
 KNOWN_ACCOUNTS = (
     "claude",
     "codex",
@@ -793,17 +772,20 @@ def _save_state(path: str | os.PathLike[str], state: dict[str, Any]) -> None:
         pass
 
 
-def _three_d_values(entry: Any) -> tuple[float, float, bool, float | None]:
-    """The 3D score, the 3D usage tokens, the eligibility, and the prior."""
+def _three_d_values(entry: Any) -> tuple[float, float, bool]:
+    """The measured 3D usage tokens and the explicit eligibility of a model.
+
+    Eligibility is the caller's verified evidence: the catalog proves the
+    model can read an image and the workload admission is explicit. There is
+    no prior and no score here; the tier orders by the measured record.
+    """
     if not isinstance(entry, Mapping):
-        return 0.0, 0.0, False, None
-    score = _as_float(entry.get("score"))
+        return 0.0, 0.0, False
     tokens = _as_float(entry.get("usage_tokens"))
     if tokens is None:
         tokens = _as_float(entry.get("tokens"))
     eligible = bool(entry.get("eligible", False))
-    prior = _as_float(entry.get("prior"))
-    return (score or 0.0), (tokens or 0.0), eligible, prior
+    return 0.0, (tokens or 0.0), eligible
 
 
 def _three_d_usage_score(tokens: float) -> float:
@@ -897,8 +879,7 @@ class _Candidate:
 
     provider: str
     model: str
-    quality: float
-    prior: float
+    quality: float | None
     available: bool
     fresh: bool
     small: bool
@@ -912,7 +893,6 @@ class _Candidate:
     three_d_score: float
     three_d_tokens: float
     three_d_eligible: bool
-    three_d_prior: float | None
     settled: bool
     pending_reason: str
     used_tokens: float
@@ -940,8 +920,11 @@ class _Candidate:
         """
         return (
             self.available
-            and self.quality >= FRONTIER_MIN_QUALITY
-            and self.prior >= FRONTIER_MIN_PRIOR
+            # A model with no measured record is never a frontier candidate,
+            # and neither is a model outside the owner's explicit workhorse
+            # list.
+            and self.quality is not None
+            and str(self.model) in FRONTIER_WORKHORSES
             and self.fresh
             and not self.small
             # A promotional free model is not a frontier account: it belongs
@@ -1073,7 +1056,10 @@ def _frontier_surplus(
 def _reasons(candidate: "_Candidate", tier: str) -> list[str]:
     """The short reasons behind a rank, so it can be explained."""
     reasons: list[str] = []
-    reasons.append(f"quality {candidate.quality:.0f} (a prior, not a measurement)")
+    if candidate.quality is None:
+        reasons.append("no verified Artificial Analysis record: unranked")
+    else:
+        reasons.append(f"quality {candidate.quality:.0f} (the verified index)")
     if candidate.remaining is None:
         reasons.append("capacity unknown: the provider reported no usable window")
     else:
@@ -1093,8 +1079,6 @@ def _reasons(candidate: "_Candidate", tier: str) -> list[str]:
         reasons.append("an economy model: cheap and fast")
     if candidate.free:
         reasons.append("free to use")
-    if candidate.three_d_prior is not None:
-        reasons.append(f"3D prior {candidate.three_d_prior:.2f}")
     if not candidate.settled:
         reasons.append(candidate.pending_reason)
     return reasons
@@ -1164,6 +1148,7 @@ def rank_models(
     external_availability: Mapping[tuple[str, str], bool] | None = None,
     usage_tokens: Mapping[tuple[str, str], float] | None = None,
     three_d_scores: Mapping[tuple[str, str], Any] | None = None,
+    aa_cache: Mapping[str, Any] | None = None,
     exclude_providers: Mapping[str, Iterable[str]] | None = None,
     free_route_accounts: Iterable[str] | None = None,
     now: float = 0.0,
@@ -1175,9 +1160,11 @@ def rank_models(
     may mention a model the inventory does not offer; such a model is
     reported as unavailable and is never ranked.
 
-    The 7 day token usage is accepted for the dashboard's own accounting and
-    does not change a rank: the tiers describe what a model is worth, not
-    how much it was used.
+    The quality of a model is the measured Artificial Analysis record and
+    nothing else: a model without one has no quality and no tier, and the
+    tiers carry no quality threshold calibrated on a guess. The 7 day token
+    usage is accepted for the dashboard's own accounting and does not change
+    a rank.
 
     `exclude_providers` names, per tier, the providers that must not appear
     in it. The default keeps every provider in every tier.
@@ -1274,7 +1261,7 @@ def rank_models(
                 remaining is not None and remaining > MIN_REMAINING
             )
 
-        quality = quality_score(catalog, provider, model, now=now)
+        quality = quality_score(aa_cache, provider, model)
 
         catalog_entry = _catalog_entry(catalog, provider, model)
         released = _release_epoch(catalog_entry)
@@ -1283,7 +1270,7 @@ def rank_models(
         family = catalog_entry.get("family")
         lineage = _lineage_key(family if isinstance(family, str) else "", model)
 
-        three_d_score, three_d_tokens, three_d_eligible, three_d_prior = _three_d_values(
+        three_d_score, three_d_tokens, three_d_eligible = _three_d_values(
             three_d.get((provider, model))
         )
 
@@ -1301,9 +1288,6 @@ def rank_models(
                 provider=provider,
                 model=model,
                 quality=quality,
-                prior=_lineage_prior(
-                    family if isinstance(family, str) else "", model
-                ),
                 available=available,
                 fresh=fresh,
                 small=_has_size_marker(model),
@@ -1317,7 +1301,6 @@ def rank_models(
                 three_d_score=three_d_score,
                 three_d_tokens=three_d_tokens,
                 three_d_eligible=three_d_eligible,
-                three_d_prior=three_d_prior,
                 settled=settled,
                 pending_reason=pending_reason,
                 used_tokens=usage.get((provider, model), 0.0),
@@ -1339,7 +1322,10 @@ def rank_models(
     three_d_keys = {
         candidate.key
         for candidate in candidates
-        if candidate.available and candidate.three_d_eligible and candidate.three_d_score > 0
+        # Explicit visual capability and a verified workload admission put a
+        # model in the tier; a measured record lets it hold a rank. Nothing
+        # else does: no family prior, no token volume, no attachment.
+        if candidate.available and candidate.three_d_eligible and candidate.quality is not None
     }
 
     entries: list[RankedModel] = []
@@ -1354,7 +1340,7 @@ def rank_models(
         surplus = candidate.frontier_surplus
         if (
             candidate.available
-            and quality >= BULK_MIN_QUALITY
+            and quality is not None
             and (
                 "frontier" not in tiers
                 # A frontier model may carry volume work when an allowance
@@ -1365,7 +1351,7 @@ def rank_models(
             )
         ):
             tiers.append("bulk")
-        if candidate.available and candidate.free:
+        if candidate.available and candidate.free and quality is not None:
             tiers.append("free")
         if candidate.key in three_d_keys:
             tiers.append("3d")
@@ -1374,37 +1360,29 @@ def rank_models(
         # The bulk score of a model that is wanted for 3D work is reduced, so
         # its bulk capacity stays with the free models. The frontier score is
         # never reduced.
-        bulk_score = quality * (1.0 + candidate.capacity_bonus)
+        bulk_score = (quality or 0.0) * (1.0 + candidate.capacity_bonus)
         # The bulk tier prefers the economy models: the cheap and fast ones
         # take the bulk work, so the paid frontier accounts keep their
         # capacity for frontier work.
         bulk_score = bulk_score * (
             ECONOMY_BULK_FACTOR if candidate.economy else PREMIUM_BULK_FACTOR
         )
-        if candidate.three_d_eligible and candidate.three_d_score >= 0.6:
-            bulk_score = bulk_score * 0.6
         pace_bonus = PACE_WEIGHT * (candidate.pace or 0.0)
         if "frontier" in tiers:
-            scores["frontier"] = quality * (
+            scores["frontier"] = (quality or 0.0) * (
                 1.0 + 2.0 * candidate.capacity_bonus + pace_bonus
             )
         if "bulk" in tiers:
             scores["bulk"] = bulk_score * (1.0 + pace_bonus)
         if "free" in tiers:
-            scores["free"] = quality * (
+            scores["free"] = (quality or 0.0) * (
                 1.0 + 0.5 * candidate.capacity_bonus + pace_bonus
             )
         if "3d" in tiers:
-            # The 3D tier ranks 3D skill and 3D usage. The capacity of the
-            # account is not part of it: a model that is good at 3D work
-            # belongs in the tier even when its account is busy.
-            if candidate.three_d_prior is not None:
-                three_d_quality = _clamp(candidate.three_d_prior * 100.0)
-            else:
-                three_d_quality = _clamp(candidate.three_d_score * 100.0)
-            # The 3D tier ranks the documented capability prior. Token volume
-            # is displayed beside it and is not evidence of 3D competence.
-            scores["3d"] = three_d_quality
+            # The tier ranks the measured Artificial Analysis index, with its
+            # condition published. It does not rank a 3D prior, and token
+            # volume is displayed beside it, never ranked as competence.
+            scores["3d"] = quality or 0.0
 
         if not tiers:
             entries.append(
@@ -1429,7 +1407,6 @@ def rank_models(
                     frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
-                    three_d_prior=candidate.three_d_prior,
                     three_d_tokens=candidate.three_d_tokens,
                 )
             )
@@ -1461,7 +1438,6 @@ def rank_models(
                     frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
-                    three_d_prior=candidate.three_d_prior,
                     three_d_tokens=candidate.three_d_tokens,
                 )
             )
@@ -1490,7 +1466,6 @@ def rank_models(
                     frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
-                    three_d_prior=candidate.three_d_prior,
                     three_d_tokens=candidate.three_d_tokens,
                 )
             )
@@ -1540,7 +1515,12 @@ def rank_samples(
         if key not in seen:
             seen.add(key)
             labels = {"provider": provider, "model": model}
-            samples.append(("ghostship_ai_model_quality", dict(labels), float(entry.quality)))
+            if entry.quality is not None:
+                # A model without a measured record has no quality sample at
+                # all; a zero or a prior would be a claim.
+                samples.append(
+                    ("ghostship_ai_model_quality", dict(labels), float(entry.quality))
+                )
             samples.append(
                 (
                     "ghostship_ai_model_available",

@@ -151,6 +151,29 @@ class FrontierMembershipTests(unittest.TestCase):
             },
             free_models=set(),
             usage_tokens={},
+            aa_cache={
+                "status": "ok",
+                "index_version": "4.3",
+                "fetched_at_epoch": NOW,
+                "records": [
+                    {
+                        "id": "id-claude-opus-5-5",
+                        "slug": "claude-opus-5-5",
+                        "model": "claude-opus-5-5",
+                        "release_date": "2026-12-01",
+                        "indices": {"intelligence_index": 100.0, "coding_index": 95.0},
+                        "cost_per_task": 0.2,
+                    },
+                    {
+                        "id": "id-gpt-6-1-sol",
+                        "slug": "gpt-6-1-sol",
+                        "model": "gpt-6.1-sol",
+                        "release_date": "2026-12-01",
+                        "indices": {"intelligence_index": 98.0, "coding_index": 96.0},
+                        "cost_per_task": 0.3,
+                    },
+                ],
+            },
             now=NOW,
         )
         return snapshot.build_snapshot(
@@ -250,7 +273,26 @@ class ThreeDVisualTests(unittest.TestCase):
         )
         self.assertFalse(any(entry.tier == "3d" for entry in ranked))
 
-    def test_a_visual_model_with_a_good_prior_qualifies(self):
+    def _feed(self):
+        return {
+            "status": "ok",
+            "index_version": "4.3",
+            "fetched_at_epoch": NOW,
+            "records": [
+                {
+                    "id": "id-gemini-3-8-flash",
+                    "slug": "gemini-3-8-flash",
+                    "model": "gemini-3.8-flash",
+                    "release_date": "2026-12-01",
+                    "indices": {"intelligence_index": 42.7},
+                    "cost_per_task": 0.2201,
+                    "median_performance": 100.0,
+                    "prices": {},
+                }
+            ],
+        }
+
+    def test_a_visual_model_with_explicit_eligibility_qualifies(self):
         ranked = ranking.rank_models(
             models=[ranking.ModelRecord("antigravity", "gemini-3.8-flash")],
             catalog=_VisualCatalog(),
@@ -259,17 +301,16 @@ class ThreeDVisualTests(unittest.TestCase):
             usage_tokens={},
             three_d_scores={
                 ("antigravity", "gemini-3.8-flash"): {
-                    "score": 0.9,
-                    "prior": 0.9,
                     "usage_tokens": 0.0,
                     "eligible": True,
                 }
             },
+            aa_cache=self._feed(),
             now=NOW,
         )
         self.assertTrue(any(entry.tier == "3d" for entry in ranked))
 
-    def test_the_3d_score_does_not_use_token_volume(self):
+    def test_the_3d_score_is_the_measured_index_not_token_volume(self):
         ranked = ranking.rank_models(
             models=[ranking.ModelRecord("antigravity", "gemini-3.8-flash")],
             catalog=_VisualCatalog(),
@@ -278,17 +319,16 @@ class ThreeDVisualTests(unittest.TestCase):
             usage_tokens={("antigravity", "gemini-3.8-flash"): 9_000_000_000.0},
             three_d_scores={
                 ("antigravity", "gemini-3.8-flash"): {
-                    "score": 0.9,
-                    "prior": 0.9,
                     "usage_tokens": 9_000_000_000.0,
                     "eligible": True,
                 }
             },
+            aa_cache=self._feed(),
             now=NOW,
         )
         three_d = [entry for entry in ranked if entry.tier == "3d"][0]
-        # The prior alone, on the 0..100 scale: no usage bonus.
-        self.assertAlmostEqual(three_d.score, 90.0, places=3)
+        # The measured index, never the token volume and never a prior.
+        self.assertAlmostEqual(three_d.score, 42.7, places=3)
 
 
 class _Catalog:

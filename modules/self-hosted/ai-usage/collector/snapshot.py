@@ -46,6 +46,7 @@ timestamps.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from datetime import datetime, timezone
@@ -168,6 +169,31 @@ def _pace_record(
     return expected, actual
 
 
+def _native_option(option: Mapping[str, Any]) -> dict[str, Any]:
+    """One native option, with every descriptor value the stock catalog gave.
+
+    A descriptor that lists the allowed values is what makes an alignment
+    checkable. The keys are kept as the catalog spells them; no global option
+    name is assumed.
+    """
+    record: dict[str, Any] = {
+        "id": str(option.get("id")),
+        "current_value": option.get("currentValue", option.get("current_value")),
+    }
+    for key in ("values", "allowed", "allowedValues", "choices", "enum"):
+        value = option.get(key)
+        if isinstance(value, (list, tuple)) and 0 < len(value) <= 64:
+            cleaned = [
+                item
+                for item in value
+                if isinstance(item, (str, int, float, bool))
+            ]
+            if cleaned:
+                record["values"] = cleaned
+                break
+    return record
+
+
 def _native_record(
     provider: str, model: str, native: Mapping[str, Any] | None
 ) -> dict[str, Any]:
@@ -188,11 +214,7 @@ def _native_record(
     return {
         "provider_instance_id": str(native.get("providerInstance") or ""),
         "model_id": str(native.get("modelId") or ""),
-        "options": [
-            {"id": str(option.get("id")), "current_value": option.get("currentValue")}
-            for option in (native.get("options") or [])
-            if isinstance(option, Mapping) and option.get("id")
-        ],
+        "options": [_native_option(option) for option in (native.get("options") or []) if isinstance(option, Mapping) and option.get("id")],
         "mapped": True,
         "provenance": "live T3 Code instance catalog",
     }
@@ -422,6 +444,8 @@ def _intelligence_record(
         "native_variant": binding.get("native_variant") or "",
         "variant_match": binding.get("variant_match") or "",
         "variant_mismatch": bool(binding.get("variant_mismatch")),
+        "condition_confirmed": bool(binding.get("condition_confirmed")),
+        "identity_match": binding.get("identity_match") or "",
         "variants": binding.get("variants") or [],
         "matched_by": binding.get("matched_by") or "",
         "checkpoint": binding.get("checkpoint") or "",
@@ -459,7 +483,6 @@ def _candidate(
     settled = True
     pending_reason = ""
     used_tokens = 0.0
-    three_d_prior: float | None = None
     three_d_tokens = 0.0
     account = ""
     pace: float | None = None
@@ -473,7 +496,7 @@ def _candidate(
             tiers.append(entry.tier)
             ranks[entry.tier] = entry.rank
             scores[entry.tier] = round(float(entry.score), 3)
-        quality = float(entry.quality)
+        quality = None if entry.quality is None else float(entry.quality)
         if entry.remaining is not None:
             remaining = float(entry.remaining)
         if entry.expires_in_seconds is not None:
@@ -482,7 +505,6 @@ def _candidate(
         settled = bool(entry.settled)
         pending_reason = entry.pending_reason
         used_tokens = float(entry.used_tokens)
-        three_d_prior = entry.three_d_prior
         three_d_tokens = float(entry.three_d_tokens)
         account = entry.account or account
         pace = getattr(entry, "pace", pace)
@@ -556,10 +578,14 @@ def _candidate(
         "account": account,
         "quota_account": account,
         "quality": {
-            "value": round(quality, 2),
-            "source": "prior",
-            "measured": False,
-            "basis": "lineage prior, release age, context window, capabilities",
+            "value": None if quality is None else round(quality, 2),
+            "source": "unknown" if quality is None else "measured",
+            "measured": quality is not None,
+            "basis": (
+                "the verified Artificial Analysis intelligence index"
+                if quality is not None
+                else "no verified record; the model awaits the feed"
+            ),
         },
         "capacity": {
             "remaining_ratio": None if remaining is None else round(remaining, 4),
@@ -575,6 +601,12 @@ def _candidate(
             "expected_used_ratio": None if expected is None else round(expected, 4),
             "measured_used_ratio": None if actual is None else round(actual, 4),
             "pace_delta": None if pace is None else round(pace, 4),
+            "capacity_binding_id": _binding_id(
+                getattr(entries[0], "capacity_binding", None) if entries else None
+            ),
+            "pace_binding_id": _binding_id(
+                getattr(entries[0], "pace_binding", None) if entries else None
+            ),
             "pace_binding": _binding_record(
                 getattr(entries[0], "pace_binding", None) if entries else None
             ),
@@ -591,9 +623,12 @@ def _candidate(
             "basis": "token volume, not task success",
         },
         "three_d": {
-            "prior": None if three_d_prior is None else round(three_d_prior, 3),
+            # No 3D prior exists: the tier is admitted on explicit visual
+            # capability and a verified workload admission, and its rank is
+            # the measured record. The usage is displayed beside that.
             "usage_tokens": round(three_d_tokens, 1),
-            "source": "prior" if three_d_tokens <= 0 else "prior+measured",
+            "source": "measured" if three_d_tokens > 0 else "none",
+            "basis": "our own 3D printing session history, last 30 days",
         },
         "intelligence": _intelligence_record(
             aa_cache, provider, model, native_record.get("options"), now
@@ -732,6 +767,7 @@ def _recommendations(
             if (row.get("availability") or {}).get("state") == "available"
             and row.get("rank")
             and (row.get("admission") or {}).get("state") == "settled"
+            and not _selection_excluded(str(row.get("model") or ""))
         ]
         if entry.get("complexity") == "high":
             # A dedicated free route needs admission evidence for the workload
@@ -881,14 +917,28 @@ def _recommendations(
 # is unknown is left out and the weights of the known ones are renormalized:
 # an unknown is never a zero, and it never makes a model look worse than it is
 # measured to be.
+# The owner's transparent policy: the measured intelligence and the measured
+# cost per task, and nothing else. These are policy weights, not claims of the
+# feed; the raw inputs and the transforms are published beside them.
 VALUE_WEIGHTS = {
-    "intelligence": 0.35,
-    "coding": 0.1,
-    "agentic": 0.1,
-    "engineering": 0.1,
-    "cost_per_task": 0.1,
-    "speed": 0.1,
-    "token_price": 0.15,
+    "intelligence": 0.80,
+    "cost_per_task": 0.20,
+}
+
+VALUE_TRANSFORMS = {
+    "intelligence": "I = the Artificial Analysis intelligence index / 100",
+    "cost_per_task": "E = 1 / (1 + the Artificial Analysis cost per task in USD)",
+}
+VALUE_POLICY = {
+    "formula": "0.80 * I + 0.20 * E",
+    "weights": dict(VALUE_WEIGHTS),
+    "transforms": dict(VALUE_TRANSFORMS),
+    "units": {
+        "intelligence": "the feed's index, 0 to 100, scaled to 0..1",
+        "cost_per_task": "US dollars per measured task, scaled to 0..1",
+    },
+    "requires": "both measurements; a missing cost per task leaves the value unknown",
+    "not_aa_claim": "the weights are an owner policy; the inputs are the feed's",
 }
 
 # The calculation of a winner, published with the snapshot so every number
@@ -907,23 +957,22 @@ CALCULATION = {
         ),
     },
     "value": {
-        "formula": (
-            "the weighted mean of the known components, with the weights of "
-            "the known ones renormalized; an unknown component is left out, "
-            "never counted as zero"
-        ),
+        "formula": VALUE_POLICY["formula"],
         "weights": dict(VALUE_WEIGHTS),
+        "transforms": dict(VALUE_TRANSFORMS),
+        "units": dict(VALUE_POLICY["units"]),
+        "requires": VALUE_POLICY["requires"],
+        "not_aa_claim": VALUE_POLICY["not_aa_claim"],
         "components": {
             "intelligence": "the verified intelligence index over 100",
-            "coding": "the verified coding index over 100",
-            "agentic": "the verified agentic index over 100",
-            "engineering": "the verified engineering index over 100",
             "cost_per_task": "1 / (1 + the cost per task of the feed)",
-            "speed": "the median output tokens per second over (100 + it)",
-            "token_price": (
-                "1 / (1 + the provider's listed blended token price), within "
-                "the provider"
-            ),
+        },
+        "visible_not_ranked": {
+            "coding": "the verified coding index, shown and not weighted",
+            "agentic": "the verified agentic index, shown and not weighted",
+            "engineering": "the verified engineering index, shown and not weighted",
+            "speed": "the median output tokens per second, shown and not weighted",
+            "released_at": "release metadata, shown and never a bonus",
         },
         "provider_order": (
             "the tiers are ordered by the pace of the provider's own window; "
@@ -947,7 +996,10 @@ CALCULATION = {
         "source": "pace_delta of the account window",
     },
     "gates": {
-        "frontier": "the frontier tier, with the newest model of a lineage",
+        "frontier": (
+            "the owner's explicit workhorses only: GPT-6.1 Sol and Claude "
+            "Opus 5.5; another model never takes the tier over"
+        ),
         "frontier_surplus": (
             "a frontier model may carry volume work only when a weekly or "
             "monthly allowance resets within a day and the session window is "
@@ -1000,90 +1052,201 @@ def _median(values: list[float]) -> float | None:
 
 
 def _calibrate_values(candidates: list[dict[str, Any]]) -> None:
-    """The value of every model on one common, calibrated basis.
+    """The combined value: the measured intelligence and the measured cost.
 
-    Every component carries the same weight for every model. A component a
-    model was not measured on sits at the median of the measured values of
-    the cohort, so missing evidence neither helps nor hurts: it is a neutral
-    estimate, and the coverage and the uncertainty of the row say how much of
-    the value was measured. Dropping the missing components and renormalizing
-    the weights would let a model win by being measured on less.
+    The policy is 0.80 * I + 0.20 * E with I the intelligence index over 100
+    and E = 1 / (1 + cost per task). Both measurements are required: a model
+    with no cost per task has an unknown efficiency and no combined value,
+    while its raw measured intelligence stays visible. Nothing is filled from
+    a cohort median and nothing is renormalized.
     """
-    cohort: dict[str, float] = {}
-    for name in VALUE_WEIGHTS:
-        measured = [
-            float(component["value"])
-            for row in candidates
-            for component in [((row.get("_components") or {}).get(name) or {})]
-            if component.get("source") == "measured"
-            and isinstance(component.get("value"), (int, float))
-        ]
-        median = _median(measured)
-        if median is not None:
-            cohort[name] = round(median, 4)
     for row in candidates:
         components = row.get("_components") or {}
-        known_weight = 0.0
-        total = 0.0
-        for name, weight in VALUE_WEIGHTS.items():
+        value_block = row.get("value") or {}
+        published = {}
+        for name in VALUE_WEIGHTS:
             component = components.get(name) or {}
             value = component.get("value")
-            source = component.get("source")
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
-                total += weight * float(value)
-                known_weight += weight
-            elif name in cohort:
-                total += weight * cohort[name]
-            # A component with no measurement and no cohort value is left out
-            # of the total, and it is not counted in the known coverage.
-        value_block = row.get("value") or {}
-        strength_component = (components.get("intelligence") or {}).get("value")
-        if not isinstance(strength_component, (int, float)):
-            # No verified record: no scalar at all. A median filled number
-            # would be a guess, and a guess never ranks a model.
-            value_block["components"] = {
-                name: {
-                    "value": (
-                        round(float((components.get(name) or {}).get("value")), 4)
-                        if isinstance((components.get(name) or {}).get("value"), (int, float))
-                        else None
-                    ),
-                    "source": str((components.get(name) or {}).get("source") or "unknown"),
-                }
-                for name in VALUE_WEIGHTS
+            published[name] = {
+                "value": (
+                    round(float(value), 4)
+                    if isinstance(value, (int, float)) and not isinstance(value, bool)
+                    else None
+                ),
+                "source": str(component.get("source") or "unknown"),
             }
-            value_block["weights"] = dict(VALUE_WEIGHTS)
-            value_block["cohort"] = {"basis": "", "values": {}}
-            value_block["coverage"] = 0.0
-            value_block["uncertainty"] = 1.0
+        value_block["components"] = published
+        value_block["weights"] = dict(VALUE_WEIGHTS)
+        value_block["transforms"] = dict(VALUE_TRANSFORMS)
+        value_block["cohort"] = {"basis": "", "values": {}}
+        intelligence = published["intelligence"]["value"]
+        efficiency = published["cost_per_task"]["value"]
+        if not isinstance(intelligence, (int, float)) or not isinstance(
+            efficiency, (int, float)
+        ):
+            known = int(isinstance(intelligence, (int, float))) + int(
+                isinstance(efficiency, (int, float))
+            )
+            value_block["coverage"] = known / len(VALUE_WEIGHTS)
+            value_block["uncertainty"] = 1.0 - known / len(VALUE_WEIGHTS)
             value_block["value"] = None
+            value_block["missing"] = [
+                name for name in VALUE_WEIGHTS if published[name]["value"] is None
+            ]
+            value_block["strength"] = (
+                round(float(intelligence) * 100.0, 4)
+                if isinstance(intelligence, (int, float))
+                else None
+            )
+            value_block["strength_source"] = published["intelligence"]["source"]
             row["value"] = value_block
             row.pop("_components", None)
             continue
-        value_block["components"] = {
-            name: {
-                "value": (
-                    round(float((components.get(name) or {}).get("value")), 4)
-                    if isinstance((components.get(name) or {}).get("value"), (int, float))
-                    else None
-                ),
-                "source": str((components.get(name) or {}).get("source") or "unknown"),
-            }
-            for name in VALUE_WEIGHTS
-        }
-        value_block["weights"] = {name: weight for name, weight in VALUE_WEIGHTS.items()}
-        value_block["cohort"] = {
-            "basis": (
-                "the median of the measured values of the candidates, used only "
-                "for a component a model was not measured on"
-            ),
-            "values": dict(cohort),
-        }
-        value_block["coverage"] = round(known_weight, 3)
-        value_block["uncertainty"] = round(1.0 - known_weight, 3)
-        value_block["value"] = round(total, 4)
+        combined = VALUE_WEIGHTS["intelligence"] * float(
+            intelligence
+        ) + VALUE_WEIGHTS["cost_per_task"] * float(efficiency)
+        value_block["coverage"] = 1.0
+        value_block["uncertainty"] = 0.0
+        value_block["missing"] = []
+        value_block["value"] = round(combined, 6)
+        value_block["strength"] = round(float(intelligence) * 100.0, 4)
+        value_block["strength_source"] = published["intelligence"]["source"]
         row["value"] = value_block
         row.pop("_components", None)
+
+
+def _applied_windows(windows: Iterable[Any]) -> list[dict[str, Any]]:
+    """The windows that apply to a model, with their scope.
+
+    A shared window applies to every model of the account; a model scoped
+    window names the family it belongs to. The most constraining of them
+    decides the availability, so a subordinate sublimit is never read as an
+    independent allowance.
+    """
+    records: list[dict[str, Any]] = []
+    for window in windows or ():
+        scope = getattr(window, "applies_to", ()) or ()
+        used = getattr(window, "used_ratio", None)
+        reset = getattr(window, "reset_epoch", None)
+        records.append(
+            {
+                "quota": str(getattr(window, "quota_id", "") or "default"),
+                "kind": str(getattr(window, "kind", "") or "other"),
+                "scope": "model" if scope else "shared",
+                "applies_to": [str(token) for token in scope],
+                "remaining_ratio": (
+                    round(max(0.0, 1.0 - float(used)), 4)
+                    if isinstance(used, (int, float)) and not isinstance(used, bool)
+                    else None
+                ),
+                "reset_at": _iso(float(reset)) if isinstance(reset, (int, float)) else None,
+            }
+        )
+    return records
+
+
+def _binding_record(window: Any) -> dict[str, Any] | None:
+    """The identity of the window a binding came from."""
+    if window is None:
+        return None
+    kind = getattr(window, "kind", None)
+    quota = getattr(window, "quota_id", None)
+    duration = getattr(window, "duration_seconds", None)
+    reset = getattr(window, "reset_epoch", None)
+    return {
+        "kind": None if kind is None else str(kind),
+        "quota": None if quota is None else str(quota),
+        "duration_seconds": int(duration) if isinstance(duration, (int, float)) else None,
+        "reset_at": _iso(reset) if isinstance(reset, (int, float)) else None,
+    }
+
+
+def _binding_id(window: Any) -> str | None:
+    """The exact id of the window a binding came from, or None."""
+    if window is None:
+        return None
+    kind = getattr(window, "kind", None)
+    quota = getattr(window, "quota_id", None)
+    if kind is None and quota is None:
+        return None
+    return f"{kind or 'window'}:{quota or 'primary'}"
+
+
+def _bindings_differ(row: Mapping[str, Any]) -> bool:
+    """True when the hard capacity and the pace bind different windows."""
+    capacity = row.get("capacity") or {}
+    return bool(capacity.get("capacity_binding_id")) and bool(
+        capacity.get("pace_binding_id")
+    ) and capacity.get("capacity_binding_id") != capacity.get("pace_binding_id")
+
+
+def _visual_capable(entry: Any) -> bool:
+    """True when the catalog proves the model accepts image input."""
+    if not isinstance(entry, Mapping):
+        return False
+    modalities = entry.get("modalities")
+    if not isinstance(modalities, Mapping):
+        return False
+    inputs = modalities.get("input")
+    if not isinstance(inputs, list):
+        return False
+    return any(str(value).lower() == "image" for value in inputs)
+
+
+def _three_d_state(row: Mapping[str, Any], entry: Any) -> dict[str, Any]:
+    """The 3D evidence of a row: admitted, or pending.
+
+    The tier needs an explicit, verified admission for 3D work and a catalog
+    that proves image input. There is no prior. Artificial Analysis publishes
+    an AA-3D evaluation of interactive 3D scenes; it is a different question
+    from CAD and printable geometry, so it is cited as future evidence only
+    and is not a score here.
+    """
+    visual = _visual_capable(entry)
+    admitted = _admitted_for(row, "3d")
+    text_only = bool((row.get("aa") or {}).get("text_only"))
+    if admitted and visual and not text_only:
+        state = "admitted"
+        reason = "a verified 3D workload admission and a proven image input"
+    elif text_only:
+        state = "ineligible"
+        reason = "the official record is text only"
+    elif not visual:
+        state = "ineligible"
+        reason = "the catalog does not prove image input"
+    else:
+        state = "pending"
+        reason = "no verified 3D workload admission yet"
+    return {
+        "state": state,
+        "reason": reason,
+        "visual": visual,
+        "admitted": admitted,
+        "evidence": (
+            "a verified admission record; AA-3D (interactive 3D scenes) may "
+            "inform it later but is not a CAD or printable-geometry score"
+        ),
+    }
+
+
+def _row_variant(row: Mapping[str, Any]) -> str:
+    """The reasoning variant a model is run with, when it is known.
+
+    The variant is the value of the option that changes the reasoning of a
+    model. A model without such an option has the empty variant.
+    """
+    options = (row.get("native") or {}).get("options") or []
+    parts: list[str] = []
+    for option in options:
+        if not isinstance(option, Mapping):
+            continue
+        name = str(option.get("id") or "").lower()
+        value = option.get("current_value")
+        if name in ("variant", "reasoningeffort", "effort", "thinking") and isinstance(
+            value, (str, int, float, bool)
+        ):
+            parts.append(f"{name}={value}")
+    return ",".join(parts)
 
 
 def _pending_identities(
@@ -1153,85 +1316,18 @@ def _pending_identities(
     return pending
 
 
-def _applied_windows(windows: Iterable[Any]) -> list[dict[str, Any]]:
-    """The windows that apply to a model, with their scope.
-
-    A shared window applies to every model of the account; a model scoped
-    window names the family it belongs to. The most constraining of them
-    decides the availability, so a subordinate sublimit is never read as an
-    independent allowance.
-    """
-    records: list[dict[str, Any]] = []
-    for window in windows or ():
-        scope = getattr(window, "applies_to", ()) or ()
-        used = getattr(window, "used_ratio", None)
-        reset = getattr(window, "reset_epoch", None)
-        records.append(
-            {
-                "quota": str(getattr(window, "quota_id", "") or "default"),
-                "kind": str(getattr(window, "kind", "") or "other"),
-                "scope": "model" if scope else "shared",
-                "applies_to": [str(token) for token in scope],
-                "remaining_ratio": (
-                    round(max(0.0, 1.0 - float(used)), 4)
-                    if isinstance(used, (int, float)) and not isinstance(used, bool)
-                    else None
-                ),
-                "reset_at": _iso(float(reset)) if isinstance(reset, (int, float)) else None,
-            }
-        )
-    return records
-
-
-def _binding_record(window: Any) -> dict[str, Any] | None:
-    """The identity of the window a binding came from."""
-    if window is None:
-        return None
-    kind = getattr(window, "kind", None)
-    quota = getattr(window, "quota_id", None)
-    duration = getattr(window, "duration_seconds", None)
-    reset = getattr(window, "reset_epoch", None)
-    return {
-        "kind": None if kind is None else str(kind),
-        "quota": None if quota is None else str(quota),
-        "duration_seconds": int(duration) if isinstance(duration, (int, float)) else None,
-        "reset_at": _iso(reset) if isinstance(reset, (int, float)) else None,
-    }
-
-
-def _row_variant(row: Mapping[str, Any]) -> str:
-    """The reasoning variant a model is run with, when it is known.
-
-    The variant is the value of the option that changes the reasoning of a
-    model. A model without such an option has the empty variant.
-    """
-    options = (row.get("native") or {}).get("options") or []
-    parts: list[str] = []
-    for option in options:
-        if not isinstance(option, Mapping):
-            continue
-        name = str(option.get("id") or "").lower()
-        value = option.get("current_value")
-        if name in ("variant", "reasoningeffort", "effort", "thinking") and isinstance(
-            value, (str, int, float, bool)
-        ):
-            parts.append(f"{name}={value}")
-    return ",".join(parts)
-
-
 def _component_value(components: dict[str, float | None]) -> tuple[float | None, dict[str, float]]:
-    """The weighted mean of the known components, and the weights used."""
-    known = {
-        name: float(value)
-        for name, value in components.items()
-        if isinstance(value, (int, float)) and not isinstance(value, bool)
-    }
-    total_weight = sum(VALUE_WEIGHTS[name] for name in known if name in VALUE_WEIGHTS)
-    if total_weight <= 0:
-        return None, {}
-    value = sum(VALUE_WEIGHTS[name] * known[name] for name in known if name in VALUE_WEIGHTS) / total_weight
-    used = {name: VALUE_WEIGHTS[name] for name in known if name in VALUE_WEIGHTS}
-    return value, used
+    """The combined value of the measured inputs, and the weights used.
+
+    Both inputs are required. A missing input means no combined value rather
+    than a renormalized score over the inputs that happen to exist.
+    """
+    for name in VALUE_WEIGHTS:
+        value = components.get(name)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return None, {}
+    value = sum(VALUE_WEIGHTS[name] * float(components[name]) for name in VALUE_WEIGHTS)
+    return value, dict(VALUE_WEIGHTS)
 
 
 def _fill_value(
@@ -1260,6 +1356,14 @@ def _fill_value(
             "source": "provider listing",
             "relative_index": None,
         }
+    if isinstance(fact, Mapping) and isinstance(fact.get("admission_evidence"), list):
+        allowed_workloads = tuple(getattr(facts_module, "PUBLIC_WORKLOADS", ()))
+        row["admission_evidence"] = [
+            entry
+            for entry in fact["admission_evidence"]
+            if isinstance(entry, Mapping)
+            and str(entry.get("workload") or "") in allowed_workloads
+        ]
     intelligence = dict(row.get("intelligence") or {})
     indices = dict(intelligence.get("indices") or {})
     # The verified record of the exact model: the current feed when it lists
@@ -1301,9 +1405,12 @@ def _fill_value(
         # selectable only when its native options can be aligned to the
         # measured setting; otherwise the mismatch stays visible and it is
         # not selected. Nothing is guessed about the unmeasured setting.
-        if bind_module.can_align((row.get("native") or {}).get("options"), measured_variant):
+        aligned = bind_module.alignment_option(
+            (row.get("native") or {}).get("options"), measured_variant
+        )
+        if aligned is not None:
             selectable = True
-            alignment = {"reasoningEffort": measured_variant}
+            alignment = {aligned[0]: aligned[1]}
         else:
             selectable = False
     row["aa"] = {
@@ -1318,14 +1425,28 @@ def _fill_value(
         "slug": intelligence.get("slug"),
         "name": intelligence.get("name"),
         "release_date": intelligence.get("release_date"),
+        # The feed's own raw inputs, distinct from the provider's listing.
+        "cost_per_task": intelligence.get("cost_per_task"),
+        "median_performance": intelligence.get("median_performance"),
+        "token_prices": intelligence.get("token_prices") or {},
         "index_version": intelligence.get("index_version"),
         "fetched_at": intelligence.get("fetched_at"),
         "condition": {
             "measured_variant": measured_variant,
             "native_variant": intelligence.get("native_variant") or "",
             "variant_match": intelligence.get("variant_match") or "",
+            # True only when the native setting is the measured one, or when
+            # the feed marks the record as the provider's default fallback.
+            # An id without an effort option is not proof of either.
+            "confirmed": bool(intelligence.get("condition_confirmed")),
+            "note": (
+                "the benchmark condition is the feed's own label; a model "
+                "that publishes no effort keeps that condition visible and "
+                "is not assumed to run at it"
+            ),
             "variants": intelligence.get("variants") or [],
             "checkpoint": intelligence.get("checkpoint") or "",
+            "identity_match": intelligence.get("identity_match") or "",
         },
         "variants": intelligence.get("variants") or [],
         "matched_by": intelligence.get("matched_by") or "",
@@ -1353,10 +1474,24 @@ def _fill_value(
             "basis": "no verified record; the model awaits the feed",
         }
     )
-    if row["aa"]["text_only"]:
-        # The official evidence says text only: the model is never a 3D
-        # candidate, whatever a catalog modality field claims.
+    entry = None
+    if catalog is not None:
+        getter = getattr(catalog, "model_entry", None)
+        if callable(getter):
+            try:
+                entry = getter(provider, model)
+            except Exception:  # pragma: no cover - a catalog without the model
+                entry = None
+    three_d = _three_d_state(row, entry)
+    row["three_d"].update(three_d)
+    if three_d["state"] != "admitted":
+        # Without explicit evidence the model is not a 3D candidate; the
+        # pending state stays visible on the row.
         row["tiers"] = [tier for tier in row["tiers"] if tier != "3d"]
+    elif "3d" not in row["tiers"]:
+        # The verified admission is the evidence the snapshot holds; the
+        # ranking's 3D list is an input, not the authority.
+        row["tiers"].append("3d")
     indices = intelligence.get("indices") or {}
 
     def index(name: str) -> float | None:
@@ -1380,8 +1515,11 @@ def _fill_value(
         "agentic": index("agentic_index"),
         "engineering": index("engineering_index"),
         "cost_per_task": (
-            1.0 / (1.0 + max(0.0, float(cost_per_task)))
-            if isinstance(cost_per_task, (int, float)) and not isinstance(cost_per_task, bool)
+            1.0 / (1.0 + float(cost_per_task))
+            if isinstance(cost_per_task, (int, float))
+            and not isinstance(cost_per_task, bool)
+            and math.isfinite(float(cost_per_task))
+            and float(cost_per_task) >= 0.0
             else None
         ),
         "speed": (
@@ -1518,6 +1656,25 @@ def _winners(
     return winners, coverage
 
 
+# The owner's explicit selection exclusions. Astra and Fable remain in the
+# usage and quota readings, and they are never a winner or a recommendation in
+# any tier: the frontier workhorses are GPT-6.1 Sol and Claude Opus 5.5.
+SELECTION_EXCLUDED_MODELS = ("gpt-6-astra", "claude-fable-5", "claude-fable-5-1")
+FRONTIER_WORKHORSES = ("gpt-6.1-sol", "claude-opus-5-5")
+
+
+def _normalised_model(model: str) -> str:
+    return str(model or "").strip().lower().replace(".", "-")
+
+
+def _selection_excluded(model: str) -> bool:
+    return _normalised_model(model) in SELECTION_EXCLUDED_MODELS
+
+
+def _frontier_workhorse(model: str) -> bool:
+    return str(model or "").strip().lower() in FRONTIER_WORKHORSES
+
+
 def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
     """True when a model may hold a rank in a tier.
 
@@ -1535,9 +1692,15 @@ def _eligible_for_tier(row: Mapping[str, Any], tier: str) -> bool:
         # model cannot be aligned to: the mismatch stays visible and the
         # model is not selected.
         return False
+    if _selection_excluded(str(row.get("model") or "")):
+        # Astra and Fable are read, counted and shown; they are never picked.
+        return False
     eligibility = row.get("eligibility") or {}
     if tier == "frontier":
-        return bool((eligibility.get("frontier_prime") or {}).get("allowed"))
+        # The frontier is the owner's two workhorses and nothing else.
+        return bool((eligibility.get("frontier_prime") or {}).get("allowed")) and (
+            _frontier_workhorse(str(row.get("model") or ""))
+        )
     return bool((eligibility.get("delegate") or {}).get("allowed"))
 
 
@@ -1624,6 +1787,7 @@ def build_snapshot(
             free_set,
             promo_set,
         )
+        row["capacity"]["bindings_differ"] = _bindings_differ(row)
         variant = _row_variant(row)
         fact = facts_module.lookup_by_model(
             facts_source,
@@ -1660,6 +1824,7 @@ def build_snapshot(
             or row["admission"]["state"] == "pending"
             or row["quota_state"] != "unknown"
             or row["aa"]["state"] != "measured"
+            or not row["rank"]
         ):
             # An unranked model stays visible with its reason: the dashboard
             # shows it waiting for the feed, not silently dropped.
@@ -1728,6 +1893,44 @@ def build_snapshot(
         "reasons": aa_reasons,
         "candidates": aa_coverage_rows,
     }
+    provider_capacity: dict[str, Any] = {}
+    for account, windows in accounts.items():
+        reported = [
+            window
+            for window in windows
+            if window.get("evidence") == "provider_reported"
+            and isinstance(window.get("remaining_ratio"), (int, float))
+            and not isinstance(window.get("remaining_ratio"), bool)
+        ]
+        unknown = [window for window in windows if window not in reported]
+        spent = [window for window in reported if float(window["remaining_ratio"]) <= 0.0]
+        binding = None
+        remaining: float | None = None
+        if spent:
+            # A spent window blocks the provider even when another window
+            # still has room.
+            binding = sorted(spent, key=lambda window: str(window.get("kind") or ""))[0]
+            remaining = 0.0
+        elif reported:
+            binding = min(reported, key=lambda window: float(window["remaining_ratio"]))
+            remaining = float(binding["remaining_ratio"])
+        provider_capacity[account] = {
+            "remaining_ratio": None if remaining is None else round(remaining, 4),
+            "binding": None
+            if binding is None
+            else {
+                "kind": binding.get("kind"),
+                "quota": binding.get("quota"),
+                "reset_at": binding.get("reset_at"),
+            },
+            "windows": len(windows),
+            "unknown_windows": len(unknown),
+            "basis": (
+                "the lowest applicable remaining share; any spent window "
+                "blocks the provider, and an unknown window is not room"
+            ),
+        }
+
     source_records = []
     for source in sources:
         record = dict(source)
@@ -1858,7 +2061,10 @@ def build_snapshot(
         "tier_winners": winners,
         "tier_members": tier_members,
         "calculation": CALCULATION,
-        "quota": {"accounts": accounts},
+        "quota": {
+            "accounts": accounts,
+            "provider_capacity": provider_capacity,
+        },
         "quality_feed": {
             "source": "artificialanalysis",
             "status": str((aa_cache or {}).get("status") or "no_cache"),
@@ -1917,6 +2123,7 @@ def build_snapshot(
             "pending_identities": pending_identities,
         },
         "pending": pending,
+        "value_policy": VALUE_POLICY,
         "aa_coverage": aa_coverage,
         "counts": {
             "candidates": len(candidates),

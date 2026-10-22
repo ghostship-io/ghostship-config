@@ -17,6 +17,53 @@ import ranking  # noqa: E402
 NOW = 1_760_000_000.0
 DAY = 86400.0
 
+# The ranking reads quality from the measured Artificial Analysis record.
+# These tests inject one measured record per model, so no prior is involved.
+AA_INDEX = 80.0
+
+
+def aa_cache_for(models):
+    records = []
+    seen = set()
+    for record in models or ():
+        provider = getattr(record, "provider", "")
+        model = getattr(record, "model", "")
+        key = (provider, model)
+        if key in seen:
+            continue
+        seen.add(key)
+        records.append(
+            {
+                "id": f"id-{provider}-{model}",
+                "slug": model,
+                "model": model,
+                "release_date": "2025-09-20",
+                "indices": {"intelligence_index": AA_INDEX},
+                "cost_per_task": 0.2,
+                "median_performance": 100.0,
+                "prices": {},
+            }
+        )
+    return {
+        "status": "ok",
+        "index_version": "4.3",
+        "fetched_at": "2025-09-20T00:00:00Z",
+        "fetched_at_epoch": NOW,
+        "records": records,
+    }
+
+
+_rank_models = ranking.rank_models
+
+
+def _rank_with_feed(**kwargs):
+    if "aa_cache" not in kwargs:
+        kwargs["aa_cache"] = aa_cache_for(kwargs.get("models") or ())
+    return _rank_models(**kwargs)
+
+
+ranking.rank_models = _rank_with_feed
+
 
 def entry(
     model_id,
@@ -279,18 +326,19 @@ class ThreeDTests(unittest.TestCase):
             now=NOW,
         )
 
-    def test_a_three_d_model_ranks_lower_in_the_bulk_tier(self):
-        bulk = tier_members(self.rank(self.three_d), "bulk")
-        self.assertEqual(
-            [item.model for item in bulk],
-            ["deepseek-thinking-v3", "deepseek-pro-v3"],
-        )
+    def test_three_d_eligibility_does_not_change_the_bulk_order(self):
+        with_3d = [item.model for item in tier_members(self.rank(self.three_d), "bulk")]
+        without = [item.model for item in tier_members(self.rank(), "bulk")]
+        self.assertEqual(with_3d, without)
 
-    def test_without_a_three_d_score_the_bulk_order_is_unchanged(self):
-        bulk = tier_members(self.rank(), "bulk")
-        self.assertEqual(
-            [item.model for item in bulk],
-            ["deepseek-pro-v3", "deepseek-thinking-v3"],
+    def test_a_three_d_member_needs_explicit_eligibility(self):
+        self.assertIn(
+            ("deepseek", "deepseek-pro-v3", "3d"),
+            tiers_of(self.rank(self.three_d)),
+        )
+        self.assertNotIn(
+            ("deepseek", "deepseek-pro-v3", "3d"),
+            tiers_of(self.rank()),
         )
 
     def test_the_frontier_rank_is_untouched(self):
@@ -394,7 +442,7 @@ class UnknownModelTests(unittest.TestCase):
         )
         found = [item for item in ranked if item.model == "claude-opus-9-9"]
         self.assertTrue(found)
-        self.assertEqual(found[0].quality, 95.0)
+        self.assertEqual(found[0].quality, AA_INDEX)
         self.assertEqual(found[0].tier, "bulk")
         self.assertEqual(found[0].rank, 1)
 
@@ -429,7 +477,7 @@ class UnknownModelTests(unittest.TestCase):
         self.assertEqual(len(quality), 1)
         self.assertEqual(quality[0][0]["provider"], "anthropic")
         self.assertEqual(quality[0][0]["model"], "claude-opus-9-9")
-        self.assertEqual(quality[0][1], 95.0)
+        self.assertEqual(quality[0][1], AA_INDEX)
 
         ranks = [
             (labels, value)
@@ -553,7 +601,12 @@ class LineageFrontierTests(unittest.TestCase):
             now=NOW,
         )
         frontier = {item.model for item in tier_members(ranked, "frontier")}
-        self.assertEqual(frontier, {"claude-opus-6"})
+        # The frontier is the owner's explicit workhorse list; a newer
+        # release does not take it over.
+        self.assertEqual(frontier, {"claude-opus-5-5"})
+        self.assertNotIn(
+            ("anthropic", "claude-opus-6", "frontier"), tiers_of(ranked)
+        )
 
     def test_the_version_of_the_id_decides_when_the_dates_are_missing(self):
         catalog = make_catalog(
@@ -704,77 +757,62 @@ class EconomyBulkTests(unittest.TestCase):
 
 
 class RecencyBonusTests(unittest.TestCase):
-    """A brand new model is worth a little more."""
+    """Release age does not add a quality number: the index is measured."""
 
-    def quality_of(self, released):
-        catalog = make_catalog(
-            {
-                "google": {
-                    "models": {
-                        "gemini-3.8-pro": entry(
-                            "gemini-3.8-pro", "gemini", released=released
-                        )
-                    }
-                }
-            }
-        )
-        ranked = ranking.rank_models(
-            models=[ranking.ModelRecord("antigravity", "gemini-3.8-pro")],
-            catalog=catalog,
-            quota_windows={},
-            free_models=set(),
-            usage_tokens={},
-            now=NOW,
-        )
-        found = [item for item in ranked if item.model == "gemini-3.8-pro"]
-        self.assertTrue(found)
-        return found[0].quality
-
-    def test_a_model_released_today_scores_higher_than_one_released_a_year_ago(self):
-        today = self.quality_of("2025-10-09")
-        a_year_ago = self.quality_of("2024-10-09")
-        self.assertGreater(today, a_year_ago)
-        # A model of the last month gains three, a model of last year loses
-        # fifteen.
-        self.assertAlmostEqual(today - a_year_ago, 18.0)
-
-    def test_the_bonus_reaches_the_free_tier(self):
-        catalog = make_catalog(
-            {
-                "opencode-go": {
-                    "models": {
-                        "minimax-m3.1-flash-free": entry(
-                            "minimax-m3.1-flash-free",
-                            "minimax",
-                            released="2025-10-01",
-                            cost={"input": 0, "output": 0},
-                        ),
-                        "minimax-m3.1-flash": entry(
-                            "minimax-m3.1-flash",
-                            "minimax",
-                            released="2025-01-01",
-                            cost={"input": 0, "output": 0},
-                        ),
-                    }
-                }
-            }
+    def test_a_new_release_does_not_score_higher_than_an_old_one(self):
+        today = "2025-09-20"
+        a_year_ago = "2024-09-20"
+        cache = aa_cache_for(
+            [
+                ranking.ModelRecord("p", "m-today"),
+                ranking.ModelRecord("p", "m-old"),
+            ]
         )
         ranked = ranking.rank_models(
             models=[
-                ranking.ModelRecord("opencode-go", "minimax-m3.1-flash-free"),
-                ranking.ModelRecord("opencode-go", "minimax-m3.1-flash"),
+                ranking.ModelRecord("p", "m-today"),
+                ranking.ModelRecord("p", "m-old"),
             ],
-            catalog=catalog,
+            catalog=make_catalog(
+                {
+                    "p": {
+                        "models": {
+                            "m-today": entry("m-today", "f", released=today),
+                            "m-old": entry("m-old", "f", released=a_year_ago),
+                        }
+                    }
+                }
+            ),
             quota_windows={},
-            free_models={
-                ("opencode-go", "minimax-m3.1-flash-free"),
-                ("opencode-go", "minimax-m3.1-flash"),
-            },
+            free_models=set(),
             usage_tokens={},
+            aa_cache=cache,
+            now=NOW,
+        )
+        quality = {item.model: item.quality for item in ranked}
+        self.assertEqual(quality["m-today"], quality["m-old"])
+
+    def test_the_measured_index_reaches_the_free_tier(self):
+        cache = aa_cache_for([ranking.ModelRecord("p", "free-model")])
+        ranked = ranking.rank_models(
+            models=[ranking.ModelRecord("p", "free-model")],
+            catalog=make_catalog(
+                {
+                    "p": {
+                        "models": {
+                            "free-model": entry("free-model", "f", cost={"input": 0, "output": 0})
+                        }
+                    }
+                }
+            ),
+            quota_windows={},
+            free_models={("p", "free-model")},
+            usage_tokens={},
+            aa_cache=cache,
             now=NOW,
         )
         free = tier_members(ranked, "free")
-        self.assertEqual(free[0].model, "minimax-m3.1-flash-free")
+        self.assertEqual(free[0].quality, AA_INDEX)
 
 
 class ThreeDLimitTests(unittest.TestCase):
@@ -799,6 +837,10 @@ class ThreeDLimitTests(unittest.TestCase):
         self.three_d = three_d
 
     def rank(self):
+        # The tier orders by the measured index: give every model its own.
+        cache = aa_cache_for(self.models)
+        for position, record in enumerate(cache["records"]):
+            record["indices"]["intelligence_index"] = 50.0 + position
         return ranking.rank_models(
             models=self.models,
             catalog=self.catalog,
@@ -806,6 +848,7 @@ class ThreeDLimitTests(unittest.TestCase):
             free_models=set(),
             usage_tokens={},
             three_d_scores=self.three_d,
+            aa_cache=cache,
             now=NOW,
         )
 

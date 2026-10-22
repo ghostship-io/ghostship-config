@@ -46,7 +46,6 @@ POOL_TOKEN_FILE = "/run/ghostship-integrations/inference-token"
 POOL_LEDGER_FILE = f"{T3_HOME}/.local/state/ghostship-agent/runtime/jobs.sqlite"
 CATALOG_FILE = f"{T3_HOME}/.cache/opencode/models.json"
 # The smallest 3D prior that earns a place in the 3D tier.
-THREE_D_MIN_PRIOR = 0.7
 
 # The owner's direction for the agents that run in this environment. It is a
 # policy, not a measurement, and it never changes a provider reading.
@@ -138,9 +137,12 @@ METRIC_HELP = {
     "ghostship_ai_model_capacity_expires_in_seconds": "When the model's account capacity expires.",
     "ghostship_ai_model_tier": "One for every tier a model belongs to.",
     "ghostship_ai_model_evaluated_timestamp_seconds": "When a model was last evaluated.",
-    "ghostship_ai_three_d_prior": "How good a model is at 3D printing work.",
     "ghostship_ai_three_d_usage_tokens": "Tokens spent on 3D printing work.",
-    "ghostship_ai_three_d_score": "The combined 3D score of a model.",
+    # The two series below are no longer emitted: the 3D prior and its blended
+    # score were a judgement, and the owner removed them. They stay declared
+    # so a dashboard that still queries them shows no data, not an error.
+    "ghostship_ai_three_d_prior": "Removed: no 3D prior is published.",
+    "ghostship_ai_three_d_score": "Removed: no blended 3D score is published.",
     "ghostship_ai_three_d_observed_timestamp_seconds": "When the 3D reading was taken.",
     "ghostship_ai_model_strength": (
         "The verified Artificial Analysis intelligence index of the model; a "
@@ -622,23 +624,19 @@ def ranking_samples(
             # The 3D tier holds our frontier and bulk models; the free pool
             # belongs to the free tier.
             continue
-        prior = float(entry.get("prior", 0.0))
         tokens = int(entry.get("tokens", 0))
-        score = float(entry.get("score", 0.0))
         three_d_scores[(provider, model)] = {
-            "score": score,
-            "prior": prior,
             "usage_tokens": tokens,
             # A model belongs in the 3D tier only when the catalog proves it
-            # can look at an image and its documented 3D prior clears the
-            # threshold. A high token count is not evidence of 3D work.
-            "eligible": prior >= THREE_D_MIN_PRIOR
-            and threed_module.visual_capable(
+            # can look at an image. The workload admission is verified at the
+            # snapshot, where the durable evidence lives. A high token count
+            # is not evidence of 3D work, and there is no 3D prior.
+            "eligible": threed_module.visual_capable(
                 catalog.model_entry(provider, model) if catalog is not None else None
             ),
         }
         samples.extend(
-            threed_module.three_d_samples(provider, model, prior=prior, tokens=tokens, now=now)
+            threed_module.three_d_samples(provider, model, tokens=tokens, now=now)
         )
     rank_kwargs: dict[str, Any] = {
         "models": [
@@ -652,6 +650,7 @@ def ranking_samples(
         "external_availability": external,
         "usage_tokens": usage,
         "three_d_scores": three_d_scores,
+        "aa_cache": aa_cache,
         "now": now,
         "state_path": state_path,
     }

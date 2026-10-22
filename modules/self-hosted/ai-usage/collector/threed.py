@@ -1,21 +1,17 @@
-"""The 3D tier: which models are worth using for 3D printing work.
+"""The 3D tier: the measured evidence behind it.
 
-The dashboard ranks every model the host can serve into a "3d" tier: the
-models worth using for 3D printing work. That ranking is a prior combined
-with real usage.
-
-The prior is a judgement we encode here, not a measurement. Antigravity's
-Gemini, Claude and GPT-Sol lead, because 3D printing work needs strong
-reasoning about geometry, long code sessions and patient iteration; a few
-bulk models follow for the repetitive parts. The catalog description and
-modalities nudge the prior further, and a preview or experimental model
-loses a little of it.
+The tier admits a model only on explicit evidence: the catalog proves the
+model accepts image input, and the model's workload admission for 3D work is
+verified. There is no family prior, no catalog nudge, no age bonus and no
+blended score: those were judgements encoded as numbers, and the owner
+removed them.
 
 The usage side is measured, by reading the provider session histories of our
 own 3D printing projects. Only files inside a directory whose name mentions
 `3dprint` are read, only for the last 30 days, and never more than a bounded
 number of files. Nothing here writes, and no provider, container or runtime is
-started, stopped or reconfigured.
+started, stopped or reconfigured. The usage is displayed beside the evidence
+and never stands in for it.
 """
 
 from __future__ import annotations
@@ -54,60 +50,13 @@ MAX_FILE_AGE_SECONDS = 30 * 24 * 60 * 60
 # How many session files one collection may read.
 DEFAULT_MAX_FILES = 400
 
-# The prior weights: mostly how good the model is, partly how much it is used.
-PRIOR_WEIGHT = 0.75
-USAGE_WEIGHT = 0.25
+# The 3D tier no longer carries a prior or a blended score. The tier admits a
+# model only on explicit evidence: the catalog proves it can read an image,
+# and the workload admission of the model is verified. The measured usage
+# below is displayed beside that evidence and never stands in for it.
 
-# Tokens that saturate the usage half of the score.
+# Tokens that saturate the displayed usage bar.
 USAGE_LOG_SCALE = 5.0
-
-# The catalog provider keys a provider may hold. The catalog owns that map;
-# a provider the catalog does not know is looked up under its own name.
-
-# The Claude prior per model id pattern. Higher is better.
-CLAUDE_PRIORS: tuple[tuple[str, float], ...] = (
-    ("opus", 0.92),
-    ("sonnet", 0.85),
-    ("fable", 0.80),
-    ("haiku", 0.70),
-)
-
-# The base prior per model family, by model id pattern. Higher is better.
-BASE_PRIORS: tuple[tuple[str, float], ...] = (
-    ("grok", 0.80),
-    ("deepseek-thinking", 0.78),
-    ("deepseek-pro", 0.80),
-    ("deepseek-flash", 0.72),
-    ("minimax", 0.80),
-    ("kimi-k3", 0.75),
-    ("glm", 0.70),
-    ("qwen", 0.68),
-    ("muse", 0.60),
-    ("longcat", 0.65),
-    ("mimo", 0.65),
-    ("space-bunny", 0.50),
-)
-
-# Anything we do not know about is a mid-range model.
-DEFAULT_PRIOR = 0.50
-GPT_PRIOR = 0.75
-GEMINI_PRO_PRIOR = 0.95
-GEMINI_PRIOR = 0.88
-
-# A description that mentions 3D work at all means the model knows the domain.
-THREE_D_TEXT = re.compile(
-    r"\b(3-?d|cad|stl|mesh(?:es)?|blender|spatial|geometry|engineering|physics)\b",
-    re.IGNORECASE,
-)
-
-# A preview or experimental model is not yet a settled choice.
-UNSETTLED_MARKERS = ("preview", "experimental")
-
-# A model of the last four months is the current line of its family.
-RECENT_MODEL_DAYS = 120.0
-
-# A model that is older than this has been superseded.
-OLD_MODEL_DAYS = 365.0
 
 # The token fields a usage object may report.
 TOKEN_FIELDS: tuple[str, ...] = (
@@ -120,64 +69,6 @@ TOKEN_FIELDS: tuple[str, ...] = (
 
 MODEL_KEYS: tuple[str, ...] = ("model", "model_id", "modelId")
 USAGE_KEYS: tuple[str, ...] = ("usage", "token_usage", "tokens", "tokenUsage")
-
-
-def _clamp(value: float) -> float:
-    return max(0.0, min(1.0, value))
-
-
-# --------------------------------------------------------------- Priors
-def _gemini_prior(model_id: str) -> float:
-    """The prior of a Gemini model."""
-    if re.search(r"gemini[-_. ]?[34]", model_id):
-        if "pro" in model_id:
-            return GEMINI_PRO_PRIOR
-    if "flash" in model_id:
-        return GEMINI_PRIOR
-    return GEMINI_PRIOR
-
-
-def _base_prior(model_id: str) -> float:
-    """The family prior of a model, before the catalog signals."""
-    if "gemini" in model_id:
-        return _gemini_prior(model_id)
-    for marker, value in CLAUDE_PRIORS:
-        if marker in model_id:
-            return value
-    if "gpt" in model_id:
-        # GPT-Sol and GPT-Astra lead the other GPT models.
-        if "sol" in model_id or "astra" in model_id:
-            return 0.90
-        return GPT_PRIOR
-    for marker, value in BASE_PRIORS:
-        if marker in model_id:
-            return value
-    return DEFAULT_PRIOR
-
-
-def _description(entry: Mapping[str, Any]) -> str:
-    """The human description a catalog entry carries."""
-    parts: list[str] = []
-    for key in ("description", "summary", "details", "about"):
-        value = entry.get(key)
-        if isinstance(value, str) and value:
-            parts.append(value)
-    return " ".join(parts)
-
-
-def _has_image_input(entry: Mapping[str, Any]) -> bool:
-    """True when the model takes an attachment or an image."""
-    for key in ("attachment", "attachment_supported", "vision", "image_input"):
-        if entry.get(key):
-            return True
-    for key in ("modalities", "input_modalities", "inputModalities"):
-        value = entry.get(key)
-        if isinstance(value, Mapping):
-            value = value.get("input")
-        if isinstance(value, (list, tuple)):
-            if any("image" in str(item).lower() for item in value):
-                return True
-    return False
 
 
 def visual_capable(entry: dict | None) -> bool:
@@ -198,42 +89,7 @@ def visual_capable(entry: dict | None) -> bool:
     return any(str(value).lower() == "image" for value in inputs)
 
 
-def three_d_prior(provider: str, model: str, entry: dict | None = None) -> float:
-    """Return a 0..1 score of how good the model is at 3D printing work."""
-    model_id = str(model or "").lower()
-    score = _base_prior(model_id)
-    if isinstance(entry, Mapping):
-        if THREE_D_TEXT.search(_description(entry)):
-            score += 0.05
-        if _has_image_input(entry):
-            score += 0.03
-        # The current line of a model family knows 3D work better than the
-        # line before it, and a model that is years old has not.
-        age_days = _age_days(entry)
-        if age_days is not None:
-            if age_days <= RECENT_MODEL_DAYS:
-                score += 0.05
-            elif age_days > OLD_MODEL_DAYS:
-                score -= 0.10
-    if any(marker in model_id for marker in UNSETTLED_MARKERS):
-        score -= 0.05
-    return _clamp(score)
-
-
-def _age_days(entry: Mapping[str, Any]) -> float | None:
-    """The age of a catalog entry in days, or None when it is unknown."""
-    value = entry.get("release_date")
-    if not isinstance(value, str) or not value:
-        return None
-    try:
-        released = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if released.tzinfo is None:
-        released = released.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - released).total_seconds() / 86400.0
-
-
+# ---------------------------------------------------------------- Usage
 # ---------------------------------------------------------------- Usage
 def _read_jsonl(path: Path) -> Iterator[dict[str, Any]]:
     """Yield the well-formed records of one JSONL file."""
@@ -578,27 +434,22 @@ def _model_pairs(models: Any) -> list[tuple[str, str]]:
 
 
 # --------------------------------------------------------------- Ranking
-def three_d_score(prior: float, tokens: int) -> float:
-    """The score the ranking engine consumes."""
-    usage = min(1.0, math.log10(max(0, int(tokens)) + 1) / USAGE_LOG_SCALE)
-    return PRIOR_WEIGHT * float(prior) + USAGE_WEIGHT * usage
-
-
 def three_d_samples(
     provider: str,
     model: str,
     *,
-    prior: float,
     tokens: int,
     now: float,
 ) -> list[tuple[str, dict[str, str], float]]:
-    """Return the metrics for one model."""
+    """Return the measured 3D usage of one model.
+
+    There is no prior and no blended score: the two removed series were a
+    judgement and a blend of a judgement with usage. The usage tokens are
+    measured, and the tier orders by the verified record.
+    """
     labels = {"provider": label_value(provider), "model": label_value(model)}
-    score = three_d_score(prior, tokens)
     return [
-        ("ghostship_ai_three_d_prior", dict(labels), float(prior)),
         ("ghostship_ai_three_d_usage_tokens", dict(labels), float(tokens)),
-        ("ghostship_ai_three_d_score", dict(labels), score),
         ("ghostship_ai_three_d_observed_timestamp_seconds", dict(labels), float(now)),
     ]
 
@@ -611,28 +462,21 @@ def collect(
     *,
     max_files: int = DEFAULT_MAX_FILES,
 ) -> dict[tuple[str, str], dict]:
-    """Return the 3D tier of every model: its prior, its usage and its score."""
+    """Return the measured 3D usage of every model we serve.
+
+    The catalog check stays here because it is a fact about the model (does
+    it read an image); the admission itself is explicit and verified, and
+    this module never turns a family name into a score.
+    """
     usage = collect_three_d_usage(home, now, max_files=max_files)
     keys = set(usage)
     for provider, model in _model_pairs(models):
         keys.add((provider, model))
-    # The frontier models of a provider we already serve belong in the tier
-    # too, so a model that is good at 3D work shows up before it is used.
-    # Only the models of a family we score are listed; the rest of a
-    # provider's catalog is not 3D work.
-    for provider in sorted({provider for provider, _model in keys}):
-        for model in _catalog_models(catalog, provider):
-            if _base_prior(str(model).lower()) <= DEFAULT_PRIOR:
-                continue
-            keys.add((provider, model))
     rows: dict[tuple[str, str], dict] = {}
     for provider, model in sorted(keys):
         entry = _catalog_entry(catalog, provider, model)
-        prior = three_d_prior(provider, model, entry)
-        tokens = int(usage.get((provider, model), 0))
         rows[(provider, model)] = {
-            "prior": prior,
-            "tokens": tokens,
-            "score": three_d_score(prior, tokens),
+            "tokens": int(usage.get((provider, model), 0)),
+            "visual": visual_capable(entry),
         }
     return rows

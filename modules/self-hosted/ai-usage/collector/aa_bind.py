@@ -140,16 +140,32 @@ def slugify(name: str) -> str:
 
 
 def tokens(text: str) -> list[str]:
-    """Identity tokens: case folded, split at separators and digit boundaries."""
+    """Ordered identity units.
+
+    The order is significant: ``gpt-1.6-sol`` and ``gpt-6.1-sol`` are
+    different models, and so are ``sol-6.1-gpt`` and ``gpt-6.1-sol``. A version
+    written ``6.1`` and a version written ``6-1`` are the same version, so a
+    dotted number is split into its digit runs; everything else keeps its
+    place.
+    """
     value = str(text or "").lower()
-    value = re.sub(r"([a-z])([0-9])", r"\1 \2", value)
-    value = re.sub(r"([0-9])([a-z])", r"\1 \2", value)
-    return [part for part in re.split(r"[^a-z0-9]+", value) if part]
+    value = re.sub(r"[^a-z0-9.]+", " ", value)
+    units: list[str] = []
+    for chunk in value.split():
+        for piece in re.findall(r"[a-z]+|\d+(?:\.\d+)*", chunk):
+            units.extend(part for part in piece.split(".") if part)
+    return units
 
 
 def identity(text: str) -> tuple[str, ...]:
-    """The model identity, without the measurement condition words."""
-    return tuple(sorted(part for part in tokens(text) if part not in VARIANT_WORDS))
+    """The model identity, without the measurement condition words.
+
+    The units keep their order. Two identities are the same only when they
+    are the same sequence, or when one version group sits on the other side
+    of one family word, which is the one naming difference the official
+    sources publish (``claude-haiku-4-5`` and ``Claude 4.5 Haiku``).
+    """
+    return tuple(part for part in tokens(text) if part not in VARIANT_WORDS)
 
 
 def name_key(name: str) -> str:
@@ -166,7 +182,12 @@ def _variant_of_tokens(parts: list[str]) -> str:
 
 
 def variant_of(name: str) -> tuple[str, str]:
-    """The display name of a record and its variant marker, if it has one."""
+    """The display name of a record and its proven measurement annotation.
+
+    Only a trailing parenthetical the feed uses for the condition counts: a
+    literal ``Max`` in ``Qwen3.8 Max`` is the model's name, not an effort
+    setting, and a token count or a slug suffix is not an annotation either.
+    """
     text = str(name or "").strip()
     match = re.search(r"\(([^)]+)\)\s*$", text)
     if match:
@@ -174,12 +195,20 @@ def variant_of(name: str) -> tuple[str, str]:
             key = part.strip().lower()
             if key in VARIANT_MARKERS:
                 return text[: match.start()].strip(), VARIANT_MARKERS[key]
-    parts = tokens(text)
-    marker = _variant_of_tokens(parts) if parts else ""
-    if marker:
-        base_tokens = parts[: len(parts) - len(tokens(_marker_text(marker)))]
-        return " ".join(base_tokens), marker
     return text, ""
+
+
+def default_condition(name: str) -> bool:
+    """True when the feed itself says the measured condition is the default.
+
+    Artificial Analysis writes ``(Max, Default Fallback)`` for a model it ran
+    at the provider's default setting. That annotation is the feed's own
+    statement about the provider's default, not an inference from a slug.
+    """
+    match = re.search(r"\(([^)]+)\)\s*$", str(name or "").strip())
+    if not match:
+        return False
+    return any("default fallback" in part.strip().lower() for part in match.group(1).split(","))
 
 
 def _marker_text(variant: str) -> str:
@@ -197,30 +226,55 @@ def native_variant(options: Any) -> str:
             continue
         name = str(option.get("id") or "").lower()
         value = option.get("current_value")
-        if name in ("variant", "reasoningeffort", "effort", "thinking") and isinstance(value, str):
+        if name not in ("variant", "reasoningeffort", "effort", "thinking"):
+            continue
+        if isinstance(value, bool):
+            # A thinking switch is the model's own published setting.
+            if name == "thinking":
+                return "reasoning" if value else "none"
+            continue
+        if isinstance(value, str):
             key = value.strip().lower()
-            return VARIANT_MARKERS.get(key, key if key in VARIANT_MARKERS.values() else "")
+            if key in VARIANT_MARKERS:
+                return VARIANT_MARKERS[key]
+            if key in VARIANT_MARKERS.values():
+                return key
     return ""
 
 
-def can_align(options: Any, variant: str) -> bool:
-    """True when the native options offer the measured variant."""
-    if not variant:
-        return False
-    if not isinstance(options, list):
-        return False
+def alignment_option(options: Any, variant: str) -> tuple[str, str] | None:
+    """The native option that can be set to the measured condition.
+
+    The key is the option id the model actually publishes, and the value is
+    the spelling that option lists. An option with no descriptor, or a
+    descriptor that does not list the condition, cannot be aligned, and
+    nothing is invented under a guessed key.
+    """
+    wanted = str(variant or "").strip().lower()
+    if not wanted or not isinstance(options, list):
+        return None
+    aliases = {wanted}
+    for spelling, marker in VARIANT_MARKERS.items():
+        if marker == wanted:
+            aliases.add(spelling)
     for option in options:
         if not isinstance(option, Mapping):
             continue
-        name = str(option.get("id") or "").lower()
-        if name not in ("variant", "reasoningeffort", "effort", "thinking"):
+        name = str(option.get("id") or "")
+        if not name:
             continue
-        values = option.get("values") or option.get("allowed") or option.get("options")
-        if isinstance(values, list):
-            normalised = {str(value).strip().lower() for value in values}
-            if variant in normalised or VARIANT_MARKERS.get(variant) in normalised:
-                return True
-    return False
+        values = option.get("values") or option.get("allowed") or option.get("allowedValues")
+        if not isinstance(values, (list, tuple)):
+            continue
+        for value in values:
+            if str(value).strip().lower() in aliases:
+                return name, str(value)
+    return None
+
+
+def can_align(options: Any, variant: str) -> bool:
+    """True when the native options publish a value for the measured one."""
+    return alignment_option(options, variant) is not None
 
 
 def _strip_suffix(text: str, suffixes: Iterable[str]) -> str:
@@ -254,10 +308,12 @@ def _id_forms(model: str) -> tuple[list[str], str, str]:
         if match:
             token = match.group(1)
             if len(token) == 8 and 2000 <= int(token[:4]) <= 2035:
+                # A full date is a release marker, checked against the
+                # record's release date.
                 date = f"{token[:4]}-{token[4:6]}-{token[6:]}"
-            else:
-                date = token
-            raw = raw[: match.start()]
+                raw = raw[: match.start()]
+            # A short checkpoint (1017, 0309) is part of the model identity:
+            # it stays in the units, so an undated id never matches it.
     forms = [raw, _strip_suffix(raw, PROMOTION_SUFFIXES), _strip_suffix(raw, PACKAGING_SUFFIXES)]
     stripped = _strip_suffix(raw, PROMOTION_SUFFIXES)
     forms.append(_strip_suffix(stripped, PACKAGING_SUFFIXES))
@@ -275,12 +331,54 @@ def _id_forms(model: str) -> tuple[list[str], str, str]:
 
 
 def _identity_tokens(text: str) -> list[str]:
-    """The ordered identity tokens of a name, without condition words."""
-    return [part for part in tokens(text) if part not in VARIANT_WORDS]
+    """The ordered identity units of a name.
+
+    A condition word is removed only where the source proves it is an
+    annotation. ``Qwen3.8 Max`` is the model's literal name, so ``max`` stays
+    in its identity; ``Claude Opus 4.5 (Non-reasoning)`` carries the word in a
+    measurement annotation, and that annotation is removed before the
+    comparison.
+    """
+    return list(tokens(text))
 
 
-def _same_identity(left: list[str], right: list[str]) -> bool:
-    return Counter(left) == Counter(right)
+def _version_placement(left: list[str], right: list[str]) -> bool:
+    """True when one version group sits beside one other family word.
+
+    Only an adjacent version/family pair may change sides, and the version
+    keeps its own digits and order. A reordered model name therefore never
+    matches: ``sol-6.1-gpt`` needs two moves, and ``gpt-1.6-sol`` has a
+    different version, so both stay unknown.
+    """
+    for start in range(len(left)):
+        if not left[start].isdigit():
+            continue
+        end = start
+        while end < len(left) and left[end].isdigit():
+            end += 1
+        block = left[start:end]
+        if end < len(left) and len(left[end]) == 1 and left[end].isalpha():
+            # A size label such as 70B or 30B travels with its number.
+            block = block + [left[end]]
+            end += 1
+        if start > 0 and not left[start - 1].isdigit():
+            swapped = left[: start - 1] + block + [left[start - 1]] + left[end:]
+            if swapped == right:
+                return True
+        if end < len(left) and not left[end].isdigit():
+            swapped = left[:start] + [left[end]] + block + left[end + 1 :]
+            if swapped == right:
+                return True
+    return False
+
+
+def _same_identity(left: list[str], right: list[str]) -> str:
+    """The match kind of two ordered identities, or the empty string."""
+    if list(left) == list(right):
+        return "exact"
+    if len(left) == len(right) and _version_placement(list(left), list(right)):
+        return "version_placement"
+    return ""
 
 
 def _key_variants(parts: list[str]) -> list[list[str]]:
@@ -304,10 +402,10 @@ def _target(model: str, options: Any) -> dict[str, Any]:
         for key in _key_variants(_identity_tokens(form)):
             if key not in keys:
                 keys.append(key)
+    # The native effort is only what the model's own options publish. An id
+    # that ends in -max or -reasoning is a model name, not proof of an
+    # effort setting.
     variant = native_variant(options)
-    if not variant:
-        trailing = tokens(str(model).split("/")[-1])
-        variant = _variant_of_tokens(trailing) if trailing else ""
     return {
         "forms": forms,
         "vendor": vendor,
@@ -327,11 +425,15 @@ def _record_identities(record: Mapping[str, Any]) -> tuple[list[dict[str, Any]],
     name = str(record.get("model") or "")
     slug = str(record.get("slug") or "")
     base, variant = variant_of(name)
-    if not variant:
-        variant = _variant_of_tokens(tokens(slug))
+    slug_units = tokens(slug)
+    if variant:
+        # The annotation proves the slug's trailing marker is the same
+        # condition, so both identities drop it.
+        marker = tokens(_marker_text(variant))
+        if slug_units[-len(marker) :] == marker:
+            slug_units = slug_units[: -len(marker)]
     identities: list[dict[str, Any]] = []
-    for field, value in (("slug", slug), ("name", base)):
-        parts = _identity_tokens(value)
+    for field, parts in (("slug", slug_units), ("name", tokens(base))):
         if parts:
             identities.append({"field": field, "tokens": parts})
     return identities, variant
@@ -344,51 +446,44 @@ def _dated_tokens(parts: list[str]) -> list[str]:
 def _matches(target: Mapping[str, Any], record: Mapping[str, Any]) -> dict[str, Any] | None:
     """Match one record, or return None.
 
-    A checkpoint token is part of a record's slug or name, not part of the
-    model identity, so the identity is compared with the token both kept and
-    dropped. The token must still agree with the id: a short checkpoint must
-    equal the id's checkpoint, and a release date must equal the record's
-    ``release_date``.
+    The identity is compared as an ordered sequence, and a record is only
+    judged on its checkpoint or release date after its identity matched. A
+    record that names a checkpoint the id does not name is a different
+    record: an undated id never borrows a dated model, whatever the cache
+    order.
     """
     identities, variant = _record_identities(record)
-    refusal = ""
+    marker = tokens(_marker_text(variant)) if variant else []
     for identity in identities:
         parts = identity["tokens"]
-        variants = [(parts, "")]
-        for token in dict.fromkeys(_dated_tokens(parts)):
-            variants.append(([part for part in parts if part != token], token))
-        for candidate, dropped in variants:
-            if not any(
-                _same_identity(key, wanted)
-                for key in _key_variants(candidate)
-                for wanted in target["keys"]
-            ):
-                continue
-            if target["date"]:
-                if len(target["date"]) == 10:
-                    release = str(record.get("release_date") or "")
-                    if release != target["date"]:
-                        refusal = refusal or f"release date {release or 'unknown'} is not {target['date']}"
+        for key in _key_variants(parts):
+            for wanted in target["keys"]:
+                wanted_variants = [wanted]
+                if marker and wanted[-len(marker) :] == marker:
+                    # The record's own annotation proves this trailing word is
+                    # a condition, not part of the model identity.
+                    wanted_variants.append(wanted[: -len(marker)])
+                for candidate in wanted_variants:
+                    kind = _same_identity(key, candidate)
+                    if not kind:
                         continue
-                elif dropped != target["date"]:
-                    refusal = refusal or f"checkpoint {target['date']} is not in the record"
-                    continue
-            elif dropped:
-                # A dated record for an undated id: the checkpoint is
-                # published with the binding, never hidden.
-                pass
-            return {
-                "variant": variant,
-                "id": str(record.get("id") or ""),
-                "slug": str(record.get("slug") or ""),
-                "name": str(record.get("model") or ""),
-                "release_date": record.get("release_date"),
-                "matched_by": identity["field"],
-                "checkpoint": dropped,
-                "record": dict(record),
-            }
-    if refusal:
-        return {"refused": refusal}
+                    if target["date"] and len(target["date"]) == 10:
+                        release = str(record.get("release_date") or "")
+                        if release != target["date"]:
+                            return {
+                                "refused": f"release date {release or 'unknown'} is not {target['date']}"
+                            }
+                    return {
+                        "variant": variant,
+                        "default": default_condition(str(record.get("model") or "")),
+                        "id": str(record.get("id") or ""),
+                        "slug": str(record.get("slug") or ""),
+                        "name": str(record.get("model") or ""),
+                        "release_date": record.get("release_date"),
+                        "matched_by": identity["field"],
+                        "match_kind": kind,
+                        "record": dict(record),
+                    }
     return None
 
 
@@ -402,9 +497,9 @@ def resolve(
     """Resolve one model to its exact record, or say why it cannot be.
 
     The result always says what happened: `state` is measured, ambiguous or
-    missing, and `reason` is a bounded code. A resolved record carries its id,
-    slug, name, the variant it was measured under, the native variant and
-    whether the two agree.
+    missing, and `reason` is a bounded code. The choice is independent of the
+    order of the records: several records of the same variant are ambiguous,
+    never the first one.
     """
     target = _target(model, options)
     if not target["keys"]:
@@ -430,7 +525,7 @@ def resolve(
     unique: dict[str, dict[str, Any]] = {}
     for match in matches:
         unique.setdefault(match["id"], match)
-    matches = list(unique.values())
+    matches = [unique[key] for key in sorted(unique)]
     if not matches:
         reason = refusals[0] if refusals else "no record with this identity"
         return {
@@ -444,31 +539,58 @@ def resolve(
     chosen = None
     match_kind = ""
     if target["variant"]:
-        chosen = next((match for match in matches if match["variant"] == target["variant"]), None)
-        if chosen:
+        exact = [match for match in matches if match["variant"] == target["variant"]]
+        if len(exact) == 1:
+            chosen = exact[0]
             match_kind = "exact"
-    if chosen is None:
-        chosen = next(
-            (match for match in matches if not _variant_of_tokens(tokens(match["slug"]))),
-            None,
-        )
-        if chosen:
-            match_kind = "default" if not target["variant"] else "variant_mismatch"
-    if chosen is None:
-        if len(matches) == 1:
+        elif len(exact) > 1:
+            return {
+                "state": "ambiguous",
+                "reason": "several records of the measured variant: "
+                + ", ".join(sorted(match["id"] for match in exact)),
+                "record": None,
+                "variant": target["variant"],
+                "date": target["date"],
+                "variants": variants,
+            }
+        elif len(matches) == 1:
             chosen = matches[0]
             match_kind = "variant_mismatch"
         else:
             return {
                 "state": "ambiguous",
-                "reason": "several records for different variants: " + ", ".join(variants),
+                "reason": "several records, none of the native variant: "
+                + ", ".join(variants),
+                "record": None,
+                "variant": target["variant"],
+                "date": target["date"],
+                "variants": variants,
+            }
+    elif len(matches) == 1:
+        chosen = matches[0]
+        # The id publishes no effort: the record's condition is displayed and
+        # is not taken as proof that the model runs that way.
+        match_kind = "unconfirmed" if chosen["variant"] else "exact"
+    else:
+        # Several measured conditions and no native effort. Only the feed's
+        # own "Default Fallback" annotation may stand for the model's
+        # condition; without it the condition is unknown.
+        defaults = [match for match in matches if match.get("default")]
+        if len(defaults) == 1:
+            chosen = defaults[0]
+            match_kind = "default"
+        else:
+            return {
+                "state": "ambiguous",
+                "reason": "several measured conditions and no published native variant: "
+                + ", ".join(variants),
                 "record": None,
                 "variant": target["variant"],
                 "date": target["date"],
                 "variants": variants,
             }
     record = chosen
-    checkpoint = record.get("checkpoint") or target["date"]
+    checkpoint = target["date"]
     return {
         "state": "measured",
         "reason": "",
@@ -481,9 +603,11 @@ def resolve(
         "native_variant": target["variant"],
         "variant_match": match_kind,
         "variant_mismatch": match_kind == "variant_mismatch",
+        "condition_confirmed": match_kind in ("exact", "default"),
         "variants": variants,
         "date": target["date"],
         "matched_by": record.get("matched_by"),
+        "identity_match": record.get("match_kind"),
         "checkpoint": checkpoint,
         "provenance": {
             "provider": provider,
@@ -495,10 +619,12 @@ def resolve(
             "measured_variant": record["variant"],
             "native_variant": target["variant"],
             "variant_match": match_kind,
+            "condition_confirmed": match_kind in ("exact", "default"),
             "matched_by": record.get("matched_by"),
+            "identity_match": record.get("match_kind"),
             "checkpoint": checkpoint,
             "basis": (
-                "the exact id, slug, name or documented alias of the model "
+                "the ordered id, slug, name or documented alias of the model "
                 "after removing routing, promotion and packaging wrappers"
             ),
         },
