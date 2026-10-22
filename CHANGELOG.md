@@ -1,11 +1,15 @@
 # Changelog
 
-## [3.17.84] - 2026-10-22
+## [3.17.85] - 2026-10-22
 
 - The inferred capacity of a route no longer merges the routes that were never refused into the account of the provider. A route that was never refused has no limit of its own: it is measured on its own, with its whole allowance and no pace, and its use never ends the episode of another route. On live data the free routes of the Go provider were refused by nothing and still came out of the account of their paid models, which are refused and never recover.
 - The refusals of a route that never recovered are now evidence for its scope. The scope of a route is read from the episodes of its account group, the open one included, so another model of the provider that works right after the refusal shows that the limit was the model's own. The paid models of the Go provider were refused, never recovered, and the free route of the same provider worked seconds later: they came out as one account with a minute long window and a budget of a few thousand tokens, and they are now the models that were refused, with no window read out of their failures.
 - A refusal that opens the record of a group is the refusal of the group itself, so the episode of the group starts at that refusal. A record that began with a refusal produced no episode at all, because the scan looked for the first refusal after the first use: a route that was refused before it ever came back had no open episode, its scope came out unknown, and it was measured across the account, so the refusal of one model looked like the refusal of the whole provider.
 - The span of an open episode runs from after its refusal to the reading, so the refusal itself is never evidence of the scope by itself. Two routes of a provider that were refused at the same instant have nothing in that span, and the scope of each is unknown.
+
+## [3.17.84] - 2026-10-22
+
+- SIEM UI: Grafana stops logging the missing provisioning directories at every start. Grafana reads `/etc/grafana/provisioning/plugins` and `/etc/grafana/provisioning/alerting` on every start and logs an error for each one it cannot find, and the container mounts the whole provisioning tree from one read-only store path, so Grafana could not create them itself. The tree held the datasources, the dashboards and the dashboard JSON, and nothing else, so every start of every container logged two errors about directories that were never there. The tree now holds both directories, empty: they are created in the same store path as the datasources and the dashboards, so they are mounted read-only with the rest of the tree, and no plugin and no alerting configuration is provisioned through them. Grafana's own settings are unchanged. A configuration test reads the store path the way the build runs it and holds the invariant: the tree the container mounts is the whole tree, it is mounted read-only, it has a plugins and an alerting directory, and both are empty.
 
 ## [3.17.83] - 2026-10-22
 
