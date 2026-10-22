@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.53] - 2026-10-22
+
+- Host activation helper: `scripts/activate-host` records the system generation before switching. It runs `nix-env -p /nix/var/nix/profiles/system --set <toplevel>`, then `<toplevel>/bin/switch-to-configuration switch`, then compares `readlink -f /run/current-system` with `readlink -f /nix/var/nix/profiles/system` and exits non-zero when they differ. A bare `switch-to-configuration switch` on a built toplevel leaves the two apart, so a reboot reverts to the profile's generation. The repository had no activation script, so the helper is new; the deploy flow in the operating notes and the fleet operations document use it.
+
 ## [3.17.52] - 2026-10-22
 
 - Boot generation drift check: a new `ghostship-boot-generation-drift` timer compares `/run/current-system` with `/nix/var/nix/profiles/system` every five minutes. An activation that does not record the system generation leaves the two apart, so a reboot reverts to the profile's generation. A mismatch that lasts more than ten minutes reaches operations through `ghostship-notify` with the `boot-generation-drift` dedupe key, and a recovered generation resolves the alert. The check reads two symlinks and never searches the host.

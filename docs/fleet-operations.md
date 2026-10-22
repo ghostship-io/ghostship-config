@@ -428,11 +428,28 @@ writer, runs regression tests, checks shell/workflow syntax, and scans the sourc
 for secrets. It does not claim native ARM builds, live container startup, secret
 decryption on every host, GPU/controller acceptance, or successful restore drills.
 
-An activation must record the system generation. The `ghostship-boot-generation-drift`
-timer compares `/run/current-system` with `/nix/var/nix/profiles/system` every
-five minutes; a mismatch that lasts more than ten minutes reaches operations
-through `ghostship-notify` with the `boot-generation-drift` dedupe key, because
-a reboot would revert to the profile's generation.
+An activation must record the system generation. Use `scripts/activate-host`
+instead of calling `switch-to-configuration` directly: it sets the system
+profile first, switches, and then verifies that the running system and the
+system profile name the same store path.
+
+```bash
+# From the built checkout in the server's root shell.
+nixos-rebuild build --impure --flake .#chill-penguin
+scripts/activate-host --toplevel ./result
+```
+
+`scripts/activate-host` runs `nix-env -p /nix/var/nix/profiles/system --set
+<toplevel>`, then `<toplevel>/bin/switch-to-configuration switch`, then
+compares `readlink -f /run/current-system` with `readlink -f
+/nix/var/nix/profiles/system`. It exits non-zero when the two differ, so an
+activation that did not record the generation is visible instead of silent.
+`--verify-only` performs the comparison alone. The
+`ghostship-boot-generation-drift` timer compares `/run/current-system` with
+`/nix/var/nix/profiles/system` every five minutes; a mismatch that lasts more
+than ten minutes reaches operations through `ghostship-notify` with the
+`boot-generation-drift` dedupe key, because a reboot would revert to the
+profile's generation.
 
 For the first backup only, from the built checkout in the server's root shell
 (the source bundle exports the same `RESTIC_PASSWORD` as its projection):

@@ -40,6 +40,6 @@ jobs:
       - name: Check workflows and backup script
         run: |
           nix develop .#ci -c actionlint
-          nix develop .#ci -c shellcheck -s bash -e SC1091 modules/self-hosted/backup.sh modules/self-hosted/restore-check.sh
+          nix develop .#ci -c shellcheck -s bash -e SC1091 modules/self-hosted/backup.sh modules/self-hosted/restore-check.sh scripts/activate-host
       - name: Scan current source for secrets
         run: nix develop .#ci -c gitleaks dir --redact --no-banner .
