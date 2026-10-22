@@ -385,6 +385,11 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
 
 
 def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
+    # The account limits of a provider belong to the provider, not to one of
+    # its models, so they are published once per provider. A provider with
+    # several models used to publish the same limit once per model, and the
+    # repeated series made the scrape fail.
+    emitted_account_limits: set[tuple[str, str]] = set()
     for provider, entry in (catalog.get("providers") or {}).items():
         if not isinstance(entry, dict):
             continue
@@ -439,6 +444,18 @@ def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
                 samples.append(
                     _pool_sample("ghostship_ai_pool_model_cooldown_until_seconds", labels, float(cooldown))
                 )
+            # When the pool last sent a job to this route. The least recently
+            # used route breaks the tie inside the quality band of the free
+            # tier, so the reading is published with the route.
+            last_used = candidate.get("last_used")
+            if isinstance(last_used, (int, float)) and not isinstance(last_used, bool):
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_route_last_used_timestamp_seconds",
+                        labels,
+                        float(last_used),
+                    )
+                )
             admissions = candidate.get("admissions")
             if isinstance(admissions, dict):
                 for workload, entry_value in admissions.items():
@@ -465,9 +482,19 @@ def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
                                 float(score),
                             )
                         )
-            samples.extend(
-                _limit_samples(str(provider), "*", candidate.get("account_limits"), "account")
-            )
+            account_limits = candidate.get("account_limits")
+            if isinstance(account_limits, dict):
+                new_limits = {
+                    name: value
+                    for name, value in account_limits.items()
+                    if (str(provider), str(name)) not in emitted_account_limits
+                }
+                if new_limits:
+                    samples.extend(
+                        _limit_samples(str(provider), "*", new_limits, "account")
+                    )
+                    for name in new_limits:
+                        emitted_account_limits.add((str(provider), str(name)))
             samples.extend(
                 _limit_samples(str(provider), model, candidate.get("model_limits"), "model")
             )
