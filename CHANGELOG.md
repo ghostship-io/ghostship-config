@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.17.67] - 2026-10-22
+
+- SIEM alert bridge: a re-fired alert is no longer silenced forever. The 6-hour renotify window throttles repeat notices of one occurrence, but a resolve-then-fire cycle inside the window was dropped and its notification timestamp was never advanced, so the fingerprint stayed silent for good while the topic said "resolved". A re-fire inside the window is now deferred rather than dropped: it is recorded as pending and announced on the first poll after the window has elapsed, if the alert is still firing by then, and at most once per window. A re-fire outside the window still announces immediately.
+- SIEM alert bridge: a failed resolution publish is no longer lost. The retry covered firing alerts only, so a resolution that ntfy refused left the topic showing a critical alert that was never resolved. A resolution is now published again on the next poll until it is delivered, like a firing alert, and an alert whose resolution has been undelivered for a day becomes a dead letter, listed by `--list` and counted by the `ghostship_siem_bridge_dead_letters` and `ghostship_siem_bridge_resolution_retries` metrics.
+
+
 ## [3.17.66] - 2026-10-22
 
 - The 3D tier gets its AA-3D evidence. The public pull returned early whenever the main Artificial Analysis cache was fresh, so the AA-3D file it writes was never created and every model read "no usable AA-3D snapshot": the 3D tier was empty, and the 3D reserve could not apply, so a 3D-qualified model led the bulk tier. The pull now skips only when both caches are usable.
