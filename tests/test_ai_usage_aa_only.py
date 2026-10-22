@@ -86,6 +86,7 @@ def build(records, ranked=None, facts_map=None, aa_version="4.3", fetched=NOW):
         ranking.ModelRecord("minimax", "minimax-m3.1-flash-free"),
         ranking.ModelRecord("minimax", "deepseek-v4.1-flash:1017"),
     ]
+    feed = cache(records, version=aa_version, fetched=fetched)
     ranked = ranked or ranking.rank_models(
         models=models,
         catalog=Catalog(),
@@ -93,6 +94,7 @@ def build(records, ranked=None, facts_map=None, aa_version="4.3", fetched=NOW):
         free_models={("minimax", "minimax-m3.1-flash-free")},
         promo_models={("minimax", "deepseek-v4.1-flash:1017")},
         usage_tokens={},
+        aa_cache=feed,
         now=NOW,
     )
     return snapshot.build_snapshot(
@@ -120,7 +122,7 @@ def build(records, ranked=None, facts_map=None, aa_version="4.3", fetched=NOW):
         },
         catalog=Catalog(),
         facts=facts_map or {},
-        aa_cache=cache(records, version=aa_version, fetched=fetched),
+        aa_cache=feed,
         free_models={("minimax", "minimax-m3.1-flash-free")},
         promo_models={("minimax", "deepseek-v4.1-flash:1017")},
     )

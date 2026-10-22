@@ -91,6 +91,7 @@ class SurplusInTheTiersTests(unittest.TestCase):
             quota_windows={"claude": windows},
             free_models=set(),
             usage_tokens={},
+            aa_cache={"status": "ok", "index_version": "4.3", "fetched_at_epoch": NOW, "records": [{"id": "id-claude-opus-5-5", "slug": "claude-opus-5-5", "model": "claude-opus-5-5", "release_date": "2026-12-01", "indices": {"intelligence_index": 90.0}, "cost_per_task": 0.2, "median_performance": 100.0, "prices": {}}]},
             now=NOW,
         )
 

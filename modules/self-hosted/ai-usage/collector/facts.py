@@ -371,7 +371,7 @@ PUBLIC_REASONS = (
 )
 
 # The only workload classes an admission row may name.
-PUBLIC_WORKLOADS = ("research", "simple", "metadata", "engineering", "review")
+PUBLIC_WORKLOADS = ("research", "simple", "metadata", "engineering", "review", "3d")
 
 # The only URLs a public fact may carry: the first party evidence of the feed.
 PUBLIC_BRIEF_PREFIX = "https://artificialanalysis.ai/"
