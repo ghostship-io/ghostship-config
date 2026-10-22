@@ -5,7 +5,7 @@
     # One platform: the full agent flake builds the private-integration image,
     # the Keep broker, and the capability runtime with this deployment's
     # icon.
-    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/42c0c0623fd8bc8ea328d92a23b34b3ae3a236ef";
+    ghostship-private-agent.url = "github:ghostship-io/ghostship-agent/cb0037469a19089813efa79d74b8fd3fce19c93d";
 
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -86,6 +86,7 @@
         import ./checks.nix {
           pkgs = pkgsFor system;
           inherit self;
+          agentSource = inputs.ghostship-private-agent;
         }
       );
 
@@ -120,6 +121,9 @@
               vector
               victoriametrics
               python3
+              # The AI usage collector talks to T3 Code over a WebSocket. The
+              # tests need the same library the collector uses.
+              python3Packages.websockets
               ripgrep
               jq
               curl

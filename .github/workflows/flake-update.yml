@@ -11,7 +11,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   update:
-    environment: private-source-ci
+    # Runs from main only (schedule or dispatch), so it uses the main-only environment.
+    environment: ${{ github.ref == 'refs/heads/main' && 'private-source-main' || 'private-source-ci' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:

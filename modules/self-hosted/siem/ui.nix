@@ -67,7 +67,8 @@ let
     url = "http://vmauth:8427";
     basicAuth = true;
     basicAuthUser = "grafana";
-    secureJsonData.basicAuthPassword = "$__file{/run/secrets/vmauth-password}";
+    # Datasource provisioning expands environment variables, not INI $__file.
+    secureJsonData.basicAuthPassword = "$GRAFANA_VMAUTH_PASSWORD";
     editable = false;
   } // extra;
   datasourcesFile = pkgs.writeText "datasources.yaml" (builtins.toJSON {
@@ -157,6 +158,7 @@ in
       # 13.2.4 distroless: no shell or package tools in the image.
       image = "docker.io/grafana/grafana@sha256:64dc24be9648cce6eeb2ad12bc91d79cafa71b5e76eb608c640afc798c578d9a";
       user = "${grafanaUid}:${grafanaUid}";
+      environmentFiles = [ "${root}/vmauth.env" ];
       volumes = [
         "${root}/grafana:/var/lib/grafana:rw,noexec,nosuid,nodev"
         # The plugin backend runs from the store: read-only, executable.
@@ -167,6 +169,8 @@ in
       ];
       environment = {
         GF_SERVER_ROOT_URL = "https://grafana.ghostship.io";
+        GF_USERS_HOME_PAGE = "/d/ghostship-autonomous-work";
+        GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH = "/etc/grafana/provisioning/dashboards-json/autonomous-work.json";
         GF_PATHS_PLUGINS = "/var/lib/grafana-plugins";
         GF_LOG_MODE = "console";
         GF_PLUGINS_PREINSTALL_DISABLED = "true";

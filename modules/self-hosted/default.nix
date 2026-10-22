@@ -15,6 +15,7 @@
     ./reliability.nix
     ./backup.nix
     ./monitoring.nix
+    ./newsletter-health.nix
     ./notify-coverage.nix
     ./storage-health.nix
     ./synology-health.nix
@@ -43,6 +44,9 @@
     ./chaptarr.nix
     ./plex-auto-languages.nix
     ./pyload.nix
+
+    # AI usage: read-only provider limits, usage and free models
+    ./ai-usage
 
     # Apps and utilities
     ./agent-desktop.nix
