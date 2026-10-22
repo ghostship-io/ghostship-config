@@ -20,10 +20,13 @@ The rules are narrow on purpose:
 
 The pull reads the AA-3D page first and writes its snapshot as soon as
 the page is parsed, so a model page that is slow, that times out or that
-fails cannot lose it. The model pages are then read under a total budget:
-a page is started only while enough of the budget is left for it to
-finish, the pages that are not read are counted, and the quality cache
-is written either way.
+fails cannot lose it.
+
+Every read has a hard limit of its own, and the run has a hard deadline
+that covers every read, the source pages included: a read that could not
+start inside the deadline is skipped and counted, and the run writes
+what it has and stops. One line per read says how long it took and how
+it went, and the final line says how long the run took.
 
 The pull runs at most once a day. The collector itself never calls the
 network: it reads the cache the pull wrote.
@@ -34,6 +37,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -100,20 +105,25 @@ COST_BASIS_MODEL_PAGE = "aa_model_page"
 # them in one run. The count is reported with the result.
 MAX_MODEL_PAGE_FETCHES = 4
 
-# The budget of one pull, in seconds. The pull reads public pages over the
-# network, and a page that is slow must not let the run outlive the unit
-# that runs it. The budget is measured from the moment the AA-3D snapshot
-# has been written, that is, from the start of the part of the pull that
-# reads the model pages, and it stays well below the timeout of that unit.
-PULL_BUDGET_SECONDS = 480.0
+# The deadline of the whole run, in seconds, from the start of the process.
+# It covers every read of the run, the source pages included, and it stays
+# well below the timeout of the unit that runs the pull: a run that is
+# killed at its timeout writes nothing at all.
+RUN_DEADLINE_SECONDS = 480.0
 
-# A model page is started only while this much of the budget is left, so a
-# page that is read at the last moment still has the time to finish.
-MIN_REMAINING_SECONDS = 90.0
+# The hard limit of one read, in seconds: the connect, the headers and the
+# whole body. A socket timeout bounds one blocking operation, so a page
+# that trickles or that stalls can take far longer than that; a read that
+# is not finished in this time is abandoned and reported as a failed read.
+READ_DEADLINE_SECONDS = 60.0
 
-# The clock the budget of the model pages is measured with. A test moves it
-# by hand: the pull reads pages over the network, and a slow page has to be
-# a number and not a minute of waiting.
+# The body of a page is read in chunks of this size, so a read that was
+# abandoned stops at the next chunk.
+READ_CHUNK_BYTES = 256 * 1024
+
+# The clock the deadline of the run and the limit of a read are measured
+# with. A test moves it by hand: the pull reads pages over the network, and
+# a slow page has to be a number and not a minute of waiting.
 CLOCK: Any = time.monotonic
 
 # A deprecated model is superseded, not changed: its published cost is read
@@ -121,6 +131,19 @@ CLOCK: Any = time.monotonic
 # the leaderboard may still change, so it is read again - but not more than
 # once a week.
 MODEL_PAGE_REFETCH_SECONDS = 7 * 24 * 3600.0
+
+
+def _log_read(label: str, elapsed: float, bytes_read: int, outcome: str) -> None:
+    """One line per read: what was read, how long it took, how it went.
+
+    The line carries no page content: the pull reads public pages, and a
+    log is not a place for a page.
+    """
+    sys.stderr.write(
+        f"aa-pull read {label} elapsed={elapsed:.2f} "
+        f"bytes={int(bytes_read)} outcome={outcome}\n"
+    )
+    sys.stderr.flush()
 
 
 def _normalise(name: str) -> str:
@@ -139,12 +162,85 @@ _COST_IN_TEXT = re.compile(
 _FLIGHT = re.compile(r'self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)')
 
 
-def _fetch(url: str) -> dict[str, Any]:
+def _fetch(url: str, *, limit: float = READ_DEADLINE_SECONDS) -> dict[str, Any]:
     """Read one public page, or say why it could not be read.
+
+    The read has a hard limit of `limit` seconds for the whole read: the
+    connect, the headers and the body. A socket timeout bounds one
+    blocking operation, so a page that trickles or that stalls can take
+    far longer than that; the read is therefore done apart and the wait
+    for it is bounded. A read that is not finished in time is abandoned
+    and reported as a failed read, and nothing is retried.
 
     A page that is blocked, that answers with a challenge, or that is not
     there is recorded as blocked. There is no retry: the pull is a read of
     public pages, and a refused read stays refused.
+    """
+    outcome: dict[str, Any] = {}
+    finished = threading.Event()
+    abandoned = threading.Event()
+
+    def worker() -> None:
+        try:
+            outcome["reading"] = _read_once(url, abandoned)
+        except BaseException as error:  # noqa: BLE001 - the read may fail in any way
+            outcome["error"] = error
+        finally:
+            finished.set()
+
+    thread = threading.Thread(target=worker, name="aa-pull-read", daemon=True)
+    thread.start()
+    if not finished.wait(limit):
+        # The read is abandoned: the thread stops at the next chunk, and
+        # the socket it holds is closed with it.
+        abandoned.set()
+        # The read is abandoned. The socket it holds is closed when the
+        # process ends.
+        return {
+            "url": url,
+            "http_status": None,
+            "bytes": 0,
+            "blocked": True,
+            "error": "deadline",
+        }
+    reading = outcome.get("reading")
+    if isinstance(reading, dict):
+        return reading
+    error = outcome.get("error")
+    return {
+        "url": url,
+        "http_status": None,
+        "bytes": 0,
+        "blocked": True,
+        "error": type(error).__name__ if error is not None else "the read failed",
+    }
+
+
+def _read_body(response: Any, abandoned: threading.Event | None = None) -> bytes:
+    """The body of a page, in chunks, and no more than the reader accepts.
+
+    The read stops as soon as the read it belongs to has been abandoned,
+    and it never buffers more than the largest page the reader accepts.
+    """
+    parts: list[bytes] = []
+    total = 0
+    while total <= MAX_BYTES:
+        if abandoned is not None and abandoned.is_set():
+            break
+        chunk = response.read(READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        parts.append(chunk)
+        total += len(chunk)
+    return b"".join(parts)
+
+
+def _read_once(url: str, abandoned: threading.Event | None = None) -> dict[str, Any]:
+    """Read one public page with the socket timeout, and no deadline.
+
+    This is the read itself; `_fetch` gives it a deadline. The body is
+    read in chunks, so a read that was abandoned stops at the next chunk
+    and lets go of its socket and its memory.
     """
     request = urllib.request.Request(
         url,
@@ -157,7 +253,7 @@ def _fetch(url: str) -> dict[str, Any]:
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             status = getattr(response, "status", 200) or 200
-            body = response.read(MAX_BYTES + 1)
+            body = _read_body(response, abandoned)
     except urllib.error.HTTPError as error:
         return {
             "url": url,
@@ -534,12 +630,13 @@ def parse_aa3d(html: str) -> dict[str, dict[str, Any]]:
     return found
 
 
-class _ModelPageBudget:
-    """The time one pull may spend on the model pages.
+class _RunDeadline:
+    """The deadline of one pull, and the reads it skipped.
 
-    The pull has a total budget, and a model page is started only while
-    enough of it is left for the page to finish. The pages that are not
-    read are counted, so a run that skipped them says so.
+    The deadline covers every read of the run, the source pages included.
+    A read is started only while a whole read's time is left, so a read
+    that starts can still finish before the deadline. The reads that are
+    not started are counted, so a run that skipped them says so.
 
     The clock is injected: a test reads the pages of a fixture and moves
     the clock by hand, with no network and no sleeping.
@@ -549,26 +646,37 @@ class _ModelPageBudget:
         self,
         clock: Any,
         *,
-        budget_seconds: float = PULL_BUDGET_SECONDS,
-        min_remaining: float = MIN_REMAINING_SECONDS,
+        started: float | None = None,
+        deadline_seconds: float = RUN_DEADLINE_SECONDS,
+        read_seconds: float = READ_DEADLINE_SECONDS,
     ) -> None:
         self._clock = clock
-        self._budget = float(budget_seconds)
-        self._min_remaining = float(min_remaining)
-        self.started = float(clock())
+        self._deadline_seconds = float(deadline_seconds)
+        self.read_seconds = float(read_seconds)
+        self.started = float(clock()) if started is None else float(started)
+        # Every read that was not started.
         self.skipped = 0
+        # The model pages that were not read.
+        self.model_skipped = 0
+        # True when the deadline kept a read from starting.
+        self.deadline_reached = False
 
-    def used(self) -> float:
-        """The seconds of the budget the pull has spent."""
+    def elapsed(self) -> float:
+        """The seconds the run has taken so far."""
         return float(self._clock()) - self.started
 
     def remaining(self) -> float:
-        """The seconds of the budget that are left."""
-        return self._budget - self.used()
+        """The seconds of the deadline that are left."""
+        return self._deadline_seconds - self.elapsed()
 
     def allow(self) -> bool:
-        """True when a model page may be started now."""
-        return self.remaining() >= self._min_remaining
+        """True when a read may start now."""
+        return self.remaining() >= self.read_seconds
+
+    def skip(self) -> None:
+        """Count a read that the deadline kept from starting."""
+        self.skipped += 1
+        self.deadline_reached = True
 
 
 def aa3d_board_is_complete(board: Mapping[str, Any], html: str) -> bool:
@@ -604,7 +712,7 @@ def _read_model_pages(
     offered: Iterable[str] = (),
     known: Mapping[str, Any] | None = None,
     now: float | None = None,
-    budget: _ModelPageBudget | None = None,
+    deadline: _RunDeadline | None = None,
 ) -> tuple[dict[str, Any], int]:
     """The published cost of the models whose page has to be read.
 
@@ -614,10 +722,10 @@ def _read_model_pages(
     deprecated model never changes, so it is read once and never again; a
     model that is not deprecated is read again at most once a week.
 
-    With a budget, a page is read only while enough of the budget is left
-    for it to finish. The pages that are not read are counted, and their
-    models keep the cost they had: a cost that was not read is unknown,
-    never zero.
+    With a deadline, a page is read only while a whole read's time is
+    left, so a page that starts can still finish. The pages that are not
+    read are counted, and their models keep the cost they had: a cost that
+    was not read is unknown, never zero.
 
     The result is the cost of every model whose page was read or whose
     cost was already known, and the number of pages that were read.
@@ -655,17 +763,20 @@ def _read_model_pages(
             continue
         if fetches >= MAX_MODEL_PAGE_FETCHES:
             # The cap of the run. The page is not read, and it is counted.
-            if budget is not None:
-                budget.skipped += 1
-            continue
-        if budget is not None and not budget.allow():
-            # Not enough of the budget is left for a page to finish.
-            budget.skipped += 1
+            if deadline is not None:
+                deadline.skipped += 1
+                deadline.model_skipped += 1
             continue
         fetches += 1
         page = model_pages(slug)
         if not page:
             continue
+        if deadline is not None and (
+            page.get("skipped") or page.get("error") == "deadline"
+        ):
+            # The page was not read: it was skipped, or it was abandoned
+            # after it ran past the limit of a read.
+            deadline.model_skipped += 1
         text = str(page.get("text") or "")
         model = parse_model_page(text) if text else {}
         if model.get("slug") and not entry.get("deprecated"):
@@ -695,6 +806,7 @@ def pull(
     catalog_slugs: Iterable[str] = (),
     cached_costs: Mapping[str, Any] | None = None,
     write_aa3d: Any = None,
+    started: float | None = None,
 ) -> dict[str, Any]:
     """Pull the public pages and build the cache document.
 
@@ -713,16 +825,79 @@ def pull(
     has been read and parsed, before any model page is read. The AA-3D
     page is read first for that reason: a model page that is slow, that
     times out or that fails cannot lose the board.
+
+    `started` is the moment the run started, that is, the start of the
+    process: the deadline of the run is measured from it. Every read of
+    the run, the source pages included, is inside that deadline, and every
+    read is logged: one line per read, without any page content.
     """
     offered = {_normalise(slug) for slug in catalog_slugs or () if str(slug)}
     known = dict(cached_costs or {})
     reader = read or _fetch
+    deadline = _RunDeadline(CLOCK, started=started)
     entries: dict[str, dict[str, Any]] = {}
     pages: dict[str, str] = {}
 
+    def timed_read(label: str, call: Any, url: str = "") -> dict[str, Any]:
+        """Read one page inside the deadline, and say how the read went.
+
+        A read that could not start inside the deadline is skipped and
+        counted. A read that ran past its own limit is abandoned: its
+        content is not used, and nothing is retried.
+        """
+        if not deadline.allow():
+            deadline.skip()
+            _log_read(label, 0.0, 0, "skipped")
+            return {
+                "url": url,
+                "http_status": None,
+                "bytes": 0,
+                "blocked": True,
+                "error": "deadline",
+                "skipped": True,
+            }
+        began = CLOCK()
+        try:
+            reading = call()
+        except Exception as error:  # noqa: BLE001 - a read may fail in any way
+            reading = {
+                "url": url,
+                "http_status": None,
+                "bytes": 0,
+                "blocked": True,
+                "error": type(error).__name__,
+            }
+        elapsed = CLOCK() - began
+        if not isinstance(reading, dict):
+            reading = {
+                "url": url,
+                "http_status": None,
+                "bytes": 0,
+                "blocked": True,
+                "error": "the read returned nothing",
+            }
+        if elapsed > deadline.read_seconds:
+            # The read ran past the limit of a read: it is abandoned, and
+            # its content is not used.
+            reading = {
+                **{key: value for key, value in reading.items() if key != "text"},
+                "blocked": True,
+                "error": "deadline",
+            }
+        if reading.get("skipped"):
+            outcome = "skipped"
+        elif reading.get("error") == "deadline":
+            outcome = "deadline"
+        elif reading.get("blocked"):
+            outcome = "error"
+        else:
+            outcome = "ok"
+        _log_read(label, elapsed, int(reading.get("bytes") or 0), outcome)
+        return reading
+
     def read_source(key: str, url: str, role: str) -> str:
         """Read one public page, and record how the read went."""
-        reading = reader(url)
+        reading = timed_read(key, lambda: reader(url), url)
         entries[key] = {
             "key": key,
             "url": url,
@@ -730,6 +905,7 @@ def pull(
             "http_status": reading.get("http_status"),
             "bytes": reading.get("bytes"),
             "blocked": bool(reading.get("blocked")),
+            "skipped": bool(reading.get("skipped")),
             "error": reading.get("error"),
         }
         if reading.get("blocked"):
@@ -749,14 +925,15 @@ def pull(
     board_complete = bool(board) and aa3d_board_is_complete(board, aa3d_html)
     if board_complete and board_document.get("records") and write_aa3d is not None:
         write_aa3d(board_document)
-    # The budget of the model pages starts here: the AA-3D snapshot has
-    # been written, and the rest of the pull is what the budget pays for.
-    budget = _ModelPageBudget(CLOCK)
-
     for key, url, role in SOURCES:
         if key == "aa3d":
             continue
         read_source(key, url, role)
+
+    def read_model_page_of(slug: str) -> dict[str, Any]:
+        """Read the model page of one model, inside the deadline."""
+        url = f"https://artificialanalysis.ai/models/{slug}"
+        return timed_read(slug, lambda: model_pages(slug), url)
 
     sources = [entries[key] for key, _url, _role in SOURCES]
     leaderboard = parse_leaderboard(pages.get("leaderboard") or "")
@@ -840,16 +1017,16 @@ def pull(
     # A deprecated or leaderboard-absent model: its own page publishes the
     # cost per task. The page is read only for a model the live catalog
     # still offers, only when its cost is not known already, at most this
-    # many times in one run, and only while the budget of the run has
-    # enough left for the page to finish. The published number is used as
-    # it is published, and a cost is never estimated.
+    # many times in one run, and only while the deadline of the run has a
+    # whole read's time left. The published number is used as it is
+    # published, and a cost is never estimated.
     model_page_costs, fetches = _read_model_pages(
         records,
         leaderboard,
-        model_pages=model_pages,
+        model_pages=read_model_page_of if model_pages is not None else None,
         offered=offered,
         known=known,
-        budget=budget,
+        deadline=deadline,
     )
     ordered = [records[slug] for slug in sorted(records)]
     fetched_at = (
@@ -889,10 +1066,13 @@ def pull(
         # The model page costs of this pull, and the models that were read.
         "model_page_costs": model_page_costs,
         "model_page_fetches": fetches,
-        # The model pages that were not read, and the budget of the run.
-        "model_page_skipped": budget.skipped,
-        "model_page_budget_seconds": PULL_BUDGET_SECONDS,
-        "model_page_budget_used_seconds": round(budget.used(), 3),
+        # The model pages that were not read, the reads the deadline
+        # skipped, and the time the run has taken.
+        "model_page_skipped": deadline.model_skipped,
+        "skipped_reads": deadline.skipped,
+        "deadline_reached": deadline.deadline_reached,
+        "deadline_seconds": RUN_DEADLINE_SECONDS,
+        "total_seconds": round(deadline.elapsed(), 3),
         # The AA-3D board, in the contract the collector reads it in, and
         # whether the page carried the whole board.
         "aa3d": board_document,
@@ -1014,6 +1194,7 @@ def refresh(
     model_pages: Any = None,
     aa3d_path: str | Path | None = None,
     catalog_slugs: Iterable[str] = (),
+    started: float | None = None,
 ) -> dict[str, Any]:
     """Refresh the cache from the public pages, at most once a day.
 
@@ -1026,6 +1207,9 @@ def refresh(
     times out or that fails cannot lose it, and a board that could not be
     read leaves the last good board alone without holding the quality
     cache back.
+
+    `started` is the moment the run started, that is, the start of the
+    process: the deadline of the run is measured from it.
     """
     moment = time.time() if now is None else float(now)
     current = aa.load_cache(cache_path, moment)
@@ -1047,6 +1231,9 @@ def refresh(
             "changed_models": 0,
             "model_page_fetches": 0,
             "model_page_skipped": 0,
+            "skipped_reads": 0,
+            "deadline_reached": False,
+            "total_seconds": 0.0,
         }
     previous = {}
     try:
@@ -1067,20 +1254,34 @@ def refresh(
         catalog_slugs=catalog_slugs,
         cached_costs=cached_costs if isinstance(cached_costs, Mapping) else {},
         write_aa3d=write_aa3d,
+        started=started,
     )
+    skipped_pages = [
+        entry.get("url")
+        for entry in (document.get("sources") or [])
+        if entry.get("skipped")
+    ]
     if document.get("quality_blocked"):
-        # A page the quality records come from was blocked. The last good
-        # snapshot is kept: a blocked page is not a reason to publish an
-        # empty cache, and nothing is retried to get around it.
+        # A page the quality records come from was blocked or was skipped.
+        # The last good snapshot is kept: a blocked page is not a reason
+        # to publish an empty cache, and nothing is retried to get around
+        # it.
         return {
             "status": "blocked",
-            "reason": "a public page answered with a challenge",
+            "reason": (
+                "the run reached its deadline before every page was read"
+                if skipped_pages
+                else "a public page answered with a challenge"
+            ),
             "blocked": list(document.get("quality_blocked") or []),
             "changed": False,
             "new_models": 0,
             "changed_models": 0,
             "model_page_fetches": int(document.get("model_page_fetches") or 0),
             "model_page_skipped": int(document.get("model_page_skipped") or 0),
+            "skipped_reads": int(document.get("skipped_reads") or 0),
+            "deadline_reached": bool(document.get("deadline_reached")),
+            "total_seconds": float(document.get("total_seconds") or 0.0),
         }
     difference = aa_diff.diff(previous, document)
     document.pop("aa3d", None)
@@ -1114,14 +1315,13 @@ def refresh(
         "changed_models": len(difference.get("changed") or {}),
         "removed_models": len(difference.get("removed") or []),
         "model_page_fetches": fetches,
-        # The model pages that were not read, and the budget of the run.
+        # The model pages that were not read, the reads the deadline
+        # skipped, and the time the run took.
         "model_page_skipped": skipped,
-        "model_page_budget_seconds": int(
-            document.get("model_page_budget_seconds") or 0
-        ),
-        "model_page_budget_used_seconds": float(
-            document.get("model_page_budget_used_seconds") or 0.0
-        ),
+        "skipped_reads": int(document.get("skipped_reads") or 0),
+        "deadline_reached": bool(document.get("deadline_reached")),
+        "deadline_seconds": int(document.get("deadline_seconds") or 0),
+        "total_seconds": float(document.get("total_seconds") or 0.0),
         # Whether the AA-3D page carried the whole board.
         "aa3d_complete": board_complete,
         "new_model_names": [
@@ -1164,6 +1364,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
+    # The deadline of the run is measured from the start of the process.
+    started = CLOCK()
 
     def pages(slug: str) -> dict[str, Any]:
         if not args.model_pages:
@@ -1171,7 +1373,7 @@ def main(argv: list[str] | None = None) -> int:
         return read_model_page(f"https://artificialanalysis.ai/models/{slug}")
 
     if args.dry_run:
-        document = pull(model_pages=pages if args.model_pages else None)
+        document = pull(model_pages=pages if args.model_pages else None, started=started)
         print(
             json.dumps(
                 {
@@ -1187,9 +1389,14 @@ def main(argv: list[str] | None = None) -> int:
         model_pages=pages if args.model_pages else None,
         aa3d_path=args.aa3d_output or None,
         catalog_slugs=catalog_slugs(args.catalog) if args.catalog else (),
+        started=started,
     )
     print(json.dumps({key: value for key, value in result.items() if key != "diff"}))
-    return 0 if result.get("status") == "ok" else 2
+    # A run that ran out of time is not a failure: it wrote what it had,
+    # and the unit must not be marked as failed for that.
+    if result.get("status") == "ok" or result.get("deadline_reached"):
+        return 0
+    return 2
 
 
 if __name__ == "__main__":  # pragma: no cover - the CLI entry point
