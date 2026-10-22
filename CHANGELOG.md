@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.81] - 2026-10-22
+## [3.17.82] - 2026-10-22
 
 - The agent desktop update canary starts. The desktop API binds the address it is given, and the image's default is the address the production container owns on the desktop network. That address exists only in production's network namespace, so the canary could never bind it: its API failed on every start with "cannot assign requested address", and the canary never became ready, so the daily update unit failed before it could test any candidate. A canary now binds the API on loopback, an address every container namespace has, including the network-less profile canary, and the readiness probe asks the API for its health on exactly that address instead of waiting out the timeout. Production is untouched: it keeps its own address, its own environment, its own container definition and its own image; only the updater changed.
+
+## [3.17.81] - 2026-10-22
+
+- The owner identity values are supplied by the deployment, not by this repository. The account names and addresses the services log in as (the retired container registry account, the personal Google account the Keep broker verifies, the uptime kuma and ntfy administrator accounts and the account the private inputs were transferred from) are read from a root-owned file outside the repository, `/etc/ghostship/owner-identity.env`, and reach the units through their environment. A missing value fails with a clear message instead of a fallback, and the regression tests pin the same behaviour with synthetic names. The rendered configuration is unchanged once the deployment supplies the values.
 
 ## [3.17.80] - 2026-10-22
 
@@ -875,7 +879,7 @@
 ## [3.15.101] - 2026-10-12
 
 - Pin ghostship-agent 0.18.1: `health` op `types` and `query` over every Health Connect type, Ultrahuman lab biomarkers, full sleep and metrics, Wyze weigh-ins, and health documents with their text (OCR for scans).
-- The MCP container reads health documents only from the owner's "the owner" and "HealthConnect" Drive folders (`GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS`).
+- The MCP container reads health documents only from the owner's own Drive folders and the shared "HealthConnect" folder (`GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS`).
 
 ## [3.15.100] - 2026-10-12
 
