@@ -696,6 +696,15 @@ def _candidate(
                 "pace is behind the line, and the most constraining window is the "
                 "smallest pace"
             ),
+            # The owner's name for the same number: the Paced Availability is
+            # the share left minus the expected share left in the most
+            # constraining window. It is the pace delta of that window.
+            "paced_availability": (
+                None if pace is None else round(pace, 4)
+            ),
+            "paced_availability_window": _binding_id(
+                getattr(entries[0], "pace_binding", None) if entries else None
+            ),
         },
         "usage": {
             "tokens_7d": round(used_tokens, 1),
@@ -1201,10 +1210,32 @@ CALCULATION = {
     },
     "provider_order": {
         "formula": (
-            "the providers are ordered by the pace of their window: the one "
-            "that is behind the line the window draws by now comes first"
+            "the providers are ordered by their Paced Availability: the one "
+            "with the most share left over the share it was expected to have "
+            "left comes first"
         ),
-        "source": "pace_delta of the account window",
+        "source": "Paced Availability of the account window",
+    },
+    "paced_availability": {
+        "name": "Paced Availability",
+        "formula": (
+            "the share left minus the expected share left in the most "
+            "constraining window of the provider"
+        ),
+        "sign": (
+            "positive means the provider is ahead of the pace the window "
+            "draws, negative means it is behind it; a higher number ranks "
+            "first"
+        ),
+        "equivalence": (
+            "this is the pace delta of the most constraining window: the "
+            "expected used share minus the measured used share is the same "
+            "number as the share left minus the expected share left"
+        ),
+        "window": (
+            "the most constraining window: the one whose own line the "
+            "provider is furthest behind"
+        ),
     },
     "gates": {
         "frontier": (
@@ -1953,6 +1984,15 @@ def _winners(
                 "strength_source": (row.get("value") or {}).get("strength_source"),
                 "relative_cost": (row.get("value") or {}).get("relative_cost"),
                 "pace_delta": (row.get("capacity") or {}).get("pace_delta"),
+                # The owner's name for the ordering measure: the Paced
+                # Availability of the provider, in its most constraining
+                # window. A higher number ranks first.
+                "paced_availability": (row.get("capacity") or {}).get(
+                    "paced_availability"
+                ),
+                "paced_availability_window": (row.get("capacity") or {}).get(
+                    "paced_availability_window"
+                ),
                 "quota_state": row.get("quota_state"),
                 "native": row.get("native"),
                 "role": row.get("role"),
@@ -2786,6 +2826,32 @@ def provider_capacity_samples(
                 float(unknown),
             )
         )
+    # The owner's ordering measure, per provider: the Paced Availability of
+    # the provider in its most constraining window. It is the pace delta of
+    # that window, and a higher number ranks first. The provider's own
+    # measure is the smallest one over its models: the most constraining
+    # window of the account.
+    by_provider: dict[str, tuple[float, str]] = {}
+    for row in snapshot.get("candidates") or []:
+        if not isinstance(row, Mapping):
+            continue
+        capacity = row.get("capacity") or {}
+        paced = capacity.get("paced_availability")
+        if not isinstance(paced, (int, float)) or isinstance(paced, bool):
+            continue
+        provider = str(row.get("provider") or "")
+        binding = str(capacity.get("paced_availability_window") or "")
+        current = by_provider.get(provider)
+        if current is None or float(paced) < current[0]:
+            by_provider[provider] = (float(paced), binding)
+    for provider, (paced, binding) in sorted(by_provider.items()):
+        samples.append(
+            (
+                "ghostship_ai_provider_paced_availability",
+                {"provider": provider, "binding": binding},
+                paced,
+            )
+        )
     return samples
 
 
@@ -2855,6 +2921,12 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
         if isinstance(pace_delta, (int, float)) and not isinstance(pace_delta, bool):
             samples.append(
                 ("ghostship_ai_model_pace_delta_ratio", labels, float(pace_delta))
+            )
+            # The owner's name for the same number: the Paced Availability of
+            # the model. It is the pace delta of the model's most
+            # constraining window.
+            samples.append(
+                ("ghostship_ai_model_paced_availability", labels, float(pace_delta))
             )
     facts = (snapshot.get("facts") or {}).get("records") or {}
     for fact in facts.values():

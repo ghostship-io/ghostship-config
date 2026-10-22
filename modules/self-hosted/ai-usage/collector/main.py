@@ -243,6 +243,19 @@ METRIC_HELP = {
     "ghostship_ai_model_pace_delta_ratio": (
         "The most constraining pace among the windows of a model."
     ),
+    "ghostship_ai_provider_paced_availability": (
+        "The Paced Availability of a provider: the share left minus the "
+        "expected share left in its most constraining window. Positive means "
+        "the provider is ahead of the pace the window draws, and a higher "
+        "number ranks first. It is the same number as the pace delta of that "
+        "window."
+    ),
+    "ghostship_ai_model_paced_availability": (
+        "The Paced Availability of a model: the share left minus the expected "
+        "share left in its most constraining window. Positive means the model "
+        "is ahead of the pace the window draws, and a higher number ranks "
+        "first. It is the same number as the model's pace delta ratio."
+    ),
     "ghostship_ai_provider_capacity_remaining_ratio": (
         "The lowest applicable account window of a provider; a spent window "
         "publishes zero, and an unknown window publishes nothing."
