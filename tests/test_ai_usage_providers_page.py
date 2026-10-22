@@ -283,12 +283,14 @@ class ProvidersPageTests(unittest.TestCase):
         node = shutil.which("node")
         if node is None:
             self.fail("node is needed to run the helper")
+        # Business Text runs the helpers code as new Function("context", code)
+        # and hands it context.handlebars; the test runs it the same way.
         script = (
             "const helpers = {};\n"
-            "const handlebars = { registerHelper: (name, fn) => { helpers[name] = fn; } };\n"
-            + helpers
-            + "\nconsole.log(helpers.utcStamp(String(Date.UTC(2026, 9, 22, 19, 5, 0))));"
-            + "\nconsole.log(JSON.stringify(helpers.utcStamp('not a time')));"
+            "const context = { handlebars: { registerHelper: (name, fn) => { helpers[name] = fn; } } };\n"
+            "new Function('context', " + json.dumps(helpers) + ")(context);\n"
+            "console.log(helpers.utcStamp(String(Date.UTC(2026, 9, 22, 19, 5, 0))));\n"
+            "console.log(JSON.stringify(helpers.utcStamp('not a time')));"
         )
         # A viewer far from UTC: the helper must not use the local zone.
         env = dict(os.environ, TZ="Etc/GMT+10")
@@ -296,6 +298,39 @@ class ProvidersPageTests(unittest.TestCase):
             [node, "-e", script], capture_output=True, text=True, env=env, check=True
         )
         self.assertEqual(result.stdout.split("\n")[:2], ["22 Oct 19:05", '""'])
+
+    def test_every_reset_time_is_written_in_utc(self):
+        """A reset time reads in UTC, like the header, whatever the viewer's zone."""
+        node = shutil.which("node")
+        if node is None:
+            self.fail("node is needed to run the helper")
+        for title in ("Bulk", "Free", "Frontier", "3D", "Providers"):
+            panel = section(self.page, title)
+            content = panel["options"]["content"]
+            self.assertNotIn('{{date resetsAt', content, title)
+            self.assertIn("{{utcClock resetsAt}} UTC", content, title)
+            script = (
+                "const helpers = {};\n"
+                "const context = { handlebars: { registerHelper: (name, fn) => { helpers[name] = fn; } } };\n"
+                "new Function('context', " + json.dumps(panel["options"]["helpers"]) + ")(context);\n"
+                "const at = Date.UTC(2026, 9, 22, 13, 0, 0);\n"
+                "console.log(helpers.utcClock(at / 1000));\n"
+                "console.log(helpers.utcClock(at));"
+            )
+            env = dict(os.environ, TZ="Etc/GMT+10")
+            result = subprocess.run(
+                [node, "-e", script], capture_output=True, text=True, env=env, check=True
+            )
+            self.assertEqual(result.stdout.split("\n")[:2], ["13:00", "13:00"], title)
+
+    def test_the_frontier_lists_only_its_two_roles(self):
+        """Capacity is read per model, so Frontier keeps only the rows that hold a role."""
+        panel = section(self.page, "Frontier")
+        filters = [s for s in panel["transformations"] if s["id"] == "filterByValue"]
+        self.assertEqual(len(filters), 1)
+        self.assertEqual(
+            [rule["fieldName"] for rule in filters[0]["options"]["filters"]], ["rank"]
+        )
 
     def test_the_sections_are_in_the_owner_s_order(self):
         """The owner reads the page from the top: Bulk, Free, Frontier, 3D, Providers."""
