@@ -17,6 +17,7 @@ printf 'Checking AppArmor policy, evidence collector, and public-service guards\
 # Every policy the host loads is parsed as the host renders it, and the
 # named transition budget is held (tests/check-apparmor-profiles.py).
 python3 tests/check-apparmor-profiles.py
+python3 -m unittest discover -s tests -p test_apparmor_profile_paths.py
 python3 -m unittest discover -s tests -p test_apparmor_review.py
 python3 -m unittest discover -s tests -p test_cloudflare_access.py
 python3 -m unittest discover -s tests -p test_t3_worker_tunnel.py

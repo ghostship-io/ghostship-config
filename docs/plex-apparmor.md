@@ -195,10 +195,11 @@ Verified on chill-penguin (kernel 6.19, apparmor_parser 5.0.2), 2026-10-21:
   policy (`apparmor_parser -Q -K`) and abort the switch on any failure. The
   budget is twelve distinct named targets per profile block, and
   `tests/check-apparmor-profiles.py` holds it in CI: it parses every policy
-  the host loads, exactly as the host renders it and with the include tree
-  the host resolves `<tunables/global>` and the abstractions against, then
-  counts the transitions of every block in it. A profile file that no policy
-  loads has to be named in the check's allowlist with a reason.
+  the host loads, exactly as the host renders it, and counts the transitions
+  of every block in it. The include tree it parses against is the AppArmor
+  package of the machine that runs the check, which holds the same
+  abstractions and tunables the host's parser searches. A profile file that
+  no policy loads has to be named in the check's allowlist with a reason.
 - A reloaded policy reaches an idle task only at its next mediated call.
 
 ## Policy limits

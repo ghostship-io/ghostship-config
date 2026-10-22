@@ -12,7 +12,7 @@ profiles never noticed.
 The check therefore does three things:
 
   - it parses every policy that nixosConfigurations.chill-penguin loads,
-    exactly as the host renders it and with the include paths the host
+    exactly as the host renders it and with the include tree the parser
     resolves <tunables/global> and the abstractions against, so a profile
     the kernel would refuse can never pass CI;
   - it counts the named transitions of every profile block in those
@@ -180,6 +180,22 @@ def nix_eval_json(root: Path, attribute: str, apply: str | None = None) -> objec
     return json.loads(result.stdout)
 
 
+def nix_eval_expression(root: Path, expression: str, apply: str | None = None) -> object:
+    """The value of a Nix expression, evaluated in the repository.
+
+    The expression reads the flake's own inputs, which an impure
+    evaluation is needed for.
+    """
+    command = ["nix", "eval", "--impure", "--json", "--expr", expression]
+    if apply:
+        command += ["--apply", apply]
+    result = subprocess.run(command, cwd=root, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise CheckError(
+            f"the expression {expression} could not be evaluated: {result.stderr.strip()}")
+    return json.loads(result.stdout)
+
+
 def load_policies(root: Path, host: str) -> dict[str, str]:
     """The profiles the host loads, as the host renders them.
 
@@ -193,8 +209,58 @@ def load_policies(root: Path, host: str) -> dict[str, str]:
             if policy.get("state") != "disable"}
 
 
+def host_packages(root: Path, host: str) -> list[dict[str, str]]:
+    """The packages the host's AppArmor parser searches."""
+    packages = nix_eval_json(
+        root, f".#nixosConfigurations.{host}.config.security.apparmor.packages",
+        apply="ps: map (p: {name = p.name; pname = p.pname; out = p.outPath;}) ps")
+    return list(packages)
+
+
+def local_package(root: Path, pname: str) -> dict[str, str]:
+    """The same package, built for the machine that runs the check.
+
+    The host pins its own platform, so its package is a different store
+    path on every other machine, and nix cannot build it there: asking
+    for it ends in nothing, without an error. The files in it are the
+    same profile sources, so the check reads the copy of the machine it
+    runs on.
+    """
+    expression = (f'(builtins.getFlake {json.dumps(str(root))}).inputs.nixpkgs'
+                  f'.legacyPackages.${{builtins.currentSystem}}.{pname}')
+    package = nix_eval_expression(
+        root, expression, apply="p: {name = p.name; out = p.outPath; drv = p.drvPath;}")
+    return dict(package)
+
+
+def check_package_version(host_name: str, local_name: str) -> None:
+    """The host's package and this machine's copy must be the same version.
+
+    The include files name the package they come from, so a different
+    version would make the check read an include tree the host never
+    had.
+    """
+    if host_name != local_name:
+        raise CheckError(
+            f"the host's AppArmor package {host_name} is not the {local_name} this "
+            f"machine builds; its include tree would differ from the host's")
+
+
+def check_include_directory(path: str) -> Path:
+    """The directory the parser searches, or a failure naming what is missing."""
+    directory = Path(path)
+    if not directory.is_dir():
+        raise CheckError(f"{path} holds no AppArmor include files")
+    return directory
+
+
 def realise(root: Path, derivations: list[str]) -> None:
-    """Build the derivations the host's include tree is made of."""
+    """Build the derivations the include tree is made of.
+
+    A derivation for another platform cannot be built here, and nix ends
+    in nothing without an error, so every path the check reads is
+    realised through the derivation of the machine that runs it.
+    """
     if not derivations:
         return
     result = subprocess.run(
@@ -202,65 +268,60 @@ def realise(root: Path, derivations: list[str]) -> None:
         cwd=root, capture_output=True, text=True)
     if result.returncode != 0:
         raise CheckError(
-            f"the host's AppArmor include tree could not be built: {result.stderr.strip()}")
+            f"the AppArmor include tree could not be built: {result.stderr.strip()}")
 
 
-def include_paths(root: Path, host: str, scratch: Path) -> list[Path]:
+def resolve_include_paths(host: list[dict[str, str]],
+                          local: dict[str, dict[str, str]]) -> list[str]:
+    """The include directories of the host's packages, for this machine.
+
+    The host's packages belong to the host's platform, so the check
+    reads the copy of the machine it runs on. The versions must match:
+    the include files name the package they come from, so a different
+    version would make the check read an include tree the host never
+    had.
+    """
+    paths: list[str] = []
+    for package in host:
+        counterpart = local[package["pname"]]
+        check_package_version(package["name"], counterpart["name"])
+        paths.append(str(Path(counterpart["out"]) / "etc/apparmor.d"))
+    return paths
+
+
+def include_paths(root: Path, host: str) -> list[Path]:
     """The paths the host's parser searches for <tunables/global> and friends.
 
-    The host writes its enabled policies and its include files into
-    /etc/apparmor.d, and its parser.conf adds every package in
-    security.apparmor.packages to the search path. The check builds the
-    same two: the include files the host has, and the packages' own
-    directories, which hold the abstractions and the tunables.
+    The host's parser.conf adds every package in
+    security.apparmor.packages to its search path, and that package
+    holds the abstractions and the tunables every profile may include.
+    The host's own /etc/apparmor.d holds the same files with the NixOS
+    rules on top, and the host's package belongs to the host's platform,
+    so the check reads the copy of the machine it runs on: the files are
+    the same profile sources, and every include a policy names has to
+    resolve in the tree, or the parser says so.
     """
+    packages = host_packages(root, host)
+    local = {package["pname"]: local_package(root, package["pname"])
+             for package in packages}
+    # Every path the check reads is realised through the derivation of the
+    # machine that runs it: a derivation for another platform cannot be
+    # built here, and nix ends in nothing without an error.
+    realise(root, [counterpart["drv"] for counterpart in local.values()])
     paths: list[Path] = []
-
-    # The host's own include files, named as the host names them.
-    includes = nix_eval_json(
-        root, f".#nixosConfigurations.{host}.config.security.apparmor.includes",
-        apply="incs: builtins.mapAttrs (name: file: file.outPath) incs")
-    if includes:
-        derive = nix_eval_json(
-            root, f".#nixosConfigurations.{host}.config.security.apparmor.includes",
-            apply="incs: builtins.mapAttrs (name: file: file.drvPath) incs")
-        realise(root, sorted(set(derive.values())))
-        directory = scratch / "etc-apparmor.d"
-        directory.mkdir(parents=True, exist_ok=True)
-        for name, source in includes.items():
-            link = directory / name
-            link.parent.mkdir(parents=True, exist_ok=True)
-            link.symlink_to(source)
-        paths.append(directory)
-
-    # The packages the host adds to the parser's search path.
-    packages = nix_eval_json(
-        root, f".#nixosConfigurations.{host}.config.security.apparmor.packages",
-        apply="ps: map (p: p.outPath) ps")
-    derive = nix_eval_json(
-        root, f".#nixosConfigurations.{host}.config.security.apparmor.packages",
-        apply="ps: map (p: p.drvPath) ps")
-    realise(root, sorted(set(derive)))
-    for package in packages:
-        directory = Path(package) / "etc/apparmor.d"
-        if not directory.is_dir():
-            raise CheckError(f"{package} holds no etc/apparmor.d")
-        paths.append(directory)
+    for path in resolve_include_paths(packages, local):
+        directory = check_include_directory(path)
+        if directory not in paths:
+            paths.append(directory)
 
     # The CI shell names the same tree the host uses.
     configured = os.environ.get("APPARMOR_INCLUDE_DIR")
     if configured:
-        directory = Path(configured)
-        if not directory.is_dir():
-            raise CheckError(f"APPARMOR_INCLUDE_DIR={configured} is not a directory")
-        paths.append(directory)
+        directory = check_include_directory(configured)
+        if directory not in paths:
+            paths.append(directory)
 
-    # The same tree twice is one tree.
-    unique: list[Path] = []
-    for path in paths:
-        if path not in unique:
-            unique.append(path)
-    return unique
+    return paths
 
 
 def parse_policy(path: Path, includes: list[Path]) -> str:
@@ -287,7 +348,7 @@ def repository_profiles(root: Path) -> list[str]:
     return sorted(profiles)
 
 
-def self_test() -> list[str]:
+def self_test(includes: list[Path]) -> list[str]:
     """The fixtures hold the budget and the parser to the same boundary."""
     failures: list[str] = []
     accepted = FIXTURES / "at-transition-limit.profile"
@@ -312,6 +373,18 @@ def self_test() -> list[str]:
     elif under[0][1] != 13:
         failures.append(
             f"{refused.name} names {under[0][1]} transitions and must name 13")
+
+    # The parser holds the same boundary, so the budget is not a guess.
+    with tempfile.TemporaryDirectory() as directory:
+        for fixture, expected in ((accepted, True), (refused, False)):
+            path = Path(directory) / fixture.name
+            path.write_text(fixture.read_text())
+            complaint = parse_policy(path, includes)
+            if expected and complaint:
+                failures.append(f"{fixture.name} must parse: {complaint}")
+            if not expected and "too many specified profile transitions" not in complaint:
+                failures.append(
+                    f"{fixture.name} must be refused for its transitions: {complaint}")
     return failures
 
 
@@ -394,15 +467,14 @@ def main(argv: list[str] | None = None) -> int:
     failures: list[str] = []
     report: list[str] = []
     try:
-        failures.extend(self_test())
+        includes = include_paths(ROOT, arguments.host)
+        failures.extend(self_test(includes))
         if not arguments.self_test:
             policies = load_policies(ROOT, arguments.host)
             if not policies:
                 raise CheckError(f"{arguments.host} loads no AppArmor policy")
-            with tempfile.TemporaryDirectory() as scratch:
-                includes = include_paths(ROOT, arguments.host, Path(scratch))
-                policy_failures, report = check_policies(
-                    ROOT, arguments.host, policies, includes)
+            policy_failures, report = check_policies(
+                ROOT, arguments.host, policies, includes)
             failures.extend(policy_failures)
             failures.extend(check_coverage(ROOT, arguments.host, policies))
     except CheckError as error:
