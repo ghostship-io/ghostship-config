@@ -56,6 +56,87 @@ printing projects. Only session history files inside a directory whose name
 mentions `3dprint` are read, only for the last 30 days, and only a bounded
 number of files.
 
+## The OpenCode request record
+
+OpenCode records every model request it makes: the provider, the model, the
+tokens, the instant, and, when the request failed, the provider's own error.
+That record is the primary evidence for a route that is used through
+OpenCode, and the collector can infer a route's window and budget from the
+limit failures in it (the owner rule is in ghostship-agent's
+`config/agents/routing-policy.md`, "Usage measurement").
+
+The reader is `collector/opencode_reader.py`. It reads the SQLite database
+OpenCode keeps at `.local/share/opencode/opencode.db` inside the container
+home. It is not a source yet: the collector does not read it, and no metric
+carries it. What it produces is fixed:
+
+* `status` is `ok` or `unreadable`, and `reason` is a fixed code
+  (`ok`, `database_missing`, `database_unreadable`, `database_corrupt`,
+  `database_schema_missing`, `timeout`). A reading that cannot be made is
+  never a reading of zero usage.
+* `events` is one event per request: the collector's provider name, the
+  model id as recorded, the instant in epoch seconds, the outcome
+  (`success`, `limit` or `other`), the tokens used (`None` when the record
+  has none), and the window the failure named (`None`, `5h`, `7d` or `1d`).
+* `counts` holds the rows read, the rows whose provider is not in the
+  mapping table, and the events per outcome.
+
+Only a budget failure is a limit. A request that stopped for `stop`,
+`tool-calls`, `length` or `content-filter` is a success. A refusal that
+names the account's allowance is a limit, and the window it names is used
+when it names one: a session usage limit is five hours, a weekly usage limit
+is seven days, a daily limit is one day. A concurrency refusal, a per-minute
+refusal, a transient upstream refusal, a request that was too large, an
+expired key, an aborted run and a timeout spend no window, so they are read
+as `other` and never as a limit. A request that carries a retry is one
+event, with the outcome it ended on.
+
+The provider table is committed, not guessed. The OpenCode provider ids
+`ollama-cloud`, `opencode-go`, `opencode`, `openrouter`, `google`,
+`requesty`, `nvidia`, `ovh`, `upstage`, `inception`, `groq`, `mistral`,
+`cohere`, `zai`, `vercel`, `poolside` and `orcarouter` are mapped onto the
+collector's provider names. Every other provider id is counted and not
+emitted.
+
+The read is read only and it is bounded: the database is opened with the
+`mode=ro` URI, nothing in the reader writes to it, every query asks only
+for the last 35 days, the whole read has a wall clock limit of 20 seconds
+that aborts the query when it is reached, and the connection is closed on
+every path so no read transaction is left open.
+
+The query asks only for the fields the reader uses: SQLite extracts them
+from the record with its own JSON functions, so the whole record, about
+27 KB a row, never travels into Python. The error's own words come with
+the extraction and are classified in memory.
+
+The reader keeps its own cache: a file in the collector's state directory
+that holds the compact events, the cursor and the instant the history is
+complete from. A run reads only the rows the last run may not have seen,
+with two hours of overlap, so a row OpenCode inserted at the start of a
+step and completed later is read again; the events of that window are
+replaced by the ones the run read, and the events older than the window
+are pruned. The cache is written beside itself and renamed over the old
+one, so a reader never sees half of it, and it never holds the text of a
+provider's error.
+
+The history is filled a slice at a time. With no cache, a run reads the
+newest slice of three days. With a cache whose history starts later than
+the window allows, a run reads one slice of at most three days, walking
+back from the start of the history, inside the same cap. The reading is
+`partial` until the history reaches the whole window, and it carries the
+instant the history is complete from. A slice that runs out of time leaves
+the cache as it was and is read again by the next run; the part that was
+read still counts.
+
+A cache that does not parse, or that does not carry the shape the reader
+expects, is discarded and the backfill starts again. A cache is never
+trusted for an event that is dated in the future: those events are
+dropped.
+
+The text of a provider's error is read in memory, to pick the outcome, and
+it never leaves the process: it is not stored, not returned, not logged and
+not in an event. A real limit message names the account it belongs to.
+
 ## The windows and where their numbers come from
 
 A window is only headroom when it carries three things: the share of the
