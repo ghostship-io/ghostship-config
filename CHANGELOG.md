@@ -1,11 +1,22 @@
 # Changelog
 
-## [3.17.82] - 2026-10-22
+## [3.17.83] - 2026-10-22
 
 - The inferred capacity of a route no longer merges the routes that were never refused into the account of the provider. A route that was never refused has no limit of its own: it is measured on its own, with its whole allowance and no pace, and its use never ends the episode of another route. On live data the free routes of the Go provider were refused by nothing and still came out of the account of their paid models, which are refused and never recover.
 - The refusals of a route that never recovered are now evidence for its scope. The scope of a route is read from the episodes of its account group, the open one included, so another model of the provider that works right after the refusal shows that the limit was the model's own. The paid models of the Go provider were refused, never recovered, and the free route of the same provider worked seconds later: they came out as one account with a minute long window and a budget of a few thousand tokens, and they are now the models that were refused, with no window read out of their failures.
 - A refusal that opens the record of a group is the refusal of the group itself, so the episode of the group starts at that refusal. A record that began with a refusal produced no episode at all, because the scan looked for the first refusal after the first use: a route that was refused before it ever came back had no open episode, its scope came out unknown, and it was measured across the account, so the refusal of one model looked like the refusal of the whole provider.
 - The span of an open episode runs from after its refusal to the reading, so the refusal itself is never evidence of the scope by itself. Two routes of a provider that were refused at the same instant have nothing in that span, and the scope of each is unknown.
+
+## [3.17.83] - 2026-10-22
+
+- The inferred capacity of a route no longer merges the routes that were never refused into the account of the provider. A route that was never refused has no limit of its own: it is measured on its own, with its whole allowance and no pace, and its use never ends the episode of another route. On live data the free routes of the Go provider were refused by nothing and still came out of the account of their paid models, which are refused and never recover.
+- The refusals of a route that never recovered are now evidence for its scope. The scope of a route is read from the episodes of its account group, the open one included, so another model of the provider that works right after the refusal shows that the limit was the model's own. The paid models of the Go provider were refused, never recovered, and the free route of the same provider worked seconds later: they came out as one account with a minute long window and a budget of a few thousand tokens, and they are now the models that were refused, with no window read out of their failures.
+- A refusal that opens the record of a group is the refusal of the group itself, so the episode of the group starts at that refusal. A record that began with a refusal produced no episode at all, because the scan looked for the first refusal after the first use: a route that was refused before it ever came back had no open episode, its scope came out unknown, and it was measured across the account, so the refusal of one model looked like the refusal of the whole provider.
+- The span of an open episode runs from after its refusal to the reading, so the refusal itself is never evidence of the scope by itself. Two routes of a provider that were refused at the same instant have nothing in that span, and the scope of each is unknown.
+
+## [3.17.82] - 2026-10-22
+
+- The agent desktop update canary starts. The desktop API binds the address it is given, and the image's default is the address the production container owns on the desktop network. That address exists only in production's network namespace, so the canary could never bind it: its API failed on every start with "cannot assign requested address", and the canary never became ready, so the daily update unit failed before it could test any candidate. A canary now binds the API on loopback, an address every container namespace has, including the network-less profile canary, and the readiness probe asks the API for its health on exactly that address instead of waiting out the timeout. Production is untouched: it keeps its own address, its own environment, its own container definition and its own image; only the updater changed.
 
 ## [3.17.81] - 2026-10-22
 
