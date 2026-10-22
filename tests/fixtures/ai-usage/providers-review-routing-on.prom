@@ -1,0 +1,6 @@
+# The review fixture of the Providers page with the routing switched on.
+#
+# The collector publishes the routing state as a gauge without labels: one
+# means the routing is on, zero means it is off, and no series at all means
+# the routing was never switched on.
+ghostship_ai_routing_enabled 1
