@@ -46,6 +46,10 @@ python3 -m unittest discover -s tests -p test_agent_pin_guard.py
 printf 'Checking the T3 restart guard\n'
 python3 -m unittest discover -s tests -p test_t3code_restart_guard.py
 
+printf 'Checking that the tests read only committed fixtures\n'
+python3 scripts/check-test-fixtures.py tests
+python3 -m unittest discover -s tests -p test_test_fixture_lint.py
+
 printf 'Checking SIEM log parsing and secret redaction\n'
 vector --quiet test tests/siem-vector.toml
 python3 -m unittest discover -s tests -p test_siem_alerts.py
