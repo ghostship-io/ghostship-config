@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.90] - 2026-10-22
+
+- Providers page: capacity is read per model, not per tier. The collector publishes a model's capacity once, labelled with its first tier, so the 3D table (asking for tier="3d") showed "Limits unknown" for every model; GPT-6.1-Sol's capacity is labelled frontier.
+- Providers page: Frontier lists Chief then Backup, as the concept shows; the "3D reserve" tag is shown only in Bulk and Free, where the reserve applies; the 3D table lists its winners and the routes that are out.
+
 ## [3.17.89] - 2026-10-22
 
 - Providers page: a provider without a capacity reading sorts below every provider with one, as the page says ("exhausted and unknown last"), whichever series made it appear; before, a provider with only an entitlement reset sorted among the readings.
