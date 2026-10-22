@@ -3,6 +3,7 @@ import importlib.machinery
 import importlib.util
 import os
 import tempfile
+import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -24,6 +25,31 @@ def node(con, title):
 
 def tab(title, url="https://example.test/"):
     return {"title": title, "url": url, "targetId": title + url}
+
+
+RUN_A = "a" * 32
+RUN_B = "b" * 32
+
+
+def sway_window(con, run):
+    """A sway window showing a run's home tab (its anchor URL is the title)."""
+    return {"id": con, "pid": 100 + con, "rect": {"x": 0, "y": 0, "width": 1600, "height": 900},
+            "name": f"about:blank#ghostship-window-{run}.99 - Google Chrome"}
+
+
+def sway_tree():
+    """A sway tree with two Chrome windows, each on its own output and workspace."""
+    return {"type": "root", "nodes": [
+        {"type": "output", "name": "HEADLESS-0", "nodes": [{"type": "workspace", "name": "idle", "nodes": []}]},
+        {"type": "output", "name": "HEADLESS-1", "nodes": [
+            {"type": "workspace", "name": "w-HEADLESS-1", "nodes": [sway_window(5, RUN_A)]}]},
+        {"type": "output", "name": "HEADLESS-2", "nodes": [
+            {"type": "workspace", "name": "w-HEADLESS-2", "nodes": [sway_window(6, RUN_B)]}]}]}
+
+
+def stage_outputs():
+    return [{"name": name, "active": True, "rect": {"x": 1920 * index, "y": 0, "width": 1920, "height": 1080}}
+            for index, name in enumerate(("HEADLESS-0", "HEADLESS-1", "HEADLESS-2"))]
 
 
 class PairTest(unittest.TestCase):
@@ -58,6 +84,33 @@ class PairTest(unittest.TestCase):
         self.assertEqual(s.run_of(groups[101]), "a" * 32)
 
 
+class RestartTest(unittest.TestCase):
+    def test_pairs_are_restored_after_a_stage_restart(self):
+        """Catches a restart dropping the sway<->Chrome link: screenshot/ui then fail with not_found."""
+        s = stage()
+        s.ipc = FakeIpc(tree=sway_tree(), outputs=stage_outputs())
+        s.devices = FakeDevices()
+        s.windows, s.outputs, s.base_output = {}, [], None
+        s.refresh_screens = lambda: None
+        s.setup()
+        self.assertEqual(s.anchor_titles, {5: RUN_A, 6: RUN_B})
+        groups = {100: [tab("about:blank", f"about:blank#ghostship-window-{RUN_A}.99")],
+                  101: [tab("about:blank", f"about:blank#ghostship-window-{RUN_B}.99")]}
+        self.assertEqual(s.pair(s.tree_windows(), groups), {5: 100, 6: 101})
+
+    def test_windows_without_an_anchor_title_are_left_alone(self):
+        """Catches a title that only looks like an anchor being read as a run id."""
+        tree = sway_tree()
+        tree["nodes"][1]["nodes"][0]["nodes"][0]["name"] = "Shop - Google Chrome"
+        s = stage()
+        s.ipc = FakeIpc(tree=tree, outputs=stage_outputs())
+        s.devices = FakeDevices()
+        s.windows, s.outputs, s.base_output = {}, [], None
+        s.refresh_screens = lambda: None
+        s.setup()
+        self.assertEqual(s.anchor_titles, {6: RUN_B})
+
+
 class AgentInputTest(unittest.TestCase):
     def test_agent_browser_controls_refused_while_a_person_holds_the_run(self):
         """Catches an agent clicking Chrome's toolbar during a takeover, or leaving busy markers behind."""
@@ -81,15 +134,19 @@ class AgentInputTest(unittest.TestCase):
 
 
 class FakeIpc:
-    def __init__(self):
+    def __init__(self, tree=None, outputs=None):
         self.commands = []
+        self.tree = tree or []
+        self.outputs = outputs or [{"name": "HEADLESS-1", "active": True, "rect": {"x": 0, "y": 1080, "width": 1920, "height": 1080}},
+                                   {"name": "HEADLESS-2", "active": True, "rect": {"x": 1920, "y": 0, "width": 1920, "height": 1080}}]
 
     def command(self, text):
         self.commands.append(text)
 
     def request(self, kind, payload=""):
-        return [{"name": "HEADLESS-1", "active": True, "rect": {"x": 0, "y": 1080, "width": 1920, "height": 1080}},
-                {"name": "HEADLESS-2", "active": True, "rect": {"x": 1920, "y": 0, "width": 1920, "height": 1080}}]
+        if kind == stage_control.GET_TREE:
+            return self.tree
+        return self.outputs
 
 
 class FakeDevices:
@@ -120,7 +177,7 @@ class LeaseTest(unittest.TestCase):
         idle, stage_control.LEASE_IDLE = stage_control.LEASE_IDLE, 0.0
         try:
             s = live_stage(None)
-            s.devices = FakeDevices(on_button=lambda: (s.expire(), s.release(6)))
+            s.devices = FakeDevices(on_button=lambda: (s.expire(), s.release(6, actor="agent")))
             s._input(6, [{"action": "left_click", "coordinate": [10, 10]}], "agent")
             self.assertNotIn("workspace idle", s.ipc.commands)  # neither expiry nor release cut in
             s.expire()  # once the batch is done, the lease ends as usual
@@ -135,6 +192,43 @@ class LeaseTest(unittest.TestCase):
         s._input(6, [{"action": "left_click"}], "agent")
         self.assertEqual(s.devices.moves, [(2020, 200), (2020, 200)])
         self.assertEqual(s._input(6, [{"action": "cursor_position"}], "agent")["results"][0]["position"], [100, 200])
+
+
+class ReleaseTest(unittest.TestCase):
+    def held_lease(self, actor):
+        s = live_stage(FakeDevices())
+        s.lease = {"con": 6, "actor": actor, "last": time.monotonic(), "batches": 0}
+        return s
+
+    def test_the_viewer_dropping_its_client_does_not_close_an_agent_s_lease(self):
+        """Catches the viewer closing the Chrome menu an agent is working with."""
+        s = self.held_lease("agent")
+        s.handle({"op": "release", "con": 6, "actor": "human"})
+        self.assertIsNotNone(s.lease)
+        self.assertNotIn("workspace idle", s.ipc.commands)
+
+    def test_the_holder_releases_its_own_lease(self):
+        """Catches a lease that nobody can give back: the window would keep the focus."""
+        s = self.held_lease("agent")
+        s.handle({"op": "release", "con": 6, "actor": "agent"})
+        self.assertIsNone(s.lease)
+        self.assertIn("workspace idle", s.ipc.commands)
+
+    def test_an_admin_release_forces_the_lease_down(self):
+        """Catches a lease with no way out but waiting for the idle timer."""
+        s = self.held_lease("agent")
+        s.handle({"op": "release", "con": 6, "admin": True})
+        self.assertIsNone(s.lease)
+        self.assertIn("workspace idle", s.ipc.commands)
+
+    def test_an_agent_cannot_force_a_person_s_lease_away(self):
+        """Catches an agent taking the window a person is working in."""
+        request = stage_control.agent_request({"op": "release", "con": 6, "admin": True})
+        self.assertEqual(request, {"op": "release", "con": 6, "actor": "agent"})
+        s = self.held_lease("human")
+        s.handle(request)
+        self.assertIsNotNone(s.lease)
+        self.assertNotIn("workspace idle", s.ipc.commands)
 
 
 if __name__ == "__main__":

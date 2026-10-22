@@ -31,16 +31,21 @@ window. Chrome listens to one Wayland seat, so this stage has one focus:
   sway sees it as the window title, else by the window title matching tab
   titles in exactly one Chrome window, else by elimination. Pairs are sticky;
   an ambiguous window stays unpaired (the viewer then shows page content
-  only) rather than risk showing another run's window.
+  only) rather than risk showing another run's window. Sway does not
+  re-announce the windows it already has, so a restart reads the tree once
+  and pairs the windows it finds there.
 
 Socket /config/agent-desktop/runs/stage-<identity>.sock, one JSON request per
 line: windows | frame {window, max_edge, quality} | input {window, actions,
-actor} | release {window}, where window is {con: <sway id>} (the viewer) or
-{chrome_window: <DevTools window id>, run_id} (agents). Agent input marks the
-window's tabs busy, then fails with "paused" while a person has taken the run
-over, as the browser gate does. `stage-control call <identity>` sends one
-request read from stdin (agents use it over SSH). It also holds the stage's
-virtual pointer and keyboard, so pages see a fine
+actor} | release {window, actor}, where window is {con: <sway id>} (the viewer)
+or {chrome_window: <DevTools window id>, run_id} (agents). Only the focus
+lease's holder may release it, so a person closing the viewer does not close
+the Chrome menu an agent is working with; an idle lease expires on its own,
+and an explicit admin request (never from an agent) forces it down. Agent
+input marks the window's tabs busy, then fails with "paused" while a person
+has taken the run over, as the browser gate does. `stage-control call
+<identity>` sends one request read from stdin (agents use it over SSH). It
+also holds the stage's virtual pointer and keyboard, so pages see a fine
 pointer and hover.
 """
 from __future__ import annotations
@@ -152,6 +157,11 @@ class Stage:
         self.ipc.command("workspace idle")
         self.outputs = [o["name"] for o in outputs[1:]]
         for con in self.tree_windows():
+            # Sway does not re-announce the windows it already has, so a restart
+            # learns their anchor titles (the run id in the title) from the tree.
+            match = ANCHOR.search(con.get("name") or "")
+            if match:
+                self.anchor_titles[con["id"]] = match.group(1)
             # After a restart, adopt windows that already have their own output.
             if con["output"] != self.base_output and con.get("workspace") == f"w-{con['output']}":
                 self.windows[con["id"]] = {"output": con["output"]}
@@ -430,14 +440,24 @@ class Stage:
             self.lease = {"con": con, "actor": actor, "last": now, "batches": 0}
         self.lease.update(actor=actor, last=now)
 
-    def release(self, con: int | None = None) -> None:
+    def release(self, con: int | None = None, actor: str | None = None, admin: bool = False) -> None:
+        """Give up the focus lease.
+
+        Only its holder may: a person closing the viewer must not close the Chrome
+        menu an agent is working with. An admin request forces the lease down,
+        and a lease nobody uses expires on its own.
+        """
         with self.lock:
-            if self.lease and (con is None or self.lease["con"] == con):
-                if self.lease["batches"]:  # a running batch keeps it; it expires right after
-                    self.lease["last"] = 0.0
-                    return
-                self._focus_idle()
-                self.lease = None
+            if not self.lease or (con is not None and self.lease["con"] != con):
+                return
+            if not admin and self.lease["actor"] != actor:
+                log(f"release refused: the lease is {self.lease['actor']}'s")
+                return
+            if self.lease["batches"]:  # a running batch keeps it; it expires right after
+                self.lease["last"] = 0.0
+                return
+            self._focus_idle()
+            self.lease = None
 
     def expire(self) -> None:
         with self.lock:
@@ -548,7 +568,7 @@ class Stage:
             return self.input(con, request.get("actions"), actor, run_id=request.get("run_id"),
                               targets=(window or {}).get("targets"))
         if op == "release":
-            self.release(con)
+            self.release(con, actor=request.get("actor"), admin=bool(request.get("admin")))
             return {"released": True}
         raise ValueError("unknown op")
 
@@ -596,6 +616,17 @@ async def serve(stage: Stage, path: str) -> None:
         await server.serve_forever()
 
 
+def agent_request(request: dict) -> dict:
+    """The request an agent sends: it speaks for the agent, never for a person.
+
+    An agent never holds a person's lease, so it may not force one away either.
+    """
+    request = dict(request)
+    request["actor"] = "agent"
+    request.pop("admin", None)
+    return request
+
+
 def call(identity: str) -> int:
     """One request from stdin to the running stage-control; prints its JSON reply."""
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -604,7 +635,7 @@ def call(identity: str) -> int:
         request = json.loads(sys.stdin.read())
         if not isinstance(request, dict):
             raise ValueError("request must be an object")
-        request["actor"] = "agent"  # only the viewer speaks for a person
+        request = agent_request(request)  # only the viewer speaks for a person
         sock.connect(os.path.join(RUNS, f"stage-{identity}.sock"))
         sock.sendall(json.dumps(request).encode() + b"\n")
         data = b""

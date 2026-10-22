@@ -5,9 +5,9 @@
   "ghostship",
   "host"
  ],
- "timezone": "browser",
+ "timezone": "utc",
  "schemaVersion": 41,
- "version": 1,
+ "version": 3,
  "editable": false,
  "refresh": "1m",
  "time": {
@@ -16,18 +16,34 @@
  },
  "panels": [
   {
-   "id": 1,
-   "title": "CPU busy",
-   "type": "timeseries",
+   "id": 1000,
+   "title": "HOST  /  Resources & containers",
+   "type": "text",
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 4
+   },
+   "options": {
+    "mode": "markdown",
+    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline) \u00b7 [AI usage](/d/ghostship-ai-usage)\n\nLive node_exporter and bounded Podman cgroup counters. CPU is busy time over all cores; memory used is total minus available in the same units. An empty or stale panel is unknown, not zero: check the sample age and the writer count first."
+   }
+  },
+  {
+   "id": 1001,
+   "title": "CPU total  (all cores)",
+   "description": "Busy time across every core as a five-minute rolling average over the selected range; it is a rate, not a counter total.",
+   "type": "stat",
+   "gridPos": {
+    "x": 0,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "w": 12,
-    "h": 8,
-    "x": 0,
-    "y": 0
    },
    "targets": [
     {
@@ -36,31 +52,188 @@
       "type": "prometheus",
       "uid": "victoriametrics"
      },
-     "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))",
-     "legendFormat": "cpu"
+     "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+     "instant": true
     }
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "percentunit"
+     "unit": "percent",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 70
+       },
+       {
+        "color": "red",
+        "value": 90
+       }
+      ]
+     }
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
   },
   {
-   "id": 2,
-   "title": "Memory available",
-   "type": "timeseries",
+   "id": 1002,
+   "title": "Memory used",
+   "description": "MemTotal \u2212 MemAvailable, both in bytes from the same exporter: the reclaimable part of available memory is already excluded.",
+   "type": "stat",
+   "gridPos": {
+    "x": 4,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
    },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 51539607552
+       },
+       {
+        "color": "red",
+        "value": 60129542144
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1003,
+   "title": "Memory total",
+   "description": "MemTotal of the host in bytes.",
+   "type": "stat",
    "gridPos": {
-    "w": 12,
-    "h": 8,
+    "x": 8,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "node_memory_MemTotal_bytes",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1004,
+   "title": "Memory available",
+   "description": "MemAvailable: free memory plus the reclaimable page cache, as exported.",
+   "type": "stat",
+   "gridPos": {
     "x": 12,
-    "y": 0
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
    },
    "targets": [
     {
@@ -70,39 +243,55 @@
       "uid": "victoriametrics"
      },
      "expr": "node_memory_MemAvailable_bytes",
-     "legendFormat": "available"
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "node_memory_MemTotal_bytes",
-     "legendFormat": "total"
+     "instant": true
     }
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "bytes"
+     "unit": "bytes",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
   },
   {
-   "id": 3,
-   "title": "Root filesystem free",
-   "type": "timeseries",
+   "id": 1005,
+   "title": "Root disk free",
+   "description": "Available over total for the root filesystem.",
+   "type": "stat",
+   "gridPos": {
+    "x": 16,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "w": 12,
-    "h": 8,
-    "x": 0,
-    "y": 8
    },
    "targets": [
     {
@@ -112,30 +301,520 @@
       "uid": "victoriametrics"
      },
      "expr": "node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}",
-     "legendFormat": "free"
+     "instant": true
     }
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "percentunit"
+     "unit": "percentunit",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.1
+       },
+       {
+        "color": "green",
+        "value": 0.2
+       }
+      ]
+     }
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
   },
   {
-   "id": 4,
-   "title": "Load",
+   "id": 1006,
+   "title": "Node sample age",
+   "description": "Seconds since the last node_exporter sample. A stale sample makes every panel above unknown rather than zero.",
+   "type": "stat",
+   "gridPos": {
+    "x": 20,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "time() - timestamp(node_uname_info)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 60
+       },
+       {
+        "color": "red",
+        "value": 180
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1007,
+   "title": "Memory used %",
+   "description": "The same used/total ratio as the bytes panels, for a quick read.",
+   "type": "stat",
+   "gridPos": {
+    "x": 0,
+    "y": 8,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 75
+       },
+       {
+        "color": "red",
+        "value": 90
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1008,
+   "title": "Host writers",
+   "description": "Number of exporters reporting MemTotal. More than one means the CPU and memory panels would blend hosts; it is shown here instead of hidden.",
+   "type": "stat",
+   "gridPos": {
+    "x": 4,
+    "y": 8,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "count(node_memory_MemTotal_bytes)",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 2
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 1009,
+   "title": "CPUs reporting",
+   "description": "Distinct cpu series in the idle counter. It matches the core count of the host and proves the per-core panel has no duplicated core.",
+   "type": "stat",
+   "gridPos": {
+    "x": 8,
+    "y": 8,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "count(count by (cpu) (node_cpu_seconds_total{mode=\"idle\"}))",
+     "instant": true
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 8,
+   "title": "CPU per core  /  5-minute busy average",
+   "description": "One row per core in numeric order 0..19, time on the x axis. Every cell is that core's busy percentage as a five-minute average (1 - idle rate over 5m), so a single skipped scrape is interpolated rather than shown as a gap; a core with no samples at all has no row. Colour is a restrained threshold (green under 70%, orange to 90%, red above) and the tooltip carries the exact average.",
+   "type": "state-timeline",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 12,
+    "w": 24,
+    "h": 14
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sort_by_label_numeric(100 * (1 - avg by (cpu) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))), \"cpu\")",
+     "legendFormat": "core {{cpu}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "max": 100,
+     "noValue": "\u2014",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 70
+       },
+       {
+        "color": "red",
+        "value": 90
+       }
+      ]
+     },
+     "custom": {
+      "fillOpacity": 80,
+      "lineWidth": 1,
+      "spanNulls": false
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "mergeValues": false,
+    "showValue": "auto",
+    "alignValue": "center",
+    "rowHeight": 0.85,
+    "legend": {
+     "showLegend": true,
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "single",
+     "sort": "none"
+    }
+   }
+  },
+  {
+   "id": 1,
+   "title": "CPU busy (total, all cores)",
+   "description": "Busy time across every core as a five-minute rolling average over the selected range; it is a rate, not a counter total.",
    "type": "timeseries",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
    },
    "gridPos": {
+    "x": 0,
+    "y": 26,
+    "w": 24,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+     "legendFormat": "all cores"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     },
+     "max": 100,
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 2,
+   "title": "Memory  (total, used, available)",
+   "description": "All three series are bytes from the same exporter: used = total \u2212 available.",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 34,
     "w": 12,
-    "h": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "node_memory_MemTotal_bytes",
+     "legendFormat": "total"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+     "legendFormat": "used"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "node_memory_MemAvailable_bytes",
+     "legendFormat": "available"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 4,
+   "title": "Load",
+   "description": "Kernel load average (rolling gauge, not a range total).",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
     "x": 12,
-    "y": 8
+    "y": 34,
+    "w": 12,
+    "h": 8
    },
    "targets": [
     {
@@ -145,7 +824,7 @@
       "uid": "victoriametrics"
      },
      "expr": "node_load1",
-     "legendFormat": "1m"
+     "legendFormat": "load 1m"
     },
     {
      "refId": "B",
@@ -154,28 +833,107 @@
       "uid": "victoriametrics"
      },
      "expr": "node_load15",
-     "legendFormat": "15m"
+     "legendFormat": "load 15m"
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     },
+     "min": 0
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
-   "id": 5,
-   "title": "Container CPU (cores)",
+   "id": 3,
+   "title": "Root filesystem free",
+   "description": "Available over total for /.",
    "type": "timeseries",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "w": 24,
-    "h": 8,
     "x": 0,
-    "y": 16
+    "y": 42,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}",
+     "legendFormat": "root free"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
+  },
+  {
+   "id": 5,
+   "title": "Container CPU (cores)",
+   "description": "Busy cores per container as a five-minute rolling rate, top 10 (not a range total).",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 42,
+    "w": 12,
+    "h": 8
    },
    "targets": [
     {
@@ -185,28 +943,52 @@
       "uid": "victoriametrics"
      },
      "expr": "topk(10, rate(ghostship_container_cpu_seconds_total[5m]))",
-     "legendFormat": "{{container}}"
+     "legendFormat": "{{name}}"
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "unit": "short",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     },
+     "min": 0
+    },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 6,
    "title": "Container memory",
+   "description": "Resident memory per container, a current gauge (not a range total), top 10.",
    "type": "timeseries",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "w": 12,
-    "h": 8,
     "x": 0,
-    "y": 24
+    "y": 50,
+    "w": 12,
+    "h": 8
    },
    "targets": [
     {
@@ -216,30 +998,52 @@
       "uid": "victoriametrics"
      },
      "expr": "topk(10, ghostship_container_memory_bytes)",
-     "legendFormat": "{{container}}"
+     "legendFormat": "{{name}}"
     }
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "bytes"
+     "unit": "bytes",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     },
+     "min": 0
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   },
   {
    "id": 7,
    "title": "Container transmit (per netns)",
+   "description": "Transmit rate per container network namespace as a five-minute rolling rate, top 10.",
    "type": "timeseries",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "w": 12,
-    "h": 8,
     "x": 12,
-    "y": 24
+    "y": 50,
+    "w": 12,
+    "h": 8
    },
    "targets": [
     {
@@ -249,16 +1053,85 @@
       "uid": "victoriametrics"
      },
      "expr": "topk(10, rate(ghostship_container_network_transmit_bytes_total[5m]))",
-     "legendFormat": "{{container}}"
+     "legendFormat": "{{name}}"
     }
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "Bps"
+     "unit": "Bps",
+     "noValue": "Unknown",
+     "custom": {
+      "fillOpacity": 8,
+      "lineWidth": 1,
+      "spanNulls": false
+     },
+     "min": 0
     },
     "overrides": []
    },
-   "options": {}
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "bottom",
+     "showLegend": true,
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   }
   }
- ]
+ ],
+ "links": [
+  {
+   "title": "Work overview",
+   "type": "link",
+   "url": "/d/ghostship-autonomous-work",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": true,
+   "keepTime": true
+  },
+  {
+   "title": "Host",
+   "type": "link",
+   "url": "/d/ghostship-host",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": true,
+   "keepTime": true
+  },
+  {
+   "title": "Security",
+   "type": "link",
+   "url": "/d/ghostship-security",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": true,
+   "keepTime": true
+  },
+  {
+   "title": "Pipeline",
+   "type": "link",
+   "url": "/d/ghostship-siem-pipeline",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": true,
+   "keepTime": true
+  },
+  {
+   "title": "AI usage",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": true,
+   "keepTime": true
+  }
+ ],
+ "description": "Provisioned read-only Ghostship monitoring. Direct navigation; data comes from the existing SIEM stores."
 }

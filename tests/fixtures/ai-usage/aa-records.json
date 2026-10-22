@@ -1,0 +1,1270 @@
+{
+ "fetched_at": "2026-10-21T23:35:17.791174282Z",
+ "fetched_at_epoch": 1792625717.791174,
+ "index_version": "4.3",
+ "note": "A trimmed copy of the real Artificial Analysis cache used for the 2026-10-21 audit. The id, slug, name, release date and indices are the feed's own values.",
+ "records": [
+  {
+   "cost_per_task": null,
+   "id": "c2b1e769-7aee-4669-8076-73918bdebf6c",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 15.4
+   },
+   "median_performance": 87.8,
+   "model": "Claude 4.5 Haiku (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.1,
+    "cache_write": 1.25,
+    "input": 1.0,
+    "output": 5.0
+   },
+   "provider": "Anthropic",
+   "release_date": "2025-10-15",
+   "slug": "claude-4-5-haiku"
+  },
+  {
+   "cost_per_task": 0.2768,
+   "id": "a6340098-d7ae-462d-b372-0a0a67fc44b4",
+   "indices": {
+    "agentic_index": 8.0,
+    "coding_index": 43.9,
+    "engineering_index": 19.5,
+    "intelligence_index": 16.9
+   },
+   "median_performance": 95.36,
+   "model": "Claude 4.5 Haiku (Reasoning)",
+   "prices": {
+    "cache_read": 0.1,
+    "cache_write": 1.25,
+    "input": 1.0,
+    "output": 5.0
+   },
+   "provider": "Anthropic",
+   "release_date": "2025-10-15",
+   "slug": "claude-4-5-haiku-reasoning"
+  },
+  {
+   "cost_per_task": null,
+   "id": "91cb6144-4937-4e4e-aeda-b4341d355c10",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 19.3
+   },
+   "median_performance": 46.37,
+   "model": "Claude 4.5 Sonnet (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.3,
+    "cache_write": 3.75,
+    "input": 3.0,
+    "output": 15.0
+   },
+   "provider": "Anthropic",
+   "release_date": "2025-09-29",
+   "slug": "claude-4-5-sonnet"
+  },
+  {
+   "cost_per_task": 0.5566,
+   "id": "90e078f2-051b-4c63-8919-76618971cb3f",
+   "indices": {
+    "agentic_index": 15.8,
+    "coding_index": 52.1,
+    "engineering_index": 22.8,
+    "intelligence_index": 20.7
+   },
+   "median_performance": 52.5,
+   "model": "Claude 4.5 Sonnet (Reasoning)",
+   "prices": {
+    "cache_read": 0.3,
+    "cache_write": 3.75,
+    "input": 3.0,
+    "output": 15.0
+   },
+   "provider": "Anthropic",
+   "release_date": "2025-09-29",
+   "slug": "claude-4-5-sonnet-thinking"
+  },
+  {
+   "cost_per_task": null,
+   "id": "4077490a-bbfb-404e-979a-a97a20e3b5de",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 23.7
+   },
+   "median_performance": 49.32,
+   "model": "Claude Opus 4.5 (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.5,
+    "cache_write": 6.25,
+    "input": 5.0,
+    "output": 25.0
+   },
+   "provider": "Anthropic",
+   "release_date": "2025-11-24",
+   "slug": "claude-opus-4-5"
+  },
+  {
+   "cost_per_task": null,
+   "id": "2660d74f-ce79-48a8-8b53-6e668e2071a2",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 29.1
+   },
+   "median_performance": 56.53,
+   "model": "Claude Opus 4.5 (Reasoning)",
+   "prices": {
+    "cache_read": 0.5,
+    "cache_write": 6.25,
+    "input": 5.0,
+    "output": 25.0
+   },
+   "provider": "Anthropic",
+   "release_date": "2025-11-24",
+   "slug": "claude-opus-4-5-thinking"
+  },
+  {
+   "cost_per_task": 5.982,
+   "id": "2f3c4dc9-a450-4303-8697-0237257cf08f",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 60.4,
+    "intelligence_index": 57.6
+   },
+   "median_performance": 95.69,
+   "model": "Claude Opus 5.5 (Max, Default Fallback)",
+   "prices": {
+    "cache_read": 0.2,
+    "cache_write": 5.0,
+    "input": 4.0,
+    "output": 20.0
+   },
+   "provider": "Anthropic",
+   "release_date": "2026-09-22",
+   "slug": "claude-opus-5-5"
+  },
+  {
+   "cost_per_task": 0.8844,
+   "id": "268525e2-f873-4178-bc07-e6a0ee1f002d",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 48.3,
+    "intelligence_index": 46.8
+   },
+   "median_performance": 103.61,
+   "model": "Claude Sonnet 5.5 (High, Default Fallback)",
+   "prices": {
+    "cache_read": 0.1,
+    "cache_write": 2.5,
+    "input": 2.0,
+    "output": 10.0
+   },
+   "provider": "Anthropic",
+   "release_date": "2026-09-28",
+   "slug": "claude-sonnet-5-5-high"
+  },
+  {
+   "cost_per_task": 0.4833,
+   "id": "042e8a37-fcd0-40f4-8f41-99215fb68eda",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 42.4,
+    "intelligence_index": 40.8
+   },
+   "median_performance": 104.76,
+   "model": "Claude Sonnet 5.5 (Medium, Default Fallback)",
+   "prices": {
+    "cache_read": 0.1,
+    "cache_write": 2.5,
+    "input": 2.0,
+    "output": 10.0
+   },
+   "provider": "Anthropic",
+   "release_date": "2026-09-28",
+   "slug": "claude-sonnet-5-5-medium"
+  },
+  {
+   "cost_per_task": 2.012,
+   "id": "975aeaef-50bd-4a65-9c73-f1015adcd4d4",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 53.9,
+    "intelligence_index": 51.9
+   },
+   "median_performance": 110.41,
+   "model": "Claude Sonnet 5.5 (Xhigh, Default Fallback)",
+   "prices": {
+    "cache_read": 0.1,
+    "cache_write": 2.5,
+    "input": 2.0,
+    "output": 10.0
+   },
+   "provider": "Anthropic",
+   "release_date": "2026-09-28",
+   "slug": "claude-sonnet-5-5-xhigh"
+  },
+  {
+   "cost_per_task": 0.4003,
+   "id": "dbe7c625-3100-4463-b479-a228c41f75dd",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 39.3,
+    "intelligence_index": 39.5
+   },
+   "median_performance": 221.66,
+   "model": "DeepSeek V4.1 Flash (Max)",
+   "prices": {
+    "cache_read": 0.006,
+    "cache_write": null,
+    "input": 0.3,
+    "output": 1.2
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-09-10",
+   "slug": "deepseek-v4-1-flash"
+  },
+  {
+   "cost_per_task": 0.262,
+   "id": "f151fd0b-2139-40cf-a3ec-995e8cedc592",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 45.2,
+    "intelligence_index": 45.1
+   },
+   "median_performance": 206.19,
+   "model": "DeepSeek V4.1 Flash 1017 (Max)",
+   "prices": {
+    "cache_read": 0.006,
+    "cache_write": null,
+    "input": 0.3,
+    "output": 1.2
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-10-17",
+   "slug": "deepseek-v4-1-flash-1017"
+  },
+  {
+   "cost_per_task": 0.2488,
+   "id": "73c96f99-0de3-4668-a4bd-b106a0fe18f2",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 24.7,
+    "intelligence_index": 24.7
+   },
+   "median_performance": 334.14,
+   "model": "DeepSeek V4.1 Flash (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.007,
+    "cache_write": null,
+    "input": 0.3,
+    "output": 1.2
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-09-10",
+   "slug": "deepseek-v4-1-flash-non-reasoning"
+  },
+  {
+   "cost_per_task": 0.1487,
+   "id": "fe4c0848-e284-4e52-a79d-cdc28392f1a9",
+   "indices": {
+    "agentic_index": 41.0,
+    "coding_index": 69.1,
+    "engineering_index": 34.9,
+    "intelligence_index": 34.3
+   },
+   "median_performance": 132.71,
+   "model": "DeepSeek V4 Flash 0731 (Max)",
+   "prices": {
+    "cache_read": 0.023,
+    "cache_write": null,
+    "input": 0.14,
+    "output": 0.28
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-07-31",
+   "slug": "deepseek-v4-flash"
+  },
+  {
+   "cost_per_task": 0.0895,
+   "id": "d8ddb241-b3e4-4c25-a6a3-72eb1b30c541",
+   "indices": {
+    "agentic_index": 22.2,
+    "coding_index": 56.2,
+    "engineering_index": 26.4,
+    "intelligence_index": 24.2
+   },
+   "median_performance": 46.51,
+   "model": "DeepSeek V4 Flash 0420 (Max)",
+   "prices": {
+    "cache_read": 0.0235,
+    "cache_write": null,
+    "input": 0.1119,
+    "output": 0.2338
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-04-24",
+   "slug": "deepseek-v4-flash-0420"
+  },
+  {
+   "cost_per_task": 0.1026,
+   "id": "89a2c945-1fab-4ee4-9f45-83a9f46cb221",
+   "indices": {
+    "agentic_index": 26.3,
+    "coding_index": 52.0,
+    "engineering_index": 26.0,
+    "intelligence_index": 24.4
+   },
+   "median_performance": null,
+   "model": "DeepSeek V4 Flash 0420 (High)",
+   "prices": {
+    "cache_read": 0.0235,
+    "cache_write": null,
+    "input": 0.1119,
+    "output": 0.2338
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-04-24",
+   "slug": "deepseek-v4-flash-0420-high"
+  },
+  {
+   "cost_per_task": null,
+   "id": "ad173c8d-f14f-4230-90e9-60979b7720e7",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 18.9
+   },
+   "median_performance": null,
+   "model": "DeepSeek V4 Flash 0420 (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.019,
+    "cache_write": null,
+    "input": 0.0938,
+    "output": 0.1876
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-04-24",
+   "slug": "deepseek-v4-flash-0420-non-reasoning"
+  },
+  {
+   "cost_per_task": 0.674,
+   "id": "83173329-c09a-41f1-a028-a282a5f908d7",
+   "indices": {
+    "agentic_index": 41.3,
+    "coding_index": 68.8,
+    "engineering_index": 37.1,
+    "intelligence_index": 36.0
+   },
+   "median_performance": 82.94,
+   "model": "DeepSeek V4 Pro 0813 (Max)",
+   "prices": {
+    "cache_read": 0.044,
+    "cache_write": null,
+    "input": 1.32,
+    "output": 3.96
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-08-13",
+   "slug": "deepseek-v4-pro"
+  },
+  {
+   "cost_per_task": 0.1215,
+   "id": "bf220674-68bd-43cc-a1b8-ce5ed4d2f18d",
+   "indices": {
+    "agentic_index": 26.3,
+    "coding_index": 59.4,
+    "engineering_index": 31.6,
+    "intelligence_index": 30.4
+   },
+   "median_performance": 86.95,
+   "model": "DeepSeek V4 Pro 0424 (Max)",
+   "prices": {
+    "cache_read": 0.0036,
+    "cache_write": null,
+    "input": 0.435,
+    "output": 0.87
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-04-24",
+   "slug": "deepseek-v4-pro-0424"
+  },
+  {
+   "cost_per_task": null,
+   "id": "5da3c0e2-65d2-4bff-a410-cb2132ddafb6",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": 58.7,
+    "engineering_index": null,
+    "intelligence_index": 30.1
+   },
+   "median_performance": 85.7,
+   "model": "DeepSeek V4 Pro 0424 (High)",
+   "prices": {
+    "cache_read": 0.0036,
+    "cache_write": null,
+    "input": 0.435,
+    "output": 0.87
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-04-24",
+   "slug": "deepseek-v4-pro-0424-high"
+  },
+  {
+   "cost_per_task": null,
+   "id": "6e2a2572-ed8d-4616-8d7d-68d125fc8ee7",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 20.8
+   },
+   "median_performance": 91.7,
+   "model": "DeepSeek V4 Pro 0424 (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.0036,
+    "cache_write": null,
+    "input": 0.435,
+    "output": 0.87
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-04-24",
+   "slug": "deepseek-v4-pro-0424-non-reasoning"
+  },
+  {
+   "cost_per_task": 0.3555,
+   "id": "d4f5b250-be37-4801-85e6-32fda4179337",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 21.9,
+    "intelligence_index": 20.4
+   },
+   "median_performance": 87.68,
+   "model": "DeepSeek V4 Pro 0813 (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.044,
+    "cache_write": null,
+    "input": 1.32,
+    "output": 3.96
+   },
+   "provider": "DeepSeek",
+   "release_date": "2026-08-13",
+   "slug": "deepseek-v4-pro-non-reasoning"
+  },
+  {
+   "cost_per_task": 0.0602,
+   "id": "598190f8-dc9c-4fea-a7ea-4b81c402ab18",
+   "indices": {
+    "agentic_index": 1.6,
+    "coding_index": 34.7,
+    "engineering_index": 18.5,
+    "intelligence_index": 15.6
+   },
+   "median_performance": 337.91,
+   "model": "Gemini 3.1 Flash-Lite",
+   "prices": {
+    "cache_read": 0.025,
+    "cache_write": null,
+    "input": 0.25,
+    "output": 1.5
+   },
+   "provider": "Google",
+   "release_date": "2026-03-03",
+   "slug": "gemini-3-1-flash-lite-preview"
+  },
+  {
+   "cost_per_task": null,
+   "id": "6e1b44ff-c227-496b-aef4-19b70cd18c76",
+   "indices": {
+    "agentic_index": 2.9,
+    "coding_index": 39.3,
+    "engineering_index": null,
+    "intelligence_index": 16.7
+   },
+   "median_performance": 63.77,
+   "model": "Gemma 4 26B A4B (Reasoning)",
+   "prices": {
+    "cache_read": 0.05,
+    "cache_write": null,
+    "input": 0.1,
+    "output": 0.34
+   },
+   "provider": "Google",
+   "release_date": "2026-04-02",
+   "slug": "gemma-4-26b-a4b"
+  },
+  {
+   "cost_per_task": null,
+   "id": "70882ec6-914c-41f0-9754-5e8f75005f77",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 13.1
+   },
+   "median_performance": 89.13,
+   "model": "Gemma 4 26B A4B (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.06,
+    "cache_write": null,
+    "input": 0.115,
+    "output": 0.4
+   },
+   "provider": "Google",
+   "release_date": "2026-04-02",
+   "slug": "gemma-4-26b-a4b-non-reasoning"
+  },
+  {
+   "cost_per_task": 0.0,
+   "id": "cd26a386-4873-46ff-b853-d239050025a2",
+   "indices": {
+    "agentic_index": 4.2,
+    "coding_index": 43.4,
+    "engineering_index": 16.7,
+    "intelligence_index": 14.7
+   },
+   "median_performance": 35.59,
+   "model": "Gemma 4 31B (Reasoning)",
+   "prices": {
+    "cache_read": null,
+    "cache_write": null,
+    "input": 0.0,
+    "output": 0.0
+   },
+   "provider": "Google",
+   "release_date": "2026-04-02",
+   "slug": "gemma-4-31b"
+  },
+  {
+   "cost_per_task": null,
+   "id": "d0aa27aa-4705-4184-9a1d-483b78c9331c",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": 33.2,
+    "engineering_index": null,
+    "intelligence_index": 13.9
+   },
+   "median_performance": 51.2,
+   "model": "Gemma 4 31B (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.14,
+    "cache_write": null,
+    "input": 0.165,
+    "output": 0.4
+   },
+   "provider": "Google",
+   "release_date": "2026-04-02",
+   "slug": "gemma-4-31b-non-reasoning"
+  },
+  {
+   "cost_per_task": null,
+   "id": "43098bd0-77ca-408b-b698-9d60b1d1c3b8",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 8.4
+   },
+   "median_performance": 87.58,
+   "model": "GLM-4.6V (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.1775,
+    "cache_write": null,
+    "input": 0.3,
+    "output": 0.9
+   },
+   "provider": "Z AI",
+   "release_date": "2025-12-08",
+   "slug": "glm-4-6v"
+  },
+  {
+   "cost_per_task": null,
+   "id": "d2d7dd95-770f-4cb0-9bbc-d275ac19c265",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 11.2
+   },
+   "median_performance": 75.08,
+   "model": "GLM-4.6V (Reasoning)",
+   "prices": {
+    "cache_read": 0.1775,
+    "cache_write": null,
+    "input": 0.3,
+    "output": 0.9
+   },
+   "provider": "Z AI",
+   "release_date": "2025-12-08",
+   "slug": "glm-4-6v-reasoning"
+  },
+  {
+   "cost_per_task": 0.2836,
+   "id": "19496b81-9f41-4214-a77a-1df803b3c5ae",
+   "indices": {
+    "agentic_index": 50.9,
+    "coding_index": 71.5,
+    "engineering_index": 43.8,
+    "intelligence_index": 41.8
+   },
+   "median_performance": 68.53,
+   "model": "GLM-5.3-Flash",
+   "prices": {
+    "cache_read": 0.03,
+    "cache_write": null,
+    "input": 0.15,
+    "output": 0.5
+   },
+   "provider": "Z AI",
+   "release_date": "2026-08-26",
+   "slug": "glm-5-3-flash"
+  },
+  {
+   "cost_per_task": null,
+   "id": "c1045dc0-4fd3-4adb-9548-18763e0d051f",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 8.4
+   },
+   "median_performance": 173.73,
+   "model": "GPT-4o (Nov '24)",
+   "prices": {
+    "cache_read": 1.5,
+    "cache_write": null,
+    "input": 2.5,
+    "output": 10.0
+   },
+   "provider": "OpenAI",
+   "release_date": "2024-11-20",
+   "slug": "gpt-4o"
+  },
+  {
+   "cost_per_task": null,
+   "id": "e98e911e-9fb2-4a9a-826e-3d681d0cdca8",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": 24.2,
+    "engineering_index": null,
+    "intelligence_index": 7.3
+   },
+   "median_performance": 118.24,
+   "model": "GPT-4o (May '24)",
+   "prices": {
+    "cache_read": null,
+    "cache_write": null,
+    "input": 5.0,
+    "output": 15.0
+   },
+   "provider": "OpenAI",
+   "release_date": "2024-05-13",
+   "slug": "gpt-4o-2024-05-13"
+  },
+  {
+   "cost_per_task": null,
+   "id": "8c1be908-67b6-4cf4-ba08-83ddbe44fde3",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 7.7
+   },
+   "median_performance": 120.26,
+   "model": "GPT-4o (Aug '24)",
+   "prices": {
+    "cache_read": 1.25,
+    "cache_write": null,
+    "input": 2.5,
+    "output": 10.0
+   },
+   "provider": "OpenAI",
+   "release_date": "2024-08-06",
+   "slug": "gpt-4o-2024-08-06"
+  },
+  {
+   "cost_per_task": 0.7242,
+   "id": "b25ac058-1e33-4c31-bbc9-a20c3ad0717a",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 53.9,
+    "intelligence_index": 51.8
+   },
+   "median_performance": 54.33,
+   "model": "GPT-6.1 Sol (Max)",
+   "prices": {
+    "cache_read": 0.1,
+    "cache_write": 2.5,
+    "input": 2.0,
+    "output": 10.0
+   },
+   "provider": "OpenAI",
+   "release_date": "2026-09-29",
+   "slug": "gpt-6-1-sol"
+  },
+  {
+   "cost_per_task": 0.3191,
+   "id": "3b84fee3-b70a-41bc-819e-5fbdef9a0042",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 51.9,
+    "intelligence_index": 50.2
+   },
+   "median_performance": 46.09,
+   "model": "GPT-6.1 Sol (High)",
+   "prices": {
+    "cache_read": 0.1,
+    "cache_write": 2.5,
+    "input": 2.0,
+    "output": 10.0
+   },
+   "provider": "OpenAI",
+   "release_date": "2026-09-29",
+   "slug": "gpt-6-1-sol-high"
+  },
+  {
+   "cost_per_task": 0.1308,
+   "id": "e76e0fe5-93ca-4272-9359-2eb1740467d1",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 43.9,
+    "intelligence_index": 42.1
+   },
+   "median_performance": 43.07,
+   "model": "GPT-6.1 Sol (Low)",
+   "prices": {
+    "cache_read": 0.1,
+    "cache_write": 2.5,
+    "input": 2.0,
+    "output": 10.0
+   },
+   "provider": "OpenAI",
+   "release_date": "2026-09-29",
+   "slug": "gpt-6-1-sol-low"
+  },
+  {
+   "cost_per_task": 0.2137,
+   "id": "a2e51d62-ea4e-4f15-8be0-be9dc1fb489d",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 49.7,
+    "intelligence_index": 47.8
+   },
+   "median_performance": 45.89,
+   "model": "GPT-6.1 Sol (Medium)",
+   "prices": {
+    "cache_read": 0.1,
+    "cache_write": 2.5,
+    "input": 2.0,
+    "output": 10.0
+   },
+   "provider": "OpenAI",
+   "release_date": "2026-09-29",
+   "slug": "gpt-6-1-sol-medium"
+  },
+  {
+   "cost_per_task": 0.3929,
+   "id": "092a3b0e-c5c8-45dc-bf1b-53673c8ff352",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 53.2,
+    "intelligence_index": 51.0
+   },
+   "median_performance": 48.16,
+   "model": "GPT-6.1 Sol (Xhigh)",
+   "prices": {
+    "cache_read": 0.1,
+    "cache_write": 2.5,
+    "input": 2.0,
+    "output": 10.0
+   },
+   "provider": "OpenAI",
+   "release_date": "2026-09-29",
+   "slug": "gpt-6-1-sol-xhigh"
+  },
+  {
+   "cost_per_task": null,
+   "id": "04787c2b-0751-4269-8029-075b727d7aed",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 25.2
+   },
+   "median_performance": null,
+   "model": "Grok 4.20 0309 (Reasoning)",
+   "prices": {
+    "cache_read": 0.2,
+    "cache_write": null,
+    "input": 2.0,
+    "output": 6.0
+   },
+   "provider": "SpaceXAI",
+   "release_date": "2026-03-10",
+   "slug": "grok-4-20-0309"
+  },
+  {
+   "cost_per_task": null,
+   "id": "523125f4-a1da-4990-9abd-dd08a069100e",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 14.6
+   },
+   "median_performance": null,
+   "model": "Grok 4.20 0309 (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.2,
+    "cache_write": null,
+    "input": 2.0,
+    "output": 6.0
+   },
+   "provider": "SpaceXAI",
+   "release_date": "2026-03-10",
+   "slug": "grok-4-20-0309-non-reasoning"
+  },
+  {
+   "cost_per_task": 3.7383,
+   "id": "59627802-1546-422c-9a65-65b61c022d36",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 47.4,
+    "intelligence_index": 46.4
+   },
+   "median_performance": 89.71,
+   "model": "Grok 4.7 (Xhigh)",
+   "prices": {
+    "cache_read": 0.5,
+    "cache_write": null,
+    "input": 2.0,
+    "output": 6.0
+   },
+   "provider": "SpaceXAI",
+   "release_date": "2026-09-21",
+   "slug": "grok-4-7"
+  },
+  {
+   "cost_per_task": 2.7261,
+   "id": "272f5f03-aea9-4675-a244-2b753b618cdf",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 46.6,
+    "intelligence_index": 46.3
+   },
+   "median_performance": 86.66,
+   "model": "Grok 4.7 (High)",
+   "prices": {
+    "cache_read": 0.5,
+    "cache_write": null,
+    "input": 2.0,
+    "output": 6.0
+   },
+   "provider": "SpaceXAI",
+   "release_date": "2026-09-21",
+   "slug": "grok-4-7-high"
+  },
+  {
+   "cost_per_task": 2.0001,
+   "id": "f7d2fc3e-1f7b-405f-818c-07952a4af78f",
+   "indices": {
+    "agentic_index": 50.0,
+    "coding_index": 76.2,
+    "engineering_index": 43.3,
+    "intelligence_index": 43.6
+   },
+   "median_performance": 38.68,
+   "model": "Kimi K3 (Max)",
+   "prices": {
+    "cache_read": 0.3,
+    "cache_write": null,
+    "input": 3.0,
+    "output": 15.0
+   },
+   "provider": "Kimi",
+   "release_date": "2026-07-16",
+   "slug": "kimi-k3"
+  },
+  {
+   "cost_per_task": 1.1463,
+   "id": "512d17ef-13d2-4f65-bf9b-154b0dec7e8d",
+   "indices": {
+    "agentic_index": 29.3,
+    "coding_index": 72.0,
+    "engineering_index": 29.7,
+    "intelligence_index": 30.1
+   },
+   "median_performance": 38.28,
+   "model": "Kimi K3 (Low)",
+   "prices": {
+    "cache_read": 0.3,
+    "cache_write": null,
+    "input": 3.0,
+    "output": 15.0
+   },
+   "provider": "Kimi",
+   "release_date": "2026-07-16",
+   "slug": "kimi-k3-low"
+  },
+  {
+   "cost_per_task": null,
+   "id": "5fb47ff6-a30e-4c2c-96f2-55e95a13390f",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 5.4
+   },
+   "median_performance": 23.79,
+   "model": "Llama 3.2 Instruct 11B (Vision)",
+   "prices": {
+    "cache_read": null,
+    "cache_write": null,
+    "input": 0.345,
+    "output": 0.345
+   },
+   "provider": "Meta",
+   "release_date": "2024-09-25",
+   "slug": "llama-3-2-instruct-11b-vision"
+  },
+  {
+   "cost_per_task": null,
+   "id": "9ca71ac4-41c8-42c0-87dd-5704a9e5b94d",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 6.4
+   },
+   "median_performance": null,
+   "model": "Llama 3.2 Instruct 90B (Vision)",
+   "prices": {
+    "cache_read": null,
+    "cache_write": null,
+    "input": null,
+    "output": null
+   },
+   "provider": "Meta",
+   "release_date": "2024-09-25",
+   "slug": "llama-3-2-instruct-90b-vision"
+  },
+  {
+   "cost_per_task": null,
+   "id": "976cc8ad-7904-4056-83c5-960181f47d5f",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": 11.9,
+    "engineering_index": null,
+    "intelligence_index": 7.7
+   },
+   "median_performance": 92.69,
+   "model": "Llama 3.3 Instruct 70B",
+   "prices": {
+    "cache_read": 0.71,
+    "cache_write": null,
+    "input": 0.71,
+    "output": 0.72
+   },
+   "provider": "Meta",
+   "release_date": "2024-12-06",
+   "slug": "llama-3-3-instruct-70b"
+  },
+  {
+   "cost_per_task": 0.0191,
+   "id": "22d09131-343b-4adf-8760-533e20a2155f",
+   "indices": {
+    "agentic_index": 15.8,
+    "coding_index": 56.8,
+    "engineering_index": 24.6,
+    "intelligence_index": 21.8
+   },
+   "median_performance": 33.04,
+   "model": "MiMo-V2.5",
+   "prices": {
+    "cache_read": 0.0028,
+    "cache_write": null,
+    "input": 0.14,
+    "output": 0.28
+   },
+   "provider": "Xiaomi",
+   "release_date": "2026-04-22",
+   "slug": "mimo-v2-5-0424"
+  },
+  {
+   "cost_per_task": 0.0541,
+   "id": "00f1248e-78e3-4230-8dc8-5e13ba8645e2",
+   "indices": {
+    "agentic_index": a home coordinate,
+    "coding_index": 60.2,
+    "engineering_index": 28.6,
+    "intelligence_index": 26.0
+   },
+   "median_performance": 40.31,
+   "model": "MiMo-V2.5-Pro (Reasoning)",
+   "prices": {
+    "cache_read": 0.0036,
+    "cache_write": null,
+    "input": 0.435,
+    "output": 0.87
+   },
+   "provider": "Xiaomi",
+   "release_date": "2026-04-22",
+   "slug": "mimo-v2-5-pro"
+  },
+  {
+   "cost_per_task": null,
+   "id": "4764d31d-f4af-4297-8bd1-e993f26bcb64",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": null,
+    "intelligence_index": 18.3
+   },
+   "median_performance": 42.21,
+   "model": "MiMo-V2.5-Pro (Non-reasoning)",
+   "prices": {
+    "cache_read": 0.0036,
+    "cache_write": null,
+    "input": 0.435,
+    "output": 0.87
+   },
+   "provider": "Xiaomi",
+   "release_date": "2026-04-22",
+   "slug": "mimo-v2-5-pro-non-reasoning"
+  },
+  {
+   "cost_per_task": 0.2201,
+   "id": "d49c8680-e29b-400e-9511-824f7ddebe07",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 43.4,
+    "intelligence_index": 42.7
+   },
+   "median_performance": 116.25,
+   "model": "MiniMax-M3.1-Flash",
+   "prices": {
+    "cache_read": 0.015,
+    "cache_write": null,
+    "input": 0.15,
+    "output": 0.6
+   },
+   "provider": "MiniMax",
+   "release_date": "2026-10-19",
+   "slug": "minimax-m3-1-flash"
+  },
+  {
+   "cost_per_task": 0.0795,
+   "id": "29976311-665a-4b2f-ac72-557c33e0758e",
+   "indices": {
+    "agentic_index": 3.5,
+    "coding_index": 26.8,
+    "engineering_index": 18.1,
+    "intelligence_index": 12.9
+   },
+   "median_performance": 305.45,
+   "model": "Nemotron 3.5 Lightning",
+   "prices": {
+    "cache_read": 0.035,
+    "cache_write": null,
+    "input": 0.06,
+    "output": 0.2
+   },
+   "provider": "NVIDIA",
+   "release_date": "2026-08-11",
+   "slug": "nemotron-3-5-lightning"
+  },
+  {
+   "cost_per_task": null,
+   "id": "8c748e53-61ae-48b8-af8d-eb8298b1e9db",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": 13.8,
+    "engineering_index": null,
+    "intelligence_index": 10.3
+   },
+   "median_performance": 236.05,
+   "model": "Nemotron 3 Nano Omni 30B A3B Reasoning",
+   "prices": {
+    "cache_read": 0.2,
+    "cache_write": null,
+    "input": 0.4,
+    "output": 1.365
+   },
+   "provider": "NVIDIA",
+   "release_date": "2026-04-29",
+   "slug": "nemotron-3-nano-omni-30b-a3b"
+  },
+  {
+   "cost_per_task": 1.6391,
+   "id": "63872e9c-3377-4a6b-b477-7bba244c38e9",
+   "indices": {
+    "agentic_index": 1.7,
+    "coding_index": 37.7,
+    "engineering_index": 17.0,
+    "intelligence_index": 12.8
+   },
+   "median_performance": 129.42,
+   "model": "Nemotron 3 Super 120B A12B (Reasoning)",
+   "prices": {
+    "cache_read": 0.085,
+    "cache_write": null,
+    "input": 0.3,
+    "output": 0.9
+   },
+   "provider": "NVIDIA",
+   "release_date": "2026-03-11",
+   "slug": "nvidia-nemotron-3-super-120b-a12b"
+  },
+  {
+   "cost_per_task": 0.4697,
+   "id": "5b52def2-ac9b-4465-ad80-91ea8079e253",
+   "indices": {
+    "agentic_index": 20.1,
+    "coding_index": 49.3,
+    "engineering_index": 27.2,
+    "intelligence_index": 22.9
+   },
+   "median_performance": 158.74,
+   "model": "Nemotron 3 Ultra 550B A55B (Reasoning)",
+   "prices": {
+    "cache_read": 0.12,
+    "cache_write": null,
+    "input": 0.6,
+    "output": 2.7
+   },
+   "provider": "NVIDIA",
+   "release_date": "2026-06-04",
+   "slug": "nvidia-nemotron-3-ultra-550b-a55b"
+  },
+  {
+   "cost_per_task": 1.0075,
+   "id": "b01dee41-c62b-48ed-8d16-984adc405e5c",
+   "indices": {
+    "agentic_index": 45.8,
+    "coding_index": 68.1,
+    "engineering_index": 33.3,
+    "intelligence_index": 33.7
+   },
+   "median_performance": 40.3,
+   "model": "Qwen3.8 27B (Xhigh)",
+   "prices": {
+    "cache_read": 0.1,
+    "cache_write": null,
+    "input": 0.5,
+    "output": 3.0
+   },
+   "provider": "Alibaba",
+   "release_date": "2026-08-14",
+   "slug": "qwen3-8-27b"
+  },
+  {
+   "cost_per_task": 0.3722,
+   "id": "9ac3908c-9eb2-44db-8c01-3ec7da6fc2ae",
+   "indices": {
+    "agentic_index": 53.6,
+    "coding_index": 73.1,
+    "engineering_index": 39.5,
+    "intelligence_index": 39.8
+   },
+   "median_performance": 51.51,
+   "model": "Qwen3.8-Flash-Next",
+   "prices": {
+    "cache_read": 0.016,
+    "cache_write": null,
+    "input": 0.15,
+    "output": 0.47
+   },
+   "provider": "Alibaba",
+   "release_date": "2026-08-26",
+   "slug": "qwen3-8-flash-next"
+  },
+  {
+   "cost_per_task": 2.67,
+   "id": "5e5b4ce7-bc54-47b2-b911-21b9cad8394c",
+   "indices": {
+    "agentic_index": 49.1,
+    "coding_index": 71.8,
+    "engineering_index": 40.8,
+    "intelligence_index": 40.2
+   },
+   "median_performance": 39.32,
+   "model": "Qwen3.8 Max",
+   "prices": {
+    "cache_read": 0.25,
+    "cache_write": null,
+    "input": 2.0,
+    "output": 6.0
+   },
+   "provider": "Alibaba",
+   "release_date": "2026-08-03",
+   "slug": "qwen3-8-max-0803"
+  },
+  {
+   "cost_per_task": 0.2262,
+   "id": "69468cce-7b5c-414a-b498-41df4c34df85",
+   "indices": {
+    "agentic_index": null,
+    "coding_index": null,
+    "engineering_index": 31.0,
+    "intelligence_index": 30.3
+   },
+   "median_performance": 337.45,
+   "model": "Beam 1.0",
+   "prices": {
+    "cache_read": 0.05,
+    "cache_write": null,
+    "input": 0.4,
+    "output": 1.2
+   },
+   "provider": "Reflection",
+   "release_date": "2026-10-16",
+   "slug": "reflection-beam"
+  },
+  {
+   "cost_per_task": 0.0794,
+   "id": "b89c4faf-219e-4171-a1aa-e3bd2fd0a924",
+   "indices": {
+    "agentic_index": 1.4,
+    "coding_index": 16.2,
+    "engineering_index": 11.5,
+    "intelligence_index": 7.8
+   },
+   "median_performance": 146.8,
+   "model": "Solar Pro 3",
+   "prices": {
+    "cache_read": 0.015,
+    "cache_write": null,
+    "input": 0.15,
+    "output": 0.6
+   },
+   "provider": "Upstage",
+   "release_date": "2026-04-06",
+   "slug": "solar-pro-3"
+  }
+ ],
+ "source": "artificialanalysis",
+ "status": "ok"
+}
