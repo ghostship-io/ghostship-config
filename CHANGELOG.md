@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.68] - 2026-10-22
+
+- AI usage collector: a metric series is published once. The free pool published the account limits of a provider once per model of that provider, so a provider with two models published the same limit twice and the node exporter dropped the repeat. The account limits belong to the account, and they are published once per provider now. The renderer holds the same rule for every series: a repeated name with the same labels is dropped and counted, and the count is published as `ghostship_ai_collection_duplicate_series`, so a duplicate never passes unnoticed.
+- AI usage collector: the free tier is ordered by the routing policy instead of by name. The eligible routes within five Artificial Analysis intelligence points of the best eligible free route form the quality band, and the band comes first, ordered by the most remaining headroom of the route, with the least recently used route breaking the ties. The rest of the tier follows by intelligence, and a route without an intelligence record comes last. The headroom is the remaining share the collector measures for the route, and the moment the pool last used it is published as `ghostship_ai_pool_route_last_used_timestamp_seconds`, so the rotation is visible. The band is published with the position of the free tier as the label `band`, and the other tiers keep their own order.
+
 ## [3.17.67] - 2026-10-22
 
 - SIEM alert bridge: a re-fired alert is no longer silenced forever. The 6-hour renotify window throttles repeat notices of one occurrence, but a resolve-then-fire cycle inside the window was dropped and its notification timestamp was never advanced, so the fingerprint stayed silent for good while the topic said "resolved". A re-fire inside the window is now deferred rather than dropped: it is recorded as pending and announced on the first poll after the window has elapsed, if the alert is still firing by then, and at most once per window. A re-fire outside the window still announces immediately.
