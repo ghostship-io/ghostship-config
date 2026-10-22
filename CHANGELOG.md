@@ -1,9 +1,13 @@
 # Changelog
 
-## [3.17.75] - 2026-10-22
+## [3.17.76] - 2026-10-22
 
 - Two kernel module denials are now durable in the configuration. The running 6.19 kernel is affected by CVE-2026-31431 (`algif_aead`) and CVE-2026-53266 (`ebt_snat`), both in the CISA KEV feed, and the running kernel carries neither fix: no 6.19.x release carries the `ebt_snat` fix. The `algif_aead` deny existed only as a file placed by hand on the host, outside Nix, so it did not survive a rebuild and was never reviewed with the configuration that produced it. The host configuration now blacklists both modules and hands each of them to a false command in the generated `modprobe.d/nixos.conf`, which stops the automatic hardware probing and an explicit `modprobe` alike. The check `tests/kernel-module-deny.nix` evaluates the host configuration and holds the blacklist and the install rules in place.
 - The denials are containment, not a fix. A privileged direct `insmod`, `modprobe --ignore-install` and an already loaded module stay outside them, and only a patched kernel removes the exposure. Nothing on the host uses ebtables, so the `ebt_snat` deny takes away no service the host depends on. CVE-2026-53362 (the IPv6 fragment path) is in the KEV feed and names no module: it has no module-level containment and needs a kernel upgrade.
+
+## [3.17.75] - 2026-10-22
+
+- The AI usage collector publishes the free pool's recent jobs as a count. The pool published one `ghostship_ai_pool_recent_jobs` sample per recent job, so two jobs that shared a provider, a worker, a client and a status were the same metric series twice. The renderer dropped the repeat and kept the first value, so the published number was one where it was two, and the collector's own duplicate counter reported the repeat on every run. The series is now the count of the recent jobs that share its labels and it is published once per label set. The labels and their defaults are unchanged, a job without a provider is still skipped, and a status that repeats a job publishes no duplicate series at all.
 
 ## [3.17.74] - 2026-10-22
 
