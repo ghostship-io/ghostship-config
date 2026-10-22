@@ -103,7 +103,7 @@ REFUSED_ROUTE = "example-flash-z"
 QUIET_ROUTE = "example-flash-a"
 MATHS = [
     record(at(9), model=QUIET_ROUTE, usage=1000),
-    record(at(12), model=QUIET_ROUTE, usage=2000),
+    record(at(13, 20), model=QUIET_ROUTE, usage=2000),
     record(at(8), model=REFUSED_ROUTE, usage=200000),
     record(at(10, 30), model=REFUSED_ROUTE, limit=True),
     record(at(13, 2), model=REFUSED_ROUTE, usage=0),
@@ -236,38 +236,41 @@ class AccountSectionTests(PublicationTestCase):
 
     def test_a_refused_route_outside_the_ranking_keeps_its_record(self):
         # The route was in the record the inference read, and the ranking
-        # does not hold a row for it any more.
-        routes = [("example-zen", "example-zen-a")]
+        # does not hold a row for it any more. The reader only emits the
+        # providers it maps, so the case uses one of them with an invented
+        # model id.
+        routes = [("groq", "example-groq-a")]
         inferred = self.infer(
             [
-                record(at(8), provider="example-zen", model="example-zen-a", usage=200000),
-                record(at(10, 30), provider="example-zen", model="example-zen-a", limit=True),
-                record(at(13, 2), provider="example-zen", model="example-zen-a", usage=0),
+                record(at(8), provider="groq", model="example-groq-a", usage=200000),
+                record(at(10, 30), provider="groq", model="example-groq-a", limit=True),
+                record(at(13, 2), provider="groq", model="example-groq-a", usage=0),
             ],
             routes,
         )
+        self.assertEqual(sorted(inferred.capacities), [("groq", "example-groq-a")])
         # The ranking is built over an inventory that no longer offers it.
         _samples, ranked = self.rank(inferred, [])
         self.assertEqual(ranked, [])
         snapshot = self.snapshot(inferred, [])
-        records = snapshot["quota"]["accounts"]["example-zen"]
+        records = snapshot["quota"]["accounts"]["groq"]
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["quota_id"], "inferred:5h")
         self.assertEqual(records[0]["evidence"], "inferred")
         self.assertEqual(records[0]["inference"]["budget"], 200000.0)
 
     def test_a_provider_never_refused_publishes_its_no_failure_record(self):
-        routes = [("example-quiet", "example-quiet-a")]
+        routes = [("mistral", "example-mistral-a")]
         inferred = self.infer(
             [
-                record(at(9), provider="example-quiet", model="example-quiet-a", usage=1000),
-                record(at(12), provider="example-quiet", model="example-quiet-a", usage=2000),
+                record(at(9), provider="mistral", model="example-mistral-a", usage=1000),
+                record(at(12), provider="mistral", model="example-mistral-a", usage=2000),
             ],
             routes,
         )
         _samples, ranked = self.rank(inferred, routes)
         snapshot = self.snapshot(inferred, routes, ranked)
-        records = snapshot["quota"]["accounts"]["example-quiet"]
+        records = snapshot["quota"]["accounts"]["mistral"]
         self.assertEqual(len(records), 1)
         found = records[0]
         self.assertEqual(found["quota_id"], "inferred:no-limit-seen")
