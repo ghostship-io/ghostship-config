@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.50] - 2026-10-22
+
+- Pin ghostship-agent a58beedc (0.38.1): the current pin cb003746 (feat/unified-engineering-program) plus the free inference queue fix from agent main (#59). A bench job for a pair that has left the free inventory now fails instead of requeueing forever, and a job deferred for lack of a route backs off (60 s doubling to 15 minutes), so 11 dead light benches no longer starve about 30 routable ones. Status lists providers routable only through a light admission (Upstage, Inception) as available.
+
 ## [3.17.49] - 2026-10-22
 
 - GitHub-launched threads lead with the chief reviewer (Claude Opus 5.5), with Codex GPT-6.1-Sol as the backup, per the owner's role policy.
