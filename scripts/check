@@ -42,6 +42,24 @@ vmalert -dryRun -loggerLevel=ERROR -rule.defaultRuleType=vlogs \
 vmalert -dryRun -loggerLevel=ERROR -rule=modules/self-hosted/siem/rules/metrics.yml
 python3 -c 'import json, sys; json.load(open(sys.argv[1]))' modules/self-hosted/siem/suppressions.json
 
+printf 'Checking the AI usage collector and its model ranking\n'
+python3 -m unittest discover -s tests -p test_ai_usage_collector.py
+python3 -m unittest discover -s tests -p test_ai_usage_ranking.py
+python3 -m unittest discover -s tests -p test_ai_usage_threed.py
+python3 -m unittest discover -s tests -p test_ai_usage_snapshot.py
+python3 -m unittest discover -s tests -p test_ai_usage_ranking_bounds.py
+python3 -m unittest discover -s tests -p test_ai_usage_frontier_surplus.py
+python3 -m unittest discover -s tests -p test_ai_usage_t3client.py
+python3 -m unittest discover -s tests -p test_ai_usage_privacy.py
+python3 -m unittest discover -s tests -p test_ai_usage_workload.py
+python3 -m unittest discover -s tests -p test_ai_usage_facts.py
+python3 -m unittest discover -s tests -p test_ai_usage_boundaries.py
+python3 -m unittest discover -s tests -p test_ai_usage_integration.py
+python3 -m unittest discover -s tests -p test_ai_usage_aa_normalize.py
+python3 -m unittest discover -s tests -p test_ai_usage_gate.py
+python3 -m unittest discover -s tests -p test_ai_usage_quota.py
+python3 -c 'import json, sys; json.load(open(sys.argv[1]))' modules/self-hosted/siem/dashboards/ai-usage.json
+
 printf 'Evaluating development shells for both Linux architectures\n'
 for system in x86_64-linux aarch64-linux; do
   for shell in ci default browser; do
