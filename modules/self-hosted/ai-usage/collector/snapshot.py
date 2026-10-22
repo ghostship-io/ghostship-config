@@ -2145,18 +2145,68 @@ def _winners(
             current = chosen.get(row["provider"])
             if current is None or _winner_key(row, tier) > _winner_key(current, tier):
                 chosen[row["provider"]] = row
-        ordered = sorted(
-            chosen.values(),
-            key=lambda row: (
-                # A model reserved for the 3D tier comes last in the tiers
-                # it is reserved away from. The reserve changes the order,
-                # never the value.
-                1 if (row.get("reserve") or {}).get("3d") else 0,
-                -(_pace_of(row) if _pace_of(row) is not None else 0.0),
-                row["provider"],
-                row["model"],
-            ),
-        )
+        # The quality band of the free tier: routes within five AA
+        # intelligence points of the best eligible route. Outside the band
+        # the order is by intelligence; inside, headroom then least recently
+        # used.
+        best_strength = None
+        if tier == "free":
+            for key in members:
+                row = by_key.get(key)
+                if row is None:
+                    continue
+                if (row.get("availability") or {}).get("state") != "available":
+                    continue
+                if (row.get("admission") or {}).get("state") != "settled":
+                    continue
+                if not _eligible_for_tier(row, tier):
+                    continue
+                strength = (row.get("value") or {}).get("strength")
+                if isinstance(strength, (int, float)) and not isinstance(strength, bool):
+                    if best_strength is None or float(strength) > best_strength:
+                        best_strength = float(strength)
+
+        def _free_band(row: dict[str, Any]) -> bool:
+            if tier != "free" or best_strength is None:
+                return False
+            strength = (row.get("value") or {}).get("strength")
+            if not isinstance(strength, (int, float)) or isinstance(strength, bool):
+                return False
+            return (best_strength - float(strength)) <= 5.0
+
+        if tier == "free":
+            ordered = sorted(
+                chosen.values(),
+                key=lambda row: (
+                    0 if _free_band(row) else 1,
+                    # within band: most remaining headroom first
+                    -(
+                        (row.get("capacity") or {}).get("remaining_ratio")
+                        if isinstance((row.get("capacity") or {}).get("remaining_ratio"), (int, float))
+                        and not isinstance((row.get("capacity") or {}).get("remaining_ratio"), bool)
+                        else 0.0
+                    ),
+                    # outside band / tie-break: AA intelligence descending
+                    -(
+                        (row.get("value") or {}).get("strength")
+                        if isinstance((row.get("value") or {}).get("strength"), (int, float))
+                        and not isinstance((row.get("value") or {}).get("strength"), bool)
+                        else 0.0
+                    ),
+                    row["provider"],
+                    row["model"],
+                ),
+            )
+        else:
+            ordered = sorted(
+                chosen.values(),
+                key=lambda row: (
+                    1 if (row.get("reserve") or {}).get("3d") else 0,
+                    -(_pace_of(row) if _pace_of(row) is not None else 0.0),
+                    row["provider"],
+                    row["model"],
+                ),
+            )
         winners[tier] = [
             {
                 "provider": row["provider"],
@@ -2177,6 +2227,7 @@ def _winners(
                 "paced_availability_window": (row.get("capacity") or {}).get(
                     "paced_availability_window"
                 ),
+                "band": "true" if _free_band(row) else "false",
                 "quota_state": row.get("quota_state"),
                 "native": row.get("native"),
                 "role": row.get("role"),
@@ -3278,7 +3329,12 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
             samples.append(
                 (
                     "ghostship_ai_model_winner_position",
-                    {"tier": str(tier), "provider": labels["provider"], "model": labels["model"]},
+                    {
+                        "tier": str(tier),
+                        "provider": labels["provider"],
+                        "model": labels["model"],
+                        "band": str(winner.get("band") or "false"),
+                    },
                     float(position),
                 )
             )

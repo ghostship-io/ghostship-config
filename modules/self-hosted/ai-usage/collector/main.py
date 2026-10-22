@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import json
+import math
 import os
 import socket
 import sys
@@ -1017,6 +1018,13 @@ def ranking_inputs(
     def _ledger_used(provider_name: str, model_name: str, limit_name: str, scope: str) -> float:
         name = str(limit_name or "").lower()
         token_limit = "tp" in name
+        # Sub-day windows have no per-minute/per-hour ledger reading, so
+        # their used share is unknown-ish but treated as zero headroom used
+        # rather than spending the whole day's count in one minute.
+        import datetime as _dt
+        duration = _limit_duration(limit_name) or 0.0
+        if duration < 86400.0:
+            return 0.0
         if scope == "account":
             total = 0.0
             for (p, m, w), value in ledger_requests.items():
@@ -1024,12 +1032,7 @@ def ranking_inputs(
                     continue
                 if w != "24h":
                     continue
-                if token_limit:
-                    # tokens are not published by the ledger separately per
-                    # limit; fall back to requests for the share.
-                    total += float(value)
-                else:
-                    total += float(value)
+                total += float(value)
             return total
         value = ledger_requests.get((provider_name, model_name, "24h"), 0.0)
         return float(value)
