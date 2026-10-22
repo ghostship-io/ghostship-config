@@ -72,6 +72,11 @@ try:  # pragma: no cover - the collector always ships value_policy.py
 except ImportError:  # pragma: no cover - standalone use
     value_policy = None  # type: ignore[assignment]
 
+try:  # pragma: no cover - the collector always ships quota.py
+    import quota as quota_module
+except ImportError:  # pragma: no cover - standalone use
+    quota_module = None  # type: ignore[assignment]
+
 
 @dataclasses.dataclass
 class ModelRecord:
@@ -1841,6 +1846,22 @@ def rank_samples(
                     float(now),
                 )
             )
+            # Why the headroom of this model is unknown. An unknown headroom
+            # always says why, so the dashboard never shows a bare
+            # "unknown".
+            reason = (
+                ""
+                if quota_module is None
+                else quota_module.unknown_reason_code(entry.windows, entry.remaining)
+            )
+            if reason:
+                samples.append(
+                    (
+                        "ghostship_ai_model_quota_unknown",
+                        {**labels, "reason": reason},
+                        1.0,
+                    )
+                )
         if not entry.tier or not entry.available:
             continue
         tier = label_value(entry.tier)

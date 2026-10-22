@@ -200,6 +200,9 @@ METRIC_HELP = {
     "ghostship_ai_model_quality": "The quality score of a model.",
     "ghostship_ai_model_available": "Whether a model can be used right now.",
     "ghostship_ai_model_capacity_remaining": "The remaining share of a model's account capacity.",
+    "ghostship_ai_model_quota_unknown": (
+        "One for a model whose headroom is unknown, with the reason it is unknown."
+    ),
     "ghostship_ai_model_capacity_expires_in_seconds": "When the model's account capacity expires.",
     "ghostship_ai_model_tier": "One for every tier a model belongs to.",
     "ghostship_ai_model_evaluated_timestamp_seconds": "When a model was last evaluated.",

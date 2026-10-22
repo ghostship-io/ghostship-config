@@ -156,6 +156,33 @@ QUOTA_ALIASES = {
     "go_weekly": "weekly",
 }
 
+# Why a headroom is unknown. The codes are fixed, so the dashboard can group
+# them, and the texts say it in words. An unknown headroom without a reason
+# is a gap a reader cannot explain, so a reason is always there.
+UNKNOWN_REASON_NO_WINDOW = "no_window"
+UNKNOWN_REASON_WINDOW_UNKNOWN = "window_unknown"
+
+UNKNOWN_REASON_TEXT = {
+    UNKNOWN_REASON_NO_WINDOW: (
+        "the provider publishes no quota window for this account"
+    ),
+    UNKNOWN_REASON_WINDOW_UNKNOWN: (
+        "the provider's window was not read, is stale, or has already reset"
+    ),
+}
+
+
+def unknown_reason_code(windows: Iterable[Any], remaining: Any) -> str:
+    """The code of the reason a headroom is unknown, or an empty string.
+
+    A headroom that is known has no reason to give: it is measured. A
+    headroom that is unknown always has one, so a consumer never has to
+    guess why a window is missing.
+    """
+    if isinstance(remaining, (int, float)) and not isinstance(remaining, bool):
+        return ""
+    return UNKNOWN_REASON_WINDOW_UNKNOWN if list(windows or ()) else UNKNOWN_REASON_NO_WINDOW
+
 
 def _entitlement_parts(window: Any) -> dict[str, str]:
     def get(name: str, default: str = "") -> str:

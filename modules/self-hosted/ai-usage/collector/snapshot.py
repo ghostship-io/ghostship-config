@@ -56,6 +56,7 @@ from typing import Any, Iterable, Mapping
 import aa_3d
 import aa_bind as bind_module
 import facts as facts_module
+import quota as quota_module
 import value_policy
 
 SCHEMA = "ghostship.ai-usage.routing"
@@ -277,6 +278,47 @@ def _quota_state(remaining: float | None, windows: list[dict[str, Any]]) -> str:
     if remaining <= 0.0:
         return QUOTA_EXHAUSTED
     return QUOTA_AVAILABLE
+
+
+def _unknown_reason(
+    windows: list[dict[str, Any]], remaining: float | None, quota_state: str
+) -> str:
+    """Why the headroom is unknown, in words.
+
+    An unknown headroom always says why it is unknown: a reader never has
+    to guess whether the provider published no window, or whether the window
+    it published could not be read.
+    """
+    if quota_state != QUOTA_UNKNOWN:
+        return ""
+    code = quota_module.unknown_reason_code(windows, remaining)
+    return quota_module.UNKNOWN_REASON_TEXT.get(code, "")
+
+
+def unknown_headroom_violations(
+    candidates: Iterable[Mapping[str, Any]],
+) -> list[dict[str, str]]:
+    """The rows whose headroom is unknown without a reason.
+
+    The owner rule: an unknown headroom always says why it is unknown. A
+    row that is unknown and silent is a gap, and this is what finds it. An
+    empty list is the proof that the rule holds.
+    """
+    violations: list[dict[str, str]] = []
+    for row in candidates or ():
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("quota_state") or "") != QUOTA_UNKNOWN:
+            continue
+        if str(row.get("unknown_reason") or "").strip():
+            continue
+        violations.append(
+            {
+                "provider": str(row.get("provider") or ""),
+                "model": str(row.get("model") or ""),
+            }
+        )
+    return violations
 
 
 def _exact_model_match(model: str, allowed: Iterable[str]) -> bool:
@@ -602,6 +644,9 @@ def _candidate(
     capacity_measured = bool(windows) and all(
         window["evidence"] == "provider_reported" for window in windows
     )
+    # Why the headroom is unknown, when it is. An unknown headroom always
+    # says why: a reader never has to guess why a window is missing.
+    unknown_reason = _unknown_reason(windows, remaining, quota_state)
 
     return {
         "provider": provider,
@@ -642,11 +687,7 @@ def _candidate(
                     else (
                         "a window is spent"
                         if quota_state == QUOTA_EXHAUSTED
-                        else (
-                            "a window is unknown, stale, or missing"
-                            if windows
-                            else "the provider reports no quota for this account"
-                        )
+                        else unknown_reason
                     )
                 )
             ),
@@ -666,6 +707,9 @@ def _candidate(
             ),
         },
         "quota_state": quota_state,
+        # The reason the headroom is unknown, or an empty string when it is
+        # known. An unknown headroom without a reason is a gap.
+        "unknown_reason": unknown_reason,
         "account": account,
         "quota_account": account,
         "quality": {

@@ -539,6 +539,24 @@ Concretely:
 * The pool's local admission caps are labelled as local policy, never as a
   provider's own allowance.
 
+## An unknown headroom always says why
+
+An unknown headroom is not a gap in the reading; it is a state the
+dashboard has to be able to explain. Every candidate row of the routing
+snapshot therefore carries an `unknown_reason` beside its `quota_state`, and
+the reason is one of two:
+
+| Reason | What it means |
+| --- | --- |
+| `the provider publishes no quota window for this account` | The account has no window at all: nothing reports a limit for it |
+| `the provider's window was not read, is stale, or has already reset` | There is a window, but its reading cannot be used |
+
+The rule is enforced with tooling: the snapshot of the enabled providers
+(`tests/fixtures/ai-usage/enabled-providers.json`) is checked, and a row
+whose headroom is unknown without a reason fails the check. The same reason
+is published as `ghostship_ai_model_quota_unknown`, so the dashboard can
+list the unknown headrooms with the reason beside them.
+
 ## Privacy
 
 No email address, no account identifier, no file path, no key, no prompt, no

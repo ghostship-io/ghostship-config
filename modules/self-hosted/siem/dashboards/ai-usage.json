@@ -8,7 +8,7 @@
  ],
  "timezone": "utc",
  "schemaVersion": 41,
- "version": 6,
+ "version": 7,
  "editable": false,
  "refresh": "1m",
  "time": {
@@ -4719,6 +4719,74 @@
        }
       ]
      }
+    },
+    "overrides": []
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": 50,
+   "title": "Unknown headroom",
+   "type": "row",
+   "gridPos": {
+    "x": 0,
+    "y": 189,
+    "w": 24,
+    "h": 1
+   },
+   "collapsed": false,
+   "panels": []
+  },
+  {
+   "id": 51,
+   "title": "Why the headroom is unknown",
+   "type": "table",
+   "description": "The models whose headroom is unknown, with the reason it is unknown. An unknown headroom always carries a reason: a provider that publishes no window is a different thing from a window that could not be read.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 190,
+    "w": 24,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (provider, model, reason) ((ghostship_ai_model_quota_unknown{provider=~\"$provider\"} and (timestamp(ghostship_ai_model_quota_unknown{provider=~\"$provider\"}) == scalar(max(timestamp(ghostship_ai_collection_duration_seconds))))))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true
+      },
+      "renameByName": {
+       "Value": "Unknown"
+      }
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "None unknown"
     },
     "overrides": []
    },
