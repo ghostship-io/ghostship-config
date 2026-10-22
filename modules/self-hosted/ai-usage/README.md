@@ -658,6 +658,7 @@ the reasons, the quota state, the components, and the eligibility:
 | `eligibility` | the policy flags, kept apart from the readings |
 | `admission` | `settled`, or `pending` with the reason and the end of the evaluation window |
 | `provenance` | where the reading came from and when it was observed |
+| `access` | how the route is reached and how it is paid for: the access kind (`dedicated_free`, `provider_promo`, `provider_paid`, `unknown`), the billing class, the price, and whether the route runs as a provider-native thread or as an inference job |
 
 Three kinds of statement never mix: a `policy` is what the owner decided, a
 `measured` value is what a provider reported, and a `prior` is what the
@@ -708,6 +709,29 @@ true|false`, and the collector publishes it in three places:
 The collector never acts on the switch. It publishes the owner's decision
 and leaves the decision itself to the consumer, and nothing else in the
 repository sets the option: turning routing on is the owner's action alone.
+
+## How a route is paid for
+
+Every candidate row and every winner carries an `access` record, and the
+record carries a `billing` class. The class says how the route is paid for,
+and it is derived from the access class the collector already keeps: the two
+never disagree, and the class is never guessed from a price.
+
+| Billing class | What it means |
+| --- | --- |
+| `subscription` | the route is covered by a subscription the owner already pays for |
+| `free` | the route costs nothing by construction: the dedicated free inference pool, or a route the provider lists at no cost |
+| `promotion` | the route is a paid route of a paid account that costs nothing right now |
+| `pay_per_token` | the route is paid per token, and no subscription pays for it |
+| `unknown` | the billing of the route is not known |
+
+A dedicated free route is free, a promotional route is a promotion, and a
+route with no known access is unknown. A paid route is a subscription only
+when its provider is one the owner pays a subscription for (Claude, Codex,
+Antigravity, Cursor, Ollama, OpenCode Go), and a pay per token route only
+when its provider bills that way (Grok, OpenRouter, Vercel, Requesty). A
+paid route of a provider we do not know how the owner pays for is unknown:
+it never becomes a subscription.
 
 ## The daily evaluation
 

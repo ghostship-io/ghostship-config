@@ -401,6 +401,71 @@ ACCESS_PROVIDER_PROMO = "provider_promo"
 ACCESS_PROVIDER_PAID = "provider_paid"
 ACCESS_UNKNOWN = "unknown"
 
+# The billing classes of a route. The class says how the route is paid for:
+# a subscription the owner already has, a route that costs nothing by
+# construction, a route that costs nothing right now because of a promotion,
+# a route that is paid per token, or a route whose billing is not known.
+# It is derived from the access class, never guessed from the price.
+BILLING_SUBSCRIPTION = "subscription"
+BILLING_FREE = "free"
+BILLING_PROMOTION = "promotion"
+BILLING_PAY_PER_TOKEN = "pay_per_token"
+BILLING_UNKNOWN = "unknown"
+
+# Every billing class a route may carry. A route outside this set is a bug
+# in the collector, not a new class.
+BILLING_CLASSES = (
+    BILLING_SUBSCRIPTION,
+    BILLING_FREE,
+    BILLING_PROMOTION,
+    BILLING_PAY_PER_TOKEN,
+    BILLING_UNKNOWN,
+)
+
+# The providers whose paid routes are covered by a subscription the owner
+# already pays for. The route is not billed per token.
+SUBSCRIPTION_PROVIDERS = (
+    "claude",
+    "codex",
+    "antigravity",
+    "cursor",
+    "ollama",
+    "opencode-go",
+)
+
+# The providers whose paid routes are billed per token. The subscription of
+# another provider does not pay for them.
+PAY_PER_TOKEN_PROVIDERS = (
+    "grok",
+    "openrouter",
+    "vercel",
+    "requesty",
+)
+
+
+def _billing_class(kind: str, provider: str) -> str:
+    """How the route is paid for, from its access class and its provider.
+
+    The access class is the source: a dedicated free route is free, a
+    promotional route is a promotion, and a route with no known access is
+    unknown. A paid route is a subscription only when its provider is one the
+    owner pays a subscription for, and a pay per token route only when its
+    provider bills that way. A paid route of a provider we do not know how
+    the owner pays for is unknown: it never becomes a subscription.
+    """
+    if kind == ACCESS_DEDICATED_FREE:
+        return BILLING_FREE
+    if kind == ACCESS_PROVIDER_PROMO:
+        return BILLING_PROMOTION
+    if kind != ACCESS_PROVIDER_PAID:
+        return BILLING_UNKNOWN
+    name = str(provider or "").strip().lower()
+    if name in SUBSCRIPTION_PROVIDERS:
+        return BILLING_SUBSCRIPTION
+    if name in PAY_PER_TOKEN_PROVIDERS:
+        return BILLING_PAY_PER_TOKEN
+    return BILLING_UNKNOWN
+
 
 def _access_record(
     provider: str,
@@ -444,6 +509,9 @@ def _access_record(
     return {
         "kind": kind,
         "basis": basis,
+        # How the route is paid for. The class is derived from the access
+        # class above, so the two never disagree.
+        "billing": _billing_class(kind, provider),
         "price": dict(prices or {}),
         "execution": (
             "provider_native"
@@ -803,6 +871,7 @@ def _candidate(
         "access": {
             "kind": ACCESS_UNKNOWN,
             "basis": "",
+            "billing": BILLING_UNKNOWN,
             "price": {},
             "execution": "provider_native",
         },
@@ -2253,6 +2322,10 @@ def _winners(
                 "quota_state": row.get("quota_state"),
                 "native": row.get("native"),
                 "role": row.get("role"),
+                # The access of the winner, with the billing class. A
+                # consumer that picks a route reads the same access record
+                # the candidate row carries.
+                "access": dict(row.get("access") or {}),
                 "reason": (
                     "the best eligible model of this provider for this tier, "
                     "ordered by the pace of the account window"
