@@ -163,6 +163,10 @@ class RankedModel:
     # The observed failure of the route, when there is one. The reason is a
     # code and a fixed label, never the provider's own text.
     observed_failure: dict[str, Any] = dataclasses.field(default_factory=dict)
+    # True when the provider publishes this route as unlimited. The route
+    # then carries its own window and the paid allowance of the account
+    # does not gate it.
+    unlimited: bool = False
 
 
 # The tiers, in the order the dashboard reads them.
@@ -1032,6 +1036,10 @@ class _Candidate:
     capacity_binding: Any
     frontier_surplus: dict[str, Any]
     applied_windows: list[Any]
+    # True when the provider publishes this route as unlimited. The route
+    # then carries its own window and the paid allowance of the account
+    # does not gate it.
+    unlimited: bool = False
     # The owner's frontier workhorses, as the runtime policy names them.
     workhorses: tuple[str, ...] = FRONTIER_WORKHORSES
 
@@ -1189,6 +1197,10 @@ def _reasons(candidate: "_Candidate", tier: str) -> list[str]:
         reasons.append("no verified Artificial Analysis record: unranked")
     else:
         reasons.append(f"quality {candidate.quality:.0f} (the verified index)")
+    if candidate.unlimited:
+        # The provider publishes this route as unlimited, so it is not gated
+        # by the paid allowance of the account.
+        reasons.append("unlimited (published): the provider publishes this route as unlimited")
     if candidate.remaining is None:
         reasons.append("capacity unknown: the provider reported no usable window")
     else:
@@ -1219,6 +1231,20 @@ def _is_allowance_window(window: Any) -> bool:
     if kind is None and isinstance(window, Mapping):
         kind = window.get("kind")
     return str(kind or "") in ("session", "weekly", "monthly", "subscription")
+
+
+def _is_unlimited_window(window: Any) -> bool:
+    """True when a window states that the route is published as unlimited.
+
+    The window is the provider's own published statement about one route,
+    and it is scoped to that route. The paid allowance of the account does
+    not gate a route the provider publishes as unlimited: the two are
+    different entitlements.
+    """
+    quota_id = getattr(window, "quota_id", None)
+    if quota_id is None and isinstance(window, Mapping):
+        quota_id = window.get("quota_id")
+    return str(quota_id or "") == "free-unlimited"
 
 
 def _window_applies(window: Any, model: str) -> bool:
@@ -1411,6 +1437,19 @@ def rank_models(
             if _window_applies(window, model)
         ]
         model_windows = list(windows_by_model.get((provider, model)) or [])
+        # A route the provider publishes as unlimited is not gated by the
+        # paid allowance of the account: the two are different entitlements.
+        # The allowance windows that are exempted are counted, so the
+        # decision stays visible instead of hiding the account's state.
+        exempted: list[Any] = []
+        if any(_is_unlimited_window(window) for window in model_windows):
+            kept: list[Any] = []
+            for window in parent_windows:
+                if _is_allowance_window(window):
+                    exempted.append(window)
+                else:
+                    kept.append(window)
+            parent_windows = kept
         windows = parent_windows + model_windows
         # A promotional or free route is not exempt from its account's paid
         # allowance by price, a model suffix or an operation while the
@@ -1551,6 +1590,7 @@ def rank_models(
                 },
                 frontier_surplus=_frontier_surplus(list(windows), now),
                 applied_windows=list(windows),
+                unlimited=any(_is_unlimited_window(window) for window in model_windows),
             )
         )
 
@@ -1639,6 +1679,7 @@ def rank_models(
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
                     observed_failure=dict(failure or {}),
+                    unlimited=candidate.unlimited,
                 )
             )
             continue
@@ -1672,6 +1713,7 @@ def rank_models(
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
                     observed_failure=dict(failure or {}),
+                    unlimited=candidate.unlimited,
                 )
             )
         if not tier_entries:
@@ -1702,6 +1744,7 @@ def rank_models(
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
                     observed_failure=dict(failure or {}),
+                    unlimited=candidate.unlimited,
                 )
             )
         entries.extend(tier_entries)

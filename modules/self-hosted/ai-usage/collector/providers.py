@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 import codes
+import published
 from metrics import SourceResult, Sample
 from util import HttpResult, http_request, iso_to_epoch, read_env_file
 
@@ -621,7 +622,7 @@ def _merge_models(models: dict[str, dict[str, Any]], body: Any) -> None:
 # documentation states it; the provider does not report it on the key
 # endpoint, and it only appears on the headers of a refused request. The
 # number is a published limit, and our own requests are counted against it.
-OPENROUTER_FREE_REQUESTS_PER_MINUTE = 20
+OPENROUTER_FREE_REQUESTS_PER_MINUTE = published.OPENROUTER_FREE_REQUESTS_PER_MINUTE
 OPENROUTER_MINUTE_SECONDS = 60.0
 OPENROUTER_DAILY_SECONDS = 86400.0
 

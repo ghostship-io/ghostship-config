@@ -1408,12 +1408,16 @@ def _applied_windows(windows: Iterable[Any]) -> list[dict[str, Any]]:
         scope = getattr(window, "applies_to", ()) or ()
         used = getattr(window, "used_ratio", None)
         reset = getattr(window, "reset_epoch", None)
+        quota_id = str(getattr(window, "quota_id", "") or "default")
         records.append(
             {
-                "quota": str(getattr(window, "quota_id", "") or "default"),
+                "quota": quota_id,
                 "kind": str(getattr(window, "kind", "") or "other"),
                 "scope": "model" if scope else "shared",
                 "applies_to": [str(token) for token in scope],
+                # The label of a window whose state the provider publishes
+                # rather than reports, so a reader sees what it is.
+                "label": WINDOW_LABELS.get(quota_id, ""),
                 "remaining_ratio": (
                     round(max(0.0, 1.0 - float(used)), 4)
                     if isinstance(used, (int, float)) and not isinstance(used, bool)
