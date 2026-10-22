@@ -14,15 +14,10 @@ git diff --check
 git diff --cached --check
 
 printf 'Checking AppArmor policy, evidence collector, and public-service guards\n'
-apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
-  -I modules/self-hosted modules/self-hosted/plex-apparmor.profile
-apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
-  modules/self-hosted/ntfy-apparmor.profile
-apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
-  modules/self-hosted/hooks-apparmor.profile
-for profile in modules/self-hosted/apparmor/{victoria*,vmalert}.profile; do
-  apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null "$profile"
-done
+# Every policy the host loads is parsed as the host renders it, and the
+# named transition budget is held (tests/check-apparmor-profiles.py).
+python3 tests/check-apparmor-profiles.py
+python3 -m unittest discover -s tests -p test_apparmor_profile_paths.py
 python3 -m unittest discover -s tests -p test_apparmor_review.py
 python3 -m unittest discover -s tests -p test_cloudflare_access.py
 python3 -m unittest discover -s tests -p test_t3_worker_tunnel.py
@@ -51,6 +46,9 @@ python3 -m unittest discover -s tests -p test_agent_pin_guard.py
 
 printf 'Checking the private source owners\n'
 python3 -m unittest discover -s tests -p test_private_source_owner.py
+
+printf 'Checking the owner identity settings\n'
+python3 -m unittest discover -s tests -p test_owner_identity.py
 
 printf 'Checking the T3 restart guard\n'
 python3 -m unittest discover -s tests -p test_t3code_restart_guard.py
