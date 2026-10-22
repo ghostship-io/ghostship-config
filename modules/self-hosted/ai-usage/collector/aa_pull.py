@@ -18,6 +18,13 @@ The rules are narrow on purpose:
   an estimate is not a measurement, and the value formula needs a
   measurement.
 
+The pull reads the AA-3D page first and writes its snapshot as soon as
+the page is parsed, so a model page that is slow, that times out or that
+fails cannot lose it. The model pages are then read under a total budget:
+a page is started only while enough of the budget is left for it to
+finish, the pages that are not read are counted, and the quality cache
+is written either way.
+
 The pull runs at most once a day. The collector itself never calls the
 network: it reads the cache the pull wrote.
 """
@@ -37,6 +44,10 @@ from typing import Any, Iterable, Mapping
 import aa
 import aa_diff
 
+# The AA-3D page. It is read first: its snapshot is written as soon as
+# the page is parsed, so a model page that is slow cannot lose it.
+AA3D_URL = "https://artificialanalysis.ai/evaluations/aa-3d"
+
 # The public pages the pull reads.
 SOURCES = (
     (
@@ -52,7 +63,7 @@ SOURCES = (
     ),
     (
         "aa3d",
-        "https://artificialanalysis.ai/evaluations/aa-3d",
+        AA3D_URL,
         "the AA-3D Elo and its interval",
     ),
 )
@@ -87,7 +98,23 @@ COST_BASIS_MODEL_PAGE = "aa_model_page"
 # A model page is about four megabytes. The pull reads only the pages of the
 # models the live catalog still offers, and it reads at most this many of
 # them in one run. The count is reported with the result.
-MAX_MODEL_PAGE_FETCHES = 10
+MAX_MODEL_PAGE_FETCHES = 4
+
+# The budget of one pull, in seconds. The pull reads public pages over the
+# network, and a page that is slow must not let the run outlive the unit
+# that runs it. The budget is measured from the moment the AA-3D snapshot
+# has been written, that is, from the start of the part of the pull that
+# reads the model pages, and it stays well below the timeout of that unit.
+PULL_BUDGET_SECONDS = 480.0
+
+# A model page is started only while this much of the budget is left, so a
+# page that is read at the last moment still has the time to finish.
+MIN_REMAINING_SECONDS = 90.0
+
+# The clock the budget of the model pages is measured with. A test moves it
+# by hand: the pull reads pages over the network, and a slow page has to be
+# a number and not a minute of waiting.
+CLOCK: Any = time.monotonic
 
 # A deprecated model is superseded, not changed: its published cost is read
 # once and never again. A model that is not deprecated but is absent from
@@ -507,6 +534,68 @@ def parse_aa3d(html: str) -> dict[str, dict[str, Any]]:
     return found
 
 
+class _ModelPageBudget:
+    """The time one pull may spend on the model pages.
+
+    The pull has a total budget, and a model page is started only while
+    enough of it is left for the page to finish. The pages that are not
+    read are counted, so a run that skipped them says so.
+
+    The clock is injected: a test reads the pages of a fixture and moves
+    the clock by hand, with no network and no sleeping.
+    """
+
+    def __init__(
+        self,
+        clock: Any,
+        *,
+        budget_seconds: float = PULL_BUDGET_SECONDS,
+        min_remaining: float = MIN_REMAINING_SECONDS,
+    ) -> None:
+        self._clock = clock
+        self._budget = float(budget_seconds)
+        self._min_remaining = float(min_remaining)
+        self.started = float(clock())
+        self.skipped = 0
+
+    def used(self) -> float:
+        """The seconds of the budget the pull has spent."""
+        return float(self._clock()) - self.started
+
+    def remaining(self) -> float:
+        """The seconds of the budget that are left."""
+        return self._budget - self.used()
+
+    def allow(self) -> bool:
+        """True when a model page may be started now."""
+        return self.remaining() >= self._min_remaining
+
+
+def aa3d_board_is_complete(board: Mapping[str, Any], html: str) -> bool:
+    """True when the page shows the whole board that it scores.
+
+    The board is the entire displayed leaderboard, and the ranks and the
+    normalisation of the 3D tier are computed over it. The rows the page
+    renders and the models it scores must be the same ones: a page that
+    lost a row, on either side of it, is not a board, and the numbers
+    would be computed over a part of it.
+
+    The names must be unique as well: the 3D reader refuses a board with
+    two measurements of the same model.
+    """
+    scored = [
+        str(entry.get("name") or "")
+        for entry in (board or {}).values()
+        if isinstance(entry, Mapping) and _number(entry.get("elo")) is not None
+    ]
+    if len(set(scored)) != len(scored):
+        return False
+    rows = list(_aa3d_table(html or ""))
+    if len(scored) != len(rows):
+        return False
+    return sorted(scored) == sorted(rows)
+
+
 def _read_model_pages(
     records: dict[str, dict[str, Any]],
     leaderboard: Mapping[str, Any],
@@ -515,6 +604,7 @@ def _read_model_pages(
     offered: Iterable[str] = (),
     known: Mapping[str, Any] | None = None,
     now: float | None = None,
+    budget: _ModelPageBudget | None = None,
 ) -> tuple[dict[str, Any], int]:
     """The published cost of the models whose page has to be read.
 
@@ -523,6 +613,11 @@ def _read_model_pages(
     already, and at most this many times in one run. The cost of a
     deprecated model never changes, so it is read once and never again; a
     model that is not deprecated is read again at most once a week.
+
+    With a budget, a page is read only while enough of the budget is left
+    for it to finish. The pages that are not read are counted, and their
+    models keep the cost they had: a cost that was not read is unknown,
+    never zero.
 
     The result is the cost of every model whose page was read or whose
     cost was already known, and the number of pages that were read.
@@ -556,7 +651,16 @@ def _read_model_pages(
                 entry["cost_basis"] = COST_BASIS_MODEL_PAGE
                 costs[slug] = dict(previous)
                 continue
-        if model_pages is None or fetches >= MAX_MODEL_PAGE_FETCHES:
+        if model_pages is None:
+            continue
+        if fetches >= MAX_MODEL_PAGE_FETCHES:
+            # The cap of the run. The page is not read, and it is counted.
+            if budget is not None:
+                budget.skipped += 1
+            continue
+        if budget is not None and not budget.allow():
+            # Not enough of the budget is left for a page to finish.
+            budget.skipped += 1
             continue
         fetches += 1
         page = model_pages(slug)
@@ -590,6 +694,7 @@ def pull(
     model_pages: Any = None,
     catalog_slugs: Iterable[str] = (),
     cached_costs: Mapping[str, Any] | None = None,
+    write_aa3d: Any = None,
 ) -> dict[str, Any]:
     """Pull the public pages and build the cache document.
 
@@ -603,31 +708,59 @@ def pull(
     model nobody uses is not worth a read. `cached_costs` are the model
     page costs of an earlier pull, and a model whose cost is known is not
     read again.
+
+    `write_aa3d` is called with the AA-3D board as soon as the AA-3D page
+    has been read and parsed, before any model page is read. The AA-3D
+    page is read first for that reason: a model page that is slow, that
+    times out or that fails cannot lose the board.
     """
     offered = {_normalise(slug) for slug in catalog_slugs or () if str(slug)}
     known = dict(cached_costs or {})
     reader = read or _fetch
-    sources: list[dict[str, Any]] = []
+    entries: dict[str, dict[str, Any]] = {}
     pages: dict[str, str] = {}
-    for key, url, role in SOURCES:
+
+    def read_source(key: str, url: str, role: str) -> str:
+        """Read one public page, and record how the read went."""
         reading = reader(url)
-        sources.append(
-            {
-                "key": key,
-                "url": url,
-                "role": role,
-                "http_status": reading.get("http_status"),
-                "bytes": reading.get("bytes"),
-                "blocked": bool(reading.get("blocked")),
-                "error": reading.get("error"),
-            }
-        )
+        entries[key] = {
+            "key": key,
+            "url": url,
+            "role": role,
+            "http_status": reading.get("http_status"),
+            "bytes": reading.get("bytes"),
+            "blocked": bool(reading.get("blocked")),
+            "error": reading.get("error"),
+        }
         if reading.get("blocked"):
-            continue
+            return ""
         pages[key] = str(reading.get("text") or "")
+        return pages[key]
+
+    # The AA-3D page is read first, and its snapshot is written as soon as
+    # the page is parsed. The 3D tier reads that file and not the cache,
+    # so the board must not wait for the model pages.
+    aa3d_role = next(role for key, _url, role in SOURCES if key == "aa3d")
+    aa3d_html = read_source("aa3d", AA3D_URL, aa3d_role)
+    board = parse_aa3d(aa3d_html)
+    board_document = aa3d_document(board, time.time()) if board else {}
+    # The board is written only when the page carries the whole board. A
+    # page that lost a row is not a board, and the last good board is kept.
+    board_complete = bool(board) and aa3d_board_is_complete(board, aa3d_html)
+    if board_complete and board_document.get("records") and write_aa3d is not None:
+        write_aa3d(board_document)
+    # The budget of the model pages starts here: the AA-3D snapshot has
+    # been written, and the rest of the pull is what the budget pays for.
+    budget = _ModelPageBudget(CLOCK)
+
+    for key, url, role in SOURCES:
+        if key == "aa3d":
+            continue
+        read_source(key, url, role)
+
+    sources = [entries[key] for key, _url, _role in SOURCES]
     leaderboard = parse_leaderboard(pages.get("leaderboard") or "")
     models = parse_models(pages.get("models") or "")
-    aa3d = parse_aa3d(pages.get("aa3d") or "")
 
     records: dict[str, dict[str, Any]] = {}
     for slug, entry in leaderboard.items():
@@ -686,7 +819,7 @@ def pull(
             elo=entry.get("elo"),
         )
     # The AA-3D board fills the Elo of the models it shows.
-    for slug, entry in aa3d.items():
+    for slug, entry in board.items():
         record = records.get(slug)
         if record is None:
             record = _record(
@@ -706,15 +839,17 @@ def pull(
             }
     # A deprecated or leaderboard-absent model: its own page publishes the
     # cost per task. The page is read only for a model the live catalog
-    # still offers, only when its cost is not known already, and at most
-    # this many times in one run. The published number is used as it is
-    # published, and a cost is never estimated.
+    # still offers, only when its cost is not known already, at most this
+    # many times in one run, and only while the budget of the run has
+    # enough left for the page to finish. The published number is used as
+    # it is published, and a cost is never estimated.
     model_page_costs, fetches = _read_model_pages(
         records,
         leaderboard,
         model_pages=model_pages,
         offered=offered,
         known=known,
+        budget=budget,
     )
     ordered = [records[slug] for slug in sorted(records)]
     fetched_at = (
@@ -733,9 +868,19 @@ def pull(
         "attribution": "Artificial Analysis (https://artificialanalysis.ai/)",
         "sources": sources,
         "blocked": [entry["url"] for entry in sources if entry["blocked"]],
+        # The pages the quality records come from. The AA-3D page is not one
+        # of them: a board that could not be read does not hold the quality
+        # cache back, and the last good board is kept.
+        "quality_blocked": [
+            entry["url"]
+            for entry in sources
+            if entry["blocked"] and entry["key"] != "aa3d"
+        ],
         "completeness": {
             "scope": "the public pages",
-            "complete": not any(entry["blocked"] for entry in sources),
+            "complete": not any(
+                entry["blocked"] and entry["key"] != "aa3d" for entry in sources
+            ),
             "pages_fetched": len(pages),
             "total_pages": len(SOURCES),
             "records": len(ordered),
@@ -744,8 +889,14 @@ def pull(
         # The model page costs of this pull, and the models that were read.
         "model_page_costs": model_page_costs,
         "model_page_fetches": fetches,
-        # The AA-3D board, in the contract the collector reads it in.
-        "aa3d": aa3d_document(aa3d, time.time()),
+        # The model pages that were not read, and the budget of the run.
+        "model_page_skipped": budget.skipped,
+        "model_page_budget_seconds": PULL_BUDGET_SECONDS,
+        "model_page_budget_used_seconds": round(budget.used(), 3),
+        # The AA-3D board, in the contract the collector reads it in, and
+        # whether the page carried the whole board.
+        "aa3d": board_document,
+        "aa3d_complete": board_complete,
     }
 
 
@@ -869,6 +1020,12 @@ def refresh(
     A cache that is still fresh is left alone. A fetch that is blocked or
     that fails keeps the last good snapshot: the cache is not replaced with
     an empty one, and the blocked state is recorded.
+
+    The AA-3D board is written as soon as its page has been read and
+    parsed, before any model page is read. A model page that is slow, that
+    times out or that fails cannot lose it, and a board that could not be
+    read leaves the last good board alone without holding the quality
+    cache back.
     """
     moment = time.time() if now is None else float(now)
     current = aa.load_cache(cache_path, moment)
@@ -889,6 +1046,7 @@ def refresh(
             "new_models": 0,
             "changed_models": 0,
             "model_page_fetches": 0,
+            "model_page_skipped": 0,
         }
     previous = {}
     try:
@@ -897,30 +1055,39 @@ def refresh(
         previous = {}
     if not isinstance(previous, dict):
         previous = {}
+    def write_aa3d(board: Mapping[str, Any]) -> None:
+        """Write the AA-3D board, now, before the model pages are read."""
+        if aa3d_path is not None:
+            write_snapshot(aa3d_path, board)
+
     cached_costs = previous.get("model_page_costs")
     document = pull(
         read=read,
         model_pages=model_pages,
         catalog_slugs=catalog_slugs,
         cached_costs=cached_costs if isinstance(cached_costs, Mapping) else {},
+        write_aa3d=write_aa3d,
     )
-    if document.get("blocked"):
-        # A page was blocked. The last good snapshot is kept: a blocked
-        # page is not a reason to publish an empty cache, and nothing is
-        # retried to get around it.
+    if document.get("quality_blocked"):
+        # A page the quality records come from was blocked. The last good
+        # snapshot is kept: a blocked page is not a reason to publish an
+        # empty cache, and nothing is retried to get around it.
         return {
             "status": "blocked",
             "reason": "a public page answered with a challenge",
-            "blocked": list(document.get("blocked") or []),
+            "blocked": list(document.get("quality_blocked") or []),
             "changed": False,
             "new_models": 0,
             "changed_models": 0,
             "model_page_fetches": int(document.get("model_page_fetches") or 0),
+            "model_page_skipped": int(document.get("model_page_skipped") or 0),
         }
     difference = aa_diff.diff(previous, document)
-    board = document.pop("aa3d", None)
+    document.pop("aa3d", None)
     page_costs = document.pop("model_page_costs", None)
     fetches = int(document.pop("model_page_fetches", 0) or 0)
+    skipped = int(document.get("model_page_skipped") or 0)
+    board_complete = bool(document.get("aa3d_complete"))
     # The new and the changed models travel with the cache, so the
     # collector publishes them without reading the old pull.
     document = {
@@ -938,8 +1105,6 @@ def refresh(
         },
     }
     changed = write_snapshot(cache_path, document)
-    if aa3d_path is not None and isinstance(board, Mapping):
-        write_snapshot(aa3d_path, board)
     return {
         "status": "ok",
         "reason": "",
@@ -949,6 +1114,16 @@ def refresh(
         "changed_models": len(difference.get("changed") or {}),
         "removed_models": len(difference.get("removed") or []),
         "model_page_fetches": fetches,
+        # The model pages that were not read, and the budget of the run.
+        "model_page_skipped": skipped,
+        "model_page_budget_seconds": int(
+            document.get("model_page_budget_seconds") or 0
+        ),
+        "model_page_budget_used_seconds": float(
+            document.get("model_page_budget_used_seconds") or 0.0
+        ),
+        # Whether the AA-3D page carried the whole board.
+        "aa3d_complete": board_complete,
         "new_model_names": [
             entry.get("name") or entry.get("slug")
             for entry in (difference.get("added") or [])

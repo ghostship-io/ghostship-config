@@ -40,6 +40,16 @@ def label_name(name: str) -> str:
     return _LABEL_NAME.sub("_", name)
 
 
+def format_series(name: str, labels: Mapping[str, str]) -> str:
+    """Render a series the way the text file holds it."""
+    if not labels:
+        return name
+    rendered = ",".join(
+        f'{key}="{_escape_label(item)}"' for key, item in sorted(labels.items())
+    )
+    return f"{name}{{{rendered}}}"
+
+
 def escape_help(text: str) -> str:
     return text.replace("\\", "\\\\").replace("\n", "\\n")
 
@@ -55,6 +65,23 @@ def format_value(value: float) -> str:
     return repr(float(value))
 
 
+@dataclasses.dataclass(frozen=True)
+class DroppedSeries:
+    """A repeated series that the writer dropped.
+
+    The name and the labels are the series, and the flag says whether the
+    repeat carried the value that was kept.
+    """
+
+    name: str
+    labels: tuple[tuple[str, str], ...]
+    same_value: bool
+
+    def describe(self) -> str:
+        """Render the series the way the text file holds it."""
+        return format_series(self.name, dict(self.labels))
+
+
 class MetricWriter:
     """Collects samples and renders them in the Prometheus textfile format."""
 
@@ -65,9 +92,15 @@ class MetricWriter:
         # Every published series, by its name and its label set. A metric
         # series is that pair, and a series is published once.
         self._seen: set[tuple[str, tuple[tuple[str, str], ...]]] = set()
+        # The value each published series kept, so a repeat can say whether
+        # it carried the same value.
+        self._kept: dict[tuple[str, tuple[tuple[str, str], ...]], float] = {}
         # How many repeats were dropped. The count is published, so a
         # duplicate is never hidden.
         self.duplicates = 0
+        # The repeats that were dropped, so the run can name every series it
+        # dropped and not only say how many there were.
+        self.dropped: list[DroppedSeries] = []
 
     def declare(self, name: str, kind: str, help_text: str) -> None:
         self._help.setdefault(name, help_text)
@@ -84,10 +117,19 @@ class MetricWriter:
         if key in self._seen:
             # The same series a second time. The first reading is the one
             # that is published, and the repeat is counted: a textfile that
-            # holds one series twice makes the scrape fail.
+            # holds one series twice makes the scrape fail. The repeat is
+            # recorded as well, so the run can name the series it dropped.
             self.duplicates += 1
+            self.dropped.append(
+                DroppedSeries(
+                    name,
+                    tuple(sorted(clean.items())),
+                    self._kept[key] == number,
+                )
+            )
             return
         self._seen.add(key)
+        self._kept[key] = number
         self._samples.append((name, clean, number))
 
     def gauge(self, name: str, value: float, **labels: object) -> None:
@@ -111,14 +153,7 @@ class MetricWriter:
             for _, labels, value in sorted(
                 grouped[name], key=lambda item: sorted(item[1].items())
             ):
-                if labels:
-                    rendered = ",".join(
-                        f'{key}="{_escape_label(item)}"'
-                        for key, item in sorted(labels.items())
-                    )
-                    lines.append(f"{name}{{{rendered}}} {format_value(value)}")
-                else:
-                    lines.append(f"{name} {format_value(value)}")
+                lines.append(f"{format_series(name, labels)} {format_value(value)}")
         return "\n".join(lines) + "\n"
 
 
