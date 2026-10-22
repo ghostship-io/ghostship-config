@@ -71,11 +71,17 @@ hidden workspace, floating at their tile's size so placing them never resizes
 a loading page (a page being resized loses clicks), and focus rests on an
 empty `idle` workspace. Using Chrome's own controls takes a **focus lease**
 on one window (Chrome reads only one Wayland seat): focus moves only between
-that window and `idle`; other windows are never activated or deactivated. A lease ends when released or after 20 s without
-input, and only one window holds it at a time (others get `busy`).
+that window and `idle`; other windows are never activated or deactivated. A lease ends when its holder releases it or after 20 s without
+input, and only one window holds it at a time (others get `busy`). The holder
+is whoever used the window last, so a person closing the viewer does not
+release an agent's lease (that would close the Chrome menu the agent is
+working with); only an explicit admin request forces a lease down, and an
+agent never sends one.
 `stage-control` pairs sway windows with Chrome's DevTools window ids (home-tab
 title, then unique tab titles, then elimination; ambiguous windows stay
-unpaired), which tells the viewer which run a window belongs to. Whoever opens
+unpaired), which tells the viewer which run a window belongs to. Sway does not
+re-announce the windows it already has, so a restart reads the tree once and
+pairs the windows it finds there. Whoever opens
 a run window waits until the stage has paired it by its home tab before
 opening a working tab, which takes the window title over.
 
