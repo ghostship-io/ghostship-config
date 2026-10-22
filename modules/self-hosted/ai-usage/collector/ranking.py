@@ -102,6 +102,10 @@ class QuotaWindow:
     # When the provider last reported this window. A reading that is older
     # than the freshness bound is stale, and a stale reading is not headroom.
     observed_at: float | None = None
+    # Where the numbers of the window come from: a reading the provider
+    # reported, a number its documentation publishes, or a published limit
+    # counted against our own requests. The bases are never mixed.
+    basis: str = ""
     # Whether the window constrains the route. A window a source publishes
     # without reading is visible and it does not gate: an unknown reading is
     # not evidence that an account is exhausted.

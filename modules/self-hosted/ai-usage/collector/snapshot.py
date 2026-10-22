@@ -76,6 +76,13 @@ ROLE_DELEGATE = "delegate"
 # The tiers the snapshot reports, in the order the dashboard reads them.
 TIER_NAMES = ("frontier", "bulk", "free", "3d")
 
+# The visible label of a window whose state the provider publishes rather
+# than reports. The OpenCode Go documentation lists the free routes as
+# unlimited, so the window says so instead of leaving the reader to guess.
+WINDOW_LABELS = {
+    "free-unlimited": "unlimited (published)",
+}
+
 
 def _finite(value: Any) -> float | None:
     """A finite float, or None. A NaN or an infinity is never published."""
@@ -115,6 +122,7 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
     duration = _get("duration_seconds", "durationSeconds")
     applies = _get("applies_to", "appliesTo", default=())
     observed = _get("observed_at", "observedAtEpoch")
+    basis = str(_get("basis", default="") or "")
 
     used_value = _finite(used)
     known = used_value is not None and 0.0 <= used_value <= 1.0
@@ -141,6 +149,11 @@ def _window_record(window: Any, now: float) -> dict[str, Any]:
         "duration_seconds": (
             int(duration_value) if duration_value is not None and duration_value > 0 else None
         ),
+        # Where the numbers of the window come from. A published limit and a
+        # reading the provider reported are never mixed, and the label says
+        # which one a reader is looking at.
+        "basis": basis,
+        "label": WINDOW_LABELS.get(quota_id, ""),
         # The check time is the moment the provider reported the window. It
         # is never the moment the snapshot was written.
         "check_at": _iso(observed_value) if observed_value is not None else None,
@@ -3031,6 +3044,13 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
                 samples.append(
                     ("ghostship_ai_model_token_price", {**labels, "kind": kind}, float(number))
                 )
+        samples.append(
+            (
+                "ghostship_ai_model_available",
+                labels,
+                1.0 if (row.get("availability") or {}).get("state") == "available" else 0.0,
+            )
+        )
         samples.append(
             (
                 "ghostship_ai_model_available",
