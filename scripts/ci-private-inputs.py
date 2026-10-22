@@ -3,11 +3,14 @@
 import json
 import os
 import subprocess
+import sys
 import tarfile
 import tempfile
-import urllib.request
-import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import private_source
 
 
 # Private flake inputs mapped to their source repository, scoped read key, and
@@ -39,15 +42,9 @@ def main():
     root = Path(tempfile.mkdtemp(prefix='ghostship-ci-sources-', dir=os.environ['RUNNER_TEMP']))
     try:
         # Authenticate the SSH host using GitHub's HTTPS-published public keys.
-        headers = {'User-Agent': 'ghostship-ci-private-inputs'}
-        if meta_token:
-            headers['Authorization'] = 'Bearer ' + meta_token
-        request = urllib.request.Request('https://api.github.com/meta', headers=headers)
-        with urllib.request.urlopen(request, timeout=30) as response:
-            host_keys = json.load(response)['ssh_keys']
-        del request, headers, meta_token
-        known = root/'known_hosts'
-        known.write_text(''.join('github.com ' + key + '\n' for key in host_keys))
+        host_keys = private_source.github_host_keys(meta_token)
+        del meta_token
+        known = private_source.known_hosts(root/'known_hosts', host_keys)
         for name, spec in SOURCES.items():
             suffix = spec['key']
             credential = credentials.pop(suffix)
@@ -61,14 +58,12 @@ def main():
                 raise SystemExit('Unsupported private source declaration: ' + name)
             if spec['dir'] and locked.get('dir') != spec['dir']:
                 raise SystemExit('Unsupported private source directory: ' + name)
-            checkout = root/('checkout-' + suffix); checkout.mkdir()
-            env = {name: os.environ[name] for name in ('PATH', 'HOME') if name in os.environ}
-            env['GIT_SSH_COMMAND'] = ('ssh -i ' + str(key) + ' -o IdentitiesOnly=yes -o BatchMode=yes'
-                + ' -o StrictHostKeyChecking=yes -o UserKnownHostsFile=' + str(known))
-            subprocess.run(['git', 'init', '-q', str(checkout)], env=env, check=True)
-            subprocess.run(['git', '-C', str(checkout), 'fetch', '-q', '--depth=1',
-                'git@github.com:owner/' + spec['repo'] + '.git', locked['rev']], env=env, check=True)
-            subprocess.run(['git', '-C', str(checkout), 'checkout', '-q', '--detach', 'FETCH_HEAD'], env=env, check=True)
+            checkout = root/('checkout-' + suffix)
+            env = private_source.ssh_environment(key, known)
+            # The owner was checked above, so the URL carries no name of its own.
+            private_source.fetch_source(checkout,
+                                        'git@github.com:' + locked['owner'] + '/' + spec['repo'] + '.git',
+                                        locked['rev'], env)
             key.unlink()
             archive = root/(suffix + '.tar')
             with archive.open('wb') as output:
