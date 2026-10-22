@@ -623,12 +623,16 @@ def _published_unlimited_routes(
     catalog may not contradict it: a route the catalog prices is only
     unlimited when it prices it free.
     """
+    free_prices = {
+        str(entry.get("model") or "")
+        for entry in (catalog.free_models(published_module.GO_PROVIDER) or [])
+    }
     routes: list[tuple[str, str]] = []
     for provider, model in sorted(inventory or ()):
         if not published_module.unlimited_route(provider, model):
             continue
         entry = catalog.model_entry(provider, model)
-        if entry is not None and not catalog_module.is_free_price(entry.get("cost")) and entry.get("cost") is not None:
+        if entry is not None and model not in free_prices:
             # The catalog prices the route and it is not free: the published
             # unlimited listing does not apply to it.
             continue
