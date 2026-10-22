@@ -745,6 +745,23 @@ class WorkedCasesTests(unittest.TestCase):
                     continue
                 self.assertLess(order[provider], order[other], f"{provider} before {other}")
 
+    def test_an_unknown_provider_comes_after_every_provider_with_a_reading(self):
+        """A provider with no capacity reading stands below every provider with one.
+
+        The fixture's google publishes an entitlement reset and no capacity
+        window and no coverage series; it still reads "Limits unknown", and
+        it must still sort below the providers that have a reading.
+        """
+        panel = section(self.page, "Providers")
+        order = self.rows(panel, target_by_field(panel, "order"), "provider")
+        has_cap = self.rows(panel, target_by_field(panel, "hasCap"), "provider")
+        unknown = [p for p in order if not has_cap.get(p)]
+        self.assertIn("google", unknown)
+        for provider in unknown:
+            for other, flag in has_cap.items():
+                if flag:
+                    self.assertLess(order[provider], order[other], f"{provider} before {other}")
+
     def test_a_sunk_route_keeps_no_place(self):
         """A route that cannot be used keeps no place: its rank cell reads '–'."""
         panel = section(self.page, "Free")
