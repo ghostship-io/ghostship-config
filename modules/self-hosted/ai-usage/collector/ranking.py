@@ -52,10 +52,13 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 try:  # pragma: no cover - the collector always ships metrics.py
-    from metrics import label_value
+    from metrics import ExactLabel, label_value
 except ImportError:  # pragma: no cover - standalone use
     def label_value(value: object) -> str:
         return str(value)
+
+    class ExactLabel(str):  # pragma: no cover - standalone use
+        """A label value that is published exactly as it is."""
 
 try:  # pragma: no cover - the collector always ships catalog.py
     from catalog import PROVIDER_ALIASES
@@ -2044,8 +2047,114 @@ def rank_models(
     return ranked
 
 
+# The fields a source may use for the name of a model. The first field with a
+# value is the label of the model.
+MODEL_NAME_FIELDS = ("name", "label", "displayName", "display_name", "title")
+
+
+def _first_label(entry: Mapping[str, Any]) -> str:
+    """The label one source entry carries, or an empty string."""
+    for field in MODEL_NAME_FIELDS:
+        value = entry.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _t3_code_label(
+    provider: str,
+    model: str,
+    native_models: Mapping[str, Any] | None,
+    catalog: Any,
+) -> str:
+    """The label T3 Code's model catalog gives one model, or an empty string.
+
+    Two sources publish it: the T3 Code instance, which names the models it
+    offers, and the model catalog that instance reads, which carries the
+    provider's own display name. A label that only repeats the model id is
+    no label: the name is looked for elsewhere.
+    """
+    entry = None
+    if isinstance(native_models, Mapping):
+        entry = native_models.get((provider, model))
+        if not isinstance(entry, Mapping):
+            entry = native_models.get((str(provider), str(model)))
+    if isinstance(entry, Mapping):
+        label = _first_label(entry)
+        known = {str(model or "")}
+        model_id = entry.get("modelId")
+        if isinstance(model_id, str) and model_id.strip():
+            known.add(model_id.strip())
+        if label and label not in known:
+            return label
+    if catalog is not None:
+        getter = getattr(catalog, "model_entry", None)
+        found = getter(provider, model) if callable(getter) else None
+        if isinstance(found, Mapping):
+            label = _first_label(found)
+            if label and label != str(model or ""):
+                return label
+    return ""
+
+
+def _aa_display_name(provider: str, model: str, aa_cache: Any) -> str:
+    """The Artificial Analysis record's name, without its reasoning condition.
+
+    The record is the one the exact identity binding proves for this model,
+    the same record the quality score comes from. The condition the feed
+    measured it under is not part of the model's name: "Claude Sonnet 5.5
+    (Max, Default Fallback)" is the model "Claude Sonnet 5.5".
+    """
+    if aa_bind is None or not isinstance(aa_cache, Mapping):
+        return ""
+    if str(aa_cache.get("status") or "") != "ok":
+        return ""
+    binding = aa_bind.resolve(
+        aa_cache.get("records") or (), provider, model, mode="reference"
+    )
+    if str(binding.get("state") or "") != "measured":
+        return ""
+    record = binding.get("record")
+    if not isinstance(record, Mapping):
+        return ""
+    raw = record.get("model")
+    if not isinstance(raw, str) or not raw.strip():
+        return ""
+    base, _variant = aa_bind.variant_of(raw)
+    return base.strip()
+
+
+def model_display_name(
+    provider: str,
+    model: str,
+    *,
+    native_models: Mapping[str, Any] | None = None,
+    aa_cache: Any = None,
+    catalog: Any = None,
+) -> str:
+    """The human name of one model. It is never empty.
+
+    The first name that exists wins: the label T3 Code's model catalog gives
+    the model, else the Artificial Analysis record's name without its
+    reasoning condition, else the raw model id. The raw id is the last
+    resort, so every row of the dashboard says something.
+    """
+    name = _t3_code_label(provider, model, native_models, catalog)
+    if name:
+        return name
+    name = _aa_display_name(provider, model, aa_cache)
+    if name:
+        return name
+    return str(model or "")
+
+
 def rank_samples(
-    ranked: list[RankedModel], *, now: float
+    ranked: list[RankedModel],
+    *,
+    now: float,
+    native_models: Mapping[str, Any] | None = None,
+    aa_cache: Mapping[str, Any] | None = None,
+    catalog: Any = None,
 ) -> list[tuple[str, dict[str, str], float]]:
     """Render the ranking as Prometheus samples.
 
@@ -2167,6 +2276,30 @@ def rank_samples(
                         1.0,
                     )
                 )
+            # The human name of the model, so a row of the dashboard can say
+            # what the model is. One series per candidate, and the name is
+            # never empty: the raw id is the last resort. The name is
+            # published exactly: it is a name, and the exposition format
+            # escapes it the way the format requires.
+            samples.append(
+                (
+                    "ghostship_ai_model_info",
+                    {
+                        "provider": provider,
+                        "model": model,
+                        "name": ExactLabel(
+                            model_display_name(
+                                entry.provider,
+                                entry.model,
+                                native_models=native_models,
+                                aa_cache=aa_cache,
+                                catalog=catalog,
+                            )
+                        ),
+                    },
+                    1.0,
+                )
+            )
         # The rank of every model, including the ones that hold no tier: a
         # model that is not usable stays visible with its rank.
         samples.append(

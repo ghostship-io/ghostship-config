@@ -240,6 +240,7 @@ METRIC_HELP = {
         "inventory. They are counted and never guessed."
     ),
     "ghostship_ai_model_tier": "One for every tier a model belongs to.",
+    "ghostship_ai_model_info": "One for a candidate model, with the human name of the model.",
     "ghostship_ai_model_evaluated_timestamp_seconds": "When a model was last evaluated.",
     "ghostship_ai_three_d_usage_tokens": "Tokens spent on 3D printing work.",
     # The two series below are no longer emitted: the 3D prior and its blended
@@ -1331,7 +1332,15 @@ def ranking_samples(
     context["observed_failures"] = observed_failures
     context["ranking_inventory"] = sorted(inventory)
     ranked = ranking_module.rank_models(**rank_kwargs)
-    samples.extend(ranking_module.rank_samples(ranked, now=now))
+    samples.extend(
+        ranking_module.rank_samples(
+            ranked,
+            now=now,
+            native_models=context.get("native_models") or {},
+            aa_cache=aa_cache,
+            catalog=catalog,
+        )
+    )
     return samples, ranked
 
 
