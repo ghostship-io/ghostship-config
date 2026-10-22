@@ -68,6 +68,99 @@ def find_target(panel, needle):
     raise AssertionError(f"no target of {panel.get('title')!r} names {needle!r}")
 
 
+def cells(fragment):
+    """The classes of the cells of a table row."""
+    return [
+        (match.group(1) or "").strip()
+        for match in re.finditer(r'<(?:th|td)(?:\s+class="([^"]*)")?', fragment)
+    ]
+
+
+def table_columns(content):
+    """The header cells of a table and the cells of its first row."""
+    head = re.search(r"<thead>(.*?)</thead>", content, re.S)
+    row = re.search(r"<tbody>(.*?)</tr>", content, re.S)
+    assert head and row, "the panel has no table"
+    return cells(head.group(1)), cells(row.group(1))
+
+
+def hide_marker(classes):
+    """The classes that hide a column on a narrow screen."""
+    return tuple(sorted(name for name in classes.split() if name.startswith("hide")))
+
+    def __init__(self, content):
+        from html.parser import HTMLParser
+
+        outer = self
+        self.nodes = []
+        self.roots = []
+
+        class Parser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.stack = []
+
+            def handle_starttag(self, tag, attrs):
+                node = {
+                    "tag": tag,
+                    "classes": (dict(attrs).get("class") or "").split(),
+                    "children": [],
+                    "parent": self.stack[-1] if self.stack else None,
+                }
+                outer.nodes.append(node)
+                if self.stack:
+                    self.stack[-1]["children"].append(node)
+                else:
+                    outer.roots.append(node)
+                if tag not in ("br", "img", "hr", "input"):
+                    self.stack.append(node)
+
+            def handle_endtag(self, tag):
+                if self.stack:
+                    self.stack.pop()
+
+            def handle_data(self, data):
+                if self.stack and data.strip():
+                    self.stack[-1]["children"].append({"text": data.strip()})
+
+        parser = Parser()
+        parser.feed(content or "")
+        parser.close()
+
+    def matches(self, node, selector):
+        """True when a node matches a selector of class names."""
+        parts = [part for part in selector.split() if part]
+        if not parts:
+            return False
+        names = [name for name in parts[-1].split(".") if name]
+        if not all(name in node.get("classes", []) for name in names):
+            return False
+        if len(parts) == 1:
+            return True
+        # A descendant selector: the last part is the node, the others are
+        # its ancestors.
+        parent = node.get("parent")
+        while parent is not None:
+            if self.matches(parent, " ".join(parts[:-1])):
+                return True
+            parent = parent.get("parent")
+        return False
+
+    def tags(self):
+        """The tag elements of the template."""
+        return [node for node in self.nodes if "tag" in node["classes"]]
+
+    def inside(self, node, selectors):
+        """True when a node or one of its ancestors matches a selector."""
+        current = node
+        while current is not None:
+            for selector in selectors:
+                if self.matches(current, selector):
+                    return True
+            current = current.get("parent")
+        return False
+
+
 class ProvidersPageTests(unittest.TestCase):
     """The shape of the page."""
 
@@ -262,6 +355,22 @@ class ProvidersPageTests(unittest.TestCase):
         )
         for row in why:
             self.assertGreater(row["gridPos"]["y"], last_section)
+
+    def test_a_hidden_column_hides_its_cells_too(self):
+        """A column that goes away on a narrow screen takes its cells with it.
+
+        The header of the basis column went away while the cells stayed, so
+        the columns of the table no longer lined up.
+        """
+        for title in list(TIERS) + ["Providers"]:
+            head, row = table_columns(section(self.page, title)["options"]["content"])
+            self.assertEqual(len(head), len(row), title)
+            for index, (header, cell) in enumerate(zip(head, row)):
+                self.assertEqual(
+                    hide_marker(header),
+                    hide_marker(cell),
+                    f"{title} column {index}: {header!r} and {cell!r}",
+                )
 
 
 class VictoriaMetricsFixture:
