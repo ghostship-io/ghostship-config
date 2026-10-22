@@ -165,12 +165,12 @@ class SelectionTests(unittest.TestCase):
     def test_the_value_is_the_published_intelligence_and_cost_policy(self):
         weights = snapshot.CALCULATION["value"]["weights"]
         self.assertAlmostEqual(sum(weights.values()), 1.0, places=6)
-        self.assertEqual(weights, {"intelligence": 0.8, "cost_per_task": 0.2})
+        self.assertEqual(weights, {"intelligence": 0.7, "cost_per_task": 0.3})
         value, used = snapshot._component_value(
             {"intelligence": 0.9, "cost_per_task": 0.5}
         )
         self.assertEqual(set(used), {"intelligence", "cost_per_task"})
-        self.assertAlmostEqual(value, 0.8 * 0.9 + 0.2 * 0.5, places=6)
+        self.assertAlmostEqual(value, 0.7 * 0.9 + 0.3 * 0.5, places=6)
         # A missing input means no combined value: no renormalization.
         self.assertEqual(
             snapshot._component_value({"intelligence": 0.9, "cost_per_task": None}),

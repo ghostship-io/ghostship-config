@@ -56,6 +56,7 @@ from typing import Any, Iterable, Mapping
 import aa_3d
 import aa_bind as bind_module
 import facts as facts_module
+import value_policy
 
 SCHEMA = "ghostship.ai-usage.routing"
 SCHEMA_VERSION = 1
@@ -1041,24 +1042,21 @@ def _recommendations(
     return result
 
 
-# The components of the value of a model, and their weights. A component that
-# is unknown is left out and the weights of the known ones are renormalized:
-# an unknown is never a zero, and it never makes a model look worse than it is
-# measured to be.
 # The owner's transparent policy: the measured intelligence and the measured
-# cost per task, and nothing else. These are policy weights, not claims of the
-# feed; the raw inputs and the transforms are published beside them.
-VALUE_WEIGHTS = {
-    "intelligence": 0.80,
-    "cost_per_task": 0.20,
-}
-
+# cost per task, and nothing else. The weights and the transform live in
+# one place, value_policy, so a lead can set them without a change anywhere
+# else.
+VALUE_WEIGHTS = dict(value_policy.VALUE_WEIGHTS)
+VALUE_3D_WEIGHTS = dict(value_policy.VALUE_3D_WEIGHTS)
 VALUE_TRANSFORMS = {
     "intelligence": "I = the Artificial Analysis intelligence index / 100",
     "cost_per_task": "E = 1 / (1 + the Artificial Analysis cost per task in USD)",
 }
+# The transform of the cost input that is in force. It is swappable, and
+# the one in force is published with the snapshot and the metrics.
+COST_TRANSFORM = value_policy.DEFAULT_COST_TRANSFORM
 VALUE_POLICY = {
-    "formula": "0.80 * I + 0.20 * E",
+    "formula": "0.70 * I + 0.30 * E",
     "weights": dict(VALUE_WEIGHTS),
     "transforms": dict(VALUE_TRANSFORMS),
     "units": {
@@ -1067,6 +1065,8 @@ VALUE_POLICY = {
     },
     "requires": "both measurements; a missing cost per task leaves the value unknown",
     "not_aa_claim": "the weights are an owner policy; the inputs are the feed's",
+    "cost_transform": COST_TRANSFORM,
+    "cost_transforms": dict(value_policy.COST_TRANSFORMS),
 }
 
 # The calculation of a winner, published with the snapshot so every number
@@ -1091,9 +1091,11 @@ CALCULATION = {
         "units": dict(VALUE_POLICY["units"]),
         "requires": VALUE_POLICY["requires"],
         "not_aa_claim": VALUE_POLICY["not_aa_claim"],
+        "cost_transform": COST_TRANSFORM,
+        "cost_transforms": dict(value_policy.COST_TRANSFORMS),
         "components": {
             "intelligence": "the verified intelligence index over 100",
-            "cost_per_task": "1 / (1 + the cost per task of the feed)",
+            "cost_per_task": "the efficiency of the measured cost per task",
         },
         "visible_not_ranked": {
             "coding": "the verified coding index, shown and not weighted",
@@ -1107,6 +1109,30 @@ CALCULATION = {
             "the value orders the candidates within one provider only"
         ),
     },
+    "value_3d": {
+        "formula": "0.45 * I + 0.25 * T + 0.30 * E",
+        "weights": dict(VALUE_3D_WEIGHTS),
+        "components": {
+            "intelligence": "the verified intelligence index over 100",
+            "three_d": (
+                "the AA-3D Elo under the source's own published normalization, "
+                "min-max over the complete AA-3D snapshot"
+            ),
+            "cost_per_task": "the efficiency of the measured cost per task",
+        },
+        "cost_transform": COST_TRANSFORM,
+        "requires": (
+            "all three measurements; a missing capability or a missing cost "
+            "leaves the value unknown"
+        ),
+        "note": (
+            "the AA-3D capability is beside the intelligence, not a "
+            "replacement for it: the owner asked for the two together for CAD "
+            "selection"
+        ),
+    },
+    "cost_transforms": dict(value_policy.COST_TRANSFORMS),
+    "cost_transform_in_force": COST_TRANSFORM,
     "relative_cost": {
         "formula": "3 * input + output + 0.1 * cache_read, per million tokens",
         "floor": 0.01,
@@ -1184,19 +1210,40 @@ def _median(values: list[float]) -> float | None:
 def _calibrate_values(candidates: list[dict[str, Any]]) -> None:
     """The combined value: the measured intelligence and the measured cost.
 
-    The policy is 0.80 * I + 0.20 * E with I the intelligence index over 100
-    and E = 1 / (1 + cost per task). Both measurements are required: a model
-    with no cost per task has an unknown efficiency and no combined value,
-    while its raw measured intelligence stays visible. Nothing is filled from
-    a cohort median and nothing is renormalized.
+    The policy is 0.70 * I + 0.30 * E with I the intelligence index over 100
+    and E the efficiency of the measured cost per task. Both measurements
+    are required: a model with no cost per task has an unknown efficiency
+    and no combined value, while its raw measured intelligence stays
+    visible. Nothing is filled from a cohort median and nothing is
+    renormalized.
+
+    The cost transform is the one in force in the policy, and the evidence
+    it was built from is published with the value.
     """
+    # The cohort the relative transforms need: the known costs of the
+    # models this snapshot compares.
+    cohort = value_policy.cost_cohort(
+        (row.get("_components") or {}).get("cost_per_task_raw")
+        for row in candidates
+    )
     for row in candidates:
         components = row.get("_components") or {}
         value_block = row.get("value") or {}
+        # The efficiency of the measured cost, under the transform that is in
+        # force. The transform and its evidence are published with the
+        # value.
+        raw = (components.get("cost_per_task_raw") or {}).get("value")
+        efficiency, evidence = value_policy.cost_transform(
+            raw, cohort, COST_TRANSFORM
+        )
         published = {}
         for name in VALUE_WEIGHTS:
             component = components.get(name) or {}
             value = component.get("value")
+            if name == "cost_per_task":
+                # The efficiency is the transform of the measured cost, not
+                # the raw cost and not a default.
+                value = efficiency
             published[name] = {
                 "value": (
                     round(float(value), 4)
@@ -1209,6 +1256,8 @@ def _calibrate_values(candidates: list[dict[str, Any]]) -> None:
         value_block["weights"] = dict(VALUE_WEIGHTS)
         value_block["transforms"] = dict(VALUE_TRANSFORMS)
         value_block["cohort"] = {"basis": "", "values": {}}
+        value_block["cost_transform"] = COST_TRANSFORM
+        value_block["cost_transform_evidence"] = evidence
         intelligence = published["intelligence"]["value"]
         efficiency = published["cost_per_task"]["value"]
         if not isinstance(intelligence, (int, float)) or not isinstance(
@@ -1695,6 +1744,17 @@ def _fill_value(
         "coding": index("coding_index"),
         "agentic": index("agentic_index"),
         "engineering": index("engineering_index"),
+        # The raw cost per task, kept beside the efficiency: the transform
+        # that turns the cost into the efficiency may need the cohort, and
+        # the cohort is only known once every row is filled.
+        "cost_per_task_raw": (
+            float(cost_per_task)
+            if isinstance(cost_per_task, (int, float))
+            and not isinstance(cost_per_task, bool)
+            and math.isfinite(float(cost_per_task))
+            and float(cost_per_task) >= 0.0
+            else None
+        ),
         "cost_per_task": (
             1.0 / (1.0 + float(cost_per_task))
             if isinstance(cost_per_task, (int, float))
@@ -1997,16 +2057,19 @@ def _runtime_reasoning(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _three_d_value(row: Mapping[str, Any]) -> dict[str, Any]:
-    """The cost-aware 3D value: 0.80 * normalized Elo + 0.20 * efficiency.
+    """The 3D value: 0.45 * intelligence + 0.25 * capability + 0.30 * efficiency.
 
     The capability input is the AA-3D Elo under the source's own explicit
-    normalization. The efficiency input is the AA-3D cost per task when the
-    feed publishes it. When it does not, the owner explicitly approved the
-    normal Artificial Analysis cost per task of the same model as a proxy:
-    it is published with `cost_source=artificialanalysis_intelligence` and
-    `proxy=true`, and it is never called a measured 3D cost. Missing both
-    costs leaves the combined value unknown, while the raw Elo, its interval
-    and the source stay visible.
+    normalization, min-max over the complete AA-3D snapshot. The
+    intelligence is beside it rather than replaced by it: the owner asked
+    for the two together for CAD selection. The efficiency input is the
+    AA-3D cost per task when the feed publishes it. When it does not, the
+    owner explicitly approved the normal Artificial Analysis cost per task
+    of the same model as a proxy: it is published with
+    `cost_source=artificialanalysis_intelligence` and `proxy=true`, and it
+    is never called a measured 3D cost. A missing input leaves the
+    combined value unknown, while the raw Elo, its interval and the source
+    stay visible.
     """
     three_d = row.get("three_d") or {}
     aa = row.get("aa") or {}
@@ -2026,26 +2089,27 @@ def _three_d_value(row: Mapping[str, Any]) -> dict[str, Any]:
             cost = None
             proxy = False
             cost_source = None
+    efficiency, evidence = value_policy.cost_transform(cost, (), COST_TRANSFORM)
+    intelligence = (aa.get("indices") or {}).get("intelligence")
     components = {
-        "elo": normalized if isinstance(normalized, (int, float)) else None,
-        "cost_per_task": (
-            1.0 / (1.0 + float(cost)) if cost is not None else None
+        "intelligence": (
+            max(0.0, min(1.0, float(intelligence) / 100.0))
+            if isinstance(intelligence, (int, float)) and not isinstance(intelligence, bool)
+            else None
         ),
+        "three_d": normalized if isinstance(normalized, (int, float)) else None,
+        "cost_per_task": efficiency,
     }
-    missing = [name for name, value in components.items() if value is None]
-    value = None
-    if not missing:
-        value = round(
-            0.80 * float(components["elo"]) + 0.20 * float(components["cost_per_task"]),
-            6,
-        )
+    value, missing = value_policy.combine(components, VALUE_3D_WEIGHTS)
     return {
-        "value": value,
+        "value": None if value is None else round(value, 6),
         "components": {
             name: None if component is None else round(float(component), 4)
             for name, component in components.items()
         },
-        "weights": {"elo": 0.80, "cost_per_task": 0.20},
+        "weights": dict(VALUE_3D_WEIGHTS),
+        "cost_transform": COST_TRANSFORM,
+        "cost_transform_evidence": evidence,
         "cost_source": cost_source,
         "proxy": proxy,
         "cost_basis": (
@@ -2521,6 +2585,7 @@ def build_snapshot(
         "tier_winners": winners,
         "tier_members": tier_members,
         "calculation": CALCULATION,
+        "value_policy": value_policy.policy_document(COST_TRANSFORM),
         "quota": {
             "accounts": accounts,
             "provider_capacity": provider_capacity,
@@ -2583,7 +2648,10 @@ def build_snapshot(
             "pending_identities": pending_identities,
         },
         "pending": pending,
-        "value_policy": VALUE_POLICY,
+        "value_policy": {
+            **VALUE_POLICY,
+            **value_policy.policy_document(COST_TRANSFORM),
+        },
         "aa_coverage": aa_coverage,
         "counts": {
             "candidates": len(candidates),
@@ -2758,6 +2826,21 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
                             float(weight),
                         )
                     )
+        # The transform of a calculated input, and the one in force. A
+        # reader can tell which transform built the value it sees.
+        transform = body.get("cost_transform")
+        if isinstance(transform, str) and transform:
+            samples.append(
+                (
+                    "ghostship_ai_calculation_transform",
+                    {
+                        "component": str(component),
+                        "transform": transform,
+                        "in_force": transform,
+                    },
+                    1.0,
+                )
+            )
         rule = body.get("rule")
         if isinstance(rule, str):
             samples.append(
@@ -2767,6 +2850,25 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
                     1.0,
                 )
             )
+    for name, description in (snapshot.get("calculation") or {}).get(
+        "cost_transforms", {}
+    ).items():
+        samples.append(
+            (
+                "ghostship_ai_calculation_transform",
+                {
+                    "component": "cost_per_task",
+                    "transform": str(name),
+                    "in_force": str(
+                        (snapshot.get("calculation") or {}).get(
+                            "cost_transform_in_force", ""
+                        )
+                    ),
+                    "formula": str(description)[:120],
+                },
+                1.0,
+            )
+        )
     for tier, winners in (snapshot.get("tier_winners") or {}).items():
         for position, winner in enumerate(winners, start=1):
             if not isinstance(winner, Mapping):

@@ -363,6 +363,112 @@ class SnapshotWriteTests(unittest.TestCase):
                 snapshot.write_snapshot(blocked / "routing.json", {"schema": "x"})
 
 
+class ValuePolicyTests(unittest.TestCase):
+    """The value formula comes from one policy constant."""
+
+    def _policy(self):
+        return _load("ai_usage_design_value_policy", "value_policy")
+
+    def test_the_weights_come_from_one_place(self):
+        policy = self._policy()
+        self.assertEqual(policy.VALUE_WEIGHTS, {"intelligence": 0.70, "cost_per_task": 0.30})
+        self.assertEqual(
+            policy.VALUE_3D_WEIGHTS,
+            {"intelligence": 0.45, "three_d": 0.25, "cost_per_task": 0.30},
+        )
+        self.assertAlmostEqual(sum(policy.VALUE_WEIGHTS.values()), 1.0, places=6)
+        self.assertAlmostEqual(sum(policy.VALUE_3D_WEIGHTS.values()), 1.0, places=6)
+
+    def test_the_snapshot_publishes_the_weights_and_the_transform(self):
+        document = snapshot.value_policy.policy_document()
+        self.assertEqual(document["value"]["weights"], {"intelligence": 0.70, "cost_per_task": 0.30})
+        self.assertEqual(
+            document["value_3d"]["weights"],
+            {"intelligence": 0.45, "three_d": 0.25, "cost_per_task": 0.30},
+        )
+        self.assertIn("inverse", document["cost_transforms"])
+        self.assertIn("minmax", document["cost_transforms"])
+        self.assertIn("median_relative", document["cost_transforms"])
+        self.assertEqual(document["cost_transform_in_force"], "inverse")
+        self.assertFalse(document["renormalized"])
+
+    def test_the_weights_are_published_as_a_metric(self):
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[{"id": "t3", "status": "ok", "reason": "ok", "observed_at_epoch": NOW}],
+            ranked=[],
+        )
+        samples = snapshot.decision_samples(data)
+        found = {
+            (labels["component"], labels["weight"]): value
+            for name, labels, value in samples
+            if name == "ghostship_ai_calculation_weight"
+        }
+        self.assertAlmostEqual(found[("value", "intelligence")], 0.70, places=6)
+        self.assertAlmostEqual(found[("value", "cost_per_task")], 0.30, places=6)
+        self.assertAlmostEqual(found[("value_3d", "three_d")], 0.25, places=6)
+
+    def test_the_transform_is_published_as_a_metric(self):
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[{"id": "t3", "status": "ok", "reason": "ok", "observed_at_epoch": NOW}],
+            ranked=[],
+        )
+        samples = snapshot.decision_samples(data)
+        transforms = {
+            labels["transform"]
+            for name, labels, _value in samples
+            if name == "ghostship_ai_calculation_transform"
+        }
+        self.assertIn("inverse", transforms)
+        self.assertIn("minmax", transforms)
+        self.assertIn("median_relative", transforms)
+
+    def test_the_default_transform_is_the_reciprocal(self):
+        policy = self._policy()
+        value, evidence = policy.cost_transform(1.5, [0.1, 5.0], "inverse")
+        self.assertAlmostEqual(value, 1.0 / 2.5, places=6)
+        self.assertEqual(evidence["transform"], "inverse")
+
+    def test_the_minmax_transform_is_relative_to_the_cohort(self):
+        policy = self._policy()
+        # The dearest model of the cohort has no efficiency, the cheapest
+        # has all of it, and the one in the middle has half.
+        dearest, evidence = policy.cost_transform(9.0, [1.0, 5.0, 9.0], "minmax")
+        self.assertAlmostEqual(dearest, 0.0, places=6)
+        self.assertEqual(evidence["cohort_min"], 1.0)
+        self.assertEqual(evidence["cohort_max"], 9.0)
+        middle, _evidence = policy.cost_transform(5.0, [1.0, 5.0, 9.0], "minmax")
+        self.assertAlmostEqual(middle, 0.5, places=6)
+
+    def test_the_median_relative_transform_is_relative_to_the_median(self):
+        policy = self._policy()
+        # A model that costs the median has the same efficiency as a model
+        # that costs twice the median: the scale is relative.
+        value, evidence = policy.cost_transform(1.0, [1.0, 2.0, 3.0], "median_relative")
+        self.assertAlmostEqual(value, 2.0 / 3.0, places=6)
+        self.assertEqual(evidence["cohort_median"], 2.0)
+
+    def test_a_missing_input_leaves_the_value_unknown(self):
+        policy = self._policy()
+        value, missing = policy.combine(
+            {"intelligence": 0.9, "cost_per_task": None}, policy.VALUE_WEIGHTS
+        )
+        self.assertIsNone(value)
+        self.assertEqual(missing, ["cost_per_task"])
+
+    def test_the_3d_value_combines_the_capability_with_the_intelligence(self):
+        policy = self._policy()
+        value, missing = policy.combine(
+            {"intelligence": 0.518, "three_d": 0.6, "cost_per_task": 0.9},
+            policy.VALUE_3D_WEIGHTS,
+        )
+        self.assertEqual(missing, [])
+        self.assertAlmostEqual(
+            value, 0.45 * 0.518 + 0.25 * 0.6 + 0.30 * 0.9, places=6
+        )
+
+
 class PoolLimitTests(unittest.TestCase):
     """F4: the pool's limits reach the decision and carry their basis."""
 

@@ -205,6 +205,10 @@ METRIC_HELP = {
     "ghostship_ai_model_winner_position": "The position of the winner among the providers of a tier.",
     "ghostship_ai_calculation_component": "One for each part of the calculation of a winner.",
     "ghostship_ai_calculation_weight": "The weight of a part of the calculation.",
+    "ghostship_ai_calculation_transform": (
+        "The transform of a calculated input, with the name of the transform in "
+        "force."
+    ),
     "ghostship_ai_calculation_gate": "One for each gate of the tiers.",
     "ghostship_ai_quota_duration_seconds": "The length of a quota window.",
     "ghostship_ai_quota_expected_used_ratio": (
