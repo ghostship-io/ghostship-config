@@ -426,10 +426,14 @@ provider instance, and a model failure only that model.
 A refusal that says the account has no money left is an exhausted account,
 not a broken route. The markers are "usage limit", "rate limit", "quota
 exceeded", "quota exhausted", "upgrade for higher limits", "add usage
-credits", "payment required", "usage balance exhausted" and the status
-`402`: every one of them is read as an account whose allowance is spent, so
-every route of that provider is unavailable with the reason
-`account_usage_limit` until a later run of it succeeds. The text of the
+credits", "payment required" and "usage balance exhausted", and the status
+of a refused payment in the shape a provider writes it: `HTTP 402`, `status
+code: 402` or `402 Payment Required`. A bare "402" is not a status: a count
+of processed items, a line number and a model id carry the same three digits
+without anything being wrong, and reading them as a spent account would hide
+every route of that provider. Every one of them is read as an account whose
+allowance is spent, so every route of that provider is unavailable with the
+reason `account_usage_limit` until a later run of it succeeds. The text of the
 error is only read to pick the code; the provider's own words never reach a
 metric, a label or a log line.
 

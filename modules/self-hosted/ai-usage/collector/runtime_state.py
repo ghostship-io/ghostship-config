@@ -77,7 +77,14 @@ _USAGE_LIMIT_MARKERS = (
     "add usage credits",
     "payment required",
     "usage balance exhausted",
-    "402",
+)
+
+# The status of a refused payment, in the shape a provider writes it: the
+# status code with its name, or the code with the reason it carries. A bare
+# "402" is not a marker: a count of processed items, a line number, or a
+# model id may carry the same three digits without anything being wrong.
+_PAYMENT_STATUS = re.compile(
+    r"\b(?:HTTP|status|code)\D{0,12}402\b|\b402\s+Payment Required\b", re.I
 )
 
 # The markers of a runtime that could not start.
@@ -191,6 +198,8 @@ def _classify(text: str) -> str:
     """
     lowered = str(text or "").lower()
     if any(marker in lowered for marker in _USAGE_LIMIT_MARKERS):
+        return REASON_ACCOUNT_USAGE_LIMIT
+    if _PAYMENT_STATUS.search(str(text or "")):
         return REASON_ACCOUNT_USAGE_LIMIT
     if any(marker in lowered for marker in _STARTUP_MARKERS):
         return REASON_ROUTE_STARTUP_FAILED
