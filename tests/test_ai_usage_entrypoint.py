@@ -52,6 +52,20 @@ def fake_aa_cache():
     }
 
 
+def loaded_aa_3d():
+    """The strict document, through the real loader."""
+    import json
+    import tempfile
+
+    handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+    handle.write(json.dumps(fake_aa_3d()))
+    handle.close()
+    try:
+        return main.aa_3d.load_cache(handle.name, NOW)
+    finally:
+        Path(handle.name).unlink()
+
+
 def fake_catalog():
     return catalog_module.Catalog(
         {
@@ -72,19 +86,28 @@ def fake_catalog():
 
 def fake_aa_3d():
     return {
-        "status": "ok",
+        "schema": "ghostship.aa3d.evidence",
+        "schema_version": 1,
         "benchmark": "AA-3D",
-        "fetched_at_epoch": NOW,
+        "benchmark_version": "1.0",
+        "source": "public_web",
+        "source_url": "https://artificialanalysis.ai/evaluations/aa-3d",
+        "observed_at": "2027-01-15T00:00:00Z",
+        "completeness": {
+            "complete": True,
+            "records": 1,
+            "scope": "entire_displayed_leaderboard",
+        },
         "records": [
             {
-                "id": "aa3d-1",
-                "slug": "gpt-6-1-sol",
                 "model": "GPT-6.1 Sol (Max)",
-                "elo": 1118.0,
-                "elo_interval": {"low": 1085.0, "high": 1150.0},
+                "elo": 1118,
+                "rank": 1,
+                "rank_range": "1",
+                "ci95_low": 1085,
+                "ci95_high": 1150,
+                "anchor": False,
                 "cost_per_task": None,
-                "source": "https://artificialanalysis.ai/evaluations/aa-3d",
-                "observed_at": "2026-10-22T00:00:00Z",
             }
         ],
     }
@@ -170,7 +193,7 @@ class EntrypointSmokeTests(unittest.TestCase):
             results, extra, context = main.collect(
                 NOW,
                 aa_cache=fake_aa_cache(),
-                aa_3d_cache=fake_aa3d_cache(),
+                aa_3d_cache=loaded_aa_3d(),
             )
         finally:
             main.catalog_module.Catalog.load = original_load
@@ -184,7 +207,7 @@ class EntrypointSmokeTests(unittest.TestCase):
             context,
             NOW,
             aa_cache=fake_aa_cache(),
-            aa_3d_cache=fake_aa3d_cache(),
+            aa_3d_cache=loaded_aa_3d(),
             catalog=fake_catalog(),
         )
         row = [candidate for candidate in snapshot["candidates"] if candidate["model"] == "gpt-6.1-sol"][0]

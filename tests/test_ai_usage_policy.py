@@ -422,160 +422,186 @@ class AlignmentTests(unittest.TestCase):
 
 
 class AA3DContractTests(unittest.TestCase):
-    """The AA-3D reader and the cost-aware 3D value."""
-
-    def _document(self, records, normalization=None):
-        document = {
-            "status": "ok",
-            "source": "artificialanalysis",
-            "benchmark": "aa-3d",
-            "conditions": "interactive Three.js scenes; not CAD",
-            "fetched_at_epoch": NOW,
-            "records": records,
-        }
-        if normalization is not None:
-            document["normalization"] = normalization
-        return document
+    """The strict AA-3D reader: the whole board or nothing."""
 
     def _record(self, **overrides):
         base = {
-            "id": "aa3d-1",
-            "slug": "gpt-6-1-sol",
-            "model": "gpt-6.1-sol",
-            "elo": 1200.0,
-            "elo_interval": {"low": 1180.0, "high": 1220.0},
+            "model": "GPT-6.1 Sol (Max)",
+            "elo": 1200,
+            "rank": 1,
+            "rank_range": "1",
+            "ci95_low": 1180,
+            "ci95_high": 1220,
+            "anchor": False,
             "cost_per_task": 0.5,
-            "source": "https://artificialanalysis.ai/evaluations/aa-3d",
-            "observed_at": "2026-10-20T00:00:00Z",
-            "task_count": 55,
-            "conditions": {"benchmark": "aa-3d", "tasks": 55},
         }
         base.update(overrides)
         return base
 
-    def _load(self, document):
+    def _document(self, records, **overrides):
+        document = {
+            "schema": "ghostship.aa3d.evidence",
+            "schema_version": 1,
+            "benchmark": "AA-3D",
+            "benchmark_version": "1.0",
+            "source": "public_web",
+            "source_url": "https://artificialanalysis.ai/evaluations/aa-3d",
+            "observed_at": "2026-10-22T01:29:46+00:00",
+            "completeness": {
+                "complete": True,
+                "records": len(records),
+                "scope": "entire_displayed_leaderboard",
+            },
+            "records": records,
+        }
+        document.update(overrides)
+        return document
+
+    def _now(self):
+        from datetime import datetime
+
+        return datetime.fromisoformat("2026-10-22T02:00:00+00:00").timestamp()
+
+    def _load(self, document, now=None):
         import tempfile, json as json_module
 
         handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
         handle.write(json_module.dumps(document))
         handle.close()
         try:
-            return aa_3d.load_cache(handle.name, NOW)
+            return aa_3d.load_cache(handle.name, self._now() if now is None else now)
         finally:
             Path(handle.name).unlink()
 
-    def test_the_reader_keeps_the_measurement_and_refuses_bad_values(self):
-        cache = self._load(
-            {
-                "status": "ok",
-                "source": "artificialanalysis",
-                "fetched_at_epoch": NOW,
-                "records": [
-                    self._record(),
-                    self._record(id="bad-negative", slug="x", model="x", elo=-1.0),
-                    self._record(id="bad-inf", slug="y", model="y", elo=float("inf")),
-                ],
-            }
-        )
+    def _now(self):
+        from datetime import datetime
+
+        return datetime.fromisoformat("2026-10-22T02:00:00+00:00").timestamp()
+
+    def test_the_valid_board_is_accepted_with_one_normalization(self):
+        cache = self._load(self._document([self._record()]), now=self._now())
         self.assertEqual(cache["status"], "ok")
-        self.assertEqual(len(cache["records"]), 1)
-        record = cache["records"][0]
-        self.assertEqual(record["elo"], 1200.0)
-        self.assertEqual(record["elo_interval"], {"low": 1180.0, "high": 1220.0})
-        self.assertEqual(record["cost_per_task"], 0.5)
-        self.assertEqual(record["task_count"], 55)
-        self.assertTrue(record["source"].startswith("https://"))
+        self.assertEqual(cache["source_url"], "https://artificialanalysis.ai/evaluations/aa-3d")
+        self.assertEqual(cache["benchmark"], "AA-3D")
+        self.assertEqual(cache["benchmark_version"], "1.0")
+        self.assertEqual(cache["bounds"], {"min_elo": 1200.0, "max_elo": 1200.0, "count": 1})
+        self.assertEqual(cache["records"][0]["normalized"], 1.0)
+        self.assertIsInstance(cache["normalization"], dict)
+        self.assertEqual(cache["normalization"]["kind"], "relative-minmax")
+        self.assertTrue(cache["fingerprint"])
+        # The record's own source and arbitrary conditions are not forwarded.
+        self.assertEqual(cache["records"][0]["source"], aa_3d.SOURCE_URL)
+        self.assertEqual(set(cache["records"][0]["conditions"]), {"benchmark", "scope"})
 
-    def test_a_stale_snapshot_is_not_measured(self):
-        cache = self._load(
-            {
-                "status": "ok",
-                "fetched_at_epoch": NOW - 60 * DAY,
-                "records": [self._record()],
-            }
+    def test_a_truncated_or_incomplete_snapshot_is_rejected(self):
+        two = [self._record(model="A"), self._record(model="B", rank=2)]
+        truncated = self._document(
+            two,
+            completeness={"complete": False, "records": 22, "scope": "entire_displayed_leaderboard"},
         )
-        self.assertEqual(cache["status"], "stale")
-        self.assertEqual(aa_3d.lookup(cache, "codex", "gpt-6.1-sol")["state"], "stale")
-
-    def test_the_elo_is_normalized_only_by_the_published_transform(self):
-        self.assertIsNone(aa_3d.normalize(1200.0, None))
-        normalization = {"kind": "min-max", "floor": 1000.0, "ceiling": 1400.0}
-        self.assertAlmostEqual(aa_3d.normalize(1200.0, normalization), 0.5)
-        self.assertIsNone(aa_3d.normalize(1200.0, {"kind": "min-max", "floor": 1400.0, "ceiling": 1400.0}))
-
-    def test_the_3d_value_uses_the_aa_3d_cost_not_the_language_cost(self):
-        models = visual_model("codex", "gpt-6.1-sol")
-        # The language record says 0.10; the AA-3D record says 0.5.
-        data = build(
-            models,
-            [record("gpt-6-1-sol", 51.8, 0.10)],
-            aa_3d=self._load(
-                self._document(
-                    [self._record()],
-                    normalization={"kind": "min-max", "floor": 1000.0, "ceiling": 1400.0},
-                )
-            ),
+        self.assertEqual(self._load(truncated)["status"], "invalid")
+        mismatch = self._document(
+            two,
+            completeness={"complete": True, "records": 22, "scope": "entire_displayed_leaderboard"},
         )
-        row = data["candidates"][0]
-        value_3d = row["value_3d"]
-        # The board has one record, so its bounds are equal and the relative
-        # performance is 1.0 (the cost breaks the tie).
-        self.assertAlmostEqual(value_3d["value"], round(0.8 * 1.0 + 0.2 * (1 / 1.5), 6), places=6)
-        self.assertEqual(value_3d["raw"]["cost_per_task"], 0.5)
-        self.assertEqual(value_3d["raw"]["elo"], 1200.0)
-        self.assertEqual(value_3d["raw"]["elo_interval"]["low"], 1180.0)
-        self.assertEqual(value_3d["raw"]["normalization_state"], "relative-minmax")
-        # The language value stays separate and uses the language cost.
-        self.assertEqual(row["aa"]["cost_per_task"], 0.10)
+        self.assertEqual(self._load(mismatch)["status"], "invalid")
+        wrong_scope = self._document(
+            two,
+            completeness={"complete": True, "records": 2, "scope": "top_10"},
+        )
+        self.assertEqual(self._load(wrong_scope)["status"], "invalid")
 
-    def test_the_board_policy_normalizes_the_elo_and_publishes_the_bounds(self):
-        models = visual_model("codex", "gpt-6.1-sol")
+    def test_a_future_or_missing_observation_is_rejected(self):
+        from datetime import datetime, timezone
+
+        future = datetime.fromtimestamp(self._now() + 86400, tz=timezone.utc).isoformat()
+        self.assertEqual(
+            self._load(self._document([self._record()], observed_at=future), now=self._now())["status"],
+            "invalid",
+        )
+        self.assertEqual(
+            self._load(self._document([self._record()], observed_at=None))["status"], "invalid"
+        )
+
+    def test_a_foreign_source_or_schema_is_rejected(self):
+        self.assertEqual(
+            self._load(
+                self._document([self._record()], source_url="https://example.com/leaderboard")
+            )["status"],
+            "invalid",
+        )
+        self.assertEqual(
+            self._load(self._document([self._record()], benchmark="other"))["status"], "invalid"
+        )
+        self.assertEqual(
+            self._load(self._document([self._record()], benchmark_version=""))["status"], "invalid"
+        )
+        self.assertEqual(
+            self._load(self._document([self._record()], schema="other"))["status"], "invalid"
+        )
+
+    def test_a_bad_record_rejects_the_whole_snapshot(self):
+        for bad in (
+            self._record(elo=-1),
+            self._record(elo=float("inf")),
+            self._record(ci95_low=1180, ci95_high=None),
+            self._record(ci95_low=1220, ci95_high=1180),
+            self._record(cost_per_task=-0.5),
+            self._record(model=""),
+        ):
+            self.assertEqual(
+                self._load(self._document([self._record(model="A"), bad]))["status"],
+                "invalid",
+                bad,
+            )
+        duplicate = [self._record(model="A"), self._record(model="a", rank=2)]
+        self.assertEqual(self._load(self._document(duplicate))["status"], "invalid")
+
+    def test_an_oversized_file_is_rejected_without_slicing(self):
+        import tempfile
+
+        handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        handle.write(" " * (aa_3d.MAX_BYTES + 10))
+        handle.close()
+        try:
+            self.assertIsNone(aa_3d.load_cache(handle.name, NOW))
+        finally:
+            Path(handle.name).unlink()
+
+    def test_the_policy_is_the_relative_minmax_over_the_board(self):
         cache = self._load(
             self._document(
                 [
-                    self._record(id="a", slug="low", model="Low Model", elo=1000.0, cost_per_task=0.5),
-                    self._record(id="b", slug="high", model="High Model", elo=1200.0, cost_per_task=0.5),
+                    self._record(model="Low", elo=1000, rank=2),
+                    self._record(model="High", elo=1200, rank=1),
                 ]
             )
         )
-        self.assertEqual(cache["status"], "ok")
         self.assertEqual(cache["bounds"], {"min_elo": 1000.0, "max_elo": 1200.0, "count": 2})
-        self.assertTrue(cache["fingerprint"])
         self.assertEqual(cache["records"][0]["normalized"], 0.0)
         self.assertEqual(cache["records"][1]["normalized"], 1.0)
         self.assertEqual(cache["records"][0]["elo_interval"]["low"], 1180.0)
-        data = build(
-            models,
-            [record("gpt-6-1-sol", 51.8, 0.10)],
-            aa_3d=self._load(self._document([self._record()])),
-        )
-        row = data["candidates"][0]
-        self.assertEqual(row["value_3d"]["raw"]["normalization_state"], "relative-minmax")
-        self.assertEqual(row["value_3d"]["raw"]["normalized"], 1.0)
-        self.assertIsNotNone(row["value_3d"]["value"])
+        self.assertEqual(cache["records"][0]["source"], aa_3d.SOURCE_URL)
 
-    def test_all_equal_elo_means_one_and_the_cost_breaks_the_tie(self):
+    def test_no_record_normalized_or_linear_transform_is_accepted(self):
+        # The old free-form fields are ignored: the board policy decides.
         cache = self._load(
             self._document(
-                [
-                    self._record(id="a", slug="x", model="Model X", elo=1100.0, cost_per_task=0.5),
-                    self._record(id="b", slug="y", model="Model Y", elo=1100.0, cost_per_task=0.5),
-                ]
+                [self._record(model="A", elo=1000, normalized=0.2)],
+                normalization={"kind": "linear", "offset": 10, "scale": 100},
             )
         )
-        self.assertEqual(cache["bounds"], {"min_elo": 1100.0, "max_elo": 1100.0, "count": 2})
-        self.assertEqual([record["normalized"] for record in cache["records"]], [1.0, 1.0])
+        self.assertEqual(cache["status"], "ok")
+        self.assertEqual(cache["normalization"]["kind"], "relative-minmax")
+        self.assertEqual(cache["records"][0]["normalized"], 1.0)
 
-    def test_without_the_3d_cost_the_language_cost_is_an_explicit_proxy(self):
+    def test_the_3d_value_is_cost_aware_with_the_explicit_proxy(self):
         models = visual_model("codex", "gpt-6.1-sol")
         data = build(
             models,
             [record("gpt-6-1-sol", 51.8, 0.10)],
             aa_3d=self._load(
-                self._document(
-                    [self._record(cost_per_task=None)],
-                    normalization={"kind": "min-max", "floor": 1000.0, "ceiling": 1400.0},
-                )
+                self._document([self._record(model="GPT-6.1 Sol (Max)", cost_per_task=None)])
             ),
         )
         row = data["candidates"][0]
@@ -583,13 +609,13 @@ class AA3DContractTests(unittest.TestCase):
         self.assertEqual(value_3d["cost_source"], "artificialanalysis_intelligence")
         self.assertTrue(value_3d["proxy"])
         self.assertIn("not a measured 3D cost", value_3d["cost_basis"])
-        # The approved proxy is used explicitly, with the language cost.
-        self.assertAlmostEqual(
-            value_3d["value"], round(0.8 * 1.0 + 0.2 * (1 / 1.1), 6), places=6
-        )
-        self.assertEqual(value_3d["raw"]["cost_per_task"], 0.10)
-        self.assertIsNone(value_3d["raw"]["aa3d_cost_per_task"])
+        self.assertAlmostEqual(value_3d["value"], round(0.8 * 1.0 + 0.2 * (1 / 1.1), 6), places=6)
         self.assertEqual(row["three_d"]["elo"], 1200.0)
+        normalization = row["three_d"]["normalization"]
+        self.assertEqual(normalization["kind"], "relative-minmax")
+        self.assertEqual(normalization["bounds"], {"min_elo": 1200.0, "max_elo": 1200.0, "count": 1})
+        self.assertTrue(normalization["fingerprint"])
+        self.assertEqual(row["three_d"]["normalization_state"], "relative-minmax")
 
     def test_missing_both_costs_leaves_no_full_value(self):
         models = visual_model("codex", "gpt-6.1-sol")
@@ -597,10 +623,7 @@ class AA3DContractTests(unittest.TestCase):
             models,
             [record("gpt-6-1-sol", 51.8, None)],
             aa_3d=self._load(
-                self._document(
-                    [self._record(cost_per_task=None)],
-                    normalization={"kind": "min-max", "floor": 1000.0, "ceiling": 1400.0},
-                )
+                self._document([self._record(model="GPT-6.1 Sol (Max)", cost_per_task=None)])
             ),
         )
         row = data["candidates"][0]
@@ -608,19 +631,6 @@ class AA3DContractTests(unittest.TestCase):
         self.assertEqual(row["value_3d"]["missing"], ["cost_per_task"])
         self.assertIsNone(row["value_3d"]["cost_source"])
         self.assertEqual(row["three_d"]["elo"], 1200.0)
-
-    def test_an_explicit_source_normalized_value_is_used(self):
-        models = visual_model("codex", "gpt-6.1-sol")
-        data = build(
-            models,
-            [record("gpt-6-1-sol", 51.8, 0.10)],
-            aa_3d=self._load(
-                self._document([self._record(normalized=0.75)])
-            ),
-        )
-        row = data["candidates"][0]
-        self.assertEqual(row["value_3d"]["raw"]["normalization_state"], "source")
-        self.assertAlmostEqual(row["value_3d"]["value"], round(0.8 * 0.75 + 0.2 * (1 / 1.5), 6), places=6)
 
 
 class RealAA3DSnapshotTests(unittest.TestCase):
