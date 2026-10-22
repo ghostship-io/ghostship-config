@@ -1456,6 +1456,198 @@ class DecisionInputTests(unittest.TestCase):
         self.assertTrue(waits)
 
 
+class ReserveTests(unittest.TestCase):
+    """The 3D reserve: a qualified model is kept for CAD work."""
+
+    FIXTURES = Path(__file__).resolve().parent / "fixtures" / "ai-usage"
+    # The moment the AA-3D fixture was read. The board is only evidence
+    # while it is fresh, so the snapshot is built at that moment.
+    NOW = 1792640463.0
+
+    def _fixture(self, name):
+        return json.loads((self.FIXTURES / name).read_text(encoding="utf-8"))
+
+    def _build(self, *, used_ratio, providers=("codex",)):
+        ranking_module = _load("ai_usage_design_ranking_reserve", "ranking")
+        aa_3d = _load("ai_usage_design_aa3d_reserve", "aa_3d")
+        records = self._fixture("aa-public-models.json")["records"]
+        cache = {
+            "status": "ok",
+            "index_version": "4.3",
+            "fetched_at_epoch": self.NOW,
+            "records": records,
+        }
+        board = aa_3d.load_cache(
+            str(self.FIXTURES / "aa-3d-public.json"), self.NOW
+        )
+        self.assertIsNotNone(board)
+        models = []
+        catalog_models = {}
+        for record in records:
+            model = record["slug"]
+            models.append(ranking_module.ModelRecord("codex", model))
+            catalog_models[model] = {
+                "id": model,
+                "name": model,
+                "family": model,
+                "release_date": "2026-01-20",
+                "limit": {"context": 200000},
+                # The 3D tier needs a proven image input.
+                "modalities": {"input": ["text", "image"]},
+            }
+        catalog = catalog_module.Catalog({"openai": {"models": catalog_models}})
+        windows = {
+            provider: [
+                ranking_module.QuotaWindow(
+                    kind="weekly",
+                    used_ratio=used_ratio,
+                    reset_epoch=self.NOW + 3 * DAY,
+                    duration_seconds=7 * DAY,
+                    observed_at=self.NOW,
+                )
+            ]
+            for provider in providers
+        }
+        ranked = ranking_module.rank_models(
+            models=models,
+            catalog=catalog,
+            quota_windows=windows,
+            free_models=set(),
+            usage_tokens={},
+            aa_cache=cache,
+            native_models={
+                ("codex", model): {
+                    "providerInstance": "codex",
+                    "modelId": model,
+                    "options": [],
+                }
+                for model in catalog_models
+            },
+            now=self.NOW,
+        )
+        return snapshot.build_snapshot(
+            now=self.NOW,
+            sources=[
+                {"id": "t3", "status": "ok", "reason": "ok", "observed_at_epoch": self.NOW}
+            ],
+            ranked=ranked,
+            aa_cache=cache,
+            aa_3d_cache=board,
+            catalog=catalog,
+            measured_windows=[
+                {
+                    "provider": provider,
+                    "account": "default",
+                    "model": "*",
+                    "kind": "weekly",
+                    "quotaId": "primary",
+                    "usedRatio": used_ratio,
+                    "resetEpoch": self.NOW + 3 * DAY,
+                    "durationSeconds": 7 * DAY,
+                    "source": "t3",
+                    "observedAtEpoch": self.NOW,
+                }
+                for provider in providers
+            ],
+            native_models={
+                ("codex", model): {
+                    "providerInstance": "codex",
+                    "modelId": model,
+                    "options": [],
+                }
+                for model in catalog_models
+            },
+            policy={
+                "frontierPrimeModels": (),
+                "excludedModels": (),
+                "allowedGptModels": (),
+                "backgroundProviderInstances": ("codex",),
+            },
+        )
+
+    def _bulk_order(self, data):
+        members = (data.get("tier_members") or {}).get("bulk") or []
+        return [key.split(":", 1)[1] for key in members]
+
+    def test_the_bulk_order_follows_the_published_value(self):
+        data = self._build(used_ratio=0.6)
+        order = self._bulk_order(data)
+        self.assertTrue(order)
+        # The measured value decides inside the tier, and the models that
+        # are reserved for the 3D tier come after the others.
+        self.assertLess(
+            order.index("deepseek-v4-1-flash-1017"), order.index("mimo-v2-6-pro")
+        )
+        self.assertLess(
+            order.index("minimax-m3-1-flash"), order.index("mimo-v2-6-pro")
+        )
+
+    def test_a_reserved_model_is_withheld_at_low_capacity(self):
+        data = self._build(used_ratio=0.6)
+        row = next(
+            entry
+            for entry in data["candidates"]
+            if entry["model"] == "mimo-v2-6-pro"
+        )
+        reserve = row["reserve"]
+        self.assertTrue(reserve["3d"])
+        self.assertTrue(reserve["withheld"])
+        self.assertAlmostEqual(reserve["capacity"], 0.4, places=6)
+        # The reserved model is not a bulk winner while the capacity is low.
+        winners = (data.get("tier_winners") or {}).get("bulk") or []
+        self.assertNotIn(
+            "mimo-v2-6-pro", [winner["model"] for winner in winners]
+        )
+
+    def test_a_reserved_model_wins_the_3d_tier(self):
+        data = self._build(used_ratio=0.6)
+        winners = (data.get("tier_winners") or {}).get("3d") or []
+        self.assertTrue(winners)
+        self.assertEqual(winners[0]["model"], "mimo-v2-6-pro")
+
+    def test_the_3d_order_follows_the_published_value(self):
+        data = self._build(used_ratio=0.6)
+        members = (data.get("tier_members") or {}).get("3d") or []
+        order = [key.split(":", 1)[1] for key in members]
+        for before, after in (
+            ("mimo-v2-6-pro", "claude-haiku-5-5"),
+            ("claude-haiku-5-5", "glm-5-3-flash"),
+            ("glm-5-3-flash", "kimi-k3"),
+            ("kimi-k3", "grok-4-7"),
+        ):
+            self.assertLess(order.index(before), order.index(after))
+
+    def test_a_reserved_model_ranks_last_with_enough_capacity(self):
+        data = self._build(used_ratio=0.2)
+        row = next(
+            entry
+            for entry in data["candidates"]
+            if entry["model"] == "mimo-v2-6-pro"
+        )
+        self.assertTrue(row["reserve"]["3d"])
+        self.assertFalse(row["reserve"]["withheld"])
+        # The reserve changes the order and the eligibility, never the value.
+        components = row["value"]["components"]
+        expected = (
+            0.70 * components["intelligence"]["value"]
+            + 0.30 * components["cost_per_task"]["value"]
+        )
+        self.assertAlmostEqual(row["value"]["value"], round(expected, 6), places=6)
+
+    def test_the_reserve_is_published_as_a_metric(self):
+        main = _load("ai_usage_design_main_reserve", "main")
+        data = self._build(used_ratio=0.6)
+        samples = main.decision_input_samples(data)
+        reserved = [
+            labels
+            for name, labels, _value in samples
+            if name == "ghostship_ai_model_reserved"
+        ]
+        self.assertTrue(reserved)
+        self.assertEqual(reserved[0]["reserve"], "3d")
+        self.assertIn(reserved[0]["tier"], ("bulk", "free"))
+
+
 class PoolLimitTests(unittest.TestCase):
     """F4: the pool's limits reach the decision and carry their basis."""
 

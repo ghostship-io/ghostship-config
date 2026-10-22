@@ -265,6 +265,11 @@ METRIC_HELP = {
         "The value of a model for 3D work: the intelligence, the AA-3D "
         "capability and the cost, with the weights of the policy."
     ),
+    "ghostship_ai_model_reserved": (
+        "One for a model that is reserved for the 3D tier: it ranks after "
+        "every other winner of the tier, and it is not used for the work of "
+        "the tier while its provider's capacity is low."
+    ),
     "ghostship_ai_calculation_component": "One for each part of the calculation of a winner.",
     "ghostship_ai_calculation_weight": "The weight of a part of the calculation.",
     "ghostship_ai_calculation_transform": (
@@ -1363,6 +1368,23 @@ def decision_input_samples(
                     float(value_3d),
                 )
             )
+        reserve = row.get("reserve") or {}
+        if reserve.get("3d"):
+            for tier in reserve.get("tiers") or ():
+                samples.append(
+                    (
+                        "ghostship_ai_model_reserved",
+                        {
+                            **labels,
+                            "tier": str(tier),
+                            "reserve": "3d",
+                            "withheld": (
+                                "withheld" if reserve.get("withheld") else "ordered_last"
+                            ),
+                        },
+                        1.0,
+                    )
+                )
     frontier = (snapshot.get("coverage") or {}).get("frontier") or {}
     for member in frontier.get("eligible") or ():
         if not isinstance(member, Mapping):

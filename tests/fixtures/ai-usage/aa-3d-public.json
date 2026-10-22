@@ -1,0 +1,279 @@
+{
+ "benchmark": "AA-3D",
+ "benchmark_version": "public-pages-2026-10-22",
+ "completeness": {
+  "complete": true,
+  "records": 22,
+  "scope": "entire_displayed_leaderboard"
+ },
+ "observed_at": "2026-10-22T03:41:03Z",
+ "records": [
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 1196.5,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Claude Sonnet 5.5 (Max, Default Fallback)",
+   "rank": 1,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 1191.0,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Claude Opus 5.5 (Max, Default Fallback)",
+   "rank": 2,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 1165.6,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "GPT-6 Astra (Max)",
+   "rank": 3,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 1154.0,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Gemini 4 Argon (High)",
+   "rank": 4,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 1132.8,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Claude Fable 5.1 (Max, Default Fallback)",
+   "rank": 5,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 1123.4,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "GPT-6 Sol (Max)",
+   "rank": 6,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 1117.6,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "GPT-6.1 Sol (Max)",
+   "rank": 7,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 1037.1,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Muse Spark 1.3 (Max)",
+   "rank": 8,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 1000.0,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "GPT-6 Luna (Max)",
+   "rank": 9,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 997.1,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Claude Haiku 5.5 (Max)",
+   "rank": 10,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 994.7,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Grok 4.7 (Xhigh)",
+   "rank": 11,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 981.0,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Kimi K3 (Max)",
+   "rank": 12,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 980.1,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "MiMo-V2.6-Pro",
+   "rank": 13,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 969.4,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Gemini 3.8 Flash (High)",
+   "rank": 14,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 948.4,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Qwen3.8 Max (0902)",
+   "rank": 15,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 935.4,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "GLM-5.3-Flash",
+   "rank": 16,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 869.7,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Mistral Large 4 Preview",
+   "rank": 17,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 852.1,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Step 5 Preview",
+   "rank": 18,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 787.3,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "GLM-5.3 (Max)",
+   "rank": 19,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 740.2,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "MiniMax-M3",
+   "rank": 20,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 580.6,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Inkling (Xhigh)",
+   "rank": 21,
+   "rank_range": ""
+  },
+  {
+   "anchor": false,
+   "cost_per_task": null,
+   "elo": 568.9,
+   "elo_interval": {
+    "high": null,
+    "low": null
+   },
+   "model": "Nemotron 3 Ultra 550B A55B (Reasoning)",
+   "rank": 22,
+   "rank_range": ""
+  }
+ ],
+ "schema": "ghostship.aa3d.evidence",
+ "schema_version": 1,
+ "source_url": "https://artificialanalysis.ai/evaluations/aa-3d"
+}
