@@ -1,4 +1,4 @@
-"""The routing switch of the AI usage snapshot.
+"""The routing switch of the AI usage snapshot, and the billing of a route.
 
 The switch belongs to the owner. The NixOS option
 `ghostship.aiUsage.routing.enabled` reaches the collector, and the collector
@@ -6,6 +6,13 @@ publishes it: a consumer reads the switch and decides, and the switch is off
 until the owner turns it on. The switch is published in the routing snapshot,
 in every projection of that snapshot, and in the
 `ghostship_ai_routing_enabled` gauge.
+
+The billing class says how a route is paid for: a subscription the owner
+already has, a route that costs nothing by construction, a route that costs
+nothing right now because of a promotion, a route that is paid per token, or
+a route whose billing is not known. The class is derived from the access
+class the collector already keeps, so the two never disagree, and it is
+never guessed from a price.
 
 The NixOS option is evaluated with Nix where Nix is available. The
 sandboxed check has no Nix, so the module is inspected there instead. Both
@@ -33,6 +40,15 @@ import ranking as ranking_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
 
 NOW = 1_800_000_000.0
+
+# The billing classes a route may carry.
+BILLING_CLASSES = {
+    "subscription",
+    "free",
+    "promotion",
+    "pay_per_token",
+    "unknown",
+}
 
 POLICY = {
     "frontierPrimeModels": (),
@@ -242,6 +258,17 @@ def build_snapshot(
     )
 
 
+def billing_of(data, provider, model):
+    """The billing class of one candidate row."""
+    rows = [
+        row
+        for row in data.get("candidates") or []
+        if row.get("provider") == provider and row.get("model") == model
+    ]
+    assert rows, f"{provider}/{model} is not a candidate of the snapshot"
+    return (rows[0].get("access") or {}).get("billing")
+
+
 class RoutingSwitchModuleTests(unittest.TestCase):
     """The NixOS option, and the unit it reaches."""
 
@@ -414,6 +441,127 @@ class RoutingSnapshotTests(unittest.TestCase):
             self.assertIs(written["routing"]["enabled"], False)
             metrics = output.read_text(encoding="utf-8")
             self.assertIn("ghostship_ai_routing_enabled 0", metrics)
+
+
+class BillingClassTests(unittest.TestCase):
+    """How every route is paid for."""
+
+    def test_claude_is_a_subscription(self):
+        data = build_snapshot(
+            [("claude", "claude-opus-5-5")],
+            prices={("claude", "claude-opus-5-5"): {"input": 3.0, "output": 15.0}},
+        )
+        self.assertEqual(billing_of(data, "claude", "claude-opus-5-5"), "subscription")
+
+    def test_codex_is_a_subscription(self):
+        data = build_snapshot(
+            [("codex", "gpt-6.1-sol")],
+            prices={("codex", "gpt-6.1-sol"): {"input": 1.0, "output": 4.0}},
+        )
+        self.assertEqual(billing_of(data, "codex", "gpt-6.1-sol"), "subscription")
+
+    def test_antigravity_is_a_subscription(self):
+        data = build_snapshot(
+            [("antigravity", "gemini-3.8-flash")],
+            prices={
+                ("antigravity", "gemini-3.8-flash"): {"input": 0.3, "output": 1.0}
+            },
+        )
+        self.assertEqual(
+            billing_of(data, "antigravity", "gemini-3.8-flash"), "subscription"
+        )
+
+    def test_a_dedicated_free_route_is_free(self):
+        data = build_snapshot(
+            [("opencode-go", "minimax-m3.1-flash-free")],
+            free_models={("opencode-go", "minimax-m3.1-flash-free")},
+        )
+        self.assertEqual(
+            billing_of(data, "opencode-go", "minimax-m3.1-flash-free"), "free"
+        )
+
+    def test_a_promotional_route_is_a_promotion(self):
+        data = build_snapshot(
+            [("ollama", "gpt-oss-120b")],
+            promo_models={("ollama", "gpt-oss-120b")},
+        )
+        self.assertEqual(billing_of(data, "ollama", "gpt-oss-120b"), "promotion")
+
+    def test_grok_is_paid_per_token(self):
+        data = build_snapshot(
+            [("grok", "grok-4.7")],
+            prices={("grok", "grok-4.7"): {"input": 2.0, "output": 8.0}},
+        )
+        self.assertEqual(billing_of(data, "grok", "grok-4.7"), "pay_per_token")
+
+    def test_a_pool_route_is_free(self):
+        data = build_snapshot(
+            [("groq", "qwen3.8-27b")],
+            free_models={("groq", "qwen3.8-27b")},
+        )
+        self.assertEqual(billing_of(data, "groq", "qwen3.8-27b"), "free")
+
+    def test_a_route_without_a_price_is_unknown(self):
+        data = build_snapshot([("pi", "default")])
+        self.assertEqual(billing_of(data, "pi", "default"), "unknown")
+
+    def test_a_paid_route_of_an_unknown_provider_is_unknown(self):
+        # The negative case: a price is not a subscription.
+        data = build_snapshot(
+            [("newco", "x")], prices={("newco", "x"): {"input": 1.0, "output": 2.0}}
+        )
+        billing = billing_of(data, "newco", "x")
+        self.assertEqual(billing, "unknown")
+        self.assertNotEqual(billing, "subscription")
+
+    def test_every_candidate_and_winner_carries_a_billing_class(self):
+        models = [
+            ("claude", "claude-opus-5-5"),
+            ("codex", "gpt-6.1-sol"),
+            ("antigravity", "gemini-3.8-flash"),
+            ("opencode-go", "minimax-m3.1-flash-free"),
+            ("ollama", "gpt-oss-120b"),
+            ("grok", "grok-4.7"),
+            ("groq", "qwen3.8-27b"),
+            ("pi", "default"),
+            ("newco", "x"),
+        ]
+        data = build_snapshot(
+            models,
+            prices={
+                ("claude", "claude-opus-5-5"): {"input": 3.0, "output": 15.0},
+                ("codex", "gpt-6.1-sol"): {"input": 1.0, "output": 4.0},
+                ("antigravity", "gemini-3.8-flash"): {"input": 0.3, "output": 1.0},
+                ("grok", "grok-4.7"): {"input": 2.0, "output": 8.0},
+                ("newco", "x"): {"input": 1.0, "output": 2.0},
+            },
+            free_models={
+                ("opencode-go", "minimax-m3.1-flash-free"),
+                ("groq", "qwen3.8-27b"),
+            },
+            promo_models={("ollama", "gpt-oss-120b")},
+        )
+        candidates = data.get("candidates") or []
+        self.assertTrue(candidates)
+        for row in candidates:
+            billing = (row.get("access") or {}).get("billing")
+            self.assertIn(
+                billing,
+                BILLING_CLASSES,
+                f"{row.get('provider')}/{row.get('model')} has no billing class",
+            )
+        winners = data.get("tier_winners") or {}
+        seen = 0
+        for tier, entries in winners.items():
+            for winner in entries:
+                seen += 1
+                billing = (winner.get("access") or {}).get("billing")
+                self.assertIn(
+                    billing,
+                    BILLING_CLASSES,
+                    f"the winner of {tier} has no billing class",
+                )
+        self.assertTrue(seen, "the snapshot has no winner to check")
 
 
 if __name__ == "__main__":
