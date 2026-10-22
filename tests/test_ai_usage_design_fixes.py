@@ -903,6 +903,124 @@ class ObservedAvailabilityTests(unittest.TestCase):
         self.assertIsNone(row["availability"]["observed_failure"])
 
 
+class PacedAvailabilityTests(unittest.TestCase):
+    """The owner's ordering measure: Paced Availability."""
+
+    def test_the_snapshot_publishes_the_paced_availability(self):
+        policy = snapshot.CALCULATION["paced_availability"]
+        self.assertEqual(policy["name"], "Paced Availability")
+        self.assertIn("share left", policy["formula"])
+        self.assertIn("pace delta", policy["equivalence"])
+        self.assertIn("ranks first", policy["sign"])
+
+    def test_the_paced_availability_is_the_pace_delta(self):
+        # The owner's measure is the same number as the pace delta of the
+        # most constraining window.
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[{"id": "t3", "status": "ok", "reason": "ok", "observed_at_epoch": NOW}],
+            ranked=[],
+        )
+        self.assertIn("paced_availability", snapshot.CALCULATION)
+        self.assertIn("Paced Availability", snapshot.CALCULATION["provider_order"]["formula"])
+        self.assertTrue(data["calculation"]["paced_availability"])
+
+    def test_the_paced_availability_is_published_as_a_metric(self):
+        ranking_module = _load("ai_usage_design_ranking_paced2", "ranking")
+        catalog = catalog_module.Catalog(
+            {"openai": {"models": {"gpt-6.1-sol": catalog_entry("gpt-6.1-sol")}}}
+        )
+        models = [ranking_module.ModelRecord("codex", "gpt-6.1-sol")]
+        ranked = ranking_module.rank_models(
+            models=models,
+            catalog=catalog,
+            quota_windows={
+                "codex": [
+                    ranking_module.QuotaWindow(
+                        kind="weekly",
+                        used_ratio=0.5,
+                        reset_epoch=NOW + 5 * DAY,
+                        duration_seconds=7 * DAY,
+                        observed_at=NOW,
+                    )
+                ]
+            },
+            free_models=set(),
+            usage_tokens={},
+            aa_cache=aa_cache_for(models),
+            now=NOW,
+        )
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[{"id": "t3", "status": "ok", "reason": "ok", "observed_at_epoch": NOW}],
+            ranked=ranked,
+            aa_cache=aa_cache_for(models),
+        )
+        samples = snapshot.decision_samples(data)
+        names = {name for name, _labels, _value in samples}
+        self.assertIn("ghostship_ai_model_paced_availability", names)
+        self.assertIn("ghostship_ai_model_pace_delta_ratio", names)
+        # The provider metric names the binding window it measured.
+        provider_samples = snapshot.provider_capacity_samples(data)
+        bindings = {
+            labels["binding"]
+            for name, labels, _value in provider_samples
+            if name == "ghostship_ai_provider_paced_availability"
+        }
+        self.assertTrue(bindings)
+
+    def test_a_model_with_a_window_publishes_both_numbers(self):
+        ranking_module = _load("ai_usage_design_ranking_paced", "ranking")
+        catalog = catalog_module.Catalog(
+            {"openai": {"models": {"gpt-6.1-sol": catalog_entry("gpt-6.1-sol")}}}
+        )
+        models = [ranking_module.ModelRecord("codex", "gpt-6.1-sol")]
+        ranked = ranking_module.rank_models(
+            models=models,
+            catalog=catalog,
+            quota_windows={
+                "codex": [
+                    ranking_module.QuotaWindow(
+                        kind="weekly",
+                        used_ratio=0.5,
+                        reset_epoch=NOW + 5 * DAY,
+                        duration_seconds=7 * DAY,
+                        observed_at=NOW,
+                    )
+                ]
+            },
+            free_models=set(),
+            usage_tokens={},
+            aa_cache=aa_cache_for(models),
+            now=NOW,
+        )
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[{"id": "t3", "status": "ok", "reason": "ok", "observed_at_epoch": NOW}],
+            ranked=ranked,
+            aa_cache=aa_cache_for(models),
+        )
+        row = data["candidates"][0]
+        capacity = row["capacity"]
+        self.assertIsNotNone(capacity["paced_availability"])
+        self.assertAlmostEqual(
+            capacity["paced_availability"], capacity["pace_delta"], places=6
+        )
+        self.assertEqual(capacity["paced_availability_window"], "weekly:primary")
+        samples = snapshot.decision_samples(data)
+        paced = {
+            (labels["provider"], labels["model"]): value
+            for name, labels, value in samples
+            if name == "ghostship_ai_model_paced_availability"
+        }
+        delta = {
+            (labels["provider"], labels["model"]): value
+            for name, labels, value in samples
+            if name == "ghostship_ai_model_pace_delta_ratio"
+        }
+        self.assertEqual(paced, delta)
+
+
 class PoolLimitTests(unittest.TestCase):
     """F4: the pool's limits reach the decision and carry their basis."""
 
