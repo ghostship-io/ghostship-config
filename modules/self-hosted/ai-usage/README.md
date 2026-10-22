@@ -107,16 +107,17 @@ visible; a row with no published interval keeps the raw Elo and no interval.
 A feed-level `normalization` (min-max or linear) and an explicit `normalized`
 value are also accepted for other sources.
 
-The 3D value is cost-aware with the same published 80/20 policy: `0.80 *
-normalized Elo + 0.20 * 1 / (1 + cost per task)`. The cost is the AA-3D cost
-per task when the feed publishes it (`cost_source: aa3d`); when it does not,
-the owner explicitly approved the normal Artificial Analysis cost per task of
-the same model as a proxy, published as
-`cost_source: artificialanalysis_intelligence` with `proxy: true` and the
-statement that it is not a measured 3D cost. The AA-3D page shows a cost
-graph without enumerated values, so nothing is read from it or extrapolated.
-Missing both costs leaves the combined value unknown. The tier is still gated
-by proven image input and excludes Astra and Fable from selection.
+The 3D value is cost-aware and carries the capability beside the
+intelligence: `0.45 * intelligence + 0.25 * normalized Elo + 0.30 * 1 / (1 +
+cost per task)`. The cost is the AA-3D cost per task when the feed publishes
+it (`cost_source: aa3d`); when it does not, the owner explicitly approved
+the normal Artificial Analysis cost per task of the same model as a proxy,
+published as `cost_source: artificialanalysis_intelligence` with
+`proxy: true` and the statement that it is not a measured 3D cost. The AA-3D
+page shows a cost graph without enumerated values, so nothing is read from it
+or extrapolated. A missing input leaves the combined value unknown. The tier
+is still gated by proven image input and excludes Astra and Fable from
+selection.
 
 The reader accepts only the snapshot file (`--aa-3d-cache`); no HTTP client,
 poller, or credential. The whole board is accepted or refused: ranks must be
@@ -135,8 +136,8 @@ reported.
 
 The AA record is selected independently of the native runtime setting.
 `aa_bind.resolve(..., mode="reference")` ignores the native options: among the
-exact records of one model it takes the best measured `0.80 intelligence +
-0.20 cost per task` value, with both inputs required and no Max preference or
+exact records of one model it takes the best measured `0.70 intelligence +
+0.30 cost per task` value, with both inputs required and no Max preference or
 guess. The chosen condition is published as the reference, every other
 measured condition is kept in `alternatives`, and two records of the same
 condition are an ambiguity that is refused. Changing only the native current
@@ -197,6 +198,12 @@ applied window count, whether a model window was used, whether the free route
 was observed operational (`observed_free_route`), and `exemption` (false
 unless a reported scope separates it). A spent account window therefore
 reaches the free route and shows zero, and the route is not a winner.
+
+The account of a model is the provider that serves it. A model id prefix is
+a name and never an account: a free pool model called `gpt-oss-120b` is not
+charged to the Codex account, and a pool `gemini` is not charged to
+Antigravity. An exhausted paid allowance therefore never removes a healthy
+pool route or the OpenCode route from a tier.
 
 ### Canonical entitlement display
 
@@ -378,11 +385,12 @@ always produce the same ranks.
 
 The four tiers, in the order the dashboard reads them:
 
-* `frontier` - the best-value models, admitted automatically when a new model
-  earns its place by quality, freshness and size.
-* `bulk` - every other good, recent model.
-* `free` - every model that can be used at no cost right now, including the
-  promotional free models of paid providers.
+* `frontier` - the owner's workhorses, and nothing else.
+* `bulk` - every other model with a measured value.
+* `free` - the dedicated free routes: the free inference pool's own
+  integrations and the routes a provider lists at no cost. A promotional
+  zero-price route of a paid account is not one of them; it competes in
+  bulk.
 * `3d` - the models worth using for 3D printing work. The 3D scores come from
   another component; the ranking never invents them.
 
@@ -391,17 +399,22 @@ How a model enters a tier:
 * A model is in the inventory only if T3 Code offers it or the free pool
   serves it. A model that the free model list or the 3D scores mention but
   the inventory does not is reported as unavailable and is never ranked.
-* `frontier` needs a quality of at least 95, a lineage prior of at least 97, a
-  release within 180 days, and no size marker (`lite`, `nano`, `mini`,
-  `flash`): a smaller sibling is never a frontier model. A promotional free
-  model is never a frontier model either; it belongs to the free and bulk
-  tiers. Only the newest model of a lineage may hold the frontier, so a new
-  release takes over from its predecessor on its own.
-* `bulk` needs a quality of at least 60. The free inference pool is not part
-  of the bulk tier: the pool belongs to the free tier.
-* `free` needs the model to be in the free model list.
+* Every tier needs a measured value: the intelligence index and the cost per
+  task, both required. A model the feed does not measure has no value and
+  holds no tier, whatever it is called and whatever its listing costs.
+* `frontier` takes the models the owner's policy names, and only those. A
+  promotional free model is never a frontier model either; it belongs to the
+  free and bulk tiers.
+* `bulk` holds every other model with a measured value. The free inference
+  pool is not part of the bulk tier: the pool belongs to the free tier.
+* `free` needs the model to be a dedicated free route. A pool route needs a
+  current admission for a workload before it may hold the tier; a native
+  free route is a provider-native thread and needs none.
 * `3d` needs an eligible 3D score above zero, and the tier keeps the twenty
-  best of them.
+  best of them. A model that qualifies for this tier is reserved for CAD
+  work: it ranks last in the tiers it is reserved away from, and it is
+  withheld from that work while its provider has less than half of its
+  capacity left.
 
 How quality is scored: the quality of a model is 0 to 100 and starts from the
 prior of its lineage, matched on the catalog family first and on the model id
@@ -415,29 +428,28 @@ How capacity and expiry drive the order: the window that matters is the one
 that frees up soonest while it still has capacity, because that is the
 compute worth using right now. The remaining share of that window is the
 model's capacity, and the seconds to its reset are the model's expiry. The
-capacity bonus is the remaining share weighted by an urgency that halves every
-six hours towards the reset, so an account that frees up soon is worth more
-than one that stays used up for days. The frontier score is quality times one
-plus twice the capacity bonus, the free score quality times one plus half the
-bonus, and the 3D score the 3D quality and usage mix on its own: the 3D tier
-is about 3D work, not about quota timing.
+capacity and the pace are reported beside the rank, and they order the
+providers; they are never folded into the score of a model.
 
-The bulk tier heavily weights the economy models, the cheap and fast ones
-(the model id carries a whole `flash`, `mini`, `nano`, `lite`, `air`,
-`haiku`, `luna`, `small` or `turbo` marker, or the catalog price is at most
-0.5 US dollars per million input tokens and 1.5 per million output tokens).
-An economy model is multiplied by 2 and any other model by 0.85, so the bulk
-work goes to the models that cost little and the paid frontier accounts keep
-their capacity for frontier work. The usage of the model itself is reported
-but does not move a rank.
+The score of a model in a tier is its measured value: the intelligence
+index and the cost per task, with the weights of the owner's policy
+(`0.70` intelligence and `0.30` efficiency for ordinary work, `0.45`
+intelligence, `0.25` AA-3D capability and `0.30` efficiency for 3D work).
+Nothing else is in it: a name suffix, a catalog price, a capacity term and
+a pace term are all guesses, and a guess that moves a rank is not a
+measurement. Both measurements are required, and a missing one leaves the
+value unknown: nothing is renormalized. The usage of the model itself is
+reported but does not move a rank.
 
 A model whose account has less than 5% left cannot be used at all and is not
 ranked.
 
-The rule that keeps the free models usable: a model that is wanted for 3D
-work keeps its bulk capacity for the free models. When a model is eligible
-for 3D work with a score of at least 0.6, its bulk score is reduced to 60%,
-so the free models keep the headroom. The frontier score is never reduced.
+The models that qualify for the 3D tier - an explicit visual input and a
+measured AA-3D score - are reserved for CAD work. They rank after every
+other member of the tiers they are reserved away from, and they are not
+used for that work at all while their provider has less than half of its
+capacity left. The reserve changes the order and the eligibility, never the
+value.
 
 * `ghostship_ai_model_rank{tier,provider,model}` - the rank inside a tier, 1 is
   best.
@@ -561,11 +573,12 @@ ceiling does not depend on the quality score.
 
 The Artificial Analysis feed is the external quality input: the intelligence,
 coding, agentic, and engineering indices, the cost per task, and the median
-performance. The feed is read once a day by the daily procedure and cached;
-the collector only reads the cache, so the free request budget belongs to one
-place. The cost per task and the token price are different things and are
-never used for each other. The endpoint is the free one; there is no paid
-plan and no account.
+performance. It is pulled from the public pages with ordinary GETs once a
+day by the `ghostship-ai-usage-feed` timer and cached; the collector only
+reads the cache, so the read belongs to one place. There is no key, no
+account and no paid plan. A page that is blocked is recorded as blocked and
+the last good snapshot is kept. The cost per task and the token price are
+different things and are never used for each other.
 
 The role and the tier are explicit, and the rule fails closed: an
 implementation by a bulk model needs a review by the frontier authority

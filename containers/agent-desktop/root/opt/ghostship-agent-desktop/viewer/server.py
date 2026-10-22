@@ -968,10 +968,15 @@ class AppCaster:
         await app_call(self.path, {"op": "input", "actor": "human", "actions": actions, **self.extra}, 60)
 
     async def release(self) -> None:
-        """Give up a full window's focus lease (app sessions have none)."""
+        """Give up a full window's focus lease (app sessions have none).
+
+        The viewer speaks for a person: the stage only lets the lease's holder
+        release it, so closing the viewer never closes the Chrome menu an agent
+        is working with.
+        """
         if self.extra:
             try:
-                await app_call(self.path, {"op": "release", **self.extra}, 10)
+                await app_call(self.path, {"op": "release", "actor": "human", **self.extra}, 10)
             except HttpError:
                 pass
 

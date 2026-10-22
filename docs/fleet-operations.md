@@ -290,6 +290,9 @@ path-scoped Access application for exactly `/github` and `/cloudflare` whose onl
 policy is bypass-everyone, recorded in the registry as `cloudflareBypassPaths`
 with `cloudflareBypassApproval`. The receiver authenticates those requests itself
 (GitHub HMAC, Cloudflare webhook secret); any other bypass still fails validation.
+`grafana.ghostship.io` has its own Access application allowing the owner identity
+and the agent identity (owner approval 2026-10-22) so agents can verify
+dashboards; read-only through vmauth.
 All existing and proposed tunnel hostnames, including unmanaged rules and
 path-specific overrides, require complete policy evidence and restrictive identity
 or explicitly scoped service-token selectors. Unauthenticated OPTIONS bypasses
@@ -345,11 +348,15 @@ repeated runs, so an interrupted migration can converge. Backups read the
 password inside the database container. Restore validation continues to use
 an isolated temporary database; it does not change the live engine or data.
 
-Private-source GitHub Actions jobs use the `private-source-ci` environment.
-Its required reviewer is `owner`; approval releases the environment-scoped,
-read-only agent deploy key. Repository-level private-source keys must remain
-absent so another pull-request workflow cannot bypass the environment gate.
-Review changes to the import script and workflow before approving a run.
+Private-source GitHub Actions jobs on pull requests use the `private-source-ci`
+environment. Its required reviewer is `owner`; approval releases the
+environment-scoped, read-only agent deploy key. Jobs on `main` (pushes, the
+weekly input refresh) use `private-source-main`: no reviewer, but only the
+`main` branch may deploy to it, so a pull request that edits a workflow still
+cannot reach its key. Each environment holds its own read-only agent deploy key.
+Repository-level private-source keys must remain absent so another
+pull-request workflow cannot bypass the environment gate. Review changes to the
+import script and workflow before approving a run.
 
 SQLite databases and WAL files are captured together. Failure handling resumes
 containers it paused and restores their health-check settings and removes the temporary Btrfs snapshot.
