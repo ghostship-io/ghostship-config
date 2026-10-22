@@ -769,6 +769,13 @@ value.
   whose headroom is unknown, with the reason it is unknown.
 * `ghostship_ai_model_tier{provider,model,tier}` - 1 for every tier a model
   belongs to.
+* `ghostship_ai_model_info{provider,model,name}` - 1 for every candidate model,
+  with its human name: the label T3 Code's model catalog gives the model, else
+  the Artificial Analysis record's name without its reasoning condition, else
+  the raw model id. The name is never empty, so a row of the dashboard always
+  says what the model is. The `name` label carries the name exactly, with its
+  spaces and its punctuation, escaped the way the text exposition format
+  requires; every other label of this collector keeps its sanitised form.
 * `ghostship_ai_model_evaluated_timestamp_seconds{provider,model}` - when the
   model was last evaluated.
 * `ghostship_ai_three_d_prior{provider,model}` - how good a model is judged

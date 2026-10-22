@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.87] - 2026-10-22
+
+- AI usage collector: every model of the Providers page carries a human name. The collector publishes one `ghostship_ai_model_info{provider,model,name}` series per candidate model, and the name is the first one that exists: the label T3 Code's model catalog gives the model, else the Artificial Analysis record's name without its reasoning condition ("GLM-5.3 Flash (High)" is the model "GLM-5.3 Flash"), else the raw model id. The name is never empty, so every row says what the model is. The Artificial Analysis name comes from the exact identity binding, the same record the quality score comes from: a record whose name only starts with the model id is a different model, and its name is never borrowed. The name label is published exactly, with its spaces and its punctuation, escaped the way the text exposition format requires; every other label keeps the sanitised form it has today.
+
 ## [3.17.86] - 2026-10-22
 
 - AI usage collector: a route whose model the provider retired is read out of OpenCode's request record as well as T3 Code's run history. The reader flags a request that says the model was deprecated, retired, past its free launch period, at its end of life or no longer available (the flag only; the text is never stored). A route whose latest flagged request has no success after it joins the collector's retirement record: it is unavailable with the reason `model_retired`, holds no tier, and stays retired until the record shows a later success. On live data this marks the deprecated `opencode-go/minimax-m3.1-flash-free` and the retired OpenRouter `minimax/minimax-m3.1-flash:free`, which only the request record reports.
