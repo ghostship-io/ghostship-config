@@ -144,7 +144,7 @@ T3 Code environment, use [container-workflow.md](container-workflow.md).
   `wslpath -w /home/nixos/...` returns a `\\wsl.localhost\NixOS\...` UNC path
   for WSL-native files rather than a `C:\...` path.
 - Docker Desktop stores its WSL disk at
-  `C:\Users\the owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
+  `C:\Users\owner\AppData\Local\Docker\wsl\disk\docker_data.vhdx` on this host.
 - WSL registry `BasePath` values may be missing or use `\??\` / `\\?\` NT
   prefixes. Guard for that before using them as normal paths.
 - WSL FHS shim changes can require a full WSL distro restart after a
