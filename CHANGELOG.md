@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.91] - 2026-10-22
+
+- Providers page: the header's "live data … UTC" time is now UTC. Grafana's date format renders in the viewer's own time zone, so the header showed a local time under a UTC label. A small panel helper formats the end time from its UTC fields only.
+
 ## [3.17.90] - 2026-10-22
 
 - The Keep broker's agent account address is supplied by the deployment (`GHOSTSHIP_KEEP_AGENT_EMAIL` in `/etc/ghostship/owner-identity.env`), like the personal account, so the repository names no account address.
