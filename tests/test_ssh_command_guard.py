@@ -162,6 +162,30 @@ class WrapperTests(unittest.TestCase):
         self.assertNotIn("refused", result.stderr.lower())
 
 
+class JournalTests(unittest.TestCase):
+    """The refusal reaches the journal."""
+
+    def test_the_message_is_written_on_stdin_not_run_as_a_command(self):
+        """systemd-cat runs its positional arguments as a command.
+
+        Passing the message as an argument made systemd-cat try to execute
+        it, so no refusal was ever journaled.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            record = Path(tmp) / "record"
+            fake = Path(tmp) / "systemd-cat"
+            fake.write_text(
+                f"#!{sys.executable}\n"
+                "import sys\n"
+                f"open({str(record)!r}, 'w').write(repr(sys.argv[1:]) + '\\n' + sys.stdin.read())\n"
+            )
+            fake.chmod(0o755)
+            guard.journal(str(fake), "host refused: grep -r x /etc")
+            argv, _, stdin = record.read_text().partition("\n")
+        self.assertNotIn("refused", argv)
+        self.assertIn("host refused: grep -r x /etc", stdin)
+
+
 class ShellTests(unittest.TestCase):
     """The shell a session runs in."""
 

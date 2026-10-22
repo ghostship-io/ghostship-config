@@ -1,9 +1,22 @@
 # Changelog
 
-## [3.17.59] - 2026-10-22
+## [3.17.62] - 2026-10-22
 
 - SIEM alert bridge: a re-fired alert is no longer silenced forever. The 6-hour renotify window throttles repeat notices of one occurrence, but a resolve-then-fire cycle inside the window was dropped and its notification timestamp was never advanced, so the fingerprint stayed silent for good while the topic said "resolved". A re-fire inside the window is now deferred rather than dropped: it is recorded as pending and announced on the first poll after the window has elapsed, if the alert is still firing by then, and at most once per window. A re-fire outside the window still announces immediately.
 - SIEM alert bridge: a failed resolution publish is no longer lost. The retry covered firing alerts only, so a resolution that ntfy refused left the topic showing a critical alert that was never resolved. A resolution is now published again on the next poll until it is delivered, like a firing alert, and an alert whose resolution has been undelivered for a day becomes a dead letter, listed by `--list` and counted by the `ghostship_siem_bridge_dead_letters` and `ghostship_siem_bridge_resolution_retries` metrics.
+
+
+## [3.17.61] - 2026-10-22
+
+- Grafana dashboards lead with graphics: Providers (four tier columns of % left, T3-style provider cards, collapsed Why this order), Overview, Host, Security and Pipeline. Shared navigation is Overview, Work, Providers, Host, Security, Pipeline. Allowance bars show remaining ("% left") coloured critical below 10%, warning below 30%, otherwise good. The ordering measure is labelled **Paced Availability**. Freshness keeps series whose timestamp is within 90s of the newest collection, so entitlement and fact cards stay filled when sample timestamps are a few seconds apart. Frontier bars are labelled Chief (Claude Opus 5.5) and Backup (Codex GPT-6.1-Sol); order inside the tier stays Paced Availability. Every ranked route of a tier is listed with the % left of its lowest applicable window: the available routes by Paced Availability, the exhausted and unavailable ones below them, greyed, with the reason they are spent. An unknown allowance is grey and reads Limits unknown, never a red bar that looks like 0%. The model names are the names a person would say, not the provider's own id.
+
+## [3.17.60] - 2026-10-22
+
+- The SSH command guard's refusals reach the journal. The guard passed the message to `systemd-cat` as an argument, and `systemd-cat` runs its arguments as a command, so every refusal failed to journal and the caller also saw a "Failed to execute" line after the refusal. The message now goes on stdin and the journal tool's own output is dropped.
+
+## [3.17.59] - 2026-10-22
+
+- The GitHub coordinator's hold lives in the host configuration. It was held off with a runtime drop-in under `/run`, and an activation clears runtime unit overrides, so the 2026-10-22 deploy started it and it replayed part of the deployment backlog before it was stopped again. `ghostship.githubEngineering.coordinatorAutoStart` (default on) now decides whether boot or an activation starts it, and chill-penguin sets it off until the replay fix passes a backlog replay. The webhook receiver keeps spooling while the coordinator is held.
 
 ## [3.17.58] - 2026-10-22
 
