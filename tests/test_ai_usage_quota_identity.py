@@ -167,3 +167,117 @@ class FreeRouteScopeTests(unittest.TestCase):
         ranked = self._rank(set(), self._spent())
         self.assertFalse(ranked[0].available)
         self.assertEqual(ranked[0].remaining, 0.0)
+
+
+class EntitlementDisplayTests(unittest.TestCase):
+    """One canonical display reading per entitlement, bound coherently."""
+
+    def _reading(self, source, quota_id, used, reset, observed, kind="monthly", duration=30 * 86400):
+        return {
+            "provider": "opencode-go",
+            "account": "default",
+            "model": "*",
+            "kind": kind,
+            "quota_id": quota_id,
+            "source": source,
+            "usedRatio": used,
+            "resetEpoch": reset,
+            "durationSeconds": duration,
+            "observedAtEpoch": observed,
+        }
+
+    def test_one_card_reading_is_chosen_and_both_raw_readings_are_kept(self):
+        windows = [
+            self._reading("t3", "go_monthly", 0.4, NOW + 5 * 86400, NOW - 60),
+            self._reading("opencode-go", "monthly", 0.9, NOW + 2 * 86400, NOW - 30),
+        ]
+        entries = [entry for entry in quota.entitlements(windows, NOW) if entry["window"] == "monthly"]
+        self.assertEqual(len(entries), 1)
+        entry = entries[0]
+        self.assertEqual(len(entry["readings"]), 2)
+        display = entry["display"]
+        self.assertEqual(display["source"], "opencode-go")
+        self.assertEqual(display["used_ratio"], 0.9)
+        # Reset, expected and pace come from that same reading, not from an
+        # extremum of the other one.
+        self.assertEqual(display["reset_at"], entry["readings"][1]["reset_at"])
+        self.assertAlmostEqual(
+            display["expected_used_ratio"],
+            1.0 - (2 * 86400) / (30 * 86400),
+            places=6,
+        )
+        self.assertAlmostEqual(
+            display["pace_delta_ratio"],
+            display["expected_used_ratio"] - 0.9,
+            places=6,
+        )
+        samples = quota.entitlement_display_samples(windows, NOW)
+        by_name = {
+            name: (labels, value) for name, labels, value in samples
+        }
+        self.assertIn("ghostship_ai_entitlement_info", by_name)
+        labels, value = by_name["ghostship_ai_entitlement_used_ratio"]
+        self.assertEqual(value, 0.9)
+        self.assertEqual(labels["source"], "opencode-go")
+        self.assertEqual(labels["quota"], "monthly")
+        self.assertEqual(by_name["ghostship_ai_entitlement_reset_timestamp_seconds"][1], NOW + 2 * 86400)
+        self.assertAlmostEqual(
+            by_name["ghostship_ai_entitlement_expected_used_ratio"][1],
+            1.0 - (2 * 86400) / (30 * 86400),
+            places=6,
+        )
+        self.assertAlmostEqual(
+            by_name["ghostship_ai_entitlement_pace_delta_ratio"][1],
+            (1.0 - (2 * 86400) / (30 * 86400)) - 0.9,
+            places=6,
+        )
+        self.assertEqual(by_name["ghostship_ai_entitlement_observed_timestamp_seconds"][1], NOW - 30)
+        # The raw per-reading info series still carries both sources.
+        raw = quota.entitlement_samples(windows, NOW)
+        self.assertEqual(len(raw), 2)
+
+    def test_the_display_follows_the_opposite_source_on_the_next_scrape(self):
+        windows = [
+            self._reading("t3", "go_monthly", 0.95, NOW + 5 * 86400, NOW - 60),
+            self._reading("opencode-go", "monthly", 0.2, NOW + 2 * 86400, NOW - 30),
+        ]
+        display = quota.entitlements(windows, NOW)[0]["display"]
+        self.assertEqual(display["source"], "t3")
+        self.assertEqual(display["used_ratio"], 0.95)
+        self.assertEqual(display["reset_at"], "2027-01-20T00:00:00Z" if False else display["reset_at"])
+
+    def test_an_unknown_entitlement_keeps_its_info_and_claims_no_number(self):
+        stale = [
+            self._reading("t3", "go_monthly", 0.4, NOW + 5 * 86400, NOW - 10 * 86400),
+        ]
+        entries = quota.entitlements(stale, NOW)
+        self.assertEqual(len(entries), 1)
+        self.assertIsNone(entries[0]["display"])
+        self.assertEqual(entries[0]["display_state"], "unknown")
+        samples = quota.entitlement_display_samples(stale, NOW)
+        names = [name for name, _labels, _value in samples]
+        self.assertEqual(
+            names,
+            ["ghostship_ai_entitlement_info"],
+        )
+        labels = samples[0][1]
+        self.assertEqual(labels["entitlement"], "opencode-go:default:*:monthly:monthly")
+        self.assertEqual(labels["source"], "")
+        self.assertEqual(labels["quota"], "monthly")
+
+    def test_an_unpaired_entitlement_keeps_its_identity(self):
+        windows = [self._reading("grok", "credits", 0.4, NOW + 86400, NOW - 60, kind="credits")]
+        entries = quota.entitlements(windows, NOW)
+        self.assertEqual(len(entries), 1)
+        self.assertFalse(entries[0]["alias"])
+        self.assertEqual(entries[0]["display"]["source"], "grok")
+
+    def test_different_accounts_or_windows_are_not_merged(self):
+        windows = [
+            self._reading("t3", "go_monthly", 0.4, NOW + 86400, NOW - 60),
+            {**self._reading("t3", "go_monthly", 0.9, NOW + 86400, NOW - 60), "account": "team"},
+            {**self._reading("t3", "go_weekly", 0.8, NOW + 86400, NOW - 60), "kind": "weekly"},
+        ]
+        entries = quota.entitlements(windows, NOW)
+        self.assertEqual(len(entries), 3)
+        self.assertTrue(all(entry["display"]["used_ratio"] is not None for entry in entries))

@@ -177,24 +177,27 @@ def _entitlement_parts(window: Any) -> dict[str, str]:
         "canonical_quota": canonical,
         "source": get("source"),
         "entitlement": f"{provider}:{account}:{model}:{kind}:{canonical}",
-        "observed_at": get("observed_at"),
-        "used_ratio": get("used_ratio"),
-        "reset_at": get("reset_at"),
+        "observed_at": _get(window, "observed_at", "observedAtEpoch", "observed_at_epoch"),
+        "used_ratio": _get(window, "used_ratio", "usedRatio"),
+        "reset_at": _get(window, "reset_at", "resetAt", "resetEpoch", "reset_epoch"),
     }
 
 
 def entitlements(windows: Iterable[Any], now: float | None = None) -> list[dict[str, Any]]:
-    """The entitlement of every reading, with its sources kept apart.
+    """The entitlement of every reading, with the canonical display reading.
 
     Two readings that name the same verified entitlement (provider, account,
     model, window and canonical quota) are grouped, and each keeps its own
-    source and quota id. Nothing is merged and nothing is dropped.
+    source and quota id. The display reading is the current usable reading
+    with the highest used share (the least remaining); its reset, expected
+    and pace are the same reading's values, never extrema from another one.
     """
     grouped: dict[str, dict[str, Any]] = {}
     for window in windows or ():
         parts = _entitlement_parts(window)
         if not parts["provider"] or not parts["window"]:
             continue
+        pace = window_pace(window, now) if now is not None else None
         entry = grouped.setdefault(
             parts["entitlement"],
             {
@@ -214,6 +217,9 @@ def entitlements(windows: Iterable[Any], now: float | None = None) -> list[dict[
                 "used_ratio": parts["used_ratio"],
                 "reset_at": parts["reset_at"],
                 "observed_at": parts["observed_at"],
+                "usable": pace is not None,
+                "expected_used_ratio": None if pace is None else pace["expected_used_ratio"],
+                "pace_delta_ratio": None if pace is None else pace["pace_delta_ratio"],
             }
         )
     result = []
@@ -229,8 +235,118 @@ def entitlements(windows: Iterable[Any], now: float | None = None) -> list[dict[
             str(reading["quota"]) != entry["canonical_quota"]
             for reading in entry["readings"]
         )
+        usable = [
+            reading
+            for reading in entry["readings"]
+            if reading["usable"] and isinstance(reading["used_ratio"], (int, float))
+        ]
+        if usable:
+            chosen = max(
+                usable,
+                key=lambda reading: (
+                    float(reading["used_ratio"]),
+                    str(reading["observed_at"] or ""),
+                    str(reading["source"] or ""),
+                ),
+            )
+            entry["display"] = {
+                "source": chosen["source"],
+                "quota": entry["canonical_quota"],
+                "used_ratio": chosen["used_ratio"],
+                "expected_used_ratio": chosen["expected_used_ratio"],
+                "pace_delta_ratio": chosen["pace_delta_ratio"],
+                "reset_at": chosen["reset_at"],
+                "observed_at": chosen["observed_at"],
+                "state": "measured",
+                "basis": "the current usable reading with the least remaining",
+            }
+        else:
+            entry["display"] = None
+            entry["display_state"] = "unknown"
         result.append(entry)
     return sorted(result, key=lambda entry: entry["entitlement"])
+
+
+def entitlement_display_samples(
+    windows: Iterable[Any], now: float
+) -> list[tuple[str, dict[str, str], float]]:
+    """The canonical display family: one reading per entitlement.
+
+    The info series is emitted even when the entitlement has no usable
+    numeric reading, so an unknown allowance stays visible. A numeric series
+    is emitted only from the chosen reading and only when that value is
+    known; nothing is filled with zero or one.
+    """
+    samples: list[tuple[str, dict[str, str], float]] = []
+    for entry in entitlements(windows, now):
+        display = entry.get("display")
+        labels = {
+            "provider": entry["provider"],
+            "account": entry["account"],
+            "model": entry["model"],
+            "window": entry["window"],
+            "quota": entry["canonical_quota"],
+            "source": str((display or {}).get("source") or ""),
+            "entitlement": entry["entitlement"],
+        }
+        samples.append(("ghostship_ai_entitlement_info", dict(labels), 1.0))
+        if not isinstance(display, Mapping):
+            continue
+        if isinstance(display.get("used_ratio"), (int, float)):
+            samples.append(
+                ("ghostship_ai_entitlement_used_ratio", dict(labels), float(display["used_ratio"]))
+            )
+        reset = _epoch(display.get("reset_at"))
+        if reset is not None:
+            samples.append(
+                (
+                    "ghostship_ai_entitlement_reset_timestamp_seconds",
+                    dict(labels),
+                    reset,
+                )
+            )
+        if isinstance(display.get("expected_used_ratio"), (int, float)):
+            samples.append(
+                (
+                    "ghostship_ai_entitlement_expected_used_ratio",
+                    dict(labels),
+                    float(display["expected_used_ratio"]),
+                )
+            )
+        if isinstance(display.get("pace_delta_ratio"), (int, float)):
+            samples.append(
+                (
+                    "ghostship_ai_entitlement_pace_delta_ratio",
+                    dict(labels),
+                    float(display["pace_delta_ratio"]),
+                )
+            )
+        observed = _epoch(display.get("observed_at"))
+        if observed is not None:
+            samples.append(
+                (
+                    "ghostship_ai_entitlement_observed_timestamp_seconds",
+                    dict(labels),
+                    observed,
+                )
+            )
+    return samples
+
+
+def _epoch(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            from datetime import datetime, timezone
+
+            moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if moment.tzinfo is None:
+                moment = moment.replace(tzinfo=timezone.utc)
+            return moment.timestamp()
+        except ValueError:
+            return None
+    return None
 
 
 def entitlement_samples(
