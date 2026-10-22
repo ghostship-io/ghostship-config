@@ -571,6 +571,31 @@ class _ModelPageBudget:
         return self.remaining() >= self._min_remaining
 
 
+def aa3d_board_is_complete(board: Mapping[str, Any], html: str) -> bool:
+    """True when the page shows the whole board that it scores.
+
+    The board is the entire displayed leaderboard, and the ranks and the
+    normalisation of the 3D tier are computed over it. The rows the page
+    renders and the models it scores must be the same ones: a page that
+    lost a row, on either side of it, is not a board, and the numbers
+    would be computed over a part of it.
+
+    The names must be unique as well: the 3D reader refuses a board with
+    two measurements of the same model.
+    """
+    scored = [
+        str(entry.get("name") or "")
+        for entry in (board or {}).values()
+        if isinstance(entry, Mapping) and _number(entry.get("elo")) is not None
+    ]
+    if len(set(scored)) != len(scored):
+        return False
+    rows = list(_aa3d_table(html or ""))
+    if len(scored) != len(rows):
+        return False
+    return sorted(scored) == sorted(rows)
+
+
 def _read_model_pages(
     records: dict[str, dict[str, Any]],
     leaderboard: Mapping[str, Any],
@@ -719,7 +744,10 @@ def pull(
     aa3d_html = read_source("aa3d", AA3D_URL, aa3d_role)
     board = parse_aa3d(aa3d_html)
     board_document = aa3d_document(board, time.time()) if board else {}
-    if board_document.get("records") and write_aa3d is not None:
+    # The board is written only when the page carries the whole board. A
+    # page that lost a row is not a board, and the last good board is kept.
+    board_complete = bool(board) and aa3d_board_is_complete(board, aa3d_html)
+    if board_complete and board_document.get("records") and write_aa3d is not None:
         write_aa3d(board_document)
     # The budget of the model pages starts here: the AA-3D snapshot has
     # been written, and the rest of the pull is what the budget pays for.
@@ -865,8 +893,10 @@ def pull(
         "model_page_skipped": budget.skipped,
         "model_page_budget_seconds": PULL_BUDGET_SECONDS,
         "model_page_budget_used_seconds": round(budget.used(), 3),
-        # The AA-3D board, in the contract the collector reads it in.
+        # The AA-3D board, in the contract the collector reads it in, and
+        # whether the page carried the whole board.
         "aa3d": board_document,
+        "aa3d_complete": board_complete,
     }
 
 
@@ -1057,6 +1087,7 @@ def refresh(
     page_costs = document.pop("model_page_costs", None)
     fetches = int(document.pop("model_page_fetches", 0) or 0)
     skipped = int(document.get("model_page_skipped") or 0)
+    board_complete = bool(document.get("aa3d_complete"))
     # The new and the changed models travel with the cache, so the
     # collector publishes them without reading the old pull.
     document = {
@@ -1091,6 +1122,8 @@ def refresh(
         "model_page_budget_used_seconds": float(
             document.get("model_page_budget_used_seconds") or 0.0
         ),
+        # Whether the AA-3D page carried the whole board.
+        "aa3d_complete": board_complete,
         "new_model_names": [
             entry.get("name") or entry.get("slug")
             for entry in (difference.get("added") or [])
