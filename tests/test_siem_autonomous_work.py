@@ -957,7 +957,9 @@ class DashboardContractTests(unittest.TestCase):
                 for forbidden in ('approved', 'conclusion', 'frontier_approved'):
                     self.assertNotIn(forbidden, target['expr'])
         header = next(p for p in dashboard['panels'] if p['type'] == 'text')
-        self.assertIn('receipt is never a green outcome', header['options']['content'].lower())
+        # The header line is one line; the rule it states lives with it.
+        self.assertIn('receipt is never a green outcome',
+                      (header.get('description') or header['options']['content']).lower())
         # No panel may claim a complete enumeration of a capped source.
         for panel in walk_panels(dashboard['panels']):
             self.assertNotIn('All projects', panel['title'])

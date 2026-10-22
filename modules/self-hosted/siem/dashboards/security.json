@@ -27,8 +27,9 @@
    },
    "options": {
     "mode": "markdown",
-    "content": "**Security \u00b7 selected range for rates \u00b7 log tables stay collapsed**\n\nStatus colour is reserved for the tiles (good / warning / critical) and always has a number. A missing log stream is Unavailable, never a zero."
-   }
+    "content": "**Security \u00b7 the selected range for the rates \u00b7 the log tables stay collapsed**"
+   },
+   "description": "The status colour is reserved for the tiles (good, warning, critical) and always has a number. A missing log stream is Unavailable, never a zero. The bars carry the magnitudes, not a verdict."
   },
   {
    "id": 1001,

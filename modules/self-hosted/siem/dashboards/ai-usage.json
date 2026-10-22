@@ -28,8 +28,9 @@
    },
    "options": {
     "mode": "markdown",
-    "content": "**Ranking as of the selected end time \u00b7 AA snapshot from the collector \u00b7 Routing OFF (awaiting owner approval)**\n\nPaced Availability = % left \u2212 expected % left in the binding window. Raw remaining is labelled % left. A missing series is Unavailable, never 0."
-   }
+    "content": "**Ranking as of the selected end time \u00b7 Routing OFF (awaiting owner approval)**"
+   },
+   "description": "Paced Availability = % left minus the expected % left in the binding window. The raw remaining is labelled % left. A missing series is Unavailable, never 0. The tier columns list every ranked route of the tier: the available ones by Paced Availability, the spent and unknown ones below them, greyed, with the reason."
   },
   {
    "id": 40,
