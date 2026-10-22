@@ -127,9 +127,15 @@ class QuotaPanelTests(unittest.TestCase):
             / "modules/self-hosted/siem/dashboards/ai-usage.json"
         )
         dashboard = json.loads(path.read_text())
+        def walk(panels):
+            # A collapsed row keeps its panels nested inside it.
+            for panel in panels:
+                yield panel
+                yield from walk(panel.get("panels") or [])
+
         quota_panels = [
             panel
-            for panel in dashboard["panels"]
+            for panel in walk(dashboard["panels"])
             if any(
                 "ghostship_ai_quota_" in (target.get("expr") or "")
                 for target in panel.get("targets") or []
