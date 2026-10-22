@@ -326,8 +326,9 @@ class CatalogCoverageShapeTests(unittest.TestCase):
         self.assertEqual(deepseek["aa_slug"], "deepseek-v4-1-flash-1017")
         self.assertEqual(deepseek["aa_name"], "DeepSeek V4.1 Flash 1017 (Max)")
         self.assertEqual(deepseek["measured_variant"], "max")
-        self.assertEqual(deepseek["native_variant"], "high")
-        self.assertEqual(deepseek["variant_match"], "variant_mismatch")
+        # The AA record is selected independently of the native setting.
+        self.assertEqual(deepseek["variant_match"], "reference")
+        self.assertEqual(deepseek["native_variant"], "")
         self.assertTrue(deepseek["matched_by"])
         unlisted = entries["unlisted-model"]
         self.assertEqual(unlisted["state"], "missing")
@@ -346,10 +347,12 @@ class CatalogCoverageShapeTests(unittest.TestCase):
         deepseek = self.rows["deepseek-v4.1-flash:1017"]
         self.assertEqual(deepseek["aa"]["name"], "DeepSeek V4.1 Flash 1017 (Max)")
         self.assertEqual(deepseek["aa"]["condition"]["measured_variant"], "max")
-        self.assertEqual(deepseek["aa"]["condition"]["native_variant"], "high")
-        self.assertTrue(deepseek["aa"]["variant_mismatch"])
-        # The model cannot be aligned to Max here, so it is not selectable and
-        # its quality is never rewritten to a guessed High.
+        self.assertEqual(deepseek["aa"]["condition"]["native_variant"], "")
+        self.assertFalse(deepseek["aa"]["variant_mismatch"])
+        # The benchmark condition is the reference's Max, and our runtime
+        # condition is Medium; the model's options do not support it.
+        self.assertEqual(deepseek["aa"]["condition"]["measured_variant"], "max")
+        self.assertEqual(deepseek["aa"]["condition"]["execution_default"], "medium")
         self.assertFalse(deepseek["aa"]["selectable"])
         self.assertEqual(deepseek["value"]["strength"], 45.1)
 

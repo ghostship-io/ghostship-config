@@ -514,12 +514,52 @@ def _matches(target: Mapping[str, Any], record: Mapping[str, Any]) -> dict[str, 
     return None
 
 
+def _reference_value(record: Mapping[str, Any]) -> float | None:
+    """The 80/20 model-selection value of one measured record.
+
+    Both the intelligence index and the measured cost per task are required;
+    a record without either has no selection value.
+    """
+    indices = record.get("indices") or {}
+    intelligence = indices.get("intelligence_index")
+    cost = record.get("cost_per_task")
+    if not isinstance(intelligence, (int, float)) or isinstance(intelligence, bool):
+        return None
+    if not isinstance(cost, (int, float)) or isinstance(cost, bool):
+        return None
+    cost_value = float(cost)
+    if not (cost_value >= 0.0) or not (cost_value == cost_value) or cost_value == float("inf"):
+        return None
+    return round(
+        0.80 * (float(intelligence) / 100.0) + 0.20 * (1.0 / (1.0 + cost_value)), 6
+    )
+
+
+def _condition_alternatives(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    alternatives = []
+    for match in matches:
+        record = match.get("record") or {}
+        alternatives.append(
+            {
+                "id": match.get("id"),
+                "slug": match.get("slug"),
+                "name": match.get("name"),
+                "condition": match.get("variant") or "",
+                "intelligence": (record.get("indices") or {}).get("intelligence_index"),
+                "cost_per_task": record.get("cost_per_task"),
+                "value": _reference_value(record),
+            }
+        )
+    return sorted(alternatives, key=lambda entry: str(entry.get("id") or ""))
+
+
 def resolve(
     records: Iterable[Mapping[str, Any]],
     provider: str,
     model: str,
     *,
     options: Any = None,
+    mode: str = "condition",
 ) -> dict[str, Any]:
     """Resolve one model to its exact record, or say why it cannot be.
 
@@ -563,6 +603,128 @@ def resolve(
             "date": target["date"],
         }
     variants = sorted({match["variant"] for match in matches})
+    alternatives = _condition_alternatives(matches)
+    if mode == "reference":
+        # The AA record is selected independently of the native runtime
+        # setting: the best measured 80/20 value with both inputs wins.
+        by_condition: dict[str, list[dict[str, Any]]] = {}
+        for match in matches:
+            by_condition.setdefault(match["variant"], []).append(match)
+        for condition, group in by_condition.items():
+            if len({entry["id"] for entry in group}) > 1:
+                return {
+                    "state": "ambiguous",
+                    "reason": "several records of the same measured condition: "
+                    + ", ".join(sorted(entry["id"] for entry in group)),
+                    "record": None,
+                    "variant": "",
+                    "date": target["date"],
+                    "variants": variants,
+                    "alternatives": alternatives,
+                }
+        valued = [
+            (value, match)
+            for match in matches
+            for value in [_reference_value(match.get("record") or {})]
+            if value is not None
+        ]
+        if valued:
+            valued.sort(
+                key=lambda item: (
+                    -item[0],
+                    -(float((item[1].get("record") or {}).get("indices", {}).get("intelligence_index") or 0.0)),
+                    str(item[1]["id"]),
+                )
+            )
+            value, chosen = valued[0]
+            match_kind = "reference"
+            record = chosen
+            checkpoint = target["date"]
+            return {
+                "state": "measured",
+                "reason": "",
+                "record": dict(record.get("record") or {}),
+                "id": record["id"],
+                "slug": record["slug"],
+                "name": record["name"],
+                "release_date": record.get("release_date"),
+                "measured_variant": record["variant"],
+                "native_variant": "",
+                "variant_match": match_kind,
+                "variant_mismatch": False,
+                "condition_confirmed": True,
+                "condition_unknown": False,
+                "variants": variants,
+                "alternatives": alternatives,
+                "reference": {
+                    "value": value,
+                    "condition": record["variant"],
+                    "id": record["id"],
+                    "basis": (
+                        "the best measured 0.80 intelligence + 0.20 cost value "
+                        "among the exact records of this model; independent of "
+                        "the native runtime setting"
+                    ),
+                    "alternatives": alternatives,
+                },
+                "date": target["date"],
+                "matched_by": record.get("matched_by"),
+                "identity_match": record.get("match_kind"),
+                "checkpoint": checkpoint,
+                "provenance": {
+                    "provider": provider,
+                    "model": model,
+                    "aa_id": record["id"],
+                    "aa_slug": record["slug"],
+                    "aa_name": record["name"],
+                    "release_date": record.get("release_date"),
+                    "measured_variant": record["variant"],
+                    "native_variant": "",
+                    "variant_match": match_kind,
+                    "condition_confirmed": True,
+                    "matched_by": record.get("matched_by"),
+                    "identity_match": record.get("match_kind"),
+                    "checkpoint": checkpoint,
+                    "basis": "the model-selection reference, independent of the native setting",
+                },
+            }
+        # A record exists but no measured value can be computed: the identity
+        # and conditions stay visible, and there is no selection reference.
+        return {
+            "state": "measured",
+            "reason": "no measured value: both intelligence and cost per task are required",
+            "record": dict(matches[0].get("record") or {}),
+            "id": matches[0]["id"],
+            "slug": matches[0]["slug"],
+            "name": matches[0]["name"],
+            "release_date": matches[0].get("release_date"),
+            "measured_variant": matches[0]["variant"],
+            "native_variant": "",
+            "variant_match": "reference",
+            "variant_mismatch": False,
+            "condition_confirmed": True,
+            "condition_unknown": False,
+            "variants": variants,
+            "alternatives": alternatives,
+            "reference": None,
+            "value_missing": [
+                name
+                for name in ("intelligence", "cost_per_task")
+                if name
+                == "cost_per_task"
+                and not isinstance((matches[0].get("record") or {}).get("cost_per_task"), (int, float))
+                or name == "intelligence"
+                and not isinstance(
+                    ((matches[0].get("record") or {}).get("indices") or {}).get("intelligence_index"),
+                    (int, float),
+                )
+            ],
+            "date": target["date"],
+            "matched_by": matches[0].get("matched_by"),
+            "identity_match": matches[0].get("match_kind"),
+            "checkpoint": target["date"],
+            "provenance": {"provider": provider, "model": model},
+        }
     chosen = None
     match_kind = ""
     if target["variant"]:

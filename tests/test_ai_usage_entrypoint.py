@@ -200,7 +200,7 @@ class EntrypointSmokeTests(unittest.TestCase):
         ranked = context.get("ranked") or []
         workhorse = [entry for entry in ranked if entry.model == "gpt-6.1-sol"]
         self.assertTrue(workhorse)
-        self.assertEqual(workhorse[0].quality, 50.2)
+        self.assertEqual(workhorse[0].quality, 51.8)
         snapshot = main.build_snapshot(
             results,
             ranked,
@@ -212,8 +212,8 @@ class EntrypointSmokeTests(unittest.TestCase):
         )
         row = [candidate for candidate in snapshot["candidates"] if candidate["model"] == "gpt-6.1-sol"][0]
         self.assertEqual(row["aa"]["state"], "measured")
-        self.assertEqual(row["aa"]["condition"]["variant_match"], "exact")
-        self.assertEqual(row["aa"]["condition"]["measured_variant"], "high")
+        self.assertEqual(row["aa"]["condition"]["variant_match"], "reference")
+        self.assertEqual(row["aa"]["condition"]["measured_variant"], "max")
         self.assertEqual(snapshot["aa_coverage"]["states"]["measured"], 1)
         self.assertEqual(row["three_d"]["state"], "measured")
         self.assertEqual(row["value_3d"]["cost_source"], "artificialanalysis_intelligence")
@@ -260,7 +260,10 @@ class EntrypointSmokeTests(unittest.TestCase):
             self.assertIn("gpt-6.1-sol", rows)
             self.assertEqual(rows["gpt-6.1-sol"]["aa"]["state"], "measured")
             self.assertEqual(
-                rows["gpt-6.1-sol"]["aa"]["condition"]["measured_variant"], "high"
+                rows["gpt-6.1-sol"]["aa"]["condition"]["measured_variant"], "max"
+            )
+            self.assertEqual(
+                rows["gpt-6.1-sol"]["aa"]["condition"]["variant_match"], "reference"
             )
             self.assertEqual(rows["gpt-6.1-sol"]["three_d"]["state"], "measured")
             self.assertEqual(written["aa_coverage"]["states"]["measured"], 1)
