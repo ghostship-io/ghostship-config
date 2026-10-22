@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.52] - 2026-10-22
+
+- Boot generation drift check: a new `ghostship-boot-generation-drift` timer compares `/run/current-system` with `/nix/var/nix/profiles/system` every five minutes. An activation that does not record the system generation leaves the two apart, so a reboot reverts to the profile's generation. A mismatch that lasts more than ten minutes reaches operations through `ghostship-notify` with the `boot-generation-drift` dedupe key, and a recovered generation resolves the alert. The check reads two symlinks and never searches the host.
+
 ## [3.17.51] - 2026-10-22
 
 - Agent SSH command guard: the agent workspace key now runs `ghostship-ssh-command-guard` as its forced command on `chill-penguin`. A recursive content read rooted at `/etc`, `/root`, `/home`, `/var/lib` or `/` is refused with exit status 126 and a journal line under the `ghostship-ssh-command-guard` tag, and every other command runs unchanged, including interactive sessions, `scp`, `sftp`, `nix-store --serve` and `ssh-ng` transfers. The owner's own keys are authorized without a forced command. A copy of the agent key outside the managed authorized keys file is removed at activation, because sshd stops at the first file that holds the key. The regression tests use the commands agents actually ran on 2026-10-22, including the `grep -rl` over `/etc` and `/root` that opened a SIEM investigation.

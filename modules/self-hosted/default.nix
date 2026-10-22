@@ -15,6 +15,7 @@
     ./reliability.nix
     ./backup.nix
     ./monitoring.nix
+    ./boot-generation-drift.nix
     ./newsletter-health.nix
     ./notify-coverage.nix
     ./ssh-command-guard.nix

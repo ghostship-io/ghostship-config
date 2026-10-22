@@ -428,6 +428,12 @@ writer, runs regression tests, checks shell/workflow syntax, and scans the sourc
 for secrets. It does not claim native ARM builds, live container startup, secret
 decryption on every host, GPU/controller acceptance, or successful restore drills.
 
+An activation must record the system generation. The `ghostship-boot-generation-drift`
+timer compares `/run/current-system` with `/nix/var/nix/profiles/system` every
+five minutes; a mismatch that lasts more than ten minutes reaches operations
+through `ghostship-notify` with the `boot-generation-drift` dedupe key, because
+a reboot would revert to the profile's generation.
+
 For the first backup only, from the built checkout in the server's root shell
 (the source bundle exports the same `RESTIC_PASSWORD` as its projection):
 
