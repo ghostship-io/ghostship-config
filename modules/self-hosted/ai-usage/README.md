@@ -24,6 +24,10 @@ listener and no new port: the service is a oneshot job that writes a file.
   writing, for a manual run.
 * Directories: `/var/lib/ghostship-container-metrics` (0755) and
   `/var/lib/ghostship-ai-usage` (0700), both created by systemd-tmpfiles.
+* The routing switch: `ghostship.aiUsage.routing.enabled` is the owner's
+  switch, it is off by default, and the collector receives it as
+  `--routing-enabled true|false`. The collector publishes the switch to its
+  consumers and never acts on it itself.
 * The collector is Python standard library only. The unit is hardened like the
   rest of this repository: `ProtectSystem=strict`, `ProtectHome`, no
   capabilities, `ReadWritePaths` limited to the two directories above, and
@@ -325,6 +329,9 @@ values only) and `ghostship_ai_provider_capacity_windows{provider,evidence}`.
 * `ghostship_ai_collection_timestamp_seconds` and
   `ghostship_ai_collection_duration_seconds` - when the collection ran and how
   long it took.
+* `ghostship_ai_routing_enabled` - 1 when the owner's routing switch is on, 0
+  when it is off. The gauge carries no label: it is one switch for the whole
+  snapshot.
 
 ### Quota and account
 
@@ -620,6 +627,7 @@ The contract, version 1:
 | `generated_at` | the UTC ISO-8601 moment the snapshot was written |
 | `max_age_seconds` | how long a consumer may trust it (900) |
 | `partial` | true when a source failed or reported nothing |
+| `routing` | the owner's routing switch: `enabled` is true only when the owner turned it on, and `source` says where the switch came from (`nixos-option`). The block is always there, so a consumer never has to guess whether it read a snapshot without a switch |
 | `coverage` | every source with its status, observation time, and age, plus whether a frontier prime is available right now and, when it is not, why a consumer has to wait for it |
 | `policy` | the owner's direction: the prime frontier models, the GPT models that may run, the instance the background agents use, and the frontier review rule with its authority and its fail closed rule |
 | `tiers` | the ordered members of `frontier`, `bulk`, `free`, and `3d` |
@@ -650,6 +658,7 @@ the reasons, the quota state, the components, and the eligibility:
 | `eligibility` | the policy flags, kept apart from the readings |
 | `admission` | `settled`, or `pending` with the reason and the end of the evaluation window |
 | `provenance` | where the reading came from and when it was observed |
+| `access` | how the route is reached and how it is paid for: the access kind (`dedicated_free`, `provider_promo`, `provider_paid`, `unknown`), the billing class, the price, and whether the route runs as a provider-native thread or as an inference job |
 
 Three kinds of statement never mix: a `policy` is what the owner decided, a
 `measured` value is what a provider reported, and a `prior` is what the
@@ -683,6 +692,46 @@ before it is integrated, a bulk review is never a final approval, and a
 required frontier that is unavailable is waited for instead of being
 quietly replaced by a delegate. The snapshot says so in `policy` and in
 `coverage.frontier`.
+
+## The routing switch
+
+Routing is off until the owner turns it on. The switch is the NixOS option
+`ghostship.aiUsage.routing.enabled`, it is a boolean, and it defaults to
+false. The unit passes it to the collector as `--routing-enabled
+true|false`, and the collector publishes it in three places:
+
+| Where | What |
+| --- | --- |
+| `routing` in the routing snapshot | `{"enabled": false, "source": "nixos-option"}`. The block is always present, so a consumer never reads a missing switch as an open one |
+| every `--projection` file | the same bytes as the canonical snapshot, so the switch cannot differ between the file and its projections |
+| `ghostship_ai_routing_enabled` | a gauge without labels: `1` when the switch is on, `0` when it is off |
+
+The collector never acts on the switch. It publishes the owner's decision
+and leaves the decision itself to the consumer, and nothing else in the
+repository sets the option: turning routing on is the owner's action alone.
+
+## How a route is paid for
+
+Every candidate row and every winner carries an `access` record, and the
+record carries a `billing` class. The class says how the route is paid for,
+and it is derived from the access class the collector already keeps: the two
+never disagree, and the class is never guessed from a price.
+
+| Billing class | What it means |
+| --- | --- |
+| `subscription` | the route is covered by a subscription the owner already pays for |
+| `free` | the route costs nothing by construction: the dedicated free inference pool, or a route the provider lists at no cost |
+| `promotion` | the route is a paid route of a paid account that costs nothing right now |
+| `pay_per_token` | the route is paid per token, and no subscription pays for it |
+| `unknown` | the billing of the route is not known |
+
+A dedicated free route is free, a promotional route is a promotion, and a
+route with no known access is unknown. A paid route is a subscription only
+when its provider is one the owner pays a subscription for (Claude, Codex,
+Antigravity, Cursor, Ollama, OpenCode Go), and a pay per token route only
+when its provider bills that way (Grok, OpenRouter, Vercel, Requesty). A
+paid route of a provider we do not know how the owner pays for is unknown:
+it never becomes a subscription.
 
 ## The daily evaluation
 

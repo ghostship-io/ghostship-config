@@ -64,8 +64,8 @@ ghostship_ai_model_info{provider="grok",model="grok-4.6",name="Grok 4.6"} 1
 # the route; it arrives with the free winners.
 ghostship_ai_model_winner_position{tier="free",provider="opencode-go",model="minimax_minimax-m3.1-flash",band="true"} 1
 ghostship_ai_model_winner_position{tier="free",provider="nvidia",model="glm-5.3-flash",band="true"} 2
-ghostship_ai_model_winner_position{tier="free",provider="groq",model="qwen3.8-27b"} 3
-ghostship_ai_model_winner_position{tier="free",provider="kilo",model="nemotron-3.5-super-vl"} 4
+ghostship_ai_model_winner_position{tier="free",provider="groq",model="qwen3.8-27b",band="false"} 3
+ghostship_ai_model_winner_position{tier="free",provider="kilo",model="nemotron-3.5-super-vl",band="false"} 4
 ghostship_ai_model_rank{tier="free",provider="opencode-go",model="minimax_minimax-m3.1-flash"} 1
 ghostship_ai_model_rank{tier="free",provider="nvidia",model="glm-5.3-flash"} 2
 ghostship_ai_model_rank{tier="free",provider="groq",model="qwen3.8-27b"} 3

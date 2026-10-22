@@ -151,8 +151,11 @@ in
   # whole rule set. NixOS rewrites /etc on each switch, so identity and SSH
   # watches also fire during deployments; alerts correlate them with switches.
   security.audit = {
-    # A single complain-mode app start overflowed 8192 (185 lost, 2026-10-21).
-    backlogLimit = 32768;
+    # A single complain-mode app start overflowed 8192 (185 lost, 2026-10-21),
+    # and a container restart burst overflowed 32768 (70811 lost, 2026-10-22).
+    # The limit is mirrored in the ghostship-audit-backlog unit, which sets it
+    # on the kernel after the audit rules were loaded.
+    backlogLimit = 131072;
     rules = [
       "-w /etc/passwd -p wa -k identity"
       "-w /etc/shadow -p wa -k identity"
