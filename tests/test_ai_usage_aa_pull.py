@@ -582,6 +582,31 @@ class PullBudgetTests(unittest.TestCase):
             for slug in self.DEPRECATED[4:]:
                 self.assertIsNone(records[slug]["cost_per_task"])
 
+    def test_a_fast_pull_reads_four_model_pages_and_writes_both_caches(self):
+        # Every page is fast, so the run stops at the cap of the run: four
+        # pages of the six that were wanted.
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "aa.json"
+            board = Path(folder) / "aa-3d.json"
+            result = aa_pull.refresh(
+                cache,
+                now=NOW,
+                read=self._reader(read_seconds=0.0),
+                model_pages=self._model_pages(board, page_seconds=0.0),
+                aa3d_path=board,
+                catalog_slugs=list(self.DEPRECATED),
+            )
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(len(self.model_reads), 4)
+            self.assertEqual(result.get("model_page_fetches"), 4)
+            self.assertEqual(result.get("model_page_skipped"), 2)
+            # Both caches are written.
+            self.assertTrue(board.exists())
+            self.assertTrue(cache.exists())
+            written = json.loads(cache.read_text(encoding="utf-8"))
+            self.assertEqual(written.get("model_page_skipped"), 2)
+            self.assertTrue(written["records"])
+
     def test_a_failed_board_keeps_the_last_board_and_refreshes_the_cache(self):
         # The AA-3D page could not be read. The last good board is kept, and
         # the quality cache is refreshed: the board is not the quality data.

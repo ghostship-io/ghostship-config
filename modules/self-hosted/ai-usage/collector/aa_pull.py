@@ -98,7 +98,7 @@ COST_BASIS_MODEL_PAGE = "aa_model_page"
 # A model page is about four megabytes. The pull reads only the pages of the
 # models the live catalog still offers, and it reads at most this many of
 # them in one run. The count is reported with the result.
-MAX_MODEL_PAGE_FETCHES = 10
+MAX_MODEL_PAGE_FETCHES = 4
 
 # The budget of one pull, in seconds. The pull reads public pages over the
 # network, and a page that is slow must not let the run outlive the unit
