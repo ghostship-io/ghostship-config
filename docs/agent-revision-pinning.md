@@ -38,9 +38,10 @@ If a future bump is not primed, the host's upgrade fails with the
 
 The private agent source now lives in the `ghostship-io` organisation. The
 `ghostship-private-agent` input URL and both lock owners name that
-organisation, and the pinned revision, its `narHash` and its `lastModified`
-are unchanged: only the source URL moved. The repositories were renamed at the
-same time — `nixos-config` became `ghostship-config` and
+organisation. The pinned revision is `f6a415dd` (free-pool grant removal and
+conservative unknown limits), which descends from the previous pin
+`cb003746`, so nothing on the pinned line is dropped. The repositories were
+renamed at the same time — `nixos-config` became `ghostship-config` and
 `orca-advanced-calibration` became `ghostship-orca` — while local checkout
 paths and T3 project identifiers stayed the same.
 
@@ -55,8 +56,8 @@ Those aliases take effect only in an agent revision that implements them. A
 pin bump that adds them must descend from the pinned revision, as
 [the pin guard](#the-pin-must-not-move-backwards) requires; a revision from
 another line would drop the coordinator behaviour that is already deployed.
-Until that bump, the aliases are inert configuration and the pinned revision
-keeps running unchanged.
+The pinned revision `f6a415dd` carries that implementation, so the alias map
+is live.
 
 ## The pin must not move backwards
 
