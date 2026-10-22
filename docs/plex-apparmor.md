@@ -192,7 +192,14 @@ Verified on chill-penguin (kernel 6.19, apparmor_parser 5.0.2), 2026-10-21:
 - A profile has a limit on named exec transitions. Going past it fails the
   whole policy load ("too many specified profile transitions"). The kernel
   keeps the old policy and `apparmor.service` reload fails. Parse every built
-  policy (`apparmor_parser -Q -K`) and abort the switch on any failure.
+  policy (`apparmor_parser -Q -K`) and abort the switch on any failure. The
+  budget is twelve distinct named targets per profile block, and
+  `tests/check-apparmor-profiles.py` holds it in CI: it parses every policy
+  the host loads, exactly as the host renders it, and counts the transitions
+  of every block in it. The include tree it parses against is the AppArmor
+  package of the machine that runs the check, which holds the same
+  abstractions and tunables the host's parser searches. A profile file that
+  no policy loads has to be named in the check's allowlist with a reason.
 - A reloaded policy reaches an idle task only at its next mediated call.
 
 ## Policy limits

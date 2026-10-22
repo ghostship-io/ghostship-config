@@ -55,7 +55,11 @@ def main():
             del credential
             locked = nodes[name]['locked']
             if not private_source.supported_source(locked, spec['repo']):
-                raise SystemExit('Unsupported private source declaration: ' + name)
+                raise SystemExit(
+                    'Unsupported private source declaration: ' + name
+                    + ' (a lock written before the transfer needs '
+                    + private_source.TRANSITION_OWNERS_VARIABLE + ')'
+                )
             if spec['dir'] and locked.get('dir') != spec['dir']:
                 raise SystemExit('Unsupported private source directory: ' + name)
             checkout = root/('checkout-' + suffix)
