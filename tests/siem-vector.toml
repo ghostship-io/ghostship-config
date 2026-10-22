@@ -184,3 +184,69 @@ assert!(!contains(m, "s3cret"), m)
 assert!(!contains(m, "AAAAB3NzaC1"), m)
 assert!(contains(m, "find / -perm -4000"), m)
 '''
+
+[[tests]]
+name = "secret names are redacted in every shape a log carries them"
+[[tests.inputs]]
+insert_at = "journal_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = '{"password":"FAKEpasswordvalue"} {"token":"FAKEtokenvalue"} {"cookie":"sid=FAKEcookievalue"} {"api_key":"FAKEapikeyvalue"} {"client_secret":"FAKEclientsecretvalue"} {"authorization":"FAKEschemelesstoken"} password: FAKEcolonvalue client_secret: FAKEclientsecretcolon password="FAKEquotedvalue" token=FAKEeqvalue'
+_TRANSPORT = "journal"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+m = string!(.message)
+assert_eq!(m, "{\"password\":\"[REDACTED]\"} {\"token\":\"[REDACTED]\"} {\"cookie\":\"[REDACTED]\"} {\"api_key\":\"[REDACTED]\"} {\"client_secret\":\"[REDACTED]\"} {\"authorization\":\"[REDACTED]\"} password: [REDACTED] client_secret: [REDACTED] password=\"[REDACTED]\" token=[REDACTED]")
+assert!(!contains(m, "FAKEpasswordvalue"), m)
+assert!(!contains(m, "FAKEtokenvalue"), m)
+assert!(!contains(m, "FAKEcookievalue"), m)
+assert!(!contains(m, "FAKEapikeyvalue"), m)
+assert!(!contains(m, "FAKEclientsecretvalue"), m)
+assert!(!contains(m, "FAKEschemelesstoken"), m)
+assert!(!contains(m, "FAKEcolonvalue"), m)
+assert!(!contains(m, "FAKEclientsecretcolon"), m)
+assert!(!contains(m, "FAKEquotedvalue"), m)
+assert!(!contains(m, "FAKEeqvalue"), m)
+'''
+
+[[tests]]
+name = "the shapes that were already sealed stay sealed"
+[[tests.inputs]]
+insert_at = "journal_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = 'password=FAKEeqsecret token=FAKEeqsecretvalue Authorization: Bearer FAKEbearersecret Cookie: sid=FAKEcookiesecret x-api-key: FAKEapikeysecret {"authorization":"Bearer FAKEjsonbearersecret"}'
+_TRANSPORT = "journal"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+m = string!(.message)
+assert_eq!(m, "password=[REDACTED] token=[REDACTED] Authorization: Bearer [REDACTED] Cookie: [REDACTED] x-api-key: [REDACTED] {\"authorization\":\"Bearer [REDACTED]\"}")
+assert!(!contains(m, "FAKEeqsecret"), m)
+assert!(!contains(m, "FAKEeqsecretvalue"), m)
+assert!(!contains(m, "FAKEbearersecret"), m)
+assert!(!contains(m, "FAKEcookiesecret"), m)
+assert!(!contains(m, "FAKEapikeysecret"), m)
+assert!(!contains(m, "FAKEjsonbearersecret"), m)
+'''
+
+[[tests]]
+name = "names that only start with a secret word keep their value"
+[[tests.inputs]]
+insert_at = "journal_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = "session_count: 3 retry_after=30s\npassword_policy: strict signal: reached\n{\"status\":\"ok\",\"retries\":2,\"auth_method\":\"proxy\"}"
+_TRANSPORT = "journal"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.message, "session_count: 3 retry_after=30s\npassword_policy: strict signal: reached\n{\"status\":\"ok\",\"retries\":2,\"auth_method\":\"proxy\"}")
+'''
