@@ -2087,7 +2087,7 @@
   {
    "id": 23,
    "title": "Range  /  durable state timeline (selected range)",
-   "description": "State changes observed inside the selected time range. The range comes from the Grafana time picker; repeated polls do not multiply entries and a state transition stays next to its earlier state.",
+   "description": "State changes inside the selected time range. The datasource bounds the search with the picker's start and end, so a range ending in the past is honoured; no relative window is applied.",
    "type": "table",
    "gridPos": {
     "x": 0,
@@ -2443,7 +2443,7 @@
       "type": "victoriametrics-logs-datasource",
       "uid": "victorialogs"
      },
-     "expr": "stream:=autonomous-work _time:$__range kind:in(run,subagent,job,launch,workflow,review,request,continuation) | last 1 by (_time) partition by (source,kind,work_id,event_at,status) | sort by (event_at desc) limit 200 | fields _time,_msg,event_at,source,kind,work_id,status,provider,evidence,thread_url,github_url",
+     "expr": "stream:=autonomous-work kind:in(run,subagent,job,launch,workflow,review,request,continuation) | last 1 by (_time) partition by (source,kind,work_id,event_at,status) | sort by (event_at desc) limit 200 | fields _time,_msg,event_at,source,kind,work_id,status,provider,evidence,thread_url,github_url",
      "queryType": "instant",
      "maxLines": 200
     }
@@ -2518,7 +2518,7 @@
   {
    "id": 24,
    "title": "Webhook fires  /  selected range",
-   "description": "Webhooks that fired inside the selected time range, with their receipt outcome; the window follows the Grafana time picker.",
+   "description": "Webhooks that fired inside the selected time range, with their receipt outcome. The datasource sends the picker's start and end, so the window is exact.",
    "type": "table",
    "gridPos": {
     "x": 14,
@@ -2874,7 +2874,7 @@
       "type": "victoriametrics-logs-datasource",
       "uid": "victorialogs"
      },
-     "expr": "stream:=autonomous-work _time:$__range kind:=webhook | last 1 by (_time) partition by (source,kind,work_id) | sort by (fired_at desc) limit 200 | fields _time,_msg,fired_at,event_at,source,work_id,event,action,evidence,status,github_url",
+     "expr": "stream:=autonomous-work kind:=webhook | last 1 by (_time) partition by (source,kind,work_id) | sort by (fired_at desc) limit 200 | fields _time,_msg,fired_at,event_at,source,work_id,event,action,evidence,status,github_url",
      "queryType": "instant",
      "maxLines": 200
     }
