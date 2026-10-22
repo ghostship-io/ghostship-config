@@ -464,6 +464,10 @@ class PullBudgetTests(unittest.TestCase):
 
     def setUp(self):
         self.clock = FakeClock()
+        # The pull measures its budget with this clock. A test moves it by
+        # hand, so a slow page is a number and not a minute of waiting.
+        self.previous_clock = getattr(aa_pull, "CLOCK", None)
+        aa_pull.CLOCK = self.clock
         # The page reads, with the clock at the moment of the read.
         self.reads: list[tuple[str, float]] = []
         # The model page reads, with the clock at the moment of the read.
@@ -471,6 +475,9 @@ class PullBudgetTests(unittest.TestCase):
         # Whether the AA-3D board was on the disk when the first model page
         # was read.
         self.board_at_first_page: bool | None = None
+
+    def tearDown(self):
+        aa_pull.CLOCK = self.previous_clock
 
     def _reading(self, url, text, *, blocked=False):
         """One reading of a public page."""
@@ -520,6 +527,60 @@ class PullBudgetTests(unittest.TestCase):
             }
 
         return read
+
+    def _budget_started(self):
+        """The moment the budget of the model pages started.
+
+        The clock moves only while a page is read, and the AA-3D page is
+        read first, so the budget starts at the second read.
+        """
+        self.assertGreaterEqual(len(self.reads), 2)
+        return self.reads[1][1]
+
+    def test_the_board_is_written_before_the_model_pages_are_read(self):
+        # A model page that is slow must not lose the AA-3D board: the 3D
+        # tier reads that file, and the pull is killed when it is slow.
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "aa.json"
+            board = Path(folder) / "aa-3d.json"
+            result = aa_pull.refresh(
+                cache,
+                now=NOW,
+                read=self._reader(),
+                model_pages=self._model_pages(board),
+                aa3d_path=board,
+                catalog_slugs=list(self.DEPRECATED),
+            )
+            # The board was on the disk while the first model page was read.
+            self.assertTrue(self.board_at_first_page)
+            self.assertTrue(board.exists())
+            self.assertTrue(json.loads(board.read_text(encoding="utf-8"))["records"])
+            # The model pages are read at 10, 130, 250 and 370 seconds of the
+            # budget, and the fifth and the sixth are not read: the budget
+            # has less than ninety seconds left.
+            started = self._budget_started()
+            self.assertEqual(
+                [moment - started for _slug, moment in self.model_reads],
+                [10, 130, 250, 370],
+            )
+            # The run ends at 490 seconds of the budget.
+            self.assertEqual(self.clock.now - started, 490)
+            self.assertEqual(len(self.model_reads), 4)
+            self.assertEqual(result.get("model_page_fetches"), 4)
+            self.assertEqual(result.get("model_page_skipped"), 2)
+            # The quality cache is written even though two pages were not
+            # read.
+            self.assertEqual(result["status"], "ok")
+            written = json.loads(cache.read_text(encoding="utf-8"))
+            self.assertEqual(written.get("model_page_skipped"), 2)
+            records = {entry["slug"]: entry for entry in written["records"]}
+            # The models whose page was read carry the published cost.
+            for slug in self.DEPRECATED[:4]:
+                self.assertEqual(records[slug]["cost_per_task"], 1.0)
+            # The models whose page was not read carry no cost at all: a
+            # cost that was not read is unknown, never zero.
+            for slug in self.DEPRECATED[4:]:
+                self.assertIsNone(records[slug]["cost_per_task"])
 
     def test_a_failed_board_keeps_the_last_board_and_refreshes_the_cache(self):
         # The AA-3D page could not be read. The last good board is kept, and

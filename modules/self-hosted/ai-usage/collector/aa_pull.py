@@ -20,8 +20,10 @@ The rules are narrow on purpose:
 
 The pull reads the AA-3D page first and writes its snapshot as soon as
 the page is parsed, so a model page that is slow, that times out or that
-fails cannot lose it. A board that could not be read leaves the last good
-board alone, and it does not hold the quality cache back.
+fails cannot lose it. The model pages are then read under a total budget:
+a page is started only while enough of the budget is left for it to
+finish, the pages that are not read are counted, and the quality cache
+is written either way.
 
 The pull runs at most once a day. The collector itself never calls the
 network: it reads the cache the pull wrote.
@@ -97,6 +99,22 @@ COST_BASIS_MODEL_PAGE = "aa_model_page"
 # models the live catalog still offers, and it reads at most this many of
 # them in one run. The count is reported with the result.
 MAX_MODEL_PAGE_FETCHES = 10
+
+# The budget of one pull, in seconds. The pull reads public pages over the
+# network, and a page that is slow must not let the run outlive the unit
+# that runs it. The budget is measured from the moment the AA-3D snapshot
+# has been written, that is, from the start of the part of the pull that
+# reads the model pages, and it stays well below the timeout of that unit.
+PULL_BUDGET_SECONDS = 480.0
+
+# A model page is started only while this much of the budget is left, so a
+# page that is read at the last moment still has the time to finish.
+MIN_REMAINING_SECONDS = 90.0
+
+# The clock the budget of the model pages is measured with. A test moves it
+# by hand: the pull reads pages over the network, and a slow page has to be
+# a number and not a minute of waiting.
+CLOCK: Any = time.monotonic
 
 # A deprecated model is superseded, not changed: its published cost is read
 # once and never again. A model that is not deprecated but is absent from
@@ -516,6 +534,43 @@ def parse_aa3d(html: str) -> dict[str, dict[str, Any]]:
     return found
 
 
+class _ModelPageBudget:
+    """The time one pull may spend on the model pages.
+
+    The pull has a total budget, and a model page is started only while
+    enough of it is left for the page to finish. The pages that are not
+    read are counted, so a run that skipped them says so.
+
+    The clock is injected: a test reads the pages of a fixture and moves
+    the clock by hand, with no network and no sleeping.
+    """
+
+    def __init__(
+        self,
+        clock: Any,
+        *,
+        budget_seconds: float = PULL_BUDGET_SECONDS,
+        min_remaining: float = MIN_REMAINING_SECONDS,
+    ) -> None:
+        self._clock = clock
+        self._budget = float(budget_seconds)
+        self._min_remaining = float(min_remaining)
+        self.started = float(clock())
+        self.skipped = 0
+
+    def used(self) -> float:
+        """The seconds of the budget the pull has spent."""
+        return float(self._clock()) - self.started
+
+    def remaining(self) -> float:
+        """The seconds of the budget that are left."""
+        return self._budget - self.used()
+
+    def allow(self) -> bool:
+        """True when a model page may be started now."""
+        return self.remaining() >= self._min_remaining
+
+
 def _read_model_pages(
     records: dict[str, dict[str, Any]],
     leaderboard: Mapping[str, Any],
@@ -524,6 +579,7 @@ def _read_model_pages(
     offered: Iterable[str] = (),
     known: Mapping[str, Any] | None = None,
     now: float | None = None,
+    budget: _ModelPageBudget | None = None,
 ) -> tuple[dict[str, Any], int]:
     """The published cost of the models whose page has to be read.
 
@@ -532,6 +588,11 @@ def _read_model_pages(
     already, and at most this many times in one run. The cost of a
     deprecated model never changes, so it is read once and never again; a
     model that is not deprecated is read again at most once a week.
+
+    With a budget, a page is read only while enough of the budget is left
+    for it to finish. The pages that are not read are counted, and their
+    models keep the cost they had: a cost that was not read is unknown,
+    never zero.
 
     The result is the cost of every model whose page was read or whose
     cost was already known, and the number of pages that were read.
@@ -565,7 +626,16 @@ def _read_model_pages(
                 entry["cost_basis"] = COST_BASIS_MODEL_PAGE
                 costs[slug] = dict(previous)
                 continue
-        if model_pages is None or fetches >= MAX_MODEL_PAGE_FETCHES:
+        if model_pages is None:
+            continue
+        if fetches >= MAX_MODEL_PAGE_FETCHES:
+            # The cap of the run. The page is not read, and it is counted.
+            if budget is not None:
+                budget.skipped += 1
+            continue
+        if budget is not None and not budget.allow():
+            # Not enough of the budget is left for a page to finish.
+            budget.skipped += 1
             continue
         fetches += 1
         page = model_pages(slug)
@@ -651,6 +721,9 @@ def pull(
     board_document = aa3d_document(board, time.time()) if board else {}
     if board_document.get("records") and write_aa3d is not None:
         write_aa3d(board_document)
+    # The budget of the model pages starts here: the AA-3D snapshot has
+    # been written, and the rest of the pull is what the budget pays for.
+    budget = _ModelPageBudget(CLOCK)
 
     for key, url, role in SOURCES:
         if key == "aa3d":
@@ -738,15 +811,17 @@ def pull(
             }
     # A deprecated or leaderboard-absent model: its own page publishes the
     # cost per task. The page is read only for a model the live catalog
-    # still offers, only when its cost is not known already, and at most
-    # this many times in one run. The published number is used as it is
-    # published, and a cost is never estimated.
+    # still offers, only when its cost is not known already, at most this
+    # many times in one run, and only while the budget of the run has
+    # enough left for the page to finish. The published number is used as
+    # it is published, and a cost is never estimated.
     model_page_costs, fetches = _read_model_pages(
         records,
         leaderboard,
         model_pages=model_pages,
         offered=offered,
         known=known,
+        budget=budget,
     )
     ordered = [records[slug] for slug in sorted(records)]
     fetched_at = (
@@ -786,6 +861,10 @@ def pull(
         # The model page costs of this pull, and the models that were read.
         "model_page_costs": model_page_costs,
         "model_page_fetches": fetches,
+        # The model pages that were not read, and the budget of the run.
+        "model_page_skipped": budget.skipped,
+        "model_page_budget_seconds": PULL_BUDGET_SECONDS,
+        "model_page_budget_used_seconds": round(budget.used(), 3),
         # The AA-3D board, in the contract the collector reads it in.
         "aa3d": board_document,
     }
@@ -937,6 +1016,7 @@ def refresh(
             "new_models": 0,
             "changed_models": 0,
             "model_page_fetches": 0,
+            "model_page_skipped": 0,
         }
     previous = {}
     try:
@@ -970,11 +1050,13 @@ def refresh(
             "new_models": 0,
             "changed_models": 0,
             "model_page_fetches": int(document.get("model_page_fetches") or 0),
+            "model_page_skipped": int(document.get("model_page_skipped") or 0),
         }
     difference = aa_diff.diff(previous, document)
     document.pop("aa3d", None)
     page_costs = document.pop("model_page_costs", None)
     fetches = int(document.pop("model_page_fetches", 0) or 0)
+    skipped = int(document.get("model_page_skipped") or 0)
     # The new and the changed models travel with the cache, so the
     # collector publishes them without reading the old pull.
     document = {
@@ -1001,6 +1083,14 @@ def refresh(
         "changed_models": len(difference.get("changed") or {}),
         "removed_models": len(difference.get("removed") or []),
         "model_page_fetches": fetches,
+        # The model pages that were not read, and the budget of the run.
+        "model_page_skipped": skipped,
+        "model_page_budget_seconds": int(
+            document.get("model_page_budget_seconds") or 0
+        ),
+        "model_page_budget_used_seconds": float(
+            document.get("model_page_budget_used_seconds") or 0.0
+        ),
         "new_model_names": [
             entry.get("name") or entry.get("slug")
             for entry in (difference.get("added") or [])
