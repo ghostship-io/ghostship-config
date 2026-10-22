@@ -33,6 +33,33 @@ FIXTURE_ROUTING_ON = ROOT / "tests/fixtures/ai-usage/providers-review-routing-on
 SECTIONS = ("Bulk", "Free", "Frontier", "3D", "Providers")
 TIERS = {"Bulk": "bulk", "Free": "free", "Frontier": "frontier", "3D": "3d"}
 
+# The name a provider is read by, as the mockup reads it. A provider that
+# is not named here keeps the identifier the collector publishes.
+PROVIDER_NAMES = {
+    "claude": "Claude",
+    "codex": "Codex",
+    "antigravity": "Antigravity",
+    "opencode-go": "OpenCode Go",
+    "opencode": "OpenCode",
+    "ollama": "Ollama",
+    "grok": "Grok",
+    "groq": "Groq",
+    "nvidia": "NVIDIA",
+    "google": "Google",
+    "openrouter": "OpenRouter",
+    "cursor": "Cursor",
+    "kilo": "Kilo",
+    "kilo-keyed": "Kilo (keyed)",
+    "cloudflare-workers-ai": "Cloudflare",
+    "requesty": "Requesty",
+    "upstage": "Upstage",
+    "inception": "Inception",
+    "ovh": "OVH",
+    "deepseek": "DeepSeek",
+    "moonshot": "Moonshot",
+}
+
+
 def panels(page):
     """The panels of the page, with the ones a collapsed row holds."""
     out = []
@@ -146,6 +173,14 @@ def clipped_selectors(styles):
         for selector, declarations in css_rules(media_body(styles))
         if "text-overflow: ellipsis" in declarations
     ]
+
+
+def provider_name_target(panel):
+    """The target that carries the name a provider is read by."""
+    for target in panel.get("targets") or []:
+        if '"providerName"' in (target.get("expr") or ""):
+            return target
+    raise AssertionError(f"no target of {panel.get('title')!r} names the provider")
 
 
 class Template:
@@ -503,6 +538,14 @@ class ProvidersPageTests(unittest.TestCase):
             content = section(self.page, title)["options"]["content"]
             self.assertIn('class="unk" title="', content, title)
 
+    def test_every_provider_is_read_by_its_name(self):
+        """A provider is read by the name the mockup gives it."""
+        for title in list(TIERS) + ["Providers"]:
+            expression = provider_name_target(section(self.page, title))["expr"]
+            for identifier, name in PROVIDER_NAMES.items():
+                self.assertIn(f'"^{identifier}$"', expression, f"{title} {identifier}")
+                self.assertIn(f'"{name}"', expression, f"{title} {name}")
+
     def test_the_on_pace_pace_carries_its_number_on_a_narrow_screen(self):
         """Every pace of a narrow screen carries a number: the on-pace one reads '● 0'."""
         for title in ("Bulk", "Frontier", "3D"):
@@ -714,6 +757,33 @@ class WorkedCasesTests(unittest.TestCase):
         # The cell reads a dash when the route has no place.
         content = panel["options"]["content"]
         self.assertIn("{{#if rank}}{{rank}}{{else}}–{{/if}}", content)
+
+    def test_the_providers_are_read_by_their_name(self):
+        """A provider is read by the name the mockup gives it, and an unknown id as it is."""
+        expected = {
+            "Free": {"nvidia": "NVIDIA", "deepseek": "DeepSeek", "google": "Google",
+                     "opencode-go": "OpenCode Go", "fireworks": None},
+            "Providers": {"claude": "Claude", "nvidia": "NVIDIA", "google": "Google",
+                          "openrouter": "OpenRouter", "fireworks": None},
+        }
+        for title, names in expected.items():
+            panel = section(self.page, title)
+            target = provider_name_target(panel)
+            rows = self.store.query(target["expr"].replace("$provider", ".*"))
+            found = {
+                row["metric"]["provider"]: row["metric"].get("providerName")
+                for row in rows
+            }
+            for provider, name in names.items():
+                self.assertEqual(found.get(provider), name, f"{title} {provider}")
+        # The page reads the name where it shows the provider.
+        for title in list(TIERS) + ["Providers"]:
+            content = section(self.page, title)["options"]["content"]
+            self.assertIn(
+                "{{#if providerName}}{{providerName}}{{else}}{{provider}}{{/if}}",
+                content,
+                title,
+            )
 
     def test_the_basis_of_a_route_is_the_one_the_collector_publishes(self):
         """The basis of a route is published, inferred, reported or unknown."""
