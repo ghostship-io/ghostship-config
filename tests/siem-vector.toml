@@ -226,7 +226,7 @@ extract_from = "redacted"
 type = "vrl"
 source = '''
 m = string!(.message)
-assert_eq!(m, "password=[REDACTED] token=[REDACTED] Authorization: Bearer [REDACTED] Cookie: [REDACTED] x-api-key: [REDACTED] {\"authorization\":\"Bearer [REDACTED]\"}")
+assert_eq!(m, "password=[REDACTED] token=[REDACTED] Authorization: Bearer [REDACTED] Cookie: [REDACTED] x-api-key: [REDACTED] {\"authorization\":\"[REDACTED]\"}")
 assert!(!contains(m, "FAKEeqsecret"), m)
 assert!(!contains(m, "FAKEeqsecretvalue"), m)
 assert!(!contains(m, "FAKEbearersecret"), m)
@@ -249,4 +249,40 @@ extract_from = "redacted"
 type = "vrl"
 source = '''
 assert_eq!(.message, "session_count: 3 retry_after=30s\npassword_policy: strict signal: reached\n{\"status\":\"ok\",\"retries\":2,\"auth_method\":\"proxy\"}")
+'''
+
+[[tests]]
+name = "a quoted secret value is redacted through its closing quote"
+[[tests.inputs]]
+insert_at = "journal_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = "{\"password\":\"two words\"} password=\"two words\" next=1 {\"token\":\"a\\\"b c\"} {\"authorization\":\"Bearer abc def\"} {\"db_password\":\"two words\"} db_password=abc next=1"
+_TRANSPORT = "journal"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+m = string!(.message)
+assert_eq!(m, "{\"password\":\"[REDACTED]\"} password=\"[REDACTED]\" next=1 {\"token\":\"[REDACTED]\"} {\"authorization\":\"[REDACTED]\"} {\"db_password\":\"[REDACTED]\"} db_password=[REDACTED] next=1")
+assert!(!contains(m, "two words"), m)
+assert!(!contains(m, "b c"), m)
+assert!(!contains(m, "abc def"), m)
+'''
+
+[[tests]]
+name = "a quoted secret value keeps a name that only starts with a secret word"
+[[tests.inputs]]
+insert_at = "journal_shape"
+type = "log"
+[tests.inputs.log_fields]
+message = "{\"session_count\":\"3 4\"} password_policy: strict mode"
+_TRANSPORT = "journal"
+[[tests.outputs]]
+extract_from = "redacted"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.message, "{\"session_count\":\"3 4\"} password_policy: strict mode")
 '''
