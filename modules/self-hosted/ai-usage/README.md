@@ -128,6 +128,11 @@ instant the history is complete from. A slice that runs out of time leaves
 the cache as it was and is read again by the next run; the part that was
 read still counts.
 
+A cache that does not parse, or that does not carry the shape the reader
+expects, is discarded and the backfill starts again. A cache is never
+trusted for an event that is dated in the future: those events are
+dropped.
+
 The text of a provider's error is read in memory, to pick the outcome, and
 it never leaves the process: it is not stored, not returned, not logged and
 not in an event. A real limit message names the account it belongs to.

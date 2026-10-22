@@ -1052,6 +1052,92 @@ class BackfillTests(unittest.TestCase):
         self.assertIn(newest / 1000, moments)
 
 
+class CacheRobustnessTests(unittest.TestCase):
+    """A cache that cannot be trusted is discarded, not believed."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.state = Path(self.directory.name) / "state"
+        self.state.mkdir()
+        self.cache_path = self.state / "opencode-events.json"
+        self.now = 1800000000.0
+        self.path, self.connection = build_database(
+            self.directory.name,
+            synthetic_rows(10, start=int((self.now - 10 * 3600) * 1000), step=3600000),
+        )
+        self.addCleanup(self.connection.close)
+
+    def run_reader(self):
+        return reader().collect_events(self.path, self.cache_path, self.now)
+
+    def test_a_cache_that_does_not_parse_starts_the_backfill_again(self):
+        self.cache_path.write_text("{not json at all", encoding="utf-8")
+        result = self.run_reader()
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["complete_since"], self.now - 3 * 86400)
+        cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        self.assertEqual(cache["complete_since"], self.now - 3 * 86400)
+
+    def test_the_backfill_walks_back_again_after_a_corrupt_cache(self):
+        self.run_reader()
+        self.cache_path.write_text("{not json at all", encoding="utf-8")
+        self.run_reader()
+        result = self.run_reader()
+        self.assertLess(result["complete_since"], self.now - 3 * 86400)
+
+    def test_a_cache_of_the_wrong_shape_is_discarded(self):
+        self.cache_path.write_text(json.dumps({"events": "not a list"}), encoding="utf-8")
+        result = self.run_reader()
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["complete_since"], self.now - 3 * 86400)
+
+    def test_a_cache_that_is_not_an_object_is_discarded(self):
+        self.cache_path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+        result = self.run_reader()
+        self.assertEqual(result["complete_since"], self.now - 3 * 86400)
+
+    def test_future_dated_events_are_dropped(self):
+        cache = {
+            "version": 1,
+            "complete_since": self.now - 3 * 86400,
+            "cursor": int((self.now - 3600) * 1000),
+            "events": [
+                {
+                    "provider": "opencode-go",
+                    "model": "example/model",
+                    "at": self.now + 3600,
+                    "outcome": "success",
+                    "usage": 1,
+                    "window_hint": None,
+                },
+                {
+                    "provider": "opencode-go",
+                    "model": "example/model",
+                    "at": self.now - 36000,
+                    "outcome": "success",
+                    "usage": 2,
+                    "window_hint": None,
+                },
+            ],
+        }
+        self.cache_path.write_text(json.dumps(cache), encoding="utf-8")
+        result = self.run_reader()
+        moments = [event["at"] for event in result["events"]]
+        self.assertNotIn(self.now + 3600, moments)
+
+    def test_a_cache_from_the_future_is_not_trusted_for_its_history(self):
+        cache = {
+            "version": 1,
+            "complete_since": self.now + 86400,
+            "cursor": int((self.now - 3600) * 1000),
+            "events": [],
+        }
+        self.cache_path.write_text(json.dumps(cache), encoding="utf-8")
+        result = self.run_reader()
+        self.assertLessEqual(result["complete_since"], self.now)
+
+
 class ConnectionTests(unittest.TestCase):
     """The connection is closed on every path."""
 
