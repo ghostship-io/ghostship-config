@@ -174,20 +174,31 @@ class CapacityTests(unittest.TestCase):
         ]
 
     def test_an_account_that_frees_up_soon_outranks_one_that_stays_used_up(self):
+        # The order across the providers comes from the pace of their own
+        # window: the account behind the line its window draws is the one
+        # that is used first. The score is the measured value and carries no
+        # capacity term, so the two models of equal measurement score the
+        # same.
         ranked = ranking.rank_models(
             models=self.models,
             catalog=self.catalog,
             quota_windows={
                 "claude": [
                     ranking.QuotaWindow(
-                        kind="weekly", used_ratio=0.5, reset_epoch=NOW + 3600.0
-                    , observed_at=NOW
+                        kind="weekly",
+                        used_ratio=0.5,
+                        reset_epoch=NOW + 3600.0,
+                        duration_seconds=2 * 3600.0,
+                        observed_at=NOW,
                     )
                 ],
                 "codex": [
                     ranking.QuotaWindow(
-                        kind="weekly", used_ratio=0.5, reset_epoch=NOW + 5 * DAY
-                    , observed_at=NOW
+                        kind="weekly",
+                        used_ratio=0.8,
+                        reset_epoch=NOW + 5 * DAY,
+                        duration_seconds=10 * DAY,
+                        observed_at=NOW,
                     )
                 ],
             },
@@ -200,8 +211,11 @@ class CapacityTests(unittest.TestCase):
         claude = frontier[0]
         codex = frontier[1]
         self.assertEqual(claude.remaining, 0.5)
-        self.assertEqual(codex.remaining, 0.5)
-        self.assertGreater(claude.score, codex.score)
+        self.assertAlmostEqual(codex.remaining, 0.2, places=6)
+        # The score is the value: the capacity is reported beside the rank,
+        # never folded into it.
+        self.assertAlmostEqual(claude.score, codex.score, places=6)
+        self.assertGreater(claude.pace, codex.pace)
 
     def test_an_exhausted_account_makes_its_models_unavailable(self):
         ranked = ranking.rank_models(
@@ -642,12 +656,17 @@ class LineageFrontierTests(unittest.TestCase):
         self.assertEqual(ranking._newness(None, "claude-opus-4-8", "anthropic")[2], (4, 8))
 
 
-class EconomyBulkTests(unittest.TestCase):
-    """The bulk tier prefers the economy models."""
+class HonestScoreTests(unittest.TestCase):
+    """The published score is the measured value, and nothing else.
+
+    A name suffix, a catalog price, a capacity term and a pace term are
+    all guesses. They are not in the score, and a model of equal measured
+    value keeps its place whatever it is called.
+    """
 
     def setUp(self):
         # Both models share a family, so both have the same quality and only
-        # the economy weighting of the bulk tier separates them.
+        # the economy weighting of the bulk tier used to separate them.
         self.catalog = make_catalog(
             {
                 "deepseek": {
@@ -675,18 +694,20 @@ class EconomyBulkTests(unittest.TestCase):
             now=NOW,
         )
 
-    def test_an_economy_model_outranks_a_premium_model_of_the_same_quality(self):
+    def test_a_name_suffix_does_not_change_the_score(self):
         bulk = tier_members(self.rank(), "bulk")
-        self.assertEqual(
-            [item.model for item in bulk], ["deepseek-v4.1-flash", "deepseek-v4-pro"]
-        )
+        self.assertEqual(len(bulk), 2)
         self.assertEqual(bulk[0].quality, bulk[1].quality)
+        # The measured value is the same, so the score is the same: the
+        # "flash" suffix buys nothing.
+        self.assertAlmostEqual(bulk[0].score, bulk[1].score, places=6)
         self.assertAlmostEqual(
-            bulk[0].score / bulk[1].score,
-            ranking.ECONOMY_BULK_FACTOR / ranking.PREMIUM_BULK_FACTOR,
+            bulk[0].score,
+            bulk[0].value if bulk[0].value is not None else bulk[0].score,
+            places=6,
         )
 
-    def test_a_price_above_the_cheap_threshold_is_not_an_economy_model(self):
+    def test_a_catalog_price_does_not_change_the_score(self):
         catalog = make_catalog(
             {
                 "kimi": {
@@ -713,18 +734,46 @@ class EconomyBulkTests(unittest.TestCase):
             now=NOW,
         )
         bulk = {item.model: item for item in tier_members(ranked, "bulk")}
-        quality = bulk["kimi-k2"].quality
-        self.assertEqual(quality, bulk["kimi-k3"].quality)
-        # Without a quota window the capacity is unknown, so it earns no
-        # bonus: an unknown allowance is never treated as headroom.
         self.assertAlmostEqual(
-            bulk["kimi-k2"].score, quality * ranking.PREMIUM_BULK_FACTOR
-        )
-        self.assertAlmostEqual(
-            bulk["kimi-k3"].score, quality * ranking.ECONOMY_BULK_FACTOR
+            bulk["kimi-k2"].score, bulk["kimi-k3"].score, places=6
         )
 
+    def test_a_capacity_or_pace_term_is_not_in_the_score(self):
+        without = {
+            (item.provider, item.model): item
+            for item in tier_members(self.rank(), "bulk")
+        }
+        ranked = ranking.rank_models(
+            models=self.models,
+            catalog=self.catalog,
+            quota_windows={
+                "deepseek": [
+                    ranking.QuotaWindow(
+                        kind="weekly",
+                        used_ratio=0.1,
+                        reset_epoch=NOW + 5 * DAY,
+                        observed_at=NOW,
+                    )
+                ]
+            },
+            free_models=set(),
+            usage_tokens={},
+            now=NOW,
+        )
+        with_window = {
+            item.model: item for item in tier_members(ranked, "bulk")
+        }
+        for model, item in with_window.items():
+            self.assertAlmostEqual(
+                item.score,
+                without[(item.provider, item.model)].score,
+                places=6,
+            )
+
     def test_a_promotional_free_model_leads_the_bulk_tier(self):
+        # The free route leads because its measured cost per task is zero,
+        # which the value formula turns into the full efficiency. Nothing in
+        # the score knows that the model is called "-free".
         catalog = make_catalog(
             {
                 "opencode-go": {
@@ -741,19 +790,26 @@ class EconomyBulkTests(unittest.TestCase):
                 }
             }
         )
+        models = [
+            ranking.ModelRecord("opencode-go", "minimax-m3.1-flash-free"),
+            ranking.ModelRecord("opencode-go", "deepseek-v4-pro"),
+        ]
+        cache = aa_cache_for(models)
+        for record in cache["records"]:
+            if record["model"] == "minimax-m3.1-flash-free":
+                record["cost_per_task"] = 0.0
         ranked = ranking.rank_models(
-            models=[
-                ranking.ModelRecord("opencode-go", "minimax-m3.1-flash-free"),
-                ranking.ModelRecord("opencode-go", "deepseek-v4-pro"),
-            ],
+            models=models,
             catalog=catalog,
             quota_windows={},
             free_models={("opencode-go", "minimax-m3.1-flash-free")},
             usage_tokens={},
+            aa_cache=cache,
             now=NOW,
         )
         bulk = tier_members(ranked, "bulk")
         self.assertEqual(bulk[0].model, "minimax-m3.1-flash-free")
+        self.assertGreater(bulk[0].score, bulk[1].score)
 
 
 class RecencyBonusTests(unittest.TestCase):

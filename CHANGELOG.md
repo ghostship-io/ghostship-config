@@ -1,8 +1,13 @@
 # Changelog
 
-## [3.17.50] - 2026-10-22
+## [3.17.51] - 2026-10-22
 
 - Grafana dashboards lead with graphics: Providers (four tier columns of % left, T3-style provider cards, collapsed Why this order), Overview, Host, Security and Pipeline. Shared navigation is Overview, Work, Providers, Host, Security, Pipeline. Allowance bars show remaining ("% left") coloured critical below 10%, warning below 30%, otherwise good. The ordering measure is labelled **Paced Availability**. Freshness keeps series whose timestamp is within 90s of the newest collection, so entitlement and fact cards stay filled when sample timestamps are a few seconds apart. Frontier bars are labelled Chief (Claude Opus 5.5) and Backup (Codex GPT-6.1-Sol); order inside the tier stays Paced Availability.
+
+## [3.17.50] - 2026-10-22
+
+- Agent desktop browser stage: a stage-control restart re-pairs the windows it finds. Sway does not re-announce the windows it already has, so the anchor titles (the run id in a window's title) were only learned from new window events; after the restart that `run-chrome` loops on, every window stayed unpaired and `browser_window` `screenshot` and `ui` failed with `not_found` until the page titles happened to differ. The stage now reads the sway tree once at setup and seeds the anchor titles from it.
+- Agent desktop browser stage: only the focus lease's holder may release it. The viewer released a window's lease whenever its last client left, so a person closing the viewer closed the Chrome menu an agent was working with, and the agent's next click landed on the page behind it. The release now carries its actor (the viewer speaks for a person, the agent's CLI for an agent), a lease that belongs to someone else is left alone, an idle lease still expires on its own, and an explicit admin request (never from an agent) forces it down.
 
 ## [3.17.49] - 2026-10-22
 

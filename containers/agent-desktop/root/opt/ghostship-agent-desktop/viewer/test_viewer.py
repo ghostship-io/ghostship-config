@@ -143,6 +143,32 @@ class StageViewsTest(unittest.TestCase):
         self.assertEqual(stage.request_extra("w9"), {"con": 9})
 
 
+class StageReleaseTest(unittest.TestCase):
+    def test_the_viewer_releases_a_window_as_a_person(self):
+        """Catches the viewer dropping a lease an agent holds: the agent's Chrome menu closes."""
+        seen = []
+
+        async def fake_app_call(path, request, timeout=30.0):
+            seen.append(request)
+            return {}
+
+        class Host:
+            def socket(self, sid):
+                return "/nonexistent"
+
+            def request_extra(self, sid):
+                return {"con": 6}
+
+        original = server.app_call
+        server.app_call = fake_app_call
+        try:
+            caster = server.AppCaster(None, Host(), "w6", True, (800, 600))
+            asyncio.run(caster.release())
+        finally:
+            server.app_call = original
+        self.assertEqual(seen, [{"op": "release", "actor": "human", "con": 6}])
+
+
 class AppKeyTest(unittest.TestCase):
     def test_viewer_keys_become_app_actions(self):
         """Catches typed characters sent as key names (case lost), shortcuts typed as text, or key-up repeats."""

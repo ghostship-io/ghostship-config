@@ -15,7 +15,11 @@ from typing import Iterable, Iterator, Mapping, Sequence
 
 Sample = tuple[str, dict[str, str], float]
 
-_LABEL_VALUE = re.compile(r"[^a-zA-Z0-9_.\-]")
+# A label value may hold any character a Prometheus label value allows, and
+# a colon is one of them. The colon is kept on purpose: a T3 Code model id
+# carries its checkpoint as "model:1017", and a dashboard that filters on the
+# model has to use the id the provider gave.
+_LABEL_VALUE = re.compile(r"[^a-zA-Z0-9_.:\-]")
 _LABEL_NAME = re.compile(r"[^a-zA-Z0-9_]")
 
 # Label values are bounded so a rogue provider string cannot create

@@ -25,7 +25,7 @@ import os
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import codes
 from metrics import SourceResult, Sample
@@ -670,6 +670,77 @@ def read_openrouter(
 
 
 # --------------------------------------------------------------- Ollama
+# The Ollama Cloud account has a session window and a weekly window. The
+# session window is the one a lockout names: the provider refuses the
+# account with "you have reached your session usage limit".
+OLLAMA_WINDOWS = ("session", "weekly")
+
+# The fields the usage endpoint may publish for a window. The endpoint is
+# the provider's own, and its shape is not ours to invent: a field that is
+# not there is an unknown window, never a zero.
+_OLLAMA_LIMIT_FIELDS = {
+    "session": ("session", "session_limit", "sessionUsage", "session_usage"),
+    "weekly": ("weekly", "weekly_limit", "weeklyUsage", "weekly_usage"),
+}
+_OLLAMA_USED_FIELDS = ("used", "used_ratio", "usedPercent", "percent", "consumed")
+_OLLAMA_LIMIT_TOTAL_FIELDS = ("limit", "total", "max", "quota")
+_OLLAMA_RESET_FIELDS = ("reset_at", "resetsAt", "reset", "expires_at", "resets_at")
+
+
+def _ollama_window_reading(
+    body: Any, window: str
+) -> tuple[float | None, float | None, float | None]:
+    """The used share, the limit and the reset of one Ollama window.
+
+    The reading is the provider's own. A window the endpoint does not
+    describe has no reading: the share is unknown, and an unknown share is
+    never published as zero.
+    """
+    if not isinstance(body, Mapping):
+        return None, None, None
+    entry = None
+    for field in _OLLAMA_LIMIT_FIELDS[window]:
+        candidate = body.get(field)
+        if isinstance(candidate, Mapping):
+            entry = candidate
+            break
+    if entry is None:
+        return None, None, None
+    used: float | None = None
+    used_is_share = False
+    for field in _OLLAMA_USED_FIELDS:
+        value = entry.get(field)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            used = float(value)
+            # A share is already a share; an amount is not.
+            used_is_share = field in ("used_ratio",)
+            break
+    limit: float | None = None
+    for field in _OLLAMA_LIMIT_TOTAL_FIELDS:
+        value = entry.get(field)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            limit = float(value)
+            break
+    reset: float | None = None
+    for field in _OLLAMA_RESET_FIELDS:
+        value = entry.get(field)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            reset = float(value)
+            break
+        if isinstance(value, str) and value:
+            reset = iso_to_epoch(value)
+            if reset is not None:
+                break
+    if used is not None and not used_is_share:
+        if limit is not None and limit > 0:
+            # The amount that was used, over the amount the window allows.
+            used = used / limit
+        elif used > 1.0:
+            # A percentage of the window.
+            used = used / 100.0
+    return used, limit, reset
+
+
 def read_ollama(
     env_path: str | os.PathLike[str], now: float, http: HttpCall = http_request
 ) -> SourceResult:
@@ -685,6 +756,7 @@ def read_ollama(
         )
     headers = {"Authorization": f"Bearer {key}"}
     samples: list[Sample] = []
+    windows: list[dict] = []
     failures = 0
     for window, range_value in (("24h", "24h"), ("7d", "7d"), ("30d", "30d")):
         response = http(f"{OLLAMA_USAGE_URL}?range={range_value}", headers=headers)
@@ -713,6 +785,68 @@ def read_ollama(
                     now,
                 )
             )
+    # The session and the weekly window of the account. The provider names
+    # them in its own reading, and a window it does not describe is
+    # published as unknown: the provider stays visible, and the lockout it
+    # reports is what makes the route unavailable.
+    for window in OLLAMA_WINDOWS:
+        used, limit, reset = _ollama_window_reading(body, window)
+        labels = {
+            "provider": "ollama",
+            "account": "default",
+            "model": "*",
+            "window": window,
+            "quota": window,
+            "source": source,
+        }
+        if used is None:
+            # The window exists, its number is unknown. It is published as
+            # an unknown state and it does not gate the route: an unknown
+            # reading is not evidence that the account is exhausted.
+            samples.append(
+                ("ghostship_ai_quota_state", {**labels, "state": "unknown"}, 1.0)
+            )
+            windows.append(
+                {
+                    "provider": "ollama",
+                    "account": "default",
+                    "model": "*",
+                    "kind": window,
+                    "quotaId": window,
+                    "usedRatio": None,
+                    "resetEpoch": reset,
+                    "durationSeconds": None,
+                    "source": source,
+                    "observedAtEpoch": now,
+                    # The window does not constrain the route on its own: the
+                    # account's lockout is observed, not inferred.
+                    "gating": False,
+                }
+            )
+            continue
+        samples.append(("ghostship_ai_quota_used_ratio", labels, _clamp(used)))
+        if reset is not None:
+            samples.append(
+                ("ghostship_ai_quota_reset_timestamp_seconds", labels, reset)
+            )
+        samples.append(
+            ("ghostship_ai_quota_observed_timestamp_seconds", labels, now)
+        )
+        samples.append(("ghostship_ai_quota_state", {**labels, "state": "measured"}, 1.0))
+        windows.append(
+            {
+                "provider": "ollama",
+                "account": "default",
+                "model": "*",
+                "kind": window,
+                "quotaId": window,
+                "usedRatio": _clamp(used),
+                "resetEpoch": reset,
+                "durationSeconds": None,
+                "source": source,
+                "observedAtEpoch": now,
+            }
+        )
     if not samples:
         return SourceResult(
             source=source,
@@ -727,4 +861,5 @@ def read_ollama(
         metrics=samples,
         observed_at=now,
         duration_s=time.monotonic() - started,
+        windows=windows,
     )
