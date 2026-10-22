@@ -114,6 +114,44 @@ def hide_marker(classes):
     """The classes that hide a column on a narrow screen."""
     return tuple(sorted(name for name in classes.split() if name.startswith("hide")))
 
+
+def media_body(styles):
+    """The rules of the narrow screen of a stylesheet."""
+    index = (styles or "").find("@media")
+    if index < 0:
+        return ""
+    start = styles.index("{", index)
+    depth = 0
+    for position in range(start, len(styles)):
+        if styles[position] == "{":
+            depth += 1
+        elif styles[position] == "}":
+            depth -= 1
+            if depth == 0:
+                return styles[start + 1 : position]
+    return ""
+
+
+def css_rules(styles):
+    """The rules of a stylesheet: a selector and its declarations."""
+    return [
+        (match.group(1).strip(), match.group(2))
+        for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", styles or "")
+    ]
+
+
+def clipped_selectors(styles):
+    """The selectors of the narrow screen that cut the text of their element."""
+    return [
+        selector
+        for selector, declarations in css_rules(media_body(styles))
+        if "text-overflow: ellipsis" in declarations
+    ]
+
+
+class Template:
+    """The elements of a template, with their classes and their children."""
+
     def __init__(self, content):
         from html.parser import HTMLParser
 
@@ -418,6 +456,27 @@ class ProvidersPageTests(unittest.TestCase):
         # The limit of a provider is not the basis of a route.
         self.assertNotIn("limitBasis", content)
         self.assertNotIn("ghostship_ai_provider_limit", expressions(panel))
+
+    def test_a_tag_is_never_a_clipped_box(self):
+        """The tag of a route keeps its text on a narrow screen.
+
+        The name of the model and its tag shared one line that the narrow
+        screen cut, so the tag became an empty grey box.
+        """
+        for title in list(TIERS) + ["Providers"]:
+            panel = section(self.page, title)
+            content = panel["options"]["content"]
+            styles = panel["options"].get("styles") or ""
+            template = Template(content)
+            for tag in template.tags():
+                self.assertFalse(
+                    template.inside(tag, clipped_selectors(styles)),
+                    f"{title}: the tag {tag.get('classes')} is cut with the name",
+                )
+        # The tiers carry the tags of the collector.
+        self.assertTrue(
+            Template(section(self.page, "Bulk")["options"]["content"]).tags()
+        )
 
 
 class VictoriaMetricsFixture:
