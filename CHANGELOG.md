@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.66] - 2026-10-22
+
+- AI usage collector: free-pool routes now derive capacity from the pool's own limits and ledger instead of reporting "Limits unknown": each limit becomes a window (account scope applies to every model, model scope to that model), used share from the ledger, remaining share min over windows, source "pool", basis carried from the limit. Duplicate metric series from repeated account-scope limits and repeated model availability are emitted once.
+
 ## [3.17.65] - 2026-10-22
 
 - Pin ghostship-agent 2318134e (0.43.2): capability handlers import on first call, so the MCP browser tools work again. 0.43.1 left registration importing every handler, and the GitHub handlers' missing package still failed every MCP call.

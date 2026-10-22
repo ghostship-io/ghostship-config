@@ -385,6 +385,7 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
 
 
 def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
+    _emit_catalog._emitted_account_limits = set()
     for provider, entry in (catalog.get("providers") or {}).items():
         if not isinstance(entry, dict):
             continue
@@ -465,9 +466,23 @@ def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
                                 float(score),
                             )
                         )
-            samples.extend(
-                _limit_samples(str(provider), "*", candidate.get("account_limits"), "account")
-            )
+            emitted_account = getattr(_emit_catalog, "_emitted_account_limits", None)
+            if emitted_account is None:
+                emitted_account = set()
+                _emit_catalog._emitted_account_limits = emitted_account
+            account_limits = candidate.get("account_limits")
+            if isinstance(account_limits, dict):
+                new_limits = {
+                    name: value
+                    for name, value in account_limits.items()
+                    if (str(provider), str(name)) not in emitted_account
+                }
+                if new_limits:
+                    samples.extend(
+                        _limit_samples(str(provider), "*", new_limits, "account")
+                    )
+                    for name in new_limits:
+                        emitted_account.add((str(provider), str(name)))
             samples.extend(
                 _limit_samples(str(provider), model, candidate.get("model_limits"), "model")
             )
