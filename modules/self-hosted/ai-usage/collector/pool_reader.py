@@ -20,6 +20,8 @@ Three rules keep the reading honest:
 * the estimate the pool writes before a dispatch is not consumption. A
   failed attempt contributes no usage at all, and only a success carries
   the usage the pool settled onto its reservation;
+* the read is bound to the last 35 days of reservations, so the work of
+  the reading stays bounded as the ledger grows;
 * the reading never raises. A ledger that cannot be read is reported as
   unreadable with a fixed reason code, because an unreadable reading is
   not a reading of zero usage.
@@ -42,12 +44,14 @@ The contract is fixed:
         ],
         "counts": {
             "attempts_read": <int>,
+            "probes_read": <int>,
             "attempts_without_reservation": <int>,
             "outcomes": {"success": <int>, "limit": <int>, "other": <int>},
         },
     }
 
-`attempts_read` counts the attempts on the job receipts,
+`attempts_read` counts the attempts on the job receipts, `probes_read`
+counts the reservations of the requests that have no receipt,
 `attempts_without_reservation` counts the attempts that had no reservation
 to pair with, and `outcomes` counts the emitted events. An attempt that cannot be placed is counted and
 not emitted: a reading never invents an event.
@@ -62,6 +66,12 @@ import time
 import urllib.parse
 from pathlib import Path
 from typing import Any
+
+# The read window. The collector needs the recent history to infer a window
+# and a budget, and the inference is about the last weeks; a 35 day bound
+# keeps the read to what that inference can use.
+READ_DAYS = 35
+DAY_SECONDS = 24 * 3600.0
 
 # The busy timeout of the connection. A ledger that stays locked for longer
 # than this is not waited for.
@@ -112,6 +122,9 @@ LIMIT_CATEGORIES = {
     "free_daily_exhausted": WINDOW_1D,
 }
 
+# How many job identifiers one membership query carries.
+CHUNK = 400
+
 # The columns of a reservation row, in the order they are read.
 RESERVATION_ID = 0
 RESERVATION_JOB = 1
@@ -125,6 +138,7 @@ RESERVATION_OUTPUT = 6
 def _empty_counts() -> dict[str, Any]:
     return {
         "attempts_read": 0,
+        "probes_read": 0,
         "attempts_without_reservation": 0,
         "outcomes": {outcome: 0 for outcome in OUTCOMES},
     }
@@ -231,6 +245,26 @@ def _reservations_by_route(reservations: list[Any]) -> dict[tuple[str, str, str]
     return grouped
 
 
+def _known_jobs(connection: sqlite3.Connection, reservations: list[Any]) -> set[str]:
+    """The identifiers of the jobs the reservations belong to.
+
+    A reservation whose job has no receipt is a probe: the pool's own
+    check of a route, which it never puts on a job.
+    """
+    identifiers = sorted(
+        {str(row[RESERVATION_JOB]) for row in reservations if row[RESERVATION_JOB]}
+    )
+    known: set[str] = set()
+    for start in range(0, len(identifiers), CHUNK):
+        chunk = identifiers[start : start + CHUNK]
+        placeholders = ",".join("?" * len(chunk))
+        rows = connection.execute(
+            f"SELECT id FROM jobs WHERE id IN ({placeholders})", chunk
+        ).fetchall()
+        known.update(str(row[0]) for row in rows)
+    return known
+
+
 def _attempt_event(attempt: dict[str, Any], reservation: Any) -> dict[str, Any]:
     """The event of one attempted route."""
     outcome, window_hint = _outcome(str(attempt.get("category") or ""))
@@ -250,12 +284,35 @@ def _attempt_event(attempt: dict[str, Any], reservation: Any) -> dict[str, Any]:
     }
 
 
-def read_events(path: str | os.PathLike[str], now: float) -> dict[str, Any]:
+def _probe_event(reservation: Any) -> dict[str, Any]:
+    """The event of a request without a job receipt.
+
+    The probe consumed the route's allowance and its outcome is unknown,
+    so it is an `other` with the usage the ledger holds.
+    """
+    return {
+        "provider": str(reservation[RESERVATION_PROVIDER] or ""),
+        "model": str(reservation[RESERVATION_MODEL] or ""),
+        "at": float(reservation[RESERVATION_AT] or 0.0),
+        "outcome": OUTCOME_OTHER,
+        "usage": _tokens(reservation[RESERVATION_INPUT], reservation[RESERVATION_OUTPUT]),
+        "window_hint": None,
+    }
+
+
+def read_events(
+    path: str | os.PathLike[str],
+    now: float,
+    *,
+    days: int = READ_DAYS,
+) -> dict[str, Any]:
     """Read the pool's ledger into usage events.
 
     The reading never raises. A ledger that cannot be read is reported as
     unreadable with a fixed reason code and no events, because an
     unreadable reading is not a reading of zero usage.
+
+    The read is bound to the last `days` days of reservations.
     """
     try:
         connection = open_ledger(path)
@@ -266,14 +323,19 @@ def read_events(path: str | os.PathLike[str], now: float) -> dict[str, Any]:
 
     events: list[dict[str, Any]] = []
     counts = _empty_counts()
+    cutoff = float(now) - float(days) * DAY_SECONDS
     try:
         reservations = connection.execute(
-            "SELECT id, job, provider, model, at, input, output FROM inference_reservations"
+            "SELECT id, job, provider, model, at, input, output "
+            "FROM inference_reservations WHERE at >= ?",
+            (cutoff,),
         ).fetchall()
         receipts = connection.execute(
-            "SELECT id, result FROM jobs WHERE kind = ?", (JOB_KIND,)
+            "SELECT id, result FROM jobs WHERE kind = ? AND updated_at >= ?",
+            (JOB_KIND, cutoff),
         ).fetchall()
         by_route = _reservations_by_route(reservations)
+        known = _known_jobs(connection, reservations)
         matched: dict[tuple[str, str, str], int] = {}
         for job_id, result in receipts:
             for attempt in _attempts(result):
@@ -294,6 +356,14 @@ def read_events(path: str | os.PathLike[str], now: float) -> dict[str, Any]:
                 event = _attempt_event(attempt, rows[index])
                 events.append(event)
                 counts["outcomes"][event["outcome"]] += 1
+        for reservation in reservations:
+            job_id = reservation[RESERVATION_JOB]
+            if job_id is not None and job_id in known:
+                continue
+            counts["probes_read"] += 1
+            event = _probe_event(reservation)
+            events.append(event)
+            counts["outcomes"][event["outcome"]] += 1
     except sqlite3.Error as error:
         return _unreadable(_reason_for_read(error))
     finally:

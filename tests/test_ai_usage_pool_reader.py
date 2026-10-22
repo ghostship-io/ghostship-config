@@ -182,24 +182,51 @@ class MatchingTests(PoolReaderTestCase):
         # The estimate is not consumption, so the three contribute nothing.
         self.assertEqual([event["usage"] for event in events], [0, 0, 0])
         # The reading's usage is the two successes (150 + 220) and the two
-        # successes that are outside the reading window.
-        self.assertEqual(sum(event["usage"] or 0 for event in reading["events"]), 14406)
+        # probes (4068 + 102) alone.
+        self.assertEqual(sum(event["usage"] or 0 for event in reading["events"]), 4540)
 
     def test_attempt_without_a_reservation_is_counted_and_not_emitted(self):
         reading = self.read()
-        self.assertEqual(reading["counts"]["attempts_without_reservation"], 1)
+        self.assertEqual(reading["counts"]["attempts_without_reservation"], 2)
         self.assertNotIn(1799995100, [event["at"] for event in reading["events"]])
 
     def test_the_reading_counts_what_it_covered(self):
         reading = self.read()
         self.assertEqual(reading["status"], "ok")
         self.assertEqual(reading["reason"], "ok")
-        self.assertEqual(reading["counts"]["attempts_read"], 17)
-        self.assertEqual(reading["counts"]["attempts_without_reservation"], 1)
+        self.assertEqual(reading["counts"]["attempts_read"], 16)
+        self.assertEqual(reading["counts"]["probes_read"], 2)
+        self.assertEqual(reading["counts"]["attempts_without_reservation"], 2)
         self.assertEqual(
-            reading["counts"]["outcomes"], {"success": 4, "limit": 3, "other": 9}
+            reading["counts"]["outcomes"], {"success": 2, "limit": 3, "other": 11}
         )
         self.assertEqual(len(reading["events"]), 16)
+
+
+class ProbeTests(PoolReaderTestCase):
+    """A probe is a request of the pool's own, without a receipt."""
+
+    def test_probe_reservation_is_an_other_event_with_its_own_usage(self):
+        reading = self.read()
+        event = self.event(reading, 1799994100)
+        self.assertEqual(event["outcome"], "other")
+        self.assertEqual(event["usage"], 4068)
+        self.assertIsNone(event["window_hint"])
+        self.assertEqual(reading["counts"]["probes_read"], 2)
+
+
+class WindowTests(PoolReaderTestCase):
+    """The reading covers the last 35 days of reservations."""
+
+    def test_reservations_older_than_the_window_are_not_read(self):
+        reading = self.read()
+        self.assertEqual(reading["status"], "ok")
+        self.assertNotIn(1796889600, [event["at"] for event in reading["events"]])
+        self.assertNotIn(1796889700, [event["at"] for event in reading["events"]])
+
+    def test_a_reservation_inside_the_window_is_read(self):
+        reading = self.read()
+        self.assertIn(1799996400, [event["at"] for event in reading["events"]])
 
 
 if __name__ == "__main__":
