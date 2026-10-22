@@ -1021,6 +1021,177 @@ class PacedAvailabilityTests(unittest.TestCase):
         self.assertEqual(paced, delta)
 
 
+class OllamaWindowTests(unittest.TestCase):
+    """The Ollama Cloud account has a session window and a weekly window."""
+
+    def _providers(self):
+        return _load("ai_usage_design_providers", "providers")
+
+    def _env(self, folder):
+        path = Path(folder) / "secrets.env"
+        path.write_text("OLLAMA_API_KEY=key\n")
+        return str(path)
+
+    def _response(self, body, ok=True, status=200):
+        class Response:
+            def __init__(self):
+                self.ok = ok
+                self.status = status
+                self._body = body
+
+            def json(self):
+                return self._body
+
+        return Response()
+
+    def test_the_ollama_windows_are_published(self):
+        providers = self._providers()
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            env = self._env(folder)
+            result = providers.read_ollama(
+                env,
+                1000.0,
+                http=lambda url, **kwargs: self._response(
+                    {
+                        "range": "7d",
+                        "totals": {"request_count": 5},
+                        "session": {"used": 3, "limit": 10, "resetsAt": 2000.0},
+                        "weekly": {"used": 1, "limit": 100, "resetsAt": 3000.0},
+                    }
+                ),
+            )
+        states = {
+            sample[1]["window"]
+            for sample in result.metrics
+            if sample[0] == "ghostship_ai_quota_state"
+        }
+        self.assertEqual(states, {"session", "weekly"})
+        windows = {window["kind"]: window for window in result.windows}
+        self.assertAlmostEqual(windows["session"]["usedRatio"], 0.3, places=6)
+        self.assertEqual(windows["session"]["resetEpoch"], 2000.0)
+        self.assertAlmostEqual(windows["weekly"]["usedRatio"], 0.01, places=6)
+        self.assertEqual(windows["weekly"]["resetEpoch"], 3000.0)
+
+    def test_an_unread_window_is_published_as_unknown_and_never_gates(self):
+        providers = self._providers()
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            env = self._env(folder)
+            result = providers.read_ollama(
+                env,
+                1000.0,
+                http=lambda url, **kwargs: self._response(
+                    {"range": "7d", "totals": {"request_count": 5}}
+                ),
+            )
+        states = {
+            (sample[1]["window"], sample[1]["state"])
+            for sample in result.metrics
+            if sample[0] == "ghostship_ai_quota_state"
+        }
+        self.assertEqual(states, {("session", "unknown"), ("weekly", "unknown")})
+        windows = {window["kind"]: window for window in result.windows}
+        self.assertIsNone(windows["session"]["usedRatio"])
+        # The window does not gate the route: an unknown reading is not
+        # evidence that the account is exhausted.
+        self.assertFalse(windows["session"]["gating"])
+
+    def test_an_ollama_model_is_not_hidden_by_an_unknown_window(self):
+        ranking_module = _load("ai_usage_design_ranking_ollama", "ranking")
+        catalog = catalog_module.Catalog(
+            {
+                "ollama-cloud": {
+                    "models": {
+                        "deepseek-v4.1-flash:1017": catalog_entry(
+                            "deepseek-v4.1-flash:1017"
+                        )
+                    }
+                }
+            }
+        )
+        models = [ranking_module.ModelRecord("ollama", "deepseek-v4.1-flash:1017")]
+        ranked = ranking_module.rank_models(
+            models=models,
+            catalog=catalog,
+            quota_windows={
+                "ollama": [
+                    ranking_module.QuotaWindow(
+                        kind="session",
+                        used_ratio=None,
+                        reset_epoch=None,
+                        observed_at=NOW,
+                        gating=False,
+                    )
+                ]
+            },
+            free_models=set(),
+            usage_tokens={},
+            aa_cache=aa_cache_for(models),
+            now=NOW,
+        )
+        self.assertTrue(ranked)
+        self.assertTrue(ranked[0].available)
+
+    def test_the_model_label_keeps_the_t3_id(self):
+        metrics = _load("ai_usage_design_metrics_ollama", "metrics")
+        self.assertEqual(
+            metrics.label_value("deepseek-v4.1-flash:1017"),
+            "deepseek-v4.1-flash:1017",
+        )
+
+    def test_the_t3_status_publishes_the_ollama_windows(self):
+        t3source = _load("ai_usage_design_t3source_ollama", "t3source")
+
+        class Client:
+            def call(self, tag, payload=None):
+                if tag == "server.refreshProviders":
+                    return {
+                        "providers": [
+                            {
+                                "instanceId": "opencode",
+                                "status": "ready",
+                                "models": [
+                                    {"slug": "ollama-cloud/deepseek-v4.1-flash:1017"}
+                                ],
+                                "usageLimits": {
+                                    "checkedAt": "2026-01-15T00:00:00Z",
+                                    "windows": [
+                                        {
+                                            "id": "ollama_session",
+                                            "kind": "session",
+                                            "usedPercent": 100,
+                                            "resetsAt": "2026-01-16T00:00:00Z",
+                                            "windowDurationMins": 300,
+                                        },
+                                        {
+                                            "id": "ollama_weekly",
+                                            "kind": "weekly",
+                                            "usedPercent": 20,
+                                            "resetsAt": "2026-01-22T00:00:00Z",
+                                            "windowDurationMins": 10080,
+                                        },
+                                    ],
+                                },
+                            }
+                        ]
+                    }
+                return {}
+
+        result = t3source._collect_limits(Client())
+        windows = {window["kind"]: window for window in result.windows}
+        # The Ollama windows belong to the Ollama account, not to the Go
+        # subscription the instance also serves.
+        self.assertEqual(windows["session"]["provider"], "ollama")
+        self.assertEqual(windows["weekly"]["provider"], "ollama")
+        self.assertAlmostEqual(windows["session"]["usedRatio"], 1.0, places=6)
+        self.assertAlmostEqual(windows["weekly"]["usedRatio"], 0.2, places=6)
+        self.assertIsNotNone(windows["session"]["resetEpoch"])
+        self.assertIsNotNone(windows["weekly"]["resetEpoch"])
+
+
 class PoolLimitTests(unittest.TestCase):
     """F4: the pool's limits reach the decision and carry their basis."""
 

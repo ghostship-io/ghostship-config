@@ -743,6 +743,11 @@ def ranking_inputs(
         reset = measured.get("resetEpoch")
         duration = measured.get("durationSeconds")
         quota_id = str(measured.get("quotaId") or "default")
+        # A window the source publishes but does not read is visible and it
+        # does not constrain the route: an unknown reading is not evidence
+        # that the account is exhausted. The provider stays visible, and the
+        # lockout it reports is observed instead of inferred.
+        gating = measured.get("gating")
         window = ranking_module.QuotaWindow(
             kind=str(measured.get("kind") or "other"),
             used_ratio=float(used) if isinstance(used, (int, float)) else None,
@@ -759,6 +764,7 @@ def ranking_inputs(
                 if isinstance(measured.get("observedAtEpoch"), (int, float))
                 else None
             ),
+            gating=gating is not False,
         )
         if model == "*":
             windows.setdefault(provider, []).append(window)
