@@ -20,8 +20,10 @@ Three rules keep the reading honest:
 * the estimate the pool writes before a dispatch is not consumption. A
   failed attempt contributes no usage at all, and only a success carries
   the usage the pool settled onto its reservation;
-* the read is bound to the last 35 days of reservations, so the work of
-  the reading stays bounded as the ledger grows;
+* the read is bounded twice over: every query is bound to the last 35 days
+  of reservations, so the work of the reading stays bounded as the ledger
+  grows, and the whole read is given a wall clock limit that aborts the
+  query when it is reached;
 * the reading never raises. A ledger that cannot be read is reported as
   unreadable with a fixed reason code, because an unreadable reading is
   not a reading of zero usage.
@@ -73,9 +75,20 @@ from typing import Any
 READ_DAYS = 35
 DAY_SECONDS = 24 * 3600.0
 
+# The wall clock limit of one read. The read is bounded by the window above
+# as well, but a slow disk or a busy ledger must not hold the collector:
+# the query is aborted when the limit is reached and the reading is
+# reported as unreadable.
+READ_TIMEOUT_S = 20.0
+
 # The busy timeout of the connection. A ledger that stays locked for longer
 # than this is not waited for.
 BUSY_TIMEOUT_S = 2.0
+
+# How often the progress handler looks at the clock. The handler runs every
+# so many instructions of the running query, so the limit is honoured well
+# inside the wall clock it names.
+PROGRESS_STEPS = 100
 
 # The two statuses a reading has.
 STATUS_OK = "ok"
@@ -88,6 +101,7 @@ REASON_MISSING = "ledger_missing"
 REASON_UNREADABLE = "ledger_unreadable"
 REASON_CORRUPT = "ledger_corrupt"
 REASON_SCHEMA = "ledger_schema_missing"
+REASON_TIMEOUT = "timeout"
 
 REASONS = frozenset(
     {
@@ -96,6 +110,7 @@ REASONS = frozenset(
         REASON_UNREADABLE,
         REASON_CORRUPT,
         REASON_SCHEMA,
+        REASON_TIMEOUT,
     }
 )
 
@@ -162,6 +177,22 @@ def _reason_for(error: Exception, path: str | os.PathLike[str]) -> str:
         return REASON_MISSING
     if isinstance(error, sqlite3.DatabaseError) and not isinstance(error, sqlite3.OperationalError):
         return REASON_CORRUPT
+    return REASON_UNREADABLE
+
+
+def _reason_for_read(error: Exception) -> str:
+    """The fixed reason code of a failed read.
+
+    A ledger whose shared memory file is missing on a read only directory
+    cannot be read at all: the reader reports that, and never a reading of
+    zero usage.
+    """
+    text = str(error).lower()
+    if "no such table" in text:
+        return REASON_SCHEMA
+    if "interrupted" in text:
+        # The query was aborted because the read ran out of time.
+        return REASON_TIMEOUT
     return REASON_UNREADABLE
 
 
@@ -305,6 +336,7 @@ def read_events(
     now: float,
     *,
     days: int = READ_DAYS,
+    timeout_s: float = READ_TIMEOUT_S,
 ) -> dict[str, Any]:
     """Read the pool's ledger into usage events.
 
@@ -312,7 +344,10 @@ def read_events(
     unreadable with a fixed reason code and no events, because an
     unreadable reading is not a reading of zero usage.
 
-    The read is bound to the last `days` days of reservations.
+    The read is bounded twice over: the query only asks for the last `days`
+    days, and the whole read is given `timeout_s` seconds of wall clock. A
+    read that runs out of time aborts its query and is reported as
+    unreadable with the reason `timeout`.
     """
     try:
         connection = open_ledger(path)
@@ -324,6 +359,11 @@ def read_events(
     events: list[dict[str, Any]] = []
     counts = _empty_counts()
     cutoff = float(now) - float(days) * DAY_SECONDS
+    deadline = time.monotonic() + float(timeout_s)
+    # The progress handler aborts the query when the read is out of time.
+    connection.set_progress_handler(
+        lambda: 1 if time.monotonic() > deadline else 0, PROGRESS_STEPS
+    )
     try:
         reservations = connection.execute(
             "SELECT id, job, provider, model, at, input, output "
@@ -334,6 +374,10 @@ def read_events(
             "SELECT id, result FROM jobs WHERE kind = ? AND updated_at >= ?",
             (JOB_KIND, cutoff),
         ).fetchall()
+        if time.monotonic() > deadline:
+            # The read is out of time: the partial reading is dropped,
+            # because a half reading is not a reading.
+            return _unreadable(REASON_TIMEOUT)
         by_route = _reservations_by_route(reservations)
         known = _known_jobs(connection, reservations)
         matched: dict[tuple[str, str, str], int] = {}
@@ -364,6 +408,8 @@ def read_events(
             event = _probe_event(reservation)
             events.append(event)
             counts["outcomes"][event["outcome"]] += 1
+        if time.monotonic() > deadline:
+            return _unreadable(REASON_TIMEOUT)
     except sqlite3.Error as error:
         return _unreadable(_reason_for_read(error))
     finally:
