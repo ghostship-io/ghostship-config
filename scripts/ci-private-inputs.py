@@ -16,10 +16,12 @@ import private_source
 # Private flake inputs mapped to their source repository, scoped read key, and
 # optional subdirectory. The deployment consumes the agent repository for the
 # ghostship-tools platform builder; the MCP image's shopping policy and icon are
-# deployment-owned under modules/self-hosted/private-integrations/.
+# deployment-owned under modules/self-hosted/private-integrations/. The AI usage
+# collector reads the same repository's runtime policy as a plain source tree,
+# under its own pin.
 SOURCES = {
     'ghostship-private-agent': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
-
+    'ghostship-agent-policy': {'repo': 'ghostship-agent', 'key': 'agent', 'dir': None},
 }
 
 
@@ -47,10 +49,10 @@ def main():
         known = private_source.known_hosts(root/'known_hosts', host_keys)
         for name, spec in SOURCES.items():
             suffix = spec['key']
-            credential = credentials.pop(suffix)
+            credential = credentials.get(suffix)
             if not credential:
                 raise SystemExit('Missing scoped private-source key: ' + suffix)
-            key = root/(suffix + '.key')
+            key = root/(name + '.key')
             key.write_text(credential + '\n'); key.chmod(0o600)
             del credential
             locked = nodes[name]['locked']
@@ -62,7 +64,9 @@ def main():
                 )
             if spec['dir'] and locked.get('dir') != spec['dir']:
                 raise SystemExit('Unsupported private source directory: ' + name)
-            checkout = root/('checkout-' + suffix)
+            # Two inputs may share one read key, so every working path is named
+            # after the input and never after the key.
+            checkout = root/('checkout-' + name)
             env = private_source.ssh_environment(key, known)
             # The owner and the repository come from the lock that was checked
             # above, so neither is written out here.
@@ -71,15 +75,15 @@ def main():
                 raise SystemExit('Unsupported private source declaration: ' + name)
             private_source.fetch_source(checkout, url, locked['rev'], env)
             key.unlink()
-            archive = root/(suffix + '.tar')
+            archive = root/(name + '.tar')
             with archive.open('wb') as output:
                 subprocess.run(['git', '-C', str(checkout), 'archive', 'FETCH_HEAD'], stdout=output, env=env, check=True)
-            source = root/('source-' + suffix); source.mkdir()
+            source = root/('source-' + name); source.mkdir()
             with tarfile.open(archive) as packed:
                 packed.extractall(source, filter='data')
             actual = subprocess.check_output(['nix', 'hash', 'path', str(source)], text=True).strip()
             if actual != locked['narHash']:
-                raise SystemExit('Pinned private source hash mismatch: ' + suffix)
+                raise SystemExit('Pinned private source hash mismatch: ' + name)
             # CI-only local Git locks avoid private GitHub archive/API credentials.
             substituted = {
                 'type': 'git', 'url': checkout.as_uri(), 'rev': locked['rev'],
@@ -90,6 +94,7 @@ def main():
             print('Verified pinned private source: ' + name, flush=True)
         lock_path.write_text(json.dumps(lock, indent=2) + '\n')
     finally:
+        credentials.clear()
         for key in root.glob('*.key'):
             key.unlink(missing_ok=True)
 

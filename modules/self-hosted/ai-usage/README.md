@@ -21,7 +21,10 @@ listener and no new port: the service is a oneshot job that writes a file.
   /var/lib/ghostship-ai-usage/state.json`. `--output` is the Prometheus
   textfile node_exporter reads; `--state` is the ranking's own JSON state
   (first seen, evaluation count, staleness). `--stdout` prints instead of
-  writing, for a manual run.
+  writing, for a manual run. `--runtime-policy` is the runtime policy that
+  carries the owner's static worker routes; the unit passes the pinned
+  `ghostship-agent-policy` input's
+  `config/agents/runtime-policy.json`.
 * Directories: `/var/lib/ghostship-container-metrics` (0755) and
   `/var/lib/ghostship-ai-usage` (0700), both created by systemd-tmpfiles.
 * The routing switch: `ghostship.aiUsage.routing.enabled` is the owner's
@@ -520,6 +523,52 @@ A window with no length has no even-spend line, and a reading that could
 not be read publishes no share: the row keeps its place in the card and
 says that it is unknown. The mark of an account whose limit was never seen
 is not a window at all: the account is learning, and the card says so.
+
+### The static worker table
+
+While the routing switch is off, the selection in force is the owner's static
+table, `worker_routes.entries` of
+`config/agents/runtime-policy.json`. Each entry names a `task_type` and a
+`scope`, and lists the routes to try in order; a route is an `instance_id` and
+a `model`. The collector reads the policy passed as `--runtime-policy` and
+publishes one row per model, in the order the page shows: the bulk routes by
+their place in the bulk entry, then the large route, then the deploy routes,
+then a route only research uses.
+
+The provider and model of a route are the collector's own split. The OpenCode
+instance carries the account in its model id (`ollama-cloud/...` is the
+`ollama` account, `opencode-go/...` is `opencode-go`), which is the split
+`t3source.split_model` already makes; any other instance is the provider
+itself (`codex` with `gpt-6.1-sol` is the `codex` route).
+
+The role is the first matching rule: `implementation`/`narrow` is `Bulk N`,
+where N is the route's place in that entry; `implementation`/`large` is
+`Large`; `activation` is `Deploys`; a model the table only names for
+`research` is `Research`. `used_for` names every entry that carries the
+model, in the role order above, each with the route's place in its entry:
+`Narrow implementation (1st), Research (2nd)`.
+
+The row's capacity is read from the routing snapshot's candidate of the same
+route, never measured again:
+
+* `ghostship_ai_static_route_info{row,role,provider,model,display_name,used_for}`
+  - 1 for every model of the table. `row` is the display order, from 1;
+  `display_name` is the name the collector already publishes for the model,
+  falling back to the model id.
+* `ghostship_ai_static_route_remaining_ratio{row}` - the candidate's
+  `capacity.remaining_ratio`. A route the snapshot does not carry publishes
+  no series, never a zero.
+* `ghostship_ai_static_route_paced_availability{row}` - the candidate's
+  `capacity.pace_delta`, the same number the page calls the Paced
+  Availability. A promotion with no pace publishes no series.
+* `ghostship_ai_static_route_reset_timestamp_seconds{row}` - the
+  `capacity.capacity_binding.reset_at` of the candidate, in epoch seconds.
+* `ghostship_ai_static_route_policy_ok` - 1 when the policy was read, 0 when
+  it is missing or unreadable. A missing or unreadable policy publishes no
+  static row at all; the rest of the collection is still written.
+
+A model is one row even when several entries name it, and a model that is not
+in `worker_routes` has no row.
 
 ### Source health
 

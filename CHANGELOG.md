@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.101] - 2026-10-22
+
+- AI usage collector: the owner's static model selection is published for the Providers page. While routing is off, the selection in force is `worker_routes.entries` of the runtime policy, and the collector now reads it through `--runtime-policy` and publishes one row per model: the role the table gives it (Bulk 1, Bulk 2, Large, Deploys, Research), every entry that names it with the route's place in that entry, and the share left, the Paced Availability and the reset the routing snapshot already measured for that route. A model listed twice is one row and a model outside the table has none; a route the snapshot does not carry keeps its row with no capacity; a missing or unreadable policy publishes no rows and `ghostship_ai_static_route_policy_ok 0` while everything else is still written. The policy has its own flake input, `ghostship-agent-policy`, so the T3 Code input and its lock entry are unchanged.
+
 ## [3.17.100] - 2026-10-22
 
 - AI usage: a provider whose routes hit limit failures now shows its learned window and budget, instead of "no limit seen", in the ranking and in `routing.json` `quota.accounts`. A route of the provider that was never refused filed its own no-failure window under the provider key and hid the refused route's learned window; the quiet route no longer stands in for a refused one of its provider.
