@@ -276,6 +276,18 @@ def _model_options(model: dict[str, Any]) -> list[dict[str, Any]]:
     return options
 
 
+def _model_label(model: dict[str, Any]) -> str:
+    """The label the instance gives one model, or an empty string.
+
+    The label is a name, never an id: the model id is published beside it.
+    """
+    for field in ("name", "label", "displayName", "display_name", "title"):
+        value = model.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
 def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> SourceResult:
     started = time.monotonic()
     providers: list[dict[str, Any]] = []
@@ -320,13 +332,9 @@ def _collect_limits(client: T3Client, context: dict[str, Any] | None = None) -> 
             native[pair] = {
                 "providerInstance": instance,
                 "modelId": slug,
-                "name": (
-                    model.get("name")
-                    or model.get("label")
-                    or model.get("displayName")
-                    or model.get("display_name")
-                    or model.get("title")
-                ),
+                # The label the instance gives the model, when it gives one.
+                # It is the name T3 Code's model catalog carries for it.
+                "name": _model_label(model),
                 "options": _model_options(model),
             }
         state = str(provider.get("status") or "")
