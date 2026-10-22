@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.69] - 2026-10-22
+
+- The owner identity values are supplied by the deployment, not by this repository. The account names and addresses the services log in as (the retired container registry account, the personal Google account the Keep broker verifies, the uptime kuma and ntfy administrator accounts and the account the private inputs were transferred from) are read from a root-owned file outside the repository, `/etc/ghostship/owner-identity.env`, and reach the units through their environment. A missing value fails with a clear message instead of a fallback, and the regression tests pin the same behaviour with synthetic names. The rendered configuration is unchanged once the deployment supplies the values.
+
 ## [3.17.68] - 2026-10-22
 
 - AI usage collector: a metric series is published once. The free pool published the account limits of a provider once per model of that provider, so a provider with two models published the same limit twice and the node exporter dropped the repeat. The account limits belong to the account, and they are published once per provider now. The renderer holds the same rule for every series: a repeated name with the same labels is dropped and counted, and the count is published as `ghostship_ai_collection_duplicate_series`, so a duplicate never passes unnoticed.

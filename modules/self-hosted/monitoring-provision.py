@@ -7,6 +7,13 @@ import sys
 import threading
 from pathlib import Path
 
+import socketio
+from engineio.payload import Payload
+
+# Kuma emits heartbeat/stat packets for every monitor before acknowledging login.
+# Its populated fleet can exceed Engine.IO's default 16-packet polling limit.
+Payload.max_decode_packets = 256
+
 RETIRED_APP_MONITORS = {
     "Ghostship OpenChamber": "OpenChamber",
     "Ghostship Synara": "Synara",
@@ -87,14 +94,6 @@ def reconcile_ntfy_notification(call, notifications, password):
 
 
 def main():
-    import socketio
-    from engineio.payload import Payload
-
-    # Kuma emits heartbeat/stat packets for every monitor before acknowledging
-    # login. Its populated fleet can exceed Engine.IO's default 16-packet
-    # polling limit.
-    Payload.max_decode_packets = 256
-
     client = socketio.Client(request_timeout=15, reconnection=False)
     monitors = {}
     notifications = []

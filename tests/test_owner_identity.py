@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
 import pathlib
 import sys
 import tempfile
+import types
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MODULES = ROOT / "modules" / "self-hosted"
@@ -28,8 +29,35 @@ def load(name: str, path: pathlib.Path):
     return module
 
 
+def load_provision():
+    """The provisioning module, with a stub when the socket library is absent.
+
+    The check shell does not carry the Kuma client library, so the module is
+    loaded against a stub. The stub only lives for the load, so the modules
+    that use the real library keep it.
+    """
+    stubs: dict[str, types.ModuleType] = {}
+    try:
+        import engineio.payload  # noqa: F401
+        import socketio  # noqa: F401
+    except ImportError:
+        payload = types.ModuleType("engineio.payload")
+
+        class Payload:  # noqa: D401 - the stub only carries the limit
+            max_decode_packets = 16
+
+        payload.Payload = Payload
+        engineio = types.ModuleType("engineio")
+        engineio.payload = payload
+        socketio = types.ModuleType("socketio")
+        socketio.Client = object
+        stubs = {"engineio": engineio, "engineio.payload": payload, "socketio": socketio}
+    with mock.patch.dict(sys.modules, stubs):
+        return load("monitoring_provision", MODULES / "monitoring-provision.py")
+
+
 renderer = load("owner_config_renderer", MODULES / "render-owner-config.py")
-provision = load("monitoring_provision", MODULES / "monitoring-provision.py")
+provision = load_provision()
 
 IDENTITY_FILE = "/etc/ghostship/owner-identity.env"
 
