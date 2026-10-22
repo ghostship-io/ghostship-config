@@ -613,3 +613,163 @@ def read_events(
         "cursor": cursor,
     }
 
+
+
+def _event_outcomes(events: list[Mapping[str, Any]]) -> dict[str, int]:
+    """The number of events per outcome."""
+    counts = {outcome: 0 for outcome in OUTCOMES}
+    for event in events:
+        outcome = str(event.get("outcome") or "")
+        if outcome in counts:
+            counts[outcome] += 1
+    return counts
+
+
+def _remaining(deadline: float) -> float:
+    """The seconds left before a deadline."""
+    return max(0.0, deadline - time.monotonic())
+
+
+def load_cache(path: str | os.PathLike[str], now: float) -> dict[str, Any] | None:
+    """The cached events, or None when there is no usable cache.
+
+    A cache that cannot be read, does not parse, or does not carry the
+    shape the reader expects is discarded: the reader starts over rather
+    than trust it.
+    """
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    try:
+        cache = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(cache, Mapping):
+        return None
+    complete_since = cache.get("complete_since")
+    if isinstance(complete_since, bool) or not isinstance(complete_since, (int, float)):
+        return None
+    cursor = cache.get("cursor")
+    if cursor is not None and (
+        isinstance(cursor, bool) or not isinstance(cursor, (int, float))
+    ):
+        return None
+    events = cache.get("events")
+    if not isinstance(events, list):
+        return None
+    kept: list[dict[str, Any]] = []
+    for event in events:
+        if not isinstance(event, Mapping):
+            continue
+        moment = event.get("at")
+        if isinstance(moment, bool) or not isinstance(moment, (int, float)):
+            continue
+        if moment > float(now):
+            # A cache is never trusted for an event that is dated in the
+            # future.
+            continue
+        kept.append(dict(event))
+    return {
+        "complete_since": min(float(complete_since), float(now)),
+        "cursor": int(cursor) if cursor is not None else None,
+        "events": kept,
+    }
+
+
+def save_cache(path: str | os.PathLike[str], cache: Mapping[str, Any]) -> None:
+    """Write the cache, atomically.
+
+    The file is written beside itself and renamed over the old one, so a
+    reader never sees half a cache.
+    """
+    location = Path(path)
+    location.parent.mkdir(parents=True, exist_ok=True)
+    temporary = location.with_name(location.name + ".tmp")
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump(cache, handle, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, location)
+
+
+def collect_events(
+    path: str | os.PathLike[str],
+    cache_path: str | os.PathLike[str],
+    now: float,
+    *,
+    days: int = READ_DAYS,
+    timeout_s: float = READ_TIMEOUT_S,
+) -> dict[str, Any]:
+    """Read the events, with the cache that keeps the history.
+
+    The cache is the collector's own state: a file in its state directory
+    that holds the compact events, the cursor and the instant the history
+    is complete from. It never holds the text of a provider's error.
+
+    A run reads the rows the last run may not have seen, with two hours of
+    overlap so a row OpenCode completed after it inserted it is read again,
+    and it replaces the events of that window with the ones it read. The
+    events older than the window are pruned, and the cursor moves to the
+    newest row the run saw.
+    """
+    deadline = time.monotonic() + float(timeout_s)
+    now = float(now)
+    horizon = now - float(days) * DAY_SECONDS
+    cache = load_cache(cache_path, now)
+    if cache is None:
+        complete_since = now - BACKFILL_S
+        cursor: int | None = None
+        cached: list[dict[str, Any]] = []
+    else:
+        complete_since = float(cache["complete_since"])
+        cursor = cache["cursor"]
+        cached = list(cache["events"])
+
+    # The incremental read: the rows since the last run, with the overlap
+    # that catches a row a step completed after it inserted it.
+    if cursor is None:
+        since = complete_since
+    else:
+        since = cursor / 1000.0 - OVERLAP_S
+    fresh = read_events(path, now, since=since, days=days, timeout_s=_remaining(deadline))
+    if fresh["status"] != STATUS_OK:
+        # The cache is left alone: the next run reads the same window again.
+        return _unreadable(fresh["reason"])
+
+    # The events of the window the read covers are replaced by the ones the
+    # read found; the rest of the history stays.
+    merged = [
+        event for event in cached if float(event.get("at") or 0.0) < since
+    ] + list(fresh["events"])
+    # The history the collector keeps is the window itself.
+    merged = [event for event in merged if float(event.get("at") or 0.0) >= horizon]
+
+    if fresh["cursor"] is not None:
+        cursor = fresh["cursor"] if cursor is None else max(cursor, fresh["cursor"])
+
+    written = True
+    try:
+        save_cache(
+            cache_path,
+            {
+                "version": CACHE_VERSION,
+                "complete_since": complete_since,
+                "cursor": cursor,
+                "events": merged,
+            },
+        )
+    except OSError:
+        written = False
+
+    counts = fresh["counts"]
+    counts["outcomes"] = _event_outcomes(merged)
+    return {
+        "status": STATUS_OK if written else STATUS_PARTIAL,
+        "reason": REASON_OK if written else REASON_CACHE,
+        "events": merged,
+        "counts": counts,
+        "complete_since": complete_since,
+        "cursor": cursor,
+    }

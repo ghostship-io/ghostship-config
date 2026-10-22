@@ -109,6 +109,16 @@ from the record with its own JSON functions, so the whole record, about
 27 KB a row, never travels into Python. The error's own words come with
 the extraction and are classified in memory.
 
+The reader keeps its own cache: a file in the collector's state directory
+that holds the compact events, the cursor and the instant the history is
+complete from. A run reads only the rows the last run may not have seen,
+with two hours of overlap, so a row OpenCode inserted at the start of a
+step and completed later is read again; the events of that window are
+replaced by the ones the run read, and the events older than the window
+are pruned. The cache is written beside itself and renamed over the old
+one, so a reader never sees half of it, and it never holds the text of a
+provider's error.
+
 The text of a provider's error is read in memory, to pick the outcome, and
 it never leaves the process: it is not stored, not returned, not logged and
 not in an event. A real limit message names the account it belongs to.

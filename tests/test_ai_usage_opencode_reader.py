@@ -124,14 +124,14 @@ def capture_statements(module, test):
     return statements
 
 
-def synthetic_rows(count, start=1799900000000, step=1000, provider="opencode-go"):
+def synthetic_rows(count, start=1799900000000, step=1000, provider="opencode-go", prefix="synthetic"):
     """A batch of invented request records."""
     rows = []
     for index in range(count):
         moment = start + index * step
         rows.append(
             {
-                "id": f"msg_synthetic_{index}",
+                "id": f"msg_{prefix}_{index}",
                 "session_id": "ses_synthetic",
                 "type": "assistant",
                 "time_created": moment,
@@ -761,6 +761,144 @@ class IncrementalReadTests(unittest.TestCase):
     def test_a_read_without_a_bound_reads_the_whole_window(self):
         result = reader().read_events(self.path, self.now)
         self.assertEqual(result["counts"]["rows_read"], 10)
+
+
+class CacheTests(unittest.TestCase):
+    """The event cache the collector owns."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.state = Path(self.directory.name) / "state"
+        self.state.mkdir()
+        self.cache_path = self.state / "opencode-events.json"
+        self.now = 1800000000.0
+        self.path, self.connection = build_database(
+            self.directory.name,
+            synthetic_rows(10, start=int((self.now - 10 * 3600) * 1000), step=3600000),
+        )
+        self.addCleanup(self.connection.close)
+
+    def run_reader(self, now=None):
+        return reader().collect_events(
+            self.path, self.cache_path, self.now if now is None else now
+        )
+
+    def add_rows(self, count, start_ms):
+        rows = synthetic_rows(count, start=start_ms, step=1000, prefix="new")
+        for row in rows:
+            self.connection.execute(
+                "INSERT INTO session_message (id, session_id, type, time_created, data) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    row["id"],
+                    row["session_id"],
+                    row["type"],
+                    row["time_created"],
+                    json.dumps(row["data"]),
+                ),
+            )
+        self.connection.commit()
+        return rows
+
+    def test_the_cache_is_written_and_read_back(self):
+        result = self.run_reader()
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(self.cache_path.exists())
+        cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        self.assertEqual(cache["cursor"], int((self.now - 3600) * 1000))
+        self.assertEqual(len(cache["events"]), 10)
+
+    def test_the_cache_is_written_beside_itself_and_renamed(self):
+        self.run_reader()
+        leftovers = [name for name in os.listdir(self.state) if name.endswith(".tmp")]
+        self.assertEqual(leftovers, [])
+
+    def test_the_cache_holds_no_error_text(self):
+        content = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            path, connection = build_database(directory, content["rows"])
+            try:
+                result = reader().collect_events(path, self.cache_path, self.now)
+            finally:
+                connection.close()
+        self.assertEqual(result["status"], "ok")
+        self.assertNotIn("example-user", self.cache_path.read_text(encoding="utf-8"))
+
+    def test_the_next_run_reads_only_the_overlap(self):
+        self.run_reader()
+        result = self.run_reader()
+        self.assertEqual(result["status"], "ok")
+        # The window the cursor covers: the overlap and nothing older.
+        self.assertEqual(result["counts"]["rows_read"], 3)
+
+    def test_the_next_run_queries_only_the_window_of_the_cursor(self):
+        module = reader()
+        self.run_reader()
+        statements = capture_statements(module, self)
+        self.run_reader()
+        bounds = [text for text in statements if "session_message" in text]
+        self.assertTrue(bounds)
+        expected = int((self.now - 3600 - 7200) * 1000)
+        for statement in bounds:
+            self.assertIn(str(expected), statement)
+
+    def test_the_new_rows_are_added_to_the_history(self):
+        self.run_reader()
+        self.add_rows(5, int((self.now - 1800) * 1000))
+        result = self.run_reader()
+        self.assertEqual(result["counts"]["rows_read"], 8)
+        self.assertEqual(len(result["events"]), 15)
+
+    def test_a_row_completed_later_shows_up_once(self):
+        moment = int((self.now - 900) * 1000)
+        unfinished = {
+            "id": "msg_unfinished",
+            "session_id": "ses_synthetic",
+            "type": "assistant",
+            "time_created": moment,
+            "data": {
+                "model": {"providerID": "opencode-go", "id": "example/minimax-m3.1-flash"},
+                "time": {"created": moment},
+                "tokens": {"input": 10, "output": 0, "reasoning": 0},
+            },
+        }
+        self.connection.execute(
+            "INSERT INTO session_message (id, session_id, type, time_created, data) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                unfinished["id"],
+                unfinished["session_id"],
+                unfinished["type"],
+                unfinished["time_created"],
+                json.dumps(unfinished["data"]),
+            ),
+        )
+        self.connection.commit()
+        first = self.run_reader()
+        pending = [event for event in first["events"] if event["at"] == moment / 1000]
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["outcome"], "other")
+        # OpenCode completes the row: the same id, the same time, new data.
+        finished = dict(unfinished["data"])
+        finished["finish"] = "stop"
+        self.connection.execute(
+            "UPDATE session_message SET data = ? WHERE id = ?",
+            (json.dumps(finished), unfinished["id"]),
+        )
+        self.connection.commit()
+        second = self.run_reader()
+        completed = [event for event in second["events"] if event["at"] == moment / 1000]
+        self.assertEqual(len(completed), 1)
+        self.assertEqual(completed[0]["outcome"], "success")
+
+    def test_the_events_older_than_the_window_are_pruned(self):
+        self.run_reader()
+        later = self.now + 36 * 86400
+        result = self.run_reader(later)
+        self.assertEqual(result["events"], [])
+        cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        self.assertEqual(cache["events"], [])
 
 
 class ConnectionTests(unittest.TestCase):
