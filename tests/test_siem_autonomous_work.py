@@ -804,6 +804,9 @@ class DashboardContractTests(unittest.TestCase):
                 self.assertEqual([url.removeprefix('/d/') for url in urls], expected)
                 self.assertEqual(len(urls), len(set(urls)))
                 self.assertEqual(len(urls), 5)
+                for link in page['links']:
+                    self.assertTrue(link['keepTime'], 'navigation must keep the selected time range')
+                    self.assertTrue(link['includeVars'], 'navigation must keep the selected filters')
             for panel in page['panels']:
                 if panel.get('type') == 'text':
                     content = panel['options']['content']
@@ -1107,7 +1110,8 @@ class NativeStoreTests(unittest.TestCase):
         self.assertIn('Routing off or disabled providers', titles)
         exception = titles['Providers with no fresh reading']
         self.assertTrue(all('unless on(source)' in t['expr'] for t in exception['targets']))
-        self.assertLess(titles['Winners by tier']['gridPos']['y'], titles['Frontier tier']['gridPos']['y'])
+        self.assertLess(titles['Frontier tier']['gridPos']['y'], titles['Winners by tier']['gridPos']['y'])
+        self.assertLess(titles['Winners by tier']['gridPos']['y'], titles['Candidates considered']['gridPos']['y'])
         self.assertLess(titles['Providers with no fresh reading']['gridPos']['y'],
                         titles['Quota windows']['gridPos']['y'])
 

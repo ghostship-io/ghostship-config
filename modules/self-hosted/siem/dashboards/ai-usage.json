@@ -8,7 +8,7 @@
  ],
  "timezone": "utc",
  "schemaVersion": 41,
- "version": 5,
+ "version": 6,
  "editable": false,
  "refresh": "1m",
  "time": {
@@ -24,38 +24,1046 @@
     "x": 0,
     "y": 0,
     "w": 24,
-    "h": 4
+    "h": 3
    },
    "options": {
     "mode": "markdown",
-    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline) \u00b7 [AI usage](/d/ghostship-ai-usage)\n\n**Observation only: automatic model switching and research triggers are off.** Benchmark inputs come from the Artificial Analysis free feed; unmatched models stay unknown and durable facts ingestion is disabled. Decisions and their inputs are at the top; the long usage and ranking tables are below."
+    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline) \u00b7 [AI usage](/d/ghostship-ai-usage)\n\n**Observation only: automatic model switching and research triggers are off.** Benchmark inputs come from the Artificial Analysis free feed; unmatched models stay unknown and durable facts ingestion is disabled. Model tiers rank first, then provider exhaustion per window, then the evidence tables. Status and quota cards are as of the selected end time; ranges follow the time picker."
    }
   },
   {
-   "id": 27,
-   "title": "Decision view",
+   "id": 8,
+   "title": "Model rankings",
    "type": "row",
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 4,
+    "y": 3,
     "w": 24,
     "h": 1
    },
    "panels": []
   },
   {
-   "id": 28,
-   "title": "Winners by tier",
+   "id": 9,
+   "title": "Frontier tier",
    "type": "table",
-   "description": "The proposed winner per provider and tier, grouped by tier, with the value and the remaining account capacity. Capacity is a share of the account window. The source, quality and expiry are in Winner detail below, so these core columns stay legible without horizontal scrolling, including at narrow width.",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
    },
    "gridPos": {
     "x": 0,
-    "y": 5,
+    "y": 4,
+    "w": 12,
+    "h": 9
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"frontier\"})",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "D",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "E",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "F",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "rename",
+     "options": {
+      "renameByName": {
+       "Value #A": "rank",
+       "Value #B": "score",
+       "Value #C": "quality",
+       "Value #D": "capacity left",
+       "Value #E": "capacity expires in",
+       "Value #F": "available"
+      }
+     }
+    },
+    {
+     "id": "order",
+     "options": {
+      "indexByName": {
+       "tier": 0,
+       "provider": 1,
+       "model": 2,
+       "Value #A": 3,
+       "Value #B": 4,
+       "Value #C": 5,
+       "Value #D": 6,
+       "Value #E": 7,
+       "Value #F": 8
+      },
+      "excludeByName": {
+       "Time": true
+      }
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "inspect": false
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "capacity expires in"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "s"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "capacity left"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "short"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "score"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "quality"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": 10,
+   "title": "Bulk tier",
+   "type": "table",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 4,
+    "w": 12,
+    "h": 9
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"bulk\"})",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "D",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "E",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "F",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "rename",
+     "options": {
+      "renameByName": {
+       "Value #A": "rank",
+       "Value #B": "score",
+       "Value #C": "quality",
+       "Value #D": "capacity left",
+       "Value #E": "capacity expires in",
+       "Value #F": "available"
+      }
+     }
+    },
+    {
+     "id": "order",
+     "options": {
+      "indexByName": {
+       "tier": 0,
+       "provider": 1,
+       "model": 2,
+       "Value #A": 3,
+       "Value #B": 4,
+       "Value #C": 5,
+       "Value #D": 6,
+       "Value #E": 7,
+       "Value #F": 8
+      },
+      "excludeByName": {
+       "Time": true
+      }
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "inspect": false
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "capacity expires in"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "s"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "capacity left"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "short"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "score"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "quality"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": 11,
+   "title": "Free tier",
+   "type": "table",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 14,
+    "w": 12,
+    "h": 9
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"free\"}))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"free\"})",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "D",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "E",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "F",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "rename",
+     "options": {
+      "renameByName": {
+       "Value #A": "rank",
+       "Value #B": "score",
+       "Value #C": "quality",
+       "Value #D": "capacity left",
+       "Value #E": "capacity expires in",
+       "Value #F": "available"
+      }
+     }
+    },
+    {
+     "id": "order",
+     "options": {
+      "indexByName": {
+       "tier": 0,
+       "provider": 1,
+       "model": 2,
+       "Value #A": 3,
+       "Value #B": 4,
+       "Value #C": 5,
+       "Value #D": 6,
+       "Value #E": 7,
+       "Value #F": 8
+      },
+      "excludeByName": {
+       "Time": true
+      }
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "inspect": false
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "capacity expires in"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "s"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "capacity left"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "short"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "score"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "quality"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": 12,
+   "title": "3d tier",
+   "type": "table",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 14,
+    "w": 12,
+    "h": 9
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"3d\"}))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"3d\"})",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "D",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "E",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "F",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "rename",
+     "options": {
+      "renameByName": {
+       "Value #A": "rank",
+       "Value #B": "score",
+       "Value #C": "quality",
+       "Value #D": "capacity left",
+       "Value #E": "capacity expires in",
+       "Value #F": "available"
+      }
+     }
+    },
+    {
+     "id": "order",
+     "options": {
+      "indexByName": {
+       "tier": 0,
+       "provider": 1,
+       "model": 2,
+       "Value #A": 3,
+       "Value #B": 4,
+       "Value #C": 5,
+       "Value #D": 6,
+       "Value #E": 7,
+       "Value #F": 8
+      },
+      "excludeByName": {
+       "Time": true
+      }
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "inspect": false
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "capacity expires in"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "s"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "capacity left"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "short"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "score"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "quality"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": 13,
+   "title": "3D tier detail",
+   "type": "table",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 23,
+    "w": 24,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (provider, model) (ghostship_ai_three_d_score)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (provider, model) (ghostship_ai_three_d_prior)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (provider, model) (ghostship_ai_three_d_usage_tokens)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "D",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (provider, model) (time() - ghostship_ai_three_d_observed_timestamp_seconds)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "rename",
+     "options": {
+      "renameByName": {
+       "Value #A": "3d score",
+       "Value #B": "prior score",
+       "Value #C": "3d tokens",
+       "Value #D": "reading age"
+      }
+     }
+    },
+    {
+     "id": "order",
+     "options": {
+      "indexByName": {
+       "provider": 0,
+       "model": 1,
+       "Value #A": 2,
+       "Value #B": 3,
+       "Value #C": 4,
+       "Value #D": 5
+      },
+      "excludeByName": {
+       "Time": true
+      }
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "inspect": false
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "3d tokens"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "short"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "reading age"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "s"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "3d score"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prior score"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    }
+   }
+  },
+  {
+   "id": 28,
+   "title": "Winners by tier",
+   "type": "table",
+   "description": "The proposed winner per provider and tier, grouped by tier. Value is on the Artificial Analysis scale where present; the source column in Winner detail says measured or prior. Capacity is the remaining share of the account window.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 32,
     "w": 24,
     "h": 16
    },
@@ -218,7 +1226,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 22,
+    "y": 48,
     "w": 24,
     "h": 12
    },
@@ -407,7 +1415,7 @@
    "panels": [],
    "gridPos": {
     "x": 0,
-    "y": 34,
+    "y": 60,
     "w": 24,
     "h": 1
    }
@@ -422,7 +1430,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 35,
+    "y": 61,
     "w": 24,
     "h": 14
    },
@@ -650,7 +1658,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 50,
+    "y": 75,
     "w": 8,
     "h": 8
    },
@@ -718,7 +1726,7 @@
    },
    "gridPos": {
     "x": 8,
-    "y": 50,
+    "y": 75,
     "w": 8,
     "h": 8
    },
@@ -766,7 +1774,7 @@
    },
    "gridPos": {
     "x": 16,
-    "y": 50,
+    "y": 75,
     "w": 8,
     "h": 8
    },
@@ -839,10 +1847,10 @@
    "type": "row",
    "collapsed": false,
    "gridPos": {
-    "h": 1,
-    "w": 24,
     "x": 0,
-    "y": 58
+    "y": 83,
+    "w": 24,
+    "h": 1
    },
    "panels": []
   },
@@ -855,10 +1863,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 10,
-    "w": 14,
     "x": 0,
-    "y": 59
+    "y": 84,
+    "w": 14,
+    "h": 10
    },
    "targets": [
     {
@@ -977,7 +1985,7 @@
    },
    "gridPos": {
     "x": 14,
-    "y": 59,
+    "y": 84,
     "w": 10,
     "h": 10
    },
@@ -1043,10 +2051,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 8,
-    "w": 8,
     "x": 0,
-    "y": 69
+    "y": 94,
+    "w": 8,
+    "h": 8
    },
    "targets": [
     {
@@ -1120,10 +2128,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 8,
-    "w": 8,
     "x": 8,
-    "y": 69
+    "y": 94,
+    "w": 8,
+    "h": 8
    },
    "targets": [
     {
@@ -1198,10 +2206,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 8,
-    "w": 8,
     "x": 16,
-    "y": 69
+    "y": 94,
+    "w": 8,
+    "h": 8
    },
    "targets": [
     {
@@ -1279,10 +2287,10 @@
    "type": "row",
    "collapsed": false,
    "gridPos": {
-    "h": 1,
-    "w": 24,
     "x": 0,
-    "y": 77
+    "y": 102,
+    "w": 24,
+    "h": 1
    },
    "panels": []
   },
@@ -1295,10 +2303,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 10,
-    "w": 16,
     "x": 0,
-    "y": 78
+    "y": 103,
+    "w": 16,
+    "h": 10
    },
    "targets": [
     {
@@ -1461,10 +2469,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 10,
-    "w": 8,
     "x": 16,
-    "y": 78
+    "y": 103,
+    "w": 8,
+    "h": 10
    },
    "targets": [
     {
@@ -1529,10 +2537,10 @@
    "type": "row",
    "collapsed": false,
    "gridPos": {
-    "h": 1,
-    "w": 24,
     "x": 0,
-    "y": 88
+    "y": 113,
+    "w": 24,
+    "h": 1
    },
    "panels": []
   },
@@ -1545,10 +2553,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 9,
-    "w": 12,
     "x": 0,
-    "y": 89
+    "y": 114,
+    "w": 12,
+    "h": 9
    },
    "targets": [
     {
@@ -1648,10 +2656,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 9,
-    "w": 12,
     "x": 12,
-    "y": 89
+    "y": 114,
+    "w": 12,
+    "h": 9
    },
    "targets": [
     {
@@ -1781,10 +2789,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 7,
-    "w": 8,
     "x": 0,
-    "y": 98
+    "y": 123,
+    "w": 8,
+    "h": 7
    },
    "targets": [
     {
@@ -1910,10 +2918,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 7,
-    "w": 8,
     "x": 8,
-    "y": 98
+    "y": 123,
+    "w": 8,
+    "h": 7
    },
    "targets": [
     {
@@ -1961,1036 +2969,15 @@
    }
   },
   {
-   "id": 8,
-   "title": "Model rankings",
-   "type": "row",
-   "collapsed": false,
-   "gridPos": {
-    "h": 1,
-    "w": 24,
-    "x": 0,
-    "y": 105
-   },
-   "panels": []
-  },
-  {
-   "id": 9,
-   "title": "Frontier tier",
-   "type": "table",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "h": 9,
-    "w": 12,
-    "x": 0,
-    "y": 106
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"frontier\"})",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "C",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "D",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "E",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "F",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"frontier\"}), \"tier\", \"frontier\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    }
-   ],
-   "transformations": [
-    {
-     "id": "merge",
-     "options": {}
-    },
-    {
-     "id": "rename",
-     "options": {
-      "renameByName": {
-       "Value #A": "rank",
-       "Value #B": "score",
-       "Value #C": "quality",
-       "Value #D": "capacity left",
-       "Value #E": "capacity expires in",
-       "Value #F": "available"
-      }
-     }
-    },
-    {
-     "id": "order",
-     "options": {
-      "indexByName": {
-       "tier": 0,
-       "provider": 1,
-       "model": 2,
-       "Value #A": 3,
-       "Value #B": 4,
-       "Value #C": 5,
-       "Value #D": 6,
-       "Value #E": 7,
-       "Value #F": 8
-      },
-      "excludeByName": {
-       "Time": true
-      }
-     }
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "custom": {
-      "align": "auto",
-      "cellOptions": {
-       "type": "auto"
-      },
-      "inspect": false
-     },
-     "mappings": [],
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       }
-      ]
-     }
-    },
-    "overrides": [
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "capacity expires in"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "s"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "capacity left"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "short"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "score"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "quality"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     }
-    ]
-   },
-   "options": {
-    "showHeader": true,
-    "cellHeight": "sm",
-    "footer": {
-     "show": false
-    }
-   }
-  },
-  {
-   "id": 10,
-   "title": "Bulk tier",
-   "type": "table",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "h": 9,
-    "w": 12,
-    "x": 12,
-    "y": 106
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"bulk\"})",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "C",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "D",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "E",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "F",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"bulk\"}), \"tier\", \"bulk\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    }
-   ],
-   "transformations": [
-    {
-     "id": "merge",
-     "options": {}
-    },
-    {
-     "id": "rename",
-     "options": {
-      "renameByName": {
-       "Value #A": "rank",
-       "Value #B": "score",
-       "Value #C": "quality",
-       "Value #D": "capacity left",
-       "Value #E": "capacity expires in",
-       "Value #F": "available"
-      }
-     }
-    },
-    {
-     "id": "order",
-     "options": {
-      "indexByName": {
-       "tier": 0,
-       "provider": 1,
-       "model": 2,
-       "Value #A": 3,
-       "Value #B": 4,
-       "Value #C": 5,
-       "Value #D": 6,
-       "Value #E": 7,
-       "Value #F": 8
-      },
-      "excludeByName": {
-       "Time": true
-      }
-     }
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "custom": {
-      "align": "auto",
-      "cellOptions": {
-       "type": "auto"
-      },
-      "inspect": false
-     },
-     "mappings": [],
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       }
-      ]
-     }
-    },
-    "overrides": [
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "capacity expires in"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "s"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "capacity left"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "short"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "score"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "quality"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     }
-    ]
-   },
-   "options": {
-    "showHeader": true,
-    "cellHeight": "sm",
-    "footer": {
-     "show": false
-    }
-   }
-  },
-  {
-   "id": 11,
-   "title": "Free tier",
-   "type": "table",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "h": 9,
-    "w": 12,
-    "x": 0,
-    "y": 115
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"free\"}))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"free\"})",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "C",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "D",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "E",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "F",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"free\"}), \"tier\", \"free\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    }
-   ],
-   "transformations": [
-    {
-     "id": "merge",
-     "options": {}
-    },
-    {
-     "id": "rename",
-     "options": {
-      "renameByName": {
-       "Value #A": "rank",
-       "Value #B": "score",
-       "Value #C": "quality",
-       "Value #D": "capacity left",
-       "Value #E": "capacity expires in",
-       "Value #F": "available"
-      }
-     }
-    },
-    {
-     "id": "order",
-     "options": {
-      "indexByName": {
-       "tier": 0,
-       "provider": 1,
-       "model": 2,
-       "Value #A": 3,
-       "Value #B": 4,
-       "Value #C": 5,
-       "Value #D": 6,
-       "Value #E": 7,
-       "Value #F": 8
-      },
-      "excludeByName": {
-       "Time": true
-      }
-     }
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "custom": {
-      "align": "auto",
-      "cellOptions": {
-       "type": "auto"
-      },
-      "inspect": false
-     },
-     "mappings": [],
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       }
-      ]
-     }
-    },
-    "overrides": [
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "capacity expires in"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "s"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "capacity left"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "short"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "score"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "quality"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     }
-    ]
-   },
-   "options": {
-    "showHeader": true,
-    "cellHeight": "sm",
-    "footer": {
-     "show": false
-    }
-   }
-  },
-  {
-   "id": 12,
-   "title": "3d tier",
-   "type": "table",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "h": 9,
-    "w": 12,
-    "x": 12,
-    "y": 115
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "sort(max by (tier, provider, model) (ghostship_ai_model_rank{tier=\"3d\"}))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_score{tier=\"3d\"})",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "C",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_quality and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "D",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_remaining and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "E",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_capacity_expires_in_seconds and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "F",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (tier, provider, model) (label_replace(ghostship_ai_model_available and on(provider, model) max by (provider, model) (ghostship_ai_model_rank{tier=\"3d\"}), \"tier\", \"3d\", \"provider\", \"(.*)\"))",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    }
-   ],
-   "transformations": [
-    {
-     "id": "merge",
-     "options": {}
-    },
-    {
-     "id": "rename",
-     "options": {
-      "renameByName": {
-       "Value #A": "rank",
-       "Value #B": "score",
-       "Value #C": "quality",
-       "Value #D": "capacity left",
-       "Value #E": "capacity expires in",
-       "Value #F": "available"
-      }
-     }
-    },
-    {
-     "id": "order",
-     "options": {
-      "indexByName": {
-       "tier": 0,
-       "provider": 1,
-       "model": 2,
-       "Value #A": 3,
-       "Value #B": 4,
-       "Value #C": 5,
-       "Value #D": 6,
-       "Value #E": 7,
-       "Value #F": 8
-      },
-      "excludeByName": {
-       "Time": true
-      }
-     }
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "custom": {
-      "align": "auto",
-      "cellOptions": {
-       "type": "auto"
-      },
-      "inspect": false
-     },
-     "mappings": [],
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       }
-      ]
-     }
-    },
-    "overrides": [
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "capacity expires in"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "s"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "capacity left"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "short"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "score"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "quality"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     }
-    ]
-   },
-   "options": {
-    "showHeader": true,
-    "cellHeight": "sm",
-    "footer": {
-     "show": false
-    }
-   }
-  },
-  {
-   "id": 13,
-   "title": "3D tier detail",
-   "type": "table",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "victoriametrics"
-   },
-   "gridPos": {
-    "h": 8,
-    "w": 24,
-    "x": 0,
-    "y": 124
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (provider, model) (ghostship_ai_three_d_score)",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (provider, model) (ghostship_ai_three_d_prior)",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "C",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (provider, model) (ghostship_ai_three_d_usage_tokens)",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "D",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (provider, model) (time() - ghostship_ai_three_d_observed_timestamp_seconds)",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    }
-   ],
-   "transformations": [
-    {
-     "id": "merge",
-     "options": {}
-    },
-    {
-     "id": "rename",
-     "options": {
-      "renameByName": {
-       "Value #A": "3d score",
-       "Value #B": "prior score",
-       "Value #C": "3d tokens",
-       "Value #D": "reading age"
-      }
-     }
-    },
-    {
-     "id": "order",
-     "options": {
-      "indexByName": {
-       "provider": 0,
-       "model": 1,
-       "Value #A": 2,
-       "Value #B": 3,
-       "Value #C": 4,
-       "Value #D": 5
-      },
-      "excludeByName": {
-       "Time": true
-      }
-     }
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "custom": {
-      "align": "auto",
-      "cellOptions": {
-       "type": "auto"
-      },
-      "inspect": false
-     },
-     "mappings": [],
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       }
-      ]
-     }
-    },
-    "overrides": [
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "3d tokens"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "short"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "reading age"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "s"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "3d score"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "prior score"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     }
-    ]
-   },
-   "options": {
-    "showHeader": true,
-    "cellHeight": "sm",
-    "footer": {
-     "show": false
-    }
-   }
-  },
-  {
    "id": 20,
    "title": "Free models and the free pool",
    "type": "row",
    "collapsed": false,
    "gridPos": {
-    "h": 1,
-    "w": 24,
     "x": 0,
-    "y": 132
+    "y": 130,
+    "w": 24,
+    "h": 1
    },
    "panels": []
   },
@@ -3003,10 +2990,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 9,
-    "w": 12,
     "x": 0,
-    "y": 133
+    "y": 131,
+    "w": 12,
+    "h": 9
    },
    "targets": [
     {
@@ -3132,10 +3119,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 9,
-    "w": 12,
     "x": 12,
-    "y": 133
+    "y": 131,
+    "w": 12,
+    "h": 9
    },
    "targets": [
     {
@@ -3289,10 +3276,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 9,
-    "w": 12,
     "x": 0,
-    "y": 142
+    "y": 140,
+    "w": 12,
+    "h": 9
    },
    "targets": [
     {
@@ -3458,10 +3445,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 9,
-    "w": 6,
     "x": 12,
-    "y": 142
+    "y": 140,
+    "w": 6,
+    "h": 9
    },
    "targets": [
     {
@@ -3543,10 +3530,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 9,
-    "w": 6,
     "x": 18,
-    "y": 142
+    "y": 140,
+    "w": 6,
+    "h": 9
    },
    "targets": [
     {
@@ -3629,10 +3616,10 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "h": 8,
-    "w": 24,
     "x": 0,
-    "y": 151
+    "y": 149,
+    "w": 24,
+    "h": 8
    },
    "targets": [
     {
@@ -3713,8 +3700,8 @@
    "url": "/d/ghostship-autonomous-work",
    "icon": "dashboard",
    "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
+   "includeVars": true,
+   "keepTime": true
   },
   {
    "title": "Host",
@@ -3722,8 +3709,8 @@
    "url": "/d/ghostship-host",
    "icon": "dashboard",
    "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
+   "includeVars": true,
+   "keepTime": true
   },
   {
    "title": "Security",
@@ -3731,8 +3718,8 @@
    "url": "/d/ghostship-security",
    "icon": "dashboard",
    "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
+   "includeVars": true,
+   "keepTime": true
   },
   {
    "title": "Pipeline",
@@ -3740,8 +3727,8 @@
    "url": "/d/ghostship-siem-pipeline",
    "icon": "dashboard",
    "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
+   "includeVars": true,
+   "keepTime": true
   },
   {
    "title": "AI usage",
@@ -3749,8 +3736,8 @@
    "url": "/d/ghostship-ai-usage",
    "icon": "dashboard",
    "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
+   "includeVars": true,
+   "keepTime": true
   }
  ],
  "templating": {
