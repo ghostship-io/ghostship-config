@@ -130,6 +130,7 @@ def _pool_sample(name: str, labels: dict[str, str], value: float) -> Sample:
 
 
 def _limit_samples(provider: str, model: str, limits: Any, scope: str) -> list[Sample]:
+    """The pool's own ceilings, published as the configured basis."""
     samples: list[Sample] = []
     if not isinstance(limits, dict):
         return samples
@@ -139,7 +140,13 @@ def _limit_samples(provider: str, model: str, limits: Any, scope: str) -> list[S
         samples.append(
             _pool_sample(
                 "ghostship_ai_pool_limit",
-                {"provider": provider, "model": model, "limit": str(limit), "scope": scope},
+                {
+                    "provider": provider,
+                    "model": model,
+                    "limit": str(limit),
+                    "scope": scope,
+                    "basis": "configured",
+                },
                 float(value),
             )
         )
@@ -291,6 +298,25 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                             "unit": str(unit),
                         },
                         float(value),
+                    )
+                )
+            # A limit the provider's own response headers carried is an
+            # observation, and it is published with that basis.
+            observed_limit = values.get("limit")
+            if isinstance(observed_limit, (int, float)) and not isinstance(
+                observed_limit, bool
+            ):
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_limit",
+                        {
+                            "provider": provider,
+                            "model": model,
+                            "limit": str(unit),
+                            "scope": "observed",
+                            "basis": "observed",
+                        },
+                        float(observed_limit),
                     )
                 )
             reset = values.get("reset")
