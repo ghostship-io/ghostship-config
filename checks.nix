@@ -1,5 +1,9 @@
 { pkgs, self }:
 let
+  antigravityPkgs = import pkgs.path {
+    system = pkgs.stdenv.hostPlatform.system;
+    config.allowUnfreePredicate = pkg: pkgs.lib.getName pkg == "antigravity-acp";
+  };
   python = pkgs.python3.withPackages (ps: [
     ps.lxml
     ps.ruamel-yaml
@@ -23,6 +27,8 @@ let
   ) hosts;
 in
 {
+  antigravity-native-loader =
+    (antigravityPkgs.callPackage ./packages/t3code/antigravity-acp.nix { }).tests.native-loader;
   config-package = self.packages.${pkgs.stdenv.hostPlatform.system}.ghostship-config;
   config-tests =
     pkgs.runCommand "ghostship-config-tests"

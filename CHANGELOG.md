@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.48] - 2026-10-22
+
+- Antigravity: restore the native GCC library path when the emulated ACP server launches its native harness. T3 MCP children inherited only the x86 guest glibc path and failed to load ARM64 `libatomic.so.1`. A QEMU regression check exercises the guest-to-native harness and MCP child boundary.
+
 ## [3.17.47] - 2026-10-22
 
 - AI usage collection: expose one canonical display reading per verified quota entitlement, so a top card cannot double-count the same allowance. The new `ghostship_ai_entitlement_{info,used_ratio,reset_timestamp_seconds,expected_used_ratio,pace_delta_ratio,observed_timestamp_seconds}` family carries `provider/account/model/window/quota/source/entitlement`; the reading is the current usable one with the least remaining, and its reset, expected line, pace, observation and source all come from that same reading rather than independent extrema. The info series is emitted even when no numeric reading is usable, with `source=""`, so an unknown entitlement stays visible and is never shown as zero or one. The raw per-reading series and `quota.entitlements[].readings[]` are retained, the fixed Go alias proof is the only merge, and unpaired entitlements, different accounts and unrelated windows keep their own identity. No dashboard file, service, scorer or client is added.
