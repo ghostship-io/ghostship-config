@@ -989,6 +989,23 @@ class DesignContractTests(unittest.TestCase):
     EQUALITY = '== scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))'
     TOLERANCE = '> scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90'
 
+    def test_tier_column_order_comes_from_the_collector_not_from_a_local_ranking(self):
+        """Defect: the tier column recomputes the order, so a route the collector holds back (a 3D reserve) is listed above the routes ahead of it."""
+        page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
+        by_id = panels_by_id(page)
+        for pid, tier in ((40, 'frontier'), (41, 'bulk'), (42, 'free'), (43, '3d')):
+            order = by_id[pid]['targets'][0]['expr']
+            self.assertIn('ghostship_ai_model_winner_position', order, pid)
+            self.assertIn(f'tier="{tier}"', order, pid)
+            self.assertNotIn('ghostship_ai_model_paced_availability', order, pid)
+            self.assertNotIn('pace_delta_ratio', order, pid)
+            self.assertIn(self.TOLERANCE, order, pid)
+            # The panel still sorts on that key, descending.
+            sorts = [t for t in by_id[pid]['transformations'] if t['id'] == 'sortBy']
+            self.assertEqual(len(sorts), 1, pid)
+            self.assertEqual(sorts[0]['options']['sort'],
+                             [{'field': 'order key', 'desc': True}], pid)
+
     def test_paced_availability_label_percent_left_and_freshness_tolerance(self):
         """Defect: ordering labelled as something other than Paced Availability, remaining shown as used, or snapshot equality drops live entitlement/fact series."""
         page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
@@ -1303,6 +1320,9 @@ class NativeStoreTests(unittest.TestCase):
         # One available route and one exhausted route in the same tier.
         rows.append(f'ghostship_ai_model_rank{{tier="bulk",provider="claude",model="claude-haiku-5-5"}} 1 {stamp}')
         rows.append(f'ghostship_ai_model_rank{{tier="bulk",provider="grok",model="grok-4.6"}} 2 {stamp}')
+        # The collector's order: the route with allowance left is the winner,
+        # the spent one never is.
+        rows.append(f'ghostship_ai_model_winner_position{{tier="bulk",provider="claude",model="claude-haiku-5-5"}} 1 {stamp}')
         rows.append(f'ghostship_ai_model_capacity_remaining{{provider="claude",model="claude-haiku-5-5"}} 0.76 {stamp}')
         rows.append(f'ghostship_ai_model_capacity_remaining{{provider="grok",model="grok-4.6"}} 0 {stamp}')
         rows.append(f'ghostship_ai_model_paced_availability{{provider="claude",model="claude-haiku-5-5"}} 0.08 {stamp}')
