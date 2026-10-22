@@ -1,9 +1,22 @@
 # Changelog
 
-## [3.17.59] - 2026-10-22
+## [3.17.62] - 2026-10-22
 
 - SIEM log redaction: a secret name is redacted in every shape a log carries it. The `=` rule needed an unquoted value and the `:` rule covered six header names, so `{"password":"…"}`, `{"token":"…"}`, `{"cookie":"…"}`, `password: …`, `client_secret: …` and `password="…"` reached VictoriaLogs, which keeps them for 180 days and serves them to every Grafana user. The secret names (token, api_key, apikey, access and refresh token, client_secret, auth, password, passwd, pwd, secret, session, signature, sig and cookie) are now redacted as `key=value`, `key="value"`, `key: value`, `"key":"value"` and `"key": "value"`, and the scheme-less `{"authorization":"…"}` with them. The key itself is kept, so a reader still sees which field was secret. A name must stand alone, so `session_count: 3`, `password_policy` and `signal` keep their value and `sig` is not matched inside a longer word, while a prefixed name such as `db_password` is still a secret. The Vector test suite proves both directions now: every leaking shape is redacted, the shapes that were already sealed stay sealed, and three benign lines are unchanged.
 - SIEM UI: Grafana creates no administrator. Grafana created the default `admin`/`admin` account on the first start, and the account outlives the login paths that are closed (the login form, basic auth and anonymous access are all off), so it waited on the internal network for a password path to be reopened. `GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION` is now true: the browser signs in through the auth proxy as a Viewer, and the dashboards and datasources are provisioned, so nothing needs an administrator. A new configuration test asserts the setting and the auth-proxy flow around it.
+
+
+## [3.17.61] - 2026-10-22
+
+- Grafana dashboards lead with graphics: Providers (four tier columns of % left, T3-style provider cards, collapsed Why this order), Overview, Host, Security and Pipeline. Shared navigation is Overview, Work, Providers, Host, Security, Pipeline. Allowance bars show remaining ("% left") coloured critical below 10%, warning below 30%, otherwise good. The ordering measure is labelled **Paced Availability**. Freshness keeps series whose timestamp is within 90s of the newest collection, so entitlement and fact cards stay filled when sample timestamps are a few seconds apart. Frontier bars are labelled Chief (Claude Opus 5.5) and Backup (Codex GPT-6.1-Sol); order inside the tier stays Paced Availability. Every ranked route of a tier is listed with the % left of its lowest applicable window: the available routes by Paced Availability, the exhausted and unavailable ones below them, greyed, with the reason they are spent. An unknown allowance is grey and reads Limits unknown, never a red bar that looks like 0%. The model names are the names a person would say, not the provider's own id.
+
+## [3.17.60] - 2026-10-22
+
+- The SSH command guard's refusals reach the journal. The guard passed the message to `systemd-cat` as an argument, and `systemd-cat` runs its arguments as a command, so every refusal failed to journal and the caller also saw a "Failed to execute" line after the refusal. The message now goes on stdin and the journal tool's own output is dropped.
+
+## [3.17.59] - 2026-10-22
+
+- The GitHub coordinator's hold lives in the host configuration. It was held off with a runtime drop-in under `/run`, and an activation clears runtime unit overrides, so the 2026-10-22 deploy started it and it replayed part of the deployment backlog before it was stopped again. `ghostship.githubEngineering.coordinatorAutoStart` (default on) now decides whether boot or an activation starts it, and chill-penguin sets it off until the replay fix passes a backlog replay. The webhook receiver keeps spooling while the coordinator is held.
 
 ## [3.17.58] - 2026-10-22
 
