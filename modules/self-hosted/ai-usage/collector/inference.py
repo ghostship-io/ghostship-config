@@ -540,7 +540,7 @@ class _Group:
             if recovery < event.at <= self.now
         ]
 
-    def _current_usage(self, events: Sequence[_Event], start: float) -> tuple[float, dict[str, float]]:
+    def current_usage(self, events: Sequence[_Event], start: float) -> tuple[float, dict[str, float]]:
         """The usage since the start of the current window, and per model."""
         total = 0.0
         per_model: dict[str, float] = {}
@@ -558,7 +558,7 @@ class _Group:
                 per_model[event.model] = per_model.get(event.model, 0.0) + 1.0
         return total, per_model
 
-    def _tile(self, start: float, events: Sequence[_Event]) -> float:
+    def tile(self, start: float, events: Sequence[_Event]) -> float:
         """Move the start of the window forward over the windows that ended."""
         if self.window_seconds is None:
             return start
@@ -665,9 +665,14 @@ def _capacity_of(
     provider: str,
     model: str,
     scope: str,
-    share: float | None,
+    share_model: str | None,
 ) -> RouteCapacity:
-    """The capacity one group implies for one route."""
+    """The capacity one group implies for one route.
+
+    `share_model` is the model whose share of the account is reported. It is
+    None for a route whose limit is its own, because such a route shares no
+    budget with the other models of the provider.
+    """
     state = group.state()
     start, window_events = group.current_window()
     budget = group.budget()
@@ -685,6 +690,17 @@ def _capacity_of(
     paced: float | None = None
     left = 1.0
 
+    if state == "in_window" and window_seconds is not None:
+        # The window that ended while nobody used the route is over: the
+        # start moves to the next use.
+        start = group.tile(start, window_events)
+
+    _, per_model = group.current_usage(window_events, start)
+    weighted = {
+        name: weights.get(name, 0.0) * value for name, value in per_model.items()
+    }
+    usage = sum(weighted.values())
+
     if state == "no_failure":
         # Nothing was refused, so nothing is measured: the route has all of
         # its allowance and no pace is claimed.
@@ -699,18 +715,16 @@ def _capacity_of(
             expected_left = _clamp01(1.0 - (group.now - start) / window_seconds)
             paced = left - expected_left
     else:
-        if window_seconds is not None:
-            start = group._tile(start, window_events)
-        _, per_model = group._current_usage(window_events, start)
-        usage = sum(
-            weights.get(name, 0.0) * value for name, value in per_model.items()
-        )
         if budget is not None and budget > 0:
             left = max(0.0, 1.0 - usage / budget)
         if window_seconds is not None:
             reset_at = start + window_seconds
             expected_left = _clamp01(1.0 - (group.now - start) / window_seconds)
             paced = left - expected_left
+
+    share: float | None = None
+    if share_model is not None and usage > 0:
+        share = weighted.get(share_model, 0.0) / usage
 
     return RouteCapacity(
         provider=provider,
@@ -778,21 +792,7 @@ def infer_capacity(events: Iterable[Any], now: float) -> dict[tuple[str, str], R
             )
             continue
         provider_group = provider_groups[provider]
-        share = _share_of(provider_group, model)
         results[(provider, model)] = _capacity_of(
-            provider_group, provider, model, scope, share
+            provider_group, provider, model, scope, model
         )
     return results
-
-
-def _share_of(group: _Group, model: str) -> float | None:
-    """The share of the account's current usage that belongs to one model."""
-    start, window_events = group.current_window()
-    _, per_model = group._current_usage(window_events, start)
-    weighted = {
-        name: group.weights.get(name, 0.0) * value for name, value in per_model.items()
-    }
-    total = sum(weighted.values())
-    if total <= 0:
-        return None
-    return weighted.get(model, 0.0) / total
