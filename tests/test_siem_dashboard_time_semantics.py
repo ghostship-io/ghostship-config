@@ -9,8 +9,16 @@ DASH = ROOT / 'modules/self-hosted/siem/dashboards'
 OWNED = ('autonomous-work.json', 'host.json', 'security.json', 'siem-pipeline.json')
 
 
+def walk_panels(panels):
+    """Top-level panels plus children nested in collapsed rows."""
+    for panel in panels:
+        yield panel
+        if panel.get('type') == 'row':
+            yield from walk_panels(panel.get('panels') or [])
+
+
 def panels(name):
-    return json.loads((DASH / name).read_text())['panels']
+    return list(walk_panels(json.loads((DASH / name).read_text())['panels']))
 
 
 class TimeSemantics(unittest.TestCase):
