@@ -23,11 +23,11 @@
     "x": 0,
     "y": 0,
     "w": 24,
-    "h": 2
+    "h": 3
    },
    "options": {
     "mode": "markdown",
-    "content": "**Pipeline \u00b7 is evidence still arriving?**\n\nTiles are latest snapshot (watchdog-gated where noted). Trends follow the time picker."
+    "content": "**SIEM pipeline \u00b7 selected range for rates \u00b7 log tables stay collapsed**\n\nA stalled bridge or a lost audit record is a status. Everything else is a measurement. A missing reading is Unavailable, never a zero."
    }
   },
   {
@@ -60,7 +60,8 @@
     "defaults": {
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -78,14 +79,46 @@
         "value": 5
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 5,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 5,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -129,7 +162,8 @@
      "unit": "s",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -147,14 +181,46 @@
         "value": 120
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 30,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 30,
+        "to": 120,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 120,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -198,7 +264,8 @@
      "unit": "s",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      }
     },
     "overrides": []
@@ -206,7 +273,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -249,7 +316,8 @@
     "defaults": {
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -263,14 +331,36 @@
         "value": 1
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -314,7 +404,8 @@
      "unit": "s",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -332,14 +423,46 @@
         "value": 180
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 120,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 120,
+        "to": 180,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 180,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -382,7 +505,8 @@
      "unit": "s",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -400,14 +524,46 @@
         "value": 180
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 90,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 90,
+        "to": 180,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 180,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -450,7 +606,8 @@
      "unit": "s",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -468,14 +625,46 @@
         "value": 600
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 180,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 180,
+        "to": 600,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 600,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -790,7 +979,7 @@
       "uid": "victoriametrics"
      },
      "expr": "ghostship_audit_backlog_limit",
-     "legendFormat": "limit"
+     "legendFormat": "backlog"
     }
    ],
    "fieldConfig": {
@@ -829,7 +1018,8 @@
       }
      },
      "color": {
-      "mode": "palette-classic"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
