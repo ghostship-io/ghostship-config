@@ -18,6 +18,11 @@ The rules are narrow on purpose:
   an estimate is not a measurement, and the value formula needs a
   measurement.
 
+The pull reads the AA-3D page first and writes its snapshot as soon as
+the page is parsed, so a model page that is slow, that times out or that
+fails cannot lose it. A board that could not be read leaves the last good
+board alone, and it does not hold the quality cache back.
+
 The pull runs at most once a day. The collector itself never calls the
 network: it reads the cache the pull wrote.
 """
@@ -37,6 +42,10 @@ from typing import Any, Iterable, Mapping
 import aa
 import aa_diff
 
+# The AA-3D page. It is read first: its snapshot is written as soon as
+# the page is parsed, so a model page that is slow cannot lose it.
+AA3D_URL = "https://artificialanalysis.ai/evaluations/aa-3d"
+
 # The public pages the pull reads.
 SOURCES = (
     (
@@ -52,7 +61,7 @@ SOURCES = (
     ),
     (
         "aa3d",
-        "https://artificialanalysis.ai/evaluations/aa-3d",
+        AA3D_URL,
         "the AA-3D Elo and its interval",
     ),
 )
@@ -590,6 +599,7 @@ def pull(
     model_pages: Any = None,
     catalog_slugs: Iterable[str] = (),
     cached_costs: Mapping[str, Any] | None = None,
+    write_aa3d: Any = None,
 ) -> dict[str, Any]:
     """Pull the public pages and build the cache document.
 
@@ -603,31 +613,53 @@ def pull(
     model nobody uses is not worth a read. `cached_costs` are the model
     page costs of an earlier pull, and a model whose cost is known is not
     read again.
+
+    `write_aa3d` is called with the AA-3D board as soon as the AA-3D page
+    has been read and parsed, before any model page is read. The AA-3D
+    page is read first for that reason: a model page that is slow, that
+    times out or that fails cannot lose the board.
     """
     offered = {_normalise(slug) for slug in catalog_slugs or () if str(slug)}
     known = dict(cached_costs or {})
     reader = read or _fetch
-    sources: list[dict[str, Any]] = []
+    entries: dict[str, dict[str, Any]] = {}
     pages: dict[str, str] = {}
-    for key, url, role in SOURCES:
+
+    def read_source(key: str, url: str, role: str) -> str:
+        """Read one public page, and record how the read went."""
         reading = reader(url)
-        sources.append(
-            {
-                "key": key,
-                "url": url,
-                "role": role,
-                "http_status": reading.get("http_status"),
-                "bytes": reading.get("bytes"),
-                "blocked": bool(reading.get("blocked")),
-                "error": reading.get("error"),
-            }
-        )
+        entries[key] = {
+            "key": key,
+            "url": url,
+            "role": role,
+            "http_status": reading.get("http_status"),
+            "bytes": reading.get("bytes"),
+            "blocked": bool(reading.get("blocked")),
+            "error": reading.get("error"),
+        }
         if reading.get("blocked"):
-            continue
+            return ""
         pages[key] = str(reading.get("text") or "")
+        return pages[key]
+
+    # The AA-3D page is read first, and its snapshot is written as soon as
+    # the page is parsed. The 3D tier reads that file and not the cache,
+    # so the board must not wait for the model pages.
+    aa3d_role = next(role for key, _url, role in SOURCES if key == "aa3d")
+    aa3d_html = read_source("aa3d", AA3D_URL, aa3d_role)
+    board = parse_aa3d(aa3d_html)
+    board_document = aa3d_document(board, time.time()) if board else {}
+    if board_document.get("records") and write_aa3d is not None:
+        write_aa3d(board_document)
+
+    for key, url, role in SOURCES:
+        if key == "aa3d":
+            continue
+        read_source(key, url, role)
+
+    sources = [entries[key] for key, _url, _role in SOURCES]
     leaderboard = parse_leaderboard(pages.get("leaderboard") or "")
     models = parse_models(pages.get("models") or "")
-    aa3d = parse_aa3d(pages.get("aa3d") or "")
 
     records: dict[str, dict[str, Any]] = {}
     for slug, entry in leaderboard.items():
@@ -686,7 +718,7 @@ def pull(
             elo=entry.get("elo"),
         )
     # The AA-3D board fills the Elo of the models it shows.
-    for slug, entry in aa3d.items():
+    for slug, entry in board.items():
         record = records.get(slug)
         if record is None:
             record = _record(
@@ -733,9 +765,19 @@ def pull(
         "attribution": "Artificial Analysis (https://artificialanalysis.ai/)",
         "sources": sources,
         "blocked": [entry["url"] for entry in sources if entry["blocked"]],
+        # The pages the quality records come from. The AA-3D page is not one
+        # of them: a board that could not be read does not hold the quality
+        # cache back, and the last good board is kept.
+        "quality_blocked": [
+            entry["url"]
+            for entry in sources
+            if entry["blocked"] and entry["key"] != "aa3d"
+        ],
         "completeness": {
             "scope": "the public pages",
-            "complete": not any(entry["blocked"] for entry in sources),
+            "complete": not any(
+                entry["blocked"] and entry["key"] != "aa3d" for entry in sources
+            ),
             "pages_fetched": len(pages),
             "total_pages": len(SOURCES),
             "records": len(ordered),
@@ -745,7 +787,7 @@ def pull(
         "model_page_costs": model_page_costs,
         "model_page_fetches": fetches,
         # The AA-3D board, in the contract the collector reads it in.
-        "aa3d": aa3d_document(aa3d, time.time()),
+        "aa3d": board_document,
     }
 
 
@@ -869,6 +911,12 @@ def refresh(
     A cache that is still fresh is left alone. A fetch that is blocked or
     that fails keeps the last good snapshot: the cache is not replaced with
     an empty one, and the blocked state is recorded.
+
+    The AA-3D board is written as soon as its page has been read and
+    parsed, before any model page is read. A model page that is slow, that
+    times out or that fails cannot lose it, and a board that could not be
+    read leaves the last good board alone without holding the quality
+    cache back.
     """
     moment = time.time() if now is None else float(now)
     current = aa.load_cache(cache_path, moment)
@@ -897,28 +945,34 @@ def refresh(
         previous = {}
     if not isinstance(previous, dict):
         previous = {}
+    def write_aa3d(board: Mapping[str, Any]) -> None:
+        """Write the AA-3D board, now, before the model pages are read."""
+        if aa3d_path is not None:
+            write_snapshot(aa3d_path, board)
+
     cached_costs = previous.get("model_page_costs")
     document = pull(
         read=read,
         model_pages=model_pages,
         catalog_slugs=catalog_slugs,
         cached_costs=cached_costs if isinstance(cached_costs, Mapping) else {},
+        write_aa3d=write_aa3d,
     )
-    if document.get("blocked"):
-        # A page was blocked. The last good snapshot is kept: a blocked
-        # page is not a reason to publish an empty cache, and nothing is
-        # retried to get around it.
+    if document.get("quality_blocked"):
+        # A page the quality records come from was blocked. The last good
+        # snapshot is kept: a blocked page is not a reason to publish an
+        # empty cache, and nothing is retried to get around it.
         return {
             "status": "blocked",
             "reason": "a public page answered with a challenge",
-            "blocked": list(document.get("blocked") or []),
+            "blocked": list(document.get("quality_blocked") or []),
             "changed": False,
             "new_models": 0,
             "changed_models": 0,
             "model_page_fetches": int(document.get("model_page_fetches") or 0),
         }
     difference = aa_diff.diff(previous, document)
-    board = document.pop("aa3d", None)
+    document.pop("aa3d", None)
     page_costs = document.pop("model_page_costs", None)
     fetches = int(document.pop("model_page_fetches", 0) or 0)
     # The new and the changed models travel with the cache, so the
@@ -938,8 +992,6 @@ def refresh(
         },
     }
     changed = write_snapshot(cache_path, document)
-    if aa3d_path is not None and isinstance(board, Mapping):
-        write_snapshot(aa3d_path, board)
     return {
         "status": "ok",
         "reason": "",
