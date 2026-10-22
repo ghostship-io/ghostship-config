@@ -96,12 +96,16 @@ benchmark conditions, and, where the source publishes it, the AA-3D cost per
 task. A malformed row is refused, never read as zero. A snapshot older than
 30 days, or one with no usable row, is not measured.
 
-The Elo is not a 0..100 index. It is normalized only by the transform the
-source publishes (`normalization` in the snapshot: `min-max` with a floor and
-a ceiling, or `linear` with an offset and a scale, or an explicit
-`normalized` value on the record). Without a published transform the
-normalized capability is unknown and there is no combined 3D value, while the
-raw Elo, its interval and the source stay visible.
+The Elo is not a 0..100 index. The root's policy is a relative min-max over
+the **complete** board of the same snapshot, before any exclusion:
+`(elo - min board elo) / (max board elo - min board elo)`. The bounds and a
+fingerprint of the board are published with every use; if every measured Elo
+is equal the component is 1 (equal relative performance), and the cost breaks
+the tie. This is relative performance, not a win probability, an AA
+intelligence index or a zero-ability claim. Raw Elo and its 95% interval stay
+visible; a row with no published interval keeps the raw Elo and no interval.
+A feed-level `normalization` (min-max or linear) and an explicit `normalized`
+value are also accepted for other sources.
 
 The 3D value is cost-aware with the same published 80/20 policy: `0.80 *
 normalized Elo + 0.20 * 1 / (1 + cost per task)`. The cost is the AA-3D cost
@@ -125,6 +129,16 @@ publishes an AA-3D evaluation of interactive 3D scenes
 question from CAD and printable-geometry suitability, so it is cited as
 future evidence and is not a score here. The collector opens no new client
 and fetches nothing for it.
+
+### Provider capacity
+
+`quota.provider_capacity{provider}` is the lowest applicable account window,
+with the binding window's id. A spent window publishes zero and blocks the
+provider; an unknown window suppresses a positive reading, because an
+unknown window is not room. A model-scoped subordinate window constrains that
+model only and never the provider's overall capacity. The metrics are
+`ghostship_ai_provider_capacity_remaining_ratio{provider,binding}` (known
+values only) and `ghostship_ai_provider_capacity_windows{provider,evidence}`.
 
 ### Source health
 

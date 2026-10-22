@@ -18,6 +18,7 @@ measures.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from datetime import datetime, timezone
@@ -52,34 +53,32 @@ def _iso_epoch(value: Any) -> float | None:
 
 
 def _record(raw: Mapping[str, Any]) -> dict[str, Any] | None:
-    """One validated AA-3D record, or None when it is not usable evidence."""
+    """One validated AA-3D record, or None when it is not usable evidence.
+
+    The evidence shape the root acquires is `{model, elo, ci95_low,
+    ci95_high, rank, rank_range, anchor, cost_per_task}`; the older feed shape
+    used `slug`/`observed_at`. Both are accepted, and nothing is invented.
+    """
     model = str(raw.get("model") or raw.get("name") or "").strip()
     elo = _finite(raw.get("elo"))
     source = str(raw.get("source") or "").strip()
     observed = _iso_epoch(raw.get("observed_at") or raw.get("observed_at_epoch"))
     if not model or elo is None or elo < 0.0 or not source:
+        source = ""
+    if not model or elo is None or elo < 0.0:
         return None
-    conditions = raw.get("conditions")
-    if isinstance(conditions, Mapping):
-        published_conditions = {
-            str(key)[:40]: (
-                value if isinstance(value, (str, int, float, bool)) else None
-            )
-            for key, value in list(conditions.items())[:20]
-        }
-    else:
-        published_conditions = {"benchmark": str(raw.get("benchmark") or "aa-3d")[:60]}
+    low = _finite(raw.get("ci95_low"))
+    high = _finite(raw.get("ci95_high"))
+    interval = raw.get("elo_interval") or raw.get("interval") or raw.get("confidence_interval")
+    if isinstance(interval, Mapping):
+        low = _finite(interval.get("low")) if low is None else low
+        high = _finite(interval.get("high")) if high is None else high
+    elif isinstance(interval, (list, tuple)) and len(interval) == 2:
+        low = _finite(interval[0]) if low is None else low
+        high = _finite(interval[1]) if high is None else high
     cost = _finite(raw.get("cost_per_task"))
     if cost is not None and (cost < 0.0 or not math.isfinite(cost)):
         cost = None
-    interval = raw.get("elo_interval") or raw.get("interval") or raw.get("confidence_interval")
-    low = high = None
-    if isinstance(interval, Mapping):
-        low = _finite(interval.get("low"))
-        high = _finite(interval.get("high"))
-    elif isinstance(interval, (list, tuple)) and len(interval) == 2:
-        low = _finite(interval[0])
-        high = _finite(interval[1])
     normalised = _finite(raw.get("normalized"))
     if normalised is not None and not 0.0 <= normalised <= 1.0:
         normalised = None
@@ -92,12 +91,20 @@ def _record(raw: Mapping[str, Any]) -> dict[str, Any] | None:
             "low": None if low is None else round(low, 1),
             "high": None if high is None else round(high, 1),
         },
+        "rank": int(raw["rank"])
+        if isinstance(raw.get("rank"), (int, float)) and not isinstance(raw.get("rank"), bool)
+        else None,
+        "rank_range": str(raw.get("rank_range") or "")[:16] or None,
+        "anchor": bool(raw.get("anchor", False)),
         "cost_per_task": None if cost is None else round(cost, 6),
         "normalized": normalised,
+        "source_normalized": normalised is not None,
         "normalization": str(raw.get("normalization") or "")[:80] or None,
         "source": source[:120],
         "observed_at": (
-            datetime.fromtimestamp(observed, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+            datetime.fromtimestamp(observed, tz=timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
             if observed is not None
             else None
         ),
@@ -107,7 +114,16 @@ def _record(raw: Mapping[str, Any]) -> dict[str, Any] | None:
         if isinstance(raw.get("task_count"), (int, float))
         and not isinstance(raw.get("task_count"), bool)
         else None,
-        "conditions": published_conditions,
+        "conditions": (
+            {
+                str(key)[:40]: (
+                    value if isinstance(value, (str, int, float, bool)) else None
+                )
+                for key, value in list(conditions.items())[:20]
+            }
+            if isinstance((conditions := raw.get("conditions")), Mapping)
+            else {"benchmark": str(raw.get("benchmark") or "aa-3d")[:60]}
+        ),
     }
 
 
@@ -137,11 +153,21 @@ def _normalization(raw: Any) -> dict[str, Any] | None:
 
 
 def normalize(elo: float | None, normalization: Mapping[str, Any] | None) -> float | None:
-    """The normalized 0..1 capability, using only the source's transform."""
+    """The normalized 0..1 capability, using only the published transform."""
     if not isinstance(elo, (int, float)) or isinstance(elo, bool):
         return None
     if not isinstance(normalization, Mapping):
         return None
+    if "min_elo" in normalization and "max_elo" in normalization:
+        floor = normalization.get("min_elo")
+        ceiling = normalization.get("max_elo")
+        if not isinstance(floor, (int, float)) or not isinstance(ceiling, (int, float)):
+            return None
+        if ceiling <= floor:
+            # Every measured Elo is equal: every model has the same relative
+            # performance, and the cost breaks the tie.
+            return 1.0
+        return max(0.0, min(1.0, (float(elo) - float(floor)) / (float(ceiling) - float(floor))))
     kind = normalization.get("kind")
     if kind == "min-max":
         floor = normalization.get("floor")
@@ -177,17 +203,66 @@ def load_cache(path: str | None, now: float) -> dict[str, Any] | None:
         record = _record(raw)
         if record is not None:
             records.append(record)
+    source_url = str(
+        document.get("source_url") or document.get("source") or ""
+    ).strip()[:200]
+    for record in records:
+        if not record["source"]:
+            record["source"] = source_url or "artificialanalysis"
     observed = _iso_epoch(
-        document.get("fetched_at_epoch") or document.get("fetched_at")
+        document.get("fetched_at_epoch")
+        or document.get("fetched_at")
+        or document.get("observed_at")
     )
     age = None if observed is None else max(0.0, now - observed)
     status = "ok" if observed is not None and age is not None and age <= MAX_AGE_SECONDS else "stale"
     if not records:
         status = "missing"
+    elos = [float(record["elo"]) for record in records]
+    bounds = {
+        "min_elo": min(elos) if elos else None,
+        "max_elo": max(elos) if elos else None,
+        "count": len(elos),
+    }
+    for record in records:
+        if record.get("normalized") is None:
+            record["normalized"] = normalize(record["elo"], bounds)
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "source_url": source_url,
+                "benchmark": document.get("benchmark"),
+                "benchmark_version": document.get("benchmark_version"),
+                "observed_at": document.get("observed_at"),
+                "board": [[record["model"], record["elo"]] for record in records],
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
     return {
         "status": status,
-        "source": str(document.get("source") or "artificialanalysis")[:120],
+        "source": str(
+            document.get("source") or document.get("source_url") or "artificialanalysis"
+        )[:120],
+        "source_url": source_url,
         "benchmark": str(document.get("benchmark") or "aa-3d")[:60],
+        "benchmark_version": str(document.get("benchmark_version") or "")[:20] or None,
+        "attribution": str(document.get("attribution") or "")[:200] or None,
+        "completeness": document.get("completeness")
+        if isinstance(document.get("completeness"), Mapping)
+        else None,
+        "bounds": bounds,
+        "fingerprint": fingerprint,
+        "normalization": {
+            "kind": "relative-minmax",
+            "policy": (
+                "(elo - min board elo) / (max board elo - min board elo) over "
+                "the complete snapshot before any exclusion; all equal means 1"
+            ),
+            "bounds": bounds,
+            "fingerprint": fingerprint,
+            "not": "a win probability, an AA intelligence index or a zero-ability claim",
+        },
         "normalization": _normalization(document.get("normalization")),
         "conditions": str(
             document.get("conditions")
@@ -230,9 +305,12 @@ def lookup(cache: Mapping[str, Any] | None, provider: str, model: str) -> dict[s
         "normalized": normalised,
         "normalization": normalization,
         "normalization_state": (
-            "source" if record.get("normalized") is not None
-            else ("applied" if normalised is not None else "unknown")
+            "source"
+            if record.get("source_normalized")
+            else ("relative-minmax" if normalised is not None else "unknown")
         ),
+        "bounds": cache.get("bounds"),
+        "fingerprint": cache.get("fingerprint"),
         "source": record.get("source"),
         "benchmark": str(cache.get("benchmark") or "aa-3d"),
         "conditions": record.get("conditions") or {},

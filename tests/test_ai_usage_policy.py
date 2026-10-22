@@ -518,22 +518,53 @@ class AA3DContractTests(unittest.TestCase):
         )
         row = data["candidates"][0]
         value_3d = row["value_3d"]
-        self.assertAlmostEqual(value_3d["value"], round(0.8 * 0.5 + 0.2 * (1 / 1.5), 6), places=6)
+        # The board has one record, so its bounds are equal and the relative
+        # performance is 1.0 (the cost breaks the tie).
+        self.assertAlmostEqual(value_3d["value"], round(0.8 * 1.0 + 0.2 * (1 / 1.5), 6), places=6)
         self.assertEqual(value_3d["raw"]["cost_per_task"], 0.5)
         self.assertEqual(value_3d["raw"]["elo"], 1200.0)
         self.assertEqual(value_3d["raw"]["elo_interval"]["low"], 1180.0)
-        self.assertEqual(value_3d["raw"]["normalization_state"], "applied")
+        self.assertEqual(value_3d["raw"]["normalization_state"], "relative-minmax")
         # The language value stays separate and uses the language cost.
         self.assertEqual(row["aa"]["cost_per_task"], 0.10)
 
-    def test_without_the_normalization_the_3d_value_is_unknown_and_the_elo_visible(self):
+    def test_the_board_policy_normalizes_the_elo_and_publishes_the_bounds(self):
         models = visual_model("codex", "gpt-6.1-sol")
-        data = build(models, [record("gpt-6-1-sol", 51.8, 0.10)], aa_3d=self._load(self._document([self._record()])))
+        cache = self._load(
+            self._document(
+                [
+                    self._record(id="a", slug="low", model="Low Model", elo=1000.0, cost_per_task=0.5),
+                    self._record(id="b", slug="high", model="High Model", elo=1200.0, cost_per_task=0.5),
+                ]
+            )
+        )
+        self.assertEqual(cache["status"], "ok")
+        self.assertEqual(cache["bounds"], {"min_elo": 1000.0, "max_elo": 1200.0, "count": 2})
+        self.assertTrue(cache["fingerprint"])
+        self.assertEqual(cache["records"][0]["normalized"], 0.0)
+        self.assertEqual(cache["records"][1]["normalized"], 1.0)
+        self.assertEqual(cache["records"][0]["elo_interval"]["low"], 1180.0)
+        data = build(
+            models,
+            [record("gpt-6-1-sol", 51.8, 0.10)],
+            aa_3d=self._load(self._document([self._record()])),
+        )
         row = data["candidates"][0]
-        self.assertIsNone(row["value_3d"]["value"])
-        self.assertEqual(row["value_3d"]["missing"], ["elo"])
-        self.assertEqual(row["three_d"]["elo"], 1200.0)
-        self.assertEqual(row["three_d"]["normalization_state"], "unknown")
+        self.assertEqual(row["value_3d"]["raw"]["normalization_state"], "relative-minmax")
+        self.assertEqual(row["value_3d"]["raw"]["normalized"], 1.0)
+        self.assertIsNotNone(row["value_3d"]["value"])
+
+    def test_all_equal_elo_means_one_and_the_cost_breaks_the_tie(self):
+        cache = self._load(
+            self._document(
+                [
+                    self._record(id="a", slug="x", model="Model X", elo=1100.0, cost_per_task=0.5),
+                    self._record(id="b", slug="y", model="Model Y", elo=1100.0, cost_per_task=0.5),
+                ]
+            )
+        )
+        self.assertEqual(cache["bounds"], {"min_elo": 1100.0, "max_elo": 1100.0, "count": 2})
+        self.assertEqual([record["normalized"] for record in cache["records"]], [1.0, 1.0])
 
     def test_without_the_3d_cost_the_language_cost_is_an_explicit_proxy(self):
         models = visual_model("codex", "gpt-6.1-sol")
@@ -554,7 +585,7 @@ class AA3DContractTests(unittest.TestCase):
         self.assertIn("not a measured 3D cost", value_3d["cost_basis"])
         # The approved proxy is used explicitly, with the language cost.
         self.assertAlmostEqual(
-            value_3d["value"], round(0.8 * 0.5 + 0.2 * (1 / 1.1), 6), places=6
+            value_3d["value"], round(0.8 * 1.0 + 0.2 * (1 / 1.1), 6), places=6
         )
         self.assertEqual(value_3d["raw"]["cost_per_task"], 0.10)
         self.assertIsNone(value_3d["raw"]["aa3d_cost_per_task"])
@@ -590,3 +621,94 @@ class AA3DContractTests(unittest.TestCase):
         row = data["candidates"][0]
         self.assertEqual(row["value_3d"]["raw"]["normalization_state"], "source")
         self.assertAlmostEqual(row["value_3d"]["value"], round(0.8 * 0.75 + 0.2 * (1 / 1.5), 6), places=6)
+
+
+class RealAA3DSnapshotTests(unittest.TestCase):
+    """The root-acquired 22-row AA-3D snapshot, through the reader."""
+
+    def _now(self):
+        from datetime import datetime
+
+        return datetime.fromisoformat("2026-10-22T02:00:00+00:00").timestamp()
+
+    def test_the_real_board_reads_and_normalizes_over_every_row(self):
+        path = Path(__file__).resolve().parent / "fixtures" / "ai-usage" / "aa-3d-measured.json"
+        cache = aa_3d.load_cache(str(path), self._now())
+        self.assertEqual(cache["status"], "ok")
+        self.assertEqual(cache["benchmark"], "AA-3D")
+        self.assertEqual(cache["benchmark_version"], "1.0")
+        self.assertEqual(len(cache["records"]), 22)
+        elos = [record["elo"] for record in cache["records"]]
+        self.assertEqual(cache["bounds"]["min_elo"], min(elos))
+        self.assertEqual(cache["bounds"]["max_elo"], max(elos))
+        self.assertEqual(cache["bounds"]["count"], 22)
+        self.assertTrue(cache["fingerprint"])
+        normalized = [record["normalized"] for record in cache["records"]]
+        self.assertEqual(max(normalized), 1.0)
+        self.assertEqual(min(normalized), 0.0)
+        # The source publishes a 95% interval for every row but one; that
+        # row keeps its raw Elo and the interval stays absent, never invented.
+        with_interval = [
+            record
+            for record in cache["records"]
+            if record["elo_interval"]["low"] is not None
+        ]
+        self.assertGreaterEqual(len(with_interval), 21)
+        for record in cache["records"]:
+            self.assertIsNone(record["cost_per_task"])
+
+    def test_the_actual_measurement_names_bind_to_the_provider_models(self):
+        path = Path(__file__).resolve().parent / "fixtures" / "ai-usage" / "aa-3d-measured.json"
+        cache = aa_3d.load_cache(str(path), self._now())
+        found = aa_3d.lookup(cache, "codex", "gpt-6.1-sol")
+        self.assertEqual(found["state"], "measured")
+        self.assertEqual(found["elo"], 1118.0)
+        self.assertEqual(found["normalization_state"], "relative-minmax")
+        self.assertEqual(found["aa_name"], "GPT-6.1 Sol (Max)")
+        self.assertEqual(found["elo_interval"], {"low": 1085.0, "high": 1150.0})
+        self.assertIsNone(found["cost_per_task"])
+        expected = (1118.0 - min(r["elo"] for r in cache["records"])) / (
+            max(r["elo"] for r in cache["records"]) - min(r["elo"] for r in cache["records"])
+        )
+        self.assertAlmostEqual(found["normalized"], expected, places=9)
+
+
+class ProviderCapacityUnknownTests(unittest.TestCase):
+    def test_an_unknown_window_suppresses_a_positive_capacity(self):
+        models = text_model("claude", "claude-opus-5-5")
+        data = build(
+            models,
+            [record("claude-opus-5-5", 57.6, 0.5)],
+            windows={
+                "claude": [
+                    window(0.1, 2 * HOUR, "session"),
+                    ranking.QuotaWindow(
+                        kind="monthly",
+                        used_ratio=None,
+                        reset_epoch=NOW + 20 * DAY,
+                        duration_seconds=30 * DAY,
+                        observed_at=NOW,
+                        quota_id="monthly",
+                    ),
+                ]
+            },
+        )
+        capacity = data["quota"]["provider_capacity"]["claude"]
+        # The known window has room, but the account also has an unknown one:
+        # no positive capacity is published.
+        self.assertIsNone(capacity["remaining_ratio"])
+        self.assertGreaterEqual(capacity["unknown_windows"], 1)
+
+    def test_a_model_scoped_window_does_not_constrain_the_provider(self):
+        rows = {
+            "provider_capacity": {"claude": {"remaining_ratio": 0.8, "binding": {"kind": "weekly"}, "windows": 1, "unknown_windows": 0}}
+        }
+        samples = snapshot.provider_capacity_samples({"quota": rows})
+        values = {
+            (name, labels.get("binding"), labels.get("evidence")): value
+            for name, labels, value in samples
+        }
+        self.assertEqual(
+            values[("ghostship_ai_provider_capacity_remaining_ratio", "weekly", None)],
+            0.8,
+        )
