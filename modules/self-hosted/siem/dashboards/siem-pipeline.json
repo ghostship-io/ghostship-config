@@ -695,8 +695,8 @@
    "url": "/d/ghostship-autonomous-work",
    "icon": "dashboard",
    "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
+   "includeVars": true,
+   "keepTime": true
   },
   {
    "title": "Host",
@@ -704,8 +704,8 @@
    "url": "/d/ghostship-host",
    "icon": "dashboard",
    "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
+   "includeVars": true,
+   "keepTime": true
   },
   {
    "title": "Security",
@@ -713,8 +713,8 @@
    "url": "/d/ghostship-security",
    "icon": "dashboard",
    "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
+   "includeVars": true,
+   "keepTime": true
   },
   {
    "title": "Pipeline",
@@ -722,8 +722,8 @@
    "url": "/d/ghostship-siem-pipeline",
    "icon": "dashboard",
    "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
+   "includeVars": true,
+   "keepTime": true
   },
   {
    "title": "AI usage",
@@ -731,8 +731,8 @@
    "url": "/d/ghostship-ai-usage",
    "icon": "dashboard",
    "targetBlank": false,
-   "includeVars": false,
-   "keepTime": false
+   "includeVars": true,
+   "keepTime": true
   }
  ],
  "description": "Provisioned read-only Ghostship monitoring. Direct navigation; data comes from the existing SIEM stores."
