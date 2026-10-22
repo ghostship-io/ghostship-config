@@ -1432,48 +1432,25 @@ def _fill_value(
         str(intelligence.get("variant_match") or "") in ("exact", "default")
         and not intelligence.get("condition_unknown")
     )
-    alignment: dict[str, Any] = {}
-    alignment_meta: dict[str, Any] = {}
-    selectable = strength is not None
-    native_options = (row.get("native") or {}).get("options") or []
-    native_published = any(
-        isinstance(option, Mapping) and option.get("current_published")
-        and str(option.get("id") or "").lower()
-        in ("variant", "reasoningeffort", "effort", "thinking")
-        for option in native_options
+    runtime = _runtime_reasoning(row)
+    alignment = dict(runtime.get("alignment") or {})
+    alignment_meta = {
+        "option": runtime.get("option"),
+        "value": REASONING_DEFAULT if alignment else None,
+        "recommended": bool(alignment),
+        "applied": (
+            runtime.get("current") == REASONING_DEFAULT
+            if runtime.get("current") is not None
+            else False
+        ),
+        "actual": runtime.get("current"),
+        "escalation": runtime.get("escalation_alignment") or {},
+        "basis": runtime.get("policy"),
+    }
+    selectable = strength is not None and runtime["state"] in (
+        "selectable",
+        "not_applicable",
     )
-    if strength is not None and not condition_exact:
-        # The record's condition is not the model's proven one. The model is
-        # selectable only when a published native option supports the measured
-        # condition, and the alignment names that option. Without it the
-        # condition is unknown and the model is not selectable, with no empty
-        # alignment claiming otherwise.
-        aligned = (
-            bind_module.alignment_option(native_options, measured_variant)
-            if measured_variant
-            else None
-        )
-        if aligned is not None:
-            selectable = True
-            alignment = {aligned[0]: aligned[1]}
-            current = next(
-                (
-                    option.get("current_value")
-                    for option in native_options
-                    if isinstance(option, Mapping)
-                    and str(option.get("id") or "") == aligned[0]
-                ),
-                None,
-            )
-            alignment_meta = {
-                "option": aligned[0],
-                "value": aligned[1],
-                "recommended": True,
-                "applied": current is not None and str(current) == aligned[1],
-                "actual": current,
-            }
-        else:
-            selectable = False
     row["aa"] = {
         "state": "measured" if strength is not None else "missing",
         "indices": {
@@ -1494,6 +1471,8 @@ def _fill_value(
         "fetched_at": intelligence.get("fetched_at"),
         "condition": {
             "measured_variant": measured_variant,
+            "execution_default": REASONING_DEFAULT,
+            "execution_escalation": REASONING_ESCALATION,
             "native_variant": intelligence.get("native_variant") or "",
             "variant_match": intelligence.get("variant_match") or "",
             # True only when the native setting is the measured one, or when
@@ -1516,7 +1495,14 @@ def _fill_value(
         "selectable": selectable,
         "alignment": alignment,
         "alignment_meta": alignment_meta,
-        "native_condition_published": native_published,
+        "runtime_policy": runtime,
+        "execution": {
+            "default": REASONING_DEFAULT,
+            "escalation": REASONING_ESCALATION,
+            "state": runtime["state"],
+            "reason": runtime.get("reason") or "",
+            "is_benchmark_condition": False,
+        },
         "text_only": bool(intelligence.get("text_only")),
         "reason": intelligence.get("reason") or "",
         "basis": "the verified Artificial Analysis record of the exact model",
@@ -1734,6 +1720,88 @@ FRONTIER_WORKHORSES = ("gpt-6.1-sol", "claude-opus-5-5")
 
 def _normalised_model(model: str) -> str:
     return str(model or "").strip().lower().replace(".", "-")
+
+
+# The owner's runtime reasoning policy. It is independent of the condition
+# Artificial Analysis measured the model under: the AA record ranks the model,
+# and this policy says how we run it.
+REASONING_DEFAULT = "medium"
+REASONING_ESCALATION = "high"
+REASONING_LEVEL_OPTIONS = ("variant", "reasoningeffort", "effort")
+
+
+def _runtime_reasoning(row: Mapping[str, Any]) -> dict[str, Any]:
+    """The runtime reasoning policy of a model, from its stock options.
+
+    The default is medium and the escalation is high. A model is selectable
+    when its published option lists the default; if it lists other levels
+    without medium, that is an explicit capability mismatch and nothing is
+    substituted. A model with no published level option is not subject to the
+    policy. The AA benchmark condition is reported beside this, never as the
+    condition we run.
+    """
+    options = (row.get("native") or {}).get("options") or []
+    effort_options = [
+        option
+        for option in options
+        if isinstance(option, Mapping)
+        and str(option.get("id") or "").lower() in REASONING_LEVEL_OPTIONS
+    ]
+    policy = {
+        "default": REASONING_DEFAULT,
+        "escalation": REASONING_ESCALATION,
+        "basis": (
+            "owner runtime policy: reason independently of Artificial "
+            "Analysis; AA is used for model selection only"
+        ),
+    }
+    if not effort_options:
+        return {
+            "state": "not_applicable",
+            "reason": "the model publishes no reasoning level option",
+            "policy": policy,
+            "option": None,
+            "supported": [],
+            "default_supported": None,
+            "escalation_supported": None,
+            "alignment": {},
+            "escalation_alignment": {},
+        }
+    option = effort_options[0]
+    identifier = str(option.get("id"))
+    values = [
+        str(value).strip().lower()
+        for value in (option.get("values") or [])
+        if isinstance(value, (str, int, float))
+    ]
+    current = option.get("current_value")
+    if not values and isinstance(current, str):
+        values = [current.strip().lower()]
+    default_supported = REASONING_DEFAULT in values
+    escalation_supported = REASONING_ESCALATION in values
+    state = "selectable" if default_supported else "capability_mismatch"
+    reason = (
+        f"the model lists {REASONING_DEFAULT} for {identifier}"
+        if default_supported
+        else (
+            f"the model lists {', '.join(values) or 'no levels'} for {identifier} "
+            f"and not {REASONING_DEFAULT}; no level is substituted"
+        )
+    )
+    return {
+        "state": state,
+        "reason": reason,
+        "policy": policy,
+        "option": identifier,
+        "supported": values,
+        "current": current if isinstance(current, str) else None,
+        "default_supported": default_supported,
+        "escalation_supported": escalation_supported,
+        "alignment": {identifier: REASONING_DEFAULT} if default_supported else {},
+        "escalation_alignment": {identifier: REASONING_ESCALATION}
+        if escalation_supported
+        else {},
+    }
 
 
 def _three_d_value(row: Mapping[str, Any]) -> dict[str, Any]:

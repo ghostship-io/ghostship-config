@@ -418,7 +418,9 @@ class AlignmentTests(unittest.TestCase):
         row = data["candidates"][0]
         self.assertEqual(row["aa"]["condition"]["variant_match"], "exact")
         self.assertTrue(row["aa"]["selectable"])
-        self.assertEqual(row["aa"]["alignment"], {})
+        self.assertEqual(row["aa"]["alignment"], {"effort": "medium"})
+        self.assertEqual(row["aa"]["alignment_meta"]["escalation"], {"effort": "high"})
+        self.assertEqual(row["aa"]["execution"]["state"], "selectable")
 
 
 class AA3DContractTests(unittest.TestCase):
@@ -830,35 +832,75 @@ class StockDescriptorTests(unittest.TestCase):
         )
         row = data["candidates"][0]
         self.assertEqual(row["aa"]["condition"]["variant_match"], "unconfirmed")
+        # The AA condition stays Max, visible; our run is Medium.
+        self.assertEqual(row["aa"]["condition"]["measured_variant"], "max")
+        self.assertEqual(row["aa"]["condition"]["execution_default"], "medium")
         self.assertTrue(row["aa"]["selectable"])
-        self.assertEqual(row["aa"]["alignment"], {"effort": "max"})
+        self.assertEqual(row["aa"]["alignment"], {"effort": "medium"})
         self.assertEqual(row["aa"]["alignment_meta"]["option"], "effort")
         self.assertTrue(row["aa"]["alignment_meta"]["recommended"])
         self.assertFalse(row["aa"]["alignment_meta"]["applied"])
-        self.assertFalse(row["aa"]["alignment_meta"]["actual"] is not None)
+        self.assertIsNone(row["aa"]["alignment_meta"]["actual"])
+        self.assertEqual(row["aa"]["alignment_meta"]["escalation"], {"effort": "high"})
+        self.assertEqual(row["aa"]["runtime_policy"]["state"], "selectable")
 
-    def test_an_unsupported_condition_is_not_selectable(self):
-        models = visual_model("claude", "claude-opus-5-5")
+    def test_the_minimax_flash_options_support_the_default_and_the_escalation(self):
+        options = [{"id": "variant", "values": ["low", "medium", "high", "xhigh", "max"]}]
+        models = visual_model("opencode-go", "minimax-m3.1-flash")
         data = build(
             models,
-            [record("claude-opus-5-5", 57.6, 0.5, name="Claude Opus 5.5 (Ultra)")],
-            native_options={("claude", "claude-opus-5-5"): self._source_options()},
+            [record("minimax-m3-1-flash", 42.7, 0.2201, name="MiniMax-M3.1-Flash")],
+            native_options={("opencode-go", "minimax-m3.1-flash"): options},
         )
         row = data["candidates"][0]
-        self.assertEqual(row["aa"]["alignment"], {})
-        self.assertFalse(row["aa"]["selectable"])
-        self.assertEqual(row["aa"]["alignment_meta"], {})
+        self.assertTrue(row["aa"]["selectable"])
+        self.assertEqual(row["aa"]["alignment"], {"variant": "medium"})
+        self.assertEqual(row["aa"]["alignment_meta"]["escalation"], {"variant": "high"})
+        self.assertEqual(row["aa"]["runtime_policy"]["state"], "selectable")
 
-    def test_the_condition_without_a_stock_descriptor_is_not_selectable(self):
+    def test_a_model_without_medium_is_an_explicit_capability_mismatch(self):
+        # DeepSeek V4.1 Flash 1017 advertises variant low/high/max only.
+        options = [
+            {"id": "variant", "values": ["low", "high", "max"]},
+        ]
+        models = visual_model("ollama", "deepseek-v4.1-flash:1017")
+        data = build(
+            models,
+            [
+                record(
+                    "deepseek-v4-1-flash-1017",
+                    45.1,
+                    0.262,
+                    name="DeepSeek V4.1 Flash 1017 (Max)",
+                )
+            ],
+            native_options={("ollama", "deepseek-v4.1-flash:1017"): options},
+        )
+        row = data["candidates"][0]
+        self.assertFalse(row["aa"]["selectable"])
+        self.assertEqual(row["aa"]["alignment"], {})
+        self.assertEqual(row["aa"]["alignment_meta"]["escalation"], {"variant": "high"})
+        runtime = row["aa"]["runtime_policy"]
+        self.assertEqual(runtime["state"], "capability_mismatch")
+        self.assertEqual(runtime["option"], "variant")
+        self.assertEqual(runtime["supported"], ["low", "high", "max"])
+        self.assertFalse(runtime["default_supported"])
+        # The measured Max is still visible and is not our run condition.
+        self.assertEqual(row["aa"]["condition"]["measured_variant"], "max")
+        self.assertEqual(row["aa"]["condition"]["execution_default"], "medium")
+
+    def test_a_model_without_a_reasoning_option_is_not_subject_to_the_policy(self):
         models = visual_model("claude", "claude-opus-5-5")
         data = build(
             models,
             [record("claude-opus-5-5", 57.6, 0.5, name="Claude Opus 5.5 (High)")],
         )
         row = data["candidates"][0]
-        # No native option was passed at all: unknown condition, no select.
-        self.assertFalse(row["aa"]["selectable"])
+        self.assertTrue(row["aa"]["selectable"])
         self.assertEqual(row["aa"]["alignment"], {})
+        self.assertEqual(row["aa"]["runtime_policy"]["state"], "not_applicable")
+        # The benchmark condition remains visible.
+        self.assertEqual(row["aa"]["condition"]["measured_variant"], "high")
 
     def test_the_codex_actual_current_value_is_distinguished_from_the_recommendation(self):
         import t3source
@@ -891,11 +933,13 @@ class StockDescriptorTests(unittest.TestCase):
             native_options={("codex", "gpt-6.1-sol"): options},
         )
         row = data["candidates"][0]
-        self.assertEqual(row["aa"]["alignment"], {"reasoningEffort": "max"})
+        self.assertEqual(row["aa"]["alignment"], {"reasoningEffort": "medium"})
+        self.assertEqual(row["aa"]["alignment_meta"]["escalation"], {"reasoningEffort": "high"})
         self.assertTrue(row["aa"]["alignment_meta"]["recommended"])
         self.assertFalse(row["aa"]["alignment_meta"]["applied"])
         # The actual low is still published beside the recommendation.
         self.assertEqual(row["native"]["options"][0]["current_value"], "low")
+        self.assertEqual(row["aa"]["runtime_policy"]["current"], "low")
 
 
 class CatalogCoverageReconciliationTests(unittest.TestCase):
