@@ -35,6 +35,7 @@ import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
 import runtime_state as runtime_state_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
+import static_routes as static_routes_module  # noqa: E402
 import t3source  # noqa: E402
 import threed as threed_module  # noqa: E402
 import usage_inference  # noqa: E402
@@ -379,6 +380,25 @@ METRIC_HELP = {
     "ghostship_ai_routing_enabled": (
         "One when the owner's routing switch is on. The collector publishes "
         "the switch and never acts on it itself."
+    ),
+    "ghostship_ai_static_route_info": (
+        "One for every model of the owner's static worker table, with the "
+        "role the table gives it and every entry that names it."
+    ),
+    "ghostship_ai_static_route_remaining_ratio": (
+        "The share left of a static route's capacity, read from the routing "
+        "snapshot's candidate of that route."
+    ),
+    "ghostship_ai_static_route_paced_availability": (
+        "The Paced Availability of a static route: the pace delta of the "
+        "capacity of its candidate."
+    ),
+    "ghostship_ai_static_route_reset_timestamp_seconds": (
+        "When the capacity window that binds a static route resets."
+    ),
+    "ghostship_ai_static_route_policy_ok": (
+        "One when the runtime policy that carries the static worker routes "
+        "was read, zero when it is missing or unreadable."
     ),
 }
 
@@ -1837,6 +1857,7 @@ def render(
     now: float,
     duration: float,
     snapshot: dict[str, Any] | None = None,
+    runtime_policy: str | None = None,
 ) -> str:
     writer = MetricWriter()
     for name, help_text in METRIC_HELP.items():
@@ -1895,6 +1916,21 @@ def render(
     for name, labels, value in feed_samples(snapshot or {}):
         writer.add(name, labels, value)
     for name, labels, value in decision_input_samples(snapshot or {}):
+        writer.add(name, labels, value)
+    # The name the collector already publishes for a model, so a static row
+    # says what the model is. The row falls back to the model id.
+    display_names: dict[tuple[str, str], str] = {}
+    for name, labels, _value in list(_iter_samples(results)) + list(extra):
+        if name != "ghostship_ai_model_info":
+            continue
+        provider = str(labels.get("provider") or "")
+        model = str(labels.get("model") or "")
+        text = str(labels.get("name") or "")
+        if provider and model and text:
+            display_names[(provider, model)] = text
+    for name, labels, value in static_routes_module.samples(
+        runtime_policy, snapshot or {}, display_names
+    ):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
@@ -2019,6 +2055,15 @@ def main(argv: list[str] | None = None) -> int:
             "consumers and never acts on it itself."
         ),
     )
+    parser.add_argument(
+        "--runtime-policy",
+        default="",
+        help=(
+            "The runtime policy that carries the owner's static worker "
+            "routes. A missing or unreadable file publishes no static rows "
+            "and says so; the rest of the collection is unaffected."
+        ),
+    )
     args = parser.parse_args(argv)
 
     started = time.monotonic()
@@ -2054,7 +2099,14 @@ def main(argv: list[str] | None = None) -> int:
         aa_3d_cache=aa_3d_cache,
         routing_enabled=routing_enabled,
     )
-    text = render(results, extra, now, duration, snapshot)
+    text = render(
+        results,
+        extra,
+        now,
+        duration,
+        snapshot,
+        runtime_policy=args.runtime_policy,
+    )
     if args.stdout:
         sys.stdout.write(text)
         sys.stdout.write(json.dumps(snapshot, indent=1, default=str) + "\n")
