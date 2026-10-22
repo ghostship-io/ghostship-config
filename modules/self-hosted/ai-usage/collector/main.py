@@ -37,6 +37,7 @@ import runtime_state as runtime_state_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
 import t3source  # noqa: E402
 import threed as threed_module  # noqa: E402
+import usage_inference  # noqa: E402
 from metrics import MetricWriter, Sample, SourceResult  # noqa: E402
 from t3client import T3Client, T3Error  # noqa: E402
 from util import now as wall_clock  # noqa: E402
@@ -48,6 +49,12 @@ SECRETS_ENV_FILE = "/run/ghostship-secrets/t3code.env"
 POOL_SERVER_FILE = "/run/ghostship-integrations/inference-server.json"
 POOL_TOKEN_FILE = "/run/ghostship-integrations/inference-token"
 POOL_LEDGER_FILE = f"{T3_HOME}/.local/state/ghostship-agent/runtime/jobs.sqlite"
+# The OpenCode request records, inside the T3 Code home. The reader opens the
+# database read only, and the unit's read only paths cover the home.
+OPENCODE_DB_FILE = f"{T3_HOME}/{usage_inference.OPENCODE_DB_RELATIVE}"
+# The reader's own cache of the OpenCode events, in the collector's state
+# directory. The state directory is writable and nothing else is.
+EVENTS_CACHE_FILE = usage_inference.EVENTS_CACHE_PATH
 # The T3 Code state, read only. It carries the observed failures of the
 # routes: a child that could not start, a provider that reported its
 # allowance spent, a model that was refused.
@@ -216,6 +223,22 @@ METRIC_HELP = {
         "One for a model whose headroom is unknown, with the reason it is unknown."
     ),
     "ghostship_ai_model_capacity_expires_in_seconds": "When the model's account capacity expires.",
+    "ghostship_ai_model_capacity_basis": (
+        "Where the capacity of a model comes from: a reading the provider "
+        "reported, an inference from the limit failures of the route, a "
+        "statement the provider publishes, or nothing at all."
+    ),
+    "ghostship_ai_model_capacity_budget": (
+        "The budget an inferred capacity was measured against, in the unit "
+        "it was measured in."
+    ),
+    "ghostship_ai_model_capacity_episodes": (
+        "The limit episodes an inferred capacity was measured from."
+    ),
+    "ghostship_ai_inference_unmatched_events": (
+        "The recorded events whose route is not in the collector's "
+        "inventory. They are counted and never guessed."
+    ),
     "ghostship_ai_model_tier": "One for every tier a model belongs to.",
     "ghostship_ai_model_evaluated_timestamp_seconds": "When a model was last evaluated.",
     "ghostship_ai_three_d_usage_tokens": "Tokens spent on 3D printing work.",
@@ -904,6 +927,27 @@ def ranking_inputs(
                 basis=published_module.GO_FREE_BASIS,
             )
         )
+    # The capacity the limit failures of a route imply. A route that
+    # reports its usage keeps its reported window: an inference never
+    # overrides a reported reading, and a route whose account already has a
+    # window keeps that one as well. The window is keyed by the route when
+    # the limit is the model's own, and by the provider when the limit
+    # belongs to the account.
+    inferred_keys: set[str] = set()
+    for route, capacity in sorted((context.get("inferred_capacity") or {}).items()):
+        provider, model = str(route[0]), str(route[1])
+        key = usage_inference.key_for(capacity)
+        if key in windows or provider in windows or f"{provider}/{model}" in windows:
+            # A reported window of the route, of the account, or of the
+            # route itself is the reading: the inference does not replace
+            # it.
+            continue
+        if key in inferred_keys:
+            # The account's capacity is the same for every route of the
+            # account, so it is filed once.
+            continue
+        inferred_keys.add(key)
+        windows.setdefault(key, []).append(usage_inference.window_for(capacity, moment))
     # The free pool's own evidence: the admissions of a route, its limits
     # and its cooldown. The admission is what lets a pool route hold the
     # free tier and take a workload.
@@ -1349,6 +1393,8 @@ def collect(
     pool_ledger: str | None = POOL_LEDGER_FILE,
     catalog_path: str = CATALOG_FILE,
     state_path: str | None = None,
+    events_cache: str = EVENTS_CACHE_FILE,
+    opencode_db: str | None = None,
     window_state_path: str | None = providers_module.OLLAMA_WINDOW_STATE_FILE,
     t3_state: str = T3_STATE_FILE,
     aa_cache: dict[str, Any] | None = None,
@@ -1388,6 +1434,22 @@ def collect(
     }
     offered = context.get("offered_models") or []
     extra.extend(free_model_samples(catalog, offered, pool_models, moment))
+    # The request records of the routes, and the capacity they imply. The
+    # two records are read at the same time and each of them caps itself, so
+    # the pair never holds the collector up. A record that cannot be read
+    # contributes no events: the routes it would have fed keep the basis
+    # they had.
+    routes = _known_routes(offered, pool_models, extra)
+    inferred = usage_inference.read_and_infer(
+        moment,
+        opencode_db=opencode_db or f"{t3_home}/{usage_inference.OPENCODE_DB_RELATIVE}",
+        events_cache=events_cache,
+        pool_ledger=pool_ledger,
+        routes=routes,
+    )
+    results.extend(inferred.results)
+    context["inferred_capacity"] = inferred.capacities
+    context["inference_unmatched"] = dict(inferred.unmatched)
     ranking_metrics, ranked = ranking_samples(
         results,
         catalog,
@@ -1402,6 +1464,26 @@ def collect(
     extra.extend(ranking_metrics)
     context["ranked"] = ranked
     return results, extra, context
+
+
+def _known_routes(
+    offered: Iterable[tuple[str, str]],
+    pool_models: Iterable[tuple[str, str]],
+    samples: Iterable[Sample],
+) -> set[tuple[str, str]]:
+    """The routes the collector knows.
+
+    The inventory of the instance, the routes of the free pool and the free
+    list of the catalog. An event of a route that is not in this set cannot
+    be placed on a route, and it is counted and published as unmatched: a
+    reading never invents a route.
+    """
+    routes = {(str(provider), str(model)) for provider, model in offered or ()}
+    routes |= {(str(provider), str(model)) for provider, model in pool_models or ()}
+    for name, labels, _value in samples or ():
+        if name == "ghostship_ai_free_model":
+            routes.add((str(labels.get("provider") or ""), str(labels.get("model") or "")))
+    return routes
 
 
 def _iter_samples(results: Iterable[SourceResult]):
@@ -1742,6 +1824,14 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--events-cache",
+        default=EVENTS_CACHE_FILE,
+        help=(
+            "Where the reader of the OpenCode request records keeps its own "
+            "cache of the events it read."
+        ),
+    )
+    parser.add_argument(
         "--projection",
         action="append",
         default=[],
@@ -1800,6 +1890,7 @@ def main(argv: list[str] | None = None) -> int:
         now,
         state_path=args.state,
         window_state_path=args.window_state,
+        events_cache=args.events_cache,
         aa_cache=aa_cache,
         aa_3d_cache=aa_3d_cache,
     )

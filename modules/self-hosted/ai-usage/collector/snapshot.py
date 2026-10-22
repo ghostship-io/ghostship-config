@@ -659,6 +659,8 @@ def _candidate(
     raw_windows: list[Any] = []
     surplus: dict[str, Any] = {}
     observed_failure: dict[str, Any] = {}
+    capacity_basis = ""
+    capacity_inference: dict[str, Any] = {}
 
     for entry in entries:
         if entry.tier:
@@ -678,6 +680,10 @@ def _candidate(
         account = entry.account or account
         pace = getattr(entry, "pace", pace)
         surplus = getattr(entry, "frontier_surplus", None) or surplus
+        capacity_basis = getattr(entry, "capacity_basis", "") or capacity_basis
+        capacity_inference = dict(
+            getattr(entry, "capacity_inference", None) or capacity_inference
+        )
         for reason in entry.reasons:
             if reason not in reasons:
                 reasons.append(reason)
@@ -816,6 +822,24 @@ def _candidate(
             "basis": _binding_basis(
                 getattr(entries[0], "capacity_binding", None) if entries else None
             ),
+            # Where the capacity of the route comes from: a reading the
+            # provider reported, an inference from the limit failures of the
+            # route, a statement the provider publishes, or nothing at all.
+            "capacity_basis": str(capacity_basis or ""),
+            # The inference behind the capacity, when the capacity was
+            # inferred: the window it was measured over, the budget, the
+            # unit, the scope, the weights, the episode count and the state.
+            # A route that reports its usage has none of these.
+            "inference": {
+                "window": capacity_inference.get("window"),
+                "budget": capacity_inference.get("budget"),
+                "unit": capacity_inference.get("unit") or None,
+                "scope": capacity_inference.get("scope") or None,
+                "weights": dict(capacity_inference.get("weights") or {}),
+                "weights_basis": capacity_inference.get("weights_basis") or None,
+                "episodes": capacity_inference.get("episodes"),
+                "state": capacity_inference.get("state") or None,
+            },
             "ends_at": _binding_ends_at(
                 getattr(entries[0], "capacity_binding", None) if entries else None
             ),

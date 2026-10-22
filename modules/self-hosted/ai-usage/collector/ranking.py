@@ -118,6 +118,10 @@ class QuotaWindow:
     # without reading is visible and it does not gate: an unknown reading is
     # not evidence that an account is exhausted.
     gating: bool = True
+    # The inference behind an inferred window: the window it was measured
+    # from, the budget, the unit, the scope, the weights, the episode count
+    # and the state. It is empty for every window a provider reported.
+    inference: Any = None
 
     def applies(self, model: str) -> bool:
         """True when this window applies to the model."""
@@ -179,6 +183,22 @@ class RankedModel:
     # then carries its own window and the paid allowance of the account
     # does not gate it.
     unlimited: bool = False
+    # Where the capacity of the route comes from: a reading the provider
+    # reported, an inference from its limit failures, a statement the
+    # provider publishes, or nothing at all.
+    capacity_basis: str = ""
+    # The inference behind the capacity, when the capacity is inferred: the
+    # window, the budget, the unit, the scope, the weights, the episode
+    # count and the state.
+    capacity_inference: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+
+# The four bases a capacity can have. They are never mixed: a reader sees
+# which one a number came from.
+BASIS_REPORTED = "reported"
+BASIS_INFERRED = "inferred"
+BASIS_PUBLISHED = "published"
+BASIS_UNKNOWN = "unknown"
 
 
 # The tiers, in the order the dashboard reads them.
@@ -1174,6 +1194,10 @@ class _Candidate:
     # The observed failure of this route, when there is one. It belongs to
     # this model alone: a failure of another model is not its failure.
     failure: dict[str, Any] = dataclasses.field(default_factory=dict)
+    # Where the capacity of the route comes from, and the inference behind it
+    # when the capacity was inferred.
+    capacity_basis: str = ""
+    capacity_inference: dict[str, Any] = dataclasses.field(default_factory=dict)
     # The owner's frontier workhorses, as the runtime policy names them.
     workhorses: tuple[str, ...] = FRONTIER_WORKHORSES
 
@@ -1383,6 +1407,48 @@ def _is_unlimited_window(window: Any) -> bool:
     if quota_id is None and isinstance(window, Mapping):
         quota_id = window.get("quota_id")
     return str(quota_id or "") == "free-unlimited"
+
+
+def _is_inferred_window(window: Any) -> bool:
+    """True when a window was inferred from the limit failures of a route."""
+    inference = getattr(window, "inference", None)
+    if inference is None and isinstance(window, Mapping):
+        inference = window.get("inference")
+    if inference:
+        return True
+    quota_id = getattr(window, "quota_id", None)
+    if quota_id is None and isinstance(window, Mapping):
+        quota_id = window.get("quota_id")
+    return str(quota_id or "").startswith("inferred:")
+
+
+def _capacity_basis(windows: Iterable[Any]) -> str:
+    """Where the capacity of a route comes from.
+
+    A window the provider reported is a reading, a window the provider
+    publishes is a statement, and a window that was inferred from the limit
+    failures of the route is an inference. A route with no window at all
+    has an unknown capacity: it is never published as a number.
+    """
+    applied = list(windows or ())
+    if any(_is_inferred_window(window) for window in applied):
+        return BASIS_INFERRED
+    if any(_is_unlimited_window(window) for window in applied):
+        return BASIS_PUBLISHED
+    if applied:
+        return BASIS_REPORTED
+    return BASIS_UNKNOWN
+
+
+def _inference_detail(windows: Iterable[Any]) -> dict[str, Any]:
+    """The inference behind the capacity of a route, or an empty record."""
+    for window in windows or ():
+        inference = getattr(window, "inference", None)
+        if inference is None and isinstance(window, Mapping):
+            inference = window.get("inference")
+        if isinstance(inference, Mapping) and inference:
+            return dict(inference)
+    return {}
 
 
 def _window_applies(window: Any, model: str) -> bool:
@@ -1764,6 +1830,8 @@ def rank_models(
                 unlimited=any(_is_unlimited_window(window) for window in model_windows),
                 availability_reason=availability_reason,
                 failure=dict(failure or {}),
+                capacity_basis=_capacity_basis(windows),
+                capacity_inference=_inference_detail(windows),
             )
         )
 
@@ -1854,6 +1922,8 @@ def rank_models(
                     observed_failure=dict(candidate.failure),
                     unlimited=candidate.unlimited,
                     availability_reason=candidate.availability_reason,
+                    capacity_basis=candidate.capacity_basis,
+                    capacity_inference=dict(candidate.capacity_inference),
                 )
             )
             continue
@@ -1889,6 +1959,8 @@ def rank_models(
                     observed_failure=dict(candidate.failure),
                     unlimited=candidate.unlimited,
                     availability_reason=candidate.availability_reason,
+                    capacity_basis=candidate.capacity_basis,
+                    capacity_inference=dict(candidate.capacity_inference),
                 )
             )
         if not tier_entries:
@@ -1921,6 +1993,8 @@ def rank_models(
                     observed_failure=dict(candidate.failure),
                     unlimited=candidate.unlimited,
                     availability_reason=candidate.availability_reason,
+                    capacity_basis=candidate.capacity_basis,
+                    capacity_inference=dict(candidate.capacity_inference),
                 )
             )
         entries.extend(tier_entries)
@@ -2028,6 +2102,46 @@ def rank_samples(
                         "ghostship_ai_model_capacity_expires_in_seconds",
                         {**labels, "tier": tier},
                         float(entry.expires_in_seconds),
+                    )
+                )
+            # Where the capacity of this route comes from: a reading the
+            # provider reported, an inference from the limit failures of the
+            # route, a statement the provider publishes, or nothing at all.
+            # The inference behind it is published with it, so a reader
+            # knows how much record stands behind the number.
+            inference = entry.capacity_inference or {}
+            basis = entry.capacity_basis or BASIS_UNKNOWN
+            samples.append(
+                (
+                    "ghostship_ai_model_capacity_basis",
+                    {
+                        **labels,
+                        "basis": label_value(basis),
+                        "state": label_value(str(inference.get("state") or "")),
+                        "window": label_value(str(inference.get("window") or "")),
+                        "scope": label_value(str(inference.get("scope") or "")),
+                        "unit": label_value(str(inference.get("unit") or "")),
+                        "weights": label_value(str(inference.get("weights_basis") or "")),
+                    },
+                    1.0,
+                )
+            )
+            budget = inference.get("budget")
+            if isinstance(budget, (int, float)) and not isinstance(budget, bool):
+                samples.append(
+                    (
+                        "ghostship_ai_model_capacity_budget",
+                        {**labels, "unit": label_value(str(inference.get("unit") or ""))},
+                        float(budget),
+                    )
+                )
+            if basis == BASIS_INFERRED:
+                episodes = inference.get("episodes")
+                samples.append(
+                    (
+                        "ghostship_ai_model_capacity_episodes",
+                        dict(labels),
+                        float(episodes) if isinstance(episodes, (int, float)) and not isinstance(episodes, bool) else 0.0,
                     )
                 )
             samples.append(
