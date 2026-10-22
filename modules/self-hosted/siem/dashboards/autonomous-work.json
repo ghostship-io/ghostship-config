@@ -206,7 +206,7 @@
   {
    "id": 4,
    "title": "Work today",
-   "description": "Distinct work items with a UTC-day change, deduplicated across the one-minute polls. Sources that are down or truncated lower this count.",
+   "description": "Distinct work items with a state change today (UTC day), deduplicated across polls. Today is the collector UTC day, not the time picker; ranges are in the timeline below.",
    "type": "stat",
    "gridPos": {
     "x": 8,
@@ -264,7 +264,7 @@
   {
    "id": 5,
    "title": "Webhooks today",
-   "description": "Webhooks that fired today, deduplicated across polls. Acceptance per receipt is in the webhook table; a missing receipt is missing evidence.",
+   "description": "Webhooks that fired today (UTC day), deduplicated. This card is the UTC-day count, not the time picker; the range view is the webhook table below.",
    "type": "stat",
    "gridPos": {
     "x": 12,
@@ -794,7 +794,7 @@
   {
    "id": 20,
    "title": "Next up  /  schedules & timer initiators",
-   "description": "Enabled schedules with a next run, plus host systemd timers. The enable flag, the next run, the last run and the last result are separate facts.",
+   "description": "Enabled schedules with a next run, plus host systemd timers. The enable flag, the next run, the last run and the last result are separate facts. Current state from the last collector snapshot (one-minute poll); not a range total.",
    "type": "table",
    "gridPos": {
     "x": 0,
@@ -1225,7 +1225,7 @@
   {
    "id": 21,
    "title": "Attention  /  failures & held work",
-   "description": "Latest state per work item in a failure, blocked or held state.",
+   "description": "Latest state per work item in a failure, blocked or held state. Current state from the last collector snapshot (one-minute poll); not a range total.",
    "type": "table",
    "gridPos": {
     "x": 14,
@@ -1656,7 +1656,7 @@
   {
    "id": 22,
    "title": "Queues & jobs  /  explicit waiting and background work",
-   "description": "Runtime queues, launch workflows and pending native requests. Agents and their runs are in the agent table above; a recorded state is not process liveness.",
+   "description": "Runtime queues, launch workflows and pending native requests. Agents and their runs are in the agent table above; a recorded state is not process liveness. Current state from the last collector snapshot (one-minute poll); not a range total.",
    "type": "table",
    "gridPos": {
     "x": 0,
@@ -2086,8 +2086,8 @@
   },
   {
    "id": 23,
-   "title": "Today  /  durable state timeline",
-   "description": "State changes recorded today (UTC). Repeated polls do not multiply entries, and a state transition stays visible next to its earlier state.",
+   "title": "Range  /  durable state timeline (selected range)",
+   "description": "State changes observed inside the selected time range. The range comes from the Grafana time picker; repeated polls do not multiply entries and a state transition stays next to its earlier state.",
    "type": "table",
    "gridPos": {
     "x": 0,
@@ -2443,7 +2443,7 @@
       "type": "victoriametrics-logs-datasource",
       "uid": "victorialogs"
      },
-     "expr": "stream:=autonomous-work _time:24h kind:in(run,subagent,job,launch,workflow,review,request,continuation) | last 1 by (_time) partition by (source,kind,work_id,event_at,status) | filter event_today:1 | sort by (event_at desc) limit 200 | fields _msg,_time,event_at,source,kind,work_id,status,provider,evidence,thread_url,github_url",
+     "expr": "stream:=autonomous-work _time:$__range kind:in(run,subagent,job,launch,workflow,review,request,continuation) | last 1 by (_time) partition by (source,kind,work_id,event_at,status) | sort by (event_at desc) limit 200 | fields _time,_msg,event_at,source,kind,work_id,status,provider,evidence,thread_url,github_url",
      "queryType": "instant",
      "maxLines": 200
     }
@@ -2517,8 +2517,8 @@
   },
   {
    "id": 24,
-   "title": "Webhook fires  /  last 24 h receipt time & outcome",
-   "description": "Fired webhooks with their receipt time and outcome. The evidence class separates CI and deployment receipts from other receipts.",
+   "title": "Webhook fires  /  selected range",
+   "description": "Webhooks that fired inside the selected time range, with their receipt outcome; the window follows the Grafana time picker.",
    "type": "table",
    "gridPos": {
     "x": 14,
@@ -2874,7 +2874,7 @@
       "type": "victoriametrics-logs-datasource",
       "uid": "victorialogs"
      },
-     "expr": "stream:=autonomous-work _time:24h kind:=webhook | last 1 by (_time) partition by (source,kind,work_id) | sort by (fired_at desc) limit 200 | fields _msg,_time,fired_at,event_at,source,work_id,event,action,evidence,status,github_url",
+     "expr": "stream:=autonomous-work _time:$__range kind:=webhook | last 1 by (_time) partition by (source,kind,work_id) | sort by (fired_at desc) limit 200 | fields _time,_msg,fired_at,event_at,source,work_id,event,action,evidence,status,github_url",
      "queryType": "instant",
      "maxLines": 200
     }
@@ -2949,7 +2949,7 @@
   {
    "id": 25,
    "title": "Coverage  /  freshness, limits & read cost",
-   "description": "Per-source coverage of the last snapshot. A gap is a missing source, not an empty result; objective completion has no source today.",
+   "description": "Per-source coverage of the last snapshot. A gap is a missing source, not an empty result; objective completion has no source today. Current state from the last collector snapshot (one-minute poll); not a range total.",
    "type": "table",
    "gridPos": {
     "x": 0,
@@ -3381,7 +3381,7 @@
   {
    "id": 26,
    "title": "CI proof  /  configured checks on the exact SHA",
-   "description": "The coordinator CI proof of each pull request: the outcome, the merge flag, the required check count and the failing check count, bound to the exact revision. It proves configured checks on that revision, nothing else.",
+   "description": "The coordinator CI proof of each pull request: the outcome, the merge flag, the required check count and the failing check count, bound to the exact revision. It proves configured checks on that revision, nothing else. Current state from the last collector snapshot (one-minute poll); not a range total.",
    "type": "table",
    "gridPos": {
     "x": 14,
@@ -3817,7 +3817,7 @@
   {
    "id": 27,
    "title": "Schedule inventory  /  enabled, disabled & timers",
-   "description": "Every known schedule, including disabled ones and host timers, with its next run, last run and last result.",
+   "description": "Every known schedule, including disabled ones and host timers, with its next run, last run and last result. Current state from the last collector snapshot (one-minute poll); not a range total.",
    "type": "table",
    "gridPos": {
     "x": 0,
@@ -4248,7 +4248,7 @@
   {
    "id": 28,
    "title": "Source health  /  last successful read age",
-   "description": "Seconds since each source last read successfully. A source that never succeeded has no row here; the snapshot age above catches a collector failure.",
+   "description": "Seconds since each source last read successfully. A source that never succeeded has no row here; the snapshot age above catches a collector failure. Current state from the last collector snapshot (one-minute poll); not a range total.",
    "type": "table",
    "gridPos": {
     "x": 14,
@@ -4390,7 +4390,7 @@
   {
    "id": 29,
    "title": "Projects  /  native inventory",
-   "description": "Native T3 projects, including projects without agent activity. At most 200 rows per source: a truncated source is a lower bound, not a complete inventory.",
+   "description": "Native T3 projects, including projects without agent activity. At most 200 rows per source: a truncated source is a lower bound, not a complete inventory. Current state from the last collector snapshot (one-minute poll); not a range total.",
    "type": "table",
    "gridPos": {
     "x": 0,
@@ -4821,7 +4821,7 @@
   {
    "id": 30,
    "title": "Threads  /  manual, ordinary & agent work",
-   "description": "Ordinary and agent threads across every project, with the latest recorded state. At most 200 rows per source: a truncated source is a lower bound, not a complete inventory.",
+   "description": "Ordinary and agent threads across every project, with the latest recorded state. At most 200 rows per source: a truncated source is a lower bound, not a complete inventory. Current state from the last collector snapshot (one-minute poll); not a range total.",
    "type": "table",
    "gridPos": {
     "x": 8,
@@ -5252,7 +5252,7 @@
   {
    "id": 31,
    "title": "Handoffs & evidence  /  reviews, artifacts & continuations",
-   "description": "Review reports, provider routing, model continuations and every open pull request artifact. A review report is a model report; a reserved slot or an accepted switch is a receipt, not objective completion.",
+   "description": "Review reports, provider routing, model continuations and every open pull request artifact. A review report is a model report; a reserved slot or an accepted switch is a receipt, not objective completion. Current state from the last collector snapshot (one-minute poll); not a range total.",
    "type": "table",
    "gridPos": {
     "x": 0,
