@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.66] - 2026-10-22
+
+- The 3D tier gets its AA-3D evidence. The public pull returned early whenever the main Artificial Analysis cache was fresh, so the AA-3D file it writes was never created and every model read "no usable AA-3D snapshot": the 3D tier was empty, and the 3D reserve could not apply, so a 3D-qualified model led the bulk tier. The pull now skips only when both caches are usable.
+
 ## [3.17.65] - 2026-10-22
 
 - Pin ghostship-agent 2318134e (0.43.2): capability handlers import on first call, so the MCP browser tools work again. 0.43.1 left registration importing every handler, and the GitHub handlers' missing package still failed every MCP call.
