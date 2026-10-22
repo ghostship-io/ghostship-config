@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.51] - 2026-10-22
+
+- Free inference pool: renew the owner grants that were expiring on 2026-10-23 and 2026-10-25, using terms and billing evidence gathered on 2026-10-22. Every renewed grant carries the check date 2026-10-22 and the same seven-day expiry length the earlier renewals used (2026-10-29), and the Upstage, Mistral and Inception billing attestations are refreshed from today's console check (free plan, $0 spend, no payment method, no auto-recharge). The NVIDIA grant now cites the newly published free-tier rate limits and the Requesty grant cites its free-tier pricing page. No provider, model, limit or workload is added or removed: `poolside` stays untouched (its grant runs to 2026-10-31 and the 2026-10-22 review could not verify it), and the model end-of-service, operator and card-requirement changes the review found are listed as follow-ups in the pull request.
+
 ## [3.17.50] - 2026-10-22
 
 - Agent desktop browser stage: a stage-control restart re-pairs the windows it finds. Sway does not re-announce the windows it already has, so the anchor titles (the run id in a window's title) were only learned from new window events; after the restart that `run-chrome` loops on, every window stayed unpaired and `browser_window` `screenshot` and `ui` failed with `not_found` until the page titles happened to differ. The stage now reads the sway tree once at setup and seeds the anchor titles from it.
