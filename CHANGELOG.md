@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.78] - 2026-10-22
+
+- The inferred capacity of a route no longer merges the routes that were never refused into the account of the provider. A route that was never refused has no limit of its own: it is measured on its own, with its whole allowance and no pace, and its use never ends the episode of another route. On live data the free routes of the Go provider were refused by nothing and still came out of the account of their paid models, which are refused and never recover.
+- The refusals of a route that never recovered are now evidence for its scope. The scope of a route is read from the episodes of its account group, the open one included, so another model of the provider that works right after the refusal shows that the limit was the model's own. The paid models of the Go provider were refused, never recovered, and the free route of the same provider worked seconds later: they came out as one account with a minute long window and a budget of a few thousand tokens, and they are now the models that were refused, with no window read out of their failures.
+
 ## [3.17.77] - 2026-10-22
 
 - Two kernel module denials are now durable in the configuration. The running 6.19 kernel is affected by CVE-2026-31431 (`algif_aead`) and CVE-2026-53266 (`ebt_snat`), both in the CISA KEV feed, and the running kernel carries neither fix: no 6.19.x release carries the `ebt_snat` fix. The `algif_aead` deny existed only as a file placed by hand on the host, outside Nix, so it did not survive a rebuild and was never reviewed with the configuration that produced it. The host configuration now blacklists both modules and hands each of them to a false command in the generated `modprobe.d/nixos.conf`, which stops the automatic hardware probing and an explicit `modprobe` alike. The check `tests/kernel-module-deny.nix` evaluates the host configuration and holds the blacklist and the install rules in place.
