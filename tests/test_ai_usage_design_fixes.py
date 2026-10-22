@@ -240,3 +240,147 @@ class FreeSetTests(unittest.TestCase):
         self.assertIn(("opencode", "big-pickle"), promo)
         self.assertNotIn(("opencode", "big-pickle"), free)
         self.assertNotIn(("openrouter", "cohere/north-mini-code:free"), promo)
+
+
+def aa_record(slug, name, index=80.0, cost=0.2):
+    """One measured Artificial Analysis record."""
+    return {
+        "id": f"id-{slug}",
+        "slug": slug,
+        "model": name,
+        "release_date": "2026-01-20",
+        "indices": {"intelligence_index": index},
+        "cost_per_task": cost,
+        "median_performance": 100.0,
+        "prices": {},
+    }
+
+
+def build_free_snapshot(models, records, *, native=(), free=(), pool_evidence=None):
+    """Build a snapshot of the free routes and their tiers."""
+    document = {}
+    for provider, model in models:
+        for key in {provider, *catalog_module.PROVIDER_ALIASES.get(provider, ())}:
+            document.setdefault(key, {"models": {}})["models"][model] = {
+                "id": model,
+                "name": model,
+                "family": model,
+                "release_date": "2026-01-20",
+                "limit": {"context": 200000},
+                "cost": {"input": 0.0, "output": 0.0},
+            }
+    catalog = catalog_module.Catalog(document)
+    cache = {
+        "status": "ok",
+        "index_version": "4.3",
+        "fetched_at_epoch": NOW,
+        "records": records,
+    }
+    ranked = ranking.rank_models(
+        models=[ranking.ModelRecord(provider, model) for provider, model in models],
+        catalog=catalog,
+        quota_windows={},
+        free_models=set(free),
+        promo_models=set(),
+        usage_tokens={},
+        aa_cache=cache,
+        now=NOW,
+    )
+    return snapshot.build_snapshot(
+        now=NOW,
+        sources=[{"id": "t3", "status": "ok", "reason": "ok", "observed_at_epoch": NOW}],
+        ranked=ranked,
+        native_models={
+            key: {"providerInstance": "opencode", "modelId": key[1], "options": []}
+            for key in native
+        },
+        policy={
+            "frontierPrimeModels": ("gpt-6.1-sol", "claude-opus-5-5"),
+            "allowedGptModels": ("gpt-6.1-sol",),
+            "backgroundProviderInstances": ("opencode",),
+        },
+        catalog=catalog,
+        aa_cache=cache,
+        free_models=set(free),
+        promo_models=set(),
+        pool_evidence=pool_evidence or {},
+    )
+
+
+class FreeTierTests(unittest.TestCase):
+    """F2: the dedicated free tier has one winner per provider."""
+
+    POOL_MODEL = ("kilo", "cohere/north-mini-code:free")
+    RECORDS = [aa_record("north-mini-code", "North Mini Code")]
+
+    def _free_winners(self, data):
+        return [
+            winner
+            for winner in (data.get("tier_winners") or {}).get("free") or []
+        ]
+
+    def test_a_pool_route_with_an_admission_wins_the_free_tier(self):
+        data = build_free_snapshot(
+            [self.POOL_MODEL],
+            self.RECORDS,
+            free=[self.POOL_MODEL],
+            pool_evidence={
+                self.POOL_MODEL: {
+                    "admission": [{"workload": "light", "admitted": True}],
+                    "limits": [],
+                    "issues": [],
+                }
+            },
+        )
+        winners = self._free_winners(data)
+        self.assertEqual([(w["provider"], w["model"]) for w in winners], [self.POOL_MODEL])
+        samples = snapshot.decision_samples(data)
+        self.assertIn(
+            (
+                "ghostship_ai_model_winner",
+                {"tier": "free", "provider": "kilo", "model": "cohere/north-mini-code:free"},
+                1.0,
+            ),
+            samples,
+        )
+
+    def test_a_pool_route_without_an_admission_never_wins_the_free_tier(self):
+        data = build_free_snapshot(
+            [self.POOL_MODEL],
+            self.RECORDS,
+            free=[self.POOL_MODEL],
+            pool_evidence={self.POOL_MODEL: {"admission": [], "limits": [], "issues": []}},
+        )
+        self.assertEqual(self._free_winners(data), [])
+
+    def test_a_native_free_route_wins_the_free_tier_and_is_delegatable(self):
+        route = ("openrouter", "cohere/north-mini-code:free")
+        data = build_free_snapshot(
+            [route],
+            self.RECORDS,
+            native=[route],
+            free=[route],
+        )
+        winners = self._free_winners(data)
+        self.assertEqual([(w["provider"], w["model"]) for w in winners], [route])
+        research = data["recommendations"]["research"]
+        self.assertEqual((research["provider"], research["model"]), route)
+        self.assertTrue(research["delegate"])
+        self.assertEqual(research["tier"], "free")
+
+    def test_a_pool_route_is_never_a_delegate(self):
+        data = build_free_snapshot(
+            [self.POOL_MODEL],
+            self.RECORDS,
+            free=[self.POOL_MODEL],
+            pool_evidence={
+                self.POOL_MODEL: {
+                    "admission": [{"workload": "light", "admitted": True}],
+                    "limits": [],
+                    "issues": [],
+                }
+            },
+        )
+        research = data["recommendations"]["research"]
+        self.assertEqual((research["provider"], research["model"]), self.POOL_MODEL)
+        self.assertFalse(research["delegate"])

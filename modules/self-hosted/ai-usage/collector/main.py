@@ -636,6 +636,48 @@ def ranking_inputs(
         else:
             # A window the provider reports for one model only.
             windows.setdefault(f"{provider}/{model}", []).append(window)
+    # The free pool's own evidence: the admissions of a route, its limits
+    # and its cooldown. The admission is what lets a pool route hold the
+    # free tier and take a workload.
+    pool_admissions: dict[tuple[str, str, str], bool] = {}
+    pool_limits: dict[tuple[str, str, str, str], float] = {}
+    pool_cooldowns: dict[tuple[str, str], float] = {}
+    for name, labels, value in _iter_samples(results):
+        pool_provider = str(labels.get("provider") or "")
+        pool_model = str(labels.get("model") or "")
+        if name == "ghostship_ai_pool_model_admission":
+            workload = str(labels.get("workload") or "")
+            if workload:
+                pool_admissions[(pool_provider, pool_model, workload)] = value > 0
+        elif name == "ghostship_ai_pool_limit":
+            key = (
+                pool_provider,
+                pool_model,
+                str(labels.get("limit") or ""),
+                str(labels.get("scope") or "account"),
+            )
+            pool_limits[key] = float(value)
+        elif name == "ghostship_ai_pool_model_cooldown_until_seconds":
+            pool_cooldowns[(pool_provider, pool_model)] = float(value)
+    pool_evidence: dict[tuple[str, str], dict[str, Any]] = {}
+    for (pool_provider, pool_model), cooldown in sorted(pool_cooldowns.items()):
+        pool_evidence.setdefault(
+            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+        )
+    for (pool_provider, pool_model, workload), admitted in sorted(pool_admissions.items()):
+        entry = pool_evidence.setdefault(
+            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+        )
+        entry["admission"].append({"workload": workload, "admitted": admitted})
+    for (pool_provider, pool_model, limit, scope), value in sorted(pool_limits.items()):
+        entry = pool_evidence.setdefault(
+            (pool_provider, pool_model), {"admission": [], "limits": [], "issues": []}
+        )
+        entry["limits"].append(
+            {"limit": limit, "value": value, "scope": scope, "basis": "configured"}
+        )
+    for key, entry in pool_evidence.items():
+        entry["cooldown_until"] = pool_cooldowns.get(key)
     return {
         "inventory": sorted(inventory),
         "free": free,
@@ -644,6 +686,7 @@ def ranking_inputs(
         "usage": usage,
         "windows": windows,
         "pool_providers": pool_providers,
+        "pool_evidence": pool_evidence,
     }
 
 
@@ -676,6 +719,7 @@ def ranking_samples(
     pool_providers = inputs["pool_providers"]
     context["free_models"] = free
     context["promo_models"] = promo
+    context["pool_evidence"] = inputs["pool_evidence"]
     samples: list[Sample] = []
     three_d_scores: dict[tuple[str, str], dict[str, Any]] = {}
     try:
@@ -811,6 +855,7 @@ def build_snapshot(
         aa_3d_cache=aa_3d_cache,
         free_models=free_models or set(),
         promo_models=promo_models or set(),
+        pool_evidence=context.get("pool_evidence") or {},
         inventory=context.get("ranking_inventory") or [],
     )
     if isinstance(snapshot, dict):
