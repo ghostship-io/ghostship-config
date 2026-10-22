@@ -34,6 +34,24 @@ evaluate it with a GitHub credential — a bare public tarball fetch returns
 If a future bump is not primed, the host's upgrade fails with the
 `404` archive error described above and the running generation is unaffected.
 
+## The pin must not move backwards
+
+A pull request that moves the pin to a revision that does not descend from the
+pinned one silently drops everything that is on the pinned line. The Fleet
+checks job runs `scripts/check-agent-pin.py`, which compares the pull
+request's `ghostship-private-agent` revision with the base branch's and fails
+unless the new revision descends from the old one. Git answers that in the
+fetched agent source, which the job reads with the read-only agent key.
+
+An intentional move to another line needs an explicit approval line in the
+pull request body or in one of its commits, naming the reason:
+
+```text
+pin-regression-approved: the pinned line was merged into main
+```
+
+The line needs a reason; an empty approval does not pass the check.
+
 ## Why not a standing token
 
 The host deliberately has no long-lived GitHub credential in its Nix
