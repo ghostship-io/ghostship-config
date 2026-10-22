@@ -24,7 +24,7 @@
     "x": 0,
     "y": 0,
     "w": 24,
-    "h": 3
+    "h": 2
    },
    "options": {
     "mode": "markdown",
@@ -42,7 +42,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 3,
+    "y": 2,
     "w": 6,
     "h": 7
    },
@@ -240,7 +240,7 @@
    },
    "gridPos": {
     "x": 6,
-    "y": 3,
+    "y": 2,
     "w": 6,
     "h": 7
    },
@@ -438,7 +438,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 3,
+    "y": 2,
     "w": 6,
     "h": 7
    },
@@ -636,7 +636,7 @@
    },
    "gridPos": {
     "x": 18,
-    "y": 3,
+    "y": 2,
     "w": 6,
     "h": 7
    },
@@ -831,7 +831,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 10,
+    "y": 9,
     "w": 24,
     "h": 1
    },
@@ -847,7 +847,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 11,
+    "y": 10,
     "w": 6,
     "h": 5
    },
@@ -1022,7 +1022,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 16,
+    "y": 15,
     "w": 6,
     "h": 5
    },
@@ -1136,7 +1136,7 @@
    "title": "Why this order \u00b7 ${allowance:text}  (per-window % left, expected-left marker, Paced Availability)",
    "gridPos": {
     "x": 0,
-    "y": 21,
+    "y": 20,
     "w": 24,
     "h": 1
    },
@@ -1583,7 +1583,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 22,
+    "y": 21,
     "w": 24,
     "h": 1
    },
@@ -2320,7 +2320,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 23,
+    "y": 22,
     "w": 24,
     "h": 1
    },
@@ -3913,7 +3913,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 24,
+    "y": 23,
     "w": 24,
     "h": 1
    },
@@ -4954,7 +4954,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 25,
+    "y": 24,
     "w": 24,
     "h": 1
    },
@@ -5506,7 +5506,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 26,
+    "y": 25,
     "w": 24,
     "h": 1
    },
