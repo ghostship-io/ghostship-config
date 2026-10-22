@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.60] - 2026-10-22
+
+- The SSH command guard's refusals reach the journal. The guard passed the message to `systemd-cat` as an argument, and `systemd-cat` runs its arguments as a command, so every refusal failed to journal and the caller also saw a "Failed to execute" line after the refusal. The message now goes on stdin and the journal tool's own output is dropped.
+
 ## [3.17.59] - 2026-10-22
 
 - The GitHub coordinator's hold lives in the host configuration. It was held off with a runtime drop-in under `/run`, and an activation clears runtime unit overrides, so the 2026-10-22 deploy started it and it replayed part of the deployment backlog before it was stopped again. `ghostship.githubEngineering.coordinatorAutoStart` (default on) now decides whether boot or an activation starts it, and chill-penguin sets it off until the replay fix passes a backlog replay. The webhook receiver keeps spooling while the coordinator is held.
