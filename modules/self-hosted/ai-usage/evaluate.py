@@ -40,18 +40,12 @@ POOL_SERVER_FILE = "/run/ghostship-integrations/inference-server.json"
 POOL_TOKEN_FILE = "/run/ghostship-integrations/inference-token"
 T3_HOME = "/srv/apps/t3code/home"
 
-# The key of the free feed. It belongs to the secret catalog like every other
-# provider key. There is no account, no plan, and no paid feature.
-AA_KEY_NAME = "ARTIFICIAL_ANALYSIS_API_KEY"
-
-
-# The contract the registered client of the feed has to satisfy. The client
-# itself belongs to the service library of this fleet, and its registration is
-# owned by the root of that library: this procedure never invents a command
-# and never registers a second client.
+# The contract the public pages have to satisfy. There is no key, no
+# account, and no paid feature: the pull reads public pages with ordinary
+# GETs, and it keeps the last good snapshot when a page is blocked.
 FEED_CONTRACT = {
-    "endpoint": "GET https://artificialanalysis.ai/api/v2/language/models/free",
-    "plan": "free",
+    "endpoint": "GET https://artificialanalysis.ai/leaderboards/models",
+    "plan": "public",
     "pages": "every page, with has_more and total_pages",
     "output": {
         "intelligence_index_version": "the major.minor of the intelligence index",
@@ -100,6 +94,11 @@ def read_feed(cache_path: str, now: float) -> dict[str, Any]:
             "fetched_at": cache.get("fetched_at"),
             "fetched_at_epoch": cache.get("fetched_at_epoch"),
             "records": cache.get("records") or [],
+            # The models the last pull found that the one before it did not
+            # carry, and the models whose measurement changed. They are the
+            # re-ranking trigger, and they travel with the cache.
+            "new_models": cache.get("new_models") or [],
+            "changed_models": cache.get("changed_models") or [],
         }
     return {
         "status": str(cache.get("status") or "missing"),

@@ -2529,6 +2529,11 @@ def build_snapshot(
         "states": aa_states,
         "reasons": aa_reasons,
         "candidates": aa_coverage_rows,
+        # The models the last pull found that the one before it did not
+        # carry, and the models whose measurement changed. They are the
+        # re-ranking trigger.
+        "new_models": list((aa_cache or {}).get("new_models") or ()),
+        "changed_models": list((aa_cache or {}).get("changed_models") or ()),
     }
     provider_capacity: dict[str, Any] = {}
     for account, windows in accounts.items():

@@ -226,6 +226,18 @@ METRIC_HELP = {
         "One for every model the owner's policy excludes from selection; it "
         "stays visible in the usage and the quota readings."
     ),
+    "ghostship_ai_model_new": (
+        "One for a model the Artificial Analysis pull found that the last "
+        "pull did not carry. It is the re-ranking trigger."
+    ),
+    "ghostship_ai_model_changed": (
+        "One for a model whose Artificial Analysis measurement changed since "
+        "the last pull."
+    ),
+    "ghostship_ai_feed_status": (
+        "The state of the Artificial Analysis pull: the source, the state and "
+        "the number of records."
+    ),
     "ghostship_ai_calculation_component": "One for each part of the calculation of a winner.",
     "ghostship_ai_calculation_weight": "The weight of a part of the calculation.",
     "ghostship_ai_calculation_transform": (
@@ -1163,6 +1175,71 @@ def _iter_samples(results: Iterable[SourceResult]):
         yield from result.metrics
 
 
+def feed_samples(snapshot: Mapping[str, Any]) -> list[Sample]:
+    """The state of the Artificial Analysis pull, and what it found.
+
+    The pull runs once a day, and a model that is new or whose measurement
+    changed is the trigger for a re-ranking. The names are published so a
+    reader can see which models the last pull brought in.
+    """
+    samples: list[Sample] = []
+    quality = snapshot.get("quality_feed") or {}
+    status = str(quality.get("status") or "missing")
+    records = quality.get("records")
+    samples.append(
+        (
+            "ghostship_ai_feed_status",
+            {
+                "source": "artificialanalysis",
+                "status": status,
+                "reason": str(quality.get("reason") or ""),
+            },
+            float(records) if isinstance(records, (int, float)) else 0.0,
+        )
+    )
+    coverage = snapshot.get("aa_coverage") or {}
+    states = coverage.get("states") or {}
+    for state, count in sorted(states.items()):
+        samples.append(
+            (
+                "ghostship_ai_feed_status",
+                {
+                    "source": "artificialanalysis",
+                    "status": str(state),
+                    "reason": "",
+                },
+                float(count) if isinstance(count, (int, float)) else 0.0,
+            )
+        )
+    for entry in coverage.get("new_models") or ():
+        if not isinstance(entry, Mapping):
+            continue
+        samples.append(
+            (
+                "ghostship_ai_model_new",
+                {
+                    "provider": str(entry.get("provider") or ""),
+                    "model": str(entry.get("model") or ""),
+                },
+                1.0,
+            )
+        )
+    for entry in coverage.get("changed_models") or ():
+        if not isinstance(entry, Mapping):
+            continue
+        samples.append(
+            (
+                "ghostship_ai_model_changed",
+                {
+                    "provider": str(entry.get("provider") or ""),
+                    "model": str(entry.get("model") or ""),
+                },
+                1.0,
+            )
+        )
+    return samples
+
+
 def render(
     results: list[SourceResult],
     extra: list[Sample],
@@ -1221,6 +1298,8 @@ def render(
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
         writer.add(name, labels, value)
     for name, labels, value in snapshot_module.provider_capacity_samples(snapshot or {}):
+        writer.add(name, labels, value)
+    for name, labels, value in feed_samples(snapshot or {}):
         writer.add(name, labels, value)
     measured: list[dict[str, Any]] = []
     for result in results:
