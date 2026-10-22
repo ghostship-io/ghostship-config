@@ -102,6 +102,10 @@ class QuotaWindow:
     # When the provider last reported this window. A reading that is older
     # than the freshness bound is stale, and a stale reading is not headroom.
     observed_at: float | None = None
+    # Whether the window constrains the route. A window a source publishes
+    # without reading is visible and it does not gate: an unknown reading is
+    # not evidence that an account is exhausted.
+    gating: bool = True
 
     def applies(self, model: str) -> bool:
         """True when this window applies to the model."""
@@ -664,8 +668,17 @@ def _capacity_detail(
         "paceExpected": None,
         "paceActual": None,
     }
-    if not windows:
+    # A window a source publishes without reading stays visible, but it does
+    # not constrain the route: an unknown reading is not evidence that an
+    # account is exhausted, and a provider is never hidden by it.
+    gating = [
+        window
+        for window in windows
+        if getattr(window, "gating", True) is not False
+    ]
+    if not gating:
         return dict(empty)
+    windows = gating
     states: list[tuple[Any, str, float | None]] = []
     for window in windows:
         state, remaining = _window_state(window, now)
@@ -1423,6 +1436,12 @@ def rank_models(
             or ""
         )
         failure = _failure_for(failures, account, native_instance, model)
+        # The windows that constrain the route. A window a source publishes
+        # without reading stays visible, but it does not gate: an unknown
+        # reading is not evidence that an account is exhausted.
+        gating_windows = [
+            window for window in windows if getattr(window, "gating", True) is not False
+        ]
         if failure is not None:
             # The T3 Code state says this route is broken right now. The
             # model is not usable, and it stays visible with the reason.
@@ -1431,9 +1450,10 @@ def rank_models(
             # A source that watches the route says it is not usable now, for
             # example a cooling down pool route.
             available = False
-        elif not windows:
-            # The provider reports no quota for this account. The model can
-            # still be used, but its headroom is unknown, not unlimited.
+        elif not gating_windows:
+            # The provider reports no quota for this account, or only a
+            # window it did not read. The model can still be used, but its
+            # headroom is unknown, not unlimited.
             available = bool(in_inventory)
         else:
             # A window that is unknown, malformed, or stale makes the
