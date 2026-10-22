@@ -6,6 +6,7 @@ below are the ones agents actually ran against the host.
 """
 import importlib.util
 import os
+import shutil
 import subprocess
 import tempfile
 import sys
@@ -17,6 +18,15 @@ SCRIPT = ROOT / "modules/self-hosted/ssh-command-guard.py"
 spec = importlib.util.spec_from_file_location("ssh_command_guard", SCRIPT)
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
+
+# The shell a session runs in. The test pins it, because the account's login
+# shell is a property of the machine that runs the test: a build sandbox has
+# no account database, and an account may name a shell the machine does not
+# have. The guard then has no shell to start and every session fails.
+SESSION_SHELL = shutil.which("bash") or shutil.which("sh") or "/bin/sh"
+# A command that exists wherever the test runs. An absolute path under /bin
+# does not: a build sandbox has no /bin/echo.
+ECHO = shutil.which("echo") or "echo"
 
 # The commands an agent ran against the host on 2026-10-22, and the fleet
 # commands that must keep working.
@@ -114,7 +124,8 @@ class WrapperTests(unittest.TestCase):
             env.pop("SSH_ORIGINAL_COMMAND", None)
         else:
             env["SSH_ORIGINAL_COMMAND"] = command
-        return subprocess.run([sys.executable, str(SCRIPT), "--journal", "/bin/false"],
+        return subprocess.run([sys.executable, str(SCRIPT), "--journal", "/bin/false",
+                               "--shell", SESSION_SHELL],
                               env=env, capture_output=True, text=True, timeout=30,
                               stdin=stdin)
 
@@ -130,7 +141,7 @@ class WrapperTests(unittest.TestCase):
         self.assertIn("guard-ok", result.stdout)
 
     def test_the_sftp_server_command_is_executed_unchanged(self):
-        result = self.run_guard("/bin/echo sftp-server")
+        result = self.run_guard(f"{ECHO} sftp-server")
         self.assertEqual(result.returncode, 0)
         self.assertIn("sftp-server", result.stdout)
 
@@ -149,6 +160,18 @@ class WrapperTests(unittest.TestCase):
         result = self.run_guard(None, stdin=subprocess.DEVNULL)
         self.assertEqual(result.returncode, 0)
         self.assertNotIn("refused", result.stderr.lower())
+
+
+class ShellTests(unittest.TestCase):
+    """The shell a session runs in."""
+
+    def test_the_pinned_shell_is_used(self):
+        self.assertEqual(guard.login_shell("/bin/true"), "/bin/true")
+
+    def test_a_session_always_has_a_shell_that_exists(self):
+        """The account's shell may name a path the machine does not have."""
+        shell = guard.login_shell()
+        self.assertTrue(os.path.exists(shell), shell)
 
 
 class PruneTests(unittest.TestCase):
