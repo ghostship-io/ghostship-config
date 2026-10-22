@@ -83,6 +83,11 @@ SNAPSHOT_PATH = "/var/lib/ghostship-ai-usage/routing.json"
 # budget belongs to one place.
 AA_CACHE_PATH = "/var/lib/ghostship-ai-usage/artificial-analysis.json"
 
+# The AA-3D board, written by the same pull of the public pages. Without
+# the board there is no 3D rank: the 3D tier stays empty and the models
+# that qualify for it are not reserved.
+AA_3D_CACHE_PATH = "/var/lib/ghostship-ai-usage/aa-3d.json"
+
 # The durable facts of the models, written by the daily procedure.
 FACTS_PATH = "/var/lib/ghostship-ai-usage/facts.json"
 
@@ -1534,10 +1539,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--aa-3d-cache",
-        default="",
+        default=AA_3D_CACHE_PATH,
         help=(
             "The bounded Artificial Analysis 3D snapshot (Elo, source, date and "
-            "benchmark conditions). Absent means no 3D rank."
+            "benchmark conditions), written by the pull of the public pages. "
+            "Absent means no 3D rank."
         ),
     )
     parser.add_argument(
