@@ -343,10 +343,16 @@ def run_command(command: str, shell: str) -> int:
 
 
 def journal(program: str, message: str) -> None:
-    """Record the refusal in the journal."""
+    """Record the refusal in the journal.
+
+    systemd-cat runs its positional arguments as a command, so the message
+    goes on stdin. Its own output is dropped, so a journal failure never
+    mixes into the refusal the caller reads.
+    """
     try:
-        subprocess.run([program, "-t", "ghostship-ssh-command-guard", "-p", "warning", message],
-                       check=False, timeout=10)
+        subprocess.run([program, "-t", "ghostship-ssh-command-guard", "-p", "warning"],
+                       input=message + "\n", text=True, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, check=False, timeout=10)
     except (OSError, subprocess.SubprocessError):
         pass
 
