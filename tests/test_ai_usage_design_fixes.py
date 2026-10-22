@@ -9,6 +9,7 @@ policy lists, and the observed runtime availability of a route.
 
 import importlib.util
 import json
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -307,8 +308,62 @@ def build_free_snapshot(models, records, *, native=(), free=(), pool_evidence=No
     )
 
 
+class SnapshotWriteTests(unittest.TestCase):
+    """The snapshot and its projections are written on every run."""
+
+    def test_every_run_writes_the_snapshot_and_both_projections(self):
+        import tempfile
+
+        main = _load("ai_usage_design_main_write", "main")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            output = root / "ai-usage.prom"
+            canonical = root / "routing.json"
+            first = root / "one" / "model-routing.json"
+            second = root / "two" / "model-routing.json"
+            code = main.main(
+                [
+                    "--output",
+                    str(output),
+                    "--snapshot",
+                    str(canonical),
+                    "--projection",
+                    str(first),
+                    "--projection",
+                    str(second),
+                    "--state",
+                    str(root / "state.json"),
+                    "--facts",
+                    str(root / "facts.json"),
+                    "--aa-cache",
+                    str(root / "missing-aa.json"),
+                    "--aa-3d-cache",
+                    str(root / "missing-aa3d.json"),
+                    "--now",
+                    str(NOW),
+                ]
+            )
+            self.assertEqual(code, 0)
+            for path in (output, canonical, first, second):
+                self.assertTrue(path.exists(), f"{path} was not written")
+                self.assertGreater(path.stat().st_size, 0)
+            document = json.loads(canonical.read_text(encoding="utf-8"))
+            self.assertEqual(document["schema"], snapshot.SCHEMA)
+            # The evidence is missing, and every tier says so.
+            for tier in snapshot.TIER_NAMES:
+                state = document["coverage"]["tiers"][tier]["state"]
+                self.assertEqual(state, "pending_aa_evidence")
+                self.assertIn("Artificial Analysis", document["coverage"]["tiers"][tier]["reason"])
+
+    def test_a_write_failure_is_not_swallowed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            blocked = Path(folder) / "blocked"
+            blocked.write_text("not a directory", encoding="utf-8")
+            with self.assertRaises(OSError):
+                snapshot.write_snapshot(blocked / "routing.json", {"schema": "x"})
+
+
 class FreeTierTests(unittest.TestCase):
-    """F2: the dedicated free tier has one winner per provider."""
 
     POOL_MODEL = ("kilo", "cohere/north-mini-code:free")
     RECORDS = [aa_record("north-mini-code", "North Mini Code")]

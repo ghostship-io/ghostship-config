@@ -456,6 +456,12 @@ WINDOW_SCOPES = (
 )
 
 
+# A cooldown further out than this cannot be true. A millisecond timestamp
+# read as seconds lands tens of thousands of years out, and a value like
+# that is a broken reading, not a park. It is reported as an issue and it
+# never blocks a route.
+MAX_COOLDOWN_SECONDS = 366 * 24 * 3600.0
+
 # The providers whose zero-price listing is a free route of its own. The
 # OpenRouter free models and the Go subscription's free models cost nothing
 # by construction, so they are dedicated free routes and they may hold the
@@ -1091,13 +1097,14 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(json.dumps(snapshot, indent=1, default=str) + "\n")
     else:
         write_output(args.output, text)
+        log(f"wrote {len(text)} bytes to {args.output}")
     # The snapshot is the canonical answer for a consumer, so it is always
-    # written, atomically, even in the dry run. The runtime projections carry
-    # the same bytes: one producer, no second scorer, no history.
-    snapshot_module.write_snapshot(args.snapshot, snapshot)
-    if args.projection:
-        written = snapshot_module.publish(snapshot, args.projection)
-        log(f"published the snapshot to {len(written)} runtime projections")
+    # written, atomically, even in the dry run. A write that fails is an
+    # error: the unit must fail visibly, never pass with a stale file.
+    written = snapshot_module.write_snapshot(args.snapshot, snapshot)
+    log(f"wrote {written} bytes to {args.snapshot}")
+    for path, size in snapshot_module.publish(snapshot, args.projection):
+        log(f"wrote {size} bytes to {path}")
     for result in results:
         log(f"{result.source}: {result.status} ({codes.reason(result.reason)})")
     log(f"wrote {len(text)} bytes to {'stdout' if args.stdout else args.output}")

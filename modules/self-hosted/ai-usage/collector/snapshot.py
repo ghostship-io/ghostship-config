@@ -72,6 +72,9 @@ QUOTA_UNKNOWN = "unknown"
 ROLE_PRIME = "prime"
 ROLE_DELEGATE = "delegate"
 
+# The tiers the snapshot reports, in the order the dashboard reads them.
+TIER_NAMES = ("frontier", "bulk", "free", "3d")
+
 
 def _finite(value: Any) -> float | None:
     """A finite float, or None. A NaN or an infinity is never published."""
@@ -1767,7 +1770,9 @@ def _fill_value(
 
 
 def _winners(
-    candidates: list[dict[str, Any]], tiers: dict[str, list[str]]
+    candidates: list[dict[str, Any]],
+    tiers: dict[str, list[str]],
+    aa_cache: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
     """One winner per provider and tier, ordered by the provider pacing.
 
@@ -1778,7 +1783,19 @@ def _winners(
     by_key = {_key(row["provider"], row["model"]): row for row in candidates}
     winners: dict[str, list[dict[str, Any]]] = {}
     coverage: dict[str, Any] = {}
-    for tier, members in tiers.items():
+    # The Artificial Analysis evidence is the gate of every tier. When it is
+    # missing, a tier has no winner for a reason that is not its own, and
+    # the tier says so instead of looking empty.
+    aa_evidence = "ok"
+    aa_reason = ""
+    if not isinstance(aa_cache, Mapping) or aa_cache.get("status") != "ok":
+        aa_evidence = "pending_aa_evidence"
+        aa_reason = (
+            "no current Artificial Analysis evidence: the feed cache is "
+            + str((aa_cache or {}).get("status") or "missing")
+        )
+    for tier in TIER_NAMES:
+        members = tiers.get(tier) or []
         considered = 0
         providers: set[str] = set()
         chosen: dict[str, dict[str, Any]] = {}
@@ -1835,6 +1852,24 @@ def _winners(
             "providers": len(providers),
             "winners": len(ordered),
             "providers_without_a_winner": len(providers) - len(ordered),
+            # The state of the tier itself: it is either held, it waits for
+            # the Artificial Analysis evidence, or no model of it is
+            # eligible. A tier with no winner never looks like a tier that
+            # was never measured.
+            "state": (
+                "ok"
+                if ordered
+                else (aa_evidence if aa_evidence != "ok" else "no_eligible_model")
+            ),
+            "reason": (
+                ""
+                if ordered
+                else (
+                    aa_reason
+                    if aa_evidence != "ok"
+                    else "no model of this tier is eligible right now"
+                )
+            ),
         }
     return winners, coverage
 
@@ -2236,7 +2271,7 @@ def build_snapshot(
         }
         tiers[tier] = sorted(set(members), key=lambda key: (order.get(key, 0), key))
     _calibrate_values(candidates)
-    winners, tier_coverage = _winners(candidates, tiers)
+    winners, tier_coverage = _winners(candidates, tiers, aa_cache=aa_cache)
     pending_identities = _pending_identities(candidates, facts_source, now)
     # The tiers are the operational list: one current winner per upstream
     # provider. The whole membership stays beside them for the comparison
@@ -2752,43 +2787,67 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
     return samples
 
 
-def write_snapshot(path: str | os.PathLike[str], snapshot: Mapping[str, Any]) -> None:
-    """Write the snapshot atomically, so a reader never sees half a file."""
+def _json_safe(value: Any) -> Any:
+    """The snapshot with every number that cannot be written turned into null.
+
+    JSON has no NaN and no infinity, and a single one of them would make
+    the whole snapshot unwritable. A value that cannot be written is not a
+    measurement: it is published as null, and the gap stays visible.
+    """
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+def write_snapshot(path: str | os.PathLike[str], snapshot: Mapping[str, Any]) -> int:
+    """Write the snapshot atomically, and return the bytes written.
+
+    A failure is raised, never swallowed: the snapshot is the canonical
+    answer for a consumer, and a collection that cannot write it must fail
+    visibly instead of leaving the previous file in place without a word.
+    """
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + ".new")
     payload = json.dumps(
-        snapshot, indent=1, sort_keys=False, default=str, allow_nan=False
+        _json_safe(snapshot), indent=1, sort_keys=False, default=str, allow_nan=False
     )
     temporary.write_text(payload + "\n", encoding="utf-8")
     os.chmod(temporary, 0o644)
     os.replace(temporary, target)
+    return len(payload) + 1
 
 
-def publish(snapshot: Mapping[str, Any], paths: Iterable[str | os.PathLike[str]]) -> list[str]:
+def publish(
+    snapshot: Mapping[str, Any], paths: Iterable[str | os.PathLike[str]]
+) -> list[tuple[str, int]]:
     """Publish the same bytes to every presentation of the snapshot.
 
     The canonical file and the runtime projections carry the same bytes: one
     producer, no second scorer, no history. Every write is atomic, and the
-    projections are credential free.
+    projections are credential free. A projection that cannot be written is
+    an error: a consumer would read the previous file and believe it.
     """
     payload = json.dumps(
-        snapshot, indent=1, sort_keys=False, default=str, allow_nan=False
-    ) + "\n"
-    written: list[str] = []
+        _json_safe(snapshot), indent=1, sort_keys=False, default=str, allow_nan=False
+    )
+    written: list[tuple[str, int]] = []
     for path in paths:
         target = Path(path)
-        try:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            temporary = target.with_name(target.name + ".new")
-            temporary.write_text(payload, encoding="utf-8")
-            os.chmod(temporary, 0o644)
-            os.replace(temporary, target)
-            written.append(str(target))
-        except OSError:
-            # A projection that cannot be written is not a reason to fail the
-            # collection: the canonical file is the answer.
-            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(target.name + ".new")
+        temporary.write_text(payload + "\n", encoding="utf-8")
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, target)
+        written.append((str(target), len(payload) + 1))
     return written
 
 
