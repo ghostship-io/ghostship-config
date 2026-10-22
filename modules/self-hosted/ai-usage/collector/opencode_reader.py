@@ -104,7 +104,12 @@ BACKFILL_DAYS = 3
 BACKFILL_S = BACKFILL_DAYS * DAY_SECONDS
 
 # The version of the cache file. A cache of another version is discarded.
-CACHE_VERSION = 1
+#
+# Version two is the version of the free providers: a version one cache holds
+# no row of a free provider, because those rows were counted and never
+# emitted. A cache of version one is discarded, and the history is read again,
+# so the free rows are read with the names they belong to.
+CACHE_VERSION = 2
 
 # The three statuses a reading has.
 STATUS_OK = "ok"
@@ -159,6 +164,12 @@ SUCCESS_FINISHES = frozenset({"stop", "tool-calls", "length", "content-filter"})
 # The OpenCode provider ids, mapped onto the provider names the collector
 # uses everywhere else. The table is committed, not guessed: a provider that
 # is not in it is counted and not emitted.
+#
+# The free providers are reached through an integration of their own, and the
+# integration is not the provider: OpenCode calls Kilo's free integration
+# "kilo-free" and Cloudflare's "cf-workers", while the collector publishes the
+# free pool's provider names. The aliases below come from the pool's provider
+# registry, so a free row is read under the provider it belongs to.
 PROVIDER_MAP = {
     "ollama-cloud": "ollama",
     "opencode-go": "opencode-go",
@@ -177,6 +188,25 @@ PROVIDER_MAP = {
     "vercel": "vercel",
     "poolside": "poolside",
     "orcarouter": "orcarouter",
+    "kilo-free": "kilo",
+    "kilo-keyed-free": "kilo-keyed",
+    "groq-free": "groq",
+    "nvidia-free": "nvidia",
+    "google-free": "google",
+    "cf-workers": "cloudflare-workers-ai",
+    "cloudflare-free": "cloudflare-workers-ai",
+    "vercel-free": "vercel",
+    "requesty-free": "requesty",
+    "huggingface-free": "huggingface",
+    "cohere-free": "cohere",
+    "mistral-free": "mistral",
+    "github-models-free": "github-models",
+    "zai-free": "zai",
+    "orcarouter-free": "orcarouter",
+    "upstage-free": "upstage",
+    "inception-free": "inception",
+    "poolside-free": "poolside",
+    "ovh-free": "ovh",
 }
 
 # The phrases that name a budget, and the window each one names. The order
@@ -663,7 +693,8 @@ def load_cache(path: str | os.PathLike[str], now: float) -> dict[str, Any] | Non
 
     A cache that cannot be read, does not parse, or does not carry the
     shape the reader expects is discarded: the reader starts over rather
-    than trust it.
+    than trust it. A cache of another version is discarded as well: its
+    events were read with another table, so the history is read again.
     """
     try:
         text = Path(path).read_text(encoding="utf-8")
@@ -674,6 +705,11 @@ def load_cache(path: str | os.PathLike[str], now: float) -> dict[str, Any] | Non
     except ValueError:
         return None
     if not isinstance(cache, Mapping):
+        return None
+    version = cache.get("version")
+    if isinstance(version, bool) or not isinstance(version, int):
+        return None
+    if version != CACHE_VERSION:
         return None
     complete_since = cache.get("complete_since")
     if isinstance(complete_since, bool) or not isinstance(complete_since, (int, float)):
