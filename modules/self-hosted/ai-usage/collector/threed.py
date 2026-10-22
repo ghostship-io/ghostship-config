@@ -180,6 +180,24 @@ def _has_image_input(entry: Mapping[str, Any]) -> bool:
     return False
 
 
+def visual_capable(entry: dict | None) -> bool:
+    """True when the catalog proves the model accepts image input.
+
+    A generic attachment flag, a model family name, and a token count are not
+    proof: 3D work needs a model that can look at a drawing or a photograph,
+    and only the catalog's own image-input modality says so.
+    """
+    if not isinstance(entry, Mapping):
+        return False
+    modalities = entry.get("modalities")
+    if not isinstance(modalities, Mapping):
+        return False
+    inputs = modalities.get("input")
+    if not isinstance(inputs, list):
+        return False
+    return any(str(value).lower() == "image" for value in inputs)
+
+
 def three_d_prior(provider: str, model: str, entry: dict | None = None) -> float:
     """Return a 0..1 score of how good the model is at 3D printing work."""
     model_id = str(model or "").lower()

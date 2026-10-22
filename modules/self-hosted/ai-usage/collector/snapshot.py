@@ -454,10 +454,23 @@ def _candidate(
             "source": "measured" if capacity_measured else "unknown",
             "measured": capacity_measured,
             "expires_in_seconds": None if expires_in is None else int(round(expires_in)),
+            # The capacity binding is the window with the least headroom.
+            "capacity_binding": _binding_record(
+                getattr(entries[0], "capacity_binding", None) if entries else None
+            ),
+            # The pace binding is the window that runs out first, and it is
+            # not necessarily the same window.
             "expected_used_ratio": None if expected is None else round(expected, 4),
             "measured_used_ratio": None if actual is None else round(actual, 4),
             "pace_delta": None if pace is None else round(pace, 4),
-            "pace_basis": "measured against the line the window draws by now",
+            "pace_binding": _binding_record(
+                getattr(entries[0], "pace_binding", None) if entries else None
+            ),
+            "pace_basis": (
+                "expected = clamp(1 - (reset - now) / duration, 0, 1); a positive "
+                "pace is behind the line, and the most constraining window is the "
+                "smallest pace"
+            ),
         },
         "usage": {
             "tokens_7d": round(used_tokens, 1),
@@ -877,6 +890,22 @@ def _pending_identities(
     return pending
 
 
+def _binding_record(window: Any) -> dict[str, Any] | None:
+    """The identity of the window a binding came from."""
+    if window is None:
+        return None
+    kind = getattr(window, "kind", None)
+    quota = getattr(window, "quota_id", None)
+    duration = getattr(window, "duration_seconds", None)
+    reset = getattr(window, "reset_epoch", None)
+    return {
+        "kind": None if kind is None else str(kind),
+        "quota": None if quota is None else str(quota),
+        "duration_seconds": int(duration) if isinstance(duration, (int, float)) else None,
+        "reset_at": _iso(reset) if isinstance(reset, (int, float)) else None,
+    }
+
+
 def _row_variant(row: Mapping[str, Any]) -> str:
     """The reasoning variant a model is run with, when it is known.
 
@@ -1279,6 +1308,45 @@ def build_snapshot(
         for row in candidates
         if "frontier" in row["tiers"] and row["quota_state"] == "available"
     ]
+    # The models the policy admits to the frontier, whether their quota
+    # allows them right now or not. A spent frontier model stays a member,
+    # with its state and its reset: it is not a phantom winner, and it is not
+    # silently absent either.
+    frontier_members = [
+        row
+        for row in candidates
+        if (row.get("eligibility") or {}).get("frontier_prime", {}).get("allowed")
+        and (row.get("admission") or {}).get("state") == "settled"
+        and (row.get("native") or {}).get("mapped")
+    ]
+    frontier_eligible = []
+    for row in frontier_members:
+        capacity = row.get("capacity") or {}
+        frontier_eligible.append(
+            {
+                "provider": row["provider"],
+                "model": row["model"],
+                "key": _key(row["provider"], row["model"]),
+                "state": (
+                    "available"
+                    if (row.get("availability") or {}).get("state") == "available"
+                    else "unavailable"
+                ),
+                "reason": (
+                    ""
+                    if (row.get("availability") or {}).get("state") == "available"
+                    else "the quota of the frontier model is spent or unknown"
+                ),
+                "quota_state": row.get("quota_state"),
+                "reset_at": (
+                    (capacity.get("capacity_binding") or {}).get("reset_at")
+                    if isinstance(capacity.get("capacity_binding"), Mapping)
+                    else None
+                ),
+                "seconds_to_reset": capacity.get("expires_in_seconds"),
+                "native": row.get("native"),
+            }
+        )
     frontier_models = [
         f"{row['native']['provider_instance_id'] or row['provider']}:{row['native']['model_id'] or row['model']}"
         for row in frontier_rows
@@ -1316,6 +1384,7 @@ def build_snapshot(
             "frontier": {
                 "available": bool(frontier_rows),
                 "models": frontier_models,
+                "eligible": frontier_eligible,
                 "reason": frontier_reason,
                 "wait_for": "the frontier model becomes available again",
             },
@@ -1468,6 +1537,11 @@ def decision_samples(snapshot: Mapping[str, Any]) -> list[tuple[str, dict[str, s
                 1.0 if (row.get("availability") or {}).get("state") == "available" else 0.0,
             )
         )
+        pace_delta = (row.get("capacity") or {}).get("pace_delta")
+        if isinstance(pace_delta, (int, float)) and not isinstance(pace_delta, bool):
+            samples.append(
+                ("ghostship_ai_model_pace_delta_ratio", labels, float(pace_delta))
+            )
     facts = (snapshot.get("facts") or {}).get("records") or {}
     for fact in facts.values():
         if not isinstance(fact, Mapping):
