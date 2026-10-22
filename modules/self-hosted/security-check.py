@@ -4,8 +4,11 @@
 Invariant checks (AppArmor, audit, firewall, container privilege) alert as soon
 as they fail. Drift checks (listeners, SSH keys, persistence, SUID files) record
 a baseline on first run and alert on later differences until the reviewer
-accepts the new state with --accept. Findings are written to a root-only state
-file; alert bodies carry identifiers only, never secrets or raw logs.
+accepts the new state. A reviewer who verified one change re-baselines one
+drift category with --accept-drift CATEGORY, or accepts one reviewed flow
+finding with --accept-flow KEY; the bare --accept re-baselines every category
+and accepts every current flow finding. Findings are written to a root-only
+state file; alert bodies carry identifiers only, never secrets or raw logs.
 """
 
 import argparse
@@ -34,6 +37,8 @@ PERSISTENCE_DIRS = [
     "/etc/profile.d",
 ]
 KEY_DIRS = ["/etc/ssh/authorized_keys.d", "/root/.ssh"]
+# The drift categories a reviewer may re-baseline on their own.
+DRIFT_CATEGORIES = ["listeners", "sshkeys", "persistence", "suid"]
 
 
 def sh(argv, check=True):
@@ -387,8 +392,8 @@ def save(path, data):
     os.replace(temporary, path)
 
 
-def flow_findings(cfg, flows, accepted):
-    """Sensitive observed edges; reviewed edges are accepted by key."""
+def observed_flow_findings(cfg, flows):
+    """Every sensitive observed edge, before the accepted keys are applied."""
     found = []
     for key in flows.get("edges", {}):
         source, target, proto, port = key.split("|")
@@ -397,7 +402,12 @@ def flow_findings(cfg, flows, accepted):
         owners = cfg["database_owners"].get(target)
         if owners is not None and source not in owners:
             found.append(Finding(f"flow.db.{source}.{target}", "high", "network", f"{source} connected to {target}:{port}"))
-    return [f for f in found if f.key not in accepted]
+    return found
+
+
+def flow_findings(cfg, flows, accepted):
+    """Sensitive observed edges; reviewed edges are accepted by key."""
+    return [f for f in observed_flow_findings(cfg, flows) if f.key not in accepted]
 
 
 def run(args):
@@ -415,11 +425,32 @@ def run(args):
     findings += check_firewall(cfg, sh(["nft", "list", "tables"]), sh(["nft", "list", "table", "ip", "filter"], check=False))
     findings += check_containers(cfg, rows)
     findings += check_ssh_logins(cfg, state, journal, remember_clients(state, container_addresses(rows, cfg["host_ssh_clients"]), now))
-    flows = flow_findings(cfg, load(cfg["flows_state"], {}), set(state.get("accepted_flows", [])))
+    flows_state = load(cfg["flows_state"], {})
+    flows = flow_findings(cfg, flows_state, set(state.get("accepted_flows", [])))
     if args.accept:
         state.setdefault("baselines", {}).clear()
         state["accepted_flows"] = sorted(set(state.get("accepted_flows", [])) | {f.key for f in flows})
         flows = []
+    else:
+        # A scoped re-baseline drops one baseline, so drift() records it again
+        # on this run. The other baselines stay as they are and keep alerting.
+        baselines = state.get("baselines")
+        if baselines:
+            for category in args.accept_drift or []:
+                baselines.pop(category, None)
+        if args.accept_flow:
+            known = {f.key for f in observed_flow_findings(cfg, flows_state)}
+            unknown = [key for key in args.accept_flow if key not in known]
+            if unknown:
+                print(
+                    f"unknown flow finding: {', '.join(unknown)}; "
+                    f"current flow findings: {', '.join(sorted(known)) or 'none'}",
+                    file=sys.stderr,
+                )
+                return 2
+            state["accepted_flows"] = sorted(set(state.get("accepted_flows", [])) | set(args.accept_flow))
+            accepted = set(args.accept_flow)
+            flows = [f for f in flows if f.key not in accepted]
     findings += flows
     findings += drift(state, "listeners", sorted(listeners(sh(["ss", "-Hltnu"]))), "medium", "exposure", lambda i, c: f"new listener {i}")
     findings += drift(state, "sshkeys", ssh_auth_files(), "high", "sshd", lambda p, c: f"SSH auth file {p} {c}")
@@ -440,10 +471,18 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     parser.add_argument("--state", default="/var/lib/ghostship-security/check.json")
-    parser.add_argument("--accept", action="store_true", help="re-baseline drift checks after review")
+    parser.add_argument("--accept", action="store_true",
+                        help="re-baseline EVERY drift category and accept EVERY current flow finding (prefer --accept-drift/--accept-flow)")
+    parser.add_argument("--accept-drift", action="append", choices=DRIFT_CATEGORIES, metavar="CATEGORY",
+                        help="re-baseline one drift category after review (repeatable): " + ", ".join(DRIFT_CATEGORIES))
+    parser.add_argument("--accept-flow", action="append", metavar="KEY",
+                        help="accept one current flow finding by key after review (repeatable)")
     parser.add_argument("--suid", action="store_true", help="force the SUID scan")
     parser.add_argument("--dry-run", action="store_true", help="evaluate without publishing alerts")
-    return run(parser.parse_args(argv))
+    args = parser.parse_args(argv)
+    if args.accept and (args.accept_drift or args.accept_flow):
+        parser.error("--accept cannot be combined with --accept-drift or --accept-flow; use the scoped flags")
+    return run(args)
 
 
 if __name__ == "__main__":
