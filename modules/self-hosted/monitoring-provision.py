@@ -7,18 +7,26 @@ import sys
 import threading
 from pathlib import Path
 
-import socketio
-from engineio.payload import Payload
-
-# Kuma emits heartbeat/stat packets for every monitor before acknowledging login.
-# Its populated fleet can exceed Engine.IO's default 16-packet polling limit.
-Payload.max_decode_packets = 256
-
 RETIRED_APP_MONITORS = {
     "Ghostship OpenChamber": "OpenChamber",
     "Ghostship Synara": "Synara",
     "Ghostship Webhooks": "Webhooks",
 }
+
+
+def kuma_username(environ=None):
+    """The administrator account name the deployment supplies.
+
+    The name is part of the owner identity file outside this repository. An
+    unset value is a deployment mistake, never a default to fall back to.
+    """
+    environ = os.environ if environ is None else environ
+    username = (environ.get("GHOSTSHIP_KUMA_USERNAME") or "").strip()
+    if not username:
+        raise RuntimeError(
+            "GHOSTSHIP_KUMA_USERNAME is not set; the owner identity file must define it"
+        )
+    return username
 
 
 def is_retired_app_monitor(monitor, current_app_names):
@@ -79,6 +87,14 @@ def reconcile_ntfy_notification(call, notifications, password):
 
 
 def main():
+    import socketio
+    from engineio.payload import Payload
+
+    # Kuma emits heartbeat/stat packets for every monitor before acknowledging
+    # login. Its populated fleet can exceed Engine.IO's default 16-packet
+    # polling limit.
+    Payload.max_decode_packets = 256
+
     client = socketio.Client(request_timeout=15, reconnection=False)
     monitors = {}
     notifications = []
@@ -108,11 +124,7 @@ def main():
         # The administrator account name is supplied by the deployment outside
         # this repository; an unset value is a deployment mistake, not a
         # default to fall back to.
-        username = (os.environ.get("GHOSTSHIP_KUMA_USERNAME") or "").strip()
-        if not username:
-            raise RuntimeError(
-                "GHOSTSHIP_KUMA_USERNAME is not set; the owner identity file must define it"
-            )
+        username = kuma_username()
         # Query setup state explicitly; startup load can delay the setup event.
         if client.call("needSetup", timeout=20):
             call("setup", (username, os.environ["KUMA_PASSWORD"]))
