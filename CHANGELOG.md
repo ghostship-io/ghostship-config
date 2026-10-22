@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.72] - 2026-10-22
+
+- The AI usage collector says which metric series it dropped as a repeat. The renderer dropped a repeated name with the same labels and logged only how many series it dropped, so a run that dropped one or two series said nothing about them, and the emitter that published a series twice could not be found. Every dropped series is now named in the run's log, with its labels in the order they appear in the text file, and the line says whether the repeat carried the value that was kept or a different one. A run names at most twenty dropped series and then says how many it did not name, so the log stays a log. The first value is still the one that is published, the file still holds every series once, and `ghostship_ai_collection_duplicate_series` still counts every repeat.
+
 ## [3.17.71] - 2026-10-22
 
 - The kernel audit backlog holds 131072 records. A container restart burst overflowed the previous 32768 and the kernel dropped 70811 audit records, and a dropped record is a detection that never happened. The limit rises on both paths that reach the kernel: `security.audit.backlogLimit`, which NixOS writes into the generated audit rules and the kernel command line, and the `ghostship-audit-backlog` unit, which runs `auditctl -b` after those rules were loaded and therefore decides the value the kernel ends up with; the unit now carries that option instead of repeating the number. Nothing else moves: the failure mode stays printk, the rate limit stays unlimited, the rules and the log rotation are untouched, and no backlog wait time was configured, so none was added. A check evaluates the host configuration and holds every path to the new limit and the unchanged failure mode.
