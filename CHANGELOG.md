@@ -1,9 +1,20 @@
 # Changelog
 
-## [3.17.49] - 2026-10-22
+## [3.17.50] - 2026-10-22
 
 - Agent desktop browser stage: a stage-control restart re-pairs the windows it finds. Sway does not re-announce the windows it already has, so the anchor titles (the run id in a window's title) were only learned from new window events; after the restart that `run-chrome` loops on, every window stayed unpaired and `browser_window` `screenshot` and `ui` failed with `not_found` until the page titles happened to differ. The stage now reads the sway tree once at setup and seeds the anchor titles from it.
 - Agent desktop browser stage: only the focus lease's holder may release it. The viewer released a window's lease whenever its last client left, so a person closing the viewer closed the Chrome menu an agent was working with, and the agent's next click landed on the page behind it. The release now carries its actor (the viewer speaks for a person, the agent's CLI for an agent), a lease that belongs to someone else is left alone, an idle lease still expires on its own, and an explicit admin request (never from an agent) forces it down.
+
+## [3.17.49] - 2026-10-22
+
+- GitHub-launched threads lead with the chief reviewer (Claude Opus 5.5), with Codex GPT-6.1-Sol as the backup, per the owner's role policy.
+- Make Grafana the autonomous-work landing page, with direct navigation among work, host, security and pipeline dashboards. Read bounded T3, broker, runtime and systemd observations into the existing Victoria stores, with source/freshness limits and no transcripts or new orchestration service.
+- Configure revision-bound security/integration review in existing repository owners and approved usage-aware model routing. Prefer the owner's OpenCode MiniMax Flash Free route; preserve provider-specific options and explicit deployment approval. Correct the canonical ROM repository name and use actual NixOS CI check names for proof.
+- Close observed newsletter failure episodes independently of ntfy resolution delivery. A relapse gets a fresh persisted incident ID and a firing notification after the pending resolution succeeds. A compact sequence retains every unacknowledged handoff across repeated recovery/relapse cycles, retries one per observation even while healthy, and preserves existing episode IDs. Real-notifier and pinned-coordinator fault injection covers the relapse, bounded pending state, and a lost durable acknowledgement.
+- Pass the pinned agent source into sandboxed configuration tests. Newsletter incident integration tests no longer need a Nix executable or nested flake evaluation inside the builder; they continue to exercise the real pinned coordinator.
+- Separate newsletter incident acknowledgement from ntfy delivery. The notifier's incident-only operation acknowledges an fsynced spool write; the monitor persists one event ID per episode before sending and retries it independently. Notification outages do not enqueue recurrence messages, and spool failures remain retryable after ntfy succeeds. Regression tests exercise the real notifier and pinned coordinator with local fake edges, including lost acknowledgements and persistence failures.
+- Observe Ghostship AM outcomes from a host timer, using the newsletter's runtime-only monitor as its unprivileged user. Missing delivery, stale/invalid daily artifacts, or an unavailable monitor raise an operations alert and the existing bounded coordinator incident; recovery sends one resolution. No new sender, repair loop or T3 restart path is added. Requires newsletter 0.5.18 or later in the canonical checkout.
+- The AI provider decision page reads the canonical entitlement family for its allowance and limit cards, so one entitlement is one card: the two alias readings of the same window (the T3 status names the OpenCode Go windows go_monthly/go_rolling/go_weekly and the provider names monthly/rolling/weekly) are no longer shown as two allowances, and the shared parent window gate matches the placeholder model scope the collector publishes. The quota table keeps every raw reading with its quota and source. No routing or dispatch decision consumes the ranking; the owner reviews and approves it.
 
 ## [3.17.48] - 2026-10-22
 
