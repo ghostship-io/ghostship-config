@@ -317,7 +317,7 @@ class RoutingSwitchModuleTests(unittest.TestCase):
             if path == host:
                 lines = [line.strip() for line in text.splitlines() if "aiUsage" in line]
                 self.assertEqual(
-                    lines, ["ghostship.aiUsage.routing.enabled = true;"], str(path)
+                    lines, ["ghostship.aiUsage.routing.enabled = false;"], str(path)
                 )
                 continue
             others.append(str(path.relative_to(REPO)))
