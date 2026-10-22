@@ -311,6 +311,88 @@ class ModelIdRuleTests(WiringTestCase):
         self.assertEqual(inferred.capacities, {})
 
 
+class VendorPrefixedModelTests(WiringTestCase):
+    """A model id that carries a vendor prefix finds its route.
+
+    OpenCode records a request of Requesty as "vendor/model", while the
+    inventory of the collector knows the route as the model alone. The
+    event is placed on the route when the model alone is a route of the
+    same provider, and it stays unmatched when it is not: the prefix is
+    never taken from another provider, never added, and only ever one
+    segment of it is stripped.
+    """
+
+    def mapped(self, provider, model, routes):
+        """The events of one request, put on the routes."""
+        events = [{"provider": provider, "model": model, "at": 1.0, "outcome": "limit"}]
+        return usage().map_events(events, set(routes))
+
+    def test_a_vendor_prefixed_model_id_is_matched_to_its_route(self):
+        mapped, unmatched = self.mapped(
+            "requesty", "examplevendor/example-model-it", {("requesty", "example-model-it")}
+        )
+        self.assertEqual(unmatched, 0)
+        self.assertEqual(
+            [(event["provider"], event["model"]) for event in mapped],
+            [("requesty", "example-model-it")],
+        )
+
+    def test_a_vendor_prefixed_model_id_is_matched_by_its_case(self):
+        mapped, unmatched = self.mapped(
+            "requesty", "examplevendor/Example-Model-It", {("requesty", "example-model-it")}
+        )
+        self.assertEqual(unmatched, 0)
+        self.assertEqual(
+            [(event["provider"], event["model"]) for event in mapped],
+            [("requesty", "example-model-it")],
+        )
+
+    def test_an_exact_route_wins_over_the_stripped_one(self):
+        mapped, unmatched = self.mapped(
+            "openrouter",
+            "examplevendor/example-x",
+            {("openrouter", "examplevendor/example-x"), ("openrouter", "example-x")},
+        )
+        self.assertEqual(unmatched, 0)
+        self.assertEqual(
+            [(event["provider"], event["model"]) for event in mapped],
+            [("openrouter", "examplevendor/example-x")],
+        )
+
+    def test_the_limit_failures_of_a_prefixed_model_reach_its_route(self):
+        routes = [("requesty", "example-model-it")]
+        model = "examplevendor/example-model-it"
+        records = [
+            record(at(8), provider="requesty", model=model, usage=200000),
+            record(at(10, 30), provider="requesty", model=model, limit=True),
+            record(at(13, 2), provider="requesty", model=model, usage=0),
+            record(at(13, 5), provider="requesty", model=model, usage=150000),
+        ]
+        inferred = self.infer(records, routes)
+        self.assertEqual(inferred.unmatched["opencode_events"], 0)
+        capacity = inferred.capacities[("requesty", "example-model-it")]
+        self.assertNotEqual(capacity["state"], "no_failure")
+
+    def test_a_prefix_is_never_taken_from_another_provider(self):
+        mapped, unmatched = self.mapped(
+            "requesty", "examplevendor/example-model-it", {("otherprov", "example-model-it")}
+        )
+        self.assertEqual(unmatched, 1)
+        self.assertEqual(mapped, [])
+
+    def test_only_the_first_segment_of_the_prefix_is_stripped(self):
+        mapped, unmatched = self.mapped("requesty", "a/b/example-x", {("requesty", "example-x")})
+        self.assertEqual(unmatched, 1)
+        self.assertEqual(mapped, [])
+
+    def test_a_prefix_is_never_added_to_a_model_id(self):
+        mapped, unmatched = self.mapped(
+            "requesty", "example-model-it", {("requesty", "examplevendor/example-model-it")}
+        )
+        self.assertEqual(unmatched, 1)
+        self.assertEqual(mapped, [])
+
+
 class PolicyExampleTests(WiringTestCase):
     """The worked example of the owner rule, through the wiring."""
 
