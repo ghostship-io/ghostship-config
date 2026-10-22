@@ -142,6 +142,14 @@ def synthetic_policy(ingress: bool = False) -> dict:
                 "capabilities": [],
                 "capabilityDropsAll": True,
                 "privileged": False,
+                "namespaces": {
+                    "pid": [],
+                    "userns": [],
+                    "ipc": [],
+                    "uts": [],
+                    "cgroupns": [],
+                    "pod": [],
+                },
             }
         },
     }
@@ -543,6 +551,34 @@ def selftest() -> int:
             return
         failures.append("admission accepted " + message)
 
+    def admits(mutate, message: str) -> None:
+        good = synthetic_policy()
+        mutate(good["containers"]["candidate"])
+        try:
+            model.admit(good)
+        except model.PolicyError as error:
+            failures.append(f"admission refused {message}: {error}")
+
+    # The allowed capability set is one list, and the Nix admission reads the
+    # same one: the two cannot drift apart.
+    expected_capabilities = (
+        "CHOWN",
+        "DAC_OVERRIDE",
+        "FOWNER",
+        "FSETID",
+        "KILL",
+        "NET_BIND_SERVICE",
+        "SETFCAP",
+        "SETGID",
+        "SETPCAP",
+        "SETUID",
+        "SYS_CHROOT",
+    )
+    expect(
+        getattr(model, "ALLOWED_CAPABILITIES", None) == expected_capabilities,
+        "the allowed capability set is not the one the Nix admission reads",
+    )
+
     refuses(lambda p: p.update({"network": "host"}), "host networking")
     refuses(lambda p: p.update({"network": "container:other"}), "container networking")
     refuses(lambda p: p.update({"network": "none"}), "no networking")
@@ -555,6 +591,62 @@ def selftest() -> int:
     refuses(lambda p: p.update({"capabilities": ["ALL"]}), "ALL")
     refuses(lambda p: p.update({"capabilities": ["SYS_ADMIN"]}), "SYS_ADMIN")
     refuses(lambda p: p.update({"capabilities": ["cap_sys_admin"]}), "a lower-case SYS_ADMIN")
+    # The capability set is an allowlist: everything outside it is refused,
+    # in every spelling, and the message names the capability.
+    refuses(lambda p: p.update({"capabilities": ["SYS_MODULE"]}), "SYS_MODULE")
+    refuses(lambda p: p.update({"capabilities": ["sys_ptrace"]}), "a lower-case sys_ptrace")
+    refuses(lambda p: p.update({"capabilities": ["CAP_DAC_READ_SEARCH"]}), "CAP_DAC_READ_SEARCH")
+    refuses(lambda p: p.update({"capabilities": ["BPF"]}), "BPF")
+    refuses(
+        lambda p: p.update({"capabilities": ["CHOWN", "BPF"]}),
+        "BPF beside an allowed capability",
+    )
+    refuses(
+        lambda p: p.update({"capabilities": ["NET_BIND_SERVICE,PERFMON"]}),
+        "PERFMON in a comma list",
+    )
+    # The capabilities inside the allowed set are admitted.
+    admits(lambda p: p.update({"capabilities": ["NET_BIND_SERVICE"]}), "an allowed capability")
+    admits(
+        lambda p: p.update({"capabilities": ["cap_chown", "setuid", "SETGID"]}),
+        "the allowed capabilities in podman's spellings",
+    )
+    admits(lambda p: p.update({"capabilities": []}), "no capability at all")
+    # A host namespace is outside the rules, in every spelling.
+    refuses(
+        lambda p: p.update({"namespaces": dict(p["namespaces"], pid=["host"])}),
+        "a host pid namespace",
+    )
+    refuses(
+        lambda p: p.update({"namespaces": dict(p["namespaces"], userns=["host"])}),
+        "a host user namespace",
+    )
+    refuses(
+        lambda p: p.update({"namespaces": dict(p["namespaces"], ipc=["container:other"])}),
+        "another container's ipc namespace",
+    )
+    refuses(
+        lambda p: p.update({"namespaces": dict(p["namespaces"], uts=["ns:/proc/1/ns/uts"])}),
+        "a host uts namespace named by path",
+    )
+    refuses(
+        lambda p: p.update({"namespaces": dict(p["namespaces"], cgroupns=["host"])}),
+        "a host cgroup namespace",
+    )
+    refuses(
+        lambda p: p.update({"namespaces": dict(p["namespaces"], pod=["mypod"])}),
+        "a container in a pod",
+    )
+    refuses(lambda p: p.pop("namespaces"), "a policy without the namespace fields")
+    # The private and the automatic namespace stay admitted.
+    admits(
+        lambda p: p.update({"namespaces": dict(p["namespaces"], userns=["auto"])}),
+        "an automatic user namespace",
+    )
+    admits(
+        lambda p: p.update({"namespaces": dict(p["namespaces"], pid=["private"])}),
+        "a private pid namespace",
+    )
     refuses(lambda p: p.update({"capabilityDropsAll": False}), "a missing capability drop of ALL")
     refuses(lambda p: p.update({"privileged": True}), "a privileged container")
     refuses(lambda p: p.update({"address": "10.89.8.16"}), "an address outside the subnet")
