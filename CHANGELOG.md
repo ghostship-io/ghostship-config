@@ -1,8 +1,12 @@
 # Changelog
 
-## [3.17.75] - 2026-10-22
+## [3.17.76] - 2026-10-22
 
 - The owner identity values are supplied by the deployment, not by this repository. The account names and addresses the services log in as (the retired container registry account, the personal Google account the Keep broker verifies, the uptime kuma and ntfy administrator accounts and the account the private inputs were transferred from) are read from a root-owned file outside the repository, `/etc/ghostship/owner-identity.env`, and reach the units through their environment. A missing value fails with a clear message instead of a fallback, and the regression tests pin the same behaviour with synthetic names. The rendered configuration is unchanged once the deployment supplies the values.
+
+## [3.17.75] - 2026-10-22
+
+- The AI usage collector publishes the free pool's recent jobs as a count. The pool published one `ghostship_ai_pool_recent_jobs` sample per recent job, so two jobs that shared a provider, a worker, a client and a status were the same metric series twice. The renderer dropped the repeat and kept the first value, so the published number was one where it was two, and the collector's own duplicate counter reported the repeat on every run. The series is now the count of the recent jobs that share its labels and it is published once per label set. The labels and their defaults are unchanged, a job without a provider is still skipped, and a status that repeats a job publishes no duplicate series at all.
 
 ## [3.17.74] - 2026-10-22
 
