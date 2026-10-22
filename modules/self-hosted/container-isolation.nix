@@ -12,9 +12,10 @@
 #
 # Admission is fail-closed. A policy is refused when the container could
 # change its own identity or leave the namespace it is contained in
-# (privileged, NET_ADMIN, NET_RAW, SYS_ADMIN), when it joins
-# another network than the one the policy names, when its identity flags are
-# ambiguous, or when its address does not belong to the network's subnet.
+# (privileged, or a capability outside the allowed set), when it shares a
+# host namespace or runs in a pod, when it joins another network than the
+# one the policy names, when its identity flags are ambiguous, or when its
+# address does not belong to the network's subnet.
 # The admission reads the argv the oci-containers module actually builds,
 # native fields and extraOptions alike, with Podman's flag spellings.
 #
@@ -97,6 +98,17 @@ let
       effective = lib.filter (capability: !(lib.elem capability removals)) additions;
     };
 
+  # The capabilities a contained container may hold are an allowlist, not a
+  # denylist: everything outside it is refused, and the refusal names the
+  # capability. The list lives in one JSON file next to the policy model,
+  # which the model reads too, so the two sets cannot drift apart.
+  allowedCapabilities = (builtins.fromJSON (
+    builtins.readFile ./container-isolation/allowed-capabilities.json
+  )).allowedCapabilities;
+  disallowedCapabilities = name:
+    lib.filter (capability: !(lib.elem capability allowedCapabilities))
+      (capabilityFlags name).effective;
+
   # The podman context. `podman.user` turns the unit into a rootless user
   # unit: the container then runs in that user's network namespace, which the
   # host's rules and the metadata helper do not see. `preRunExtraOptions` are
@@ -109,6 +121,27 @@ let
   networkModes = name: flagValues (generatedArgv name) [ "--network" "--net" ];
   containerAddresses = name: flagValues (generatedArgv name) [ "--ip" ];
   containerMacs = name: map lib.toLower (flagValues (generatedArgv name) [ "--mac-address" ]);
+
+  # Host namespaces are outside the rules. A container in the host's pid
+  # namespace sees the host's processes, and one in the host's user
+  # namespace acts as the host's root. The values are read with the same
+  # flagValues helper as the network, so "--pid=host" and "--pid host" are
+  # the same flag, and the container:/ns: forms, which name another
+  # container's or a host namespace, are refused as well.
+  namespaceFlags = [ "pid" "userns" "ipc" "uts" "cgroupns" ];
+  isHostNamespace = value:
+    let lowered = lib.toLower value;
+    in
+    lowered == "host" || lib.hasPrefix "container:" lowered || lib.hasPrefix "ns:" lowered;
+  namespaceValues = name: flag: flagValues (generatedArgv name) [ "--${flag}" ];
+  hostNamespaces = name:
+    lib.concatMap
+      (flag: map (value: "${flag}=${lib.toLower value}")
+        (lib.filter isHostNamespace (namespaceValues name flag)))
+      namespaceFlags;
+  # A pod shares its namespaces between its containers, so a contained
+  # container in a pod is outside the rules. Every spelling is refused.
+  podNamespaces = name: flagValues (generatedArgv name) [ "--pod" ];
   isPrivileged = name:
     let
       values = lib.filter (element: element == "--privileged" || lib.hasPrefix "--privileged=" element) (generatedArgv name);
@@ -129,7 +162,7 @@ let
     in value >= base && value < base + size;
 
   spec = pkgs.writeText "container-isolation-policy.json" (builtins.toJSON {
-    version = 1;
+    version = 2;
     containers = lib.mapAttrs (
       name: policy: {
         inherit (policy) container network subnet address mac;
@@ -159,6 +192,16 @@ let
         capabilities = (capabilityFlags policy.container).effective;
         capabilityDropsAll = (capabilityFlags policy.container).dropsAll;
         privileged = isPrivileged policy.container;
+        # The namespace flags, as the argv spells them. The policy model
+        # refuses a host namespace and a pod with the same rules.
+        namespaces = {
+          pid = namespaceValues policy.container "pid";
+          userns = namespaceValues policy.container "userns";
+          ipc = namespaceValues policy.container "ipc";
+          uts = namespaceValues policy.container "uts";
+          cgroupns = namespaceValues policy.container "cgroupns";
+          pod = podNamespaces policy.container;
+        };
         podman = {
           user = podmanUser policy.container;
           preRun = preRunOptions policy.container;
@@ -198,7 +241,9 @@ let
         addresses = containerAddresses policy.container;
         macs = containerMacs policy.container;
         capabilities = capabilityFlags policy.container;
-        unsafeCaps = lib.filter (cap: lib.elem cap [ "NET_ADMIN" "NET_RAW" "SYS_ADMIN" "ALL" ]) capabilities.effective;
+        disallowedCaps = disallowedCapabilities policy.container;
+        hostNames = hostNamespaces policy.container;
+        podNames = podNamespaces policy.container;
       in
       [
         {
@@ -234,8 +279,26 @@ let
           message = "Container isolation policy ${name} cannot contain ${policy.container}: it both adds and drops ${lib.concatStringsSep ", " capabilities.ambiguous}, so the effective set would depend on podman's ordering.";
         }
         {
-          assertion = unsafeCaps == [ ];
-          message = "Container isolation policy ${name} cannot contain ${policy.container}: it adds NET_ADMIN, NET_RAW, SYS_ADMIN or ALL, and a container with one of those can change its own identity, craft its own frames or enter another network namespace the rules do not govern.";
+          # The capability set is an allowlist: a contained container may
+          # hold only the capabilities in the allowed set, and the refusal
+          # names the one that is not in it. SYS_MODULE loads kernel code,
+          # DAC_READ_SEARCH opens host files through open_by_handle_at,
+          # SYS_PTRACE injects into a process outside the namespace, and
+          # SYS_ADMIN can setns into a namespace the rules do not govern.
+          assertion = disallowedCaps == [ ];
+          message = "Container isolation policy ${name} cannot contain ${policy.container}: it adds ${lib.concatStringsSep ", " disallowedCaps}, which is not in the allowed capability set (${lib.concatStringsSep ", " allowedCapabilities}).";
+        }
+        {
+          # A host namespace is outside the rules: the container would see
+          # the host's processes or act as the host's root.
+          assertion = hostNames == [ ];
+          message = "Container isolation policy ${name} cannot contain ${policy.container}: it joins a host namespace (${lib.concatStringsSep ", " hostNames}), which is outside the rules.";
+        }
+        {
+          # A pod shares its namespaces between its containers, so a
+          # contained container in a pod is outside the rules.
+          assertion = podNames == [ ];
+          message = "Container isolation policy ${name} cannot contain ${policy.container}: it runs in a pod, which shares another container's namespaces and is outside the rules.";
         }
         {
           # One address, one MAC: an identity that is declared twice can be

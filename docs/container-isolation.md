@@ -121,19 +121,39 @@ it: `--flag=value` and `--flag value` are the same flag, `--net` is an alias of
 - the container is privileged, in any spelling (`container.privileged`,
   `--privileged`, `--privileged=true`);
 - it does not drop ALL capabilities explicitly (`--cap-drop=ALL`, or the
-  native `capabilities.ALL = false`), or its explicit additions include
-  `NET_ADMIN`, `NET_RAW`, `SYS_ADMIN` or `ALL`. Podman's default set comes from
+  native `capabilities.ALL = false`), or it adds a capability outside the
+  allowed set. The allowed set is one list, in
+  `modules/self-hosted/container-isolation/allowed-capabilities.json`, and both
+  the Nix admission and the policy model read that file, so the two sets
+  cannot drift apart: `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `FSETID`, `KILL`,
+  `NET_BIND_SERVICE`, `SETFCAP`, `SETGID`, `SETPCAP`, `SETUID`, `SYS_CHROOT`.
+  That is Podman's default set without `NET_RAW`, and the refusal names the
+  capability that is not in it. `SYS_MODULE` loads kernel code,
+  `DAC_READ_SEARCH` opens host files through `open_by_handle_at`,
+  `SYS_PTRACE` injects into a process outside the container's namespaces,
+  `BPF` and `PERFMON` read and steer kernel state, and `SYS_ADMIN` can
+  `setns` into any namespace whose handle it is given (a mounted
+  `/proc/<pid>/ns/net`, for example) and leave the rules behind entirely.
+  Podman's default set comes from
   `/etc/containers/containers.conf`, which NixOS writes from
   `virtualisation.containers.containersConf` and which may name `NET_RAW`;
   a mutable global default must not be able to reach a contained container.
   The baseline is therefore explicit: drop ALL, add back only what the
   service needs. A capability that is both added and dropped is refused,
   because the result would depend on Podman's ordering. A container that
-  keeps `NET_ADMIN` can change its own MAC; one that keeps `NET_RAW` can
-  craft frames that claim any address; one that keeps `SYS_ADMIN` can
-  `setns` into any network namespace whose handle it is given (a mounted
-  `/proc/<pid>/ns/net`, for example) and leave the rules behind entirely.
-  Any of them would make the identity binding meaningless;
+  keeps `NET_ADMIN` can change its own MAC and one that keeps `NET_RAW` can
+  craft frames that claim any address; both are outside the allowed set, and
+  any capability outside it would make the identity binding meaningless;
+- it shares a host namespace: `--pid`, `--userns`, `--ipc`, `--uts` or
+  `--cgroupns` with the value `host`, or with a `container:` or `ns:` value
+  (another container's namespace, or a path into the host's). The values are
+  read with the same helper as the network, so `--pid=host` and `--pid host`
+  are the same flag. A container in the host's pid namespace sees the host's
+  processes, and one in the host's user namespace acts as the host's root;
+  both are outside the rules the policy enforces;
+- it runs in a pod (`--pod`), in any spelling. A pod shares its namespaces
+  between its containers, so a contained container in a pod would share them
+  with containers the policy does not govern;
 - it joins anything but exactly one network, the one the policy names. The
   native `networks` list, `--network`, `--net`, a second attachment and an
   alternate attachment (`name:ip=…`) are all read the same way;
@@ -197,10 +217,10 @@ that was seen is not a flow that was reviewed. The policy therefore keeps
 
 - `selftest` runs without privileges. It checks the model, the admission
   rules, the rendered ruleset and the network metadata gate: an unsupported
-  topology, an ambiguous identity, an unsafe capability set, an address
-  outside the subnet, a coordinate in a free text field or a network whose
-  metadata names another subnet must be refused, and an observed edge must
-  not reach the ruleset.
+  topology, an ambiguous identity, a capability outside the allowed set, a
+  host namespace, a container in a pod, an address outside the subnet, a
+  coordinate in a free text field or a network whose metadata names another
+  subnet must be refused, and an observed edge must not reach the ruleset.
 - `harness` runs as root on the target. It builds a disposable topology in
   its own network namespaces, loads the generated ruleset inside the router
   namespace only, and removes every namespace, bridge and table with the
@@ -271,9 +291,10 @@ policy from being enabled.
 - **The candidate containers need a fixed identity and an explicit capability
   baseline.** A contained container needs a fixed `--ip`, a fixed
   `--mac-address` and `--cap-drop=ALL` plus only the capabilities its service
-  needs. Today only FlareSolverr has a fixed address, and most containers do
-  not drop ALL. Those changes belong to whoever owns each container's module,
-  and the address has to come out of the network's subnet.
+  needs, taken from the allowed set. Today only FlareSolverr has a fixed
+  address, and most containers do not drop ALL. Those changes belong to
+  whoever owns each container's module, and the address has to come out of
+  the network's subnet.
 - **The network metadata has to be confirmed per host.** The policy unit
   checks the subnet at load time; the network's name, subnet and interface
   still have to be read once on the host before the first policy.
@@ -296,9 +317,9 @@ policy from being enabled.
   namespace the container is handed: a runtime socket mount (the podman
   socket) or a process handle it can ptrace lets it ask something else to act
   for it, and `SYS_ADMIN` would let it enter that namespace directly. The
-  capability is refused for that reason. Socket mounts stay governed by the
-  existing host control (`ghostship.security.socket_mount_allow`), which is
-  outside this module.
+  capability is refused for that reason: it is not in the allowed set.
+  Socket mounts stay governed by the existing host control
+  (`ghostship.security.socket_mount_allow`), which is outside this module.
 - The default policy is egress containment. A container that serves inbound
   traffic needs the optional `ingress` block with its service ports, which
   also restricts what may reach it and needs connection tracking in the

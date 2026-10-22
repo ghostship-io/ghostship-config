@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.53] - 2026-10-22
+
+- Container isolation admission: replace the capability denylist with one allowlist that the Nix module and the policy model share, and refuse a contained container that joins a host namespace or runs in a pod. A container may now hold only CHOWN, DAC_OVERRIDE, FOWNER, FSETID, KILL, NET_BIND_SERVICE, SETFCAP, SETGID, SETPCAP, SETUID and SYS_CHROOT, the refusal names the capability that is not in the set, and `--pid`, `--userns`, `--ipc`, `--uts` and `--cgroupns` with the value host, container: or ns: are refused in every flag spelling.
+
 ## [3.17.52] - 2026-10-22
 
 - Add an off-by-default per-container network policy candidate with explicit rootful-context, identity and capability admission, stateful ingress replies and flow revocation checks. Real isolated packet tests cover allowed dependencies, blocked lateral/host traffic and atomic reload; production activation retains dependency, bridge-conntrack and identity-forgery gates.
