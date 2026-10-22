@@ -21,6 +21,11 @@ Gates never load a retailer site. Cookies are read with
 Network.getAllCookies only (never Runtime.enable) and only domains and
 counts leave the container.
 
+Canaries run the production image with production's environment and
+options, but they bind the desktop API to an address of their own: the
+image's default is the production container's address, which exists only in
+production's network namespace, and a canary could never bind it.
+
 State: /var/lib/ghostship/agent-desktop-update/state.json.
 """
 from __future__ import annotations
@@ -63,6 +68,15 @@ PRODUCTION_DATA = Path("/srv/apps/agent-desktop/config/agent-desktop")
 CANARY = "agent-desktop-canary"
 CANARY_IP = "10.89.7.40"
 CANARY_NET = "agent_desktop_net"
+# The desktop API binds the address it is given, and the image's default is
+# the production container's own address on the desktop network. That address
+# exists only in production's network namespace, so a canary could never bind
+# it. A canary binds loopback instead: an address every container namespace
+# has, including the network-less profile canary.
+API_BIND_ENV = "AGENT_DESKTOP_API_BIND"
+API_PORT_ENV = "AGENT_DESKTOP_API_PORT"
+CANARY_API_BIND = "127.0.0.1"
+CANARY_API_PORT = 7080
 PROFILE_CANARY = "agent-desktop-canary-profiles"
 LAB = Path("/srv/lab")
 SNAPSHOTS = Path("/srv/.ghostship-snapshots")
@@ -748,20 +762,33 @@ print(json.dumps([{"domain": c["domain"], "session": c.get("session", False),
 class Desktop:
     """One agent desktop container (canary or production) seen from the host."""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, api_bind: str | None = None):
         self.name = name
+        # The address the desktop API answers on, when this container was
+        # given one (a canary). Production binds its own address and is
+        # probed as it was before.
+        self.api_bind = api_bind
 
     def exec(self, *args: str, user: str = "abc", timeout: float = 600, check: bool = False,
              input: str | None = None) -> subprocess.CompletedProcess:
         return run(["podman", "exec", "-i", "-u", user, "-e", "HOME=/config", "-e", "CHROME_ENSURE_TIMEOUT_SECONDS=300",
                     self.name, *args], check=check, timeout=timeout, input=input)
 
+    def api_ready(self) -> bool:
+        """The desktop API answers on the address this container was given."""
+        if not self.api_bind:
+            return True
+        url = f"http://{self.api_bind}:{CANARY_API_PORT}/healthz"
+        return self.exec("curl", "-fsS", "--max-time", "5", "-o", "/dev/null", url,
+                         timeout=30).returncode == 0
+
     def wait_ready(self, timeout: float = 600) -> None:
         deadline = time.time() + timeout
         while time.time() < deadline:
             if self.exec("curl", "-fsS", "--max-time", "5", "-o", "/dev/null", "http://127.0.0.1:3000/",
                          timeout=30).returncode == 0 and \
-                    self.exec("test", "-r", "/config/agent-desktop/session-env", timeout=30).returncode == 0:
+                    self.exec("test", "-r", "/config/agent-desktop/session-env", timeout=30).returncode == 0 and \
+                    self.api_ready():
                 return
             time.sleep(5)
         raise GateFailure("startup", f"{self.name} did not become ready in {int(timeout)}s")
@@ -840,14 +867,17 @@ def start_canary(config: dict, name: str, image: str, data: Path, network: list[
     security, profile = apparmor_option(config.get("canary_options", []))
     env = []
     for key, value in sorted(config.get("canary_environment", {}).items()):
+        if key in (API_BIND_ENV, API_PORT_ENV):
+            continue  # the canary binds its own address, never production's
         env += ["-e", f"{key}={value}"]
+    env += ["-e", f"{API_BIND_ENV}={CANARY_API_BIND}", "-e", f"{API_PORT_ENV}={CANARY_API_PORT}"]
     run(["podman", "run", "-d", "--name", name, "--label", "ghostship.lab=1",
          "--label", "ghostship.agent-desktop-update=canary", *security, *network, *env,
          "-e", f"AGENT_DESKTOP_API_TOKEN={secrets.token_hex(16)}",
          "-v", f"{data / 'config'}:/config:rw", *options, image], timeout=300)
     log(f"started {name} from {image[:12]} (apparmor {profile})")
     CANARY_APPARMOR[name] = profile
-    desktop = Desktop(name)
+    desktop = Desktop(name, api_bind=CANARY_API_BIND)
     desktop.wait_ready()
     return desktop
 

@@ -193,6 +193,9 @@ REASON_ROUTE_PARKED = "the route is parked by its own source"
 REASON_CAPACITY_SPENT = "an allowance of the account is spent"
 REASON_CAPACITY_UNKNOWN = "the headroom of the account is unknown"
 REASON_NOT_OFFERED = "the route is not offered by the instance"
+# A route whose model the provider retired. The published reason is the
+# code, so a reader matches it against the state file and the snapshot.
+REASON_MODEL_RETIRED = "model_retired"
 
 # Lineage priors. A model starts from the prior of its lineage, which is
 # matched on the catalog family first and on the model id second.
@@ -882,6 +885,110 @@ def _load_state(path: str | os.PathLike[str]) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def load_state(path: str | os.PathLike[str] | None) -> dict[str, Any]:
+    """The ranking state file, read without a path being a path.
+
+    The collector reads the state before the ranking writes it, and it
+    reads the retired routes out of it: a retirement outlives the window
+    of the failure that reported it.
+    """
+    if not path:
+        return {}
+    return _load_state(path)
+
+
+def retired_from_state(state: Mapping[str, Any] | None) -> dict[str, dict[str, Any]]:
+    """The retired routes the state file remembers, by the id of the route.
+
+    A retired route is remembered with the provider that serves it, the
+    model and the moment the retirement was first seen. A state file
+    without such a record knows of no retired route.
+    """
+    found: dict[str, dict[str, Any]] = {}
+    for entry in (state or {}).values():
+        if not isinstance(entry, Mapping):
+            continue
+        record = entry.get("retired")
+        if not isinstance(record, Mapping):
+            continue
+        route = str(record.get("route") or "")
+        if route:
+            found[route] = dict(record)
+    return found
+
+
+def _retired_for(
+    retired: Mapping[str, Mapping[str, Any]] | None,
+    provider: str,
+    model: str,
+    account: str,
+) -> Mapping[str, Any] | None:
+    """The retirement of one route, when the route is retired.
+
+    A route is named by the provider that serves it and the model, and the
+    provider is the account the route is charged to. The record of the
+    route the collector wrote is found by that name, and the account is
+    the second name a record may carry.
+    """
+    if not retired:
+        return None
+    found = retired.get(f"{provider}/{model}")
+    if found is not None:
+        return found
+    for record in retired.values():
+        if str(record.get("model") or "") != str(model or ""):
+            continue
+        if str(record.get("provider") or "") in (
+            str(provider or ""),
+            str(account or ""),
+        ):
+            return record
+    return None
+
+
+def _with_retired(
+    state: dict[str, Any],
+    retired: Mapping[str, Mapping[str, Any]] | None,
+    now: float,
+) -> dict[str, Any]:
+    """The state with the retired routes recorded, and the stale ones removed.
+
+    The state file is the collector's own memory: a route that was retired
+    stays retired after the failure that reported it has left the window,
+    and a route the provider serves again loses its record.
+    """
+    updated = dict(state)
+    for key, entry in list(updated.items()):
+        if not isinstance(entry, Mapping):
+            continue
+        record = entry.get("retired")
+        if not isinstance(record, Mapping):
+            continue
+        route = str(record.get("route") or "")
+        if route and route in (retired or {}):
+            continue
+        fresh = dict(entry)
+        fresh.pop("retired", None)
+        updated[key] = fresh
+    for record in (retired or {}).values():
+        provider = str(record.get("provider") or "")
+        model = str(record.get("model") or "")
+        if not provider or not model:
+            continue
+        key = _state_key(provider, model)
+        entry = dict(updated.get(key) or {})
+        if not entry:
+            entry = {
+                "first_seen": float(record.get("first_seen") or now),
+                "evaluations": 0,
+                "last_evaluated": float(now),
+                "stale": True,
+            }
+        entry["retired"] = dict(record)
+        updated[key] = entry
+    return updated
+
+
 def _update_state(state: dict[str, Any], present: set[str], now: float) -> dict[str, Any]:
     """Record the evaluation of every model we know about."""
     updated: dict[str, Any] = {}
@@ -1064,6 +1171,9 @@ class _Candidate:
     unlimited: bool = False
     # Why the model is not usable right now, or an empty string when it is.
     availability_reason: str = ""
+    # The observed failure of this route, when there is one. It belongs to
+    # this model alone: a failure of another model is not its failure.
+    failure: dict[str, Any] = dataclasses.field(default_factory=dict)
     # The owner's frontier workhorses, as the runtime policy names them.
     workhorses: tuple[str, ...] = FRONTIER_WORKHORSES
 
@@ -1376,6 +1486,7 @@ def rank_models(
     free_route_accounts: Iterable[str] | None = None,
     frontier_workhorses: Iterable[str] | None = None,
     observed_failures: Iterable[Mapping[str, Any]] | None = None,
+    retired_routes: Mapping[str, Mapping[str, Any]] | None = None,
     now: float = 0.0,
     state_path: str | os.PathLike[str] | None = None,
 ) -> list[RankedModel]:
@@ -1403,11 +1514,17 @@ def rank_models(
     to one model. A model under a failed scope is not available, and it
     stays visible: it is reported with the reason and the moment it was
     observed.
+
+    `retired_routes` are the routes whose model the provider retired. A
+    retired route is not available and holds no tier, whatever window it
+    has, and the state file keeps the retirement for the runs after the
+    failure that reported it has left the window.
     """
     workhorses = tuple(
         str(name) for name in (frontier_workhorses or FRONTIER_WORKHORSES)
     )
     failures = _observed_failures(observed_failures)
+    retirements = dict(retired_routes or {})
     inventory: set[tuple[str, str]] = set()
     for record in models or ():
         pair = _record_pair(record)
@@ -1507,6 +1624,18 @@ def rank_models(
             or ""
         )
         failure = _failure_for(failures, account, native_instance, model)
+        # A route whose model the provider retired. The retirement is about
+        # that one route, whatever window it has: a route that is published
+        # as unlimited is still gone when the model behind it is retired.
+        retirement = _retired_for(retirements, provider, model, account)
+        if retirement is not None:
+            failure = {
+                "scope": "model",
+                "target": str(retirement.get("route") or model),
+                "reason": REASON_MODEL_RETIRED,
+                "label": REASON_MODEL_RETIRED,
+                "observed_at": float(retirement.get("first_seen") or 0.0),
+            }
         # The windows that constrain the route. A window a source publishes
         # without reading stays visible, but it does not gate: an unknown
         # reading is not evidence that an account is exhausted.
@@ -1514,8 +1643,9 @@ def rank_models(
             window for window in windows if getattr(window, "gating", True) is not False
         ]
         if failure is not None:
-            # The T3 Code state says this route is broken right now. The
-            # model is not usable, and it stays visible with the reason.
+            # The T3 Code state says this route is broken right now, or the
+            # provider retired the model behind it. The model is not usable,
+            # and it stays visible with the reason.
             available = False
             availability_reason = str(failure.get("label") or "") or REASON_ROUTE_FAILED
         elif external_state is False:
@@ -1633,6 +1763,7 @@ def rank_models(
                 applied_windows=list(windows),
                 unlimited=any(_is_unlimited_window(window) for window in model_windows),
                 availability_reason=availability_reason,
+                failure=dict(failure or {}),
             )
         )
 
@@ -1720,7 +1851,7 @@ def rank_models(
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
-                    observed_failure=dict(failure or {}),
+                    observed_failure=dict(candidate.failure),
                     unlimited=candidate.unlimited,
                     availability_reason=candidate.availability_reason,
                 )
@@ -1755,7 +1886,7 @@ def rank_models(
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
-                    observed_failure=dict(failure or {}),
+                    observed_failure=dict(candidate.failure),
                     unlimited=candidate.unlimited,
                     availability_reason=candidate.availability_reason,
                 )
@@ -1787,7 +1918,7 @@ def rank_models(
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
                     three_d_tokens=candidate.three_d_tokens,
-                    observed_failure=dict(failure or {}),
+                    observed_failure=dict(candidate.failure),
                     unlimited=candidate.unlimited,
                     availability_reason=candidate.availability_reason,
                 )
@@ -1830,6 +1961,10 @@ def rank_models(
         state = _update_state(
             _load_state(state_path), {_state_key(p, m) for p, m in universe}, now
         )
+        # The retirements are kept in the same state file: a retired route
+        # stays retired after the failure that reported it has left the
+        # window, and a route the provider serves again loses its record.
+        state = _with_retired(state, retirements, now)
         _save_state(state_path, state)
 
     return ranked

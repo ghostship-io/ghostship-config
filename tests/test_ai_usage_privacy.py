@@ -30,7 +30,7 @@ spec.loader.exec_module(providers)
 # The sentinels a provider could put into a failure.
 SENTINELS = (
     "sk-live-AAAABBBBCCCCDDDD",
-    "<owner-email>",
+    "person@private.invalid",
     "/srv/apps/t3code/home/.grok/auth.json",
     "https://api.grok.com/v1/billing?token=EEEE",
 )
