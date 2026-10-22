@@ -1020,10 +1020,10 @@ class ProviderCapacityTests(unittest.TestCase):
         """The panel holds every card, every row and every chip of the set.
 
         Measured in Playwright with the panel's own styles and the live set
-        of the fixture: the content is 1198 px tall at 390 px, and a grid
+        of the fixture: the content is 1651 px tall at 390 px, and a grid
         row of the dashboard is 37 px.
         """
-        self.assertGreaterEqual(self.panel["gridPos"]["h"] * 37, 1198)
+        self.assertGreaterEqual(self.panel["gridPos"]["h"] * 37, 1651)
 
 
 class VictoriaMetricsFixture:
