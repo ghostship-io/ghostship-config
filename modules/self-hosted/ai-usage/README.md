@@ -56,6 +56,137 @@ printing projects. Only session history files inside a directory whose name
 mentions `3dprint` are read, only for the last 30 days, and only a bounded
 number of files.
 
+## The OpenCode request record
+
+OpenCode records every model request it makes: the provider, the model, the
+tokens, the instant, and, when the request failed, the provider's own error.
+That record is the primary evidence for a route that is used through
+OpenCode, and the collector can infer a route's window and budget from the
+limit failures in it (the owner rule is in ghostship-agent's
+`config/agents/routing-policy.md`, "Usage measurement").
+
+The reader is `collector/opencode_reader.py`. It reads the SQLite database
+OpenCode keeps at `.local/share/opencode/opencode.db` inside the container
+home. It is not a source yet: the collector does not read it, and no metric
+carries it. What it produces is fixed:
+
+* `status` is `ok` or `unreadable`, and `reason` is a fixed code
+  (`ok`, `database_missing`, `database_unreadable`, `database_corrupt`,
+  `database_schema_missing`, `timeout`). A reading that cannot be made is
+  never a reading of zero usage.
+* `events` is one event per request: the collector's provider name, the
+  model id as recorded, the instant in epoch seconds, the outcome
+  (`success`, `limit` or `other`), the tokens used (`None` when the record
+  has none), and the window the failure named (`None`, `5h`, `7d` or `1d`).
+* `counts` holds the rows read, the rows whose provider is not in the
+  mapping table, and the events per outcome.
+
+Only a budget failure is a limit. A request that stopped for `stop`,
+`tool-calls`, `length` or `content-filter` is a success. A refusal that
+names the account's allowance is a limit, and the window it names is used
+when it names one: a session usage limit is five hours, a weekly usage limit
+is seven days, a daily limit is one day. A concurrency refusal, a per-minute
+refusal, a transient upstream refusal, a request that was too large, an
+expired key, an aborted run and a timeout spend no window, so they are read
+as `other` and never as a limit. A request that carries a retry is one
+event, with the outcome it ended on.
+
+The provider table is committed, not guessed. The OpenCode provider ids
+`ollama-cloud`, `opencode-go`, `opencode`, `openrouter`, `google`,
+`requesty`, `nvidia`, `ovh`, `upstage`, `inception`, `groq`, `mistral`,
+`cohere`, `zai`, `vercel`, `poolside` and `orcarouter` are mapped onto the
+collector's provider names. Every other provider id is counted and not
+emitted.
+
+The read is read only and it is bounded: the database is opened with the
+`mode=ro` URI, nothing in the reader writes to it, every query asks only
+for the last 35 days, the whole read has a wall clock limit of 20 seconds
+that aborts the query when it is reached, and the connection is closed on
+every path so no read transaction is left open.
+
+The query asks only for the fields the reader uses: SQLite extracts them
+from the record with its own JSON functions, so the whole record, about
+27 KB a row, never travels into Python. The error's own words come with
+the extraction and are classified in memory.
+
+The reader keeps its own cache: a file in the collector's state directory
+that holds the compact events, the cursor and the instant the history is
+complete from. A run reads only the rows the last run may not have seen,
+with two hours of overlap, so a row OpenCode inserted at the start of a
+step and completed later is read again; the events of that window are
+replaced by the ones the run read, and the events older than the window
+are pruned. The cache is written beside itself and renamed over the old
+one, so a reader never sees half of it, and it never holds the text of a
+provider's error.
+
+The history is filled a slice at a time. With no cache, a run reads the
+newest slice of three days. With a cache whose history starts later than
+the window allows, a run reads one slice of at most three days, walking
+back from the start of the history, inside the same cap. The reading is
+`partial` until the history reaches the whole window, and it carries the
+instant the history is complete from. A slice that runs out of time leaves
+the cache as it was and is read again by the next run; the part that was
+read still counts.
+
+A cache that does not parse, or that does not carry the shape the reader
+expects, is discarded and the backfill starts again. A cache is never
+trusted for an event that is dated in the future: those events are
+dropped.
+
+The text of a provider's error is read in memory, to pick the outcome, and
+it never leaves the process: it is not stored, not returned, not logged and
+not in an event. A real limit message names the account it belongs to.
+
+## The free pool's job ledger
+
+The free inference pool records every request it dispatches in a durable
+ledger: one reservation row per dispatched request, and one attempt per
+attempted route on the job's receipt. A free route reports no usage of its
+own, so the collector infers its capacity from its limit failures (the
+owner rule is in ghostship-agent's `config/agents/routing-policy.md`,
+"Usage measurement"), and the ledger is where the use of the route is
+recorded. The pool's own limits are admission caps and are never a
+capacity reading.
+
+The reader is `collector/pool_reader.py`. It reads the SQLite ledger the
+pool keeps at `.local/state/ghostship-agent/runtime/jobs.sqlite` inside the
+container home. It is not a source yet: the collector does not read it, and
+no metric carries it. What it produces is fixed, and it is the same
+contract as the OpenCode reader:
+
+* `status` is `ok` or `unreadable`, and `reason` is a fixed code (`ok`,
+  `ledger_missing`, `ledger_unreadable`, `ledger_corrupt`,
+  `ledger_schema_missing`, `timeout`). A reading that cannot be made is
+  never a reading of zero usage.
+* `events` is one event per request: the pool's provider name, the model
+  id as recorded, the instant in epoch seconds, the outcome (`success`,
+  `limit` or `other`), the tokens used (`None` when the ledger holds none),
+  and the window a limit named (`None` or `1d`).
+* `counts` holds the attempts read, the probes read, the attempts that had
+  no reservation, and the events per outcome.
+
+The attempt's category decides the outcome. A success is a success. A quota
+exhaustion is a limit and names no window; the daily exhaustion of the free
+allowance is a limit of the day. Every other category is not a limit of the
+route: a rate limit, an upstream error, an unavailable model, a context
+limit, a credential failure and an unexpected tool are all something else.
+
+An attempt takes the reservation of its route: the k-th attempt of a job
+and route takes the k-th reservation of that job and route, in time order.
+An attempt with no reservation was never dispatched, and it is counted and
+not emitted. A failed attempt contributes no usage, because the estimate
+the pool writes before a dispatch is not consumption; only a success carries
+the usage the pool settled onto its reservation. A probe - the pool's own
+check of a route - has a reservation and no receipt, so it is an event of
+its own: an `other` with the usage it consumed.
+
+The read is read only and it is bounded: the ledger is opened with the
+`mode=ro` URI and nothing in the reader writes to it, so the running pool
+keeps its own ledger. Every query asks only for the last 35 days, the whole
+read has a wall clock limit of 20 seconds that aborts the query when it is
+reached, the busy timeout is 2 seconds, and the connection is closed on
+every path so no read transaction is left open.
+
 ## The windows and where their numbers come from
 
 A window is only headroom when it carries three things: the share of the
@@ -418,9 +549,9 @@ provider-reported dollar charge.
 * `ghostship_ai_pool_latency_seconds{provider,model}` - the observed latency.
 * `ghostship_ai_pool_concurrency{provider,account,kind}` - the current and the
   allowed concurrency; `kind` is `current` or `limit`.
-* `ghostship_ai_pool_recent_jobs{provider,worker,client,status}` - 1 for a
-  recent job. The listing is bounded recent history, not a complete queue
-  census.
+* `ghostship_ai_pool_recent_jobs{provider,worker,client,status}` - the count
+  of the recent jobs with these labels. The listing is bounded recent
+  history, not a complete queue census.
 * `ghostship_ai_pool_quota_amount{provider,model,kind,unit}` - a quota amount
   seen in a provider response header; `kind` is `limit` or `remaining`.
 * `ghostship_ai_pool_quota_reset_seconds{provider,model,unit}` - when that
