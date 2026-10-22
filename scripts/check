@@ -30,6 +30,9 @@ python3 -m unittest discover -s tests -p test_security_monitoring.py
 python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
 
+printf 'Checking the kernel audit backlog limit\n'
+nix eval --impure --json --file tests/audit-backlog.nix >/dev/null
+
 printf 'Checking the agent SSH command guard\n'
 python3 -m unittest discover -s tests -p test_ssh_command_guard.py
 
@@ -83,6 +86,7 @@ python3 -m unittest discover -s tests -p test_ai_usage_aa_normalize.py
 python3 -m unittest discover -s tests -p test_ai_usage_aa_pull.py
 python3 -m unittest discover -s tests -p test_ai_usage_gate.py
 python3 -m unittest discover -s tests -p test_ai_usage_free_pool.py
+python3 -m unittest discover -s tests -p test_ai_usage_duplicate_series.py
 python3 -m unittest discover -s tests -p test_ai_usage_quota.py
 python3 -m unittest discover -s tests -p test_ai_usage_headroom.py
 python3 -c 'import json, sys; json.load(open(sys.argv[1]))' modules/self-hosted/siem/dashboards/ai-usage.json
