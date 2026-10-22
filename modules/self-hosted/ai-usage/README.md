@@ -115,8 +115,35 @@ the same model as a proxy, published as
 `cost_source: artificialanalysis_intelligence` with `proxy: true` and the
 statement that it is not a measured 3D cost. The AA-3D page shows a cost
 graph without enumerated values, so nothing is read from it or extrapolated.
-Missing both costs leaves the combined value unknown. The tier is still gated by proven image input and
-excludes Astra and Fable from selection.
+Missing both costs leaves the combined value unknown. The tier is still gated
+by proven image input and excludes Astra and Fable from selection.
+
+The reader accepts only the snapshot file (`--aa-3d-cache`); no HTTP client,
+poller, or credential. The whole board is accepted or refused: ranks must be
+finite, unique and the complete sequence, an interval must contain its Elo,
+and a duplicated, missing or malformed row rejects the snapshot. The published
+attribution and source are fixed public values, and the file's own ids, slugs,
+sources, release dates and free-form normalization are never forwarded.
+
+### Native option descriptors
+
+The collector keeps the option descriptors the stock orchestrator publishes:
+the id, a current value only when one is published, and the allowed choices,
+including the shape `options=[{id, label, ...}]`. A descriptor without a
+current value is a real option, not a discard; the run setting is simply not
+reported.
+
+An alignment to the measured AA condition is a recommendation, not a claim
+that the model already runs that way: `alignment` names the option id and the
+value the option lists, and `alignment_meta` carries `recommended`, `applied`
+and the actual current value. A model whose condition is not the measured one
+is selectable only when such an option exists; an unknown condition with no
+alignment is never selectable.
+
+The snapshot reconciles its inventory with its candidates in
+`coverage.ranking` (`inventory`, `candidates`, `excluded`, `excluded_models`),
+so a model that is offered but not a candidate is named instead of silently
+dropped.
 
 ### 3D evidence
 
