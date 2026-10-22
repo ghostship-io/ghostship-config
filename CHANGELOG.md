@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.58] - 2026-10-22
+
+- Repository references follow the organisation move. The private agent input, its lock owners, the private-source CI import, the auto-upgrade and agent-desktop update remotes, and the desktop promotion target now name the `ghostship-io` organisation and the renamed repositories. Only the source URL changes in the lock: the pinned revision, its content hash and its timestamp are unchanged. The private-source importer reads the owner from one constant, accepts the organisation's namespace and the previous account while a lock still names it, refuses any other owner, and derives the fetch URL from the lock it just validated. The coordinator's repository map, its incident repository and the webhook receiver's allowlist use the canonical names, and a repository alias map keeps existing issue owners, queued deliveries, CI issue mappings and pull request links across the transfer. Local checkout paths, T3 project identifiers, the Actions environment reviewer and the container image registry paths are unchanged.
+
 ## [3.17.57] - 2026-10-22
 
 - Test fixtures hold no personal identifier. The command guard's test used the owner's key line, with the owner's handle and home host, in a public repository; it now uses a role placeholder with synthetic key material, and the agent pin fixture uses a synthetic organisation. The command guard's regression tests also prove that the `nix-daemon --stdio` command of the `ssh-ng` transport and an interactive session, which sends no command at all, both pass the guard.

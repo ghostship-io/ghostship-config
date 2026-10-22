@@ -34,6 +34,30 @@ evaluate it with a GitHub credential — a bare public tarball fetch returns
 If a future bump is not primed, the host's upgrade fails with the
 `404` archive error described above and the running generation is unaffected.
 
+## The organisation namespace
+
+The private agent source now lives in the `ghostship-io` organisation. The
+`ghostship-private-agent` input URL and both lock owners name that
+organisation, and the pinned revision, its `narHash` and its `lastModified`
+are unchanged: only the source URL moved. The repositories were renamed at the
+same time — `nixos-config` became `ghostship-config` and
+`orca-advanced-calibration` became `ghostship-orca` — while local checkout
+paths and T3 project identifiers stayed the same.
+
+The coordinator's repository map, its incident repository and the webhook
+receiver's allowlist now name the canonical repositories. The receiver also
+serves the seven previous names, and the coordinator configuration carries a
+`repository_aliases` map from each previous name to its canonical one, so that
+existing issue owners, queued deliveries, CI issue mappings and pull request
+links survive the transfer.
+
+Those aliases take effect only in an agent revision that implements them. A
+pin bump that adds them must descend from the pinned revision, as
+[the pin guard](#the-pin-must-not-move-backwards) requires; a revision from
+another line would drop the coordinator behaviour that is already deployed.
+Until that bump, the aliases are inert configuration and the pinned revision
+keeps running unchanged.
+
 ## The pin must not move backwards
 
 A pull request that moves the pin to a revision that does not descend from the

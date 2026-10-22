@@ -28,6 +28,20 @@ let
     "ghostship-io/ghostship-newsletter".project_id = "the owner's local area";
     "ghostship-io/ghostship-orca".project_id = "the owner's local area";
   };
+  # The previous owner and the two renamed repositories, so that existing
+  # issue owners, queued deliveries, CI issue mappings and pull request links
+  # survive the transfer. The alias targets are the canonical repositories
+  # above; the coordinator resolves a legacy name to its canonical one and
+  # keeps the pre-transfer identity for commands it has already sent.
+  repositoryAliases = {
+    "ghostship-io/ghostship-config" = "ghostship-io/ghostship-config";
+    "ghostship-io/ghostship-agent" = "ghostship-io/ghostship-agent";
+    "ghostship-io/ghostship-3dprinting" = "ghostship-io/ghostship-3dprinting";
+    "ghostship-io/ghostship-roms" = "ghostship-io/ghostship-roms";
+    "ghostship-io/ghostship-xplus4" = "ghostship-io/ghostship-xplus4";
+    "ghostship-io/ghostship-newsletter" = "ghostship-io/ghostship-newsletter";
+    "ghostship-io/ghostship-orca" = "ghostship-io/ghostship-orca";
+  };
   coordinatorConfig = pkgs.writeText "ghostship-github-coordinator.json" (builtins.toJSON {
     allowed_user_ids = [ a local store id ];
     ntfy_url = "http://ntfy:8080";
@@ -64,6 +78,9 @@ let
         timeout_seconds = 1800;
       };
     }) repositories;
+    # The coordinator resolves a legacy repository name to its canonical one
+    # and keeps the pre-transfer identity for the commands it already sent.
+    repository_aliases = repositoryAliases;
     # Host incidents launch bounded repair threads in the fleet's own project.
     incidents = { repository = "ghostship-io/ghostship-config"; daily_limit = 3; };
   });
@@ -178,7 +195,10 @@ in
       pull = "never";
       user = "62030:62032";
       cmd = [ "--port" "8080" "--spool" "/spool" "--secrets" "/run/secrets/hooks.env"
-              "--repositories" (lib.concatStringsSep "," (builtins.attrNames repositories)) ];
+              # The receiver serves the canonical repositories and, while the
+              # transfer lasts, the names they had before it.
+              "--repositories" (lib.concatStringsSep ","
+                (builtins.attrNames repositories ++ builtins.attrNames repositoryAliases)) ];
       volumes = [
         "${root}/spool:/spool:rw,noexec,nosuid,nodev"
         "${config.ghostship.selfHostedSecrets.projections.ghostship-hooks.path}:/run/secrets/hooks.env:ro"
