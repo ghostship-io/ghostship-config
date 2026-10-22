@@ -28,7 +28,9 @@ The rules, in short:
 
 * An episode runs from the first use after the previous recovery (`s`) to the
   first limit (`f`) to the first success after that limit (`r`). An episode
-  without a recovery is open and counts for nothing.
+  without a recovery is open and counts for nothing. A refusal that opens the
+  record of a group is the refusal of the group itself, so the episode starts
+  at that refusal: the use before it is not in the record.
 * The window `W` is the hint on the limit when it names one, otherwise the
   time from `s` to `r` snapped to the nearest standard window. Over the last
   five episodes the most common window wins.
@@ -41,8 +43,10 @@ The rules, in short:
   evidence is the episodes of the account group, the open one included: a
   route that was refused and never recovered has an episode too, and the use
   of another model of the provider after that refusal says that the limit was
-  the model's own. A scope of `unknown` is computed across the account and
-  labelled unknown.
+  the model's own. The span of a completed episode starts at its refusal, and
+  the span of an open episode starts after it, so a refusal is never evidence
+  of the scope by itself. A scope of `unknown` is computed across the account
+  and labelled unknown.
 * Only the routes that were refused join an account group. A route that was
   never refused has no limit of its own: it is measured on its own, with its
   whole allowance and no pace, and its use never ends the episode of another
@@ -296,6 +300,11 @@ def _scan_episodes(events: Sequence[_Event], unit: str) -> tuple[list[_Episode],
     An `other` outcome (a concurrency error, a transient upstream failure)
     starts and ends nothing, so it is skipped when the start of an episode is
     looked for.
+
+    A refusal that opens the record of a group is the refusal of the group
+    itself: the use before it is not in the record, so the episode starts at
+    the refusal and the refusal of one route is the refusal of the account
+    for the routes that did not produce it.
     """
     completed: list[_Episode] = []
     open_episode: _Episode | None = None
@@ -307,11 +316,14 @@ def _scan_episodes(events: Sequence[_Event], unit: str) -> tuple[list[_Episode],
         if index >= total:
             break
         start = events[index]
-        limit_index = index + 1
-        while limit_index < total and events[limit_index].outcome != "limit":
-            limit_index += 1
-        if limit_index >= total:
-            break
+        if start.outcome == "limit":
+            limit_index = index
+        else:
+            limit_index = index + 1
+            while limit_index < total and events[limit_index].outcome != "limit":
+                limit_index += 1
+            if limit_index >= total:
+                break
         limit = events[limit_index]
         recovery_index = limit_index + 1
         while recovery_index < total and events[recovery_index].outcome != "success":
@@ -611,15 +623,17 @@ def _route_scope(group: _Group, provider_events: Sequence[_Event], model: str) -
     evidence that the refusal was the model's own.
 
     The span of an episode runs from its refusal to its recovery, and the
-    span of an open episode runs from its refusal to the reading. Another
-    model of the provider that succeeds inside the span means the limit was
-    the model's own. Other models that only fail in that span mean the limit
-    was the account's. No other model in the span means the scope is unknown,
-    which is measured across the account and labelled unknown.
+    span of an open episode runs from after its refusal to the reading.
+    Another model of the provider that succeeds inside the span means the
+    limit was the model's own. Other models that only fail in that span mean
+    the limit was the account's. No other model in the span means the scope
+    is unknown, which is measured across the account and labelled unknown.
 
-    The span starts at the refusal itself: the refusal of the group is the
-    refusal of another model for the routes that did not produce it, and two
-    models that are refused at the same instant share the allowance.
+    The span of a completed episode starts at the refusal itself: the
+    refusal of the group is the refusal of another model for the routes that
+    did not produce it, and two models that are refused at the same instant
+    share the allowance. The span of an open episode starts after its
+    refusal, so the refusal itself is never evidence of the scope.
 
     The scope of the route is the most common over the last five episodes of
     the group, the open one included. A tie reads as account.
@@ -635,7 +649,7 @@ def _route_scope(group: _Group, provider_events: Sequence[_Event], model: str) -
             span = [
                 event
                 for event in provider_events
-                if episode.limit_at <= event.at <= group.now
+                if episode.limit_at < event.at <= group.now
                 and event.model != model
             ]
         else:
