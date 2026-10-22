@@ -752,6 +752,7 @@ def ranking_inputs(
     usage: dict[tuple[str, str], float] = {}
     pool_providers: set[str] = set()
     pool_models: set[tuple[str, str]] = set()
+    ledger_requests: dict[tuple[str, str, str], float] = {}
     quota_used: dict[tuple[str, str, str, str], float] = {}
     quota_reset: dict[tuple[str, str, str, str], float] = {}
     for name, labels, value in _iter_samples(results):
@@ -917,6 +918,10 @@ def ranking_inputs(
             pool_limits.setdefault(key, (float(value), "observed"))
         elif name == "ghostship_ai_pool_model_cooldown_until_seconds":
             pool_cooldowns[(pool_provider, pool_model)] = float(value)
+        elif name == "ghostship_ai_pool_ledger_requests":
+            window = str(labels.get("window") or "24h")
+            key = (pool_provider, pool_model, window)
+            ledger_requests[key] = ledger_requests.get(key, 0.0) + float(value)
     # The cooldown is the pool's own evidence that a route is parked. A
     # cooldown that cannot be true is a broken reading, not a park: it is
     # reported as an issue and it never blocks a route.
@@ -978,6 +983,101 @@ def ranking_inputs(
             cooldown = provider_cooldown.get(key[0])
         entry["cooldown_until"] = cooldown
         entry["issues"] = list(pool_issues.get(key, []))
+
+    # Capacity from the pool's own limits and ledger: a free-pool provider
+    # carries windows built from every limit it publishes or enforces, with
+    # the ledger's usage as the used share. Account-scope limits apply to
+    # every model of the provider; model-scope limits to that model only.
+    def _limit_duration(limit_name: str) -> float | None:
+        name = str(limit_name or "").lower()
+        if name in ("rpm", "tpm", "input_tpm", "output_tpm"):
+            return 60.0
+        if name in ("rph",):
+            return 3600.0
+        if name in ("rpd", "tpd", "neurons_day", "rpd_with_10_credits"):
+            return 86400.0
+        if name in ("rmonthly",):
+            return 30 * 86400.0
+        return None
+
+    def _limit_reset(limit_name: str, now_value: float) -> float:
+        name = str(limit_name or "").lower()
+        if name in ("rpm", "tpm", "input_tpm", "output_tpm"):
+            return (int(now_value // 60) + 1) * 60.0
+        if name in ("rph",):
+            return (int(now_value // 3600) + 1) * 3600.0
+        if name in ("rpd", "tpd", "neurons_day", "rpd_with_10_credits", "rmonthly"):
+            import datetime as _dt
+
+            dt = _dt.datetime.fromtimestamp(now_value, tz=_dt.timezone.utc)
+            midnight = (dt.date() + _dt.timedelta(days=1))
+            return _dt.datetime.combine(midnight, _dt.time.min, tzinfo=_dt.timezone.utc).timestamp()
+        return now_value + (_limit_duration(limit_name) or 0.0)
+
+    def _ledger_used(provider_name: str, model_name: str, limit_name: str, scope: str) -> float:
+        name = str(limit_name or "").lower()
+        token_limit = "tp" in name
+        if scope == "account":
+            total = 0.0
+            for (p, m, w), value in ledger_requests.items():
+                if p != provider_name:
+                    continue
+                if w != "24h":
+                    continue
+                if token_limit:
+                    # tokens are not published by the ledger separately per
+                    # limit; fall back to requests for the share.
+                    total += float(value)
+                else:
+                    total += float(value)
+            return total
+        value = ledger_requests.get((provider_name, model_name, "24h"), 0.0)
+        return float(value)
+
+    # Merge published limits into the pool's own limits, so a provider that
+    # publishes a number carries that basis into capacity.
+    for provider_name in sorted(pool_providers):
+        for limit_name, limit_value, basis in pool_published.published_limits(provider_name):
+            key = (provider_name, "*", str(limit_name), "account")
+            if key not in pool_limits:
+                pool_limits[key] = (float(limit_value), str(basis))
+
+    for (pool_provider, pool_model, limit, scope), entry in sorted(pool_limits.items()):
+        value, basis = entry if isinstance(entry, tuple) else (entry, "configured")
+        try:
+            limit_value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(limit_value) or limit_value <= 0:
+            # An unknown (sentinel) or non-positive limit carries no window.
+            continue
+        duration = _limit_duration(limit)
+        if duration is None:
+            continue
+        if scope == "account":
+            used = _ledger_used(str(pool_provider), str(pool_model), str(limit), scope)
+            window_key = str(pool_provider)
+        else:
+            used = _ledger_used(str(pool_provider), str(pool_model), str(limit), scope)
+            window_key = f"{pool_provider}/{pool_model}"
+        used_ratio = used / limit_value if limit_value else 0.0
+        if used_ratio < 0:
+            used_ratio = 0.0
+        if used_ratio > 1:
+            used_ratio = 1.0
+        window = ranking_module.QuotaWindow(
+            kind=str(limit),
+            used_ratio=used_ratio,
+            reset_epoch=_limit_reset(str(limit), moment),
+            applies_to=(),
+            quota_id=str(limit),
+            duration_seconds=duration,
+            observed_at=moment,
+            basis=str(basis),
+            gating=True,
+        )
+        windows.setdefault(window_key, []).append(window)
+
     return {
         "inventory": sorted(inventory),
         "free": free,
