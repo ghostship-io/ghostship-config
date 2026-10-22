@@ -8,6 +8,7 @@ import importlib.util
 import json
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -16,6 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import aa  # noqa: E402
+import aa_3d  # noqa: E402
 import aa_diff  # noqa: E402
 import aa_pull  # noqa: E402
 
@@ -490,7 +492,7 @@ class PullBudgetTests(unittest.TestCase):
             "text": "" if blocked else text,
         }
 
-    def _reader(self, *, read_seconds=5.0, aa3d_blocked=False):
+    def _reader(self, *, read_seconds=5.0, aa3d_blocked=False, aa3d_page="aa3d.html"):
         """The reader of the public pages. The clock moves with the read."""
 
         def read(url):
@@ -499,7 +501,7 @@ class PullBudgetTests(unittest.TestCase):
             if "aa-3d" in url:
                 if aa3d_blocked:
                     return self._reading(url, "", blocked=True)
-                return self._reading(url, page("aa3d.html"))
+                return self._reading(url, page(aa3d_page))
             if "leaderboards" in url:
                 return self._reading(url, page("deprecated-leaderboard.html"))
             return self._reading(url, page("models.html"))
@@ -606,6 +608,57 @@ class PullBudgetTests(unittest.TestCase):
             written = json.loads(cache.read_text(encoding="utf-8"))
             self.assertEqual(written.get("model_page_skipped"), 2)
             self.assertTrue(written["records"])
+
+    def test_the_written_board_is_accepted_by_the_3d_reader(self):
+        # The 3D tier reads the file through the reader in aa_3d, and a
+        # file that reader refuses leaves the tier empty. The board the pull
+        # writes has to be one the reader accepts, with every row of the
+        # page.
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "aa.json"
+            board = Path(folder) / "aa-3d.json"
+            moment = time.time()
+            aa_pull.refresh(
+                cache,
+                now=moment,
+                read=self._reader(),
+                model_pages=self._model_pages(board),
+                aa3d_path=board,
+                catalog_slugs=list(self.DEPRECATED),
+            )
+            # The board was on the disk while the first model page was read.
+            self.assertTrue(self.board_at_first_page)
+            self.assertTrue(board.exists())
+            loaded = aa_3d.load_cache(str(board), moment)
+            self.assertEqual(loaded.get("status"), "ok")
+            # The board holds every row of the page.
+            rows = aa_pull._aa3d_table(page("aa3d.html"))
+            self.assertEqual(len(loaded.get("records") or []), len(rows))
+            self.assertTrue(rows)
+
+    def test_an_incomplete_board_keeps_the_last_good_board(self):
+        # A page that lost a row is not the board: the ranks and the
+        # normalisation of the 3D tier are computed over it. The last good
+        # board is kept, and the quality cache is refreshed anyway.
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / "aa.json"
+            board = Path(folder) / "aa-3d.json"
+            last_good = (SNAPSHOTS / "aa-3d-measured.json").read_text(encoding="utf-8")
+            board.write_text(last_good, encoding="utf-8")
+            result = aa_pull.refresh(
+                cache,
+                now=time.time(),
+                read=self._reader(aa3d_page="aa3d-missing-row.html"),
+                model_pages=self._model_pages(board),
+                aa3d_path=board,
+                catalog_slugs=list(self.DEPRECATED),
+            )
+            # The board is not written, and the last good one is kept.
+            self.assertEqual(board.read_text(encoding="utf-8"), last_good)
+            self.assertFalse(result.get("aa3d_complete", True))
+            # The quality cache is refreshed anyway.
+            self.assertEqual(result["status"], "ok")
+            self.assertTrue(cache.exists())
 
     def test_a_failed_board_keeps_the_last_board_and_refreshes_the_cache(self):
         # The AA-3D page could not be read. The last good board is kept, and
