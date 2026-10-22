@@ -1,10 +1,39 @@
 # Changelog
 
-## [3.17.51] - 2026-10-22
+## [3.17.58] - 2026-10-22
 
 - Stage opt-in T3 runtime confinement, a peer-checked Docker API relay and aggregate resource ceilings. Candidate workflow acceptance passed; production enablement remains gated.
 - Pin Nix 2.34.9 and Podman 5.8.8 security fixes, register their evaluation checks and record the real sandboxed Nix build results. The configured Podman wrapper also passed its bounded host build and packaged-consumer readback; service-continuity review remains required before activation.
 - Persist the kernel module autoload containment and the daily advisory/update procedure. Containment remains distinct from a patched running kernel.
+- The runtime hardening branch is merged onto the current `main`, which had moved on since the branch was published. The hardening release notes carried the same version number as a released entry of `main`, so they move to this version, one above the released one, and the entries of the merged `main` keep their own numbers.
+
+## [3.17.57] - 2026-10-22
+
+- Test fixtures hold no personal identifier. The command guard's test used the owner's key line, with the owner's handle and home host, in a public repository; it now uses a role placeholder with synthetic key material, and the agent pin fixture uses a synthetic organisation. The command guard's regression tests also prove that the `nix-daemon --stdio` command of the `ssh-ng` transport and an interactive session, which sends no command at all, both pass the guard.
+
+## [3.17.56] - 2026-10-22
+
+- Test fixture lint: the tests read only committed fixtures. `scripts/check-test-fixtures.py` fails the check when a test reads a scratch path such as `/tmp`, `/var/tmp`, `/home` or `/workspace`, which exists on the machine that runs the test rather than in the repository, and which is how pull request #190's `test_ai_usage_aa_pull.py` read `/tmp/aa-pull/raw` and failed in CI. A test that needs such a path builds it in a temporary directory, or states on the line why the reference is harmless with a `# fixture-path-ok: <reason>` comment.
+
+## [3.17.55] - 2026-10-22
+
+- T3 restart guard: T3 Code is never restarted unless it is idle, except when the owner has asked for work to be activated or deployed. A forced restart bypasses the idle gate and interrupts the work in flight, so `t3code-safe-restart --force` now requires `--owner-request "<short quote or reference of the owner's instruction>"` and refuses without one. Every forced restart is recorded in `/var/lib/t3code-restarts/ledger.jsonl` with the time, the actor, the reference, and the container identity before and after the restart, and in the journal under the `t3code-restart` tag. The queued restart still waits for the activity probe to confirm idle and defers while T3 Code is busy, and the evaluation check asserts that a switch has no unit to restart, so `podman-t3code` keeps `restartIfChanged = false`.
+
+## [3.17.54] - 2026-10-22
+
+- Agent pin guard: a pull request that moves the `ghostship-private-agent` pin to a revision that does not descend from the pinned one silently dropped everything on the pinned line. `scripts/check-agent-pin.py` now compares the pull request's pinned revision with the base branch's and fails unless the new revision descends from the old one, which git answers in the fetched agent source, or the pull request body or one of its commits carries an explicit `pin-regression-approved: <reason>` line. The check runs in the Fleet checks job, where the read-only agent key is available, and skips outside a pull request. The shared private-source access moves to `scripts/private_source.py`, which the CI import now uses as well.
+
+## [3.17.53] - 2026-10-22
+
+- Host activation helper: `scripts/activate-host` records the system generation before switching. It runs `nix-env -p /nix/var/nix/profiles/system --set <toplevel>`, then `<toplevel>/bin/switch-to-configuration switch`, then compares `readlink -f /run/current-system` with `readlink -f /nix/var/nix/profiles/system` and exits non-zero when they differ. A bare `switch-to-configuration switch` on a built toplevel leaves the two apart, so a reboot reverts to the profile's generation. The repository had no activation script, so the helper is new; the deploy flow in the operating notes and the fleet operations document use it.
+
+## [3.17.52] - 2026-10-22
+
+- Boot generation drift check: a new `ghostship-boot-generation-drift` timer compares `/run/current-system` with `/nix/var/nix/profiles/system` every five minutes. An activation that does not record the system generation leaves the two apart, so a reboot reverts to the profile's generation. A mismatch that lasts more than ten minutes reaches operations through `ghostship-notify` with the `boot-generation-drift` dedupe key, and a recovered generation resolves the alert. The check reads two symlinks and never searches the host.
+
+## [3.17.51] - 2026-10-22
+
+- Agent SSH command guard: the agent workspace key now runs `ghostship-ssh-command-guard` as its forced command on `chill-penguin`. A recursive content read rooted at `/etc`, `/root`, `/home`, `/var/lib` or `/` is refused with exit status 126 and a journal line under the `ghostship-ssh-command-guard` tag, and every other command runs unchanged, including interactive sessions, `scp`, `sftp`, `nix-store --serve` and `ssh-ng` transfers. The owner's own keys are authorized without a forced command. A copy of the agent key outside the managed authorized keys file is removed at activation, because sshd stops at the first file that holds the key. The regression tests use the commands agents actually ran on 2026-10-22, including the `grep -rl` over `/etc` and `/root` that opened a SIEM investigation.
 
 ## [3.17.50] - 2026-10-22
 

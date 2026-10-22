@@ -18,6 +18,14 @@ let
   # The ranking keeps its own small state: first seen, evaluations, staleness.
   stateDir = "/var/lib/ghostship-ai-usage";
   state = "${stateDir}/state.json";
+  # The Artificial Analysis quality cache, written by the daily pull of the
+  # public pages and read by the collector.
+  aaCache = "${stateDir}/artificial-analysis.json";
+  # The AA-3D board, written by the same pull.
+  aa3dCache = "${stateDir}/aa-3d.json";
+  # The live model catalog. Only the models it offers have their model page
+  # read by the pull.
+  modelCatalog = "${t3Home}/.cache/opencode/models.json";
   # The routing snapshot is the canonical answer for a consumer. The producer
   # writes it; a consumer only reads it.
   routing = "${stateDir}/routing.json";
@@ -115,6 +123,57 @@ in
       OnUnitActiveSec = "5min";
       AccuracySec = "1s";
       # A missed run is not caught up: the next one reads the current state.
+      Persistent = false;
+    };
+  };
+
+  # The Artificial Analysis quality feed is read from the public pages, once
+  # a day. There is no key and no account: the pull reads public pages with
+  # ordinary GETs, and it keeps the last good snapshot when a page is
+  # blocked. The collector only reads the cache the pull wrote.
+  systemd.services.ghostship-ai-usage-feed = {
+    description = "Pull the Artificial Analysis public pages into the quality cache";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${python}/bin/python3 ${collector}/collector/aa_pull.py --output ${aaCache} --aa3d-output ${aa3dCache} --catalog ${modelCatalog} --model-pages";
+      TimeoutStartSec = "10min";
+      UMask = "0077";
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectControlGroups = true;
+      RestrictNamespaces = true;
+      RestrictSUIDSGID = true;
+      LockPersonality = true;
+      MemoryDenyWriteExecute = true;
+      SystemCallArchitectures = "native";
+      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+      # Only the quality cache is written.
+      ReadWritePaths = [
+        stateDir
+      ];
+      MemoryMax = "512M";
+      MemoryHigh = "384M";
+      CPUQuota = "50%";
+      TasksMax = 32;
+      CapabilityBoundingSet = [ ];
+      AmbientCapabilities = "";
+    };
+  };
+
+  systemd.timers.ghostship-ai-usage-feed = {
+    description = "Pull the Artificial Analysis public pages once a day";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "5min";
+      OnCalendar = "*-*-* 04:17:00";
+      AccuracySec = "5min";
+      # A missed pull is not caught up: the next one reads the current pages.
       Persistent = false;
     };
   };
