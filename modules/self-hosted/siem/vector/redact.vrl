@@ -7,6 +7,19 @@
   if is_string(value) {
     text = string!(value)
     text = replace(text, r'(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----', "[REDACTED-PRIVATE-KEY]")
+    # A quoted value is redacted through its closing quote, spaces and
+    # escaped quotes included: a value that stopped at the first space left
+    # the rest of the secret in the store. The quotes stay, so the line
+    # keeps its shape.
+    text = replace(text, r'(?i)(?P<k>["]?\b(?:x-plex-token|access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passwd|token|secret|session|signature|sig|cookie|pwd|auth)\b["]?\s*[:=]\s*)(?P<q>")(?P<v>(?:[^"\\\n]|\\.)*)(?P<c>")?', "$k$q[REDACTED]$c")
+    # The same names behind a prefix (db_password, user_token) are secrets
+    # in the quoted shape too. sig is left out on purpose here: it is too
+    # short to tell a secret from a word such as msg_sig.
+    text = replace(text, r'(?i)(?P<k>(?:x-plex-token|access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passwd|token|secret|session|signature|cookie|pwd|auth)["]?\s*[:=]\s*)(?P<q>")(?P<v>(?:[^"\\\n]|\\.)*)(?P<c>")?', "$k$q[REDACTED]$c")
+    # The authorization header, quoted as a JSON log line carries it: the
+    # quoted value is redacted through its closing quote, scheme included,
+    # because the scheme is part of the quoted value.
+    text = replace(text, r'(?i)(?P<k>\b(?:proxy-)?authorization["]?\s*[:=]\s*)(?P<q>")(?P<v>(?:[^"\\\n]|\\.)*)(?P<c>")?', "$k$q[REDACTED]$c")
     # Secret names in every shape a log carries them: key=value, key="value",
     # key: value, "key":"value" and "key": "value". The name stands alone
     # between word boundaries and the key itself is kept, so a reader still
