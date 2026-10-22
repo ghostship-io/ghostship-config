@@ -81,11 +81,11 @@
     "x": 0,
     "y": 0,
     "w": 24,
-    "h": 2
+    "h": 3
    },
    "options": {
     "mode": "markdown",
-    "content": "**Overview \u00b7 today in UTC \u00b7 latest snapshot for live agents**\n\nA receipt is never a green outcome. A truncated or unavailable source is a lower bound, not a zero. Range panels follow the time picker; UTC-day tiles say so."
+    "content": "**Overview \u00b7 today in UTC \u00b7 latest snapshot for live agents**\n\nA receipt is never a green outcome. A truncated or unavailable source is a lower bound, not a zero. Panels follow the time picker. UTC-day tiles say so."
    }
   },
   {
@@ -95,8 +95,8 @@
    "type": "stat",
    "gridPos": {
     "x": 0,
-    "y": 2,
-    "w": 3,
+    "y": 3,
+    "w": 4,
     "h": 4
    },
    "datasource": {
@@ -140,7 +140,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -167,9 +167,9 @@
    "description": "Latest snapshot. In-flight agents and children.",
    "type": "stat",
    "gridPos": {
-    "x": 3,
-    "y": 2,
-    "w": 3,
+    "x": 4,
+    "y": 3,
+    "w": 4,
     "h": 4
    },
    "datasource": {
@@ -209,7 +209,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -233,15 +233,15 @@
   {
    "id": 14,
    "type": "stat",
-   "title": "Failed / blocked today",
+   "title": "Failed today",
    "datasource": {
     "type": "victoriametrics-logs-datasource",
     "uid": "victorialogs"
    },
    "gridPos": {
-    "x": 6,
-    "y": 2,
-    "w": 3,
+    "x": 8,
+    "y": 3,
+    "w": 4,
     "h": 4
    },
    "description": "UTC day. Failed, error, blocked, held or denied work. A receipt is never a green outcome.",
@@ -293,7 +293,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "justifyMode": "center",
     "wideLayout": true,
     "reduceOptions": {
@@ -308,15 +308,15 @@
   {
    "id": 15,
    "type": "stat",
-   "title": "Scheduled next 24h",
+   "title": "Next 24h",
    "datasource": {
     "type": "victoriametrics-logs-datasource",
     "uid": "victorialogs"
    },
    "gridPos": {
-    "x": 9,
-    "y": 2,
-    "w": 3,
+    "x": 12,
+    "y": 3,
+    "w": 4,
     "h": 4
    },
    "description": "Latest snapshot. Enabled schedules with a next run. Not a guarantee they will fire.",
@@ -351,7 +351,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "justifyMode": "center",
     "wideLayout": true,
     "reduceOptions": {
@@ -365,13 +365,13 @@
   },
   {
    "id": 5,
-   "title": "Webhooks fired today",
+   "title": "Webhooks today",
    "description": "UTC day, independent of the time picker. Webhook receipts, not delivery success.",
    "type": "stat",
    "gridPos": {
-    "x": 12,
-    "y": 2,
-    "w": 3,
+    "x": 16,
+    "y": 3,
+    "w": 4,
     "h": 4
    },
    "datasource": {
@@ -411,7 +411,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -429,9 +429,9 @@
    "description": "Latest snapshot of close receipts, not a merge proof.",
    "type": "stat",
    "gridPos": {
-    "x": 15,
-    "y": 2,
-    "w": 3,
+    "x": 20,
+    "y": 3,
+    "w": 4,
     "h": 4
    },
    "datasource": {
@@ -471,7 +471,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -498,9 +498,9 @@
    "description": "UTC day, independent of the time picker. Count of distinct work items with event_today.",
    "type": "stat",
    "gridPos": {
-    "x": 18,
-    "y": 2,
-    "w": 3,
+    "x": 0,
+    "y": 11,
+    "w": 6,
     "h": 4
    },
    "datasource": {
@@ -540,7 +540,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -558,9 +558,9 @@
    "description": "Latest snapshot age. Stale is not healthy.",
    "type": "stat",
    "gridPos": {
-    "x": 21,
-    "y": 2,
-    "w": 3,
+    "x": 12,
+    "y": 11,
+    "w": 6,
     "h": 4
    },
    "datasource": {
@@ -608,7 +608,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -629,9 +629,9 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "x": 0,
-    "y": 6,
-    "w": 3,
+    "x": 8,
+    "y": 7,
+    "w": 4,
     "h": 4
    },
    "description": "Rolling 5-minute busy average across all cores. Opens Host.",
@@ -685,7 +685,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "justifyMode": "center",
     "wideLayout": true,
     "reduceOptions": {
@@ -700,15 +700,15 @@
   {
    "id": 17,
    "type": "stat",
-   "title": "Host memory",
+   "title": "Host memory used",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "x": 3,
-    "y": 6,
-    "w": 3,
+    "x": 12,
+    "y": 7,
+    "w": 4,
     "h": 4
    },
    "description": "Used share of total. Opens Host.",
@@ -762,7 +762,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "justifyMode": "center",
     "wideLayout": true,
     "reduceOptions": {
@@ -783,9 +783,9 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "x": 6,
-    "y": 6,
-    "w": 3,
+    "x": 16,
+    "y": 7,
+    "w": 4,
     "h": 4
    },
    "description": "Root filesystem used share. Opens Host.",
@@ -839,7 +839,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "justifyMode": "center",
     "wideLayout": true,
     "reduceOptions": {
@@ -860,9 +860,9 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "x": 9,
-    "y": 6,
-    "w": 3,
+    "x": 20,
+    "y": 7,
+    "w": 4,
     "h": 4
    },
    "description": "Firing alerts right now. Opens Security. Unavailable if the watchdog is stale.",
@@ -914,7 +914,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "justifyMode": "center",
     "wideLayout": true,
     "reduceOptions": {
@@ -935,9 +935,9 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "x": 12,
-    "y": 6,
-    "w": 3,
+    "x": 0,
+    "y": 7,
+    "w": 4,
     "h": 4
    },
    "description": "Latest snapshot of deployment receipts. Unavailable when the series is absent.",
@@ -963,7 +963,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "justifyMode": "center",
     "wideLayout": true,
     "reduceOptions": {
@@ -981,9 +981,9 @@
    "description": "Latest snapshot. Configured-check failures on the exact SHA, not a GitHub conclusion.",
    "type": "stat",
    "gridPos": {
-    "x": 15,
-    "y": 6,
-    "w": 3,
+    "x": 4,
+    "y": 7,
+    "w": 4,
     "h": 4
    },
    "datasource": {
@@ -1027,7 +1027,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -1048,9 +1048,9 @@
     "uid": "victoriametrics"
    },
    "gridPos": {
-    "x": 18,
-    "y": 6,
-    "w": 3,
+    "x": 6,
+    "y": 11,
+    "w": 6,
     "h": 4
    },
    "description": "Age of the AI usage collection. Opens Providers. Unavailable when the collector has not run.",
@@ -1104,7 +1104,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "justifyMode": "center",
     "wideLayout": true,
     "reduceOptions": {
@@ -1122,9 +1122,9 @@
    "description": "Latest snapshot. Sources that are down, not a zero of work.",
    "type": "stat",
    "gridPos": {
-    "x": 21,
-    "y": 6,
-    "w": 3,
+    "x": 18,
+    "y": 11,
+    "w": 6,
     "h": 4
    },
    "datasource": {
@@ -1168,7 +1168,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -1187,7 +1187,7 @@
    "type": "table",
    "gridPos": {
     "x": 0,
-    "y": 10,
+    "y": 17,
     "w": 16,
     "h": 9
    },
@@ -1618,7 +1618,7 @@
    "type": "table",
    "gridPos": {
     "x": 16,
-    "y": 10,
+    "y": 17,
     "w": 8,
     "h": 9
    },
@@ -2049,7 +2049,7 @@
    "type": "table",
    "gridPos": {
     "x": 0,
-    "y": 19,
+    "y": 26,
     "w": 24,
     "h": 10
    },
@@ -2483,7 +2483,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 29,
+    "y": 36,
     "w": 24,
     "h": 1
    },
@@ -3790,7 +3790,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 31,
+    "y": 38,
     "w": 24,
     "h": 1
    },
@@ -4238,7 +4238,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 33,
+    "y": 40,
     "w": 24,
     "h": 1
    },
@@ -5693,7 +5693,7 @@
    "collapsed": true,
    "gridPos": {
     "x": 0,
-    "y": 35,
+    "y": 42,
     "w": 24,
     "h": 1
    },
