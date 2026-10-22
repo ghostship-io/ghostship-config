@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.76] - 2026-10-22
+
+- The agent desktop update canary starts. The desktop API binds the address it is given, and the image's default is the address the production container owns on the desktop network. That address exists only in production's network namespace, so the canary could never bind it: its API failed on every start with "cannot assign requested address", and the canary never became ready, so the daily update unit failed before it could test any candidate. A canary now binds the API on loopback, an address every container namespace has, including the network-less profile canary, and the readiness probe asks the API for its health on exactly that address instead of waiting out the timeout. Production is untouched: it keeps its own address, its own environment, its own container definition and its own image; only the updater changed.
+
 ## [3.17.75] - 2026-10-22
 
 - The AI usage collector publishes the free pool's recent jobs as a count. The pool published one `ghostship_ai_pool_recent_jobs` sample per recent job, so two jobs that shared a provider, a worker, a client and a status were the same metric series twice. The renderer dropped the repeat and kept the first value, so the published number was one where it was two, and the collector's own duplicate counter reported the repeat on every run. The series is now the count of the recent jobs that share its labels and it is published once per label set. The labels and their defaults are unchanged, a job without a provider is still skipped, and a status that repeats a job publishes no duplicate series at all.
