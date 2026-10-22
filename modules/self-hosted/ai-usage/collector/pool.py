@@ -444,6 +444,18 @@ def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
                 samples.append(
                     _pool_sample("ghostship_ai_pool_model_cooldown_until_seconds", labels, float(cooldown))
                 )
+            # When the pool last sent a job to this route. The least recently
+            # used route breaks the tie inside the quality band of the free
+            # tier, so the reading is published with the route.
+            last_used = candidate.get("last_used")
+            if isinstance(last_used, (int, float)) and not isinstance(last_used, bool):
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_route_last_used_timestamp_seconds",
+                        labels,
+                        float(last_used),
+                    )
+                )
             admissions = candidate.get("admissions")
             if isinstance(admissions, dict):
                 for workload, entry_value in admissions.items():

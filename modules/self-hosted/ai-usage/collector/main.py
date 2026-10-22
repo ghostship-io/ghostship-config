@@ -158,6 +158,10 @@ METRIC_HELP = {
     "ghostship_ai_pool_model_available": "Whether a pool model is available now.",
     "ghostship_ai_pool_model_selected": "Whether a pool model is the selected one.",
     "ghostship_ai_pool_model_cooldown_until_seconds": "When a pool model's cooldown ends.",
+    "ghostship_ai_pool_route_last_used_timestamp_seconds": (
+        "When the free pool last sent a job to a route. The least recently "
+        "used route breaks the tie inside the quality band of the free tier."
+    ),
     "ghostship_ai_pool_model_admission": "Whether a pool model is admitted for a workload.",
     "ghostship_ai_pool_limit": "A local admission limit of the free pool.",
     "ghostship_ai_pool_observed_limit": (
@@ -895,6 +899,7 @@ def ranking_inputs(
     pool_admissions: dict[tuple[str, str, str], bool] = {}
     pool_limits: dict[tuple[str, str, str, str], float] = {}
     pool_cooldowns: dict[tuple[str, str], float] = {}
+    pool_last_used: dict[tuple[str, str], float] = {}
     for name, labels, value in _iter_samples(results):
         pool_provider = str(labels.get("provider") or "")
         pool_model = str(labels.get("model") or "")
@@ -921,6 +926,10 @@ def ranking_inputs(
             pool_limits.setdefault(key, (float(value), "observed"))
         elif name == "ghostship_ai_pool_model_cooldown_until_seconds":
             pool_cooldowns[(pool_provider, pool_model)] = float(value)
+        elif name == "ghostship_ai_pool_route_last_used_timestamp_seconds":
+            # When the pool last sent a job to the route. The least recently
+            # used route breaks the tie inside the quality band.
+            pool_last_used[(pool_provider, pool_model)] = float(value)
     # The cooldown is the pool's own evidence that a route is parked. A
     # cooldown that cannot be true is a broken reading, not a park: it is
     # reported as an issue and it never blocks a route.
@@ -982,6 +991,10 @@ def ranking_inputs(
             cooldown = provider_cooldown.get(key[0])
         entry["cooldown_until"] = cooldown
         entry["issues"] = list(pool_issues.get(key, []))
+        # When the pool last used the route. It breaks the tie inside the
+        # quality band of the free tier, and it is absent when the pool has
+        # no reading for the route.
+        entry["last_used"] = pool_last_used.get(key)
     return {
         "inventory": sorted(inventory),
         "free": free,

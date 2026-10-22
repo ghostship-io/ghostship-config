@@ -77,12 +77,13 @@ def duplicates_of(text):
 def pool_catalog(routes):
     """The pool's catalog: one provider per route, with its own limits.
 
-    A route is a (provider, model) pair with the intelligence index of its
-    measured Artificial Analysis record, the headroom the collector reads for
-    it, and the moment the pool last used it.
+    A route is a (provider, model, intelligence, headroom, last used, reset)
+    tuple: the intelligence index of its measured Artificial Analysis record,
+    the headroom the collector reads for it, the moment the pool last used
+    it, and the moment its window resets.
     """
     providers: dict[str, dict] = {}
-    for provider, model, _index, _headroom, _last_used in routes:
+    for provider, model, _index, _headroom, _last_used, _reset in routes:
         entry = providers.setdefault(
             provider, {"selected_model": model, "candidates": []}
         )
@@ -107,7 +108,7 @@ def pool_catalog(routes):
 def catalog_document(routes):
     """The public catalog of the routes, with their release dates."""
     document: dict[str, dict] = {}
-    for provider, model, _index, _headroom, _last_used in routes:
+    for provider, model, _index, _headroom, _last_used, _reset in routes:
         for key in {provider, *catalog_module.PROVIDER_ALIASES.get(provider, ())}:
             document.setdefault(key, {"models": {}})["models"][model] = {
                 "id": model,
@@ -138,14 +139,14 @@ def free_tier(routes, *, native=()):
     catalog = catalog_module.Catalog(catalog_document(routes))
     inputs = main.ranking_inputs([result], catalog, {}, [], now=NOW)
     windows = dict(inputs["windows"])
-    for provider, model, _index, headroom, _last_used in routes:
+    for provider, model, _index, headroom, _last_used, reset in routes:
         if headroom is None:
             continue
         windows[f"{provider}/{model}"] = [
             ranking.QuotaWindow(
                 kind="daily",
                 used_ratio=1.0 - headroom,
-                reset_epoch=NOW + DAY,
+                reset_epoch=NOW + (DAY if reset is None else reset),
                 applies_to=(),
                 quota_id="daily",
                 duration_seconds=DAY,
@@ -154,7 +155,7 @@ def free_tier(routes, *, native=()):
                 gating=True,
             )
         ]
-    models = [(provider, model) for provider, model, _i, _h, _l in routes]
+    models = [(provider, model) for provider, model, _i, _h, _l, _r in routes]
     free = set(models) | set(native)
     cache = {
         "status": "ok",
@@ -162,7 +163,7 @@ def free_tier(routes, *, native=()):
         "fetched_at_epoch": NOW,
         "records": [
             aa_record(model.rsplit("/", 1)[-1], index)
-            for _provider, model, index, _headroom, _last_used in routes
+            for _provider, model, index, _headroom, _last_used, _reset in routes
             if index is not None
         ],
     }
@@ -267,10 +268,10 @@ class DuplicateSeriesTests(unittest.TestCase):
     """No metrics output holds the same series twice."""
 
     ROUTES = [
-        ("groq", "groq/llama-3.3", 42.7, None, 0.0),
-        ("groq", "groq/mixtral-8x7b", 41.8, None, 0.0),
-        ("mistral", "mistral/magistral", 33.7, None, 0.0),
-        ("ollama", "ollama/qwen3-coder", 11.6, None, 0.0),
+        ("groq", "groq/llama-3.3", 42.7, None, 0.0, None),
+        ("groq", "groq/mixtral-8x7b", 41.8, None, 0.0, None),
+        ("mistral", "mistral/magistral", 33.7, None, 0.0, None),
+        ("ollama", "ollama/qwen3-coder", 11.6, None, 0.0, None),
     ]
 
     def test_an_account_limit_is_published_once_for_a_provider_with_two_models(self):
@@ -332,7 +333,7 @@ class DuplicateSeriesTests(unittest.TestCase):
         # One series per model, and the file holds no series twice.
         self.assertEqual(len(availability), len(set(availability)))
         self.assertEqual(duplicates_of(text), [])
-        for provider, model, _index, _headroom, _last_used in self.ROUTES:
+        for provider, model, _index, _headroom, _last_used, _reset in self.ROUTES:
             self.assertEqual(
                 len(
                     [
@@ -345,6 +346,159 @@ class DuplicateSeriesTests(unittest.TestCase):
                 1,
                 f"the availability of {provider}/{model} is published once",
             )
+
+
+class FreeTierOrderTests(unittest.TestCase):
+    """The free tier is ordered by the routing policy."""
+
+    # The worked case of the policy: 42.7 and 41.8 are within five points of
+    # the best route and form the band, 33.7 and 11.6 follow by intelligence.
+    # The routes are named so that the order of the policy is not the order of
+    # the names.
+    WORKED = [
+        ("groq", "groq/llama-3.3", 42.7, None, 0.0, None),
+        ("cohere", "cohere/command", 41.8, None, 0.0, None),
+        ("mistral", "mistral/magistral", 33.7, None, 0.0, None),
+        ("ollama", "ollama/qwen3-coder", 11.6, None, 0.0, None),
+    ]
+
+    def test_the_band_comes_first_and_the_rest_follows_by_intelligence(self):
+        data = free_tier(self.WORKED)["snapshot"]
+        self.assertEqual(
+            free_winners(data),
+            [
+                ("groq", "groq/llama-3.3"),
+                ("cohere", "cohere/command"),
+                ("mistral", "mistral/magistral"),
+                ("ollama", "ollama/qwen3-coder"),
+            ],
+        )
+        bands = {
+            (winner["provider"], winner["model"]): winner.get("band")
+            for winner in (data.get("tier_winners") or {}).get("free") or []
+        }
+        self.assertEqual(
+            bands,
+            {
+                ("groq", "groq/llama-3.3"): "true",
+                ("cohere", "cohere/command"): "true",
+                ("mistral", "mistral/magistral"): "false",
+                ("ollama", "ollama/qwen3-coder"): "false",
+            },
+        )
+
+    def test_the_headroom_of_a_band_route_decides_before_its_intelligence(self):
+        # The negative case of the policy: both routes are in the band, and
+        # the route with the most remaining headroom goes first. Both windows
+        # draw the same line, so the pace of the two routes is the same and
+        # the headroom is what decides.
+        routes = [
+            ("groq", "groq/llama-3.3", 42.7, 0.10, 0.0, 0.1 * DAY),
+            ("mistral", "mistral/mixtral-8x7b", 41.8, 0.90, 0.0, 0.9 * DAY),
+        ]
+        data = free_tier(routes)["snapshot"]
+        self.assertEqual(
+            free_winners(data),
+            [
+                ("mistral", "mistral/mixtral-8x7b"),
+                ("groq", "groq/llama-3.3"),
+            ],
+        )
+        self.assertEqual(
+            [
+                winner.get("band")
+                for winner in (data.get("tier_winners") or {}).get("free") or []
+            ],
+            ["true", "true"],
+        )
+
+    def test_the_least_recently_used_route_breaks_the_tie(self):
+        # Both routes are in the band with the same headroom, and the route
+        # the pool used least recently goes first.
+        routes = [
+            ("groq", "groq/llama-3.3", 42.7, 0.50, NOW - 10.0, None),
+            ("mistral", "mistral/mixtral-8x7b", 41.8, 0.50, NOW - 3600.0, None),
+        ]
+        data = free_tier(routes)["snapshot"]
+        self.assertEqual(
+            free_winners(data),
+            [
+                ("mistral", "mistral/mixtral-8x7b"),
+                ("groq", "groq/llama-3.3"),
+            ],
+        )
+
+    def test_a_route_without_an_intelligence_record_comes_last(self):
+        # A route without an Artificial Analysis match is the lower band: it
+        # is used only when no ranked route has headroom, so it comes after
+        # every ranked route of the tier.
+        rows = [
+            free_row("groq", "groq/llama-3.3", 42.7, 0.50, 0.0),
+            free_row("mistral", "mistral/mixtral-8x7b", 41.8, 0.50, 0.0),
+            free_row("openrouter", "openrouter/zeta-free", None, 0.50, 0.0),
+        ]
+        winners, _coverage = snapshot._winners(
+            rows, {"free": [f"{row['provider']}:{row['model']}" for row in rows]}
+        )
+        self.assertEqual(
+            [(winner["provider"], winner["model"]) for winner in winners["free"]],
+            [
+                ("groq", "groq/llama-3.3"),
+                ("mistral", "mistral/mixtral-8x7b"),
+                ("openrouter", "openrouter/zeta-free"),
+            ],
+        )
+        self.assertEqual(
+            [winner.get("band") for winner in winners["free"]],
+            ["true", "true", "false"],
+        )
+
+    def test_the_band_is_published_with_the_position_of_the_free_tier(self):
+        data = free_tier(self.WORKED)["snapshot"]
+        samples = snapshot.decision_samples(data)
+        positions = {
+            (labels["provider"], labels["model"]): (value, labels.get("band"))
+            for name, labels, value in samples
+            if name == "ghostship_ai_model_winner_position"
+            and labels.get("tier") == "free"
+        }
+        self.assertEqual(
+            positions,
+            {
+                ("groq", "groq/llama-3.3"): (1.0, "true"),
+                ("cohere", "cohere/command"): (2.0, "true"),
+                ("mistral", "mistral/magistral"): (3.0, "false"),
+                ("ollama", "ollama/qwen3-coder"): (4.0, "false"),
+            },
+        )
+
+    def test_only_the_free_tier_changes(self):
+        # The band is a rule of the free tier: the other tiers keep their own
+        # order and carry no band.
+        routes = [
+            ("groq", "groq/llama-3.3", 42.7, 0.90, 0.0, None),
+            ("mistral", "mistral/mixtral-8x7b", 41.8, 0.10, 0.0, None),
+        ]
+        data = free_tier(routes, native=[("mistral", "mistral/mixtral-8x7b")])["snapshot"]
+        winners = data.get("tier_winners") or {}
+        bulk = winners.get("bulk") or []
+        free = winners.get("free") or []
+        self.assertTrue(bulk, "the bulk tier has its own winners")
+        self.assertTrue(
+            all("band" not in winner for winner in bulk),
+            "the bulk tier is not banded",
+        )
+        self.assertEqual(
+            [winner.get("band") for winner in free],
+            ["true", "true"],
+        )
+        self.assertEqual(
+            free_winners(data),
+            [
+                ("groq", "groq/llama-3.3"),
+                ("mistral", "mistral/mixtral-8x7b"),
+            ],
+        )
 
 
 if __name__ == "__main__":
