@@ -301,3 +301,121 @@ class ScopeAccount(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+class FittedWeights(unittest.TestCase):
+    """Case 11: an account budget shared between two models."""
+
+    def setUp(self):
+        self.events = []
+        usage = [(100.0, 0.0), (0.0, 50.0), (50.0, 25.0)]
+        for day, (alpha, beta) in enumerate(usage):
+            self.events.append(event("acme", "alpha", at(day, 8), usage=alpha))
+            self.events.append(event("acme", "beta", at(day, 8, 30), usage=beta))
+            self.events.append(event("acme", "alpha", at(day, 9), outcome="limit"))
+            self.events.append(event("acme", "beta", at(day, 9, 20), outcome="limit"))
+            self.events.append(event("acme", "alpha", at(day, 9, 40), outcome="limit"))
+            self.events.append(event("acme", "beta", at(day, 9, 50), outcome="limit"))
+            self.events.append(event("acme", "alpha", at(day, 11), usage=0.0))
+            self.events.append(event("acme", "beta", at(day, 11), usage=0.0))
+        self.events.append(event("acme", "alpha", at(2, 12), usage=40.0))
+        self.events.append(event("acme", "beta", at(2, 12, 5), usage=10.0))
+        self.now = at(2, 12, 30)
+
+    def test_the_weights_are_fitted(self):
+        results = inference.infer_capacity(self.events, self.now)
+        for result in results.values():
+            self.assertEqual(result.scope, "account")
+            self.assertEqual(result.weights_basis, "fitted")
+            self.assertAlmostEqual(result.weights["alpha"], 0.01, delta=1e-6)
+            self.assertAlmostEqual(result.weights["beta"], 0.02, delta=1e-6)
+            self.assertEqual(result.budget, 1.0)
+            self.assertAlmostEqual(result.left, 0.4)
+
+    def test_the_shares_of_the_models(self):
+        results = inference.infer_capacity(self.events, self.now)
+        self.assertAlmostEqual(results[("acme", "alpha")].share, 0.6666667, delta=1e-6)
+        self.assertAlmostEqual(results[("acme", "beta")].share, 0.3333333, delta=1e-6)
+
+
+class AssumedWeights(unittest.TestCase):
+    """Case 12: one account episode, so the weights stay equal."""
+
+    def setUp(self):
+        self.events = [
+            event("acme", "alpha", at(0, 8), usage=300000.0),
+            event("acme", "beta", at(0, 8, 30), usage=300000.0),
+            event("acme", "alpha", at(0, 9), outcome="limit"),
+            event("acme", "beta", at(0, 9, 20), outcome="limit"),
+            event("acme", "alpha", at(0, 9, 40), outcome="limit"),
+            event("acme", "beta", at(0, 9, 50), outcome="limit"),
+            event("acme", "alpha", at(0, 11), usage=0.0),
+            event("acme", "beta", at(0, 11), usage=0.0),
+            event("acme", "alpha", at(0, 12), usage=100000.0),
+            event("acme", "beta", at(0, 12, 5), usage=50000.0),
+        ]
+        self.now = at(0, 12, 30)
+
+    def test_the_weights_are_assumed(self):
+        results = inference.infer_capacity(self.events, self.now)
+        for result in results.values():
+            self.assertEqual(result.scope, "account")
+            self.assertEqual(result.weights_basis, "assumed")
+            self.assertEqual(result.weights["alpha"], 1.0)
+            self.assertEqual(result.weights["beta"], 1.0)
+            self.assertEqual(result.budget, 600000.0)
+            self.assertAlmostEqual(result.left, 0.75)
+
+
+class MedianAndMode(unittest.TestCase):
+    """Case 13: the most common window wins, the median sets the budget."""
+
+    def setUp(self):
+        usage = [100.0, 200.0, 999.0, 300.0, 999.0]
+        hints = ["5h", "5h", "1d", "5h", "1d"]
+        self.events = []
+        for day, (amount, hint) in enumerate(zip(usage, hints)):
+            self.events.append(event("acme", "alpha", at(day, 8), usage=amount))
+            self.events.append(
+                event("acme", "alpha", at(day, 10), outcome="limit", window_hint=hint)
+            )
+            self.events.append(event("acme", "beta", at(day, 11), usage=500.0))
+            self.events.append(event("acme", "alpha", at(day, 13), usage=0.0))
+        self.now = at(4, 14)
+
+    def test_the_mode_and_the_median(self):
+        result = route(self.events, self.now, model="alpha")
+        self.assertEqual(result.scope, "model")
+        self.assertEqual(result.window, "5h")
+        self.assertEqual(result.window_seconds, 18000)
+        self.assertEqual(result.budget, 200.0)
+        self.assertEqual(result.episodes, 5)
+
+
+class SingleModelAccount(unittest.TestCase):
+    """The written fit rule reaches an account of one model as well.
+
+    The rule fits the weights once there are more episodes than models in the
+    mix, so an account that serves one model and had two episodes is fitted
+    too: its budget is the normalised one and its share is weighed by the
+    fitted weight. This test names that reading so it is never a surprise.
+    """
+
+    def test_the_fit_reaches_an_account_of_one_model(self):
+        events = [
+            event("acme", "sonnet", at(0, 8), usage=1000.0),
+            event("acme", "sonnet", at(0, 9), outcome="limit"),
+            event("acme", "sonnet", at(0, 11), usage=0.0),
+            event("acme", "sonnet", at(1, 8), usage=3000.0),
+            event("acme", "sonnet", at(1, 9), outcome="limit"),
+            event("acme", "sonnet", at(1, 11), usage=0.0),
+            event("acme", "sonnet", at(1, 12), usage=500.0),
+        ]
+        result = route(events, at(1, 12, 30))
+        self.assertEqual(result.scope, "unknown")
+        self.assertEqual(result.weights_basis, "fitted")
+        self.assertAlmostEqual(result.weights["sonnet"], 0.0004)
+        self.assertEqual(result.budget, 1.0)
+        self.assertAlmostEqual(result.left, 0.8)
+
+
+if __name__ == "__main__":
+    unittest.main()
