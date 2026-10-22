@@ -67,6 +67,11 @@ try:  # pragma: no cover - the collector always ships aa_bind.py
 except ImportError:  # pragma: no cover - standalone use
     aa_bind = None  # type: ignore[assignment]
 
+try:  # pragma: no cover - the collector always ships aa.py
+    import aa
+except ImportError:  # pragma: no cover - standalone use
+    aa = None  # type: ignore[assignment]
+
 try:  # pragma: no cover - the collector always ships value_policy.py
     import value_policy
 except ImportError:  # pragma: no cover - standalone use
@@ -1836,7 +1841,12 @@ def rank_models(
 
 
 def rank_samples(
-    ranked: list[RankedModel], *, now: float
+    ranked: list[RankedModel],
+    *,
+    now: float,
+    native_models: Mapping[str, Any] | None = None,
+    aa_cache: Mapping[str, Any] | None = None,
+    catalog: Any = None,
 ) -> list[tuple[str, dict[str, str], float]]:
     """Render the ranking as Prometheus samples.
 
@@ -1935,6 +1945,56 @@ def rank_samples(
             (
                 "ghostship_ai_model_tier",
                 {"provider": provider, "model": model, "tier": tier},
+                1.0,
+            )
+        )
+    # One info series per candidate, carrying its human display name.
+    seen_info: set[tuple[str, str]] = set()
+    native = native_models or {}
+    for entry in ranked:
+        provider = label_value(entry.provider)
+        model = label_value(entry.model)
+        key = (provider, model)
+        if key in seen_info:
+            continue
+        seen_info.add(key)
+        name = ""
+        # 1. T3 Code's model catalog label.
+        native_entry = None
+        for lookup_key in ((provider, model), (entry.provider, entry.model)):
+            native_entry = native.get(lookup_key)
+            if isinstance(native_entry, Mapping):
+                break
+        if isinstance(native_entry, Mapping):
+            for field in ("name", "label", "displayName", "display_name", "title"):
+                value = native_entry.get(field)
+                if isinstance(value, str) and value.strip():
+                    name = value.strip()
+                    break
+        # 2. Artificial Analysis record's model name, condition removed.
+        if not name and aa is not None and aa_cache:
+            try:
+                record = aa.lookup(aa_cache, model)
+            except Exception:
+                record = None
+            if isinstance(record, Mapping) and isinstance(record.get("model"), str):
+                raw_name = str(record.get("model"))
+                if aa_bind is not None:
+                    try:
+                        name = aa_bind.variant_of(raw_name)[0]
+                    except Exception:
+                        name = raw_name
+                else:
+                    name = raw_name
+                if not name.strip():
+                    name = ""
+        # 3. Raw id.
+        if not name:
+            name = model
+        samples.append(
+            (
+                "ghostship_ai_model_info",
+                {"provider": provider, "model": model, "name": label_value(name)},
                 1.0,
             )
         )

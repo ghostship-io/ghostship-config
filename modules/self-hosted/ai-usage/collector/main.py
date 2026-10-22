@@ -215,6 +215,7 @@ METRIC_HELP = {
     ),
     "ghostship_ai_model_capacity_expires_in_seconds": "When the model's account capacity expires.",
     "ghostship_ai_model_tier": "One for every tier a model belongs to.",
+    "ghostship_ai_model_info": "One for a candidate model, with its human display name.",
     "ghostship_ai_model_evaluated_timestamp_seconds": "When a model was last evaluated.",
     "ghostship_ai_three_d_usage_tokens": "Tokens spent on 3D printing work.",
     # The two series below are no longer emitted: the 3D prior and its blended
@@ -622,16 +623,12 @@ def _published_unlimited_routes(
     catalog may not contradict it: a route the catalog prices is only
     unlimited when it prices it free.
     """
-    free_prices = {
-        str(entry.get("model") or "")
-        for entry in (catalog.free_models(published_module.GO_PROVIDER) or [])
-    }
     routes: list[tuple[str, str]] = []
     for provider, model in sorted(inventory or ()):
         if not published_module.unlimited_route(provider, model):
             continue
         entry = catalog.model_entry(provider, model)
-        if entry is not None and model not in free_prices:
+        if entry is not None and not catalog_module.is_free_price(entry.get("cost")) and entry.get("cost") is not None:
             # The catalog prices the route and it is not free: the published
             # unlimited listing does not apply to it.
             continue
@@ -1153,7 +1150,15 @@ def ranking_samples(
     context["observed_failures"] = observed_failures
     context["ranking_inventory"] = sorted(inventory)
     ranked = ranking_module.rank_models(**rank_kwargs)
-    samples.extend(ranking_module.rank_samples(ranked, now=now))
+    samples.extend(
+        ranking_module.rank_samples(
+            ranked,
+            now=now,
+            native_models=context.get("native_models") or {},
+            aa_cache=aa_cache,
+            catalog=catalog,
+        )
+    )
     return samples, ranked
 
 
