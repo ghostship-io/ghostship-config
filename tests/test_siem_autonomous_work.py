@@ -859,8 +859,8 @@ class DashboardContractTests(unittest.TestCase):
         self.assertEqual(page['uid'], 'ghostship-host')
         self.assertFalse(page['editable'])
         titles = {panel['title']: panel for panel in page['panels']}
-        for title in ('CPU total  (all cores)', 'CPU per core', 'Memory used', 'Memory total',
-                      'Memory available', 'Host writers', 'CPUs reporting'):
+        for title in ('CPU total  (all cores)', 'CPU per core  /  activity grid', 'Memory used',
+                      'Memory total', 'Memory available', 'Host writers', 'CPUs reporting'):
             self.assertIn(title, titles)
         units = {title: titles[title]['fieldConfig']['defaults'].get('unit')
                  for title in ('CPU total  (all cores)', 'Memory used', 'Memory total',
@@ -869,10 +869,18 @@ class DashboardContractTests(unittest.TestCase):
         self.assertEqual(units['Memory used %'], 'percent')
         for title in ('Memory used', 'Memory total', 'Memory available'):
             self.assertEqual(units[title], 'bytes')
-        # Total CPU averages every core once and per-core keeps one series each.
+        # Total CPU averages every core once; per-core is a native state timeline
+        # with one row per core in numeric order and restrained busy thresholds.
         self.assertIn('avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))',
                       titles['CPU total  (all cores)']['targets'][0]['expr'])
-        self.assertIn('avg by (cpu)', titles['CPU per core']['targets'][0]['expr'])
+        per_core = titles['CPU per core  /  activity grid']
+        self.assertEqual(per_core['type'], 'state-timeline')
+        self.assertIn('avg by (cpu)', per_core['targets'][0]['expr'])
+        self.assertIn('sort_by_label_numeric(', per_core['targets'][0]['expr'])
+        self.assertEqual(per_core['fieldConfig']['defaults']['unit'], 'percent')
+        self.assertEqual([s['value'] for s in per_core['fieldConfig']['defaults']['thresholds']['steps']],
+                         [None, 70, 90])
+        self.assertFalse(per_core['options']['mergeValues'])
         self.assertEqual(
             [t['expr'] for t in titles['Memory  (total, used, available)']['targets']],
             ['node_memory_MemTotal_bytes', 'node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes',
