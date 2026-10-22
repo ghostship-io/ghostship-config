@@ -916,18 +916,64 @@ class ModelQuotaWindowTests(unittest.TestCase):
             now=NOW,
         )
 
-    def test_a_model_window_replaces_the_account_window(self):
+    def test_a_model_window_combines_with_the_shared_account_window(self):
         ranked = self.rank()
         found = {
             item.model: item
             for item in ranked
             if item.model in ("gemini-3.8-pro", "gemini-3.8-flash")
         }
-        # The model window is the precise one, so it wins over the shared
-        # family window.
-        self.assertAlmostEqual(found["gemini-3.8-pro"].remaining, 0.9)
-        # The other model of the account keeps the account window.
+        # Every applicable limit gates the model: the shared daily window has
+        # 0.1 left and the model window 0.9, so the model is bound at 0.1.
+        self.assertAlmostEqual(found["gemini-3.8-pro"].remaining, 0.1)
+        self.assertEqual(found["gemini-3.8-pro"].quota_scope["parent_windows"], 1)
+        self.assertEqual(found["gemini-3.8-pro"].quota_scope["model_windows"], 1)
+        # The other model of the account is gated only by the shared window.
         self.assertAlmostEqual(found["gemini-3.8-flash"].remaining, 0.1)
+
+    def test_an_exhausted_parent_blocks_a_model_with_room_of_its_own(self):
+        ranked = ranking.rank_models(
+            models=self.models,
+            catalog=self.catalog,
+            quota_windows={
+                "antigravity": [
+                    ranking.QuotaWindow(
+                        kind="weekly",
+                        used_ratio=1.0,
+                        reset_epoch=NOW + 3600.0,
+                        observed_at=NOW,
+                    )
+                ],
+                "antigravity/gemini-3.8-pro": [
+                    ranking.QuotaWindow(
+                        kind="model",
+                        used_ratio=0.05,
+                        reset_epoch=NOW + 3600.0,
+                        observed_at=NOW,
+                    )
+                ],
+            },
+            free_models=set(),
+            usage_tokens={},
+            now=NOW,
+        )
+        found = {
+            item.model: item
+            for item in ranked
+            if item.model in ("gemini-3.8-pro", "gemini-3.8-flash")
+        }
+        self.assertEqual(found["gemini-3.8-pro"].remaining, 0.0)
+        self.assertFalse(found["gemini-3.8-pro"].available)
+        self.assertEqual(found["gemini-3.8-flash"].remaining, 0.0)
+        self.assertFalse(found["gemini-3.8-flash"].available)
+
+    def test_a_single_model_with_a_window_ranks_without_an_unbound_name(self):
+        instance = ModelQuotaWindowTests("test_a_model_window_combines_with_the_shared_account_window")
+        instance.setUp()
+        instance.models = [instance.models[0]]
+        ranked = instance.rank()
+        self.assertTrue(ranked)
+        self.assertEqual(ranked[0].quota_scope["model_windows"], 1)
 
     def test_a_model_window_decides_the_availability_of_the_model(self):
         ranked = ranking.rank_models(

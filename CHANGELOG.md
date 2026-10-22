@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.46] - 2026-10-22
+
+- AI usage collection: every applicable parent limit gates a model together with its own model window. A model-scoped quota reading no longer replaces the shared account cap; the shared windows that name the model (or name no model) and the model windows are combined, and an unrelated family window is still excluded by its scope. An exhausted weekly parent with a model window at 5% now leaves the model at zero and unavailable, and `capacity.scope` publishes `parent_windows` and `model_windows` beside the exemption flag (still false unless the provider reports an independent entitlement). A model-scoped candidate no longer raises an unbound name when it is ranked first or alone; a single-model first-loop regression covers it. Free and promotional routes stay bound to the paid account allowance unless a scope is reported.
+
 ## [3.17.45] - 2026-10-22
 
 - AI usage collection: the owner approved a High execution default for the exact DeepSeek V4.1 Flash models. `deepseek-v4.1-flash` and `deepseek-v4.1-flash:1017` (after the provider namespace) now run High by default, while every other model keeps medium with high escalation. The id is compared exactly: no substring, family or suffix rule, so other DeepSeek models, MiniMax and similarly named ids do not inherit it, and a Flash model whose option does not list High is a fail-closed capability mismatch with its supported list published. The exception is visible in `aa.condition` (`execution_default`, `execution_exception`, `execution_basis`), in `alignment`/`alignment_meta` and in `runtime_policy`, and the AA best-80/20 reference and its Max condition are unchanged.
