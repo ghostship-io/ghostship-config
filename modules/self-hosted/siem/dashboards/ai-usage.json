@@ -19,16 +19,1177 @@
   {
    "id": 32,
    "type": "text",
-   "title": "Review mode",
+   "title": "",
    "gridPos": {
     "x": 0,
     "y": 0,
     "w": 24,
-    "h": 3
+    "h": 2
    },
    "options": {
     "mode": "markdown",
-    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline) \u00b7 [AI usage](/d/ghostship-ai-usage)\n\n**Observation only: automatic model switching and research triggers are off.** Benchmark inputs come from the Artificial Analysis free feed; unmatched models stay unknown and durable facts ingestion is disabled. Model tiers rank first, then provider exhaustion per window, then the evidence tables. Status and quota cards are as of the selected end time; ranges follow the time picker."
+    "content": "**Observation only \u00b7 automatic routing OFF.** Values are as of the selected end time."
+   }
+  },
+  {
+   "id": 40,
+   "type": "bargauge",
+   "title": "Frontier \u00b7 ranked models / limit left",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 2,
+    "w": 12,
+    "h": 6
+   },
+   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time.",
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(max by (provider, model) (ghostship_ai_model_winner_position{tier=\"frontier\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\",provider=~\"$provider\"})) or on(provider, model) (0 * (max by (provider, model) (ghostship_ai_model_capacity_remaining{provider=~\"codex|claude\",provider=~\"$provider\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\"})) + 99)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(max by (provider, model) (ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) and on(provider, model) ((max by (provider, model) (ghostship_ai_model_winner_position{tier=\"frontier\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\",provider=~\"$provider\"})) or on(provider, model) (0 * (max by (provider, model) (ghostship_ai_model_capacity_remaining{provider=~\"codex|claude\",provider=~\"$provider\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\"})) + 99))) or on(provider, model) (0 * ((max by (provider, model) (ghostship_ai_model_winner_position{tier=\"frontier\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\",provider=~\"$provider\"})) or on(provider, model) (0 * (max by (provider, model) (ghostship_ai_model_capacity_remaining{provider=~\"codex|claude\",provider=~\"$provider\",model=~\"gpt-6[.]1-sol|claude-opus-5-5\"})) + 99)) - 1)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "sortBy",
+     "options": {
+      "sort": [
+       {
+        "field": "Value #A",
+        "desc": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true
+      },
+      "renameByName": {
+       "Value #A": "Order",
+       "Value #B": "Limit left"
+      }
+     }
+    },
+    {
+     "id": "rowsToFields",
+     "options": {
+      "mappings": [
+       {
+        "fieldName": "model",
+        "handlerKey": "field.name"
+       },
+       {
+        "fieldName": "Limit left",
+        "handlerKey": "field.value"
+       }
+      ]
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "decimals": 0,
+     "noValue": "Quota unknown",
+     "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#F2495C",
+        "value": null
+       },
+       {
+        "color": "#FF9830",
+        "value": 0.001
+       },
+       {
+        "color": "#5794F2",
+        "value": 0.2
+       }
+      ]
+     },
+     "links": [
+      {
+       "title": "Evidence and alternatives",
+       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
+      }
+     ],
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "-1": {
+         "text": "Unknown headroom",
+         "color": "#B8BFCC"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "showUnfilled": true,
+    "valueMode": "text",
+    "namePlacement": "top",
+    "sizing": "manual",
+    "minVizHeight": 26,
+    "minVizWidth": 40,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "maxVizHeight": 36,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    }
+   }
+  },
+  {
+   "id": 41,
+   "type": "bargauge",
+   "title": "Bulk \u00b7 ranked models / limit left",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 2,
+    "w": 12,
+    "h": 6
+   },
+   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time.",
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (provider, model) (ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"})",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(max by (provider, model) (ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) and on(provider, model) (max by (provider, model) (ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"}))) or on(provider, model) (0 * (max by (provider, model) (ghostship_ai_model_winner_position{tier=\"bulk\",provider=~\"$provider\"})) - 1)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "sortBy",
+     "options": {
+      "sort": [
+       {
+        "field": "Value #A",
+        "desc": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true
+      },
+      "renameByName": {
+       "Value #A": "Order",
+       "Value #B": "Limit left"
+      }
+     }
+    },
+    {
+     "id": "rowsToFields",
+     "options": {
+      "mappings": [
+       {
+        "fieldName": "model",
+        "handlerKey": "field.name"
+       },
+       {
+        "fieldName": "Limit left",
+        "handlerKey": "field.value"
+       }
+      ]
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "decimals": 0,
+     "noValue": "Quota unknown",
+     "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#F2495C",
+        "value": null
+       },
+       {
+        "color": "#FF9830",
+        "value": 0.001
+       },
+       {
+        "color": "#5794F2",
+        "value": 0.2
+       }
+      ]
+     },
+     "links": [
+      {
+       "title": "Evidence and alternatives",
+       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
+      }
+     ],
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "-1": {
+         "text": "Unknown headroom",
+         "color": "#B8BFCC"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "showUnfilled": true,
+    "valueMode": "text",
+    "namePlacement": "top",
+    "sizing": "manual",
+    "minVizHeight": 26,
+    "minVizWidth": 40,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "maxVizHeight": 36,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    }
+   }
+  },
+  {
+   "id": 42,
+   "type": "bargauge",
+   "title": "Dedicated free \u00b7 ranked models / limit left",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 8,
+    "w": 12,
+    "h": 6
+   },
+   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time.",
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (provider, model) (ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"})",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(max by (provider, model) (ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) and on(provider, model) (max by (provider, model) (ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"}))) or on(provider, model) (0 * (max by (provider, model) (ghostship_ai_model_winner_position{tier=\"free\",provider=~\"$provider\"})) - 1)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "sortBy",
+     "options": {
+      "sort": [
+       {
+        "field": "Value #A",
+        "desc": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true
+      },
+      "renameByName": {
+       "Value #A": "Order",
+       "Value #B": "Limit left"
+      }
+     }
+    },
+    {
+     "id": "rowsToFields",
+     "options": {
+      "mappings": [
+       {
+        "fieldName": "model",
+        "handlerKey": "field.name"
+       },
+       {
+        "fieldName": "Limit left",
+        "handlerKey": "field.value"
+       }
+      ]
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "decimals": 0,
+     "noValue": "Quota unknown",
+     "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#F2495C",
+        "value": null
+       },
+       {
+        "color": "#FF9830",
+        "value": 0.001
+       },
+       {
+        "color": "#5794F2",
+        "value": 0.2
+       }
+      ]
+     },
+     "links": [
+      {
+       "title": "Evidence and alternatives",
+       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
+      }
+     ],
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "-1": {
+         "text": "Unknown headroom",
+         "color": "#B8BFCC"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "showUnfilled": true,
+    "valueMode": "text",
+    "namePlacement": "top",
+    "sizing": "manual",
+    "minVizHeight": 26,
+    "minVizWidth": 40,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "maxVizHeight": 36,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    }
+   }
+  },
+  {
+   "id": 43,
+   "type": "bargauge",
+   "title": "3D \u00b7 ranked models / limit left",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 8,
+    "w": 12,
+    "h": 6
+   },
+   "description": "One best eligible model per provider, in the producer\u2019s usage-pace order. Bar = lowest applicable allowance left, not benchmark quality. Frontier workhorses remain visible at 0% when blocked. No eligible measurements means no recommendation. As of the selected end time.",
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "max by (provider, model) (ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"})",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(max by (provider, model) (ghostship_ai_model_capacity_remaining{provider=~\"$provider\"}) and on(provider, model) (max by (provider, model) (ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"}))) or on(provider, model) (0 * (max by (provider, model) (ghostship_ai_model_winner_position{tier=\"3d\",provider=~\"$provider\"})) - 1)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "sortBy",
+     "options": {
+      "sort": [
+       {
+        "field": "Value #A",
+        "desc": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true
+      },
+      "renameByName": {
+       "Value #A": "Order",
+       "Value #B": "Limit left"
+      }
+     }
+    },
+    {
+     "id": "rowsToFields",
+     "options": {
+      "mappings": [
+       {
+        "fieldName": "model",
+        "handlerKey": "field.name"
+       },
+       {
+        "fieldName": "Limit left",
+        "handlerKey": "field.value"
+       }
+      ]
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "decimals": 0,
+     "noValue": "Quota unknown",
+     "displayName": "${__field.labels.provider} \u00b7 ${__field.name}",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#F2495C",
+        "value": null
+       },
+       {
+        "color": "#FF9830",
+        "value": 0.001
+       },
+       {
+        "color": "#5794F2",
+        "value": 0.2
+       }
+      ]
+     },
+     "links": [
+      {
+       "title": "Evidence and alternatives",
+       "url": "/d/ghostship-ai-usage?${__url_time_range}&var-provider=${__field.labels.provider}&viewPanel=29"
+      }
+     ],
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "-1": {
+         "text": "Unknown headroom",
+         "color": "#B8BFCC"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "showUnfilled": true,
+    "valueMode": "text",
+    "namePlacement": "top",
+    "sizing": "manual",
+    "minVizHeight": 26,
+    "minVizWidth": 40,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "maxVizHeight": 36,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    }
+   }
+  },
+  {
+   "id": 45,
+   "type": "row",
+   "title": "Provider exhaustion",
+   "gridPos": {
+    "x": 0,
+    "y": 14,
+    "w": 24,
+    "h": 1
+   },
+   "collapsed": false,
+   "panels": []
+  },
+  {
+   "id": 44,
+   "title": "Providers \u00b7 lowest applicable allowance left",
+   "type": "bargauge",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 15,
+    "w": 24,
+    "h": 8
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "sort((min by (provider) (ghostship_ai_provider_capacity_remaining_ratio{provider=~\"$provider\"})) or on(provider) (0 * max by (provider) (ghostship_ai_provider_coverage{provider=~\"$provider\"}) - 1))",
+     "instant": true,
+     "range": false,
+     "legendFormat": "{{provider}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "decimals": 0,
+     "noValue": "Quota unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#F2495C",
+        "value": null
+       },
+       {
+        "color": "#FF9830",
+        "value": 0.001
+       },
+       {
+        "color": "#5794F2",
+        "value": 0.2
+       }
+      ]
+     },
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "-1": {
+         "text": "Unknown headroom",
+         "color": "#B8BFCC",
+         "index": 0
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "valueMode": "text",
+    "showUnfilled": true,
+    "minVizHeight": 26,
+    "minVizWidth": 8,
+    "namePlacement": "left",
+    "sizing": "manual",
+    "maxVizHeight": 36,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    }
+   },
+   "description": "Lowest applicable remaining allowance, as of the selected end time. Any exhausted parent blocks the provider. Unknown allowance stays unknown; the query-only -1 sentinel is displayed as Unknown headroom."
+  },
+  {
+   "id": 46,
+   "type": "row",
+   "title": "${allowance:text}",
+   "gridPos": {
+    "x": 0,
+    "y": 23,
+    "w": 24,
+    "h": 1
+   },
+   "repeat": "allowance",
+   "collapsed": false,
+   "panels": []
+  },
+  {
+   "id": 47,
+   "type": "stat",
+   "title": "Remaining",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 24,
+    "w": 5,
+    "h": 4
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(1 - (label_match(label_join((ghostship_ai_quota_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`)))",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "decimals": 0,
+     "noValue": "Unknown",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#F2495C",
+        "value": null
+       },
+       {
+        "color": "#D8D9DA",
+        "value": 0.001
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 48,
+   "type": "barchart",
+   "title": "Allowance \u00b7 white mark = expected left",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 5,
+    "y": 24,
+    "w": 12,
+    "h": 4
+   },
+   "description": "Filled track = measured remaining allowance. White marker = expected remaining from elapsed reset-window time. No marker means timing is unknown. The marker is 0.6% wide and clamped by 0.3% only at the track endpoints; the exact expected reading is preserved in the evidence table. All joins retain provider/account/model/window/quota/source.",
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(((1 - (label_match(label_join((ghostship_ai_quota_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))) + (clamp_max(clamp_min((1 - (label_match(label_join((ghostship_ai_quota_expected_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))), 0.003), 0.997) - 0.003) - abs((1 - (label_match(label_join((ghostship_ai_quota_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))) - (clamp_max(clamp_min((1 - (label_match(label_join((ghostship_ai_quota_expected_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))), 0.003), 0.997) - 0.003))) / 2) or ((1 - (label_match(label_join((ghostship_ai_quota_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))) unless (label_match(label_join((ghostship_ai_quota_expected_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`)))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(clamp_min(clamp_max(clamp_min((1 - (label_match(label_join((ghostship_ai_quota_expected_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))), 0.003), 0.997) - 0.003 - (1 - (label_match(label_join((ghostship_ai_quota_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))), 0)) or ((1 - (1 - (label_match(label_join((ghostship_ai_quota_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`)))) unless (label_match(label_join((ghostship_ai_quota_expected_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`)))",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(0 * ((1 - (label_match(label_join((ghostship_ai_quota_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))) + 0 * (label_match(label_join((ghostship_ai_quota_expected_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))) + 0.006)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "D",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "clamp_min((1 - (label_match(label_join((ghostship_ai_quota_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))) - clamp_max(clamp_min((1 - (label_match(label_join((ghostship_ai_quota_expected_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))), 0.003), 0.997) - 0.003, 0)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    },
+    {
+     "refId": "E",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "clamp_min(1 - clamp_max(clamp_min((1 - (label_match(label_join((ghostship_ai_quota_expected_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))), 0.003), 0.997) - 0.003 - (clamp_min((1 - (label_match(label_join((ghostship_ai_quota_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))) - clamp_max(clamp_min((1 - (label_match(label_join((ghostship_ai_quota_expected_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))), 0.003), 0.997) - 0.003, 0)), 0)",
+     "instant": true,
+     "range": false,
+     "format": "table"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true,
+       "provider": true,
+       "account": true,
+       "model": true,
+       "quota": true,
+       "source": true,
+       "allowance": true
+      },
+      "indexByName": {
+       "window": 0,
+       "Value #A": 1,
+       "Value #B": 2,
+       "Value #C": 3,
+       "Value #D": 4,
+       "Value #E": 5
+      },
+      "renameByName": {}
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#5794F2"
+     },
+     "custom": {
+      "axisPlacement": "hidden",
+      "fillOpacity": 100,
+      "lineWidth": 0,
+      "gradientMode": "none",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value #A"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#5794F2"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value #B"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#2B303B"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value #C"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FFFFFF"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value #D"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#5794F2"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value #E"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#2B303B"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "orientation": "horizontal",
+    "xField": "window",
+    "stacking": "normal",
+    "showValue": "never",
+    "barWidth": 0.5,
+    "groupWidth": 1,
+    "barRadius": 0,
+    "xTickLabelRotation": 0,
+    "xTickLabelSpacing": 0,
+    "legend": {
+     "showLegend": false
+    },
+    "tooltip": {
+     "mode": "none"
+    },
+    "colorByField": null
+   }
+  },
+  {
+   "id": 49,
+   "type": "stat",
+   "title": "Reset / budget margin",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 17,
+    "y": 24,
+    "w": 7,
+    "h": 4
+   },
+   "description": "Budget margin = expected usage minus actual usage: positive is spare, negative is over pace. Missing timing is unknown. A subordinate window does not bypass an exhausted parent.",
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "clamp_min(label_match(label_join((ghostship_ai_quota_reset_timestamp_seconds{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`) - time(), 0)",
+     "instant": true,
+     "range": false,
+     "legendFormat": "Reset in"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "100 * (label_match(label_join((ghostship_ai_quota_pace_delta_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))",
+     "instant": true,
+     "range": false,
+     "legendFormat": "Budget margin \u00b7 positive = spare"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "expr": "(0 * (label_match(label_join((ghostship_ai_quota_used_ratio{provider=~\"$provider\"}), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"allowance\", `^${allowance:regex}$`))) + on(provider, account) group_left() (min by (provider, account) (1 - ghostship_ai_quota_used_ratio{provider=\"claude\",model=\"\",quota=\"seven_day\"}))",
+     "instant": true,
+     "range": false,
+     "legendFormat": "Parent gate"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unknown",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "A"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "dtdurations"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "B"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "suffix: pp"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "C"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "0": {
+            "text": "BLOCKED \u00b7 Weekly",
+            "color": "#F2495C"
+           }
+          }
+         },
+         {
+          "type": "range",
+          "options": {
+           "from": 1e-06,
+           "to": 1,
+           "result": {
+            "text": "Shared weekly has room",
+            "color": "#B8BFCC"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "textMode": "value_and_name",
+    "colorMode": "value",
+    "graphMode": "none",
+    "orientation": "horizontal",
+    "text": {
+     "titleSize": 12,
+     "valueSize": 20
+    },
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
    }
   },
   {
@@ -38,7 +1199,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 3,
+    "y": 28,
     "w": 24,
     "h": 1
    },
@@ -54,7 +1215,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 4,
+    "y": 30,
     "w": 12,
     "h": 9
    },
@@ -261,7 +1422,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 4,
+    "y": 30,
     "w": 12,
     "h": 9
    },
@@ -468,7 +1629,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 14,
+    "y": 40,
     "w": 12,
     "h": 9
    },
@@ -675,7 +1836,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 14,
+    "y": 40,
     "w": 12,
     "h": 9
    },
@@ -874,7 +2035,7 @@
   },
   {
    "id": 13,
-   "title": "3D tier detail",
+   "title": "3D evidence \u00b7 AA-3D required",
    "type": "table",
    "datasource": {
     "type": "prometheus",
@@ -882,33 +2043,11 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 23,
+    "y": 49,
     "w": 24,
     "h": 8
    },
    "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (provider, model) (ghostship_ai_three_d_score)",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
-    {
-     "refId": "B",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "expr": "max by (provider, model) (ghostship_ai_three_d_prior)",
-     "instant": true,
-     "range": false,
-     "format": "table"
-    },
     {
      "refId": "C",
      "datasource": {
@@ -932,117 +2071,12 @@
      "format": "table"
     }
    ],
-   "transformations": [
-    {
-     "id": "merge",
-     "options": {}
-    },
-    {
-     "id": "rename",
-     "options": {
-      "renameByName": {
-       "Value #A": "3d score",
-       "Value #B": "prior score",
-       "Value #C": "3d tokens",
-       "Value #D": "reading age"
-      }
-     }
-    },
-    {
-     "id": "order",
-     "options": {
-      "indexByName": {
-       "provider": 0,
-       "model": 1,
-       "Value #A": 2,
-       "Value #B": 3,
-       "Value #C": 4,
-       "Value #D": 5
-      },
-      "excludeByName": {
-       "Time": true
-      }
-     }
-    }
-   ],
+   "transformations": [],
    "fieldConfig": {
     "defaults": {
-     "custom": {
-      "align": "auto",
-      "cellOptions": {
-       "type": "auto"
-      },
-      "inspect": false
-     },
-     "mappings": [],
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       }
-      ]
-     }
+     "noValue": "Unavailable"
     },
-    "overrides": [
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "3d tokens"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "short"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "reading age"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "s"
-       },
-       {
-        "id": "decimals",
-        "value": 0
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "3d score"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "prior score"
-      },
-      "properties": [
-       {
-        "id": "decimals",
-        "value": 3
-       }
-      ]
-     }
-    ]
+    "overrides": []
    },
    "options": {
     "showHeader": true,
@@ -1050,20 +2084,21 @@
     "footer": {
      "show": false
     }
-   }
+   },
+   "description": "3D recommendations use AA-3D results and measured task cost. No family or 3D priors. Token usage is a rolling observation, not a capability score."
   },
   {
    "id": 28,
    "title": "Winners by tier",
    "type": "table",
-   "description": "The proposed winner per provider and tier, grouped by tier. Value is on the Artificial Analysis scale where present; the source column in Winner detail says measured or prior. Capacity is the remaining share of the account window.",
+   "description": "One proposed model per provider and tier. Value is the published intelligence/task-cost policy score; benchmark intelligence is shown separately. Capacity is the lowest applicable remaining allowance. As of the selected end time.",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
    },
    "gridPos": {
     "x": 0,
-    "y": 32,
+    "y": 58,
     "w": 24,
     "h": 16
    },
@@ -1219,14 +2254,14 @@
    "id": 35,
    "title": "Winner detail  /  source, quality, expiry",
    "type": "table",
-   "description": "The evidence behind each winner: whether the value is measured or a prior estimate, the quality score and the remaining capacity expiry as a duration. Kept separate so the core table stays readable.",
+   "description": "Measured AA evidence, policy value and reset timing behind each proposed model. Missing measurements stay unknown.",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
    },
    "gridPos": {
     "x": 0,
-    "y": 48,
+    "y": 74,
     "w": 24,
     "h": 12
    },
@@ -1415,7 +2450,7 @@
    "panels": [],
    "gridPos": {
     "x": 0,
-    "y": 60,
+    "y": 86,
     "w": 24,
     "h": 1
    }
@@ -1430,7 +2465,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 61,
+    "y": 87,
     "w": 24,
     "h": 14
    },
@@ -1476,7 +2511,7 @@
      "format": "table"
     }
    ],
-   "description": "Compared candidates for the selected providers, ordered by value. Strength and its source distinguish measurements from priors. Available is the observed availability flag; cost per task is a benchmark task price in USD, not quota capacity or a token price. Missing values stay unknown. Catalog coverage is reported separately.",
+   "description": "Compared candidates, ordered by the explicit measured-value policy. Intelligence is the AA index; task cost is a benchmark cost in USD. Available is observed capacity, not quality. Missing values stay unknown.",
    "fieldConfig": {
     "defaults": {
      "noValue": "\u2014",
@@ -1658,7 +2693,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 75,
+    "y": 101,
     "w": 8,
     "h": 8
    },
@@ -1726,7 +2761,7 @@
    },
    "gridPos": {
     "x": 8,
-    "y": 75,
+    "y": 101,
     "w": 8,
     "h": 8
    },
@@ -1774,7 +2809,7 @@
    },
    "gridPos": {
     "x": 16,
-    "y": 75,
+    "y": 101,
     "w": 8,
     "h": 8
    },
@@ -1848,7 +2883,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 83,
+    "y": 109,
     "w": 24,
     "h": 1
    },
@@ -1864,7 +2899,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 84,
+    "y": 110,
     "w": 14,
     "h": 10
    },
@@ -1985,7 +3020,7 @@
    },
    "gridPos": {
     "x": 14,
-    "y": 84,
+    "y": 110,
     "w": 10,
     "h": 10
    },
@@ -2052,7 +3087,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 94,
+    "y": 120,
     "w": 8,
     "h": 8
    },
@@ -2129,7 +3164,7 @@
    },
    "gridPos": {
     "x": 8,
-    "y": 94,
+    "y": 120,
     "w": 8,
     "h": 8
    },
@@ -2207,7 +3242,7 @@
    },
    "gridPos": {
     "x": 16,
-    "y": 94,
+    "y": 120,
     "w": 8,
     "h": 8
    },
@@ -2288,7 +3323,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 102,
+    "y": 128,
     "w": 24,
     "h": 1
    },
@@ -2304,7 +3339,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 103,
+    "y": 129,
     "w": 16,
     "h": 10
    },
@@ -2470,7 +3505,7 @@
    },
    "gridPos": {
     "x": 16,
-    "y": 103,
+    "y": 129,
     "w": 8,
     "h": 10
    },
@@ -2538,7 +3573,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 113,
+    "y": 139,
     "w": 24,
     "h": 1
    },
@@ -2554,7 +3589,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 114,
+    "y": 140,
     "w": 12,
     "h": 9
    },
@@ -2657,7 +3692,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 114,
+    "y": 140,
     "w": 12,
     "h": 9
    },
@@ -2790,7 +3825,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 123,
+    "y": 149,
     "w": 8,
     "h": 7
    },
@@ -2919,7 +3954,7 @@
    },
    "gridPos": {
     "x": 8,
-    "y": 123,
+    "y": 149,
     "w": 8,
     "h": 7
    },
@@ -2975,7 +4010,7 @@
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 130,
+    "y": 156,
     "w": 24,
     "h": 1
    },
@@ -2991,7 +4026,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 131,
+    "y": 157,
     "w": 12,
     "h": 9
    },
@@ -3120,7 +4155,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 131,
+    "y": 157,
     "w": 12,
     "h": 9
    },
@@ -3277,7 +4312,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 140,
+    "y": 166,
     "w": 12,
     "h": 9
    },
@@ -3446,7 +4481,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 140,
+    "y": 166,
     "w": 6,
     "h": 9
    },
@@ -3531,7 +4566,7 @@
    },
    "gridPos": {
     "x": 18,
-    "y": 140,
+    "y": 166,
     "w": 6,
     "h": 9
    },
@@ -3617,7 +4652,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 149,
+    "y": 175,
     "w": 24,
     "h": 8
    },
@@ -3762,6 +4797,28 @@
     "options": [],
     "hide": 0,
     "skipUrlSync": false
+   },
+   {
+    "name": "allowance",
+    "label": "Allowance",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "victoriametrics"
+    },
+    "query": "query_result(label_join(label_join((max by (provider, account, model, window, quota, source) (ghostship_ai_quota_used_ratio{provider=~\"$provider\"})), \"allowance\", \" / \", \"provider\", \"account\", \"model\", \"window\", \"quota\", \"source\"), \"card\", \" \u00b7 \", \"provider\", \"window\", \"quota\"))",
+    "refresh": 2,
+    "multi": true,
+    "includeAll": true,
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    },
+    "regex": "/(?=.*allowance=\"(?<value>[^\"]+)\")(?=.*card=\"(?<text>[^\"]+)\").*/",
+    "options": [],
+    "hide": 2,
+    "skipUrlSync": true,
+    "sort": 1
    }
   ]
  }
