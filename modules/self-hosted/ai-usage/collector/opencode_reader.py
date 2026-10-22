@@ -44,6 +44,29 @@ WINDOWS = (WINDOW_1M, WINDOW_1H, WINDOW_5H, WINDOW_1D, WINDOW_7D, WINDOW_30D)
 # provider called the stop.
 SUCCESS_FINISHES = frozenset({"stop", "tool-calls", "length", "content-filter"})
 
+# The OpenCode provider ids, mapped onto the provider names the collector
+# uses everywhere else. The table is committed, not guessed: a provider that
+# is not in it is counted and not emitted.
+PROVIDER_MAP = {
+    "ollama-cloud": "ollama",
+    "opencode-go": "opencode-go",
+    "opencode": "opencode",
+    "openrouter": "openrouter",
+    "google": "google",
+    "requesty": "requesty",
+    "nvidia": "nvidia",
+    "ovh": "ovh",
+    "upstage": "upstage",
+    "inception": "inception",
+    "groq": "groq",
+    "mistral": "mistral",
+    "cohere": "cohere",
+    "zai": "zai",
+    "vercel": "vercel",
+    "poolside": "poolside",
+    "orcarouter": "orcarouter",
+}
+
 # The phrases that name a budget, and the window each one names. The order
 # matters: the phrase that names its window is read before the phrase that
 # names only a budget.
@@ -204,3 +227,19 @@ def usage_tokens(data: Mapping[str, Any]) -> int | None:
             continue
         total += int(value)
     return total
+
+def model_of(data: Mapping[str, Any]) -> tuple[str, str]:
+    """The provider id and the model id a request record carries."""
+    if not isinstance(data, Mapping):
+        return ("", "")
+    model = data.get("model")
+    if not isinstance(model, Mapping):
+        return ("", "")
+    provider = str(model.get("providerID") or "").strip()
+    name = str(model.get("id") or "").strip()
+    return (provider, name)
+
+
+def provider_for(provider_id: str) -> str | None:
+    """The collector's provider name, or None when the provider is unmapped."""
+    return PROVIDER_MAP.get(str(provider_id or "").strip().lower())
