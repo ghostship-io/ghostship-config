@@ -12,6 +12,9 @@
 ghostship_ai_collection_duration_seconds 1
 ghostship_ai_collection_timestamp_seconds 1790000000
 
+# The routing is off: the owner has not approved it.
+ghostship_ai_routing_enabled 0
+
 # --- Bulk ------------------------------------------------------------------
 # The next coding job goes to the first row. The order is the collector's.
 ghostship_ai_model_winner_position{tier="bulk",provider="opencode-go",model="minimax_minimax-m3.1-flash_free"} 1
@@ -25,6 +28,7 @@ ghostship_ai_model_rank{tier="bulk",provider="grok",model="grok-4.6"} 4
 # The promotion route: the provider publishes it as unlimited for a limited
 # time, so it has no window, no pace and no measured allowance.
 ghostship_ai_entitlement_info{provider="opencode-go",account="default",model="minimax_minimax-m3.1-flash_free",window="unlimited__limited-time_promotion_",quota="free-unlimited",source="published",entitlement="opencode-go:default:minimax_minimax-m3.1-flash_free:unlimited (limited-time promotion):free-unlimited",basis="promotion",ends_at=""} 1
+ghostship_ai_entitlement_info{provider="opencode-go",account="default",model="minimax_minimax-m3.1-flash",window="unlimited__limited-time_promotion_",quota="free-unlimited",source="published",entitlement="opencode-go:default:minimax_minimax-m3.1-flash:unlimited (limited-time promotion):free-unlimited",basis="promotion",ends_at=""} 1
 
 # The route ahead of the pace, the route on it, and the route behind it.
 ghostship_ai_model_capacity_remaining{provider="claude",model="claude-haiku-5-5",tier="bulk"} 0.92
@@ -58,11 +62,11 @@ ghostship_ai_model_info{provider="grok",model="grok-4.6",name="Grok 4.6"} 1
 # --- Free ------------------------------------------------------------------
 # The free pool answers with one response. The band is the quality band of
 # the route; it arrives with the free winners.
-ghostship_ai_model_winner_position{tier="free",provider="opencode-go",model="minimax_minimax-m3.1-flash_free",band="true"} 1
+ghostship_ai_model_winner_position{tier="free",provider="opencode-go",model="minimax_minimax-m3.1-flash",band="true"} 1
 ghostship_ai_model_winner_position{tier="free",provider="nvidia",model="glm-5.3-flash",band="true"} 2
 ghostship_ai_model_winner_position{tier="free",provider="groq",model="qwen3.8-27b"} 3
 ghostship_ai_model_winner_position{tier="free",provider="kilo",model="nemotron-3.5-super-vl"} 4
-ghostship_ai_model_rank{tier="free",provider="opencode-go",model="minimax_minimax-m3.1-flash_free"} 1
+ghostship_ai_model_rank{tier="free",provider="opencode-go",model="minimax_minimax-m3.1-flash"} 1
 ghostship_ai_model_rank{tier="free",provider="nvidia",model="glm-5.3-flash"} 2
 ghostship_ai_model_rank{tier="free",provider="groq",model="qwen3.8-27b"} 3
 ghostship_ai_model_rank{tier="free",provider="kilo",model="nemotron-3.5-super-vl"} 4
@@ -77,16 +81,16 @@ ghostship_ai_model_paced_availability{provider="kilo",model="nemotron-3.5-super-
 ghostship_ai_model_quota_unknown{provider="kilo",model="nemotron-3.5-super-vl",reason="no_window"} 1
 
 # The limit basis of every free route.
-ghostship_ai_provider_limit{provider="opencode-go",model="minimax_minimax-m3.1-flash_free",limit="rpm",scope="account",basis="published"} -1
+ghostship_ai_provider_limit{provider="opencode-go",model="minimax_minimax-m3.1-flash",limit="rpm",scope="account",basis="published"} -1
 ghostship_ai_provider_limit{provider="nvidia",model="glm-5.3-flash",limit="rpm",scope="account",basis="configured"} 40
 ghostship_ai_provider_limit{provider="groq",model="qwen3.8-27b",limit="rpd",scope="account",basis="configured"} 1000
 ghostship_ai_provider_limit{provider="kilo",model="nemotron-3.5-super-vl",limit="rpm",scope="account",basis="unknown"} -1
 
-ghostship_ai_model_strength{provider="opencode-go",model="minimax_minimax-m3.1-flash_free",source="measured"} 42.7
+ghostship_ai_model_strength{provider="opencode-go",model="minimax_minimax-m3.1-flash",source="measured"} 42.7
 ghostship_ai_model_strength{provider="nvidia",model="glm-5.3-flash",source="measured"} 41.8
 ghostship_ai_model_strength{provider="groq",model="qwen3.8-27b",source="measured"} 33.7
 ghostship_ai_model_strength{provider="kilo",model="nemotron-3.5-super-vl",source="measured"} 26.5
-ghostship_ai_model_info{provider="opencode-go",model="minimax_minimax-m3.1-flash_free",name="MiniMax M3.1 Flash"} 1
+ghostship_ai_model_info{provider="opencode-go",model="minimax_minimax-m3.1-flash",name="MiniMax M3.1 Flash"} 1
 ghostship_ai_model_info{provider="nvidia",model="glm-5.3-flash",name="GLM-5.3 Flash"} 1
 ghostship_ai_model_info{provider="groq",model="qwen3.8-27b",name="Qwen3.8 27B"} 1
 ghostship_ai_model_info{provider="kilo",model="nemotron-3.5-super-vl",name="Nemotron 3.5 Super VL"} 1

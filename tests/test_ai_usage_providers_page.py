@@ -1,0 +1,443 @@
+"""The Providers page of the AI usage dashboard.
+
+The page is five sections, each one a Business Text panel, and the evidence
+below them in collapsed rows. The tests here pin the contract the page has
+with the owner: the order of a tier is the collector's own winner position,
+the fill of a bar is the share left now, the line in the bar is the share the
+window expects to be left now, and the pace reads the difference between the
+two.
+
+The queries are executed against the committed review fixture, so the worked
+cases are the numbers the store returns and not a copy of them.
+"""
+import json
+import os
+import re
+import shutil
+import socket
+import subprocess
+import tempfile
+import time
+import unittest
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+DASHBOARD = ROOT / "modules/self-hosted/siem/dashboards/ai-usage.json"
+FIXTURE = ROOT / "tests/fixtures/ai-usage/providers-review.prom"
+FIXTURE_ROUTING_ON = ROOT / "tests/fixtures/ai-usage/providers-review-routing-on.prom"
+
+# The sections of the page, in the order the owner approved.
+SECTIONS = ("Bulk", "Free", "Frontier", "3D", "Providers")
+TIERS = {"Bulk": "bulk", "Free": "free", "Frontier": "frontier", "3D": "3d"}
+
+
+def panels(page):
+    """The panels of the page, with the ones a collapsed row holds."""
+    out = []
+
+    def walk(items, collapsed):
+        for panel in items:
+            out.append((panel, collapsed))
+            if panel.get("type") == "row":
+                walk(panel.get("panels") or [], bool(panel.get("collapsed")))
+
+    walk(page["panels"], False)
+    return out
+
+
+def section(page, title):
+    """The panel of a section, by its title."""
+    for panel, _ in panels(page):
+        if panel.get("title", "").startswith(title):
+            return panel
+    raise AssertionError(f"the page has no section {title!r}")
+
+
+def expressions(panel):
+    return " ".join(target.get("expr") or "" for target in panel.get("targets") or [])
+
+
+def find_target(panel, needle):
+    """The target whose expression names the metric."""
+    for target in panel.get("targets") or []:
+        if needle in (target.get("expr") or ""):
+            return target
+    raise AssertionError(f"no target of {panel.get('title')!r} names {needle!r}")
+
+
+class ProvidersPageTests(unittest.TestCase):
+    """The shape of the page."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.page = json.loads(DASHBOARD.read_text(encoding="utf-8"))
+
+    def test_the_sections_are_in_the_owner_s_order(self):
+        """The owner reads the page from the top: Bulk, Free, Frontier, 3D, Providers."""
+        titles = [
+            panel.get("title", "").split(" · ")[0]
+            for panel, collapsed in panels(self.page)
+            if not collapsed and panel.get("type") == "marcusolsson-dynamictext-panel"
+        ]
+        self.assertEqual(titles[1:], list(SECTIONS))
+        self.assertEqual(titles[0], "", "the header carries no title of its own")
+
+    def test_every_section_reads_the_collector_s_own_winner_position(self):
+        """A tier that ordered itself would show a different route than the collector picks."""
+        for title, tier in TIERS.items():
+            panel = section(self.page, title)
+            joined = expressions(panel)
+            self.assertIn(
+                f'ghostship_ai_model_winner_position{{tier="{tier}"', joined, title
+            )
+            for other in set(TIERS.values()) - {tier}:
+                self.assertNotIn(
+                    f'ghostship_ai_model_winner_position{{tier="{other}"', joined, title
+                )
+            # The order is the collector's position, not a ranking made here.
+            order = find_target(panel, "ghostship_ai_model_winner_position")
+            self.assertNotIn("ghostship_ai_model_paced_availability", order["expr"], title)
+
+    def test_the_order_of_a_tier_is_the_collector_s_position(self):
+        """The rows are sorted by the collector's own key, and the panel does not re-rank."""
+        for title in TIERS:
+            panel = section(self.page, title)
+            sorts = [t for t in panel.get("transformations") or [] if t["id"] == "sortBy"]
+            self.assertEqual(len(sorts), 1, title)
+            self.assertEqual(sorts[0]["options"]["sort"][0]["field"], "order", title)
+            self.assertTrue(sorts[0]["options"]["sort"][0]["desc"], title)
+
+    def test_no_bargauge_or_stat_panel_sits_outside_a_collapsed_row(self):
+        """The owner asked for tables, not gauges: the gauges stay in the evidence."""
+        for panel, collapsed in panels(self.page):
+            if panel.get("type") in ("bargauge", "stat"):
+                self.assertTrue(collapsed, panel.get("title"))
+
+    def test_no_template_prints_unescaped_html(self):
+        """A model name is label text: it is escaped, never printed raw."""
+        for panel, _ in panels(self.page):
+            content = json.dumps(panel.get("options") or {})
+            self.assertNotIn("{{{", content, panel.get("title"))
+            self.assertNotIn("innerHTML", content, panel.get("title"))
+            self.assertNotIn("<script", content, panel.get("title"))
+
+    def test_the_expected_left_is_the_share_left_minus_the_paced_availability(self):
+        """The line in the bar is the share the window expects to be left now."""
+        for title in TIERS:
+            panel = section(self.page, title)
+            expected = find_target(panel, "clamp_max")
+            self.assertIn("ghostship_ai_model_capacity_remaining", expected["expr"], title)
+            self.assertIn("ghostship_ai_model_paced_availability", expected["expr"], title)
+            self.assertIn("clamp_min", expected["expr"], title)
+            self.assertIn("clamp_max", expected["expr"], title)
+
+    def test_the_capacity_bar_reads_the_share_left_now(self):
+        """The fill of a bar is the share left now, and the percentage sits beside it."""
+        for title in TIERS:
+            panel = section(self.page, title)
+            content = panel["options"]["content"]
+            self.assertIn("ghostship_ai_model_capacity_remaining", expressions(panel), title)
+            self.assertIn('style="width:{{left}}"', content, title)
+            self.assertIn('class="pct"', content, title)
+            self.assertIn('style="left:{{expected}}"', content, title)
+
+    def test_the_pace_reads_the_paced_availability(self):
+        """The pace of a route is the collector's number, read as points."""
+        for title in TIERS:
+            panel = section(self.page, title)
+            joined = expressions(panel)
+            self.assertIn("ghostship_ai_model_paced_availability", joined, title)
+            self.assertIn("round(100 *", joined, title)
+        # The free tier has no pace column: it answers with one response, and
+        # the owner reads its quality band instead.
+        for title in ("Bulk", "Frontier", "3D"):
+            content = section(self.page, title)["options"]["content"]
+            self.assertIn("ahead", content, title)
+            self.assertIn("behind", content, title)
+            self.assertIn("on pace", content, title)
+            self.assertIn("no window", content, title)
+
+    def test_an_unknown_allowance_is_never_a_zero_and_never_a_red_bar(self):
+        """A route whose limits are unknown says so; it never looks spent."""
+        for title in TIERS:
+            content = section(self.page, title)["options"]["content"]
+            self.assertIn("Limits unknown", content, title)
+            self.assertIn("{{#if hasCap}}", content, title)
+            self.assertIn("{{#if hasPace}}", content, title)
+
+    def test_a_promotion_route_reads_as_unlimited(self):
+        """A route the provider publishes as unlimited for a limited time says so."""
+        for title in TIERS:
+            panel = section(self.page, title)
+            self.assertIn("Unlimited · promotion", panel["options"]["content"], title)
+            self.assertIn('ghostship_ai_entitlement_info{basis="promotion"', expressions(panel), title)
+
+    def test_the_display_name_falls_back_to_the_raw_model_id(self):
+        """The name a person would say when the collector publishes one, the id otherwise."""
+        for title in TIERS:
+            content = section(self.page, title)["options"]["content"]
+            self.assertIn("{{#if name}}{{name}}{{else}}{{model}}{{/if}}", content, title)
+
+    def test_the_routing_chip_reads_the_collector_s_gauge(self):
+        """The chip is the collector's routing state, not a fixed text."""
+        header = section(self.page, "")
+        joined = expressions(header)
+        self.assertIn("ghostship_ai_routing_enabled", joined)
+        content = header["options"]["content"]
+        self.assertIn("Routing ON", content)
+        self.assertIn("Routing OFF · awaiting your approval", content)
+        # The chip is one branch of one condition: the gauge decides it.
+        self.assertIn(
+            "{{#if (eq routing 1)}}Routing ON{{else}}Routing OFF · awaiting your approval{{/if}}",
+            content,
+        )
+
+    def test_no_hard_coded_routing_text_sits_outside_the_chip(self):
+        """Only the chip of the header says the routing is off."""
+        for panel, _ in panels(self.page):
+            if panel.get("id") == 200:
+                continue
+            self.assertNotIn("Routing OFF", json.dumps(panel), panel.get("title"))
+            self.assertNotIn("Routing ON", json.dumps(panel), panel.get("title"))
+
+    def test_the_evidence_rows_stay_below_the_page_and_collapsed(self):
+        """The detail is still there, and it is still out of the way."""
+        rows = [panel for panel, collapsed in panels(self.page) if panel.get("type") == "row"]
+        why = [row for row in rows if row.get("title", "").startswith("Why this order")]
+        self.assertGreaterEqual(len(why), 5)
+        for row in why:
+            self.assertTrue(row.get("collapsed"), row.get("title"))
+        header = section(self.page, "")
+        last_section = max(
+            panel["gridPos"]["y"]
+            for panel, collapsed in panels(self.page)
+            if not collapsed and panel.get("type") == "marcusolsson-dynamictext-panel"
+        )
+        for row in why:
+            self.assertGreater(row["gridPos"]["y"], last_section)
+
+
+class VictoriaMetricsFixture:
+    """A disposable VictoriaMetrics with the review fixture in it."""
+
+    def __init__(self):
+        self.binary = os.environ.get("GHOSTSHIP_TEST_VMETRICS") or shutil.which(
+            "victoria-metrics"
+        )
+        self.process = None
+        self.directory = None
+        self.url = None
+
+    def start(self):
+        if not self.binary:
+            return False
+        self.directory = tempfile.mkdtemp(prefix="ai-usage-page-")
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        self.url = f"http://127.0.0.1:{port}"
+        self.process = subprocess.Popen(
+            [
+                self.binary,
+                f"-storageDataPath={self.directory}/data",
+                f"-httpListenAddr=127.0.0.1:{port}",
+                "-retentionPeriod=1d",
+                "-search.latencyOffset=0s",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        for _ in range(60):
+            try:
+                with urllib.request.urlopen(self.url + "/health", timeout=1):
+                    return True
+            except Exception:
+                time.sleep(0.5)
+        return False
+
+    def stop(self):
+        if self.process:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+        if self.directory:
+            shutil.rmtree(self.directory, ignore_errors=True)
+
+    def import_fixture(self, path):
+        request = urllib.request.Request(
+            self.url + "/api/v1/import/prometheus",
+            data=path.read_bytes(),
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10):
+            pass
+
+    def wait_for(self, expression, timeout=30.0):
+        """Wait until the store answers with the imported series."""
+        deadline = time.time() + timeout
+        while True:
+            result = self.query(expression)
+            if result:
+                return result
+            if time.time() > deadline:
+                raise AssertionError(f"the store never answered {expression!r}")
+            time.sleep(0.5)
+
+    def query(self, expression):
+        url = self.url + "/api/v1/query?" + urllib.parse.urlencode({"query": expression})
+        with urllib.request.urlopen(url, timeout=10) as response:
+            payload = json.load(response)
+        return payload["data"]["result"]
+
+
+@unittest.skipUnless(
+    os.environ.get("GHOSTSHIP_TEST_VMETRICS") or shutil.which("victoria-metrics"),
+    "Set GHOSTSHIP_TEST_VMETRICS or put victoria-metrics on the path",
+)
+class WorkedCasesTests(unittest.TestCase):
+    """The worked cases, executed against the store the page reads."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.page = json.loads(DASHBOARD.read_text(encoding="utf-8"))
+        cls.store = VictoriaMetricsFixture()
+        if not cls.store.start():
+            raise unittest.SkipTest("VictoriaMetrics did not start")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.store.stop()
+
+    def setUp(self):
+        self.store.import_fixture(FIXTURE)
+        # The store answers a moment after the import.
+        self.store.wait_for("ghostship_ai_model_winner_position")
+
+    def rows(self, panel, target, key="model"):
+        """The rows of a target, keyed by the model or by the provider."""
+        expression = target["expr"].replace("$provider", ".*")
+        result = self.store.query(expression)
+        return {row["metric"].get(key): float(row["value"][1]) for row in result}
+
+    def test_the_share_left_and_the_pace_of_every_route(self):
+        """The bar of a route is the share left now, and the pace is the collector's."""
+        panel = section(self.page, "Bulk")
+        left = self.rows(panel, find_target(panel, "ghostship_ai_model_capacity_remaining"))
+        pace = self.rows(panel, find_target(panel, "ghostship_ai_model_paced_availability"))
+        self.assertAlmostEqual(left["claude-haiku-5-5"], 0.92)
+        self.assertAlmostEqual(pace["claude-haiku-5-5"], 0.58)
+        self.assertAlmostEqual(left["gemini-3.8-flash"], 0.46)
+        self.assertAlmostEqual(pace["gemini-3.8-flash"], 0.0)
+        self.assertAlmostEqual(left["grok-4.6"], 0.0)
+
+    def test_the_expected_left_of_the_worked_cases(self):
+        """(0.92, +0.58) leaves 34 % expected, (0.09, -0.60) leaves 69 %."""
+        for title, model, expected in (
+            ("Bulk", "claude-haiku-5-5", 0.34),
+            ("Bulk", "gemini-3.8-flash", 0.46),
+            ("Frontier", "gpt-6.1-sol", 0.69),
+        ):
+            panel = section(self.page, title)
+            target = find_target(panel, "clamp_max")
+            rows = self.rows(panel, target)
+            self.assertAlmostEqual(rows[model], expected, msg=f"{title} {model}")
+
+    def test_the_pace_of_the_worked_cases_in_points(self):
+        """58 points ahead, on pace, and 60 points behind."""
+        panel = section(self.page, "Bulk")
+        points = self.rows(panel, find_target(panel, "abs(round(100 *"))
+        self.assertEqual(points["claude-haiku-5-5"], 58)
+        self.assertEqual(points["gemini-3.8-flash"], 0)
+        self.assertEqual(points["grok-4.6"], 0)
+        frontier = section(self.page, "Frontier")
+        behind = self.rows(frontier, find_target(frontier, "abs(round(100 *"))
+        self.assertEqual(behind["gpt-6.1-sol"], 60)
+
+    def test_the_kind_of_the_pace(self):
+        """Three is ahead of the pace, two is on it, one is behind it."""
+        panel = section(self.page, "Bulk")
+        kind = self.rows(panel, find_target(panel, ">= bool 5"))
+        self.assertEqual(kind["claude-haiku-5-5"], 3)
+        self.assertEqual(kind["gemini-3.8-flash"], 2)
+        frontier = section(self.page, "Frontier")
+        behind = self.rows(frontier, find_target(frontier, ">= bool 5"))
+        self.assertEqual(behind["gpt-6.1-sol"], 1)
+
+    def test_a_spent_route_sinks_to_the_bottom_of_its_table(self):
+        """A spent route keeps its place in the table, under the routes that can run."""
+        panel = section(self.page, "Bulk")
+        order = self.rows(panel, find_target(panel, "1000 -"), "model")
+        self.assertGreater(order["claude-haiku-5-5"], order["gemini-3.8-flash"])
+        self.assertGreater(order["gemini-3.8-flash"], order["grok-4.6"])
+        self.assertLess(order["grok-4.6"], 0)
+
+    def test_a_route_with_unknown_limits_is_flagged_and_never_zero(self):
+        """A route with no measured allowance reads unknown, and its share is not a zero."""
+        panel = section(self.page, "Free")
+        left = self.rows(panel, find_target(panel, "ghostship_ai_model_capacity_remaining"))
+        has_cap = self.rows(panel, find_target(panel, "count by (provider, model)"))
+        self.assertEqual(has_cap["nemotron-3.5-super-vl"], 0)
+        self.assertNotEqual(left.get("nemotron-3.5-super-vl"), 0.0)
+
+    def test_a_promotion_route_is_marked_and_has_no_measured_allowance(self):
+        """The promotion route is unlimited: it has no allowance and no window."""
+        panel = section(self.page, "Bulk")
+        promotion = self.rows(panel, find_target(panel, 'basis="promotion"'))
+        self.assertEqual(promotion["minimax_minimax-m3.1-flash_free"], 1)
+        has_cap = self.rows(panel, find_target(panel, "count by (provider, model)"))
+        self.assertEqual(has_cap["minimax_minimax-m3.1-flash_free"], 0)
+
+    def test_a_route_reserved_for_3d_work_is_marked(self):
+        """The reserve of the 3D tier is visible in the tier that holds the route."""
+        panel = section(self.page, "Bulk")
+        target = find_target(panel, "ghostship_ai_model_reserved")
+        rows = self.store.query(target["expr"].replace("$provider", ".*"))
+        marks = {row["metric"]["model"]: row["metric"].get("reserveTag") for row in rows}
+        self.assertEqual(marks.get("gemini-3.8-flash"), "3d")
+
+    def test_a_route_in_the_free_quality_band_is_marked(self):
+        """The band of the free winners is the label the collector publishes."""
+        panel = section(self.page, "Free")
+        target = find_target(panel, "qualityBand")
+        rows = self.store.query(target["expr"].replace("$provider", ".*"))
+        bands = {row["metric"]["model"]: row["metric"].get("qualityBand") for row in rows}
+        self.assertEqual(bands.get("minimax_minimax-m3.1-flash"), "true")
+        self.assertEqual(bands.get("glm-5.3-flash"), "true")
+
+    def test_the_providers_are_sorted_by_paced_availability_with_the_spent_last(self):
+        """The lowest window decides, and a spent or unknown account comes last."""
+        panel = section(self.page, "Providers")
+        order = self.rows(panel, find_target(panel, "ghostship_ai_provider_paced_availability"), "provider")
+        self.assertGreater(order["claude"], order["antigravity"])
+        self.assertGreater(order["antigravity"], order["codex"])
+        self.assertLess(order["ollama"], order["codex"])
+        self.assertLess(order["cursor"], order["ollama"])
+
+    def test_the_routing_gauge_reads_one_when_the_collector_publishes_it(self):
+        """The chip reads Routing ON when the gauge is one."""
+        store = VictoriaMetricsFixture()
+        self.addCleanup(store.stop)
+        if not store.start():
+            self.skipTest("VictoriaMetrics did not start")
+        store.import_fixture(FIXTURE_ROUTING_ON)
+        store.wait_for("ghostship_ai_routing_enabled")
+        header = section(self.page, "")
+        target = find_target(header, "ghostship_ai_routing_enabled")
+        rows = store.query(target["expr"])
+        self.assertEqual([float(row["value"][1]) for row in rows], [1.0])
+
+    def test_the_routing_gauge_reads_zero_when_the_collector_publishes_it(self):
+        """The chip reads Routing OFF when the gauge is zero."""
+        header = section(self.page, "")
+        target = find_target(header, "ghostship_ai_routing_enabled")
+        rows = self.store.query(target["expr"])
+        self.assertEqual([float(row["value"][1]) for row in rows], [0.0])
+
+
+if __name__ == "__main__":
+    unittest.main()
