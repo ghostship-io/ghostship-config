@@ -1067,18 +1067,27 @@ class NativeStoreTests(unittest.TestCase):
         page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
         titles = {panel['title']: panel for panel in page['panels']}
         winners = titles['Winners by tier']
+        detail = titles['Winner detail  /  source, quality, expiry']
         units = {o['matcher']['options']: o['properties'][0]['value']
-                 for o in winners['fieldConfig']['overrides']
+                 for o in winners['fieldConfig']['overrides'] + detail['fieldConfig']['overrides']
                  if o['properties'][0]['id'] == 'unit'}
         self.assertEqual(units['Capacity'], 'percentunit')
         self.assertEqual(units['Expires in'], 'dtdurations')
-        # The value's source is part of the row so a prior estimate never reads as measured.
-        self.assertIn('group_left(source)', winners['targets'][0]['expr'])
-        renamed = winners['transformations'][1]['options']['renameByName']
+        # The core table carries only the decision fields; the evidence is a
+        # drilldown panel with the value's source, so a prior estimate never
+        # reads as measured.
+        core_fields = list(winners['transformations'][2]['options']['indexByName'])
+        self.assertEqual(core_fields, ['tier', 'provider', 'model', 'Value', 'Capacity'])
+        self.assertNotIn('Expires in', core_fields)
+        self.assertIn('group_left(source)', detail['targets'][0]['expr'])
+        renamed = detail['transformations'][1]['options']['renameByName']
         self.assertIn('Source', renamed.values())
+        # Core columns are narrow enough to read at phone width.
+        widths = {o['matcher']['options']: o['properties'][0]['value']
+                  for o in winners['fieldConfig']['overrides'] if o['properties'][0]['id'] == 'custom.width'}
+        self.assertLessEqual(sum(widths.values()), 460)
         # Rows are grouped by tier, never interleaved by position.
         self.assertEqual(winners['options']['sortBy'][0]['displayName'], 'tier')
-        self.assertIn('tier', winners['transformations'][2]['options']['indexByName'])
         self.assertEqual([v['name'] for v in page['templating']['list']], ['provider'])
         candidates = titles['Candidates considered']
         self.assertTrue(all('$provider' in t['expr'] for t in candidates['targets']))
