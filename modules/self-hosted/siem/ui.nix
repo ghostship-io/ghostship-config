@@ -188,6 +188,13 @@ in
         GF_SECURITY_COOKIE_SECURE = "true";
         GF_SECURITY_COOKIE_SAMESITE = "strict";
         GF_SECURITY_CONTENT_SECURITY_POLICY = "true";
+        # No default administrator: Grafana would otherwise create admin/admin
+        # on the first start, and the account outlives the login paths that are
+        # closed below, so it would wait on the internal network for a
+        # password path to be reopened. The auth proxy signs the users in and
+        # assigns them Viewer, and the dashboards are provisioned, so nothing
+        # needs an administrator.
+        GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION = "true";
         GF_AUTH_DISABLE_LOGIN_FORM = "true";
         GF_AUTH_BASIC_ENABLED = "false";
         GF_AUTH_ANONYMOUS_ENABLED = "false";

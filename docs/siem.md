@@ -57,6 +57,8 @@ change them in a PR. Grafana alerting is off: vmalert and the bridge alert.
 - Access: Cloudflare Access at `grafana.ghostship.io`. Grafana trusts the
   `Cf-Access-Authenticated-User-Email` header only from cloudflared's fixed
   address (10.89.22.10); users sign up as Viewer, with Explore allowed.
+  Grafana creates no administrator: the initial admin creation is off, so
+  there is no default account waiting for a password path to reopen.
 - Reads go through vmauth, which allows VictoriaLogs `/select/logsql/*` and
   VictoriaMetrics' query, series, label and metadata APIs only. Inserts,
   writes, imports, deletes and admin calls have no route. The credential is
@@ -81,10 +83,15 @@ change them in a PR. Grafana alerting is off: vmalert and the bridge alert.
 
 Secrets are removed from every string field, at any depth, before storage
 (`vector/redact.vrl`). That covers token, key, password, session and
-signature query parameters; bearer and basic credentials; Authorization,
-cookie and API-key headers; JWTs; URL credentials; `--password`-style
-arguments; MySQL/MariaDB `-p<password>`; and private-key blocks. New sources
-are covered automatically.
+signature query parameters; the same names in every shape a log carries them
+(`key=value`, `key="value"`, `key: value`, `"key":"value"`); bearer and basic
+credentials; Authorization, cookie and API-key headers; JWTs; URL
+credentials; `--password`-style arguments; MySQL/MariaDB `-p<password>`; and
+private-key blocks. A quoted value is redacted through its closing quote, so
+spaces and escaped quotes inside it are covered too, and a name behind a
+prefix (`db_password`) is redacted in the quoted shape as well. The name has to
+stand on its own, so `session_count` and `password_policy` keep their value.
+New sources are covered automatically.
 `tests/siem-vector.toml` fails if redaction or parsing regresses.
 
 ## Fields
