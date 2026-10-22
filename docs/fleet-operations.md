@@ -570,6 +570,21 @@ Known missing inputs, not faked: white-line pace and per-component benchmark
 metrics are not exported by the producer, so no panel queries them; a contract
 change on the producer side is needed before they can be shown.
 
+Pending producer contract for the per-quota widgets (schema owned by the ai-usage
+producer; not deployed yet, so no panel queries it): `expected_used_ratio =
+elapsed / duration`, and `pace_delta_ratio = expected_used − actual_used`, so a
+**positive** value is spare budget (under the line) and a negative value is over
+budget; the model-level `pace_delta_ratio` keeps the same sign. A seven-day window
+with five days left has 28.6 % expected use, so 20 % used reads as +8.6 pp spare,
+never as over budget. The widgets will show the used bar with a white expected
+line per quota and each reset separately; a per-row marker inside a table is not a
+native Grafana feature and will not be implied. Free-tier ranking follows the
+provider, not the price: zero-price promotional models (OpenCode Go) are bulk
+candidates, while dedicated free-provider integrations prefer their best eligible
+capability tier with fallback and cooldown/unknown capacity shown; a higher
+complexity tier needs explicit admission and is never inferred from a model suffix
+or a zero price.
+
 ### Host resources: CPU over all cores and the real memory split
 
 The host page is the primary resource view for the agents and the server:
