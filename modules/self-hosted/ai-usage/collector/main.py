@@ -674,6 +674,85 @@ def _published_unlimited_routes(
     return routes
 
 
+def _measured_window_keys(
+    measured_windows: Iterable[Mapping[str, Any]],
+) -> set[str]:
+    """The keys the provider-reported windows occupy.
+
+    A window the provider reports for the whole account is keyed by the
+    provider, and the one it reports for a single model by the route. An
+    inferred window is filed beside them, never over them.
+    """
+    keys: set[str] = set()
+    for measured in measured_windows or ():
+        provider = str(measured.get("provider") or "")
+        if not provider:
+            continue
+        model = str(measured.get("model") or "*")
+        keys.add(provider if model == "*" else f"{provider}/{model}")
+    return keys
+
+
+def inferred_windows(
+    context: Mapping[str, Any],
+    occupied: Iterable[str],
+    moment: float,
+) -> list[dict[str, Any]]:
+    """The windows the limit failures of the routes imply, in filing order.
+
+    The capacity of a route is its own learned window, not its provider's
+    silence. A route that was never refused files a "no limit seen" window
+    under the provider key; while a refused route of the same provider
+    exists, that quiet window is not the provider's capacity and it never
+    takes the provider key: the learned window of the refused route is.
+
+    A reported or a published window is never replaced. The keys those
+    windows already occupy are given, and an inferred window is skipped when
+    the account, the route, or the key itself holds one. The account's
+    capacity is the same for every one of its routes, so it is filed once.
+
+    Each entry carries the key it is filed under, the route it came from,
+    the model families it applies to, and the window itself. The ranking
+    reads the key and the window; the snapshot publishes the account record,
+    which keeps the route's model as the scope of a model-scoped limit.
+    """
+    capacities = context.get("inferred_capacity") or {}
+    taken = set(occupied)
+    refused = {
+        str(capacity.get("provider") or "")
+        for capacity in capacities.values()
+        if str(capacity.get("state") or "") != usage_inference.STATE_NO_FAILURE
+    }
+    filed: list[dict[str, Any]] = []
+    keys: set[str] = set()
+    for route, capacity in sorted(capacities.items()):
+        provider, model = str(route[0]), str(route[1])
+        state = str(capacity.get("state") or "")
+        if state == usage_inference.STATE_NO_FAILURE and provider in refused:
+            # A route that was never refused stands behind no budget at
+            # all, and it never stands in for a refused route of its
+            # provider.
+            continue
+        key = usage_inference.key_for(capacity)
+        if key in taken or provider in taken or f"{provider}/{model}" in taken:
+            continue
+        if key in keys:
+            continue
+        keys.add(key)
+        filed.append(
+            {
+                "key": key,
+                "provider": provider,
+                "model": model,
+                "applies_to": (
+                    (model,) if str(capacity.get("scope") or "") == "model" else ()
+                ),
+                "window": usage_inference.window_for(capacity, moment),
+            }
+        )
+    return filed
+
+
 def provider_limit_samples(
     inputs: Mapping[str, Any],
 ) -> list[Sample]:
@@ -933,22 +1012,10 @@ def ranking_inputs(
     # overrides a reported reading, and a route whose account already has a
     # window keeps that one as well. The window is keyed by the route when
     # the limit is the model's own, and by the provider when the limit
-    # belongs to the account.
-    inferred_keys: set[str] = set()
-    for route, capacity in sorted((context.get("inferred_capacity") or {}).items()):
-        provider, model = str(route[0]), str(route[1])
-        key = usage_inference.key_for(capacity)
-        if key in windows or provider in windows or f"{provider}/{model}" in windows:
-            # A reported window of the route, of the account, or of the
-            # route itself is the reading: the inference does not replace
-            # it.
-            continue
-        if key in inferred_keys:
-            # The account's capacity is the same for every route of the
-            # account, so it is filed once.
-            continue
-        inferred_keys.add(key)
-        windows.setdefault(key, []).append(usage_inference.window_for(capacity, moment))
+    # belongs to the account. A route that was never refused never stands in
+    # for a refused route of its provider.
+    for inferred in inferred_windows(context, windows, moment):
+        windows.setdefault(inferred["key"], []).append(inferred["window"])
     # The free pool's own evidence: the admissions of a route, its limits
     # and its cooldown. The admission is what lets a pool route hold the
     # free tier and take a workload.
@@ -1417,6 +1484,13 @@ def build_snapshot(
         promo_models=promo_models or set(),
         pool_evidence=context.get("pool_evidence") or {},
         inventory=context.get("ranking_inventory") or [],
+        # The learned windows of the routes whose limit failures measured
+        # them. The account section publishes them beside the reported
+        # readings, never over one, and a refused route keeps its record
+        # even while it has no ranked row.
+        inferred_windows=inferred_windows(
+            context, _measured_window_keys(measured_windows or []), now
+        ),
         routing_enabled=bool(routing_enabled),
     )
     if isinstance(snapshot, dict):
