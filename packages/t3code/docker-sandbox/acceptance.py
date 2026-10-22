@@ -422,7 +422,7 @@ def main():
                 )
                 # Host network / privileged intentionally exercise the slirp bypass
                 # boundary. In rootless mode these remain within the outer netns.
-                for endpoint in args.denied_endpoint:
+                for control_number, endpoint in enumerate(args.denied_endpoint, 1):
                     address, port = endpoint.rsplit(":", 1)
                     probe_code = (
                         "import errno,json,socket,sys\n"
@@ -448,7 +448,7 @@ def main():
                         check=False,
                     )
                     record(
-                        f"host-network private/local canary denied {endpoint}",
+                        f"host-network private/local canary denied (control {control_number})",
                         blocked.returncode == 0
                         and json.loads(blocked.stdout or "{}").get("endpoint")
                         == endpoint

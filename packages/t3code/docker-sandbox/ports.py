@@ -115,7 +115,13 @@ async def gateway():
     if listener.family != socket.AF_UNIX:
         raise RuntimeError("gateway listener must be a Unix socket")
     server = await asyncio.start_unix_server(
-        lambda r, w: start_forward(r, w, gateway_connect), sock=listener
+        lambda r, w: start_forward(r, w, gateway_connect),
+        sock=listener,
+        # systemd owns the listener and its socket path, and the dynamic user
+        # cannot stat that path. asyncio would stat it to remember the inode
+        # for unlinking, which fails with PermissionError, and it must not
+        # unlink a socket it never created.
+        cleanup_socket=False,
     )
     async with server:
         await server.serve_forever()

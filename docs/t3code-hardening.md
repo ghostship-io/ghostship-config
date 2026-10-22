@@ -57,6 +57,20 @@ holds only the basic targets and its own session bus, so it cannot start
 ordinary host user services. `dockerd-rootless` runs inside it with slirp4netns
 networking and the builtin port driver, and the engine requires cgroup v2.
 
+With hardening enabled, the outer T3 container and the engine share the
+engine account's `user-<UID>.slice`: a 48G hard memory cap, 40G reclaim
+threshold and 12544-task cap. The outer container has an 8192-task limit;
+the engine keeps its 4096-task limit, leaving 256 tasks for supervisors.
+The two children's memory maxima are not simultaneously guaranteed budgets.
+The Podman service and the container's actual scope both join this slice;
+the container scope remains a sibling of the engine's delegated manager.
+The engine cannot write the sibling or parent cgroup controls. Admission
+requires exactly one canonical inline parent flag and PID limit. It rejects
+split-argument repeats and cgroup mode, namespace or raw-setting overrides,
+so extra flags cannot silently replace containment. Existing containers
+are not moved or recreated by staging these settings; live placement remains
+an acceptance gate under the active-session preservation rule.
+
 Engine configuration is fixed in `modules/self-hosted/t3code-docker.nix`: data
 root under `/var/lib/t3code-docker`, fuse-overlayfs storage, the systemd cgroup
 driver, `live-restore` off, local log rotation, and the address pool
@@ -77,11 +91,17 @@ configured public interface, and masquerades the namespace address on that
 interface. IPv6 is disabled inside the namespace. Denied host, production and
 LAN access are acceptance observations, not claims of this document.
 
-Two sockets reach T3. The engine's API is relayed by `systemd-socket-proxyd`
+Two sockets reach T3. The engine's API is relayed by `api-relay.py`
 from `/run/t3code-docker/docker.sock`, group `apps` only, into the T3 container
-as `/var/run/docker.sock`. The relay runs without new privileges, with a strict
+as `/var/run/docker.sock`. For every upstream connection the root relay checks
+`SO_PEERCRED` before forwarding application bytes: only the dedicated engine
+UID is accepted, and UID 0 is refused. An engine-owned path or symlink is not
+authorization to reach a host-root socket. The relay and port gateway inherit
+systemd-owned listeners with asyncio socket cleanup disabled, preserving their
+paths on exit. The relay runs without new privileges, with a strict
 system view, with `/home`, `/root` and `/srv` inaccessible, and with only Unix
-sockets permitted. Published ports reach T3 through a second private Unix
+sockets permitted. Its own ceilings are 128M memory, 64 tasks and 4096 file
+descriptors. Published ports reach T3 through a second private Unix
 socket, `/run/t3code-docker/ports.sock`, whose gateway runs inside the engine
 namespace. The bridge inside T3 discovers published ports through the API and
 binds them on T3's own loopback, so no new host listener appears.
@@ -212,13 +232,26 @@ A separately labelled named-volume canary also survived the candidate engine’s
 complete stop/start cycle with the same daemon ID. Both lifecycle guards
 preserved the active T3 identities; the test volume and control record were removed.
 
-The full Docker run passed image build/public DNS, container-root bind writes,
+The full Docker run against the immutable candidate from revision `868f49f1`
+passed all 14 checks: image build/public DNS, container-root bind writes,
 nonroot UID 1000/3000 bind writes with explicit ACLs and T3 edit/delete,
 per-container memory/PID limits, outbound HTTPS, TTY allocation, both live
 host/private-network canaries, Compose service DNS and network separation, and
-named-volume persistence across container recreation. Published-port forwarding
-failed at the systemd-owned Unix gateway socket; that remains an acceptance gate.
-The hardening options stay disabled pending the remaining checks.
+named-volume persistence across container recreation, and Compose's randomly
+published TCP port through the T3 localhost bridge. The inherited Unix socket
+cleanup repair resolved the previous published-port failure. The peer-authorized
+API relay was included in this run. The driver stopped every owned candidate
+unit and the dedicated user manager; the disposable probe was absent afterward.
+The active T3 container ID, start time, host/container/inner-server PIDs,
+production image and current system generation all matched the pre-copy baseline.
+Raw evidence remains in the protected host run directory; public reports contain
+categories and counts only.
+
+This engine-only artifact does not include the production aggregate parent slice.
+Its placement/stress proof remains a production gate, along with the authenticated
+workflows below. A later admission repair rejects split-argument overrides;
+that source check does not establish live cgroup placement. The hardening
+options stay disabled pending those checks.
 
 ## Candidate acceptance
 

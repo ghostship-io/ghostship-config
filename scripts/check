@@ -31,6 +31,7 @@ python3 -m unittest discover -s tests -p test_inference_scheduler_stop.py
 nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
 nix eval --impure --json --file tests/t3code-hardening.nix >/dev/null
 nix eval --impure --json --file tests/t3code-docker.nix >/dev/null
+nix eval --impure --json --file tests/security-package-fixes.nix >/dev/null
 python3 -m unittest discover -s tests -p 'test_t3code_docker_*.py'
 apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
   modules/self-hosted/apparmor/t3code.profile
