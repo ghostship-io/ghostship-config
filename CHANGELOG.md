@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.61] - 2026-10-22
+
+- Grafana dashboards lead with graphics: Providers (four tier columns of % left, T3-style provider cards, collapsed Why this order), Overview, Host, Security and Pipeline. Shared navigation is Overview, Work, Providers, Host, Security, Pipeline. Allowance bars show remaining ("% left") coloured critical below 10%, warning below 30%, otherwise good. The ordering measure is labelled **Paced Availability**. Freshness keeps series whose timestamp is within 90s of the newest collection, so entitlement and fact cards stay filled when sample timestamps are a few seconds apart. Frontier bars are labelled Chief (Claude Opus 5.5) and Backup (Codex GPT-6.1-Sol); order inside the tier stays Paced Availability. Every ranked route of a tier is listed with the % left of its lowest applicable window: the available routes by Paced Availability, the exhausted and unavailable ones below them, greyed, with the reason they are spent. An unknown allowance is grey and reads Limits unknown, never a red bar that looks like 0%. The model names are the names a person would say, not the provider's own id.
+
 ## [3.17.60] - 2026-10-22
 
 - The SSH command guard's refusals reach the journal. The guard passed the message to `systemd-cat` as an argument, and `systemd-cat` runs its arguments as a command, so every refusal failed to journal and the caller also saw a "Failed to execute" line after the refusal. The message now goes on stdin and the journal tool's own output is dropped.
