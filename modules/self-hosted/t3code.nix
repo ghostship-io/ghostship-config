@@ -2653,6 +2653,8 @@ let
       --podman-bin "${pkgs.podman}/bin/podman" \
       --systemctl-bin "${pkgs.systemd}/bin/systemctl" \
       --audit-log "${t3codeHome}/.t3code-container/logs/restart-audit.log" \
+      --restart-ledger "/var/lib/t3code-restarts/ledger.jsonl" \
+      --journal-bin "${pkgs.systemd}/bin/systemd-cat" \
       "$@"
   '';
 
@@ -2755,6 +2757,7 @@ in
 
   systemd.tmpfiles.rules = [
     "d /srv/apps/t3code 0755 root root -"
+    "d /var/lib/t3code-restarts 0700 root root -"
     "d ${t3codeDeploymentState} 0755 root root -"
     "d ${t3codeDocker} 0755 root root -"
     "d ${t3codeTmp} 1777 root root -"

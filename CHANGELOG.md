@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.55] - 2026-10-22
+
+- T3 restart guard: T3 Code is never restarted unless it is idle, except when the owner has asked for work to be activated or deployed. A forced restart bypasses the idle gate and interrupts the work in flight, so `t3code-safe-restart --force` now requires `--owner-request "<short quote or reference of the owner's instruction>"` and refuses without one. Every forced restart is recorded in `/var/lib/t3code-restarts/ledger.jsonl` with the time, the actor, the reference, and the container identity before and after the restart, and in the journal under the `t3code-restart` tag. The queued restart still waits for the activity probe to confirm idle and defers while T3 Code is busy, and the evaluation check asserts that a switch has no unit to restart, so `podman-t3code` keeps `restartIfChanged = false`.
+
 ## [3.17.54] - 2026-10-22
 
 - Agent pin guard: a pull request that moves the `ghostship-private-agent` pin to a revision that does not descend from the pinned one silently dropped everything on the pinned line. `scripts/check-agent-pin.py` now compares the pull request's pinned revision with the base branch's and fails unless the new revision descends from the old one, which git answers in the fetched agent source, or the pull request body or one of its commits carries an explicit `pin-regression-approved: <reason>` line. The check runs in the Fleet checks job, where the read-only agent key is available, and skips outside a pull request. The shared private-source access moves to `scripts/private_source.py`, which the CI import now uses as well.
