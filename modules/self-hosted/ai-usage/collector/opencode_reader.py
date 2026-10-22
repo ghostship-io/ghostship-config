@@ -425,9 +425,14 @@ def open_database(path: str | os.PathLike[str]) -> sqlite3.Connection:
     location = Path(path)
     uri = "file:" + urllib.parse.quote(str(location), safe="/") + "?mode=ro"
     connection = sqlite3.connect(uri, uri=True, timeout=BUSY_TIMEOUT_S)
-    # The query guard makes the connection refuse a write even if the file
-    # permissions say otherwise.
-    connection.execute("PRAGMA query_only = 1")
+    try:
+        # The query guard makes the connection refuse a write even if the
+        # file permissions say otherwise.
+        connection.execute("PRAGMA query_only = 1")
+    except BaseException:
+        # A connection that never reaches the caller must not be left open.
+        connection.close()
+        raise
     return connection
 
 
