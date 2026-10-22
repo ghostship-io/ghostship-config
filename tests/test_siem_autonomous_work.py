@@ -839,7 +839,11 @@ class DashboardContractTests(unittest.TestCase):
                 expr = target['expr']
                 # Grafana has no __from/__to/__range macro the logs datasource
                 # would expand here; the collector computes the UTC day instead.
-                for macro in ('${__from', '${__to', '$__range', '$__from', '$__to'):
+                # $__range is expanded by the VictoriaLogs datasource itself
+                # (its applyTemplateVariables passes __range to the template
+                # service), so a selected-range LogsQL filter may use it; the
+                # unsupported date/format macros stay banned.
+                for macro in ('${__from', '${__to', '$__from', '$__to'):
                     self.assertNotIn(macro, expr)
                 if target['datasource']['uid'] != 'victoriametrics':
                     continue
