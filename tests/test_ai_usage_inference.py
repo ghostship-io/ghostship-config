@@ -249,6 +249,7 @@ class Tiling(unittest.TestCase):
         self.assertAlmostEqual(result.reset_at, at(0, 23, 30))
         self.assertEqual(result.state, "in_window")
 
+
 class ScopeModel(unittest.TestCase):
     """Case 9: another model of the same provider succeeded in the span."""
 
@@ -299,8 +300,6 @@ class ScopeAccount(unittest.TestCase):
         self.assertEqual(result.scope, "unknown")
 
 
-if __name__ == "__main__":
-    unittest.main()
 class FittedWeights(unittest.TestCase):
     """Case 11: an account budget shared between two models."""
 
@@ -415,6 +414,74 @@ class SingleModelAccount(unittest.TestCase):
         self.assertAlmostEqual(result.weights["sonnet"], 0.0004)
         self.assertEqual(result.budget, 1.0)
         self.assertAlmostEqual(result.left, 0.8)
+
+
+class OtherOutcomes(unittest.TestCase):
+    """Case 14: an outcome that is not a limit starts and ends nothing."""
+
+    def test_other_events_never_make_an_episode(self):
+        events = [
+            event("acme", "sonnet", at(0, 8), usage=1000.0),
+            event("acme", "sonnet", at(0, 9), outcome="other"),
+            event("acme", "sonnet", at(0, 9, 30), outcome="other"),
+            event("acme", "sonnet", at(0, 10), usage=1000.0),
+        ]
+        result = route(events, at(0, 11))
+        self.assertEqual(result.state, "no_failure")
+        self.assertEqual(result.left, 1.0)
+        self.assertEqual(result.episodes, 0)
+        self.assertIsNone(result.paced_availability)
+
+
+class Interface(unittest.TestCase):
+    """The shape of the result is fixed for the readers that come later."""
+
+    def test_the_result_carries_every_field(self):
+        events = [
+            event("acme", "sonnet", at(0, 8), usage=1000.0),
+            event("acme", "sonnet", at(0, 9), outcome="limit"),
+            event("acme", "sonnet", at(0, 10), usage=0.0),
+        ]
+        result = route(events, at(0, 11))
+        for field in (
+            "basis",
+            "state",
+            "left",
+            "expected_left",
+            "paced_availability",
+            "window",
+            "window_seconds",
+            "start_at",
+            "reset_at",
+            "budget",
+            "unit",
+            "scope",
+            "weights",
+            "weights_basis",
+            "episodes",
+            "share",
+        ):
+            self.assertIn(field, result.as_dict(), field)
+            self.assertEqual(result[field], result.as_dict()[field])
+
+    def test_the_states_are_the_three_of_the_rule(self):
+        events = [event("acme", "sonnet", at(0, 8), usage=1000.0)]
+        self.assertEqual(route(events, at(0, 9)).state, "no_failure")
+        events.append(event("acme", "sonnet", at(0, 9), outcome="limit"))
+        self.assertEqual(route(events, at(0, 9, 30)).state, "exhausted")
+        events.append(event("acme", "sonnet", at(0, 10), usage=0.0))
+        self.assertEqual(route(events, at(0, 10, 30)).state, "in_window")
+
+    def test_an_empty_record_has_no_route(self):
+        self.assertEqual(inference.infer_capacity([], at(0, 9)), {})
+
+    def test_events_after_now_are_not_part_of_the_record(self):
+        events = [
+            event("acme", "sonnet", at(0, 8), usage=1000.0),
+            event("acme", "sonnet", at(0, 20), outcome="limit"),
+        ]
+        result = route(events, at(0, 9))
+        self.assertEqual(result.state, "no_failure")
 
 
 if __name__ == "__main__":
