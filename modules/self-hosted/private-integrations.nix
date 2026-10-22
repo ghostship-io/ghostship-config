@@ -434,9 +434,12 @@ in {
       pull = "never";
       user = "62020:62020";
       environment.GHOSTSHIP_MCP_IMAGE_VERSION = "ghostship-private-integrations:${privateAddons.image.imageTag}";
-      # health op query type documents: only these Drive folders (and their subfolders) are read, so other
-      # people's records in the shared Healthcare folder stay out. The owner's own Drive folders and "HealthConnect".
-      environment.GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS = "1zZTtDHRv09HayWZ0IzNWIOZDxM9rnpB-,1VLTMH9t2oD_texoqmZZCMYf2sCpagBKp";
+      # The MCP runtime's account settings come from a root-owned file outside the
+      # repository: GHOSTSHIP_GOOGLE_OWNER_ACCOUNT, GHOSTSHIP_GOOGLE_AGENT_ACCOUNT
+      # and GHOSTSHIP_HEALTH_DOCUMENT_FOLDERS (the only Drive folders, and their
+      # subfolders, the health op reads, so other people's records in a shared
+      # folder stay out). A missing setting fails closed in the tool that needs it.
+      environmentFiles = [ "/etc/ghostship/mcp-identity.env" ];
       volumes = [
         "/run/ghostship-integrations:/run/ghostship-integrations:ro"
         "/run/ghostship-keep:/run/ghostship-keep:ro"

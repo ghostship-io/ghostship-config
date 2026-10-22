@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.99] - 2026-10-22
+
+- ghostship-agent is pinned to 5fb39a15, the rewritten main with the Google account settings read at runtime (#101, #125, #130). The previous pin, 7f8d9fda, is the rewritten 2318134e, whose Google tooling held the addresses that the privacy rewrite replaced.
+- The MCP container reads its account settings (the owner's and the agent's Google accounts, and the health document folders) from `/etc/ghostship/mcp-identity.env`, outside the repository.
+
 ## [3.17.98] - 2026-10-22
 
 - The Providers page draws one card per provider with every capacity window. The collector publishes the windows of every account as gauges, read straight from the routing snapshot: the share that is left, the even-spend line, the reset, and the place the row takes in the card. The page never recomputes a window. One window is read more than once (the OpenCode Go status and the Go usage endpoint name the same windows), and the window is published once: the reading that carries the length of the window is the one that is published. An account that publishes no window of its own says that it is learning.
