@@ -133,12 +133,22 @@ including the shape `options=[{id, label, ...}]`. A descriptor without a
 current value is a real option, not a discard; the run setting is simply not
 reported.
 
-An alignment to the measured AA condition is a recommendation, not a claim
-that the model already runs that way: `alignment` names the option id and the
-value the option lists, and `alignment_meta` carries `recommended`, `applied`
-and the actual current value. A model whose condition is not the measured one
-is selectable only when such an option exists; an unknown condition with no
-alignment is never selectable.
+Runtime reasoning is independent of the AA benchmark condition. The model
+ranking uses the measured AA intelligence and cost per task; the runtime
+policy is owner-defined: **medium by default, high for escalations**. The
+alignment is a runtime recommendation: `alignment` names the option id and
+`medium`, `alignment_meta.escalation` names `high`, and `alignment_meta`
+carries `recommended`, `applied` and the actual current value. The AA
+condition (for example Max) stays visible and is never presented as the
+condition we run.
+
+A model is selectable with a verified identity, its admission, and a published
+option that supports the default. A model that lists levels without
+`medium` (DeepSeek V4.1 Flash 1017 advertises `low/high/max`) is an explicit
+`capability_mismatch`: no level is substituted, the supported list and the
+option are published, and it is not selected until the owner resolves a
+supported default. A model with no reasoning-level option is not subject to
+the policy.
 
 The snapshot reconciles its inventory with its candidates in
 `coverage.ranking` (`inventory`, `candidates`, `excluded`, `excluded_models`),
