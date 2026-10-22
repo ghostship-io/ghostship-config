@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.58] - 2026-10-22
+
+- Main's Fleet checks are green again. The regression tests run inside the Nix check derivation, whose sandbox holds the store and little else, and two assumptions broke there. The activation helper starts with `#!/usr/bin/env bash`, and the sandbox has no `/usr/bin/env`, so the kernel could not resolve the shebang and the test reported the helper as missing although it was in the tree. The test now runs the helper with the interpreter its shebang names. The agent SSH command guard started every session in the login shell of the account the session ran as, and that account names a shell the sandbox does not have, so every session the guard started failed. The guard now falls back to a shell that exists when the account's shell is missing, and it accepts the shell the host pins.
+- Private-source environments: neither `private-source-ci` nor `private-source-main` asks for a reviewer. The owner removed that gate on 2026-10-22, because it should only hold back other people, and the environment-scoped read-only agent key is released without an approval. Only the `main` branch may deploy to `private-source-main`, and a pull request from a fork gets no environment secrets at all, because GitHub withholds them from a fork. The fleet operations document records that state, and the unused `GHOSTSHIP_PRIVATE_SOURCES` environment secret is gone.
+
 ## [3.17.57] - 2026-10-22
 
 - Test fixtures hold no personal identifier. The command guard's test used the owner's key line, with the owner's handle and home host, in a public repository; it now uses a role placeholder with synthetic key material, and the agent pin fixture uses a synthetic organisation. The command guard's regression tests also prove that the `nix-daemon --stdio` command of the `ssh-ng` transport and an interactive session, which sends no command at all, both pass the guard.
