@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.47] - 2026-10-22
+
+- AI usage collection: expose one canonical display reading per verified quota entitlement, so a top card cannot double-count the same allowance. The new `ghostship_ai_entitlement_{info,used_ratio,reset_timestamp_seconds,expected_used_ratio,pace_delta_ratio,observed_timestamp_seconds}` family carries `provider/account/model/window/quota/source/entitlement`; the reading is the current usable one with the least remaining, and its reset, expected line, pace, observation and source all come from that same reading rather than independent extrema. The info series is emitted even when no numeric reading is usable, with `source=""`, so an unknown entitlement stays visible and is never shown as zero or one. The raw per-reading series and `quota.entitlements[].readings[]` are retained, the fixed Go alias proof is the only merge, and unpaired entitlements, different accounts and unrelated windows keep their own identity. No dashboard file, service, scorer or client is added.
+
 ## [3.17.46] - 2026-10-22
 
 - AI usage collection: every applicable parent limit gates a model together with its own model window. A model-scoped quota reading no longer replaces the shared account cap; the shared windows that name the model (or name no model) and the model windows are combined, and an unrelated family window is still excluded by its scope. An exhausted weekly parent with a model window at 5% now leaves the model at zero and unavailable, and `capacity.scope` publishes `parent_windows` and `model_windows` beside the exemption flag (still false unless the provider reports an independent entitlement). A model-scoped candidate no longer raises an unbound name when it is ranked first or alone; a single-model first-loop regression covers it. Free and promotional routes stay bound to the paid account allowance unless a scope is reported.

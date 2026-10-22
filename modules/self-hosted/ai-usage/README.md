@@ -198,6 +198,29 @@ was observed operational (`observed_free_route`), and `exemption` (false
 unless a reported scope separates it). A spent account window therefore
 reaches the free route and shows zero, and the route is not a winner.
 
+### Canonical entitlement display
+
+The top cards read one canonical series family, one record per verified
+entitlement:
+
+| Series | Value |
+| --- | --- |
+| `ghostship_ai_entitlement_info{provider,account,model,window,quota,source,entitlement}` | 1, emitted even when no numeric reading is usable |
+| `ghostship_ai_entitlement_used_ratio{...}` | the chosen reading's used share |
+| `ghostship_ai_entitlement_reset_timestamp_seconds{...}` | that same reading's reset |
+| `ghostship_ai_entitlement_expected_used_ratio{...}` | that same reading's even-spend line |
+| `ghostship_ai_entitlement_pace_delta_ratio{...}` | that same reading's expected minus used |
+| `ghostship_ai_entitlement_observed_timestamp_seconds{...}` | that same reading's observation |
+
+The chosen reading is the current usable one (fresh, not reset, used known)
+with the least remaining, ties broken by the freshest observation and then
+the source; every numeric value comes from that one reading, never from
+independent extrema. `quota` is the canonical window and `source` is the
+reading that won. An entitlement with no usable reading emits only the info
+series with `source=""`; unknown is never zero or one. The raw per-reading
+series stay for the evidence table, and `quota.entitlements[].readings[]`
+keeps every raw reading beside `display`.
+
 ### Quota entitlements
 
 Two sources can report the same allowance. The OpenCode Go status surface

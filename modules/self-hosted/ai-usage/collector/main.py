@@ -106,6 +106,25 @@ METRIC_HELP = {
         "One for every reading of a quota entitlement; a verified alias of "
         "the same window shares the entitlement id and keeps its own source."
     ),
+    "ghostship_ai_entitlement_info": (
+        "One for one canonical display reading per entitlement, even when no "
+        "numeric reading is usable."
+    ),
+    "ghostship_ai_entitlement_used_ratio": (
+        "The used share of the canonical reading of an entitlement."
+    ),
+    "ghostship_ai_entitlement_reset_timestamp_seconds": (
+        "When the canonical reading of an entitlement resets."
+    ),
+    "ghostship_ai_entitlement_expected_used_ratio": (
+        "The even-spend line of the canonical reading of an entitlement."
+    ),
+    "ghostship_ai_entitlement_pace_delta_ratio": (
+        "The canonical reading's expected minus measured share."
+    ),
+    "ghostship_ai_entitlement_observed_timestamp_seconds": (
+        "When the canonical reading of an entitlement was observed."
+    ),
     "ghostship_ai_account_amount": "Reported balance, usage, cap, or request count.",
     "ghostship_ai_account_flag": "One for a reported account flag.",
     "ghostship_ai_account_observed_timestamp_seconds": "When an account reading was observed.",
@@ -892,6 +911,8 @@ def render(
     for name, labels, value in quota_module.quota_pace_samples(measured, now):
         writer.add(name, labels, value)
     for name, labels, value in quota_module.entitlement_samples(measured, now):
+        writer.add(name, labels, value)
+    for name, labels, value in quota_module.entitlement_display_samples(measured, now):
         writer.add(name, labels, value)
     writer.add("ghostship_ai_collection_timestamp_seconds", {}, now)
     writer.add("ghostship_ai_collection_duration_seconds", {}, duration)
