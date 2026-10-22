@@ -1,31 +1,24 @@
-"""The Artificial Analysis quality feed, as a cached source.
+"""The Artificial Analysis quality feed, pulled from the public pages.
 
-Artificial Analysis publishes a free API with the headline intelligence,
-coding, agentic, and engineering indices of a model, its release date, its
-token prices, its cost per task, and its median performance:
-
-    GET https://artificialanalysis.ai/api/v2/language/models/free
-    ?page=1&page_size=100
-
-The response is paginated (`has_more`, `total_pages`). A key is required and
-the free tier allows a hundred requests in twenty four hours, so the feed is
-read once a day by the daily procedure and cached. The collector only ever
-reads that cache: it never calls the feed, so the request budget belongs to
-one place.
+Artificial Analysis publishes its models, their intelligence index, their
+cost per task and their token prices on public pages. The collector reads
+those pages with ordinary GETs: no key, no account, no paywall. The pages
+are read once a day and the result is cached, so the collector's own
+collection never depends on the network.
 
 The client is deliberately careful about what it claims:
 
-* The prices in the feed are the prices of the feed, for the models the feed
-  lists. A benchmark cost per task is not a token price and is never used as
-  one.
+* The prices in the feed are the prices of the feed, for the models the
+  feed lists. A benchmark cost per task is not a token price and is never
+  used as one.
 * The intelligence index has a version. A record of a different version is
   not mixed with the current one.
 * A model the feed does not list is unknown, not bad. No score is invented.
-* Without a cache the feed is simply absent, and the coverage is reported as
-  a gap.
-
-The credential and the fetch belong to the service library, which owns the
-clients of the APIs the fleet uses. This module is the consumer side.
+* Without a cache the feed is simply absent, and the coverage is reported
+  as a gap.
+* A page that is blocked or that answers with a challenge is recorded as
+  blocked. The last good snapshot is kept, and nothing is retried to get
+  around it.
 """
 
 from __future__ import annotations
@@ -42,8 +35,8 @@ import codes
 # of a different version is not merged with it.
 INTELLIGENCE_INDEX_VERSION = "4.3"
 
-# A cache older than this is stale. The daily procedure reads the feed once
-# a day, so a day and a half is a generous bound.
+# A cache older than this is stale. The pull runs once a day, so a day and
+# a half is a generous bound.
 MAX_CACHE_AGE_SECONDS = 36 * 3600.0
 
 # A reading from the future is not a fresh reading.
@@ -56,6 +49,54 @@ INDEX_FIELDS = (
     "agentic_index",
     "engineering_index",
 )
+
+# The public pages the pull reads. The first carries the scored leaderboard
+# and the published cost per task; the second the release dates, the
+# creators and the variants; the third the AA-3D board.
+SOURCES = (
+    (
+        "leaderboard",
+        "https://artificialanalysis.ai/leaderboards/models",
+        "models_leaderboards.html",
+    ),
+    (
+        "models",
+        "https://artificialanalysis.ai/models",
+        "models.html",
+    ),
+    (
+        "aa3d",
+        "https://artificialanalysis.ai/evaluations/aa-3d",
+        "aa3d.html",
+    ),
+)
+
+# The marker of a bot-protection or challenge page. A page that carries one
+# is not read: it is recorded as blocked, and the last good snapshot is
+# kept. Nothing is retried to get around it.
+CHALLENGE_MARKERS = (
+    "captcha",
+    "cf-browser-verification",
+    "cf_chl_opt",
+    "just a moment",
+    "checking your browser",
+    "px-captcha",
+    "challenge-platform",
+)
+
+# The user agent of an ordinary browser read. The pages are public and the
+# read is a GET; nothing is posted and nothing is authenticated.
+USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/126.0 Safari/537.36"
+)
+
+# The largest page the reader accepts. A larger answer is refused rather
+# than buffered.
+MAX_BYTES = 24 * 1024 * 1024
+
+# The timeout of one read.
+TIMEOUT_SECONDS = 60.0
 
 
 # A cache is an untrusted file: only the known states and reasons of it are
@@ -172,6 +213,19 @@ def load_cache(path: str | os.PathLike[str], now: float | None = None) -> dict[s
         "fetched_at_epoch": fetched,
         "age_seconds": int(age),
         "records": [record for record in records if isinstance(record, Mapping)],
+        # The models the last pull found that the one before it did not
+        # carry, and the models whose measurement changed. They are the
+        # re-ranking trigger, and they are published with the snapshot.
+        "new_models": [
+            entry
+            for entry in (document.get("new_models") or [])
+            if isinstance(entry, Mapping)
+        ],
+        "changed_models": [
+            entry
+            for entry in (document.get("changed_models") or [])
+            if isinstance(entry, Mapping)
+        ],
     }
 
 
@@ -220,11 +274,6 @@ def _median_performance(record: Mapping[str, Any]) -> float | None:
     return _finite(value)
 
 
-# The statuses a normalization can end with. A rejected snapshot keeps one of
-# these, and never a raw field of the file.
-NORMALIZE_FREE_TIER = "free"
-
-
 def _read_time(value: Any) -> tuple[str | None, float | None]:
     """The read time of a snapshot, as text and as epoch seconds."""
     text = _safe_text(value)
@@ -241,6 +290,11 @@ def _read_time(value: Any) -> tuple[str | None, float | None]:
     return text, moment.timestamp()
 
 
+# The statuses a normalization can end with. A rejected snapshot keeps one of
+# these, and never a raw field of the file.
+NORMALIZE_FREE_TIER = "free"
+
+
 def _record(entry: Mapping[str, Any]) -> dict[str, Any] | None:
     """One official record, in the cache contract.
 
@@ -250,10 +304,16 @@ def _record(entry: Mapping[str, Any]) -> dict[str, Any] | None:
     name = entry.get("name")
     if not isinstance(name, str) or not name:
         return None
-    evaluations = entry.get("evaluations") if isinstance(entry.get("evaluations"), Mapping) else {}
+    evaluations = (
+        entry.get("evaluations") if isinstance(entry.get("evaluations"), Mapping) else {}
+    )
     pricing = entry.get("pricing") if isinstance(entry.get("pricing"), Mapping) else {}
-    performance = entry.get("performance") if isinstance(entry.get("performance"), Mapping) else {}
-    creator = entry.get("model_creator") if isinstance(entry.get("model_creator"), Mapping) else {}
+    performance = (
+        entry.get("performance") if isinstance(entry.get("performance"), Mapping) else {}
+    )
+    creator = (
+        entry.get("model_creator") if isinstance(entry.get("model_creator"), Mapping) else {}
+    )
     cost = entry.get("artificial_analysis_intelligence_index_cost")
     cost_per_task = None
     if isinstance(cost, Mapping):
@@ -267,7 +327,9 @@ def _record(entry: Mapping[str, Any]) -> dict[str, Any] | None:
         "slug": str(entry.get("slug") or name),
         "id": str(entry.get("id") or ""),
         "provider": str(creator.get("name") or ""),
-        "release_date": entry.get("release_date") if isinstance(entry.get("release_date"), str) else None,
+        "release_date": (
+            entry.get("release_date") if isinstance(entry.get("release_date"), str) else None
+        ),
         "indices": {
             "intelligence_index": _finite(evaluations.get("artificial_analysis_intelligence_index")),
             "coding_index": _finite(evaluations.get("artificial_analysis_coding_index")),
@@ -278,7 +340,7 @@ def _record(entry: Mapping[str, Any]) -> dict[str, Any] | None:
             "input": _finite(pricing.get("price_1m_input_tokens")),
             "output": _finite(pricing.get("price_1m_output_tokens")),
             "cache_read": _finite(pricing.get("price_1m_cache_hit_tokens")),
-            "cache_write": _finite(pricing.get("price_1m_cache_write_tokens")),
+            "cache_write": _finite(pricing.get("price_1m_write_tokens")),
         },
         "cost_per_task": cost_per_task,
         "median_performance": _finite(performance.get("median_output_tokens_per_second")),
@@ -294,12 +356,16 @@ def normalize(snapshot: Any, now: float | None = None) -> dict[str, Any]:
     The snapshot is accepted only when it is the free tier, complete, over
     every page, with one page size and one total, one version, a finite
     actual read time that is not in the future, and as many records as it
-    says. Anything else is rejected with a bounded status: a partial walk is
-    never promoted to a ranking snapshot.
+    says. Anything else is rejected with a bounded status: a partial walk
+    is never promoted to a ranking snapshot.
     """
     moment = time.time() if now is None else now
     rejection = {"status": "rejected", "reason": "", "records": []}
-    body = snapshot.get("results") if isinstance(snapshot, Mapping) and isinstance(snapshot.get("results"), Mapping) else snapshot
+    body = (
+        snapshot.get("results")
+        if isinstance(snapshot, Mapping) and isinstance(snapshot.get("results"), Mapping)
+        else snapshot
+    )
     if not isinstance(body, Mapping):
         return {**rejection, "reason": "not_a_snapshot"}
     tier = str(body.get("tier") or "")
@@ -308,7 +374,9 @@ def normalize(snapshot: Any, now: float | None = None) -> dict[str, Any]:
     version = str(body.get("intelligence_index_version") or "").strip()
     if not version:
         return {**rejection, "reason": "no_index_version"}
-    completeness = body.get("completeness") if isinstance(body.get("completeness"), Mapping) else {}
+    completeness = (
+        body.get("completeness") if isinstance(body.get("completeness"), Mapping) else {}
+    )
     if completeness.get("scope") != "all" or completeness.get("complete") is not True:
         return {**rejection, "reason": "incomplete"}
     if completeness.get("requested_first_page") != 1:
@@ -341,7 +409,9 @@ def normalize(snapshot: Any, now: float | None = None) -> dict[str, Any]:
     if seen != set(range(1, total_pages + 1)):
         return {**rejection, "reason": "pages_disagree"}
     evidence = body.get("evidence") if isinstance(body.get("evidence"), Mapping) else {}
-    if str(evidence.get("source") or "") != "live" or str((snapshot or {}).get("meta", {}).get("source") or "") not in ("", "live"):
+    if str(evidence.get("source") or "") != "live" or str(
+        (snapshot or {}).get("meta", {}).get("source") or ""
+    ) not in ("", "live"):
         return {**rejection, "reason": "not_a_live_read"}
     read_at, read_epoch = _read_time(evidence.get("read_at"))
     if read_at is None or read_epoch is None:
@@ -482,15 +552,15 @@ def lookup(cache: Mapping[str, Any], model: str) -> dict[str, Any] | None:
         if not isinstance(name, str):
             continue
         return {
-                "model": name,
-                "provider": str(record.get("provider") or ""),
-                "release_date": record.get("release_date"),
-                "indices": _indices(record),
-                "prices": _prices(record),
-                "cost_per_task": _cost_per_task(record),
-                "median_performance": _median_performance(record),
-                "index_version": cache.get("index_version"),
-                "fetched_at": cache.get("fetched_at"),
-                "source": "artificialanalysis",
-            }
+            "model": name,
+            "provider": str(record.get("provider") or ""),
+            "release_date": record.get("release_date"),
+            "indices": _indices(record),
+            "prices": _prices(record),
+            "cost_per_task": _cost_per_task(record),
+            "median_performance": _median_performance(record),
+            "index_version": cache.get("index_version"),
+            "fetched_at": cache.get("fetched_at"),
+            "source": "artificialanalysis",
+        }
     return None

@@ -130,6 +130,14 @@ def _pool_sample(name: str, labels: dict[str, str], value: float) -> Sample:
 
 
 def _limit_samples(provider: str, model: str, limits: Any, scope: str) -> list[Sample]:
+    """The pool's own ceilings.
+
+    These are the limits the pool enforces, which is a local policy and not
+    the provider's own allowance. The basis they were read with is
+    published with the `ghostship_ai_provider_limit` family, so a reader
+    can tell the pool's ceiling from the provider's published number and
+    from what the provider's headers said.
+    """
     samples: list[Sample] = []
     if not isinstance(limits, dict):
         return samples
@@ -293,6 +301,25 @@ def _emit_status(samples: list[Sample], status: dict[str, Any]) -> None:
                         float(value),
                     )
                 )
+            # A limit the provider's own response headers carried is an
+            # observation. It is published with the observed basis, beside
+            # the pool's own ceiling and the provider's published number.
+            observed_limit = values.get("limit")
+            if isinstance(observed_limit, (int, float)) and not isinstance(
+                observed_limit, bool
+            ):
+                samples.append(
+                    _pool_sample(
+                        "ghostship_ai_pool_observed_limit",
+                        {
+                            "provider": provider,
+                            "model": model,
+                            "limit": str(unit),
+                            "scope": "account",
+                        },
+                        float(observed_limit),
+                    )
+                )
             reset = values.get("reset")
             if isinstance(reset, str) and reset:
                 seconds = _duration_seconds(reset)
@@ -423,6 +450,21 @@ def _emit_catalog(samples: list[Sample], catalog: dict[str, Any]) -> None:
                             1.0 if admitted else 0.0,
                         )
                     )
+                    # The score the pool's own bench gave the route. It is
+                    # the pool's measurement, not ours, and it is published
+                    # beside the admission so a reader can see how strong it
+                    # is.
+                    score = (
+                        entry_value.get("score") if isinstance(entry_value, dict) else None
+                    )
+                    if isinstance(score, (int, float)) and not isinstance(score, bool):
+                        samples.append(
+                            _pool_sample(
+                                "ghostship_ai_pool_admission",
+                                {**labels, "workload": str(workload)},
+                                float(score),
+                            )
+                        )
             samples.extend(
                 _limit_samples(str(provider), "*", candidate.get("account_limits"), "account")
             )
