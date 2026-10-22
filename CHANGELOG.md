@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.95] - 2026-10-22
+
+- chill-penguin: model routing is on (`ghostship.aiUsage.routing.enabled = true`). The owner approved turning it on once the Providers page and its data passed live validation; the evidence is in the AI-usage program's morning summary. The route picker reads the switch from routing.json, and the page's chip reads Routing ON.
+
 ## [3.17.94] - 2026-10-22
 
 - Providers page: the 3D panel has room for its four live winners at 390 px (the fourth row was cut at the panel edge), and the Bulk panel loses the empty space under its winners. The panels below move with them; a test keeps the top-level panels from overlapping.
