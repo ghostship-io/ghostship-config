@@ -1,0 +1,369 @@
+"""The free inference pool's ledger: the usage events the reader produces.
+
+Every row in the fixtures under `tests/fixtures/ai-usage` is synthetic. No
+live row is copied, and the tests never read a path outside the repository
+or the temporary directory they build themselves.
+"""
+import importlib.util
+import json
+import os
+import shutil
+import sqlite3
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+REPOSITORY = Path(__file__).resolve().parents[1]
+COLLECTOR = REPOSITORY / "modules/self-hosted/ai-usage/collector"
+FIXTURES = REPOSITORY / "tests/fixtures/ai-usage"
+if str(COLLECTOR) not in sys.path:
+    sys.path.insert(0, str(COLLECTOR))
+
+
+def load(name, file):
+    spec = importlib.util.spec_from_file_location(name, COLLECTOR / file)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+pool_reader = load("ai_usage_pool_reader", "pool_reader.py")
+
+# The instant the fixtures are read at. The fixture files name it as well.
+NOW = 1800000000
+
+# The words the reader's module must not hold: the pool's ledger is opened
+# read-only and nothing may write to it, prune it or read past its log.
+FORBIDDEN = ("immutable", "vacuum", "wal_checkpoint", "journal_mode", "attach")
+
+
+class RecordingConnection(sqlite3.Connection):
+    """A connection that remembers every statement it ran."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.statements = []
+
+    def execute(self, sql, parameters=()):
+        self.statements.append(str(sql))
+        return super().execute(sql, parameters)
+
+
+def build_ledger(path, *, wal=False):
+    """Build a pool ledger from the committed fixtures."""
+    schema = (FIXTURES / "pool_schema.sql").read_text(encoding="utf-8")
+    jobs = json.loads((FIXTURES / "pool_jobs.json").read_text(encoding="utf-8"))
+    reservations = json.loads((FIXTURES / "pool_reservations.json").read_text(encoding="utf-8"))
+    connection = sqlite3.connect(path)
+    try:
+        if wal:
+            connection.execute("PRAGMA journal_mode=WAL")
+        connection.executescript(schema)
+        connection.executemany(
+            "INSERT INTO jobs (id, kind, identity, status, progress, result, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    job["id"],
+                    "inference.task",
+                    "agent",
+                    job["status"],
+                    "{}",
+                    json.dumps(job["result"]),
+                    job["created_at"],
+                    job["updated_at"],
+                )
+                for job in jobs["jobs"]
+            ],
+        )
+        connection.executemany(
+            "INSERT INTO inference_reservations (id, job, provider, model, at, input, output, usd, neurons) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)",
+            [
+                (
+                    row["id"],
+                    row["job"],
+                    row["provider"],
+                    row["model"],
+                    row["at"],
+                    row["input"],
+                    row["output"],
+                )
+                for row in reservations["reservations"]
+            ],
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+class PoolReaderTestCase(unittest.TestCase):
+    """The base of the reading tests."""
+
+    def setUp(self):
+        self.directory = tempfile.mkdtemp(prefix="pool-reader-")
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        self.path = os.path.join(self.directory, "jobs.sqlite")
+        build_ledger(self.path)
+
+    def read(self, path=None, **keywords):
+        """Read the fixture ledger."""
+        return pool_reader.read_events(path or self.path, NOW, **keywords)
+
+    def event(self, reading, at):
+        """The one event of the reading at an instant."""
+        found = [event for event in reading["events"] if event["at"] == at]
+        self.assertEqual(len(found), 1, f"expected one event at {at}, got {found}")
+        return found[0]
+
+    def opener(self, opened, *, record=False):
+        """Replace the reader's opener with one that keeps the connection."""
+
+        def open_ledger(path):
+            if record:
+                connection = sqlite3.connect(
+                    f"file:{path}?mode=ro", uri=True, timeout=2, factory=RecordingConnection
+                )
+            else:
+                connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+            opened.append(connection)
+            return connection
+
+        original = pool_reader.open_ledger
+        pool_reader.open_ledger = open_ledger
+        self.addCleanup(setattr, pool_reader, "open_ledger", original)
+        return open_ledger
+
+
+class OutcomeMappingTests(PoolReaderTestCase):
+    """The category of an attempt decides the outcome of its event."""
+
+    def test_success_attempt_is_a_success_event_with_its_settled_usage(self):
+        reading = self.read()
+        event = self.event(reading, 1799996400)
+        self.assertEqual(event["provider"], "acme-free")
+        self.assertEqual(event["model"], "small-model")
+        self.assertEqual(event["outcome"], "success")
+        self.assertEqual(event["usage"], 150)
+        self.assertIsNone(event["window_hint"])
+
+    def test_quota_exhausted_is_a_limit_without_a_window(self):
+        reading = self.read()
+        event = self.event(reading, 1799996200)
+        self.assertEqual(event["outcome"], "limit")
+        self.assertIsNone(event["window_hint"])
+
+    def test_free_daily_exhausted_is_a_limit_of_the_day(self):
+        reading = self.read()
+        event = self.event(reading, 1799996000)
+        self.assertEqual(event["outcome"], "limit")
+        self.assertEqual(event["window_hint"], "1d")
+
+    def test_rate_limited_is_not_a_limit(self):
+        event = self.event(self.read(), 1799995800)
+        self.assertEqual(event["outcome"], "other")
+        self.assertIsNone(event["window_hint"])
+
+    def test_upstream_error_is_not_a_limit(self):
+        event = self.event(self.read(), 1799995600)
+        self.assertEqual(event["outcome"], "other")
+        self.assertIsNone(event["window_hint"])
+
+    def test_model_unavailable_is_not_a_limit(self):
+        event = self.event(self.read(), 1799995400)
+        self.assertEqual(event["outcome"], "other")
+        self.assertIsNone(event["window_hint"])
+
+    def test_context_limit_is_not_a_limit(self):
+        event = self.event(self.read(), 1799995200)
+        self.assertEqual(event["outcome"], "other")
+        self.assertIsNone(event["window_hint"])
+
+    def test_credentials_or_access_is_not_a_limit(self):
+        event = self.event(self.read(), 1799995000)
+        self.assertEqual(event["outcome"], "other")
+        self.assertIsNone(event["window_hint"])
+
+    def test_unexpected_tool_is_not_a_limit(self):
+        event = self.event(self.read(), 1799994800)
+        self.assertEqual(event["outcome"], "other")
+        self.assertIsNone(event["window_hint"])
+
+
+class MatchingTests(PoolReaderTestCase):
+    """An attempt takes the reservation of its route, in time order."""
+
+    def test_two_attempts_of_one_job_on_one_route_take_two_reservations(self):
+        reading = self.read()
+        first = self.event(reading, 1799994500)
+        second = self.event(reading, 1799994600)
+        self.assertEqual(first["outcome"], "other")
+        self.assertEqual(first["usage"], 0)
+        self.assertEqual(second["outcome"], "success")
+        self.assertEqual(second["usage"], 220)
+
+    def test_failed_attempts_contribute_no_usage(self):
+        reading = self.read()
+        events = [
+            event
+            for event in reading["events"]
+            if event["at"] in (1799994200, 1799994300, 1799994400)
+        ]
+        self.assertEqual(len(events), 3)
+        # Each of the three failures booked 5994 + 1024 before the dispatch.
+        # The estimate is not consumption, so the three contribute nothing.
+        self.assertEqual([event["usage"] for event in events], [0, 0, 0])
+        # The reading's usage is the two successes (150 + 220) and the two
+        # probes (4068 + 102) alone.
+        self.assertEqual(sum(event["usage"] or 0 for event in reading["events"]), 4540)
+
+    def test_attempt_without_a_reservation_is_counted_and_not_emitted(self):
+        reading = self.read()
+        self.assertEqual(reading["counts"]["attempts_without_reservation"], 2)
+        self.assertNotIn(1799995100, [event["at"] for event in reading["events"]])
+
+    def test_the_reading_counts_what_it_covered(self):
+        reading = self.read()
+        self.assertEqual(reading["status"], "ok")
+        self.assertEqual(reading["reason"], "ok")
+        self.assertEqual(reading["counts"]["attempts_read"], 16)
+        self.assertEqual(reading["counts"]["probes_read"], 2)
+        self.assertEqual(reading["counts"]["attempts_without_reservation"], 2)
+        self.assertEqual(
+            reading["counts"]["outcomes"], {"success": 2, "limit": 3, "other": 11}
+        )
+        self.assertEqual(len(reading["events"]), 16)
+
+
+class ProbeTests(PoolReaderTestCase):
+    """A probe is a request of the pool's own, without a receipt."""
+
+    def test_probe_reservation_is_an_other_event_with_its_own_usage(self):
+        reading = self.read()
+        event = self.event(reading, 1799994100)
+        self.assertEqual(event["outcome"], "other")
+        self.assertEqual(event["usage"], 4068)
+        self.assertIsNone(event["window_hint"])
+        self.assertEqual(reading["counts"]["probes_read"], 2)
+
+
+class WindowTests(PoolReaderTestCase):
+    """The reading covers the last 35 days of reservations."""
+
+    def test_reservations_older_than_the_window_are_not_read(self):
+        reading = self.read()
+        self.assertEqual(reading["status"], "ok")
+        self.assertNotIn(1796889600, [event["at"] for event in reading["events"]])
+        self.assertNotIn(1796889700, [event["at"] for event in reading["events"]])
+
+    def test_a_reservation_inside_the_window_is_read(self):
+        reading = self.read()
+        self.assertIn(1799996400, [event["at"] for event in reading["events"]])
+
+
+class UnreadableTests(PoolReaderTestCase):
+    """A ledger that cannot be read is reported, never raised."""
+
+    def test_a_missing_ledger_is_unreadable(self):
+        missing = os.path.join(self.directory, "absent.sqlite")
+        reading = self.read(path=missing)
+        self.assertEqual(reading["status"], "unreadable")
+        self.assertEqual(reading["reason"], "ledger_missing")
+        self.assertEqual(reading["events"], [])
+
+    def test_a_write_ahead_ledger_without_its_shared_memory_is_unreadable(self):
+        if os.geteuid() == 0:
+            self.skipTest("the directory mode does not hold a root reader")
+        path = os.path.join(self.directory, "write-ahead.sqlite")
+        build_ledger(path, wal=True)
+        # The ledger is in the write-ahead mode and its shared memory file
+        # is gone, and the directory cannot hold a new one.
+        self.assertFalse(os.path.exists(path + "-shm"))
+        os.chmod(self.directory, 0o555)
+        try:
+            reading = self.read(path=path)
+        finally:
+            os.chmod(self.directory, 0o755)
+        self.assertEqual(reading["status"], "unreadable")
+        self.assertEqual(reading["reason"], "ledger_unreadable")
+        self.assertEqual(reading["events"], [])
+
+    def test_a_ledger_without_the_pool_tables_is_unreadable(self):
+        path = os.path.join(self.directory, "other.sqlite")
+        shutil.copyfile(self.path, path)
+        connection = sqlite3.connect(path)
+        connection.execute("DROP TABLE inference_reservations")
+        connection.commit()
+        connection.close()
+        reading = self.read(path=path)
+        self.assertEqual(reading["status"], "unreadable")
+        self.assertEqual(reading["reason"], "ledger_schema_missing")
+        self.assertEqual(reading["events"], [])
+
+    def test_a_short_limit_gives_up_with_the_timeout_reason(self):
+        reading = self.read(timeout_s=0)
+        self.assertEqual(reading["status"], "unreadable")
+        self.assertEqual(reading["reason"], "timeout")
+        self.assertEqual(reading["events"], [])
+
+
+class LedgerSafetyTests(PoolReaderTestCase):
+    """The ledger belongs to the running pool: it is never written."""
+
+    def test_the_connection_is_closed_after_a_reading(self):
+        opened = []
+        self.opener(opened)
+        reading = self.read()
+        self.assertEqual(reading["status"], "ok")
+        self.assertEqual(len(opened), 1)
+        with self.assertRaises(sqlite3.ProgrammingError):
+            opened[0].execute("SELECT 1")
+
+    def test_the_connection_is_closed_after_an_error(self):
+        opened = []
+        self.opener(opened)
+        path = os.path.join(self.directory, "other.sqlite")
+        shutil.copyfile(self.path, path)
+        connection = sqlite3.connect(path)
+        connection.execute("DROP TABLE inference_reservations")
+        connection.commit()
+        connection.close()
+        reading = self.read(path=path)
+        self.assertEqual(reading["status"], "unreadable")
+        self.assertEqual(len(opened), 1)
+        with self.assertRaises(sqlite3.ProgrammingError):
+            opened[0].execute("SELECT 1")
+
+    def test_the_reading_never_writes(self):
+        opened = []
+        self.opener(opened, record=True)
+        reading = self.read()
+        self.assertEqual(reading["status"], "ok")
+        self.assertTrue(opened[0].statements)
+        for statement in opened[0].statements:
+            self.assertTrue(
+                statement.lstrip().upper().startswith("SELECT"),
+                f"the reader ran a statement that is not a read: {statement}",
+            )
+
+    def test_a_write_through_the_connection_fails(self):
+        connection = pool_reader.open_ledger(self.path)
+        try:
+            with self.assertRaises(sqlite3.OperationalError):
+                connection.execute(
+                    "INSERT INTO inference_reservations (id, job, provider, model, at, input, output) "
+                    "VALUES ('written', 'job', 'acme-free', 'small-model', 0, 0, 0)"
+                )
+        finally:
+            connection.close()
+
+    def test_the_module_holds_no_write_or_bypass_statement(self):
+        source = (COLLECTOR / "pool_reader.py").read_text(encoding="utf-8").lower()
+        for word in FORBIDDEN:
+            self.assertNotIn(word, source, f"the reader's module holds {word}")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -187,7 +187,9 @@ METRIC_HELP = {
     "ghostship_ai_pool_health_events": "Successes and failures recorded for a pool model.",
     "ghostship_ai_pool_latency_seconds": "Observed latency of a pool model.",
     "ghostship_ai_pool_concurrency": "Current and allowed concurrency of a pool provider.",
-    "ghostship_ai_pool_recent_jobs": "One for a recent job in the free pool.",
+    "ghostship_ai_pool_recent_jobs": (
+        "The count of recent jobs in the free pool with these labels."
+    ),
     "ghostship_ai_pool_quota_amount": "A quota amount observed in provider response headers.",
     "ghostship_ai_pool_quota_reset_seconds": "When an observed quota resets.",
     "ghostship_ai_pool_quota_observed_timestamp_seconds": "When an observed quota was seen.",
@@ -333,9 +335,18 @@ METRIC_HELP = {
         "How many metric series this collection published twice. The repeats "
         "are dropped, so the file holds one series per name and label set."
     ),
+    "ghostship_ai_routing_enabled": (
+        "One when the owner's routing switch is on. The collector publishes "
+        "the switch and never acts on it itself."
+    ),
 }
 
 GAUGE_METRICS = tuple(METRIC_HELP)
+
+# How many dropped series a run names. A run that drops a handful of series
+# names every one of them; a run that drops many names the first ones and
+# says how many it did not name, so the log stays a log and not a dump.
+MAX_NAMED_DUPLICATE_SERIES = 20
 
 
 def log(message: str) -> None:
@@ -1011,6 +1022,82 @@ def ranking_inputs(
     }
 
 
+def retired_routes(
+    persisted: Mapping[str, Mapping[str, Any]] | None,
+    failures: Iterable[Mapping[str, Any]] | None,
+    successes: Mapping[str, float] | None,
+) -> dict[str, dict[str, Any]]:
+    """The routes that are retired, and the moment each was first seen.
+
+    A provider that retired a model does not serve it again, so the
+    retirement is not a failure of an hour: it is kept in the collector's
+    own state file and outlives the window of the failure that reported it.
+    A later successful run of the route clears it: the provider serves the
+    model again, and the route is usable once more.
+
+    A retirement is scoped to one route. The other models of the same
+    provider are not touched by it.
+    """
+    found: dict[str, dict[str, Any]] = {
+        str(route): dict(record) for route, record in (persisted or {}).items()
+    }
+    for failure in failures or ():
+        if (
+            str(failure.get("reason") or "")
+            != runtime_state_module.REASON_MODEL_RETIRED
+        ):
+            continue
+        route = str(failure.get("route") or failure.get("target") or "")
+        if not route:
+            continue
+        record = {
+            "provider": str(failure.get("provider") or ""),
+            "model": str(failure.get("model") or ""),
+            "route": route,
+            "first_seen": float(failure.get("observed_at") or 0.0),
+            "reason": runtime_state_module.REASON_MODEL_RETIRED,
+        }
+        previous = found.get(route)
+        if previous is not None:
+            # The retirement started when it was first seen, and a later
+            # report of it does not make it younger.
+            first_seen = float(previous.get("first_seen") or 0.0)
+            if first_seen and (
+                not record["first_seen"] or first_seen < record["first_seen"]
+            ):
+                record["first_seen"] = first_seen
+        found[route] = record
+    # A later successful run of the route clears the retirement.
+    for route in list(found):
+        succeeded = (successes or {}).get(route)
+        if succeeded is None:
+            continue
+        if float(succeeded) > float(found[route].get("first_seen") or 0.0):
+            found.pop(route, None)
+    return found
+
+
+def _success_window(
+    now: float, retired: Mapping[str, Mapping[str, Any]] | None
+) -> float:
+    """How far back a successful run is read to clear a retirement.
+
+    A successful run that is older than the window of a failure still
+    clears a retirement when it is newer than the retirement itself, so
+    the window of the successes reaches back to the first retirement the
+    collector remembers.
+    """
+    window = float(runtime_state_module.MAX_AGE_SECONDS)
+    first_seen = [
+        float(record.get("first_seen") or 0.0)
+        for record in (retired or {}).values()
+        if record.get("first_seen")
+    ]
+    if not first_seen:
+        return window
+    return max(window, float(now) - min(first_seen))
+
+
 def ranking_samples(
     results: list[SourceResult],
     catalog: catalog_module.Catalog,
@@ -1123,9 +1210,20 @@ def ranking_samples(
     # The observed failures of the routes, read from the T3 Code state. A
     # route that is known to be broken does not win a tier, and it stays
     # visible with the reason and the moment it was observed.
-    observed_failures = runtime_state_module.read_failures(t3_state, now)
-    if "observed_failures" in inspect.signature(ranking_module.rank_models).parameters:
-        rank_kwargs["observed_failures"] = observed_failures
+    #
+    # The routes whose model a provider retired are kept in the collector's
+    # own state file: the retirement outlives the window of the failure
+    # that reported it.
+    persisted = ranking_module.retired_from_state(
+        ranking_module.load_state(state_path)
+    )
+    observations = runtime_state_module.read_observations(
+        t3_state, now, success_age_seconds=_success_window(now, persisted)
+    )
+    observed_failures = observations["failures"]
+    retired = retired_routes(persisted, observed_failures, observations["successes"])
+    if "retired_routes" in inspect.signature(ranking_module.rank_models).parameters:
+        rank_kwargs["retired_routes"] = retired
     for failure in observed_failures:
         samples.append(
             (
@@ -1196,6 +1294,7 @@ def build_snapshot(
     aa_3d_cache: dict[str, Any] | None = None,
     free_models: set[tuple[str, str]] | None = None,
     promo_models: set[tuple[str, str]] | None = None,
+    routing_enabled: bool = False,
 ) -> dict[str, Any]:
     """Build the canonical ranking and eligibility snapshot."""
     sources = []
@@ -1238,6 +1337,7 @@ def build_snapshot(
         promo_models=promo_models or set(),
         pool_evidence=context.get("pool_evidence") or {},
         inventory=context.get("ranking_inventory") or [],
+        routing_enabled=bool(routing_enabled),
     )
     if isinstance(snapshot, dict):
         quota_block = snapshot.setdefault("quota", {})
@@ -1306,6 +1406,7 @@ def collect(
         state_path=state_path,
         aa_cache=aa_cache,
         aa_3d_cache=aa_3d_cache,
+        t3_state=t3_state,
     )
     extra.extend(ranking_metrics)
     context["ranked"] = ranked
@@ -1593,11 +1694,27 @@ def render(
     writer.add("ghostship_ai_collection_timestamp_seconds", {}, now)
     writer.add("ghostship_ai_collection_duration_seconds", {}, duration)
     # A series is published once. A repeat is dropped and counted, and the
-    # count is published, so a duplicate never passes unnoticed.
-    if writer.duplicates:
-        log(f"dropped {writer.duplicates} duplicate metric series")
+    # count is published, so a duplicate never passes unnoticed. The run
+    # names every series it dropped, so the emitter that published a series
+    # twice can be found, and it says whether the repeat carried the value
+    # that was kept.
+    for dropped in writer.dropped[:MAX_NAMED_DUPLICATE_SERIES]:
+        log(
+            f"dropped repeated series {dropped.describe()}"
+            f" ({'same' if dropped.same_value else 'different'} value)"
+        )
+    unnamed = len(writer.dropped) - MAX_NAMED_DUPLICATE_SERIES
+    if unnamed > 0:
+        log(f"and {unnamed} more")
     writer.add(
         "ghostship_ai_collection_duplicate_series", {}, float(writer.duplicates)
+    )
+    # The owner's routing switch, published as it is. The gauge carries no
+    # label: the switch is one switch for the whole snapshot.
+    writer.add(
+        "ghostship_ai_routing_enabled",
+        {},
+        1.0 if ((snapshot or {}).get("routing") or {}).get("enabled") else 0.0,
     )
     return writer.render()
 
@@ -1671,9 +1788,20 @@ def main(argv: list[str] | None = None) -> int:
         default=SNAPSHOT_PATH,
         help="Where the canonical ranking and eligibility snapshot is written.",
     )
+    parser.add_argument(
+        "--routing-enabled",
+        choices=("true", "false"),
+        default="false",
+        help=(
+            "The owner's routing switch. The collector publishes it to its "
+            "consumers and never acts on it itself."
+        ),
+    )
     args = parser.parse_args(argv)
 
     started = time.monotonic()
+    routing_enabled = args.routing_enabled == "true"
+    log(f"the routing switch is {'on' if routing_enabled else 'off'}")
     now = wall_clock() if args.now is None else args.now
     aa_cache = aa.load_cache(args.aa_cache, now)
     aa_3d_cache = aa_3d.load_cache(args.aa_3d_cache, now)
@@ -1701,6 +1829,7 @@ def main(argv: list[str] | None = None) -> int:
         free_models=context.get("free_models") or set(),
         promo_models=context.get("promo_models") or set(),
         aa_3d_cache=aa_3d_cache,
+        routing_enabled=routing_enabled,
     )
     text = render(results, extra, now, duration, snapshot)
     if args.stdout:

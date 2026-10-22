@@ -24,6 +24,10 @@ listener and no new port: the service is a oneshot job that writes a file.
   writing, for a manual run.
 * Directories: `/var/lib/ghostship-container-metrics` (0755) and
   `/var/lib/ghostship-ai-usage` (0700), both created by systemd-tmpfiles.
+* The routing switch: `ghostship.aiUsage.routing.enabled` is the owner's
+  switch, it is off by default, and the collector receives it as
+  `--routing-enabled true|false`. The collector publishes the switch to its
+  consumers and never acts on it itself.
 * The collector is Python standard library only. The unit is hardened like the
   rest of this repository: `ProtectSystem=strict`, `ProtectHome`, no
   capabilities, `ReadWritePaths` limited to the two directories above, and
@@ -51,6 +55,137 @@ The 3D reading is not a provider source: it is the measured use of our own 3D
 printing projects. Only session history files inside a directory whose name
 mentions `3dprint` are read, only for the last 30 days, and only a bounded
 number of files.
+
+## The OpenCode request record
+
+OpenCode records every model request it makes: the provider, the model, the
+tokens, the instant, and, when the request failed, the provider's own error.
+That record is the primary evidence for a route that is used through
+OpenCode, and the collector can infer a route's window and budget from the
+limit failures in it (the owner rule is in ghostship-agent's
+`config/agents/routing-policy.md`, "Usage measurement").
+
+The reader is `collector/opencode_reader.py`. It reads the SQLite database
+OpenCode keeps at `.local/share/opencode/opencode.db` inside the container
+home. It is not a source yet: the collector does not read it, and no metric
+carries it. What it produces is fixed:
+
+* `status` is `ok` or `unreadable`, and `reason` is a fixed code
+  (`ok`, `database_missing`, `database_unreadable`, `database_corrupt`,
+  `database_schema_missing`, `timeout`). A reading that cannot be made is
+  never a reading of zero usage.
+* `events` is one event per request: the collector's provider name, the
+  model id as recorded, the instant in epoch seconds, the outcome
+  (`success`, `limit` or `other`), the tokens used (`None` when the record
+  has none), and the window the failure named (`None`, `5h`, `7d` or `1d`).
+* `counts` holds the rows read, the rows whose provider is not in the
+  mapping table, and the events per outcome.
+
+Only a budget failure is a limit. A request that stopped for `stop`,
+`tool-calls`, `length` or `content-filter` is a success. A refusal that
+names the account's allowance is a limit, and the window it names is used
+when it names one: a session usage limit is five hours, a weekly usage limit
+is seven days, a daily limit is one day. A concurrency refusal, a per-minute
+refusal, a transient upstream refusal, a request that was too large, an
+expired key, an aborted run and a timeout spend no window, so they are read
+as `other` and never as a limit. A request that carries a retry is one
+event, with the outcome it ended on.
+
+The provider table is committed, not guessed. The OpenCode provider ids
+`ollama-cloud`, `opencode-go`, `opencode`, `openrouter`, `google`,
+`requesty`, `nvidia`, `ovh`, `upstage`, `inception`, `groq`, `mistral`,
+`cohere`, `zai`, `vercel`, `poolside` and `orcarouter` are mapped onto the
+collector's provider names. Every other provider id is counted and not
+emitted.
+
+The read is read only and it is bounded: the database is opened with the
+`mode=ro` URI, nothing in the reader writes to it, every query asks only
+for the last 35 days, the whole read has a wall clock limit of 20 seconds
+that aborts the query when it is reached, and the connection is closed on
+every path so no read transaction is left open.
+
+The query asks only for the fields the reader uses: SQLite extracts them
+from the record with its own JSON functions, so the whole record, about
+27 KB a row, never travels into Python. The error's own words come with
+the extraction and are classified in memory.
+
+The reader keeps its own cache: a file in the collector's state directory
+that holds the compact events, the cursor and the instant the history is
+complete from. A run reads only the rows the last run may not have seen,
+with two hours of overlap, so a row OpenCode inserted at the start of a
+step and completed later is read again; the events of that window are
+replaced by the ones the run read, and the events older than the window
+are pruned. The cache is written beside itself and renamed over the old
+one, so a reader never sees half of it, and it never holds the text of a
+provider's error.
+
+The history is filled a slice at a time. With no cache, a run reads the
+newest slice of three days. With a cache whose history starts later than
+the window allows, a run reads one slice of at most three days, walking
+back from the start of the history, inside the same cap. The reading is
+`partial` until the history reaches the whole window, and it carries the
+instant the history is complete from. A slice that runs out of time leaves
+the cache as it was and is read again by the next run; the part that was
+read still counts.
+
+A cache that does not parse, or that does not carry the shape the reader
+expects, is discarded and the backfill starts again. A cache is never
+trusted for an event that is dated in the future: those events are
+dropped.
+
+The text of a provider's error is read in memory, to pick the outcome, and
+it never leaves the process: it is not stored, not returned, not logged and
+not in an event. A real limit message names the account it belongs to.
+
+## The free pool's job ledger
+
+The free inference pool records every request it dispatches in a durable
+ledger: one reservation row per dispatched request, and one attempt per
+attempted route on the job's receipt. A free route reports no usage of its
+own, so the collector infers its capacity from its limit failures (the
+owner rule is in ghostship-agent's `config/agents/routing-policy.md`,
+"Usage measurement"), and the ledger is where the use of the route is
+recorded. The pool's own limits are admission caps and are never a
+capacity reading.
+
+The reader is `collector/pool_reader.py`. It reads the SQLite ledger the
+pool keeps at `.local/state/ghostship-agent/runtime/jobs.sqlite` inside the
+container home. It is not a source yet: the collector does not read it, and
+no metric carries it. What it produces is fixed, and it is the same
+contract as the OpenCode reader:
+
+* `status` is `ok` or `unreadable`, and `reason` is a fixed code (`ok`,
+  `ledger_missing`, `ledger_unreadable`, `ledger_corrupt`,
+  `ledger_schema_missing`, `timeout`). A reading that cannot be made is
+  never a reading of zero usage.
+* `events` is one event per request: the pool's provider name, the model
+  id as recorded, the instant in epoch seconds, the outcome (`success`,
+  `limit` or `other`), the tokens used (`None` when the ledger holds none),
+  and the window a limit named (`None` or `1d`).
+* `counts` holds the attempts read, the probes read, the attempts that had
+  no reservation, and the events per outcome.
+
+The attempt's category decides the outcome. A success is a success. A quota
+exhaustion is a limit and names no window; the daily exhaustion of the free
+allowance is a limit of the day. Every other category is not a limit of the
+route: a rate limit, an upstream error, an unavailable model, a context
+limit, a credential failure and an unexpected tool are all something else.
+
+An attempt takes the reservation of its route: the k-th attempt of a job
+and route takes the k-th reservation of that job and route, in time order.
+An attempt with no reservation was never dispatched, and it is counted and
+not emitted. A failed attempt contributes no usage, because the estimate
+the pool writes before a dispatch is not consumption; only a success carries
+the usage the pool settled onto its reservation. A probe - the pool's own
+check of a route - has a reservation and no receipt, so it is an event of
+its own: an `other` with the usage it consumed.
+
+The read is read only and it is bounded: the ledger is opened with the
+`mode=ro` URI and nothing in the reader writes to it, so the running pool
+keeps its own ledger. Every query asks only for the last 35 days, the whole
+read has a wall clock limit of 20 seconds that aborts the query when it is
+reached, the busy timeout is 2 seconds, and the connection is closed on
+every path so no read transaction is left open.
 
 ## The windows and where their numbers come from
 
@@ -325,6 +460,9 @@ values only) and `ghostship_ai_provider_capacity_windows{provider,evidence}`.
 * `ghostship_ai_collection_timestamp_seconds` and
   `ghostship_ai_collection_duration_seconds` - when the collection ran and how
   long it took.
+* `ghostship_ai_routing_enabled` - 1 when the owner's routing switch is on, 0
+  when it is off. The gauge carries no label: it is one switch for the whole
+  snapshot.
 
 ### Quota and account
 
@@ -411,9 +549,9 @@ provider-reported dollar charge.
 * `ghostship_ai_pool_latency_seconds{provider,model}` - the observed latency.
 * `ghostship_ai_pool_concurrency{provider,account,kind}` - the current and the
   allowed concurrency; `kind` is `current` or `limit`.
-* `ghostship_ai_pool_recent_jobs{provider,worker,client,status}` - 1 for a
-  recent job. The listing is bounded recent history, not a complete queue
-  census.
+* `ghostship_ai_pool_recent_jobs{provider,worker,client,status}` - the count
+  of the recent jobs with these labels. The listing is bounded recent
+  history, not a complete queue census.
 * `ghostship_ai_pool_quota_amount{provider,model,kind,unit}` - a quota amount
   seen in a provider response header; `kind` is `limit` or `remaining`.
 * `ghostship_ai_pool_quota_reset_seconds{provider,model,unit}` - when that
@@ -445,6 +583,23 @@ allowance is spent, so every route of that provider is unavailable with the
 reason `account_usage_limit` until a later run of it succeeds. The text of the
 error is only read to pick the code; the provider's own words never reach a
 metric, a label or a log line.
+
+A model the provider retired is gone, and that is not a broken route and not
+a spent account. The markers are "has been deprecated", "has been retired",
+"free launch period", "reached its end of life" and "is no longer
+available". Such a failure is scoped to one route: the model itself, on the
+account that serves it. The other models of the same provider are not
+affected by it. The route is not available, with the reason
+`model_retired`, and it holds no tier at all - not the bulk tier, not the
+free tier - whatever window it has, including the published unlimited
+promotion of the Go free routes.
+
+A retirement outlives the window of a failure. A failure older than 24 hours
+is a past event, and a model that was retired yesterday is still retired
+today, so the collector keeps the retired routes in its own state file, with
+the provider, the model and the moment the retirement was first seen. A
+later successful run of the same route clears it: the provider serves the
+model again, and the route is usable once more.
 
 ### The model ranking
 
@@ -531,8 +686,9 @@ value.
 * `ghostship_ai_model_quality{provider,model}` - the quality score, 0 to 100.
 * `ghostship_ai_model_available{provider,model,reason}` - whether the model
   can be used right now, with the reason it cannot: a spent allowance, an
-  unknown headroom, a route that failed, or a route that is not offered.
-  The reason is a fixed label, never the provider's own text.
+  unknown headroom, a route that failed, a route that is not offered, or a
+  model the provider retired (`model_retired`). The reason is a fixed label
+  or a fixed code, never the provider's own text.
 * `ghostship_ai_model_capacity_remaining{tier,provider,model}` - the remaining
   share of the model's account capacity, 0 to 1. A spent allowance is
   published as 0; an unknown capacity is not published at all, because an
@@ -627,6 +783,7 @@ The contract, version 1:
 | `generated_at` | the UTC ISO-8601 moment the snapshot was written |
 | `max_age_seconds` | how long a consumer may trust it (900) |
 | `partial` | true when a source failed or reported nothing |
+| `routing` | the owner's routing switch: `enabled` is true only when the owner turned it on, and `source` says where the switch came from (`nixos-option`). The block is always there, so a consumer never has to guess whether it read a snapshot without a switch |
 | `coverage` | every source with its status, observation time, and age, plus whether a frontier prime is available right now and, when it is not, why a consumer has to wait for it |
 | `policy` | the owner's direction: the prime frontier models, the GPT models that may run, the instance the background agents use, and the frontier review rule with its authority and its fail closed rule |
 | `tiers` | the ordered members of `frontier`, `bulk`, `free`, and `3d` |
@@ -657,6 +814,7 @@ the reasons, the quota state, the components, and the eligibility:
 | `eligibility` | the policy flags, kept apart from the readings |
 | `admission` | `settled`, or `pending` with the reason and the end of the evaluation window |
 | `provenance` | where the reading came from and when it was observed |
+| `access` | how the route is reached and how it is paid for: the access kind (`dedicated_free`, `provider_promo`, `provider_paid`, `unknown`), the billing class, the price, and whether the route runs as a provider-native thread or as an inference job |
 
 Three kinds of statement never mix: a `policy` is what the owner decided, a
 `measured` value is what a provider reported, and a `prior` is what the
@@ -690,6 +848,46 @@ before it is integrated, a bulk review is never a final approval, and a
 required frontier that is unavailable is waited for instead of being
 quietly replaced by a delegate. The snapshot says so in `policy` and in
 `coverage.frontier`.
+
+## The routing switch
+
+Routing is off until the owner turns it on. The switch is the NixOS option
+`ghostship.aiUsage.routing.enabled`, it is a boolean, and it defaults to
+false. The unit passes it to the collector as `--routing-enabled
+true|false`, and the collector publishes it in three places:
+
+| Where | What |
+| --- | --- |
+| `routing` in the routing snapshot | `{"enabled": false, "source": "nixos-option"}`. The block is always present, so a consumer never reads a missing switch as an open one |
+| every `--projection` file | the same bytes as the canonical snapshot, so the switch cannot differ between the file and its projections |
+| `ghostship_ai_routing_enabled` | a gauge without labels: `1` when the switch is on, `0` when it is off |
+
+The collector never acts on the switch. It publishes the owner's decision
+and leaves the decision itself to the consumer, and nothing else in the
+repository sets the option: turning routing on is the owner's action alone.
+
+## How a route is paid for
+
+Every candidate row and every winner carries an `access` record, and the
+record carries a `billing` class. The class says how the route is paid for,
+and it is derived from the access class the collector already keeps: the two
+never disagree, and the class is never guessed from a price.
+
+| Billing class | What it means |
+| --- | --- |
+| `subscription` | the route is covered by a subscription the owner already pays for |
+| `free` | the route costs nothing by construction: the dedicated free inference pool, or a route the provider lists at no cost |
+| `promotion` | the route is a paid route of a paid account that costs nothing right now |
+| `pay_per_token` | the route is paid per token, and no subscription pays for it |
+| `unknown` | the billing of the route is not known |
+
+A dedicated free route is free, a promotional route is a promotion, and a
+route with no known access is unknown. A paid route is a subscription only
+when its provider is one the owner pays a subscription for (Claude, Codex,
+Antigravity, Cursor, Ollama, OpenCode Go), and a pay per token route only
+when its provider bills that way (Grok, OpenRouter, Vercel, Requesty). A
+paid route of a provider we do not know how the owner pays for is unknown:
+it never becomes a subscription.
 
 ## The daily evaluation
 

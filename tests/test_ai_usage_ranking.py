@@ -66,7 +66,15 @@ def _rank_with_feed(**kwargs):
     return _rank_models(**kwargs)
 
 
-ranking.rank_models = _rank_with_feed
+def setUpModule():
+    # The feed is injected for this module's tests only. A patch left in place
+    # at import time leaks into every test module that runs after this one in
+    # the same process (CI runs them all in one), and changes their ranking.
+    ranking.rank_models = _rank_with_feed
+
+
+def tearDownModule():
+    ranking.rank_models = _rank_models
 
 
 def entry(

@@ -193,7 +193,7 @@ class CacheAgeTests(unittest.TestCase):
                 {
                     "intelligence_index_version": "4.3",
                     "fetched_at_epoch": NOW - 3600,
-                    "fetched_at": "<owner-email> /srv/apps/secret",
+                    "fetched_at": "person@private.invalid /srv/apps/secret",
                     "reason": "sk-live-AAAABBBBCCCC",
                     "records": [],
                 },
