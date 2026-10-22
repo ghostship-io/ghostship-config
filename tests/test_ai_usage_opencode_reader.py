@@ -197,5 +197,40 @@ class ClassificationTests(unittest.TestCase):
         data = request(finish="stop", retry={"attempt": 2})
         self.assertEqual(self.classify(data), ("success", None))
 
+class ProviderMappingTests(unittest.TestCase):
+    """The provider table is committed, and nothing is guessed."""
+
+    def test_the_known_providers_are_mapped(self):
+        expected = {
+            "ollama-cloud": "ollama",
+            "opencode-go": "opencode-go",
+            "opencode": "opencode",
+            "openrouter": "openrouter",
+            "google": "google",
+            "requesty": "requesty",
+            "nvidia": "nvidia",
+            "ovh": "ovh",
+            "upstage": "upstage",
+            "inception": "inception",
+            "groq": "groq",
+            "mistral": "mistral",
+            "cohere": "cohere",
+            "zai": "zai",
+            "vercel": "vercel",
+            "poolside": "poolside",
+            "orcarouter": "orcarouter",
+        }
+        for provider_id, name in expected.items():
+            with self.subTest(provider=provider_id):
+                self.assertEqual(reader().provider_for(provider_id), name)
+
+    def test_an_unmapped_provider_is_not_mapped(self):
+        for provider_id in ("kilo", "kilo-free", "groq-free", "cf-workers", "ghm"):
+            with self.subTest(provider=provider_id):
+                self.assertIsNone(reader().provider_for(provider_id))
+
+    def test_an_unknown_provider_is_not_mapped(self):
+        self.assertIsNone(reader().provider_for("a-provider-nobody-knows"))
+
 if __name__ == "__main__":
     unittest.main()
