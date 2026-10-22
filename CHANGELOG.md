@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.17.77] - 2026-10-22
+
+- Two kernel module denials are now durable in the configuration. The running 6.19 kernel is affected by CVE-2026-31431 (`algif_aead`) and CVE-2026-53266 (`ebt_snat`), both in the CISA KEV feed, and the running kernel carries neither fix: no 6.19.x release carries the `ebt_snat` fix. The `algif_aead` deny existed only as a file placed by hand on the host, outside Nix, so it did not survive a rebuild and was never reviewed with the configuration that produced it. The host configuration now blacklists both modules and hands each of them to a false command in the generated `modprobe.d/nixos.conf`, which stops the automatic hardware probing and an explicit `modprobe` alike. The check `tests/kernel-module-deny.nix` evaluates the host configuration and holds the blacklist and the install rules in place.
+- The denials are containment, not a fix. A privileged direct `insmod`, `modprobe --ignore-install` and an already loaded module stay outside them, and only a patched kernel removes the exposure. Nothing on the host uses ebtables, so the `ebt_snat` deny takes away no service the host depends on. CVE-2026-53362 (the IPv6 fragment path) is in the KEV feed and names no module: it has no module-level containment and needs a kernel upgrade.
+
 ## [3.17.76] - 2026-10-22
 
 - The AI usage collector learns the capacity of the routes that report nothing. The providers with no usage API, no balance and no rate-limit headers, and every free route, showed "Limits unknown" on the Providers page. The owner rule reads their capacity from the limit failures instead, and this adds the computation of that rule: a route that runs until it is refused shows the window of its limit failures, the budget it reached, the share it has left, the share an even spend would have left, the paced availability and whether the limit was the model's own or the account's. The module takes the events of a record and returns the capacity per route. It reads no file, no database and no network, and it is not wired into the collector yet: the readers and the publication come later against this interface.
