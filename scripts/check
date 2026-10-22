@@ -43,6 +43,9 @@ printf 'Checking the agent pin against a regression\n'
 python3 scripts/check-agent-pin.py
 python3 -m unittest discover -s tests -p test_agent_pin_guard.py
 
+printf 'Checking the T3 restart guard\n'
+python3 -m unittest discover -s tests -p test_t3code_restart_guard.py
+
 printf 'Checking SIEM log parsing and secret redaction\n'
 vector --quiet test tests/siem-vector.toml
 python3 -m unittest discover -s tests -p test_siem_alerts.py

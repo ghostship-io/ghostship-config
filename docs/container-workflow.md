@@ -137,7 +137,9 @@ interruption. `podman-t3code.service` does not restart on configuration switch.
 Instead, image updates and restarts are queued and applied by
 `t3code-deploy-when-idle` only after confirming sustained idle across active turns
 and pending tasks. If a manual host restart is required, use `t3code-safe-restart`
-rather than restarting `podman-t3code.service` directly.
+rather than restarting `podman-t3code.service` directly. A forced restart needs the
+owner's own deploy or activate instruction, recorded with
+`--owner-request "<short quote or reference>"`.
 
 Record the container ID and start time plus the service MainPID before work.
 Build first; inspect the candidate unit definitions, activation scripts, and
