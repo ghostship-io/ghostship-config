@@ -1135,5 +1135,163 @@ class ExcludedProviderTests(unittest.TestCase):
         self.assertEqual(found[0].tier, "")
 
 
+class ModelNameTests(unittest.TestCase):
+    """Every candidate carries a human name, and the name is never empty.
+
+    The name is the first one that exists: the label T3 Code's model catalog
+    gives the model, else the Artificial Analysis record's name without its
+    reasoning condition, else the raw model id.
+    """
+
+    FIXTURES = Path(__file__).resolve().parents[1] / "tests/fixtures/ai-usage"
+    CATALOG = FIXTURES / "model-catalog.json"
+    AA_CACHE = FIXTURES / "model-names-aa.json"
+
+    def _catalog(self):
+        document = json.loads(self.CATALOG.read_text(encoding="utf-8"))
+        return catalog_module.Catalog(document)
+
+    def _aa_cache(self):
+        return json.loads(self.AA_CACHE.read_text(encoding="utf-8"))
+
+    def _ranked(self, provider, model, tier="bulk"):
+        return [
+            ranking.RankedModel(
+                tier=tier,
+                provider=provider,
+                model=model,
+                rank=1,
+                score=1.0,
+                quality=None,
+                remaining=None,
+                expires_in_seconds=None,
+                available=True,
+            )
+        ]
+
+    def _names(self, samples):
+        return {
+            (labels["provider"], labels["model"]): labels["name"]
+            for name, labels, _value in samples
+            if name == "ghostship_ai_model_info"
+        }
+
+    def _info(self, ranked, **kwargs):
+        samples = ranking.rank_samples(ranked, now=NOW, **kwargs)
+        return self._names(samples)
+
+    def test_the_t3_code_label_is_the_name_of_the_row(self):
+        # The instance names the model it offers, and that label is the name.
+        native = {
+            ("opencode-go", "minimax-m3.1-flash-free"): {
+                "providerInstance": "opencode",
+                "modelId": "opencode-go/minimax-m3.1-flash-free",
+                "name": "MiniMax M3.1 Flash Free",
+            }
+        }
+        name = ranking.model_display_name(
+            "opencode-go",
+            "minimax-m3.1-flash-free",
+            native_models=native,
+            catalog=self._catalog(),
+        )
+        self.assertEqual(name, "MiniMax M3.1 Flash Free")
+        names = self._info(
+            self._ranked("opencode-go", "minimax-m3.1-flash-free"),
+            native_models=native,
+            catalog=self._catalog(),
+        )
+        # The label value is the Prometheus-safe form of the name.
+        self.assertEqual(
+            names[("opencode-go", "minimax-m3.1-flash-free")],
+            "MiniMax_M3.1_Flash_Free",
+        )
+
+    def test_the_model_catalog_label_is_the_name_when_the_instance_names_none(self):
+        # The catalog T3 Code reads carries the provider's own display name.
+        name = ranking.model_display_name(
+            "opencode-go",
+            "minimax-m3.1-flash-free",
+            native_models={},
+            catalog=self._catalog(),
+        )
+        self.assertEqual(name, "MiniMax M3.1 Flash Free")
+
+    def test_the_aa_record_name_is_used_without_its_reasoning_condition(self):
+        # The feed measured the model at one condition; the condition is not
+        # part of the name of the model.
+        name = ranking.model_display_name(
+            "opencode-go",
+            "glm-5.3-flash",
+            native_models={},
+            aa_cache=self._aa_cache(),
+            catalog=catalog_module.Catalog({}),
+        )
+        self.assertEqual(name, "GLM-5.3 Flash")
+        names = self._info(
+            self._ranked("opencode-go", "glm-5.3-flash"),
+            native_models={},
+            aa_cache=self._aa_cache(),
+            catalog=catalog_module.Catalog({}),
+        )
+        self.assertEqual(names[("opencode-go", "glm-5.3-flash")], "GLM-5.3_Flash")
+
+    def test_the_raw_id_is_the_name_when_nothing_names_the_model(self):
+        name = ranking.model_display_name(
+            "openrouter",
+            "qwen/qwen3.8-27b",
+            native_models={},
+            aa_cache=self._aa_cache(),
+            catalog=catalog_module.Catalog({}),
+        )
+        self.assertEqual(name, "qwen/qwen3.8-27b")
+        names = self._info(
+            self._ranked("openrouter", "qwen/qwen3.8-27b"),
+            native_models={},
+            aa_cache=self._aa_cache(),
+            catalog=catalog_module.Catalog({}),
+        )
+        # The label values are the Prometheus-safe form, as every label of
+        # this collector is.
+        self.assertEqual(
+            names[("openrouter", "qwen_qwen3.8-27b")],
+            "qwen_qwen3.8-27b",
+        )
+
+    def test_every_candidate_has_one_info_series_with_a_name(self):
+        ranked = self._ranked("opencode-go", "minimax-m3.1-flash-free")
+        # The same model in a second tier is still one candidate.
+        second = ranking.RankedModel(
+            tier="free",
+            provider=ranked[0].provider,
+            model=ranked[0].model,
+            rank=1,
+            score=1.0,
+            quality=None,
+            remaining=None,
+            expires_in_seconds=None,
+            available=True,
+        )
+        ranked.append(second)
+        samples = ranking.rank_samples(
+            ranked,
+            now=NOW,
+            native_models={},
+            aa_cache=self._aa_cache(),
+            catalog=self._catalog(),
+        )
+        info = [
+            (labels, value)
+            for name, labels, value in samples
+            if name == "ghostship_ai_model_info"
+        ]
+        self.assertEqual(len(info), 1)
+        labels, value = info[0]
+        self.assertEqual(labels["provider"], "opencode-go")
+        self.assertEqual(labels["model"], "minimax-m3.1-flash-free")
+        self.assertEqual(labels["name"], "MiniMax_M3.1_Flash_Free")
+        self.assertEqual(value, 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
