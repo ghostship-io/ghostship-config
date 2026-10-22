@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.17.71] - 2026-10-22
+
+- The AI usage collector says which metric series it dropped as a repeat. The renderer dropped a repeated name with the same labels and logged only how many series it dropped, so a run that dropped one or two series said nothing about them, and the emitter that published a series twice could not be found. Every dropped series is now named in the run's log, with its labels in the order they appear in the text file, and the line says whether the repeat carried the value that was kept or a different one. A run names at most twenty dropped series and then says how many it did not name, so the log stays a log. The first value is still the one that is published, the file still holds every series once, and `ghostship_ai_collection_duplicate_series` still counts every repeat.
+
 ## [3.17.70] - 2026-10-22
 
 - The AI usage collector publishes the owner's routing switch. A consumer of the routing snapshot could not learn whether routing was on: the snapshot carried no switch at all, and a missing field is not an answer. The new NixOS option `ghostship.aiUsage.routing.enabled` is off by default and nothing else in the repository sets it, the unit passes it to the collector as `--routing-enabled true|false`, and the collector publishes it in the routing snapshot, in every projection of that snapshot, and in the new gauge `ghostship_ai_routing_enabled` (1 or 0, no labels). The collector never acts on the switch itself: it publishes the owner's decision and leaves the decision to the consumer.
