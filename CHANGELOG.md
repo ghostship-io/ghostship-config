@@ -1,16 +1,20 @@
 # Changelog
 
+## [3.17.68] - 2026-10-22
+
+- AI usage collector: a metric series is published once. The free pool published the account limits of a provider once per model of that provider, so a provider with two models published the same limit twice and the node exporter dropped the repeat. The account limits belong to the account, and they are published once per provider now. The renderer holds the same rule for every series: a repeated name with the same labels is dropped and counted, and the count is published as `ghostship_ai_collection_duplicate_series`, so a duplicate never passes unnoticed.
+
 ## [3.17.67] - 2026-10-22
 
 - SIEM alert bridge: a re-fired alert is no longer silenced forever. The 6-hour renotify window throttles repeat notices of one occurrence, but a resolve-then-fire cycle inside the window was dropped and its notification timestamp was never advanced, so the fingerprint stayed silent for good while the topic said "resolved". A re-fire inside the window is now deferred rather than dropped: it is recorded as pending and announced on the first poll after the window has elapsed, if the alert is still firing by then, and at most once per window. A re-fire outside the window still announces immediately.
 - SIEM alert bridge: a failed resolution publish is no longer lost. The retry covered firing alerts only, so a resolution that ntfy refused left the topic showing a critical alert that was never resolved. A resolution is now published again on the next poll until it is delivered, like a firing alert, and an alert whose resolution has been undelivered for a day becomes a dead letter, listed by `--list` and counted by the `ghostship_siem_bridge_dead_letters` and `ghostship_siem_bridge_resolution_retries` metrics.
 
-
 ## [3.17.66] - 2026-10-22
 
 - The 3D tier gets its AA-3D evidence. The public pull returned early whenever the main Artificial Analysis cache was fresh, so the AA-3D file it writes was never created and every model read "no usable AA-3D snapshot": the 3D tier was empty, and the 3D reserve could not apply, so a 3D-qualified model led the bulk tier. The pull now skips only when both caches are usable.
+Stashed changes
 
-## [3.17.65] - 2026-10-22
+## [3.17.67] - 2026-10-22
 
 - Pin ghostship-agent 2318134e (0.43.2): capability handlers import on first call, so the MCP browser tools work again. 0.43.1 left registration importing every handler, and the GitHub handlers' missing package still failed every MCP call.
 
@@ -1702,7 +1706,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provider plugins, and add repeatable container setup and CI validation.
 - Reduce agent instructions to short workflow rules and task-specific references;
   install and apply Matt Pocock's `writing-for-agents` skill.
-
 
 ## [3.8.2] - 2026-09-08
 
@@ -3864,7 +3867,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tun0` IPv4 in `podman-vuetorrent` pre-start so qBittorrent no longer boots
   with the previous tunnel address and spends its first restart window unable
   to bind after Gluetun server changes.
-
 
 - **Develop Gemini maintenance**: Removed the deprecated `experimental.plan` key from the generated develop-host Gemini system settings so managed Gemini launches stop warning about read-only stale config, and added `bash` to the maintenance runtime inputs so npm and npx subprocesses can spawn `sh` reliably during `ghostship-agent-maintenance`.
 

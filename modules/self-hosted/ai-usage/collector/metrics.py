@@ -62,6 +62,12 @@ class MetricWriter:
         self._samples: list[Sample] = []
         self._help: dict[str, str] = {}
         self._types: dict[str, str] = {}
+        # Every published series, by its name and its label set. A metric
+        # series is that pair, and a series is published once.
+        self._seen: set[tuple[str, tuple[tuple[str, str], ...]]] = set()
+        # How many repeats were dropped. The count is published, so a
+        # duplicate is never hidden.
+        self.duplicates = 0
 
     def declare(self, name: str, kind: str, help_text: str) -> None:
         self._help.setdefault(name, help_text)
@@ -74,6 +80,14 @@ class MetricWriter:
         if math.isnan(number):
             return
         clean = {label_name(key): label_value(item) for key, item in labels.items()}
+        key = (name, tuple(sorted(clean.items())))
+        if key in self._seen:
+            # The same series a second time. The first reading is the one
+            # that is published, and the repeat is counted: a textfile that
+            # holds one series twice makes the scrape fail.
+            self.duplicates += 1
+            return
+        self._seen.add(key)
         self._samples.append((name, clean, number))
 
     def gauge(self, name: str, value: float, **labels: object) -> None:
