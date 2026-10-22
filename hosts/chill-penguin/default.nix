@@ -15,6 +15,10 @@ in
   ghostship.privateIntegrations.enable = true;
   ghostship.privateIntegrations.skillsReconcile.enable = true;
   ghostship.githubEngineering.enable = true;
+  # Model routing is on: the owner approved it on 2026-10-22, on the
+  # condition that the Providers page and its data pass live validation
+  # (the evidence is in the AI-usage program's morning summary).
+  ghostship.aiUsage.routing.enabled = true;
   # Held off by the owner until the coordinator replay fix is deployed and
   # passes a backlog replay.
   ghostship.githubEngineering.coordinatorAutoStart = false;
