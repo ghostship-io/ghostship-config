@@ -489,10 +489,6 @@ class _Group:
         self.weights: dict[str, float] = {model: 1.0 for model in self.models}
         self.weights_basis = "assumed"
 
-    def model(self) -> str | None:
-        """The model of a route group, if it holds one."""
-        return self.models[0] if len(self.models) == 1 else None
-
     # -- the episodes -----------------------------------------------------
 
     def weighted_episode_usage(self, episode: _Episode) -> float:
@@ -709,6 +705,10 @@ def _capacity_of(
         budget = None
     elif state == "exhausted":
         # The last refusal has no recovery behind it: the route is spent.
+        # The window that is spent is the open episode's own window, so the
+        # reset is the end of that episode's window.
+        if group.open_episode is not None:
+            start = group.open_episode.start_at
         left = 0.0
         if window_seconds is not None:
             reset_at = start + window_seconds
