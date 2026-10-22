@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -55,84 +56,51 @@ def _iso_epoch(value: Any) -> float | None:
 def _record(raw: Mapping[str, Any]) -> dict[str, Any] | None:
     """One validated AA-3D record, or None when it is not usable evidence.
 
-    The evidence shape the root acquires is `{model, elo, ci95_low,
-    ci95_high, rank, rank_range, anchor, cost_per_task}`; the older feed shape
-    used `slug`/`observed_at`. Both are accepted, and nothing is invented.
+    The fields are allowlisted: the measurement name, the Elo, its interval,
+    the rank, the anchor flag and the AA-3D cost. No arbitrary id, slug,
+    source, release date, normalization or free text is read from the file.
     """
-    model = str(raw.get("model") or raw.get("name") or "").strip()
+    model = str(raw.get("model") or "").strip()
+    if not model or len(model) > 120:
+        return None
     elo = _finite(raw.get("elo"))
-    source = str(raw.get("source") or "").strip()
-    observed = _iso_epoch(raw.get("observed_at") or raw.get("observed_at_epoch"))
-    if not model or elo is None or elo < 0.0 or not source:
-        source = ""
-    if not model or elo is None or elo < 0.0:
+    if elo is None or elo < 0.0:
+        return None
+    rank = _finite(raw.get("rank"))
+    if rank is None or rank < 1.0 or rank != int(rank):
+        return None
+    if rank > MAX_RECORDS:
+        return None
+    rank_range = str(raw.get("rank_range") or "")[:16] or None
+    if rank_range is not None and not re.fullmatch(r"[0-9-]{1,16}", rank_range):
         return None
     low = _finite(raw.get("ci95_low"))
     high = _finite(raw.get("ci95_high"))
-    interval = raw.get("elo_interval") or raw.get("interval") or raw.get("confidence_interval")
-    if isinstance(interval, Mapping):
-        low = _finite(interval.get("low")) if low is None else low
-        high = _finite(interval.get("high")) if high is None else high
-    elif isinstance(interval, (list, tuple)) and len(interval) == 2:
-        low = _finite(interval[0]) if low is None else low
-        high = _finite(interval[1]) if high is None else high
-    if (low is None) != (high is None) or (
-        low is not None and high is not None and low > high
-    ):
-        # A half interval or an inverted one is malformed; both absent is an
-        # interval the source did not publish.
+    if (low is None) != (high is None):
+        return None
+    if low is not None and (low > elo or high < elo):
+        # The interval must contain the point estimate.
         return None
     raw_cost = raw.get("cost_per_task")
     cost = _finite(raw_cost)
     if raw_cost is not None and (cost is None or cost < 0.0):
-        # A present but unusable cost is malformed; an absent one is an
-        # unpublished value.
         return None
-    normalised = _finite(raw.get("normalized"))
-    if normalised is not None and not 0.0 <= normalised <= 1.0:
-        normalised = None
     return {
-        "id": str(raw.get("id") or ""),
-        "slug": str(raw.get("slug") or ""),
-        "model": model[:120],
+        "model": model,
         "elo": round(elo, 1),
         "elo_interval": {
             "low": None if low is None else round(low, 1),
             "high": None if high is None else round(high, 1),
         },
-        "rank": int(raw["rank"])
-        if isinstance(raw.get("rank"), (int, float)) and not isinstance(raw.get("rank"), bool)
-        else None,
-        "rank_range": str(raw.get("rank_range") or "")[:16] or None,
+        "rank": int(rank),
+        "rank_range": rank_range,
         "anchor": bool(raw.get("anchor", False)),
         "cost_per_task": None if cost is None else round(cost, 6),
-        "normalized": normalised,
-        "source_normalized": normalised is not None,
-        "normalization": str(raw.get("normalization") or "")[:80] or None,
-        "source": source[:120],
-        "observed_at": (
-            datetime.fromtimestamp(observed, tz=timezone.utc)
-            .isoformat()
-            .replace("+00:00", "Z")
-            if observed is not None
-            else None
-        ),
-        "observed_at_epoch": observed,
-        "released_at": str(raw.get("released_at") or "")[:40] or None,
-        "task_count": int(raw["task_count"])
-        if isinstance(raw.get("task_count"), (int, float))
-        and not isinstance(raw.get("task_count"), bool)
-        else None,
-        "conditions": (
-            {
-                str(key)[:40]: (
-                    value if isinstance(value, (str, int, float, bool)) else None
-                )
-                for key, value in list(conditions.items())[:20]
-            }
-            if isinstance((conditions := raw.get("conditions")), Mapping)
-            else {"benchmark": str(raw.get("benchmark") or "aa-3d")[:60]}
-        ),
+        # Published only after the loader applies the board policy.
+        "normalized": None,
+        "source_normalized": False,
+        "conditions": {"benchmark": BENCHMARK, "scope": PUBLIC_CONDITION},
+        "source": SOURCE_URL,
     }
 
 
@@ -312,6 +280,10 @@ def load_cache(path: str | None, now: float) -> dict[str, Any] | None:
         records.append(record)
     if len(records) != len(raw_records):
         return _rejected("record was dropped")
+    if sorted(record["rank"] for record in records) != list(range(1, len(records) + 1)):
+        # The board is a complete, ordered leaderboard: finite, unique,
+        # sequential ranks with no duplicate or gap.
+        return _rejected("ranks are not the complete sequence")
 
     elos = [float(record["elo"]) for record in records]
     bounds = {
@@ -342,7 +314,7 @@ def load_cache(path: str | None, now: float) -> dict[str, Any] | None:
         "source_url": SOURCE_URL,
         "benchmark": BENCHMARK,
         "benchmark_version": version[:20],
-        "attribution": str(document.get("attribution") or "Artificial Analysis")[:200],
+        "attribution": "Artificial Analysis (https://artificialanalysis.ai/)",
         "completeness": {
             "complete": True,
             "records": len(records),
@@ -405,10 +377,10 @@ def lookup(cache: Mapping[str, Any] | None, provider: str, model: str) -> dict[s
         "benchmark": str(cache.get("benchmark") or "aa-3d"),
         "conditions": record.get("conditions") or {},
         "observed_at": record.get("observed_at"),
-        "released_at": record.get("released_at"),
+        "released_at": None,
         "task_count": record.get("task_count"),
-        "aa_id": record.get("id"),
-        "aa_slug": record.get("slug"),
+        "aa_id": None,
+        "aa_slug": None,
         "aa_name": record.get("model"),
         "note": (
             "an AA-3D Elo measures interactive 3D scene work; it is not a "

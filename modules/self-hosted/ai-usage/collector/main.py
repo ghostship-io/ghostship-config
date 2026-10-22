@@ -681,6 +681,7 @@ def ranking_samples(
         rank_kwargs["free_route_accounts"] = sorted(
             free_route_accounts(results, context, measured_windows)
         )
+    context["ranking_inventory"] = sorted(inventory)
     ranked = ranking_module.rank_models(**rank_kwargs)
     samples.extend(ranking_module.rank_samples(ranked, now=now))
     return samples, ranked
@@ -756,6 +757,7 @@ def build_snapshot(
         aa_3d_cache=aa_3d_cache,
         free_models=free_models or set(),
         promo_models=promo_models or set(),
+        inventory=context.get("ranking_inventory") or [],
     )
 
 

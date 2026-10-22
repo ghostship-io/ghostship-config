@@ -177,9 +177,11 @@ def _native_option(option: Mapping[str, Any]) -> dict[str, Any]:
     checkable. The keys are kept as the catalog spells them; no global option
     name is assumed.
     """
+    current = option.get("currentValue", option.get("current_value"))
     record: dict[str, Any] = {
         "id": str(option.get("id")),
-        "current_value": option.get("currentValue", option.get("current_value")),
+        "current_value": current,
+        "current_published": current is not None,
     }
     for key in ("values", "allowed", "allowedValues", "choices", "enum"):
         value = option.get(key)
@@ -192,6 +194,16 @@ def _native_option(option: Mapping[str, Any]) -> dict[str, Any]:
             if cleaned:
                 record["values"] = cleaned
                 break
+    if "values" not in record:
+        choices = option.get("options")
+        if isinstance(choices, list) and 0 < len(choices) <= 64:
+            cleaned = [
+                entry.get("id")
+                for entry in choices
+                if isinstance(entry, Mapping) and isinstance(entry.get("id"), str)
+            ]
+            if cleaned:
+                record["values"] = cleaned
     return record
 
 
@@ -446,6 +458,7 @@ def _intelligence_record(
         "variant_match": binding.get("variant_match") or "",
         "variant_mismatch": bool(binding.get("variant_mismatch")),
         "condition_confirmed": bool(binding.get("condition_confirmed")),
+        "condition_unknown": bool(binding.get("condition_unknown")),
         "identity_match": binding.get("identity_match") or "",
         "variants": binding.get("variants") or [],
         "matched_by": binding.get("matched_by") or "",
@@ -1353,6 +1366,7 @@ def _fill_value(
     free_set: set[tuple[str, str]] | None = None,
     promo_set: set[tuple[str, str]] | None = None,
     aa_3d_cache: Mapping[str, Any] | None = None,
+    inventory: Iterable[Any] | None = None,
 ) -> None:
     """The strength, the relative price, and the value of one model."""
     provider = row.get("provider") or ""
@@ -1414,19 +1428,50 @@ def _fill_value(
         row["role"] = "unranked"
     measured_variant = str(intelligence.get("measured_variant") or "")
     variant_mismatch = bool(intelligence.get("variant_mismatch"))
+    condition_exact = (
+        str(intelligence.get("variant_match") or "") in ("exact", "default")
+        and not intelligence.get("condition_unknown")
+    )
     alignment: dict[str, Any] = {}
+    alignment_meta: dict[str, Any] = {}
     selectable = strength is not None
-    if strength is not None and variant_mismatch:
-        # The record was measured under another effort setting. The model is
-        # selectable only when its native options can be aligned to the
-        # measured setting; otherwise the mismatch stays visible and it is
-        # not selected. Nothing is guessed about the unmeasured setting.
-        aligned = bind_module.alignment_option(
-            (row.get("native") or {}).get("options"), measured_variant
+    native_options = (row.get("native") or {}).get("options") or []
+    native_published = any(
+        isinstance(option, Mapping) and option.get("current_published")
+        and str(option.get("id") or "").lower()
+        in ("variant", "reasoningeffort", "effort", "thinking")
+        for option in native_options
+    )
+    if strength is not None and not condition_exact:
+        # The record's condition is not the model's proven one. The model is
+        # selectable only when a published native option supports the measured
+        # condition, and the alignment names that option. Without it the
+        # condition is unknown and the model is not selectable, with no empty
+        # alignment claiming otherwise.
+        aligned = (
+            bind_module.alignment_option(native_options, measured_variant)
+            if measured_variant
+            else None
         )
         if aligned is not None:
             selectable = True
             alignment = {aligned[0]: aligned[1]}
+            current = next(
+                (
+                    option.get("current_value")
+                    for option in native_options
+                    if isinstance(option, Mapping)
+                    and str(option.get("id") or "") == aligned[0]
+                ),
+                None,
+            )
+            alignment_meta = {
+                "option": aligned[0],
+                "value": aligned[1],
+                "recommended": True,
+                "applied": current is not None and str(current) == aligned[1],
+                "actual": current,
+            }
         else:
             selectable = False
     row["aa"] = {
@@ -1455,6 +1500,7 @@ def _fill_value(
             # the feed marks the record as the provider's default fallback.
             # An id without an effort option is not proof of either.
             "confirmed": bool(intelligence.get("condition_confirmed")),
+            "unknown": bool(intelligence.get("condition_unknown")),
             "note": (
                 "the benchmark condition is the feed's own label; a model "
                 "that publishes no effort keeps that condition visible and "
@@ -1469,6 +1515,8 @@ def _fill_value(
         "variant_mismatch": variant_mismatch,
         "selectable": selectable,
         "alignment": alignment,
+        "alignment_meta": alignment_meta,
+        "native_condition_published": native_published,
         "text_only": bool(intelligence.get("text_only")),
         "reason": intelligence.get("reason") or "",
         "basis": "the verified Artificial Analysis record of the exact model",
@@ -1837,6 +1885,7 @@ def build_snapshot(
     aa_cache: Mapping[str, Any] | None = None,
     measured_windows: Iterable[Mapping[str, Any]] | None = None,
     aa_3d_cache: Mapping[str, Any] | None = None,
+    inventory: Iterable[Any] | None = None,
     catalog: Any = None,
     facts: Mapping[str, Any] | None = None,
     free_models: Iterable[Any] | None = None,
@@ -1954,6 +2003,24 @@ def build_snapshot(
         tier: [winner["key"] for winner in rows] for tier, rows in winners.items()
     }
 
+    candidate_keys = {(row["provider"], row["model"]) for row in candidates}
+    inventory_keys = []
+    for entry in inventory or ():
+        if isinstance(entry, (tuple, list)) and len(entry) == 2:
+            inventory_keys.append((str(entry[0]), str(entry[1])))
+        elif isinstance(entry, Mapping):
+            inventory_keys.append((str(entry.get("provider") or ""), str(entry.get("model") or "")))
+    excluded = [list(pair) for pair in inventory_keys if pair not in candidate_keys]
+    ranking_coverage = {
+        "inventory": len(inventory_keys),
+        "candidates": len(candidates),
+        "excluded": len(excluded),
+        "excluded_models": excluded[:500],
+        "basis": (
+            "every offered model is a candidate row; a model missing from the "
+            "candidates is listed here, never silently dropped"
+        ),
+    }
     aa_coverage_rows = []
     for row in candidates:
         aa = row.get("aa") or {}
@@ -2137,6 +2204,7 @@ def build_snapshot(
         "max_age_seconds": max_age_seconds,
         "partial": bool(incomplete),
         "coverage": {
+            "ranking": ranking_coverage,
             "sources_total": len(source_records),
             "sources_ok": sum(1 for r in source_records if r.get("status") == "ok"),
             "sources_partial": sum(
