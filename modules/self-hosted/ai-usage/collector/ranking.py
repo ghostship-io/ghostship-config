@@ -120,6 +120,9 @@ class RankedModel:
     settled: bool = True
     pending_reason: str = ""
     account: str = ""
+    pace: float | None = None
+    pace_binding: Any = None
+    capacity_binding: Any = None
     frontier_surplus: dict[str, Any] = dataclasses.field(default_factory=dict)
     used_tokens: float = 0.0
     three_d_prior: float | None = None
@@ -563,16 +566,21 @@ def _capacity_detail(
     consuming its allowance slowly, so using it now spreads the usage
     across every reset limit instead of piling it on one account.
     """
+    empty = {
+        "remaining": None,
+        "expiresIn": None,
+        "urgency": 0.0,
+        "pace": None,
+        "expected": None,
+        "actual": None,
+        "binding": None,
+        "paceBinding": None,
+        "paceValue": None,
+        "paceExpected": None,
+        "paceActual": None,
+    }
     if not windows:
-        return {
-            "remaining": None,
-            "expiresIn": None,
-            "urgency": 0.0,
-            "pace": None,
-            "expected": None,
-            "actual": None,
-            "binding": None,
-        }
+        return dict(empty)
     states: list[tuple[Any, str, float | None]] = []
     for window in windows:
         state, remaining = _window_state(window, now)
@@ -584,24 +592,13 @@ def _capacity_detail(
         binding = min(spent, key=lambda item: _reset_sort_key(item[0]))
         reset = _window_reset(binding[0])
         return {
+            **empty,
             "remaining": 0.0,
             "expiresIn": None if reset is None else reset - now,
-            "urgency": 0.0,
-            "pace": None,
-            "expected": None,
-            "actual": None,
             "binding": binding[0],
         }
     if any(state == "unknown" for _window, state, _remaining in states):
-        return {
-            "remaining": None,
-            "expiresIn": None,
-            "urgency": 0.0,
-            "pace": None,
-            "expected": None,
-            "actual": None,
-            "binding": None,
-        }
+        return dict(empty)
     binding = min(
         states,
         key=lambda item: (
@@ -616,6 +613,17 @@ def _capacity_detail(
         1.0 + max(0.0, (reset - now) / 3600.0) / URGENCY_HALF_LIFE_HOURS
     )
     expected, actual = _pace(binding[0], now, remaining)
+    paces: list[tuple[Any, float, float, float]] = []
+    for window, state, remaining_value in states:
+        if state != "known" or remaining_value is None:
+            continue
+        window_expected, window_actual = _pace(window, now, remaining_value)
+        if window_expected is None or window_actual is None:
+            continue
+        paces.append(
+            (window, window_expected, window_actual, window_expected - window_actual)
+        )
+    pace_binding = min(paces, key=lambda item: item[3]) if paces else None
     return {
         "remaining": remaining,
         "expiresIn": expires_in,
@@ -624,6 +632,13 @@ def _capacity_detail(
         "expected": expected,
         "actual": actual,
         "binding": binding[0],
+        # The pace binding is the most constraining window, which is not
+        # necessarily the capacity binding: a window can be lightly used and
+        # still run out first because its own line is far ahead.
+        "paceBinding": None if pace_binding is None else pace_binding[0],
+        "paceValue": None if pace_binding is None else max(-1.0, min(1.0, pace_binding[3])),
+        "paceExpected": None if pace_binding is None else pace_binding[1],
+        "paceActual": None if pace_binding is None else pace_binding[2],
     }
 
 
@@ -905,6 +920,8 @@ class _Candidate:
     expected: float | None
     actual: float | None
     account: str
+    pace_binding: Any
+    capacity_binding: Any
     frontier_surplus: dict[str, Any]
 
     @property
@@ -1281,9 +1298,11 @@ def rank_models(
                 pending_reason=pending_reason,
                 used_tokens=usage.get((provider, model), 0.0),
                 windows=list(windows),
-                pace=pace,
-                expected=detail["expected"],
-                actual=detail["actual"],
+                pace=detail["paceValue"] if detail["paceValue"] is not None else pace,
+                expected=detail["paceExpected"] if detail["paceExpected"] is not None else detail["expected"],
+                actual=detail["paceActual"] if detail["paceActual"] is not None else detail["actual"],
+                pace_binding=detail["paceBinding"],
+                capacity_binding=detail["binding"],
                 account=account,
                 frontier_surplus=_frontier_surplus(list(windows), now),
             )
@@ -1358,8 +1377,9 @@ def rank_models(
                 three_d_quality = _clamp(candidate.three_d_prior * 100.0)
             else:
                 three_d_quality = _clamp(candidate.three_d_score * 100.0)
-            three_d_usage = _three_d_usage_score(candidate.three_d_tokens)
-            scores["3d"] = 0.7 * three_d_quality + 0.3 * three_d_usage
+            # The 3D tier ranks the documented capability prior. Token volume
+            # is displayed beside it and is not evidence of 3D competence.
+            scores["3d"] = three_d_quality
 
         if not tiers:
             entries.append(
@@ -1377,6 +1397,9 @@ def rank_models(
                     windows=tuple(candidate.windows),
                     settled=candidate.settled,
                     account=candidate.account,
+                    pace=candidate.pace,
+                    pace_binding=candidate.pace_binding,
+                    capacity_binding=candidate.capacity_binding,
                     frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
@@ -1405,6 +1428,9 @@ def rank_models(
                     windows=tuple(candidate.windows),
                     settled=candidate.settled,
                     account=candidate.account,
+                    pace=candidate.pace,
+                    pace_binding=candidate.pace_binding,
+                    capacity_binding=candidate.capacity_binding,
                     frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,
@@ -1430,6 +1456,9 @@ def rank_models(
                     windows=tuple(candidate.windows),
                     settled=candidate.settled,
                     account=candidate.account,
+                    pace=candidate.pace,
+                    pace_binding=candidate.pace_binding,
+                    capacity_binding=candidate.capacity_binding,
                     frontier_surplus=candidate.frontier_surplus,
                     pending_reason=candidate.pending_reason,
                     used_tokens=candidate.used_tokens,

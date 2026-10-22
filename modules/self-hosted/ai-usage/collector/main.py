@@ -27,6 +27,7 @@ import aa  # noqa: E402
 import catalog as catalog_module  # noqa: E402
 import codes  # noqa: E402
 import pool as pool_module  # noqa: E402
+import quota as quota_module  # noqa: E402
 import providers as providers_module  # noqa: E402
 import ranking as ranking_module  # noqa: E402
 import snapshot as snapshot_module  # noqa: E402
@@ -156,6 +157,16 @@ METRIC_HELP = {
     "ghostship_ai_calculation_component": "One for each part of the calculation of a winner.",
     "ghostship_ai_calculation_weight": "The weight of a part of the calculation.",
     "ghostship_ai_calculation_gate": "One for each gate of the tiers.",
+    "ghostship_ai_quota_duration_seconds": "The length of a quota window.",
+    "ghostship_ai_quota_expected_used_ratio": (
+        "The usage an even spend would have reached by now; the white line."
+    ),
+    "ghostship_ai_quota_pace_delta_ratio": (
+        "The expected usage minus the measured usage; positive is behind budget."
+    ),
+    "ghostship_ai_model_pace_delta_ratio": (
+        "The most constraining pace among the windows of a model."
+    ),
     "ghostship_ai_collection_timestamp_seconds": "When this collection ran.",
     "ghostship_ai_collection_duration_seconds": "How long this collection took.",
 }
@@ -607,9 +618,13 @@ def ranking_samples(
             "score": score,
             "prior": prior,
             "usage_tokens": tokens,
-            # Only a model that is genuinely good at 3D work belongs in the
-            # tier; the tier stays small and useful.
-            "eligible": prior >= THREE_D_MIN_PRIOR,
+            # A model belongs in the 3D tier only when the catalog proves it
+            # can look at an image and its documented 3D prior clears the
+            # threshold. A high token count is not evidence of 3D work.
+            "eligible": prior >= THREE_D_MIN_PRIOR
+            and threed_module.visual_capable(
+                catalog.model_entry(provider, model) if catalog is not None else None
+            ),
         }
         samples.extend(
             threed_module.three_d_samples(provider, model, prior=prior, tokens=tokens, now=now)
@@ -814,6 +829,11 @@ def render(
     for name, labels, value in extra:
         writer.add(name, labels, value)
     for name, labels, value in snapshot_module.decision_samples(snapshot or {}):
+        writer.add(name, labels, value)
+    measured: list[dict[str, Any]] = []
+    for result in results:
+        measured.extend(result.windows)
+    for name, labels, value in quota_module.quota_pace_samples(measured, now):
         writer.add(name, labels, value)
     writer.add("ghostship_ai_collection_timestamp_seconds", {}, now)
     writer.add("ghostship_ai_collection_duration_seconds", {}, duration)
