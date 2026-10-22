@@ -113,6 +113,10 @@ class Inference:
         self.unmatched = dict(unmatched or {})
         # The events of every record, by the record they came from.
         self.records = {name: list(events) for name, events in (records or {}).items()}
+        # The routes the OpenCode record says a provider retired, by
+        # "provider/model", and the last success of every route it saw.
+        self.retirements: dict[str, dict[str, Any]] = {}
+        self.last_success: dict[str, float] = {}
 
     @property
     def unmatched_events(self) -> int:
@@ -276,6 +280,50 @@ def infer(
     return {route: capacity.as_dict() for route, capacity in capacities.items()}
 
 
+def retirements_from_events(
+    events: Sequence[Mapping[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, float]]:
+    """The retired routes an event record shows, and each route's last success.
+
+    A route is retired when its latest retirement event has no success after
+    it. The retirement is first seen at the earliest retirement event after
+    the route's last success. Only the flag is read: the record holds no
+    error text.
+    """
+    last_success: dict[str, float] = {}
+    by_route: dict[str, list[Mapping[str, Any]]] = {}
+    for event in events:
+        if not isinstance(event, Mapping):
+            continue
+        at = event.get("at")
+        if isinstance(at, bool) or not isinstance(at, (int, float)):
+            continue
+        key = f"{event.get('provider') or ''}/{event.get('model') or ''}"
+        by_route.setdefault(key, []).append(event)
+        if event.get("outcome") == "success":
+            last_success[key] = max(float(at), last_success.get(key, float("-inf")))
+    retired: dict[str, dict[str, Any]] = {}
+    for key, route_events in by_route.items():
+        after = last_success.get(key, float("-inf"))
+        flagged = [
+            float(event["at"])
+            for event in route_events
+            if event.get("retired") is True and float(event["at"]) > after
+        ]
+        if not flagged:
+            continue
+        first = route_events[0]
+        retired[key] = {
+            "provider": str(first.get("provider") or ""),
+            "model": str(first.get("model") or ""),
+            "route": key,
+            "first_seen": min(flagged),
+            "reason": "model_retired",
+            "source": SOURCE_OPENCODE,
+        }
+    return retired, last_success
+
+
 def read_and_infer(
     now: float,
     *,
@@ -304,6 +352,8 @@ def read_and_infer(
         mapped, missing = map_events(records_of_source, routes)
         unmatched[source] = missing
         events.extend(mapped)
+        if source == SOURCE_OPENCODE:
+            reading.retirements, reading.last_success = retirements_from_events(mapped)
     reading.unmatched = unmatched
     reading.capacities = infer(events, now)
     # Every record publishes the events it could not place on a route. The

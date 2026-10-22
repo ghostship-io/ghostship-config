@@ -1065,6 +1065,37 @@ def ranking_inputs(
     }
 
 
+def merge_record_retirements(
+    retired: Mapping[str, Mapping[str, Any]],
+    record_retirements: Mapping[str, Mapping[str, Any]],
+    record_last_success: Mapping[str, float],
+) -> dict[str, dict[str, Any]]:
+    """Add the retirements the OpenCode request record shows.
+
+    Some retirements reach the collector only through the request record,
+    not through T3 Code's run history. They join the same record, keyed by
+    "provider/model": a route keeps the earliest moment it was first seen
+    retired, and a success the request record shows after that moment
+    clears it, as a successful run does.
+    """
+    merged = {str(route): dict(record) for route, record in (retired or {}).items()}
+    for route, record in (record_retirements or {}).items():
+        previous = merged.get(route)
+        entry = dict(record)
+        if previous is not None:
+            earlier = float(previous.get("first_seen") or 0.0)
+            if earlier and earlier < float(entry.get("first_seen") or 0.0):
+                entry["first_seen"] = earlier
+        merged[route] = entry
+    for route in list(merged):
+        succeeded = (record_last_success or {}).get(route)
+        if succeeded is None:
+            continue
+        if float(succeeded) > float(merged[route].get("first_seen") or 0.0):
+            merged.pop(route, None)
+    return merged
+
+
 def retired_routes(
     persisted: Mapping[str, Mapping[str, Any]] | None,
     failures: Iterable[Mapping[str, Any]] | None,
@@ -1265,6 +1296,11 @@ def ranking_samples(
     )
     observed_failures = observations["failures"]
     retired = retired_routes(persisted, observed_failures, observations["successes"])
+    retired = merge_record_retirements(
+        retired,
+        context.get("inferred_retirements") or {},
+        context.get("inferred_last_success") or {},
+    )
     if "retired_routes" in inspect.signature(ranking_module.rank_models).parameters:
         rank_kwargs["retired_routes"] = retired
     for failure in observed_failures:
@@ -1449,6 +1485,8 @@ def collect(
     )
     results.extend(inferred.results)
     context["inferred_capacity"] = inferred.capacities
+    context["inferred_retirements"] = dict(inferred.retirements)
+    context["inferred_last_success"] = dict(inferred.last_success)
     context["inference_unmatched"] = dict(inferred.unmatched)
     ranking_metrics, ranked = ranking_samples(
         results,
