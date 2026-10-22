@@ -137,6 +137,56 @@ The text of a provider's error is read in memory, to pick the outcome, and
 it never leaves the process: it is not stored, not returned, not logged and
 not in an event. A real limit message names the account it belongs to.
 
+## The free pool's job ledger
+
+The free inference pool records every request it dispatches in a durable
+ledger: one reservation row per dispatched request, and one attempt per
+attempted route on the job's receipt. A free route reports no usage of its
+own, so the collector infers its capacity from its limit failures (the
+owner rule is in ghostship-agent's `config/agents/routing-policy.md`,
+"Usage measurement"), and the ledger is where the use of the route is
+recorded. The pool's own limits are admission caps and are never a
+capacity reading.
+
+The reader is `collector/pool_reader.py`. It reads the SQLite ledger the
+pool keeps at `.local/state/ghostship-agent/runtime/jobs.sqlite` inside the
+container home. It is not a source yet: the collector does not read it, and
+no metric carries it. What it produces is fixed, and it is the same
+contract as the OpenCode reader:
+
+* `status` is `ok` or `unreadable`, and `reason` is a fixed code (`ok`,
+  `ledger_missing`, `ledger_unreadable`, `ledger_corrupt`,
+  `ledger_schema_missing`, `timeout`). A reading that cannot be made is
+  never a reading of zero usage.
+* `events` is one event per request: the pool's provider name, the model
+  id as recorded, the instant in epoch seconds, the outcome (`success`,
+  `limit` or `other`), the tokens used (`None` when the ledger holds none),
+  and the window a limit named (`None` or `1d`).
+* `counts` holds the attempts read, the probes read, the attempts that had
+  no reservation, and the events per outcome.
+
+The attempt's category decides the outcome. A success is a success. A quota
+exhaustion is a limit and names no window; the daily exhaustion of the free
+allowance is a limit of the day. Every other category is not a limit of the
+route: a rate limit, an upstream error, an unavailable model, a context
+limit, a credential failure and an unexpected tool are all something else.
+
+An attempt takes the reservation of its route: the k-th attempt of a job
+and route takes the k-th reservation of that job and route, in time order.
+An attempt with no reservation was never dispatched, and it is counted and
+not emitted. A failed attempt contributes no usage, because the estimate
+the pool writes before a dispatch is not consumption; only a success carries
+the usage the pool settled onto its reservation. A probe - the pool's own
+check of a route - has a reservation and no receipt, so it is an event of
+its own: an `other` with the usage it consumed.
+
+The read is read only and it is bounded: the ledger is opened with the
+`mode=ro` URI and nothing in the reader writes to it, so the running pool
+keeps its own ledger. Every query asks only for the last 35 days, the whole
+read has a wall clock limit of 20 seconds that aborts the query when it is
+reached, the busy timeout is 2 seconds, and the connection is closed on
+every path so no read transaction is left open.
+
 ## The windows and where their numbers come from
 
 A window is only headroom when it carries three things: the share of the
