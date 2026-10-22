@@ -8,7 +8,7 @@
  ],
  "timezone": "utc",
  "schemaVersion": 41,
- "version": 4,
+ "version": 5,
  "editable": false,
  "refresh": "1m",
  "time": {
@@ -48,7 +48,7 @@
    "id": 28,
    "title": "Winners by tier",
    "type": "table",
-   "description": "The proposed winner per provider and tier, grouped by tier so rows never interleave. Value and its source show whether the number is measured or a prior estimate; capacity is the remaining account share and expiry a duration. A free-tier value is a low-complexity choice, not frontier intelligence. Empty values are unknown, never zero.",
+   "description": "The proposed winner per provider and tier, grouped by tier, with the value and the remaining account capacity. Capacity is a share of the account window. The source, quality and expiry are in Winner detail below, so these core columns stay legible without horizontal scrolling, including at narrow width.",
    "datasource": {
     "type": "prometheus",
     "uid": "victoriametrics"
@@ -57,7 +57,170 @@
     "x": 0,
     "y": 5,
     "w": 24,
-    "h": 9
+    "h": 16
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "instant": true,
+     "format": "table",
+     "expr": "max by (tier, provider, model, source) (ghostship_ai_model_winner * on(provider, model) group_left(source) ghostship_ai_model_value)"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "victoriametrics"
+     },
+     "instant": true,
+     "format": "table",
+     "expr": "max by (tier, provider, model) (ghostship_ai_model_winner * on(provider, model) group_left() ghostship_ai_model_capacity_remaining)"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "merge",
+     "options": {}
+    },
+    {
+     "id": "rename",
+     "options": {
+      "renameByName": {
+       "Value #A": "Value",
+       "Value #B": "Capacity"
+      }
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true,
+       "source": true
+      },
+      "indexByName": {
+       "tier": 0,
+       "provider": 1,
+       "model": 2,
+       "Value": 3,
+       "Capacity": 4
+      }
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "\u2014",
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      }
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "tier"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 45
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "provider"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 70
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "model"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 110
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 50
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Capacity"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 60
+       },
+       {
+        "id": "unit",
+        "value": "percentunit"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false
+    },
+    "sortBy": [
+     {
+      "displayName": "tier",
+      "desc": false
+     }
+    ]
+   }
+  },
+  {
+   "id": 35,
+   "title": "Winner detail  /  source, quality, expiry",
+   "type": "table",
+   "description": "The evidence behind each winner: whether the value is measured or a prior estimate, the quality score and the remaining capacity expiry as a duration. Kept separate so the core table stays readable.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "victoriametrics"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 22,
+    "w": 24,
+    "h": 12
    },
    "targets": [
     {
@@ -88,16 +251,6 @@
      },
      "instant": true,
      "format": "table",
-     "expr": "max by (tier, provider, model) (ghostship_ai_model_winner * on(provider, model) group_left() ghostship_ai_model_capacity_remaining)"
-    },
-    {
-     "refId": "D",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "victoriametrics"
-     },
-     "instant": true,
-     "format": "table",
      "expr": "max by (tier, provider, model) (ghostship_ai_model_winner * on(provider, model) group_left() ghostship_ai_model_capacity_expires_in_seconds)"
     }
    ],
@@ -112,8 +265,7 @@
       "renameByName": {
        "Value #A": "Value",
        "Value #B": "Quality",
-       "Value #C": "Capacity",
-       "Value #D": "Expires in",
+       "Value #C": "Expires in",
        "source": "Source"
       }
      }
@@ -122,17 +274,16 @@
      "id": "organize",
      "options": {
       "excludeByName": {
-       "Time": true
+       "Time": true,
+       "tier": true
       },
       "indexByName": {
-       "tier": 0,
-       "provider": 1,
-       "model": 2,
-       "Value": 3,
-       "Source": 4,
-       "Quality": 5,
-       "Capacity": 6,
-       "Expires in": 7
+       "provider": 0,
+       "model": 1,
+       "Value": 2,
+       "Source": 3,
+       "Quality": 4,
+       "Expires in": 5
       }
      }
     }
@@ -151,7 +302,7 @@
      {
       "matcher": {
        "id": "byName",
-       "options": "tier"
+       "options": "provider"
       },
       "properties": [
        {
@@ -163,48 +314,12 @@
      {
       "matcher": {
        "id": "byName",
-       "options": "provider"
-      },
-      "properties": [
-       {
-        "id": "custom.width",
-        "value": 150
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
        "options": "model"
       },
       "properties": [
        {
         "id": "custom.width",
-        "value": 300
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "Capacity"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "percentunit"
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "Expires in"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "dtdurations"
+        "value": 210
        }
       ]
      },
@@ -215,8 +330,24 @@
       },
       "properties": [
        {
+        "id": "custom.width",
+        "value": 70
+       },
+       {
         "id": "decimals",
         "value": 2
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 85
        }
       ]
      },
@@ -227,8 +358,28 @@
       },
       "properties": [
        {
+        "id": "custom.width",
+        "value": 75
+       },
+       {
         "id": "decimals",
         "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Expires in"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 110
+       },
+       {
+        "id": "unit",
+        "value": "dtdurations"
        }
       ]
      }
@@ -242,7 +393,7 @@
     },
     "sortBy": [
      {
-      "displayName": "tier",
+      "displayName": "provider",
       "desc": false
      }
     ]
@@ -256,7 +407,7 @@
    "panels": [],
    "gridPos": {
     "x": 0,
-    "y": 15,
+    "y": 34,
     "w": 24,
     "h": 1
    }
@@ -271,9 +422,9 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 16,
+    "y": 35,
     "w": 24,
-    "h": 16
+    "h": 14
    },
    "targets": [
     {
@@ -337,7 +488,7 @@
       "properties": [
        {
         "id": "custom.width",
-        "value": 130
+        "value": 100
        }
       ]
      },
@@ -349,7 +500,55 @@
       "properties": [
        {
         "id": "custom.width",
-        "value": 280
+        "value": 240
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Strength"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 80
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Source"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 80
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Value"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 70
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Available"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 80
        }
       ]
      },
@@ -360,8 +559,8 @@
       },
       "properties": [
        {
-        "id": "unit",
-        "value": "currencyUSD"
+        "id": "custom.width",
+        "value": 95
        }
       ]
      },
@@ -374,6 +573,18 @@
        {
         "id": "decimals",
         "value": 2
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Cost per task"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "currencyUSD"
        }
       ]
      }
@@ -439,7 +650,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 32,
+    "y": 50,
     "w": 8,
     "h": 8
    },
@@ -507,7 +718,7 @@
    },
    "gridPos": {
     "x": 8,
-    "y": 32,
+    "y": 50,
     "w": 8,
     "h": 8
    },
@@ -555,7 +766,7 @@
    },
    "gridPos": {
     "x": 16,
-    "y": 32,
+    "y": 50,
     "w": 8,
     "h": 8
    },
@@ -631,7 +842,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 40
+    "y": 58
    },
    "panels": []
   },
@@ -647,7 +858,7 @@
     "h": 10,
     "w": 14,
     "x": 0,
-    "y": 41
+    "y": 59
    },
    "targets": [
     {
@@ -766,7 +977,7 @@
    },
    "gridPos": {
     "x": 14,
-    "y": 41,
+    "y": 59,
     "w": 10,
     "h": 10
    },
@@ -835,7 +1046,7 @@
     "h": 8,
     "w": 8,
     "x": 0,
-    "y": 51
+    "y": 69
    },
    "targets": [
     {
@@ -912,7 +1123,7 @@
     "h": 8,
     "w": 8,
     "x": 8,
-    "y": 51
+    "y": 69
    },
    "targets": [
     {
@@ -990,7 +1201,7 @@
     "h": 8,
     "w": 8,
     "x": 16,
-    "y": 51
+    "y": 69
    },
    "targets": [
     {
@@ -1071,7 +1282,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 59
+    "y": 77
    },
    "panels": []
   },
@@ -1087,7 +1298,7 @@
     "h": 10,
     "w": 16,
     "x": 0,
-    "y": 60
+    "y": 78
    },
    "targets": [
     {
@@ -1253,7 +1464,7 @@
     "h": 10,
     "w": 8,
     "x": 16,
-    "y": 60
+    "y": 78
    },
    "targets": [
     {
@@ -1321,7 +1532,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 70
+    "y": 88
    },
    "panels": []
   },
@@ -1337,7 +1548,7 @@
     "h": 9,
     "w": 12,
     "x": 0,
-    "y": 71
+    "y": 89
    },
    "targets": [
     {
@@ -1440,7 +1651,7 @@
     "h": 9,
     "w": 12,
     "x": 12,
-    "y": 71
+    "y": 89
    },
    "targets": [
     {
@@ -1573,7 +1784,7 @@
     "h": 7,
     "w": 8,
     "x": 0,
-    "y": 80
+    "y": 98
    },
    "targets": [
     {
@@ -1702,7 +1913,7 @@
     "h": 7,
     "w": 8,
     "x": 8,
-    "y": 80
+    "y": 98
    },
    "targets": [
     {
@@ -1758,7 +1969,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 87
+    "y": 105
    },
    "panels": []
   },
@@ -1774,7 +1985,7 @@
     "h": 9,
     "w": 12,
     "x": 0,
-    "y": 88
+    "y": 106
    },
    "targets": [
     {
@@ -1981,7 +2192,7 @@
     "h": 9,
     "w": 12,
     "x": 12,
-    "y": 88
+    "y": 106
    },
    "targets": [
     {
@@ -2188,7 +2399,7 @@
     "h": 9,
     "w": 12,
     "x": 0,
-    "y": 97
+    "y": 115
    },
    "targets": [
     {
@@ -2395,7 +2606,7 @@
     "h": 9,
     "w": 12,
     "x": 12,
-    "y": 97
+    "y": 115
    },
    "targets": [
     {
@@ -2602,7 +2813,7 @@
     "h": 8,
     "w": 24,
     "x": 0,
-    "y": 106
+    "y": 124
    },
    "targets": [
     {
@@ -2779,7 +2990,7 @@
     "h": 1,
     "w": 24,
     "x": 0,
-    "y": 114
+    "y": 132
    },
    "panels": []
   },
@@ -2795,7 +3006,7 @@
     "h": 9,
     "w": 12,
     "x": 0,
-    "y": 115
+    "y": 133
    },
    "targets": [
     {
@@ -2924,7 +3135,7 @@
     "h": 9,
     "w": 12,
     "x": 12,
-    "y": 115
+    "y": 133
    },
    "targets": [
     {
@@ -3081,7 +3292,7 @@
     "h": 9,
     "w": 12,
     "x": 0,
-    "y": 124
+    "y": 142
    },
    "targets": [
     {
@@ -3250,7 +3461,7 @@
     "h": 9,
     "w": 6,
     "x": 12,
-    "y": 124
+    "y": 142
    },
    "targets": [
     {
@@ -3335,7 +3546,7 @@
     "h": 9,
     "w": 6,
     "x": 18,
-    "y": 124
+    "y": 142
    },
    "targets": [
     {
@@ -3421,7 +3632,7 @@
     "h": 8,
     "w": 24,
     "x": 0,
-    "y": 133
+    "y": 151
    },
    "targets": [
     {
