@@ -972,11 +972,13 @@ class NativeStoreTests(unittest.TestCase):
                 f'ghostship_ai_provider_coverage{{provider="cursor",source="t3"}} 1 {stamp}',
                 f'ghostship_ai_provider_capacity_remaining_ratio{{provider="claude"}} 0 {stamp}']
         for quota, used in [('seven_day', 1.0), ('seven_day_fable', .05)]:
-            # MetricWriter normalizes an empty model scope to "_".
-            labels = f'provider="claude",account="account.test",model="_",window="weekly",quota="{quota}",source="t3"'
+            # The cards read the canonical entitlement family: one reading per
+            # entitlement, with the entitlement id beside the reading.
+            labels = (f'provider="claude",account="account.test",model="_",window="weekly",'
+                      f'quota="{quota}",source="t3",entitlement="claude:account.test:_:weekly:{quota}"')
             for metric, value in [('used_ratio', used), ('expected_used_ratio', 2/7),
                                   ('pace_delta_ratio', 2/7-used)]:
-                rows.append(f'ghostship_ai_quota_{metric}{{{labels}}} {value} {stamp}')
+                rows.append(f'ghostship_ai_entitlement_{metric}{{{labels}}} {value} {stamp}')
         rows += [f'ghostship_ai_model_winner_position{{tier="bulk",provider="ollama",model="current"}} 1 {stamp}',
                  f'ghostship_ai_model_capacity_remaining{{provider="ollama",model="current"}} .8 {stamp}',
                  f'ghostship_ai_model_winner_position{{tier="bulk",provider="ollama",model="unknown"}} 2 {stamp}',
@@ -1030,6 +1032,65 @@ class NativeStoreTests(unittest.TestCase):
                 result = json.load(response)['data']['result']
             self.assertEqual({r['metric']['model'] for r in result}, expected,
                              'Details respect both the Provider filter and the selected end time')
+
+    def test_one_allowance_card_per_entitlement_when_one_window_has_two_readings(self):
+        # The T3 status names the OpenCode Go windows go_monthly/go_rolling/go_weekly
+        # and the provider's own endpoint names monthly/rolling/weekly: one
+        # entitlement, read twice. The allowance list must show it once, while
+        # the quota table keeps every raw reading.
+        import re
+        now = int(time.time())
+        stamp = now * 1000
+        rows = [f'ghostship_ai_collection_duration_seconds 1 {stamp}']
+        for quota in ('go_weekly', 'weekly'):
+            rows.append(
+                f'ghostship_ai_quota_used_ratio{{provider="opencode-go",account="default",model="*",'
+                f'window="weekly",quota="{quota}",source="t3"}} 0.4 {stamp}'
+            )
+        labels = ('provider="opencode-go",account="default",model="*",window="weekly",'
+                  'quota="weekly",source="t3",'
+                  'entitlement="opencode-go:default:*:weekly:weekly"')
+        rows.append(f'ghostship_ai_entitlement_info{{{labels}}} 1 {stamp}')
+        rows.append(f'ghostship_ai_entitlement_used_ratio{{{labels}}} 0.4 {stamp}')
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        vm = self.server(os.environ['GHOSTSHIP_TEST_VMETRICS'], tmp.name + '/metrics')
+        urllib.request.urlopen(urllib.request.Request(vm + '/api/v1/import/prometheus',
+            data='\n'.join(rows).encode()), timeout=3).close()
+        urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
+        page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
+        by_id = {panel['id']: panel for panel in page['panels']}
+        allowance = page['templating']['list'][1]
+
+        def query(expr):
+            with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}),
+                                       timeout=5) as response:
+                return json.load(response)['data']['result']
+
+        # The allowance list is built from the canonical entitlement family.
+        self.assertIn('ghostship_ai_entitlement_info', allowance['query'])
+        self.assertNotIn('ghostship_ai_quota_used_ratio', allowance['query'])
+        for panel_id in (47, 48, 49):
+            for target in by_id[panel_id]['targets']:
+                for raw in ('ghostship_ai_quota_used_ratio', 'ghostship_ai_quota_expected_used_ratio',
+                            'ghostship_ai_quota_pace_delta_ratio', 'ghostship_ai_quota_reset_timestamp_seconds'):
+                    self.assertNotIn(raw, target['expr'],
+                                     f'panel {panel_id} must read the canonical entitlement, not the raw reading')
+        # Grafana strips the query_result() wrapper before it asks the store.
+        inner = re.match(r'^query_result\((.*)\)$', allowance['query'], re.S).group(1)
+        listed = query(inner.replace('$provider', '.*'))
+        self.assertEqual(len(listed), 1, 'One entitlement is one allowance, not one per alias reading')
+        self.assertEqual(listed[0]['metric']['allowance'],
+                         'opencode-go / default / * / weekly / weekly / t3')
+        # Both raw readings stay visible in the quota table.
+        self.assertEqual(len(query('ghostship_ai_quota_used_ratio')), 2)
+        identity = 'opencode-go / default / * / weekly / weekly / t3'
+        escaped = re.sub(r'([.*/])', r'\\\1', identity)
+        expr = (by_id[47]['targets'][0]['expr'].replace('$provider', '.*')
+                .replace('${allowance:regex}', escaped))
+        cards = query(expr)
+        self.assertEqual(len(cards), 1, 'The card selects exactly the one entitlement')
+        self.assertAlmostEqual(float(cards[0]['value'][1]), .6)
 
     def server(self, binary, directory):
         with socket.socket() as sock:
