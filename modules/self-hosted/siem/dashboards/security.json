@@ -1,6 +1,6 @@
 {
  "uid": "ghostship-security",
- "title": "Security events",
+ "title": "Security",
  "tags": [
   "ghostship",
   "security"
@@ -17,27 +17,28 @@
  "panels": [
   {
    "id": 1000,
-   "title": "SECURITY / Signals & source health",
+   "title": "",
    "type": "text",
    "gridPos": {
     "x": 0,
     "y": 0,
     "w": 24,
-    "h": 4
+    "h": 2
    },
    "options": {
     "mode": "markdown",
-    "content": "[Work overview](/d/ghostship-autonomous-work) \u00b7 [Host](/d/ghostship-host) \u00b7 [Security](/d/ghostship-security) \u00b7 [Pipeline](/d/ghostship-siem-pipeline) \u00b7 [AI usage](/d/ghostship-ai-usage)\n\nToday in UTC. Zero event counts mean no matches in the selected window; an empty series is not proof of healthy collection. Check ingestion and watchdog freshness first. AppArmor ALLOWED is complain-mode learning, not enforcement."
-   }
+    "content": "**Security \u00b7 the selected range for the rates \u00b7 the log tables stay collapsed**"
+   },
+   "description": "The status colour is reserved for the tiles (good, warning, critical) and always has a number. A missing log stream is Unavailable, never a zero. The bars carry the magnitudes, not a verdict."
   },
   {
    "id": 1001,
    "title": "Log ingestion lag",
-   "description": "Counts and rows follow the selected time range.",
+   "description": "Counts and rows follow the selected time range. Follows the time picker for log stats.",
    "type": "stat",
    "gridPos": {
     "x": 0,
-    "y": 4,
+    "y": 2,
     "w": 4,
     "h": 4
    },
@@ -59,51 +60,86 @@
    "fieldConfig": {
     "defaults": {
      "unit": "s",
-     "noValue": "Unknown",
+     "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
       "steps": [
        {
-        "color": "green",
+        "color": "#0ca30c",
         "value": null
        },
        {
-        "color": "orange",
-        "value": 90
+        "color": "#fab219",
+        "value": 1
        },
        {
-        "color": "red",
-        "value": 180
+        "color": "#d03b3b",
+        "value": 20
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 20,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 20,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
+    },
+    "justifyMode": "center",
+    "wideLayout": true
    }
   },
   {
    "id": 1002,
    "title": "Enforced denials",
-   "description": "Matches in the selected time window. Freshness is a separate signal.",
+   "description": "Matches in the selected time window. Freshness is a separate signal. Follows the time picker for log stats.",
    "type": "stat",
    "gridPos": {
     "x": 4,
-    "y": 4,
+    "y": 2,
     "w": 4,
     "h": 4
    },
@@ -125,43 +161,86 @@
    "fieldConfig": {
     "defaults": {
      "unit": "short",
-     "noValue": "Unknown",
+     "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
       "steps": [
        {
-        "color": "blue",
+        "color": "#0ca30c",
         "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 1
+       },
+       {
+        "color": "#d03b3b",
+        "value": 20
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 20,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 20,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
+    },
+    "justifyMode": "center",
+    "wideLayout": true
    }
   },
   {
    "id": 1003,
    "title": "AppArmor learning",
-   "description": "ALLOWED events are generated in complain mode, not blocked operations.",
+   "description": "ALLOWED events are generated in complain mode, not blocked operations. Follows the time picker for log stats.",
    "type": "stat",
    "gridPos": {
     "x": 8,
-    "y": 4,
+    "y": 2,
     "w": 4,
     "h": 4
    },
@@ -183,16 +262,25 @@
    "fieldConfig": {
     "defaults": {
      "unit": "short",
-     "noValue": "Unknown",
+     "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
       "steps": [
        {
-        "color": "blue",
+        "color": "#0ca30c",
         "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 1
+       },
+       {
+        "color": "#d03b3b",
+        "value": 20
        }
       ]
      }
@@ -202,24 +290,26 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
+    },
+    "justifyMode": "center",
+    "wideLayout": true
    }
   },
   {
    "id": 1004,
    "title": "Falco events",
-   "description": "Counts and rows follow the selected time range.",
+   "description": "Counts and rows follow the selected time range. Follows the time picker for log stats.",
    "type": "stat",
    "gridPos": {
     "x": 12,
-    "y": 4,
+    "y": 2,
     "w": 4,
     "h": 4
    },
@@ -241,43 +331,86 @@
    "fieldConfig": {
     "defaults": {
      "unit": "short",
-     "noValue": "Unknown",
+     "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
       "steps": [
        {
-        "color": "blue",
+        "color": "#0ca30c",
         "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 1
+       },
+       {
+        "color": "#d03b3b",
+        "value": 20
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 20,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 20,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
+    },
+    "justifyMode": "center",
+    "wideLayout": true
    }
   },
   {
    "id": 1005,
    "title": "SSH failures",
-   "description": "Counts and rows follow the selected time range.",
+   "description": "Counts and rows follow the selected time range. Follows the time picker for log stats.",
    "type": "stat",
    "gridPos": {
     "x": 16,
-    "y": 4,
+    "y": 2,
     "w": 4,
     "h": 4
    },
@@ -299,43 +432,86 @@
    "fieldConfig": {
     "defaults": {
      "unit": "short",
-     "noValue": "Unknown",
+     "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
       "steps": [
        {
-        "color": "blue",
+        "color": "#0ca30c",
         "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 1
+       },
+       {
+        "color": "#d03b3b",
+        "value": 20
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 20,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 20,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
      ],
      "fields": "",
      "values": false
-    }
+    },
+    "justifyMode": "center",
+    "wideLayout": true
    }
   },
   {
    "id": 1006,
    "title": "Firewall refusals",
-   "description": "Matches in the selected window. Zero means no matching refusal event; ingestion freshness is shown separately.",
+   "description": "Matches in the selected window. Zero means no matching refusal event; ingestion freshness is shown separately. Follows the time picker for log stats.",
    "type": "stat",
    "gridPos": {
     "x": 20,
-    "y": 4,
+    "y": 2,
     "w": 4,
     "h": 4
    },
@@ -357,26 +533,161 @@
    "fieldConfig": {
     "defaults": {
      "unit": "short",
-     "noValue": "Unknown",
+     "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
       "steps": [
        {
-        "color": "blue",
+        "color": "#0ca30c",
         "value": null
+       },
+       {
+        "color": "#fab219",
+        "value": 1
+       },
+       {
+        "color": "#d03b3b",
+        "value": 20
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 20,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 20,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "justifyMode": "center",
+    "wideLayout": true
+   }
+  },
+  {
+   "id": 30,
+   "type": "bargauge",
+   "title": "Signals in the selected range",
+   "datasource": {
+    "type": "victoriametrics-logs-datasource",
+    "uid": "victorialogs"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 5,
+    "w": 24,
+    "h": 6
+   },
+   "description": "Selected range. Counts by signal. Sequential blue, not status colour.",
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "queryType": "stats",
+     "legendFormat": "Enforced denials",
+     "expr": "apparmor:=DENIED | stats count() n"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "queryType": "stats",
+     "legendFormat": "Falco",
+     "expr": "falco_rule:* | stats count() n"
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "queryType": "stats",
+     "legendFormat": "SSH failures",
+     "expr": "unit:~\"sshd\" (\"Failed password\" OR \"Invalid user\" OR \"authentication failure\") | stats count() n"
+    },
+    {
+     "refId": "D",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "queryType": "stats",
+     "legendFormat": "Firewall refusals",
+     "expr": "\"refused connection:\" | stats count() n"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "noValue": "Unavailable",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
+     },
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "valueMode": "text",
+    "showUnfilled": true,
+    "minVizHeight": 18,
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -395,10 +706,10 @@
     "uid": "victorialogs"
    },
    "gridPos": {
-    "w": 12,
-    "h": 8,
     "x": 0,
-    "y": 8
+    "y": 12,
+    "w": 12,
+    "h": 8
    },
    "targets": [
     {
@@ -408,7 +719,8 @@
       "uid": "victorialogs"
      },
      "expr": "apparmor:=DENIED | stats by (aa_profile) count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "{{aa_profile}}"
     }
    ],
    "fieldConfig": {
@@ -416,28 +728,111 @@
      "noValue": "Unknown",
      "custom": {
       "fillOpacity": 8,
-      "lineWidth": 1,
-      "spanNulls": false
+      "lineWidth": 2,
+      "spanNulls": false,
+      "drawStyle": "line",
+      "lineInterpolation": "linear",
+      "gradientMode": "none",
+      "showPoints": "never",
+      "insertNulls": false,
+      "axisBorderShow": false,
+      "axisColorMode": "text",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
      }
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "t3code"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3987e5"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "curl"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#d95926"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "bash"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#199e70"
+        }
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "legend": {
-     "displayMode": "table",
+     "displayMode": "list",
      "placement": "bottom",
      "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
+     "calcs": []
     },
     "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
+     "mode": "single",
+     "sort": "none"
     }
    },
-   "description": "Enforced DENIED events only. Empty buckets are expected when no denial occurred; learning events appear separately below."
+   "description": "Enforced DENIED events only. Empty buckets are expected when no denial occurred; learning events appear separately below. Follows the time picker. Thin lines, categorical colour."
   },
   {
    "id": 18,
@@ -448,10 +843,10 @@
     "uid": "victorialogs"
    },
    "gridPos": {
-    "w": 12,
-    "h": 8,
     "x": 12,
-    "y": 8
+    "y": 12,
+    "w": 12,
+    "h": 8
    },
    "targets": [
     {
@@ -461,7 +856,8 @@
       "uid": "victorialogs"
      },
      "expr": "falco_rule:* | stats by (falco_rule) count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "{{falco_rule}}"
     }
    ],
    "fieldConfig": {
@@ -469,28 +865,65 @@
      "noValue": "Unknown",
      "custom": {
       "fillOpacity": 8,
-      "lineWidth": 1,
-      "spanNulls": false
+      "lineWidth": 2,
+      "spanNulls": false,
+      "drawStyle": "line",
+      "lineInterpolation": "linear",
+      "gradientMode": "none",
+      "showPoints": "never",
+      "insertNulls": false,
+      "axisBorderShow": false,
+      "axisColorMode": "text",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
      }
     },
     "overrides": []
    },
    "options": {
     "legend": {
-     "displayMode": "table",
+     "displayMode": "list",
      "placement": "bottom",
      "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
+     "calcs": []
     },
     "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
+     "mode": "single",
+     "sort": "none"
     }
    },
-   "description": "Counts and rows follow the selected time range."
+   "description": "Counts and rows follow the selected time range. Follows the time picker. Thin lines, categorical colour."
   },
   {
    "id": 19,
@@ -501,10 +934,10 @@
     "uid": "victorialogs"
    },
    "gridPos": {
-    "w": 12,
-    "h": 8,
     "x": 0,
-    "y": 16
+    "y": 20,
+    "w": 12,
+    "h": 8
    },
    "targets": [
     {
@@ -514,7 +947,8 @@
       "uid": "victorialogs"
      },
      "expr": "unit:~\"sshd\" (\"Failed password\" OR \"Invalid user\" OR \"authentication failure\") | stats count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "failures"
     }
    ],
    "fieldConfig": {
@@ -522,28 +956,65 @@
      "noValue": "Unknown",
      "custom": {
       "fillOpacity": 8,
-      "lineWidth": 1,
-      "spanNulls": false
+      "lineWidth": 2,
+      "spanNulls": false,
+      "drawStyle": "line",
+      "lineInterpolation": "linear",
+      "gradientMode": "none",
+      "showPoints": "never",
+      "insertNulls": false,
+      "axisBorderShow": false,
+      "axisColorMode": "text",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
      }
     },
     "overrides": []
    },
    "options": {
     "legend": {
-     "displayMode": "table",
+     "displayMode": "list",
      "placement": "bottom",
      "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
+     "calcs": []
     },
     "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
+     "mode": "single",
+     "sort": "none"
     }
    },
-   "description": "No matching failures produces an empty series; the SSH failures count above shows zero while ingestion freshness distinguishes missing collection."
+   "description": "No matching failures produces an empty series; the SSH failures count above shows zero while ingestion freshness distinguishes missing collection. Follows the time picker. Thin lines, categorical colour."
   },
   {
    "id": 20,
@@ -554,10 +1025,10 @@
     "uid": "victorialogs"
    },
    "gridPos": {
-    "w": 12,
-    "h": 8,
     "x": 12,
-    "y": 16
+    "y": 20,
+    "w": 12,
+    "h": 8
    },
    "targets": [
     {
@@ -567,7 +1038,8 @@
       "uid": "victorialogs"
      },
      "expr": "\"refused connection:\" | stats count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "refusals"
     }
    ],
    "fieldConfig": {
@@ -575,28 +1047,65 @@
      "noValue": "Unknown",
      "custom": {
       "fillOpacity": 8,
-      "lineWidth": 1,
-      "spanNulls": false
+      "lineWidth": 2,
+      "spanNulls": false,
+      "drawStyle": "line",
+      "lineInterpolation": "linear",
+      "gradientMode": "none",
+      "showPoints": "never",
+      "insertNulls": false,
+      "axisBorderShow": false,
+      "axisColorMode": "text",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
      }
     },
     "overrides": []
    },
    "options": {
     "legend": {
-     "displayMode": "table",
+     "displayMode": "list",
      "placement": "bottom",
      "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
+     "calcs": []
     },
     "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
+     "mode": "single",
+     "sort": "none"
     }
    },
-   "description": "No matching firewall refusal produces an empty series; the Firewall refusals count above shows zero. Check ingestion freshness before interpreting an empty chart."
+   "description": "No matching firewall refusal produces an empty series; the Firewall refusals count above shows zero. Check ingestion freshness before interpreting an empty chart. Follows the time picker. Thin lines, categorical colour."
   },
   {
    "id": 21,
@@ -607,10 +1116,10 @@
     "uid": "victorialogs"
    },
    "gridPos": {
-    "w": 12,
-    "h": 8,
     "x": 0,
-    "y": 24
+    "y": 28,
+    "w": 12,
+    "h": 8
    },
    "targets": [
     {
@@ -620,7 +1129,8 @@
       "uid": "victorialogs"
      },
      "expr": "audit_key:* -audit_key:=\"(null)\" | stats by (audit_key) count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "{{audit_key}}"
     }
    ],
    "fieldConfig": {
@@ -628,28 +1138,65 @@
      "noValue": "Unknown",
      "custom": {
       "fillOpacity": 8,
-      "lineWidth": 1,
-      "spanNulls": false
+      "lineWidth": 2,
+      "spanNulls": false,
+      "drawStyle": "line",
+      "lineInterpolation": "linear",
+      "gradientMode": "none",
+      "showPoints": "never",
+      "insertNulls": false,
+      "axisBorderShow": false,
+      "axisColorMode": "text",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
      }
     },
     "overrides": []
    },
    "options": {
     "legend": {
-     "displayMode": "table",
+     "displayMode": "list",
      "placement": "bottom",
      "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
+     "calcs": []
     },
     "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
+     "mode": "single",
+     "sort": "none"
     }
    },
-   "description": "Counts and rows follow the selected time range."
+   "description": "Counts and rows follow the selected time range. Follows the time picker. Thin lines, categorical colour."
   },
   {
    "id": 22,
@@ -660,10 +1207,10 @@
     "uid": "victorialogs"
    },
    "gridPos": {
-    "w": 12,
-    "h": 8,
     "x": 12,
-    "y": 24
+    "y": 28,
+    "w": 12,
+    "h": 8
    },
    "targets": [
     {
@@ -673,7 +1220,8 @@
       "uid": "victorialogs"
      },
      "expr": "source:=plex network:=WAN | stats count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "{{network}}"
     }
    ],
    "fieldConfig": {
@@ -681,121 +1229,74 @@
      "noValue": "Unknown",
      "custom": {
       "fillOpacity": 8,
-      "lineWidth": 1,
-      "spanNulls": false
+      "lineWidth": 2,
+      "spanNulls": false,
+      "drawStyle": "line",
+      "lineInterpolation": "linear",
+      "gradientMode": "none",
+      "showPoints": "never",
+      "insertNulls": false,
+      "axisBorderShow": false,
+      "axisColorMode": "text",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
      }
     },
     "overrides": []
    },
    "options": {
     "legend": {
-     "displayMode": "table",
+     "displayMode": "list",
      "placement": "bottom",
      "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "max"
-     ]
+     "calcs": []
     },
     "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
+     "mode": "single",
+     "sort": "none"
     }
    },
-   "description": "Counts and rows follow the selected time range."
-  },
-  {
-   "id": 23,
-   "title": "Falco events",
-   "type": "logs",
-   "datasource": {
-    "type": "victoriametrics-logs-datasource",
-    "uid": "victorialogs"
-   },
-   "gridPos": {
-    "w": 24,
-    "h": 10,
-    "x": 0,
-    "y": 32
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "victoriametrics-logs-datasource",
-      "uid": "victorialogs"
-     },
-     "expr": "falco_rule:* | sort by (_time desc) limit 200 | fields _time, _msg, falco_rule, falco_priority, falco.container.name",
-     "queryType": "instant",
-     "maxLines": 200
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "Unknown"
-    },
-    "overrides": []
-   },
-   "options": {
-    "showTime": true,
-    "showLabels": false,
-    "wrapLogMessage": true,
-    "sortOrder": "Descending",
-    "enableLogDetails": true,
-    "dedupStrategy": "none"
-   },
-   "description": "Latest 200 redacted Falco observations. Preserve the message so log rows have readable text; full raw command fields are not added to this dashboard."
-  },
-  {
-   "id": 24,
-   "title": "sudo and root SSH sessions",
-   "type": "logs",
-   "datasource": {
-    "type": "victoriametrics-logs-datasource",
-    "uid": "victorialogs"
-   },
-   "gridPos": {
-    "w": 24,
-    "h": 10,
-    "x": 0,
-    "y": 42
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "datasource": {
-      "type": "victoriametrics-logs-datasource",
-      "uid": "victorialogs"
-     },
-     "expr": "(ident:=sudo OR \"Accepted publickey for root\") | sort by (_time desc) limit 200 | fields _time, ident, _msg",
-     "queryType": "instant",
-     "maxLines": 200
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "noValue": "Unknown"
-    },
-    "overrides": []
-   },
-   "options": {
-    "showTime": true,
-    "showLabels": false,
-    "wrapLogMessage": true,
-    "sortOrder": "Descending",
-    "enableLogDetails": true,
-    "dedupStrategy": "none"
-   },
-   "description": "Counts and rows follow the selected time range."
+   "description": "Counts and rows follow the selected time range. Follows the time picker. Thin lines, categorical colour."
   },
   {
    "id": 1007,
    "title": "AppArmor learning events by profile",
-   "description": "ALLOWED complain-mode observations; these operations were observed, not blocked. Displays the ten largest profile counts per query step.",
+   "description": "ALLOWED complain-mode observations; these operations were observed, not blocked. Displays the ten largest profile counts per query step. Follows the time picker. Thin lines, categorical colour.",
    "type": "timeseries",
    "gridPos": {
     "x": 0,
-    "y": 52,
+    "y": 36,
     "w": 24,
     "h": 8
    },
@@ -817,32 +1318,236 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "noValue": "No matching learning events"
+     "noValue": "No matching learning events",
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
+     },
+     "custom": {
+      "drawStyle": "line",
+      "lineInterpolation": "linear",
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "gradientMode": "none",
+      "showPoints": "never",
+      "spanNulls": false,
+      "insertNulls": false,
+      "axisBorderShow": false,
+      "axisColorMode": "text",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      },
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3987e5",
+        "value": null
+       }
+      ]
+     }
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "t3code"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3987e5"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "curl"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#d95926"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "bash"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#199e70"
+        }
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "legend": {
-     "displayMode": "table",
+     "displayMode": "list",
      "placement": "bottom",
      "showLegend": true,
-     "calcs": [
-      "lastNotNull",
-      "sum"
-     ]
+     "calcs": []
     },
     "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
+     "mode": "single",
+     "sort": "none"
     }
    }
+  },
+  {
+   "id": 41,
+   "type": "row",
+   "title": "Log tables",
+   "collapsed": true,
+   "gridPos": {
+    "x": 0,
+    "y": 47,
+    "w": 24,
+    "h": 1
+   },
+   "panels": [
+    {
+     "id": 23,
+     "title": "Falco events",
+     "type": "logs",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "gridPos": {
+      "x": 0,
+      "y": 49,
+      "w": 24,
+      "h": 10
+     },
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "victorialogs"
+       },
+       "expr": "falco_rule:* | sort by (_time desc) limit 200 | fields _time, _msg, falco_rule, falco_priority, falco.container.name",
+       "queryType": "instant",
+       "maxLines": 200
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "noValue": "Unknown"
+      },
+      "overrides": []
+     },
+     "options": {
+      "showTime": true,
+      "showLabels": false,
+      "wrapLogMessage": true,
+      "sortOrder": "Descending",
+      "enableLogDetails": true,
+      "dedupStrategy": "none"
+     },
+     "description": "Latest 200 redacted Falco observations. Preserve the message so log rows have readable text; full raw command fields are not added to this dashboard."
+    },
+    {
+     "id": 24,
+     "title": "sudo and root SSH sessions",
+     "type": "logs",
+     "datasource": {
+      "type": "victoriametrics-logs-datasource",
+      "uid": "victorialogs"
+     },
+     "gridPos": {
+      "x": 0,
+      "y": 50,
+      "w": 24,
+      "h": 10
+     },
+     "targets": [
+      {
+       "refId": "A",
+       "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "victorialogs"
+       },
+       "expr": "(ident:=sudo OR \"Accepted publickey for root\") | sort by (_time desc) limit 200 | fields _time, ident, _msg",
+       "queryType": "instant",
+       "maxLines": 200
+      }
+     ],
+     "fieldConfig": {
+      "defaults": {
+       "noValue": "Unknown"
+      },
+      "overrides": []
+     },
+     "options": {
+      "showTime": true,
+      "showLabels": false,
+      "wrapLogMessage": true,
+      "sortOrder": "Descending",
+      "enableLogDetails": true,
+      "dedupStrategy": "none"
+     },
+     "description": "Counts and rows follow the selected time range."
+    }
+   ]
   }
  ],
  "links": [
   {
-   "title": "Work overview",
+   "title": "Overview",
    "type": "link",
    "url": "/d/ghostship-autonomous-work",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": true,
+   "keepTime": true
+  },
+  {
+   "title": "Work",
+   "type": "link",
+   "url": "/d/ghostship-autonomous-work",
+   "icon": "dashboard",
+   "targetBlank": false,
+   "includeVars": true,
+   "keepTime": true
+  },
+  {
+   "title": "Providers",
+   "type": "link",
+   "url": "/d/ghostship-ai-usage",
    "icon": "dashboard",
    "targetBlank": false,
    "includeVars": true,
@@ -874,16 +1579,7 @@
    "targetBlank": false,
    "includeVars": true,
    "keepTime": true
-  },
-  {
-   "title": "AI usage",
-   "type": "link",
-   "url": "/d/ghostship-ai-usage",
-   "icon": "dashboard",
-   "targetBlank": false,
-   "includeVars": true,
-   "keepTime": true
   }
  ],
- "description": "Provisioned read-only Ghostship monitoring. Direct navigation; data comes from the existing SIEM stores."
+ "description": "Alert counts and severity first; log tables in collapsed rows."
 }

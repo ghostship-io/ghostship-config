@@ -19,6 +19,24 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SIEM = ROOT / 'modules/self-hosted/siem'
+
+
+def walk_panels(panels):
+    """Top-level panels plus children nested in collapsed rows."""
+    for panel in panels:
+        yield panel
+        if panel.get('type') == 'row':
+            yield from walk_panels(panel.get('panels') or [])
+
+
+def panels_by_id(dashboard):
+    return {panel['id']: panel for panel in walk_panels(dashboard['panels'])}
+
+
+def panels_by_title(dashboard):
+    return {panel['title']: panel for panel in walk_panels(dashboard['panels'])}
+
+
 spec = importlib.util.spec_from_file_location('work', SIEM / 'autonomous-work.py')
 work = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(work)
@@ -743,7 +761,7 @@ class CollectorTests(unittest.TestCase):
 class DashboardContractTests(unittest.TestCase):
     def test_candidate_columns_name_the_quantity_the_query_returns(self):
         page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
-        panel = next(p for p in page['panels'] if p['id'] == 29)
+        panel = next(p for p in walk_panels(page['panels']) if p['id'] == 29)
         names = next(t['options']['renameByName'] for t in panel['transformations']
                      if t['id'] == 'rename')
         quantities = {names['Value #' + t['refId']]: t['expr'] for t in panel['targets']}
@@ -771,7 +789,7 @@ class DashboardContractTests(unittest.TestCase):
         self.assertIn('GF_USERS_HOME_PAGE = "/d/ghostship-autonomous-work"', ui)
         self.assertIn('secureJsonData.basicAuthPassword = "$GRAFANA_VMAUTH_PASSWORD"', ui)
         self.assertIn('environmentFiles = [ "${root}/vmauth.env" ]', ui)
-        for panel in dashboard['panels']:
+        for panel in walk_panels(dashboard['panels']):
             for target in panel.get('targets', []):
                 uid = target['datasource']['uid']
                 self.assertIn(uid, ('victorialogs','victoriametrics'))
@@ -793,27 +811,31 @@ class DashboardContractTests(unittest.TestCase):
         self.assertIn('/d/ghostship-ai-usage', [link['url'] for link in dashboard['links']])
 
     def test_navigation_has_exactly_one_link_per_page(self):
-        # Rebuilding a dashboard must never append a second copy of a link: the
-        # bar is five pages, each exactly once, with the same order everywhere.
-        expected = ['ghostship-autonomous-work', 'ghostship-host', 'ghostship-security',
-                    'ghostship-siem-pipeline', 'ghostship-ai-usage']
+        # Native dashboard links are the bar: Overview, Work, Providers, Host,
+        # Security, Pipeline. Overview and Work share the home dashboard.
+        expected_titles = ['Overview', 'Work', 'Providers', 'Host', 'Security', 'Pipeline']
+        expected_urls = ['/d/ghostship-autonomous-work', '/d/ghostship-autonomous-work',
+                         '/d/ghostship-ai-usage', '/d/ghostship-host', '/d/ghostship-security',
+                         '/d/ghostship-siem-pipeline']
         for path in (SIEM/'dashboards').glob('*.json'):
             page = json.loads(path.read_text())
             urls = [link['url'] for link in page['links']]
+            titles = [link['title'] for link in page['links']]
             with self.subTest(dashboard=page['uid']):
-                self.assertEqual([url.removeprefix('/d/') for url in urls], expected)
-                self.assertEqual(len(urls), len(set(urls)))
-                self.assertEqual(len(urls), 5)
+                self.assertEqual(titles, expected_titles)
+                self.assertEqual(urls, expected_urls)
+                self.assertEqual(len(titles), len(set(titles)))
+                self.assertEqual(len(urls), 6)
                 for link in page['links']:
                     self.assertTrue(link['keepTime'], 'navigation must keep the selected time range')
                     self.assertTrue(link['includeVars'], 'navigation must keep the selected filters')
-            for panel in page['panels']:
+            for panel in walk_panels(page['panels']):
                 if panel.get('type') == 'text':
                     content = panel['options']['content']
                     # Native dashboard links above own navigation; compact
                     # text panels need not repeat the entire navigation bar.
                     self.assertLessEqual(content.count('ghostship-ai-usage'), 1)
-                    self.assertLessEqual(content.count('/d/ghostship-'), 5)
+                    self.assertLessEqual(content.count('/d/ghostship-'), 6)
 
     def test_all_five_pages_have_consistent_direct_navigation_and_source_shapes(self):
         dashboards=[json.loads(p.read_text()) for p in (SIEM/'dashboards').glob('*.json')]
@@ -823,8 +845,9 @@ class DashboardContractTests(unittest.TestCase):
             self.assertEqual(d['links'],nav)
             self.assertEqual(d['timezone'],'utc')
             self.assertFalse(d['editable'])
-            self.assertEqual(len({p['id'] for p in d['panels']}),len(d['panels']))
-            for p in d['panels']:
+            all_panels=list(walk_panels(d['panels']))
+            self.assertEqual(len({p['id'] for p in all_panels}),len(all_panels))
+            for p in all_panels:
                 for t in p.get('targets',[]):
                     self.assertIn(t['datasource']['uid'],('victorialogs','victoriametrics'))
                     if p['type']=='logs':
@@ -836,7 +859,7 @@ class DashboardContractTests(unittest.TestCase):
 
     def test_dashboard_uses_no_unsupported_macros_and_never_reports_missing_telemetry_as_zero(self):
         dashboard = json.loads((SIEM/'dashboards/autonomous-work.json').read_text())
-        for panel in dashboard['panels']:
+        for panel in walk_panels(dashboard['panels']):
             for target in panel.get('targets', []):
                 expr = target['expr']
                 # Grafana has no __from/__to/__range macro the logs datasource
@@ -851,7 +874,12 @@ class DashboardContractTests(unittest.TestCase):
                     continue
                 if 'source_last_success_seconds' in expr:
                     continue
-                # Every metric is gated on a fresh snapshot.
+                # Host, SIEM and ranking tiles on Overview are not work telemetry.
+                if any(name in expr for name in (
+                        'node_', 'ALERTS{', 'ghostship_ai_', 'ghostship_siem_',
+                        'ghostship_log_', 'ghostship_audit', 'ghostship_journal')):
+                    continue
+                # Every work metric is gated on a fresh snapshot.
                 self.assertIn('ghostship_work_snapshot_timestamp_seconds', expr)
                 # Per-source counts are gated on that source being readable, so
                 # a missing source shows as unknown instead of zero.
@@ -867,40 +895,39 @@ class DashboardContractTests(unittest.TestCase):
         page = json.loads((SIEM/'dashboards/host.json').read_text())
         self.assertEqual(page['uid'], 'ghostship-host')
         self.assertFalse(page['editable'])
-        titles = {panel['title']: panel for panel in page['panels']}
-        for title in ('CPU total  (all cores)', 'CPU per core  /  5-minute busy average', 'Memory used',
+        titles = {panel['title']: panel for panel in walk_panels(page['panels'])}
+        for title in ('CPU %  (all cores)', 'CPU per core  /  5-minute busy average', 'Memory used',
                       'Memory total', 'Memory available', 'Host writers', 'CPUs reporting'):
             self.assertIn(title, titles)
         units = {title: titles[title]['fieldConfig']['defaults'].get('unit')
-                 for title in ('CPU total  (all cores)', 'Memory used', 'Memory total',
+                 for title in ('CPU %  (all cores)', 'Memory used', 'Memory total',
                                'Memory available', 'Memory used %')}
-        self.assertEqual(units['CPU total  (all cores)'], 'percent')
+        self.assertEqual(units['CPU %  (all cores)'], 'percent')
         self.assertEqual(units['Memory used %'], 'percent')
         for title in ('Memory used', 'Memory total', 'Memory available'):
             self.assertEqual(units[title], 'bytes')
-        # Total CPU averages every core once; per-core is a native state timeline
-        # with one row per core in numeric order and restrained busy thresholds.
+        # Total CPU averages every core once; per-core is a bargauge grid with
+        # one bar per core in numeric order.
         self.assertIn('avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))',
-                      titles['CPU total  (all cores)']['targets'][0]['expr'])
+                      titles['CPU %  (all cores)']['targets'][0]['expr'])
         per_core = titles['CPU per core  /  5-minute busy average']
-        self.assertEqual(per_core['type'], 'state-timeline')
+        self.assertEqual(per_core['type'], 'bargauge')
         self.assertIn('avg by (cpu)', per_core['targets'][0]['expr'])
         self.assertIn('sort_by_label_numeric(', per_core['targets'][0]['expr'])
         self.assertEqual(per_core['fieldConfig']['defaults']['unit'], 'percent')
-        self.assertEqual([s['value'] for s in per_core['fieldConfig']['defaults']['thresholds']['steps']],
-                         [None, 70, 90])
-        self.assertFalse(per_core['options']['mergeValues'])
         self.assertEqual(
             [t['expr'] for t in titles['Memory  (total, used, available)']['targets']],
             ['node_memory_MemTotal_bytes', 'node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes',
              'node_memory_MemAvailable_bytes'])
-        # The link bar stays the five reviewed pages.
-        self.assertEqual(len(page['links']), 5)
-        self.assertEqual(len({link['url'] for link in page['links']}), 5)
+        self.assertEqual(len(page['links']), 6)
+        self.assertEqual([link['title'] for link in page['links']],
+                         ['Overview', 'Work', 'Providers', 'Host', 'Security', 'Pipeline'])
 
     def test_agent_table_shows_branch_model_provider_state_and_links(self):
         dashboard = json.loads((SIEM/'dashboards/autonomous-work.json').read_text())
-        agents = next(p for p in dashboard['panels'] if p.get('title','').startswith('Agents now'))
+        agents = next(p for p in walk_panels(dashboard['panels'])
+                      if p.get('title','').startswith('Running now')
+                      or p.get('title','').startswith('Agents now'))
         expr = agents['targets'][0]['expr']
         for field in ('status', 'provider', 'model', 'branch', 'thread_url', 'parent_url'):
             self.assertIn(field, expr.split('| fields ')[1])
@@ -909,7 +936,7 @@ class DashboardContractTests(unittest.TestCase):
         for column in ('State', 'Provider', 'Model', 'Branch', 'T3 thread', 'Parent'):
             self.assertIn(column, renamed.values())
         # Branch and model are private values: never a metric label.
-        for panel in dashboard['panels']:
+        for panel in walk_panels(dashboard['panels']):
             for target in panel.get('targets', []):
                 if target['datasource']['uid'] == 'victoriametrics':
                     self.assertNotIn('model', target['expr'].replace('model_report', ''))
@@ -917,22 +944,24 @@ class DashboardContractTests(unittest.TestCase):
 
     def test_dashboard_distinguishes_receipts_from_outcomes(self):
         dashboard = json.loads((SIEM/'dashboards/autonomous-work.json').read_text())
-        titles = {panel['title']: panel for panel in dashboard['panels']}
+        titles = {panel['title']: panel for panel in walk_panels(dashboard['panels'])}
         for title in ('Model reports', 'CI proofs', 'CI failures', 'Review receipts',
-                      'PRs closed'):
+                      'PRs closed today'):
             self.assertIn(title, list(titles))
             expr = titles[title]['targets'][0]['expr']
             self.assertTrue('evidence_items' in expr or 'ci_failures' in expr)
             self.assertIn('ghostship_work_source_up == 1', expr)
         # Nothing on the page may present a conclusion that no owner records.
-        for panel in dashboard['panels']:
+        for panel in walk_panels(dashboard['panels']):
             for target in panel.get('targets', []):
                 for forbidden in ('approved', 'conclusion', 'frontier_approved'):
                     self.assertNotIn(forbidden, target['expr'])
         header = next(p for p in dashboard['panels'] if p['type'] == 'text')
-        self.assertIn('receipt is never a green outcome', header['options']['content'].lower())
+        # The header line is one line; the rule it states lives with it.
+        self.assertIn('receipt is never a green outcome',
+                      (header.get('description') or header['options']['content']).lower())
         # No panel may claim a complete enumeration of a capped source.
-        for panel in dashboard['panels']:
+        for panel in walk_panels(dashboard['panels']):
             self.assertNotIn('All projects', panel['title'])
             self.assertNotIn('All threads', panel['title'])
 
@@ -954,6 +983,124 @@ class DashboardContractTests(unittest.TestCase):
         fields = module.split('fields = [',1)[1].split('];',1)[0]
         self.assertEqual(set(work.re.findall(r'"([^"]+)"', fields)), work.FIELDS | {'host'})
         self.assertIn('transforms.redacted.inputs = [ "autonomous_work_shape" ]', module)
+
+
+class DesignContractTests(unittest.TestCase):
+    EQUALITY = '== scalar(max(timestamp(ghostship_ai_collection_duration_seconds)))'
+    TOLERANCE = '> scalar(max(timestamp(ghostship_ai_collection_duration_seconds))) - 90'
+
+    def test_tier_column_order_comes_from_the_collector_not_from_a_local_ranking(self):
+        """Defect: the tier column recomputes the order, so a route the collector holds back (a 3D reserve) is listed above the routes ahead of it."""
+        page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
+        by_id = panels_by_id(page)
+        for pid, tier in ((40, 'frontier'), (41, 'bulk'), (42, 'free'), (43, '3d')):
+            order = by_id[pid]['targets'][0]['expr']
+            self.assertIn('ghostship_ai_model_winner_position', order, pid)
+            self.assertIn(f'tier="{tier}"', order, pid)
+            self.assertNotIn('ghostship_ai_model_paced_availability', order, pid)
+            self.assertNotIn('pace_delta_ratio', order, pid)
+            self.assertIn(self.TOLERANCE, order, pid)
+            # The panel still sorts on that key, descending.
+            sorts = [t for t in by_id[pid]['transformations'] if t['id'] == 'sortBy']
+            self.assertEqual(len(sorts), 1, pid)
+            self.assertEqual(sorts[0]['options']['sort'],
+                             [{'field': 'order key', 'desc': True}], pid)
+
+    def test_paced_availability_label_percent_left_and_freshness_tolerance(self):
+        """Defect: ordering labelled as something other than Paced Availability, remaining shown as used, or snapshot equality drops live entitlement/fact series."""
+        page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
+        blob = json.dumps(page)
+        self.assertNotIn(self.EQUALITY, blob)
+        self.assertIn(self.TOLERANCE, blob)
+        by_id = panels_by_id(page)
+        for pid, title in (
+                (40, 'Frontier · % left · Paced Availability'),
+                (41, 'Bulk · % left · Paced Availability'),
+                (42, 'Free · % left · Paced Availability'),
+                (43, '3D · % left · Paced Availability')):
+            self.assertEqual(by_id[pid]['title'], title)
+            self.assertIn('Paced Availability', by_id[pid]['description'])
+        meter = by_id[44]
+        names = []
+        for override in meter['fieldConfig']['overrides']:
+            for prop in override['properties']:
+                if prop['id'] == 'displayName':
+                    names.append(prop['value'])
+        self.assertIn('% left', names)
+        self.assertIn('Paced Availability', names)
+        self.assertEqual(by_id[49]['title'], 'Paced Availability / resets in')
+        why = [p for p in page['panels'] if p.get('type') == 'row'
+               and str(p.get('title', '')).startswith('Why this order')]
+        self.assertGreaterEqual(len(why), 5)
+        self.assertTrue(all(p.get('collapsed') for p in why))
+        joined_40 = ' '.join(t['expr'] for t in by_id[40]['targets'])
+        self.assertIn('Chief (Claude Opus 5.5)', joined_40)
+        self.assertIn('Backup (Codex GPT-6.1-Sol)', joined_40)
+
+    def test_allowance_left_bands_unknown_copy_and_no_table_in_top_band(self):
+        """Defect: remaining bars use the wrong cutoffs, unknown windows fake a 0, or a table sits in the first screen."""
+        page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
+        by_id = panels_by_id(page)
+        for pid in (40, 41, 42, 43, 44, 50):
+            defaults = by_id[pid]['fieldConfig']['defaults']
+            # The bands are value mappings so that the unknown state keeps
+            # the panel's grey base colour instead of a red critical.
+            self.assertEqual(defaults['color'],
+                             {'mode': 'fixed', 'fixedColor': '#B8BFCC'}, pid)
+            ranges = [(m['options']['from'], m['options']['to'],
+                       m['options']['result']['color'])
+                      for m in defaults['mappings'] if m['type'] == 'range']
+            # In a tier column a route with 0% left is spent, not critical:
+            # it is grey with its reason. On a provider meter 0% left is
+            # critical, because the provider itself is spent.
+            low = 0.0001 if pid in (40, 41, 42, 43) else 0
+            self.assertEqual(ranges, [(low, 0.1, '#d03b3b'),
+                                       (0.1, 0.3, '#fab219'),
+                                       (0.3, 1, '#0ca30c')], pid)
+            unknown = [m for m in defaults['mappings'] if m['type'] == 'value']
+            self.assertEqual(unknown[0]['options']['-1']['text'], 'Limits unknown', pid)
+            self.assertEqual(unknown[0]['options']['-1']['color'], '#B8BFCC', pid)
+        self.assertEqual(by_id[40]['fieldConfig']['defaults']['noValue'],
+                         'No eligible measured model')
+        mapping = by_id[44]['fieldConfig']['defaults']['mappings'][0]['options']['-1']
+        self.assertEqual(mapping['text'], 'Limits unknown')
+        self.assertEqual(by_id[44]['repeat'], 'provider')
+        self.assertEqual(by_id[50]['repeat'], 'provider')
+        self.assertEqual(by_id[46]['repeat'], 'allowance')
+        self.assertTrue(by_id[46]['collapsed'])
+        self.assertEqual(by_id[31]['title'], 'Facts and their coverage')
+        for name, max_y in (('ai-usage.json', 10), ('host.json', 10),
+                            ('security.json', 10), ('siem-pipeline.json', 10)):
+            dashboard = json.loads((SIEM / 'dashboards' / name).read_text())
+            for panel in dashboard['panels']:
+                if panel.get('type') in ('table', 'logs') and panel['gridPos']['y'] < max_y:
+                    self.fail((name, panel['title'], panel['gridPos']))
+
+    def test_tier_rows_show_the_human_model_name_the_role_and_the_reserve(self):
+        """Defect: a raw model id is shown where a person would say a name, the owner's roles are missing, or a reserved route is not marked."""
+        page = json.loads((SIEM / 'dashboards/ai-usage.json').read_text())
+        by_id = panels_by_id(page)
+        frontier = ' '.join(t['expr'] for t in by_id[40]['targets'])
+        self.assertIn('Chief (Claude Opus 5.5)', frontier)
+        self.assertIn('Backup (Codex GPT-6.1-Sol)', frontier)
+        self.assertIn('Claude Opus 5.5', frontier)
+        self.assertIn('GPT-6.1-Sol', frontier)
+        # The display name joins the provider and the model of the row.
+        self.assertEqual(by_id[40]['fieldConfig']['defaults']['displayName'],
+                         '${__field.labels.provider} · ${__field.name}')
+        # The 3D reserve is a label of the tier rows, joined on the raw id.
+        bulk = ' '.join(t['expr'] for t in by_id[41]['targets'])
+        self.assertIn('ghostship_ai_model_reserved', bulk)
+        # The provider card shows the allowance and the Paced Availability.
+        names = []
+        for override in by_id[44]['fieldConfig']['overrides']:
+            for prop in override['properties']:
+                if prop['id'] == 'displayName':
+                    names.append(prop['value'])
+        self.assertEqual(names, ['% left', 'Paced Availability'])
+        pace = by_id[44]['targets'][1]['expr']
+        self.assertIn('ghostship_ai_provider_paced_availability', pace)
+        self.assertIn('100 *', pace)
 
 
 @unittest.skipUnless(os.environ.get('GHOSTSHIP_TEST_VLOGS') and os.environ.get('GHOSTSHIP_TEST_VMETRICS'),
@@ -994,7 +1141,7 @@ class NativeStoreTests(unittest.TestCase):
             data='\n'.join(rows).encode()), timeout=3).close()
         urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
         page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
-        by_id = {panel['id']: panel for panel in page['panels']}
+        by_id = panels_by_id(page)
         identity = 'claude / account.test / _ / weekly / seven_day_fable / t3'
         escaped = re.sub(r'([.*/])', r'\\\1', identity)
 
@@ -1018,13 +1165,22 @@ class NativeStoreTests(unittest.TestCase):
         self.assertEqual({row['metric']['provider']: float(row['value'][1]) for row in providers},
                          {'claude': 0, 'cursor': -1},
                          'Exhausted and unknown providers must remain distinct')
-        for target, expected in zip(by_id[41]['targets'],
-                                    [{'current': 1, 'unknown': 2}, {'current': .8, 'unknown': -1}]):
-            expr = target['expr'].replace('$provider', '.*')
-            with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
-                result = json.load(response)['data']['result']
-            self.assertEqual({r['metric']['model']: float(r['value'][1]) for r in result}, expected,
-                             'Old series inside the lookback must not become current recommendations')
+        # The tier column lists every ranked route of the tier: the
+        # available ones first, the spent or unknown ones below them.
+        expr = by_id[41]['targets'][0]['expr'].replace('$provider', '.*')
+        with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
+            result = json.load(response)['data']['result']
+        keys = {r['metric']['model']: float(r['value'][1]) for r in result}
+        self.assertEqual(set(keys), {'current', 'other-provider'},
+                         'Every ranked route of the tier is listed, and an old one is not')
+        self.assertGreater(keys['current'], keys['other-provider'],
+                           'An available route sorts above a spent one')
+        expr = by_id[41]['targets'][1]['expr'].replace('$provider', '.*')
+        with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr}), timeout=3) as response:
+            result = json.load(response)['data']['result']
+        self.assertEqual({r['metric']['model']: float(r['value'][1]) for r in result},
+                         {'current': .8, 'other-provider': -1},
+                         'A route with no measured allowance reads unknown, never zero')
         expr = by_id[10]['targets'][0]['expr'].replace('$provider', 'ollama')
         for selected_time, expected in [(now, {'current'}), (now-60, {'obsolete'})]:
             with urllib.request.urlopen(vm + '/api/v1/query?' + urllib.parse.urlencode(
@@ -1059,7 +1215,7 @@ class NativeStoreTests(unittest.TestCase):
             data='\n'.join(rows).encode()), timeout=3).close()
         urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
         page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
-        by_id = {panel['id']: panel for panel in page['panels']}
+        by_id = panels_by_id(page)
         allowance = page['templating']['list'][1]
 
         def query(expr):
@@ -1091,6 +1247,122 @@ class NativeStoreTests(unittest.TestCase):
         cards = query(expr)
         self.assertEqual(len(cards), 1, 'The card selects exactly the one entitlement')
         self.assertAlmostEqual(float(cards[0]['value'][1]), .6)
+
+    def test_freshness_tolerance_keeps_staggered_samples_and_drops_stale(self):
+        """Defect: exact timestamp equality hides live entitlement and fact series written a few seconds before collection_duration."""
+        import re
+        now = int(time.time())
+        collection_ms = now * 1000
+        fresh_ms = (now - 5) * 1000
+        stale_ms = (now - 120) * 1000
+        rows = [f'ghostship_ai_collection_duration_seconds 1 {collection_ms}']
+        fresh_labels = (
+            'provider="claude",account="account.test",model="_",window="weekly",'
+            'quota="seven_day_fable",source="t3",'
+            'entitlement="claude:account.test:_:weekly:seven_day_fable"')
+        stale_labels = (
+            'provider="claude",account="account.test",model="_",window="monthly",'
+            'quota="month",source="t3",'
+            'entitlement="claude:account.test:_:monthly:month"')
+        for metric, value in [('used_ratio', 0.4), ('expected_used_ratio', 2/7),
+                              ('pace_delta_ratio', 2/7-0.4),
+                              ('reset_timestamp_seconds', now + 86400)]:
+            rows.append(f'ghostship_ai_entitlement_{metric}{{{fresh_labels}}} {value} {fresh_ms}')
+            rows.append(f'ghostship_ai_entitlement_{metric}{{{stale_labels}}} {value} {stale_ms}')
+        rows.append(
+            f'ghostship_ai_model_fact{{provider="claude",model="claude-opus-5-5",status="ok",variant="max"}} 1 {fresh_ms}')
+        rows.append(
+            f'ghostship_ai_model_fact{{provider="claude",model="stale-model",status="ok",variant="max"}} 1 {stale_ms}')
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        vm = self.server(os.environ['GHOSTSHIP_TEST_VMETRICS'], tmp.name + '/metrics')
+        urllib.request.urlopen(urllib.request.Request(vm + '/api/v1/import/prometheus',
+            data='\n'.join(rows).encode()), timeout=3).close()
+        urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
+        page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
+        by_id = panels_by_id(page)
+
+        def query(expr):
+            url = vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr})
+            with urllib.request.urlopen(url, timeout=5) as response:
+                return json.load(response)['data']['result']
+
+        fresh_id = 'claude / account.test / _ / weekly / seven_day_fable / t3'
+        stale_id = 'claude / account.test / _ / monthly / month / t3'
+        fresh_esc = re.sub(r'([.*/])', r'\\\1', fresh_id)
+        stale_esc = re.sub(r'([.*/])', r'\\\1', stale_id)
+
+        def card(panel_id, target_index, escaped):
+            expr = (by_id[panel_id]['targets'][target_index]['expr']
+                    .replace('$provider', '.*')
+                    .replace('${allowance:regex}', escaped))
+            return query(expr)
+
+        remaining = card(47, 0, fresh_esc)
+        self.assertEqual(len(remaining), 1, 'A series a few seconds older than collection_duration must still fill the card')
+        self.assertAlmostEqual(float(remaining[0]['value'][1]), 0.6)
+        self.assertEqual(card(47, 0, stale_esc), [],
+                         'A series older than one collection interval must be excluded')
+        self.assertTrue(card(48, 0, fresh_esc), 'Allowance marker must be non-empty for a staggered sample')
+        self.assertTrue(card(49, 1, fresh_esc), 'Paced Availability must be non-empty for a staggered sample')
+        facts = query(by_id[31]['targets'][0]['expr'].replace('$provider', '.*'))
+        models = {row['metric']['model'] for row in facts}
+        # The table names the model the way a person would say it.
+        self.assertIn('Claude Opus 5.5', models)
+        self.assertNotIn('stale-model', models)
+
+    def test_tier_column_keeps_an_exhausted_route_last_with_its_reason(self):
+        """Defect: an exhausted route is hidden, sorted above the available ones, or shown without its reason."""
+        import re
+        now = int(time.time())
+        stamp = now * 1000
+        rows = [f'ghostship_ai_collection_duration_seconds 1 {stamp}']
+        # One available route and one exhausted route in the same tier.
+        rows.append(f'ghostship_ai_model_rank{{tier="bulk",provider="claude",model="claude-haiku-5-5"}} 1 {stamp}')
+        rows.append(f'ghostship_ai_model_rank{{tier="bulk",provider="grok",model="grok-4.6"}} 2 {stamp}')
+        # The collector's order: the route with allowance left is the winner,
+        # the spent one never is.
+        rows.append(f'ghostship_ai_model_winner_position{{tier="bulk",provider="claude",model="claude-haiku-5-5"}} 1 {stamp}')
+        rows.append(f'ghostship_ai_model_capacity_remaining{{provider="claude",model="claude-haiku-5-5"}} 0.76 {stamp}')
+        rows.append(f'ghostship_ai_model_capacity_remaining{{provider="grok",model="grok-4.6"}} 0 {stamp}')
+        rows.append(f'ghostship_ai_model_paced_availability{{provider="claude",model="claude-haiku-5-5"}} 0.08 {stamp}')
+        rows.append(f'ghostship_ai_model_paced_availability{{provider="grok",model="grok-4.6"}} 0 {stamp}')
+        rows.append(f'ghostship_ai_model_capacity_expires_in_seconds{{provider="grok",model="grok-4.6"}} {now+3600} {stamp}')
+        rows.append(f'ghostship_ai_provider_capacity_remaining_ratio{{provider="grok",binding="session"}} 0 {stamp}')
+        rows.append(f'ghostship_ai_entitlement_used_ratio{{provider="grok",account="a",model="_",window="session",quota="session",source="t3",entitlement="grok:a:_:session:session"}} 1 {stamp}')
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        vm = self.server(os.environ['GHOSTSHIP_TEST_VMETRICS'], tmp.name + '/metrics')
+        urllib.request.urlopen(urllib.request.Request(vm + '/api/v1/import/prometheus',
+            data='\n'.join(rows).encode()), timeout=3).close()
+        urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
+        page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
+        by_id = panels_by_id(page)
+
+        def query(expr):
+            url = vm + '/api/v1/query?' + urllib.parse.urlencode({'query': expr})
+            with urllib.request.urlopen(url, timeout=5) as response:
+                return json.load(response)['data']['result']
+
+        def column(target_index):
+            expr = by_id[41]['targets'][target_index]['expr'].replace('$provider', '.*')
+            return query(expr)
+
+        order = column(0)
+        left = column(1)
+        models = {row['metric']['model'] for row in left}
+        self.assertEqual(models, {'Claude Haiku 5.5', 'Grok 4.6 · session limit'},
+                         'An exhausted route stays visible in its tier, with its reason')
+        exhausted = [row for row in left if row['metric']['model'].startswith('Grok 4.6')]
+        self.assertEqual(len(exhausted), 1)
+        self.assertAlmostEqual(float(exhausted[0]['value'][1]), 0.0,
+                               msg='An exhausted route shows 0% left')
+        self.assertEqual(exhausted[0]['metric'].get('why'), 'session limit',
+                         'An exhausted route carries the reason it is spent')
+        keys = {row['metric']['model']: float(row['value'][1]) for row in order}
+        self.assertIn('Grok 4.6 · session limit', keys)
+        self.assertLess(keys['Grok 4.6 · session limit'], keys['Claude Haiku 5.5'],
+                        'The exhausted route sorts below every available route')
 
     def server(self, binary, directory):
         with socket.socket() as sock:
@@ -1146,7 +1418,7 @@ class NativeStoreTests(unittest.TestCase):
                 return json.load(response)['data']['result']
 
         page = json.loads((SIEM/'dashboards/host.json').read_text())
-        by_id = {panel['id']: panel for panel in page['panels']}
+        by_id = panels_by_id(page)
         # Select by panel id: a retitled panel must not break this load-bearing test.
         total = query(by_id[1001]['targets'][0]['expr'])
         self.assertEqual(len(total), 1)
@@ -1192,7 +1464,7 @@ class NativeStoreTests(unittest.TestCase):
         urllib.request.urlopen(vm + '/internal/force_flush', timeout=3).close()
 
         page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
-        panel = next(p for p in page['panels'] if p['title'] == 'Providers with no fresh reading')
+        panel = next(p for p in walk_panels(page['panels']) if p['title'] == 'Providers with no fresh reading')
 
         def query(expr):
             # The Provider filter at All substitutes its allValue.
@@ -1214,8 +1486,8 @@ class NativeStoreTests(unittest.TestCase):
 
     def test_ai_usage_decision_hierarchy_units_and_variables(self):
         page = json.loads((SIEM/'dashboards/ai-usage.json').read_text())
-        by_id = {panel['id']: panel for panel in page['panels']}
-        titles = {panel['title']: panel for panel in page['panels']}
+        by_id = panels_by_id(page)
+        titles = panels_by_title(page)
         winners = titles['Winners by tier']
         detail = titles['Winner detail  /  source, quality, expiry']
         units = {}
@@ -1255,14 +1527,20 @@ class NativeStoreTests(unittest.TestCase):
         self.assertTrue(all('$provider' in t['expr'] for t in candidates['targets']))
         self.assertLessEqual(len(candidates['targets']), 8)
         self.assertFalse(any('calculation_gate' in t['expr']
-                             for p in page['panels'] for t in p.get('targets', [])))
+                             for p in walk_panels(page['panels']) for t in p.get('targets', [])))
         self.assertIn('Routing off or disabled providers', titles)
         exception = titles['Providers with no fresh reading']
         self.assertTrue(all('unless on(source)' in t['expr'] for t in exception['targets']))
-        self.assertLess(titles['Frontier tier']['gridPos']['y'], titles['Winners by tier']['gridPos']['y'])
-        self.assertLess(titles['Winners by tier']['gridPos']['y'], titles['Candidates considered']['gridPos']['y'])
+        # Graphics (tier bars, then provider cards) sit above collapsed evidence.
+        self.assertLess(by_id[40]['gridPos']['y'], by_id[44]['gridPos']['y'])
+        self.assertLess(by_id[44]['gridPos']['y'], by_id[46]['gridPos']['y'])
         self.assertLess(titles['Providers with no fresh reading']['gridPos']['y'],
                         titles['Quota windows']['gridPos']['y'])
+        frontier = by_id[40]
+        joined = ' '.join(t['expr'] for t in frontier['targets'])
+        self.assertIn('Chief (Claude Opus 5.5)', joined)
+        self.assertIn('Backup (Codex GPT-6.1-Sol)', joined)
+        self.assertIn('Paced Availability', frontier['title'])
 
     def test_host_grid_reports_twenty_cores_in_numeric_order_with_a_hot_core(self):
         now = int(time.time())
@@ -1354,7 +1632,7 @@ class NativeStoreTests(unittest.TestCase):
         before = []
         counts = []
         for dashboard in dashboards:
-            for panel in dashboard['panels']:
+            for panel in walk_panels(dashboard['panels']):
                 for target in panel.get('targets', []):
                     with self.subTest(panel=panel['title']):
                         if target['datasource']['uid']=='victorialogs':
@@ -1377,7 +1655,10 @@ class NativeStoreTests(unittest.TestCase):
                                 with urllib.request.urlopen(logs+'/select/logsql/'+endpoint+'?'+urllib.parse.urlencode(params),timeout=5) as response: result=json.load(response)
                                 self.assertEqual(result['status'],'success')
                         else:
-                            url = vm+'/api/v1/query?'+urllib.parse.urlencode({'query':target['expr']})
+                            expr = (target['expr']
+                                    .replace('$provider', '.*')
+                                    .replace('${allowance:regex}', '.*'))
+                            url = vm+'/api/v1/query?'+urllib.parse.urlencode({'query':expr})
                             with urllib.request.urlopen(url, timeout=5) as response:
                                 result = json.load(response)
                             self.assertEqual(result['status'], 'success')
