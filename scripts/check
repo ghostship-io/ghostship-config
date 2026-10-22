@@ -14,15 +14,10 @@ git diff --check
 git diff --cached --check
 
 printf 'Checking AppArmor policy, evidence collector, and public-service guards\n'
-apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
-  -I modules/self-hosted modules/self-hosted/plex-apparmor.profile
-apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
-  modules/self-hosted/ntfy-apparmor.profile
-apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null \
-  modules/self-hosted/hooks-apparmor.profile
-for profile in modules/self-hosted/apparmor/{victoria*,vmalert}.profile; do
-  apparmor_parser --skip-kernel-load --skip-cache --config-file /dev/null "$profile"
-done
+# Every policy the host loads is parsed as the host renders it, and the
+# named transition budget is held (tests/check-apparmor-profiles.py).
+python3 tests/check-apparmor-profiles.py
+python3 -m unittest discover -s tests -p test_apparmor_profile_paths.py
 python3 -m unittest discover -s tests -p test_apparmor_review.py
 python3 -m unittest discover -s tests -p test_cloudflare_access.py
 python3 -m unittest discover -s tests -p test_t3_worker_tunnel.py
@@ -32,6 +27,9 @@ nix eval --impure --json --file tests/apparmor-public.nix >/dev/null
 
 printf 'Checking the kernel audit backlog limit\n'
 nix eval --impure --json --file tests/audit-backlog.nix >/dev/null
+
+printf 'Checking the kernel module denials\n'
+nix eval --impure --json --file tests/kernel-module-deny.nix >/dev/null
 
 printf 'Checking the agent SSH command guard\n'
 python3 -m unittest discover -s tests -p test_ssh_command_guard.py
@@ -59,6 +57,7 @@ python3 -m unittest discover -s tests -p test_test_fixture_lint.py
 printf 'Checking SIEM log parsing and secret redaction\n'
 vector --quiet test tests/siem-vector.toml
 python3 -m unittest discover -s tests -p test_siem_alerts.py
+python3 -m unittest discover -s tests -p test_siem_grafana.py
 python3 -m unittest discover -s tests -p test_siem_podman_snapshot.py
 python3 -m unittest discover -s tests -p test_siem_watchdog.py
 python3 -m unittest discover -s tests -p test_newsletter_health.py
@@ -92,6 +91,7 @@ python3 -m unittest discover -s tests -p test_ai_usage_quota.py
 python3 -m unittest discover -s tests -p test_ai_usage_headroom.py
 python3 -m unittest discover -s tests -p test_ai_usage_opencode_reader.py
 python3 -m unittest discover -s tests -p test_ai_usage_pool_reader.py
+python3 -m unittest discover -s tests -p test_ai_usage_inference.py
 python3 -c 'import json, sys; json.load(open(sys.argv[1]))' modules/self-hosted/siem/dashboards/ai-usage.json
 
 printf 'Checking the agent desktop browser stage\n'
