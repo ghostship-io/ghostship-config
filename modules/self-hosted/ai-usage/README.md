@@ -54,9 +54,33 @@ number of files.
 
 ## Metrics
 
-Every metric is a gauge. Labels never carry an email, an account identifier, a
-path, a key, a prompt, a job id or a raw error message; provider names, model
-ids, window names and non-secret account aliases are all that reach a label.
+Every metric is a gauge: the collector reports the value it read at this
+collection, and it never keeps a counter of its own. Labels never carry an
+email, an account identifier, a path, a key, a prompt, a job id or a raw error
+message; provider names, model ids, window names and non-secret account aliases
+are all that reach a label.
+
+### What a time range can answer
+
+The dashboard has one time picker for every panel, so the meaning of a series
+over a range has to be stated per series. There are four kinds, and none of
+them is a monotonic counter:
+
+| Kind | Series | Over a range |
+| --- | --- | --- |
+| Rolling provider window | `ghostship_ai_usage_tokens`, `ghostship_ai_usage_cost_usd` (window `24h`, `7d`, `30d`), `ghostship_ai_pool_ledger_requests`, `ghostship_ai_pool_health_events`, `ghostship_ai_three_d_usage_tokens` (last 30 days) | Each sample is the provider's rolling total at that moment. The series answers "what did the last 24 hours look like at 10:00" and "is the 7-day window growing", not "how much in the selected range". A decrease is the window moving, not a counter reset, so `increase()` and `rate()` are wrong. |
+| Instantaneous quota | `ghostship_ai_quota_used_ratio`, `ghostship_ai_quota_reset_timestamp_seconds`, `ghostship_ai_quota_state`, `ghostship_ai_account_amount`, `ghostship_ai_account_flag`, `ghostship_ai_model_capacity_remaining`, `ghostship_ai_model_available` | An as-of reading of the provider's own window. A range shows how the window filled and when it reset; it does not sum. |
+| Recorded observation | `ghostship_ai_source_*`, `ghostship_ai_collection_*`, `*_observed_timestamp_seconds`, `ghostship_ai_model_*`, `ghostship_ai_model_winner*`, `ghostship_ai_calculation_*` | A snapshot of the collector's own decision at that collection. The value is replaced each run, so a range is a history of decisions, never a sum. |
+| Counter | none | The collector owns no counter. Every source reports a window or a state, so no `_total` series is published and `increase()` on any series here is invalid. |
+
+Exact totals for an arbitrary selected range are therefore not available from
+these series. The 24h/7d/30d windows are the provider's own rolling totals,
+and a custom range needs the per-event usage history that T3 Code keeps, not
+this textfile. This is a stated gap, not an approximation: a panel that wants
+an exact range total must read the history source, and it must not add or
+subtract rolling gauges. VictoriaMetrics does keep the recorded history, so
+as-of and range queries over the gauges above (quota filling, resets, decision
+changes) are correct.
 
 ### Source health
 

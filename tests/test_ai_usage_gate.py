@@ -167,12 +167,12 @@ class SelectionTests(unittest.TestCase):
         self.assertAlmostEqual(sum(weights.values()), 1.0, places=6)
         self.assertIn("components", snapshot.CALCULATION["value"])
         value, used = snapshot._component_value(
-            {"strength": 0.9, "coding": None, "token_price": 0.5}
+            {"intelligence": 0.9, "coding": None, "token_price": 0.5}
         )
         self.assertIsNotNone(value)
-        self.assertEqual(set(used), {"strength", "token_price"})
+        self.assertEqual(set(used), {"intelligence", "token_price"})
         # The unknown component is left out and the weights renormalized.
-        self.assertAlmostEqual(value, (0.35 * 0.9 + 0.05 * 0.5) / 0.4, places=6)
+        self.assertAlmostEqual(value, (0.35 * 0.9 + 0.15 * 0.5) / 0.5, places=6)
 
 
 class PendingBackoffTests(unittest.TestCase):

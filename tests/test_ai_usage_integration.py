@@ -138,13 +138,15 @@ class FactBindingTests(unittest.TestCase):
         data = build(ranked_model(), {facts.identity_key("claude", "claude-opus-5-5"): fact})
         row = data["candidates"][0]
         self.assertEqual(row["value"]["strength_source"], "measured")
-        self.assertEqual(row["value"]["strength"], 95.0)
+        # The strength is the verified record itself, not a blend with a
+        # prior: 90 is the index of the fixture.
+        self.assertEqual(row["value"]["strength"], 90.0)
 
     def test_a_fact_of_another_provider_does_not_bind(self):
         fact = measured_fact(provider="other")
         data = build(ranked_model(), {facts.identity_key("other", "claude-opus-5-5"): fact})
         row = data["candidates"][0]
-        self.assertEqual(row["value"]["strength_source"], "prior")
+        self.assertEqual(row["value"]["strength_source"], "unknown")
 
     def test_a_variant_fact_binds_only_its_variant(self):
         fact = measured_fact(variant="effort=high")
@@ -160,7 +162,7 @@ class FactBindingTests(unittest.TestCase):
             ranked_model(),
             {facts.identity_key("claude", "claude-opus-5-5", "effort=low"): fact},
         )
-        self.assertEqual(data["candidates"][0]["value"]["strength_source"], "prior")
+        self.assertEqual(data["candidates"][0]["value"]["strength_source"], "unknown")
 
     def test_a_fact_of_another_feed_version_does_not_bind(self):
         fact = measured_fact(benchmark_version="4.2")
@@ -196,13 +198,13 @@ class FactBindingTests(unittest.TestCase):
             facts={facts.identity_key("claude", "claude-opus-5-5"): fact},
             aa_cache=cache,
         )
-        self.assertEqual(data["candidates"][0]["value"]["strength_source"], "prior")
+        self.assertEqual(data["candidates"][0]["value"]["strength_source"], "unknown")
 
     def test_a_stale_fact_does_not_bind(self):
         fact = measured_fact()
         fact["fetched_at_epoch"] = NOW - 60 * DAY
         data = build(ranked_model(), {facts.identity_key("claude", "claude-opus-5-5"): fact})
-        self.assertEqual(data["candidates"][0]["value"]["strength_source"], "prior")
+        self.assertEqual(data["candidates"][0]["value"]["strength_source"], "unknown")
 
     def test_a_model_without_a_fact_becomes_a_pending_identity(self):
         data = build(ranked_model(), {})

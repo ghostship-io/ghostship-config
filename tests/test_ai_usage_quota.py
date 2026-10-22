@@ -178,6 +178,25 @@ class FrontierMembershipTests(unittest.TestCase):
             },
             policy=self.POLICY,
             catalog=_Catalog(),
+            # The verified record of the exact models: no other quality
+            # evidence is used.
+            aa_cache={
+                "status": "ok",
+                "index_version": "4.3",
+                "fetched_at": "2027-01-15T00:00:00Z",
+                "fetched_at_epoch": NOW,
+                "age_seconds": 0,
+                "records": [
+                    {
+                        "model": "claude-opus-5-5",
+                        "indices": {"intelligence_index": 100.0, "coding_index": 95.0},
+                    },
+                    {
+                        "model": "gpt-6.1-sol",
+                        "indices": {"intelligence_index": 98.0, "coding_index": 96.0},
+                    },
+                ],
+            },
         )
 
     def test_a_spent_frontier_model_stays_a_member_with_its_reset(self):
@@ -361,3 +380,124 @@ class _VisualCatalog(_Catalog):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SharedParentPrecedenceTests(unittest.TestCase):
+    """A shared weekly allowance dominates its model scoped subordinate."""
+
+    def _rank(self, windows):
+        return ranking.rank_models(
+            models=[
+                ranking.ModelRecord("claude", "claude-opus-5-5"),
+                ranking.ModelRecord("claude", "claude-fable-5-1"),
+            ],
+            catalog=_Catalog(),
+            quota_windows={"claude": windows},
+            free_models=set(),
+            usage_tokens={},
+            now=NOW,
+        )
+
+    def test_a_spent_shared_week_blocks_the_fable_subordinate(self):
+        ranked = self._rank(
+            [
+                ranking.QuotaWindow(
+                    kind="weekly",
+                    used_ratio=1.0,
+                    reset_epoch=NOW + 10 * HOUR,
+                    duration_seconds=WEEK,
+                    observed_at=NOW,
+                    quota_id="seven_day",
+                ),
+                ranking.QuotaWindow(
+                    kind="weekly",
+                    used_ratio=0.05,
+                    reset_epoch=NOW + 10 * HOUR,
+                    duration_seconds=WEEK,
+                    observed_at=NOW,
+                    quota_id="seven_day_fable",
+                    applies_to=("fable",),
+                ),
+            ]
+        )
+        fable = [entry for entry in ranked if entry.model == "claude-fable-5-1"][0]
+        self.assertFalse(fable.available)
+        self.assertEqual(fable.remaining, 0.0)
+
+    def test_a_spent_fable_window_blocks_only_fable(self):
+        ranked = self._rank(
+            [
+                ranking.QuotaWindow(
+                    kind="weekly",
+                    used_ratio=0.2,
+                    reset_epoch=NOW + 5 * DAY,
+                    duration_seconds=WEEK,
+                    observed_at=NOW,
+                    quota_id="seven_day",
+                ),
+                ranking.QuotaWindow(
+                    kind="weekly",
+                    used_ratio=1.0,
+                    reset_epoch=NOW + 10 * HOUR,
+                    duration_seconds=WEEK,
+                    observed_at=NOW,
+                    quota_id="seven_day_fable",
+                    applies_to=("fable",),
+                ),
+            ]
+        )
+        opus = [entry for entry in ranked if entry.model == "claude-opus-5-5"][0]
+        fable = [entry for entry in ranked if entry.model == "claude-fable-5-1"][0]
+        self.assertTrue(opus.available)
+        self.assertEqual(opus.remaining, 0.8)
+        self.assertFalse(fable.available)
+
+    def test_the_row_publishes_the_shared_and_the_subordinate_windows(self):
+        ranked = self._rank(
+            [
+                ranking.QuotaWindow(
+                    kind="weekly",
+                    used_ratio=0.2,
+                    reset_epoch=NOW + 5 * DAY,
+                    duration_seconds=WEEK,
+                    observed_at=NOW,
+                    quota_id="seven_day",
+                ),
+                ranking.QuotaWindow(
+                    kind="weekly",
+                    used_ratio=0.05,
+                    reset_epoch=NOW + 5 * DAY,
+                    duration_seconds=WEEK,
+                    observed_at=NOW,
+                    quota_id="seven_day_fable",
+                    applies_to=("fable",),
+                ),
+            ]
+        )
+        data = snapshot.build_snapshot(
+            now=NOW,
+            sources=[],
+            ranked=ranked,
+            policy={
+                "frontierPrimeModels": ("claude-opus-5-5",),
+                "allowedGptModels": (),
+                "backgroundProviderInstances": ("opencode",),
+            },
+            native_models={
+                ("claude", "claude-opus-5-5"): {
+                    "providerInstance": "claudeAgent",
+                    "modelId": "claude-opus-5-5",
+                    "options": [],
+                },
+                ("claude", "claude-fable-5-1"): {
+                    "providerInstance": "claudeAgent",
+                    "modelId": "claude-fable-5-1",
+                    "options": [],
+                },
+            },
+            catalog=_Catalog(),
+        )
+        fable = [row for row in data["candidates"] if row["model"] == "claude-fable-5-1"][0]
+        scopes = {window["quota"]: window["scope"] for window in fable["quota_windows_applied"]}
+        self.assertEqual(scopes, {"seven_day": "shared", "seven_day_fable": "model"})
+        self.assertTrue(fable["quota_scope_basis"])
