@@ -19,7 +19,7 @@ service executor; unknown costs and eligibility remain explicit.
 
 ## Deployment
 
-Build the pinned `ghostship-agent` and `nixos-config` revisions, then run
+Build the pinned `ghostship-agent` and `ghostship-config` revisions, then run
 `nix develop .#ci -c scripts/check` and build the actual Chill Penguin target.
 Stage new Nix files before evaluating. Preserve the active T3 session using
 [the session guard](container-workflow.md#preserve-the-active-t3-code-session).

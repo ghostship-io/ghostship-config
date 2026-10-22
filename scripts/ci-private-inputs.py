@@ -54,16 +54,18 @@ def main():
             key.write_text(credential + '\n'); key.chmod(0o600)
             del credential
             locked = nodes[name]['locked']
-            if locked['type'] != 'github' or locked['owner'] != 'owner' or locked['repo'] != spec['repo']:
+            if not private_source.supported_source(locked, spec['repo']):
                 raise SystemExit('Unsupported private source declaration: ' + name)
             if spec['dir'] and locked.get('dir') != spec['dir']:
                 raise SystemExit('Unsupported private source directory: ' + name)
             checkout = root/('checkout-' + suffix)
             env = private_source.ssh_environment(key, known)
-            # The owner was checked above, so the URL carries no name of its own.
-            private_source.fetch_source(checkout,
-                                        'git@github.com:' + locked['owner'] + '/' + spec['repo'] + '.git',
-                                        locked['rev'], env)
+            # The owner and the repository come from the lock that was checked
+            # above, so neither is written out here.
+            url = private_source.git_ssh_url(lock, name)
+            if not url:
+                raise SystemExit('Unsupported private source declaration: ' + name)
+            private_source.fetch_source(checkout, url, locked['rev'], env)
             key.unlink()
             archive = root/(suffix + '.tar')
             with archive.open('wb') as output:
