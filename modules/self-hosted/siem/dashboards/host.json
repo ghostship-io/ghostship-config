@@ -23,11 +23,11 @@
     "x": 0,
     "y": 0,
     "w": 24,
-    "h": 2
+    "h": 3
    },
    "options": {
     "mode": "markdown",
-    "content": "**Host \u00b7 rolling 5-minute rates follow the time picker \u00b7 gauges are the latest sample**\n\nCPU is every core. Memory is total, used and available."
+    "content": "**Host \u00b7 rolling rates follow the time picker \u00b7 gauges are the latest sample**\n\nCPU is every core. Memory is total, used and available. An unknown reading is Unavailable, never a zero."
    }
   },
   {
@@ -61,7 +61,8 @@
      "unit": "percent",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -79,14 +80,46 @@
         "value": 90
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 70,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 70,
+        "to": 90,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 90,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -129,7 +162,8 @@
      "unit": "bytes",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -154,7 +188,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -197,7 +231,8 @@
      "unit": "bytes",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -214,7 +249,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -257,7 +292,8 @@
      "unit": "bytes",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -274,7 +310,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -317,7 +353,8 @@
      "unit": "percentunit",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -335,14 +372,46 @@
         "value": 0.9
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 0.7,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.7,
+        "to": 0.9,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 0.9,
+        "to": 1,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -385,7 +454,8 @@
      "unit": "percent",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -403,14 +473,46 @@
         "value": 90
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 70,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 70,
+        "to": 90,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 90,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -452,14 +554,15 @@
     "defaults": {
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      }
     }
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "justifyMode": "center",
     "wideLayout": true,
     "reduceOptions": {
@@ -502,14 +605,15 @@
      "unit": "dtdurations",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      }
     }
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "justifyMode": "center",
     "wideLayout": true,
     "reduceOptions": {
@@ -560,7 +664,8 @@
     "defaults": {
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -574,13 +679,35 @@
         "value": 1
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     }
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "justifyMode": "center",
     "wideLayout": true,
     "reduceOptions": {
@@ -623,7 +750,8 @@
      "unit": "short",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -644,7 +772,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -687,7 +815,8 @@
      "unit": "short",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -704,7 +833,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -747,7 +876,8 @@
      "unit": "s",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -765,14 +895,46 @@
         "value": 300
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 120,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 120,
+        "to": 300,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 300,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"

@@ -23,11 +23,11 @@
     "x": 0,
     "y": 0,
     "w": 24,
-    "h": 2
+    "h": 3
    },
    "options": {
     "mode": "markdown",
-    "content": "**Security \u00b7 selected range for rates \u00b7 log tables stay collapsed**\n\nStatus colour is reserved for the tiles (good / warning / critical) and always has a number."
+    "content": "**Security \u00b7 selected range for rates \u00b7 log tables stay collapsed**\n\nStatus colour is reserved for the tiles (good / warning / critical) and always has a number. A missing log stream is Unavailable, never a zero."
    }
   },
   {
@@ -61,7 +61,8 @@
      "unit": "s",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -79,14 +80,46 @@
         "value": 20
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 20,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 20,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -129,7 +162,8 @@
      "unit": "short",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -147,14 +181,46 @@
         "value": 20
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 20,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 20,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -197,7 +263,8 @@
      "unit": "short",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -222,7 +289,7 @@
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -265,7 +332,8 @@
      "unit": "short",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -283,14 +351,46 @@
         "value": 20
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 20,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 20,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -333,7 +433,8 @@
      "unit": "short",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -351,14 +452,46 @@
         "value": 20
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 20,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 20,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -401,7 +534,8 @@
      "unit": "short",
      "noValue": "Unavailable",
      "color": {
-      "mode": "thresholds"
+      "mode": "fixed",
+      "fixedColor": "#B8BFCC"
      },
      "thresholds": {
       "mode": "absolute",
@@ -419,14 +553,46 @@
         "value": 20
        }
       ]
-     }
+     },
+     "mappings": [
+      {
+       "type": "range",
+       "options": {
+        "from": 0,
+        "to": 1,
+        "result": {
+         "color": "#0ca30c"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 1,
+        "to": 20,
+        "result": {
+         "color": "#fab219"
+        }
+       }
+      },
+      {
+       "type": "range",
+       "options": {
+        "from": 20,
+        "to": 1000000000.0,
+        "result": {
+         "color": "#d03b3b"
+        }
+       }
+      }
+     ]
     },
     "overrides": []
    },
    "options": {
     "colorMode": "value",
     "graphMode": "none",
-    "textMode": "value_and_name",
+    "textMode": "value",
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -552,7 +718,8 @@
       "uid": "victorialogs"
      },
      "expr": "apparmor:=DENIED | stats by (aa_profile) count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "{{aa_profile}}"
     }
    ],
    "fieldConfig": {
@@ -591,7 +758,8 @@
       }
      },
      "color": {
-      "mode": "palette-classic"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -603,7 +771,53 @@
       ]
      }
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "t3code"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3987e5"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "curl"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#d95926"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "bash"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#199e70"
+        }
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "legend": {
@@ -641,7 +855,8 @@
       "uid": "victorialogs"
      },
      "expr": "falco_rule:* | stats by (falco_rule) count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "{{falco_rule}}"
     }
    ],
    "fieldConfig": {
@@ -680,7 +895,8 @@
       }
      },
      "color": {
-      "mode": "palette-classic"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -730,7 +946,8 @@
       "uid": "victorialogs"
      },
      "expr": "unit:~\"sshd\" (\"Failed password\" OR \"Invalid user\" OR \"authentication failure\") | stats count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "failures"
     }
    ],
    "fieldConfig": {
@@ -769,7 +986,8 @@
       }
      },
      "color": {
-      "mode": "palette-classic"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -819,7 +1037,8 @@
       "uid": "victorialogs"
      },
      "expr": "\"refused connection:\" | stats count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "refusals"
     }
    ],
    "fieldConfig": {
@@ -858,7 +1077,8 @@
       }
      },
      "color": {
-      "mode": "palette-classic"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -908,7 +1128,8 @@
       "uid": "victorialogs"
      },
      "expr": "audit_key:* -audit_key:=\"(null)\" | stats by (audit_key) count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "{{audit_key}}"
     }
    ],
    "fieldConfig": {
@@ -947,7 +1168,8 @@
       }
      },
      "color": {
-      "mode": "palette-classic"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -997,7 +1219,8 @@
       "uid": "victorialogs"
      },
      "expr": "source:=plex network:=WAN | stats count() n",
-     "queryType": "statsRange"
+     "queryType": "statsRange",
+     "legendFormat": "{{network}}"
     }
    ],
    "fieldConfig": {
@@ -1036,7 +1259,8 @@
       }
      },
      "color": {
-      "mode": "palette-classic"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "thresholds": {
       "mode": "absolute",
@@ -1095,7 +1319,8 @@
     "defaults": {
      "noValue": "No matching learning events",
      "color": {
-      "mode": "palette-classic"
+      "mode": "fixed",
+      "fixedColor": "#3987e5"
      },
      "custom": {
       "drawStyle": "line",
@@ -1139,7 +1364,53 @@
       ]
      }
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "t3code"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#3987e5"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "curl"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#d95926"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "bash"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#199e70"
+        }
+       }
+      ]
+     }
+    ]
    },
    "options": {
     "legend": {
